@@ -100,3 +100,15 @@ func TestCaptureLoginExchange(t *testing.T) {
 		t.Fatalf("record: %+v", ex)
 	}
 }
+
+func TestReplierConnPlaceholder(t *testing.T) {
+	r := DefaultReplier("{conn},00000000,ffffffff", nil)
+	req := []cube.Message{{Type: 'H', Data: "KEQ0537249,0b9573,0113,00000000,4470fa70,44,32,1a0b03,1602,03,0000"}}
+	got := r("KEQ0537249", req)
+	if len(got) != 1 || got[0].String() != "i:4470fa70,00000000,ffffffff" {
+		t.Fatalf("got %v", got)
+	}
+	if got := DefaultReplier("", nil)("x", req); len(got) != 0 {
+		t.Fatalf("empty iLine must omit i:, got %v", got)
+	}
+}

@@ -40,12 +40,25 @@ type Replier func(serial string, req []cube.Message) []cube.Message
 
 // DefaultReplier answers what the original portal was observed to answer:
 // an i: line, plus b:OK when the request carried a B: (login) line.
-// An empty iLine omits the i: line; its fields' meaning is unknown.
+// An empty iLine omits the i: line; its fields' meaning is unknown. The
+// placeholder {conn} is replaced by the connection id from the Cube's H line.
 func DefaultReplier(iLine string, extra []cube.Message) Replier {
 	return func(_ string, req []cube.Message) []cube.Message {
 		var out []cube.Message
 		if iLine != "" {
-			out = append(out, cube.Message{Type: 'i', Data: iLine})
+			line := iLine
+			if strings.Contains(line, "{conn}") {
+				conn := "00000000"
+				for _, m := range req {
+					if m.Type == 'H' {
+						if h, err := cube.ParseHello(m.Data); err == nil && h.ConnectionID != "" {
+							conn = h.ConnectionID
+						}
+					}
+				}
+				line = strings.ReplaceAll(line, "{conn}", conn)
+			}
+			out = append(out, cube.Message{Type: 'i', Data: line})
 		}
 		for _, m := range req {
 			if m.Type == 'B' {
