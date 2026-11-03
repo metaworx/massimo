@@ -26,7 +26,7 @@ func runPortal(args []string) error {
 	listen := fs.String("listen", ":8080", "address to listen on")
 	ivHex := fs.String("iv", os.Getenv(ivEnv), "IV as 32 hex digits (or "+ivEnv+")")
 	serial := fs.String("serial", "", "only accept this Cube serial (default: any serial, same key)")
-	iLine := fs.String("i", "000051b1,00000000,ffffffff", "payload of the i: reply line")
+	iLine := fs.String("i", "000051b1,00000000,ffffffff", "payload of the i: reply line; 'none' sends no i: line")
 	extra := fs.String("extra", "", "extra reply lines, separated by ';' (e.g. 'l:' to request the device list)")
 	dir := fs.String("dir", ".", "directory for portal-capture.jsonl")
 	fs.Usage = func() {
@@ -60,6 +60,9 @@ func runPortal(args []string) error {
 			}
 			extraMsgs = append(extraMsgs, m)
 		}
+	}
+	if *iLine == "none" {
+		*iLine = ""
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	cap := &portal.Capture{

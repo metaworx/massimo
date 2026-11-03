@@ -82,6 +82,24 @@ ciphertext, the first block of a 16-byte and a 32-byte message is identical,
 and the second block differs from the first for identical plaintext blocks,
 which rules out ECB and a per-message IV.
 
+## Observed polling (Cube firmware 1.1.3, November 2026)
+
+After `u:` and `i:00000000,00000000` the Cube POSTs to the URL. Each poll
+carries the full state: `H:` (long form, new connection id each time),
+`M:`, every `C:` and `L:`. Request headers:
+
+    POST /cube HTTP/1.1
+    Host: <host>
+    connection: close
+    Content-Length: <n>
+    Opt: "http://www.eq-3.com/MAX", ns=MAX
+    MAX-Serial: <serial>
+
+Gaps between polls grew from about 4 to 10 minutes within the first half
+hour, with the reply `i:000051b1,00000000,ffffffff` and also with
+`i:0000003c,…`; the first `i:` field is therefore not a poll interval in
+seconds, or the reply is ignored.
+
 ## Open questions
 
 - Does `i:00000000,00000000` start the Cube's polling immediately, and at

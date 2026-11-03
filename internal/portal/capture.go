@@ -40,10 +40,13 @@ type Replier func(serial string, req []cube.Message) []cube.Message
 
 // DefaultReplier answers what the original portal was observed to answer:
 // an i: line, plus b:OK when the request carried a B: (login) line.
-// interval is the first field of the i: line; its meaning is unknown.
+// An empty iLine omits the i: line; its fields' meaning is unknown.
 func DefaultReplier(iLine string, extra []cube.Message) Replier {
 	return func(_ string, req []cube.Message) []cube.Message {
-		out := []cube.Message{{Type: 'i', Data: iLine}}
+		var out []cube.Message
+		if iLine != "" {
+			out = append(out, cube.Message{Type: 'i', Data: iLine})
+		}
 		for _, m := range req {
 			if m.Type == 'B' {
 				out = append(out, cube.Message{Type: 'b', Data: "OK"})
