@@ -15,6 +15,14 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+	envFile := os.Getenv("MASSIMO_ENV_FILE")
+	if envFile == "" {
+		envFile = ".env"
+	}
+	if err := loadDotEnv(envFile); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 	var err error
 	switch os.Args[1] {
 	case "decode":
@@ -40,6 +48,10 @@ func main() {
 
 func usage() {
 	fmt.Fprint(os.Stderr, `usage: massimo <command> [args]
+
+Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
+environment, or from a .env file in the current directory (KEY=VALUE lines;
+override the path with MASSIMO_ENV_FILE). Keep that file out of git.
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON

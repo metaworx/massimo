@@ -1,0 +1,4 @@
+# secrets and local experiment output
+.env
+*.exe
+portal-capture.jsonl
