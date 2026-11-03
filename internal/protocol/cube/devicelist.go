@@ -79,6 +79,9 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 	case s.Type == DeviceShutterContact:
 		open := f2&0x02 != 0
 		s.WindowOpen = &open
+	case !s.Valid:
+		// The Cube has no data for the device yet (e.g. after a reboot);
+		// the value bytes are all zero and must not be read as 0 °C.
 	case (s.Type.IsRadiatorThermostat() || s.Type == DeviceWallThermostat) && len(e) >= 12:
 		valve := int(e[7])
 		sp := DecodeTemp(e[8] & 0x3f)

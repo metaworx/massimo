@@ -410,3 +410,14 @@ func TestDayProgramValidate(t *testing.T) {
 		}
 	}
 }
+
+func TestDeviceListInvalidEntryHasNoValues(t *testing.T) {
+	// Captured from a real Cube right after power-up: flags are all zero.
+	st, err := ParseDeviceList("CxUUtgkAAAAAAAAA", map[RFAddress]DeviceType{0x1514b6: DeviceRadiatorThermostat})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st[0].Valid || st[0].Setpoint != nil || st[0].ValvePct != nil {
+		t.Fatalf("got %+v", st[0])
+	}
+}
