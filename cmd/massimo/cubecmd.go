@@ -5,7 +5,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/md5"
 	"flag"
 	"fmt"
 	"net"
@@ -24,7 +23,7 @@ func runCube(args []string) error {
 	addr := fs.String("addr", "", "Cube address, host[:port] (default port 62910)")
 	wait := fs.Duration("wait", 2*time.Second, "how long to wait for replies after each command")
 	quiet := fs.Bool("quiet", false, "do not print the greeting")
-	login := fs.String("login", "", "user:password; sends a B: line with the MD5 hash the Cube expects")
+	portal := fs.String("portal", "", "'on' or 'off': enable or disable the Cube's own portal polling (sends the i: command)")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo cube -addr <ip> [flags] [line ...]\n\nSend protocol lines to a Cube over the LAN and print the replies.\n\n")
 		fs.PrintDefaults()
@@ -45,21 +44,12 @@ func runCube(args []string) error {
 	defer conn.Close()
 	r := bufio.NewReaderSize(conn, 16<<10)
 
-	var serial string
 	drain := func(show bool) {
 		for {
 			conn.SetReadDeadline(time.Now().Add(*wait))
 			line, err := r.ReadString('\n')
-			if line != "" {
-				line = strings.TrimRight(line, "\r\n")
-				if strings.HasPrefix(line, "H:") {
-					if h, err := cube.ParseHello(line[2:]); err == nil {
-						serial = h.Serial
-					}
-				}
-				if show {
-					fmt.Println(line)
-				}
+			if line != "" && show {
+				fmt.Println(strings.TrimRight(line, "\r\n"))
 			}
 			if err != nil {
 				return
@@ -69,12 +59,14 @@ func runCube(args []string) error {
 	drain(!*quiet)
 
 	lines := fs.Args()
-	if *login != "" {
-		user, pass, ok := strings.Cut(*login, ":")
-		if !ok || serial == "" {
-			return fmt.Errorf("cube: -login needs user:password and a greeting with the serial")
-		}
-		lines = append(lines, fmt.Sprintf("B:%s,%x,1,%s", user, md5.Sum([]byte(pass+serial)), pass))
+	switch *portal {
+	case "":
+	case "on":
+		lines = append(lines, cube.CmdSetPortalInterval(0).String())
+	case "off":
+		lines = append(lines, cube.CmdSetPortalInterval(-1).String())
+	default:
+		return fmt.Errorf("cube: -portal must be 'on' or 'off'")
 	}
 	for _, l := range lines {
 		if _, err := cube.ParseLine(l); err != nil {

@@ -34,6 +34,14 @@ func CmdSetNTP(servers ...string) Message {
 // "http://192.168.1.10:8080". This changes persistent Cube configuration.
 func CmdSetPortalURL(url string) Message { return Message{Type: 'u', Data: url} }
 
+// CmdSetPortalInterval controls the Cube's own connection to the portal
+// URL. The original software sends 0 to enable polling after a successful
+// portal login and -1 to disable it; other values have not been observed.
+// The second field is always 0. Format: two 32-bit values as 8 hex digits.
+func CmdSetPortalInterval(interval int32) Message {
+	return Message{Type: 'i', Data: fmt.Sprintf("%08x,%08x", uint32(interval), 0)}
+}
+
 // CmdEncrypt asks the Cube to encrypt data with its portal key (AES-128-CBC).
 func CmdEncrypt(data []byte) Message { return Message{Type: 'e', Data: b64.EncodeToString(data)} }
 

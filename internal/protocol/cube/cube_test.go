@@ -345,6 +345,8 @@ func TestCommandExamples(t *testing.T) {
 		{"inclusion", CmdInclusion(60 * time.Second), "n:003c"},
 		{"wakeup", CmdWakeup(0x1e, WakeupRoom, "01"), "z:1e,G,01"},
 		{"delete", CmdDeleteDevices(true, 0x0f1d54), "t:01,1,Dx1U"},
+		{"portal on", CmdSetPortalInterval(0), "i:00000000,00000000"},
+		{"portal off", CmdSetPortalInterval(-1), "i:ffffffff,00000000"},
 		{"ntp", CmdSetNTP("nl.pool.ntp.org", "ntp.homematic.com"), "f:nl.pool.ntp.org,ntp.homematic.com"},
 		{"set time", mustMsg(CmdSetTime(
 			TimeZoneRule{"CET", 10, 0, 3, 3600}, TimeZoneRule{"CEST", 3, 0, 2, 7200},
