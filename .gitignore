@@ -2,3 +2,5 @@
 .env
 *.exe
 portal-capture.jsonl
+/massimo
+/dist/

@@ -33,28 +33,30 @@ const KeySize = 16
 // ParseKey parses the key as printed in the QR code: 32 hex digits with an
 // optional leading "k". Whitespace is ignored.
 func ParseKey(s string) ([]byte, error) {
+	s = strings.TrimPrefix(s, "\ufeff") // UTF-8 byte order mark from some editors
 	s = strings.ToLower(strings.Join(strings.Fields(s), ""))
 	s = strings.TrimPrefix(s, "k")
-	k, err := hex.DecodeString(s)
-	if err != nil {
-		return nil, fmt.Errorf("key: not hex: %w", err)
+	return parseHex("key", s, KeySize)
+}
+
+// parseHex decodes exactly n bytes of hex and describes problems without
+// echoing the value, since it may be a secret.
+func parseHex(what, s string, n int) ([]byte, error) {
+	for i, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return nil, fmt.Errorf("%s: character %d of %d is not a hex digit (got %q)", what, i+1, len(s), c)
+		}
 	}
-	if len(k) != KeySize {
-		return nil, fmt.Errorf("key: want %d bytes, got %d", KeySize, len(k))
+	if len(s) != 2*n {
+		return nil, fmt.Errorf("%s: want %d hex digits, got %d", what, 2*n, len(s))
 	}
-	return k, nil
+	return hex.DecodeString(s)
 }
 
 // ParseIV parses a 32-hex-digit IV.
 func ParseIV(s string) ([]byte, error) {
-	iv, err := hex.DecodeString(strings.Join(strings.Fields(s), ""))
-	if err != nil {
-		return nil, fmt.Errorf("iv: not hex: %w", err)
-	}
-	if len(iv) != BlockSize {
-		return nil, fmt.Errorf("iv: want %d bytes, got %d", BlockSize, len(iv))
-	}
-	return iv, nil
+	s = strings.TrimPrefix(s, "\ufeff")
+	return parseHex("iv", strings.ToLower(strings.Join(strings.Fields(s), "")), BlockSize)
 }
 
 // Pad appends zero bytes up to the next block boundary. Data that is already

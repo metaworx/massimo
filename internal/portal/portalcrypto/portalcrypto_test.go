@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 	"testing"
 )
 
@@ -28,9 +29,19 @@ func TestParseKey(t *testing.T) {
 			t.Errorf("%q: got %x, %v", in, k, err)
 		}
 	}
-	for _, in := range []string{"", "k1234", "zz" + want[2:]} {
-		if _, err := ParseKey(in); err == nil {
-			t.Errorf("%q: want error", in)
+	for in, msg := range map[string]string{
+		"":              "want 32 hex digits, got 0",
+		"K" + want[:31]: "want 32 hex digits, got 31",
+		"zz" + want[2:]: "character 1 of 32 is not a hex digit",
+		"\ufeff" + want: "",
+	} {
+		_, err := ParseKey(in)
+		if msg == "" {
+			if err != nil {
+				t.Errorf("%q: unexpected error %v", in, err)
+			}
+		} else if err == nil || !strings.Contains(err.Error(), msg) {
+			t.Errorf("%q: got %v, want %q", in, err, msg)
 		}
 	}
 }
