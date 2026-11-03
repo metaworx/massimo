@@ -21,6 +21,10 @@ func main() {
 		err = runDecode(os.Args[2:])
 	case "portal-crypto":
 		err = runPortalCrypto(os.Args[2:])
+	case "portal":
+		err = runPortal(os.Args[2:])
+	case "cube":
+		err = runCube(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -40,5 +44,7 @@ func usage() {
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON
   portal-crypto   AES helpers for the Cube's portal encryption (see its -h)
+  portal          fake portal server that decrypts and logs what a Cube sends
+  cube            send protocol lines to a Cube over the LAN
 `)
 }
