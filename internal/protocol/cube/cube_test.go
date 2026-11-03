@@ -6,6 +6,7 @@ package cube
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -419,5 +420,80 @@ func TestDeviceListInvalidEntryHasNoValues(t *testing.T) {
 	}
 	if st[0].Valid || st[0].Setpoint != nil || st[0].ValvePct != nil {
 		t.Fatalf("got %+v", st[0])
+	}
+}
+
+// TestRealCubeGreeting decodes a session captured from a Cube with firmware
+// 1.1.3 (room and device names anonymised, everything else verbatim).
+func TestRealCubeGreeting(t *testing.T) {
+	raw, err := os.ReadFile("testdata/cube-fw0113-greeting.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := SplitLines(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var (
+		hello   *Hello
+		md      *Metadata
+		configs []*DeviceConfig
+		states  []DeviceState
+	)
+	types := map[RFAddress]DeviceType{}
+	for _, m := range msgs {
+		switch m.Type {
+		case 'H':
+			if hello, err = ParseHello(m.Data); err != nil {
+				t.Fatal(err)
+			}
+		case 'M':
+			p, err := ParseMetadataPart(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if md, err = ParseMetadata([]MetadataPart{p}); err != nil {
+				t.Fatal(err)
+			}
+			for _, d := range md.Devices {
+				types[d.RFAddress] = d.Type
+			}
+		case 'C':
+			c, err := ParseConfig(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			configs = append(configs, c)
+		case 'L':
+			if states, err = ParseDeviceList(m.Data, types); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatalf("unexpected message type %c", m.Type)
+		}
+	}
+	if hello.Serial != "KEQ0537249" || hello.FirmwareVersion != "1.1.3" || hello.FreeMemorySlots != 50 || hello.CubeDate != "2026-11-03" {
+		t.Errorf("hello: %+v", hello)
+	}
+	if len(md.Rooms) != 6 || len(md.Devices) != 6 || md.Rooms[1].Name != "Küche" {
+		t.Errorf("metadata: %+v", md)
+	}
+	if len(configs) != 7 || configs[0].Type != DeviceCube {
+		t.Fatalf("configs: %d", len(configs))
+	}
+	cc := configs[0].Cube
+	if cc.PortalEnabled || cc.PortalURL != "http://max.eq-3.de:80/cube" || cc.Winter.Name != "GMT" || cc.Summer.Name != "BST" || cc.Summer.OffsetSeconds != 3600 {
+		t.Errorf("cube config: %+v", cc)
+	}
+	th := configs[1].Thermostat
+	if th == nil || th.ComfortTemp != 21.5 || th.EcoTemp != 16.5 || th.BoostMinutes != 5 || th.BoostValvePct != 80 {
+		t.Errorf("thermostat config: %+v", th)
+	}
+	wantDay := DayProgram{{5, 720}, {13, 1260}, {18, 1290}, {5, 1440}}
+	if !reflect.DeepEqual(th.WeekProgram[Monday], wantDay) {
+		t.Errorf("week program: %+v", th.WeekProgram[Monday])
+	}
+	if len(states) != 6 || states[0].Valid || states[0].Type != DeviceRadiatorThermostat {
+		t.Errorf("states: %+v", states)
 	}
 }

@@ -19,6 +19,8 @@ func main() {
 	switch os.Args[1] {
 	case "decode":
 		err = runDecode(os.Args[2:])
+	case "portal-crypto":
+		err = runPortalCrypto(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -37,5 +39,6 @@ func usage() {
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON
+  portal-crypto   AES helpers for the Cube's portal encryption (see its -h)
 `)
 }
