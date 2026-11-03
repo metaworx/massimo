@@ -29,7 +29,7 @@ func runCube(args []string) error {
 		fmt.Fprint(os.Stderr, "usage: massimo cube -addr <ip> [flags] [line ...]\n\nSend protocol lines to a Cube over the LAN and print the replies.\n\n")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderFlags(fs, args)); err != nil {
 		return err
 	}
 	if *addr == "" {
@@ -89,4 +89,30 @@ func runCube(args []string) error {
 	}
 	conn.Write([]byte("q:\r\n"))
 	return nil
+}
+
+// reorderFlags moves flags (and their values) in front of positional
+// arguments so that "cube -addr x 'u:...' -login a:b" works; the standard
+// flag package stops parsing at the first positional argument.
+func reorderFlags(fs *flag.FlagSet, args []string) []string {
+	var flags, pos []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			pos = append(pos, args[i+1:]...)
+			break
+		}
+		name, _, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		f := fs.Lookup(name)
+		if !strings.HasPrefix(a, "-") || f == nil {
+			pos = append(pos, a)
+			continue
+		}
+		flags = append(flags, a)
+		if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); (!ok || !bf.IsBoolFlag()) && !hasValue && i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return append(flags, pos...)
 }
