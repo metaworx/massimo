@@ -50,7 +50,9 @@ firmware) via the UDP broadcast the original software uses; it needs UDP
 port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`
 recovers a Cube's portal IV from one `e:` exchange.
 
-Several Cubes: put `MASSIMO_CUBE_KEY_<SERIAL>`, `MASSIMO_CUBE_IV_<SERIAL>`
-and `MASSIMO_CUBE_ADDRESS_<SERIAL>` into `.env` and select one with
-`-sn <serial>` (or `MASSIMO_CUBE_SN`); `-env <file>` picks another env
-file. `massimo portal` serves every Cube that has a key and IV configured.
+Several Cubes: put `MASSIMO_CUBE_<SERIAL>_KEY`, `MASSIMO_CUBE_<SERIAL>_IV`
+and `MASSIMO_CUBE_<SERIAL>_ADDRESS` into `.env` and select one with
+`-sn <serial>` (default `MASSIMO_CUBE_SN`); without an address the Cube
+is discovered on the LAN. With `-addr`, the serial the Cube reports
+selects its key. `-env <file>` picks another env file. `massimo portal`
+serves every Cube that has a key and IV configured.

@@ -60,11 +60,8 @@ func runPortalCrypto(args []string) error {
 		return err
 	}
 	if sub == "iv" && *plainB64 == "" && *cipherB64 == "" {
-		if *addr == "" {
-			*addr = cubeEnv(addrEnv)
-		}
-		if *addr == "" {
-			return fmt.Errorf("iv: need -addr, or -plain and -cipher")
+		if err := defaultAddr(addr, "iv"); err != nil {
+			return fmt.Errorf("%w, or -plain and -cipher", err)
 		}
 		zero := make([]byte, 2*portalcrypto.BlockSize)
 		reply, serial, err := lanExchange(*addr, "e:"+base64.StdEncoding.EncodeToString(zero), 'E')

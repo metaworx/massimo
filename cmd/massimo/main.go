@@ -78,10 +78,11 @@ func usage() {
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
 override the path with -env or MASSIMO_ENV_FILE). Keep that file out of git.
-Several Cubes: append the serial to the variable names
-(MASSIMO_CUBE_KEY_KEQ0123456, MASSIMO_CUBE_IV_..., MASSIMO_CUBE_ADDRESS_...)
-and pick one with -sn or MASSIMO_CUBE_SN. -addr defaults to
-MASSIMO_CUBE_ADDRESS.
+Several Cubes: put the serial into the variable names
+(MASSIMO_CUBE_KEQ0123456_KEY, _IV, _ADDRESS) and pick one with -sn or
+MASSIMO_CUBE_SN; with -sn and no address the Cube is discovered on the
+LAN. With -addr, the serial the Cube reports selects its key. -addr
+defaults to MASSIMO_CUBE_ADDRESS.
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON

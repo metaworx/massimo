@@ -46,11 +46,11 @@ func runPortal(args []string) error {
 	// the default key/IV for any other serial.
 	codecs := map[string]*portal.Codec{}
 	for _, sn := range perCubeKeys() {
-		ivs := os.Getenv(ivEnv + "_" + sn)
+		ivs := os.Getenv(perCubeVar(ivEnv, sn))
 		if ivs == "" {
-			return fmt.Errorf("portal: %s_%s is set but %s_%s is not", keyEnv, sn, ivEnv, sn)
+			return fmt.Errorf("portal: %s is set but %s is not", perCubeVar(keyEnv, sn), perCubeVar(ivEnv, sn))
 		}
-		c, err := codecFor(os.Getenv(keyEnv+"_"+sn), ivs)
+		c, err := codecFor(os.Getenv(perCubeVar(keyEnv, sn)), ivs)
 		if err != nil {
 			return fmt.Errorf("portal: cube %s: %w", sn, err)
 		}

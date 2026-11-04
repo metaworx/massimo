@@ -7,8 +7,9 @@ import "testing"
 
 func TestGlobalOptionsAndCubeEnv(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_KEY", "default")
-	t.Setenv("MASSIMO_CUBE_KEY_KEQ0000001", "one")
-	t.Setenv("MASSIMO_CUBE_ADDRESS_KEQ0000001", "10.0.0.1")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_KEY", "one")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
+	t.Setenv("MASSIMO_CUBE_SN", "ignored-here")
 	t.Setenv("MASSIMO_ENV_FILE", "")
 	selectedSN = ""
 	rest, err := globalOptions([]string{"-env", "x.env", "--sn=keq0000001", "cube", "-addr", "y"})
@@ -35,7 +36,12 @@ func TestGlobalOptionsAndCubeEnv(t *testing.T) {
 	if rest, _ := globalOptions([]string{"--version"}); len(rest) != 1 || rest[0] != "--version" {
 		t.Fatalf("version alias %v", rest)
 	}
-	if n := len(perCubeKeys()); n != 1 {
-		t.Fatalf("per-cube keys %d", n)
+	if keys := perCubeKeys(); len(keys) != 1 || keys[0] != "KEQ0000001" {
+		t.Fatalf("per-cube keys %v", keys)
 	}
+	useDeviceSerial("KEQ0000001")
+	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
+		t.Fatalf("key after device serial %q", v)
+	}
+	selectedSN = ""
 }

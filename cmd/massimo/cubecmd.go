@@ -142,6 +142,7 @@ func lanExchange(addr, line string, want byte) (reply, serial string, err error)
 		if m.Type == 'H' {
 			if h, err := cube.ParseHello(m.Data); err == nil {
 				serial = h.Serial
+				useDeviceSerial(serial)
 			}
 		}
 		if m.Type == 'L' {
