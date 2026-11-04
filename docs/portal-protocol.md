@@ -191,8 +191,53 @@ A 0x11 command to a device in error state that was **not** preceded by
 "Command discarded". While the UI is open the software polls `l:` every
 10 s and disconnects after 30 s without user activity.
 
+### Verified on hardware with Massimo (2026-11-04, Cube JEQ…, live devices)
+
+Through `massimo restore` on a radiator thermostat: 0x11 preset
+temperatures (eco 17 → 16.5 shown on the device), 0x10 week program
+(one day), 0x12 valve settings (boost 5 → 10 min, shown as 600 s on the
+device), each after a `z:` room wakeup; `i:ffffffff,00000000` (portal
+polling off, confirmed by the C line). Budget per write: two memory
+slots while in flight, duty cycle +3 % for 0x11/0x12, +8 % for one day
+of 0x10.
+
+### Pairing a device, as the original software does it
+
+Log of pairing a wall thermostat (NEQ…, rf 15667d, fw 16) into room 4,
+which held a radiator thermostat (0147b7) and two shutter contacts
+(005447, 1570d3):
+
+1. `n:` inclusion mode; the Cube answers `N:<type><rf><serial>ff` when a
+   device joins. Devices paired earlier but never put into a room are
+   listed as new devices too (they have a C line but no M entry).
+2. `z:1e,G,04` wakeup, then one 0x20 (add link partner) radiogram per
+   pair in both directions: to the radiator thermostat with the room
+   flag (`00 04 20 … 0147b7 04 15667d 03`), to each shutter contact
+   (`00 00 20 … 005447 00 15667d 03`), and to the new device for each
+   partner (`00 00 20 … 15667d 00 0147b7 01`, `… 005447 04`, `… 1570d3
+   04`); then 0x22 set group (`00 00 22 … 15667d 00 04`).
+3. `c:15667d` to fetch the new device's configuration.
+4. 0x40 set temperature, auto, temp 0 (`… 40 … 15667d 00 00`).
+5. `z:` wakeup, then 0x11 preset temperatures to **every** thermostat of
+   the room, radiator and wall alike, with the room's values
+   (`27 22 3d 09 07 0a 03` = 19.5/17/30.5/4.5, offset 0, window 5.0 °C,
+   15 min).
+6. `z:` wakeup, 0x12 to the new device (`30 0c ff 00` = boost 5 min 80 %,
+   decalc Sat 12:00, max valve 100 %, offset 0).
+7. `z:` wakeup, 0x10 for all seven days to the new device (Mon..Fri,
+   Sat, Sun; 7 switch points, padded with the last one), then 0x11 once
+   more to the new device.
+8. `m:` with the device added to the room and device list.
+
+So wall thermostats take 0x11 and 0x12 with the same payloads as
+radiator thermostats, and their C line ends with offset, window-open
+temperature and boost (3 bytes after the week program at 0x16). Their L
+entry (12 bytes) carries the setpoint at offset 8 and the measured
+temperature at 12 (with bit 7 of byte 8 as the ninth bit); byte 7 is
+not a valve.
+
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
-0x03 and 0xf1; it changed after failed transmissions to that device.
+0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
 
 Duty cycle and memory slots: with the thermostats out of range, each
 command raised the duty cycle (0x44 → 0x64 = 100 %) and consumed one free

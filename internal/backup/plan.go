@@ -448,8 +448,33 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 		}
 	case want.Wall != nil && c.Wall != nil:
 		w, h := want.Wall, c.Wall
-		if !opts.SkipSettings && (w.ComfortTemp != h.ComfortTemp || w.EcoTemp != h.EcoTemp || w.MaxSetpoint != h.MaxSetpoint || w.MinSetpoint != h.MinSetpoint) {
-			p.Notes = append(p.Notes, fmt.Sprintf("device %s %q: preset temperatures of wall thermostats are not restored yet (encoding unverified)", want.RFAddress, name))
+		// The original software writes wall thermostats with the same
+		// commands as radiator thermostats; the values a wall thermostat
+		// does not store (window-open minutes, decalcification, valve
+		// limits) are taken from a radiator thermostat in the same room,
+		// else from the software's defaults.
+		ref := roomRadiator(snap, room, want.RFAddress)
+		if !opts.SkipSettings {
+			if w.ComfortTemp != h.ComfortTemp || w.EcoTemp != h.EcoTemp || w.MaxSetpoint != h.MaxSetpoint || w.MinSetpoint != h.MinSetpoint ||
+				w.TempOffset != h.TempOffset || w.WindowOpenTemp != h.WindowOpenTemp {
+				m, err := cube.CmdSetTemperatures(t, cube.TemperatureSettings{Comfort: w.ComfortTemp, Eco: w.EcoTemp, Max: w.MaxSetpoint, Min: w.MinSetpoint,
+					Offset: w.TempOffset, WindowOpen: w.WindowOpenTemp, WindowOpenMinutes: ref.WindowOpenMins})
+				if err != nil {
+					return fmt.Errorf("device %s: temperatures: %w", want.RFAddress, err)
+				}
+				lines = append(lines, m)
+				what = append(what, fmt.Sprintf("temperatures comfort %.1f eco %.1f max %.1f min %.1f offset %+.1f window %.1f",
+					w.ComfortTemp, w.EcoTemp, w.MaxSetpoint, w.MinSetpoint, w.TempOffset, w.WindowOpenTemp))
+			}
+			if w.BoostMinutes != h.BoostMinutes || w.BoostValvePct != h.BoostValvePct {
+				m, err := cube.CmdSetValveConfig(t, cube.ValveSettings{BoostMinutes: w.BoostMinutes, BoostValvePct: w.BoostValvePct, DecalcDay: ref.DecalcDay,
+					DecalcHour: ref.DecalcHour, MaxValvePct: ref.MaxValvePct, ValveOffsetPct: ref.ValveOffsetPct})
+				if err != nil {
+					return fmt.Errorf("device %s: boost: %w", want.RFAddress, err)
+				}
+				lines = append(lines, m)
+				what = append(what, fmt.Sprintf("boost %dmin/%d%%", w.BoostMinutes, w.BoostValvePct))
+			}
 		}
 		if !opts.SkipPrograms {
 			days, err := programDiff(t, w.WeekProgram, h.WeekProgram)
@@ -471,6 +496,20 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 	p.add(fmt.Sprintf("%s %q: %s", want.RFAddress, name, strings.Join(what, ", ")),
 		engine.Command{Key: "restore:" + want.RFAddress.String(), Target: want.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
 	return nil
+}
+
+// roomRadiator returns the configuration of a radiator thermostat in the
+// room (other than rf), or the original software's defaults.
+func roomRadiator(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) cube.ThermostatConfig {
+	for _, other := range snap.Devices() {
+		if other == rf {
+			continue
+		}
+		if c := snap.Config(other); c != nil && c.Thermostat != nil && c.RoomID == room {
+			return *c.Thermostat
+		}
+	}
+	return cube.ThermostatConfig{WindowOpenMins: 15, DecalcDay: cube.Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0}
 }
 
 type dayChange struct {

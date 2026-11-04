@@ -63,9 +63,10 @@ type Device struct {
 	Name      string          `json:"name"`
 	RoomID    uint8           `json:"room_id"`
 	Firmware  uint8           `json:"firmware,omitempty"`
-	// Unlisted marks a device the Cube holds a configuration for but
-	// does not show in its room and device list (no name, not visible in
-	// the apps). A restore leaves such devices alone unless the backup
+	// Unlisted marks a device that is paired but was never assigned to a
+	// room: the Cube holds its configuration but it is not in the room
+	// and device list, and the original software offers it as a "new
+	// device". A restore leaves such devices alone unless the backup
 	// gives them a name.
 	Unlisted bool `json:"unlisted,omitempty"`
 

@@ -90,14 +90,22 @@ type ThermostatConfig struct {
 	WeekProgram    WeekProgram `json:"week_program"`
 }
 
-// WallConfig holds the settings of a wall thermostat.
+// WallConfig holds the settings of a wall thermostat. The three bytes
+// after the week program (offset, window-open temperature, boost) follow
+// FHEM's reading and match a wall thermostat seen in 2026; the original
+// software writes wall thermostats with the same 0x11 and 0x12 commands
+// as radiator thermostats.
 type WallConfig struct {
-	ComfortTemp float64     `json:"comfort_temp"`
-	EcoTemp     float64     `json:"eco_temp"`
-	MaxSetpoint float64     `json:"max_setpoint"`
-	MinSetpoint float64     `json:"min_setpoint"`
-	WeekProgram WeekProgram `json:"week_program"`
-	Extra       []byte      `json:"extra,omitempty"` // bytes after the week program, meaning unknown
+	ComfortTemp    float64     `json:"comfort_temp"`
+	EcoTemp        float64     `json:"eco_temp"`
+	MaxSetpoint    float64     `json:"max_setpoint"`
+	MinSetpoint    float64     `json:"min_setpoint"`
+	TempOffset     float64     `json:"temp_offset"`
+	WindowOpenTemp float64     `json:"window_open_temp"`
+	BoostMinutes   int         `json:"boost_minutes"`
+	BoostValvePct  int         `json:"boost_valve_pct"`
+	WeekProgram    WeekProgram `json:"week_program"`
+	Extra          []byte      `json:"extra,omitempty"` // bytes beyond those, if any
 }
 
 // Offsets inside the decoded C payload (including the leading length byte).
@@ -212,14 +220,26 @@ func DecodeConfig(b []byte) (*DeviceConfig, error) {
 		if err := need(wallWeekProgram + WeekProgramSize); err != nil {
 			return nil, err
 		}
-		c.Wall = &WallConfig{
+		w := &WallConfig{
 			ComfortTemp: DecodeTemp(b[0x12]),
 			EcoTemp:     DecodeTemp(b[0x13]),
 			MaxSetpoint: DecodeTemp(b[0x14]),
 			MinSetpoint: DecodeTemp(b[0x15]),
 			WeekProgram: DecodeWeekProgram(b[wallWeekProgram : wallWeekProgram+WeekProgramSize]),
-			Extra:       append([]byte(nil), b[wallWeekProgram+WeekProgramSize:]...),
 		}
+		rest := b[wallWeekProgram+WeekProgramSize:]
+		if len(rest) >= 3 {
+			w.TempOffset = DecodeTemp(rest[0]) - 3.5
+			w.WindowOpenTemp = DecodeTemp(rest[1])
+			w.BoostMinutes = int(rest[2]>>5) * 5
+			if rest[2]>>5 == 7 {
+				w.BoostMinutes = 60
+			}
+			w.BoostValvePct = int(rest[2]&0x1f) * 5
+			rest = rest[3:]
+		}
+		w.Extra = append([]byte(nil), rest...)
+		c.Wall = w
 	}
 	return c, nil
 }

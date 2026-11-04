@@ -573,3 +573,36 @@ func TestWeekProgramJSON(t *testing.T) {
 		t.Fatal("07:60 accepted")
 	}
 }
+
+// A wall thermostat seen on hardware in 2026 (fw 16): the three bytes
+// after the week program are offset 0, window-open 12.0 °C, boost 5 min
+// at 80 %. Its L entry reports auto, 18.0 °C set, 24.4 °C measured.
+func TestWallThermostatConfigAndState(t *testing.T) {
+	c, err := ParseConfig("15667d,zhVmfQMAEP9ORVEwOTA4MzU5KiI9CURIVQhFIEUgRSBFIEUgRSBFIEUgRSBFIEUgREhVCEUgRSBFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgREhUbETMVRRFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgBxgw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := c.Wall
+	if c.Type != DeviceWallThermostat || c.Firmware != 16 || c.Serial != "NEQ0908359" || w == nil {
+		t.Fatalf("config %+v", c)
+	}
+	if w.ComfortTemp != 21 || w.EcoTemp != 17 || w.MaxSetpoint != 30.5 || w.MinSetpoint != 4.5 ||
+		w.TempOffset != 0 || w.WindowOpenTemp != 12 || w.BoostMinutes != 5 || w.BoostValvePct != 80 || len(w.Extra) != 0 {
+		t.Fatalf("wall config %+v", w)
+	}
+	if got := w.WeekProgram[Monday]; len(got) != 5 || got[1] != (SwitchPoint{Temp: 21, Until: 540}) {
+		t.Fatalf("monday %+v", got)
+	}
+	states, err := ParseDeviceList("DBVmffYSGAEkAAAA9A==", map[RFAddress]DeviceType{0x15667d: DeviceWallThermostat})
+	if err != nil || len(states) != 1 {
+		t.Fatal(err)
+	}
+	s := states[0]
+	if !s.Valid || s.Mode != ModeAuto || s.Setpoint == nil || *s.Setpoint != 18 || s.ActualTemp == nil || *s.ActualTemp != 24.4 || s.ValvePct != nil {
+		t.Fatalf("state %+v", s)
+	}
+	nd, err := ParseNewDevice("AxVmfU5FUTA5MDgzNTn/")
+	if err != nil || nd.Type != DeviceWallThermostat || nd.RFAddress != 0x15667d || nd.Serial != "NEQ0908359" {
+		t.Fatalf("new device %+v %v", nd, err)
+	}
+}
