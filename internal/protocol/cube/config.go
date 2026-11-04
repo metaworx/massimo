@@ -378,15 +378,45 @@ func (p *SwitchPoint) UnmarshalJSON(b []byte) error {
 		if err := json.Unmarshal(raw.Until, &s); err != nil {
 			return err
 		}
-		var h, m int
-		if _, err := fmt.Sscanf(s, "%d:%d", &h, &m); err != nil {
-			return fmt.Errorf("switch point until %q: want HH:MM", s)
+		v, err := parseClock(s)
+		if err != nil {
+			return err
 		}
-		p.Until = h*60 + m
+		p.Until = v
 	case len(raw.Until) > 0:
-		return json.Unmarshal(raw.Until, &p.Until)
+		// A number is HHMM (1905, 600); note that 0600 is octal in YAML.
+		var n int
+		if err := json.Unmarshal(raw.Until, &n); err != nil {
+			return err
+		}
+		v, err := parseClock(fmt.Sprintf("%04d", n))
+		if err != nil {
+			return err
+		}
+		p.Until = v
 	default:
 		return fmt.Errorf("switch point: missing until")
 	}
 	return nil
+}
+
+// parseClock reads "HH:MM", "H:MM" or "HHMM" as minutes since midnight.
+func parseClock(s string) (int, error) {
+	var h, m int
+	switch {
+	case strings.Contains(s, ":"):
+		if _, err := fmt.Sscanf(s, "%d:%d", &h, &m); err != nil {
+			return 0, fmt.Errorf("switch point until %q: want HH:MM", s)
+		}
+	case len(s) == 4:
+		if _, err := fmt.Sscanf(s, "%2d%2d", &h, &m); err != nil {
+			return 0, fmt.Errorf("switch point until %q: want HH:MM or HHMM", s)
+		}
+	default:
+		return 0, fmt.Errorf("switch point until %q: want HH:MM or HHMM", s)
+	}
+	if h < 0 || h > 24 || m < 0 || m > 59 || (h == 24 && m != 0) {
+		return 0, fmt.Errorf("switch point until %q: not a time of day", s)
+	}
+	return h*60 + m, nil
 }

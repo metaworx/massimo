@@ -560,4 +560,16 @@ func TestWeekProgramJSON(t *testing.T) {
 	if !reflect.DeepEqual(w, old) {
 		t.Fatalf("old form %+v", old)
 	}
+	// Numeric and unquoted HHMM forms.
+	var alt WeekProgram
+	if err := json.Unmarshal([]byte(`{"monday":[{"temp":17,"until":700},{"temp":21,"until":"2400"}],"saturday":[{"temp":18,"until":"24:00"}]}`), &alt); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(w, alt) {
+		t.Fatalf("numeric form %+v", alt)
+	}
+	var bad SwitchPoint
+	if err := json.Unmarshal([]byte(`{"temp":17,"until":"07:60"}`), &bad); err == nil {
+		t.Fatal("07:60 accepted")
+	}
 }
