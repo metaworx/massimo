@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -143,6 +144,9 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*Fi
 		}
 		f.Devices = append(f.Devices, d)
 	}
+	// A fixed order makes files comparable; the Cube's own order is not.
+	sort.Slice(f.Rooms, func(i, j int) bool { return f.Rooms[i].ID < f.Rooms[j].ID })
+	sort.Slice(f.Devices, func(i, j int) bool { return f.Devices[i].RFAddress < f.Devices[j].RFAddress })
 	for _, m := range snap.Lines() {
 		f.Lines = append(f.Lines, m.String())
 	}
@@ -214,11 +218,7 @@ func (f *File) Marshal(yamlFormat bool) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var generic any
-	if err := json.Unmarshal(js, &generic); err != nil {
-		return nil, err
-	}
-	return yaml.Marshal(generic)
+	return jsonToYAML(js)
 }
 
 // Unmarshal decodes JSON or YAML.

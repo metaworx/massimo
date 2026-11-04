@@ -6,6 +6,7 @@ package cube
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -529,5 +530,34 @@ func TestRealCubeGreeting(t *testing.T) {
 	}
 	if len(states) != 6 || states[0].Valid || states[0].Type != DeviceRadiatorThermostat {
 		t.Errorf("states: %+v", states)
+	}
+}
+
+func TestWeekProgramJSON(t *testing.T) {
+	var w WeekProgram
+	w[Monday] = DayProgram{{Temp: 17, Until: 420}, {Temp: 21, Until: 1440}}
+	w[Saturday] = DayProgram{{Temp: 18, Until: 1440}}
+	js, err := json.Marshal(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"monday":[{"temp":17,"until":"07:00"},{"temp":21,"until":"24:00"}],"tuesday":null,"wednesday":null,"thursday":null,"friday":null,"saturday":[{"temp":18,"until":"24:00"}],"sunday":null}`
+	if string(js) != want {
+		t.Fatalf("got %s", js)
+	}
+	var back WeekProgram
+	if err := json.Unmarshal(js, &back); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(w, back) {
+		t.Fatalf("round trip %+v", back)
+	}
+	// Device-native forms are still read.
+	var old WeekProgram
+	if err := json.Unmarshal([]byte(`[[{"temp":18,"until_min":1440}],null,[{"temp":17,"until_min":420},{"temp":21,"until_min":1440}],null,null,null,null]`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(w, old) {
+		t.Fatalf("old form %+v", old)
 	}
 }

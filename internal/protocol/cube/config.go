@@ -6,6 +6,7 @@ package cube
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -294,6 +295,98 @@ func (d DayProgram) Validate() error {
 	}
 	if prev != 24*60 {
 		return fmt.Errorf("day program: last point must end at 24:00")
+	}
+	return nil
+}
+
+// JSON forms readable in backups: a week program is an object keyed by
+// weekday name in calendar order, a switch point is {"temp": 17,
+// "until": "07:00"}. Both also accept the device-native forms (a
+// Saturday-first list, and "until_min" minutes) when read.
+
+var jsonDayOrder = [...]Weekday{Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday}
+
+// MarshalJSON implements json.Marshaler.
+func (w WeekProgram) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, d := range jsonDayOrder {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		day, err := json.Marshal(w[d])
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(&buf, "%q:%s", d.String(), day)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (w *WeekProgram) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) > 0 && b[0] == '[' {
+		var days [7]DayProgram
+		if err := json.Unmarshal(b, &days); err != nil {
+			return err
+		}
+		*w = days
+		return nil
+	}
+	var keyed map[string]DayProgram
+	if err := json.Unmarshal(b, &keyed); err != nil {
+		return err
+	}
+	var out WeekProgram
+	for name, prog := range keyed {
+		var d Weekday
+		if err := d.UnmarshalText([]byte(name)); err != nil {
+			return err
+		}
+		out[d] = prog
+	}
+	*w = out
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.
+func (p SwitchPoint) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Temp  float64 `json:"temp"`
+		Until string  `json:"until"`
+	}{p.Temp, fmt.Sprintf("%02d:%02d", p.Until/60, p.Until%60)})
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (p *SwitchPoint) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Temp     float64         `json:"temp"`
+		Until    json.RawMessage `json:"until"`
+		UntilMin *int            `json:"until_min"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	p.Temp = raw.Temp
+	switch {
+	case raw.UntilMin != nil:
+		p.Until = *raw.UntilMin
+	case len(raw.Until) > 0 && raw.Until[0] == '"':
+		var s string
+		if err := json.Unmarshal(raw.Until, &s); err != nil {
+			return err
+		}
+		var h, m int
+		if _, err := fmt.Sscanf(s, "%d:%d", &h, &m); err != nil {
+			return fmt.Errorf("switch point until %q: want HH:MM", s)
+		}
+		p.Until = h*60 + m
+	case len(raw.Until) > 0:
+		return json.Unmarshal(raw.Until, &p.Until)
+	default:
+		return fmt.Errorf("switch point: missing until")
 	}
 	return nil
 }
