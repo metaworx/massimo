@@ -33,6 +33,8 @@ func main() {
 		err = runPortal(os.Args[2:])
 	case "cube":
 		err = runCube(os.Args[2:])
+	case "watch":
+		err = runWatch(os.Args[2:])
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -60,6 +62,7 @@ commands:
   portal-crypto   AES helpers for the Cube's portal encryption (see its -h)
   portal          fake portal server that decrypts and logs what a Cube sends
   cube            send protocol lines to a Cube over the LAN
+  watch           stay connected to a Cube and print state changes
   version         print the version (also --version)
 `)
 }
