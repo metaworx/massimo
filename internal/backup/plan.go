@@ -215,9 +215,13 @@ func (p *Plan) planNames(f *File, snap *cubelan.Snapshot, present []Device) erro
 		want.Devices = append(want.Devices, d)
 		seen[d.RFAddress] = true
 	}
+	var added []string
 	for _, d := range present {
-		if !seen[d.RFAddress] {
+		if !seen[d.RFAddress] && d.Name != "" {
+			// Known to the Cube only by its configuration: list it only
+			// when the backup names it, which is what the user wants.
 			want.Devices = append(want.Devices, cube.DeviceMeta{Type: d.Type, RFAddress: d.RFAddress, Serial: d.Serial, Name: d.Name, RoomID: d.RoomID})
+			added = append(added, fmt.Sprintf("%s: add to the list as %q in room %d", d.RFAddress, d.Name, d.RoomID))
 		}
 	}
 	// Rooms from the backup that no device uses are not created; rooms the
@@ -244,7 +248,7 @@ func (p *Plan) planNames(f *File, snap *cubelan.Snapshot, present []Device) erro
 	if err != nil {
 		return err
 	}
-	var changes []string
+	changes := added
 	for _, d := range want.Devices {
 		for _, c := range cur.Devices {
 			if c.RFAddress != d.RFAddress {

@@ -71,7 +71,7 @@ func runBackup(args []string) error {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "warning: NTP servers not read:", err)
 	}
-	f, err := backup.Take(c.Snapshot(), ntp, "massimo "+versionString(), time.Now())
+	f, err := backup.Take(c.Snapshot(), ntp, versionString(), time.Now())
 	if err != nil {
 		return err
 	}

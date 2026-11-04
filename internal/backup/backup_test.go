@@ -5,6 +5,7 @@ package backup
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -238,5 +239,69 @@ func TestPlanKeepsEmptyRooms(t *testing.T) {
 	}
 	if !p.Empty() {
 		t.Fatalf("plan not empty: %+v", p.Steps)
+	}
+}
+
+// withUnlistedDevice adds a C line for a device that is not in the M list.
+func withUnlistedDevice(greeting []cube.Message) []cube.Message {
+	out := append([]cube.Message(nil), greeting...)
+	for _, m := range greeting {
+		if m.Type == 'C' && strings.HasPrefix(m.Data, "1514b6,") {
+			// Same configuration, different address and serial.
+			raw, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(m.Data, "1514b6,"))
+			raw = append([]byte(nil), raw...)
+			raw[1], raw[2], raw[3] = 0x00, 0x18, 0x67
+			copy(raw[8:18], "IEQ0158740")
+			out = append(out, cube.Message{Type: 'C', Data: "001867," + base64.StdEncoding.EncodeToString(raw)})
+		}
+	}
+	// Keep L last.
+	for i, m := range out {
+		if m.Type == 'L' && i != len(out)-1 {
+			out = append(append(out[:i:i], out[i+1:]...), m)
+			break
+		}
+	}
+	return out
+}
+
+func TestPlanLeavesUnlistedDevicesAlone(t *testing.T) {
+	_, c, _, f := take(t)
+	_ = c
+	greeting, _ := fakecube.LoadGreeting(fixture)
+	srv := &fakecube.Server{Greeting: withUnlistedDevice(greeting)}
+	addr, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); srv.Close() })
+	c2 := cubelan.New(cubelan.Options{Addr: addr})
+	go c2.Run(ctx)
+	<-c2.Ready()
+	f, err = Take(c2.Snapshot(), nil, "test", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, ok := f.Device(0x001867)
+	if !ok || !d.Unlisted || d.Name != "" || d.Serial != "IEQ0158740" {
+		t.Fatalf("unlisted device %+v ok=%v", d, ok)
+	}
+	p, err := NewPlan(f, Current{Snapshot: c2.Snapshot()}, PlanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Empty() {
+		t.Fatalf("plan not empty: %+v", p.Steps)
+	}
+	// Naming it in the backup lists it.
+	for i := range f.Devices {
+		if f.Devices[i].RFAddress == 0x001867 {
+			f.Devices[i].Name, f.Devices[i].RoomID = "Neu", 6
+		}
+	}
+	p, _ = NewPlan(f, Current{Snapshot: c2.Snapshot()}, PlanOptions{})
+	if len(p.Steps) != 1 || !strings.Contains(p.Steps[0].What, `001867: add to the list as "Neu" in room 6`) {
+		t.Fatalf("steps %+v", p.Steps)
 	}
 }

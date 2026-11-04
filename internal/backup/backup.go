@@ -62,6 +62,11 @@ type Device struct {
 	Name      string          `json:"name"`
 	RoomID    uint8           `json:"room_id"`
 	Firmware  uint8           `json:"firmware,omitempty"`
+	// Unlisted marks a device the Cube holds a configuration for but
+	// does not show in its room and device list (no name, not visible in
+	// the apps). A restore leaves such devices alone unless the backup
+	// gives them a name.
+	Unlisted bool `json:"unlisted,omitempty"`
 
 	Thermostat *cube.ThermostatConfig `json:"thermostat,omitempty"`
 	Wall       *cube.WallConfig       `json:"wall_thermostat,omitempty"`
@@ -115,7 +120,7 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*Fi
 		if c == nil && !hasMeta {
 			continue
 		}
-		d := Device{RFAddress: rf}
+		d := Device{RFAddress: rf, Unlisted: !hasMeta}
 		if hasMeta {
 			d.Type, d.Serial, d.Name, d.RoomID = m.Type, m.Serial, m.Name, m.RoomID
 		}
