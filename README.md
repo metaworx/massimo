@@ -123,7 +123,8 @@ served at http://127.0.0.1:8099/ : rooms, devices and their states live,
 setpoints, locks and the deletion of empty rooms. It is meant for the
 LAN. The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it, and the UI, which needs the same token as the
-API, with it.
+API, with it. `-log <file>` (or `MASSIMO_LOG`) appends the log,
+including every device state change, to a file as well.
 
 The Cube serves only one LAN client at a time, so `serve` is itself a
 Cube for everyone else: it listens on port 62910 on every interface
