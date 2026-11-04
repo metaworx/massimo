@@ -24,7 +24,8 @@ const ivEnv = "MASSIMO_CUBE_IV"
 // replies like the original portal unless told otherwise.
 func runPortal(args []string) error {
 	fs := flag.NewFlagSet("portal", flag.ContinueOnError)
-	listen := fs.String("listen", ":8080", "address to listen on")
+	var listens listenList
+	fs.Var(&listens, "listen", "address to listen on, [ip]:port; repeat for several (default :8080)")
 	ivHex := fs.String("iv", os.Getenv(ivEnv), "IV as 32 hex digits (or "+ivEnv+")")
 	serial := fs.String("serial", "", "only accept this Cube serial (default: any serial, same key)")
 	iLine := fs.String("i", "000051b1,00000000,ffffffff", "payload of the i: reply line; 'none' sends no i: line; {conn} is replaced by the Cube's connection id")
@@ -37,6 +38,9 @@ func runPortal(args []string) error {
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if len(listens) == 0 {
+		listens = listenList{":8080"}
 	}
 	if *ivHex == "" {
 		return fmt.Errorf("portal: need -iv or %s (recover it with 'portal-crypto iv')", ivEnv)
@@ -73,20 +77,30 @@ func runPortal(args []string) error {
 		Log:        logger,
 		Dir:        *dir,
 		DeviceURL:  *deviceURL,
-		ListenPort: strings.TrimPrefix(portForURL(*listen), ":"),
+		ListenPort: strings.TrimPrefix(portForURL(listens[0]), ":"),
 	}
 	cap.Version = versionString()
 	// Listen on IPv4 explicitly: on Windows a dual-stack IPv6 listener can
 	// bind next to another program's IPv4 socket on the same port and then
 	// silently receive nothing, while IPv4 traffic goes to the other program.
-	ln, err := net.Listen("tcp4", *listen)
-	if err != nil {
-		return fmt.Errorf("portal: %w", err)
+	errc := make(chan error, len(listens))
+	for _, addr := range listens {
+		ln, err := net.Listen("tcp4", addr)
+		if err != nil {
+			return fmt.Errorf("portal: %w", err)
+		}
+		logger.Info("fake portal listening", "addr", ln.Addr().String(), "serial", orAny(*serial), "capture", *dir+"/portal-capture.jsonl")
+		logger.Info("point the Cube here with: u:http://<this host>" + portForURL(addr) + "/cube")
+		go func() { errc <- http.Serve(ln, cap) }()
 	}
-	logger.Info("fake portal listening", "addr", ln.Addr().String(), "serial", orAny(*serial), "capture", *dir+"/portal-capture.jsonl")
-	logger.Info("point the Cube here with: u:http://<this host>" + portForURL(*listen) + "/cube")
-	return http.Serve(ln, cap)
+	return <-errc
 }
+
+// listenList collects repeated -listen flags.
+type listenList []string
+
+func (l *listenList) String() string     { return strings.Join(*l, ",") }
+func (l *listenList) Set(v string) error { *l = append(*l, v); return nil }
 
 func orAny(s string) string {
 	if s == "" {
