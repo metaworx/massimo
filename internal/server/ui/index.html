@@ -11,14 +11,15 @@
 <header class="top">
   <div class="brand">
     <h1>Massimo</h1>
-    <span id="version" class="muted"></span>
+    <span id="version" class="muted expert-only"></span>
   </div>
   <div class="cube">
     <label for="cube-select" class="muted">Cube</label>
     <select id="cube-select"></select>
     <span id="connection" class="pill"></span>
   </div>
-  <dl id="budget" class="budget">
+  <label class="expert-toggle"><input type="checkbox" id="expert-toggle"> Expert</label>
+  <dl id="budget" class="budget expert-only">
     <div><dt>Duty cycle</dt><dd id="duty">–</dd></div>
     <div><dt>Free slots</dt><dd id="slots">–</dd></div>
     <div><dt>Queued</dt><dd id="queued">–</dd></div>
@@ -29,31 +30,37 @@
 
 <main>
   <p id="message" class="message hidden"></p>
-  <section id="rooms"></section>
-  <section id="unlisted" class="hidden">
-    <h2>Not in any room</h2>
-    <div id="unlisted-devices"></div>
+
+  <section id="house" class="tile house hidden">
+    <header class="tile-head"><h2>House</h2></header>
+    <div class="house-modes">
+      <span class="muted">Mode</span>
+      <button type="button" id="house-eco">ECO</button>
+      <button type="button" id="house-auto">AUTO</button>
+      <button type="button" id="house-comfort">COMFORT</button>
+    </div>
+    <p id="house-result" class="tile-result hidden"></p>
+  </section>
+
+  <section id="rooms" class="tiles"></section>
+
+  <section id="unlisted" class="tile hidden">
+    <header class="tile-head"><h2>Devices without a room</h2></header>
+    <div id="unlisted-devices" class="devices"></div>
   </section>
 </main>
 
-<dialog id="setpoint-dialog">
-  <form method="dialog" id="setpoint-form">
-    <h3 id="setpoint-title">Setpoint</h3>
-    <label>Mode
-      <select name="mode" id="setpoint-mode">
-        <option value="auto">auto (week program)</option>
-        <option value="manual">manual</option>
-        <option value="vacation">vacation</option>
-      </select>
+<dialog id="vacation-dialog">
+  <form method="dialog" id="vacation-form">
+    <h3 id="vacation-title">Vacation</h3>
+    <label>Temperature °C
+      <input type="number" id="vacation-temp" min="4.5" max="30.5" step="0.5" value="17">
     </label>
-    <label id="setpoint-temp-label">Temperature °C
-      <input type="number" name="temp" id="setpoint-temp" min="4.5" max="30.5" step="0.5" value="20">
-    </label>
-    <label id="setpoint-until-label" class="hidden">Until
-      <input type="datetime-local" name="until" id="setpoint-until" step="1800">
+    <label>Until
+      <input type="datetime-local" id="vacation-until" step="1800" required>
     </label>
     <div class="actions">
-      <button type="button" id="setpoint-cancel">Cancel</button>
+      <button type="button" id="vacation-cancel">Cancel</button>
       <button type="submit" class="primary">Send</button>
     </div>
   </form>
@@ -69,16 +76,39 @@
 </dialog>
 
 <template id="room-template">
-  <article class="room">
-    <header class="room-head">
-      <h2 class="room-name"></h2>
-      <div class="room-actions">
-        <button type="button" class="room-setpoint">Setpoint</button>
-        <button type="button" class="room-delete hidden">Delete room</button>
-      </div>
+  <article class="tile room">
+    <header class="tile-head">
+      <button type="button" class="room-name-btn"><h2 class="room-name"></h2></button>
+      <span class="room-actual" title="measured temperature"></span>
+      <details class="menu">
+        <summary aria-label="room actions">⋯</summary>
+        <div class="menu-items">
+          <button type="button" class="menu-devices">Devices</button>
+          <button type="button" class="menu-vacation">Vacation…</button>
+          <button type="button" class="menu-lock">Lock thermostats</button>
+          <button type="button" class="menu-unlock">Unlock thermostats</button>
+          <button type="button" class="menu-delete">Delete room</button>
+        </div>
+      </details>
     </header>
     <p class="notice not-ready hidden"></p>
-    <div class="devices"></div>
+    <div class="setpoint-row">
+      <button type="button" class="step step-minus" aria-label="0.5 degrees less">−</button>
+      <span class="setpoint-big"></span>
+      <button type="button" class="step step-plus" aria-label="0.5 degrees more">+</button>
+    </div>
+    <div class="pending-row hidden">
+      <button type="button" class="pending-save primary">Save</button>
+      <button type="button" class="pending-cancel">Cancel</button>
+    </div>
+    <div class="mode-row">
+      <span class="muted">Mode</span>
+      <button type="button" class="mode-auto">AUTO</button>
+      <button type="button" class="mode-manual">MANU</button>
+      <span class="mode-vacation hidden"></span>
+    </div>
+    <p class="tile-result hidden"></p>
+    <div class="devices hidden"></div>
   </article>
 </template>
 
@@ -86,8 +116,8 @@
   <div class="device">
     <div class="device-main">
       <span class="device-name"></span>
-      <span class="device-type muted"></span>
-      <span class="device-rf muted mono"></span>
+      <span class="device-type muted expert-only"></span>
+      <span class="device-rf muted mono expert-only"></span>
     </div>
     <div class="device-state"></div>
     <div class="device-flags"></div>
@@ -96,5 +126,6 @@
 </template>
 
 <script src="/ui/app.js"></script>
+<script src="/ui/tiles.js"></script>
 </body>
 </html>

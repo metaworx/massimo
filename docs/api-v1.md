@@ -13,14 +13,28 @@ state when needed.
 
 ## Web UI
 
-The server also serves a small web page at `/` (files under `/ui/`)
-that shows the Cubes, rooms and devices from this API, follows the
-event stream, and sends setpoints, locks and room deletions. It is
-plain HTML and JavaScript embedded in the binary; it needs no setup.
-With a token configured, the page asks for it once and keeps it in the
-browser; the event stream takes the token as `?token=` because browsers
-open it without headers. The page and its files are public, the API
-behind them is not.
+The server also serves a web page at `/` (files under `/ui/`) built on
+this API, plain HTML and JavaScript embedded in the binary, no setup.
+It shows one tile per room in the manner of the original software: the
+setpoint large, a −/+ stepper (shown on hover, always on touch screens)
+that changes it in 0.5 °C steps and sends the value as a manual
+setpoint two seconds after the last click, with Save and Cancel while
+it waits; AUTO and MANU buttons; the measured temperature in the tile's
+corner; a menu with vacation, lock and unlock of the room's
+thermostats, the device list and, for an empty room, deletion. A House
+tile sets every room to ECO or COMFORT (manual at the room's eco or
+comfort temperature from its thermostat's configuration) or AUTO.
+Clicking a room name opens its devices with their states, flags,
+temperature offsets and per-thermostat lock. Setpoints are set per
+room only, as in the original software. An "Expert" switch in the
+header shows radio addresses, device types, the budget numbers, the
+version and the Cube clock; off by default. Results of every action
+appear in the tile, including the devices to nudge when the Cube
+discarded a room command. The page follows the event stream. With a
+token configured, the page asks for it once and keeps it in the
+browser; the event stream alone takes the token as `?token=` because
+browsers open it without headers, every other route needs the header.
+The page and its files are public, the API behind them is not.
 
 ## Authentication
 

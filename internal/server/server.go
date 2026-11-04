@@ -19,7 +19,7 @@
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
 //
 // With a token configured, every /api request needs "Authorization: Bearer <token>"
-// (or ?token=<token>). A web UI for all of this is served at / (see ui.go).
+// (the event stream also accepts ?token=<token>). A web UI for all of this is served at / (see ui.go).
 //
 // With proxy listeners configured, the server also answers as a Cube on
 // the LAN (TCP 62910 and UDP discovery), see internal/proxy.
@@ -245,7 +245,11 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				if st, ok := rt.client.Snapshot().State(e.Device); ok {
-					ev.State = deviceView(rt.client.Snapshot(), e.Device, st)
+					dv := deviceView(rt.client.Snapshot(), e.Device, st)
+					ev.State = dv
+					if e.Kind == cubelan.EventState {
+						s.log.Info("device state", stateAttrs(rt.serial, dv)...)
+					}
 				}
 			}
 			if e.Err != nil {
@@ -271,6 +275,47 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 	}
 }
 
+// stateAttrs builds the log attributes of a device state change: the
+// device, then whatever the device reported.
+func stateAttrs(serial string, d deviceState) []any {
+	attrs := []any{"cube", serial, "device", d.RFAddress, "name", d.Name}
+	if d.State == nil {
+		return append(attrs, "reported", false)
+	}
+	st := d.State
+	if d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat {
+		attrs = append(attrs, "mode", st.Mode.String())
+	}
+	if st.Setpoint != nil {
+		attrs = append(attrs, "setpoint", *st.Setpoint)
+	}
+	if st.ActualTemp != nil {
+		attrs = append(attrs, "actual", *st.ActualTemp)
+	}
+	if st.ValvePct != nil {
+		attrs = append(attrs, "valve_pct", *st.ValvePct)
+	}
+	if st.WindowOpen != nil {
+		attrs = append(attrs, "window_open", *st.WindowOpen)
+	}
+	if st.Until != nil {
+		attrs = append(attrs, "until", st.Until.String())
+	}
+	if st.BatteryLow {
+		attrs = append(attrs, "battery_low", true)
+	}
+	if st.Error {
+		attrs = append(attrs, "error", true)
+	}
+	if st.LinkError {
+		attrs = append(attrs, "link_error", true)
+	}
+	if st.PanelLocked {
+		attrs = append(attrs, "locked", true)
+	}
+	return attrs
+}
+
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.mux }
 
@@ -281,11 +326,14 @@ func (s *Server) routes() {
 	})
 	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			// The token comes as a bearer header, or as ?token= for the
-			// event stream, which browsers open without headers.
-			if s.opts.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.opts.Token && r.URL.Query().Get("token") != s.opts.Token {
-				writeError(w, http.StatusUnauthorized, "missing or wrong token")
-				return
+			// The token comes as a bearer header; the event stream alone
+			// also takes ?token=, because browsers open it without headers.
+			if s.opts.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.opts.Token {
+				isEvents := r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events")
+				if !isEvents || r.URL.Query().Get("token") != s.opts.Token {
+					writeError(w, http.StatusUnauthorized, "missing or wrong token")
+					return
+				}
 			}
 			if err := h(w, r); err != nil {
 				var he *httpError
