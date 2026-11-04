@@ -87,6 +87,50 @@ body:not(.expert) .expert-only { display: none !important; }
   line-height: 1.3;
 }
 body.expert #clock-plain { display: none; }
+.header-switch { margin-left: auto; }
+#version { white-space: nowrap; }
+
+/* slide toggle: a checkbox styled as a switch, keyboard accessible */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.switch .slider {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+.switch .slider::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: left 0.15s;
+}
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::after { left: 21px; }
+.switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings label.switch { flex-direction: row; }
 #clock-plain { font-variant-numeric: tabular-nums; cursor: default; }
 .budget {
   display: flex;
@@ -140,7 +184,6 @@ body.expert #clock-plain { display: none; }
 .settings { max-width: 520px; }
 .settings h3 { margin-bottom: 8px; }
 .settings label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.settings label.check { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
 .settings input[type="number"] { width: 6em; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .panel-row {

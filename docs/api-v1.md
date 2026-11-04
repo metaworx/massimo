@@ -40,7 +40,12 @@ refreshed on it, and the rooms as well while the event stream is
 down), the Expert switch (radio addresses, device types, the budget
 numbers and the version; off by default), whether the Cube clock is
 shown in the browser's time zone or the Cube's own, and "forget
-token". The Cube clock is converted from the Cube's time zone rules
+token"; an Expert switch sits in the header as well, at the end of
+the row so that toggling it moves nothing to its left. On every poll
+the page compares the server's version from `/healthz` with the one
+it was loaded with and reloads itself when they differ, immediately
+when nothing is open, otherwise it offers a "New version on the
+server, reload" button. The Cube clock is converted from the Cube's time zone rules
 (`config.tz_winter` and `tz_summer` of the cube detail); hovering it
 shows the same instant as UTC. The selected Cube and the settings are
 kept in the browser. Results of every action appear in the tile,

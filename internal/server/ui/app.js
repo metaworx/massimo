@@ -19,6 +19,8 @@ const state = {
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
   pollTimer: null,
+  version: null, // the server version the page was loaded with
+  newVersion: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -268,6 +270,7 @@ function applySettings() {
   const s = state.settings;
   document.body.classList.toggle("expert", s.expert);
   $("expert-toggle").checked = s.expert;
+  $("expert-header").checked = s.expert;
   $("poll-input").value = s.poll;
   $("clock-select").value = s.clock;
   const cube = state.cubes.find((c) => c.serial === state.serial);
@@ -327,6 +330,42 @@ function selectCube(serial) {
   refresh().then(connectEvents);
 }
 
+// --- version ----------------------------------------------------------
+
+// somethingOpen reports whether a reload would interrupt the user: a
+// panel, a dialog, a device list, or a stepper value not yet sent.
+function somethingOpen() {
+  if (!$("settings").classList.contains("hidden")) return true;
+  if (!$("house-panel").classList.contains("hidden")) return true;
+  if ($("token-dialog").open) return true;
+  for (const ui of Object.values(state.ui)) {
+    if (ui.pending !== null || ui.vacation || ui.confirm || ui.open) return true;
+  }
+  return false;
+}
+
+// checkVersion compares the server's version with the one the page was
+// loaded with; a newer server reloads the page when nothing is open,
+// otherwise it offers a button.
+async function checkVersion() {
+  let h;
+  try {
+    h = await api("GET", "/healthz");
+  } catch (e) {
+    return;
+  }
+  const v = h && h.version ? h.version : "";
+  if (state.version === null) {
+    state.version = v;
+    $("version").textContent = v;
+    return;
+  }
+  if (v === state.version) return;
+  state.newVersion = true;
+  $("reload-btn").classList.remove("hidden");
+  if (!somethingOpen()) location.reload();
+}
+
 // --- polling ----------------------------------------------------------
 
 // startPolling refreshes the header every poll interval and the rooms
@@ -334,6 +373,7 @@ function selectCube(serial) {
 function startPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(() => {
+    checkVersion();
     loadCubes().then(() => {
       if (!state.eventsOpen) return loadRooms();
     }).catch(() => {});
@@ -384,11 +424,14 @@ function initSettings() {
     store("massimo.poll", String(v));
     startPolling();
   });
-  $("expert-toggle").addEventListener("change", (ev) => {
+  const onExpert = (ev) => {
     state.settings.expert = ev.target.checked;
     store("massimo.expert", state.settings.expert ? "1" : "0");
     applySettings();
-  });
+  };
+  $("expert-toggle").addEventListener("change", onExpert);
+  $("expert-header").addEventListener("change", onExpert);
+  $("reload-btn").addEventListener("click", () => location.reload());
   $("clock-select").addEventListener("change", (ev) => {
     state.settings.clock = ev.target.value;
     store("massimo.clock", state.settings.clock);
@@ -410,9 +453,7 @@ function init() {
   loadSettings();
   initSettings();
   applySettings();
-  api("GET", "/healthz").then((h) => {
-    $("version").textContent = h && h.version ? h.version : "";
-  }).catch(() => {});
+  checkVersion();
   $("cube-select").addEventListener("change", (ev) => selectCube(ev.target.value));
   initTiles();
   refresh().then(() => {
