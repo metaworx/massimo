@@ -1,0 +1,397 @@
+openapi: 3.0.3
+info:
+  title: Massimo API
+  version: "1"
+  description: |
+    HTTP API of `massimo serve` over one or more eQ-3 MAX! Cubes.
+    Reads come from the server's copy of each Cube's state; writes go
+    through a per-Cube command queue that respects the radio budget.
+  license:
+    name: AGPL-3.0-or-later
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+servers:
+  - url: http://127.0.0.1:8099
+security:
+  - bearer: []
+  - {}
+paths:
+  /healthz:
+    get:
+      summary: Liveness and version
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  version: {type: string}
+  /api/v1/cubes:
+    get:
+      summary: List the Cubes
+      responses:
+        "200":
+          description: Every configured Cube
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Cube"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/v1/cubes/{sn}:
+    get:
+      summary: One Cube with its configuration and rooms
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: The Cube
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CubeDetail"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/rooms:
+    get:
+      summary: Rooms with their devices and states
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: Rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Room"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/devices:
+    get:
+      summary: Every device the Cube knows
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: Devices in the Cube's order; unlisted ones are paired but not in a room
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Device"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/devices/{rf}:
+    get:
+      summary: One device with its configuration
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      responses:
+        "200":
+          description: The device
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DeviceDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/devices/{rf}/setpoint:
+    put:
+      summary: Set mode and setpoint of one thermostat
+      description: |
+        The device is addressed directly. Thermostats of the same room
+        share their setpoint through their links; for a room with several
+        thermostats use the room route. The request waits for the Cube's
+        answer, up to two minutes when the radio budget is exhausted.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      requestBody: {$ref: "#/components/requestBodies/Setpoint"}
+      responses:
+        "200": {$ref: "#/components/responses/CommandResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/rooms/{id}/setpoint:
+    put:
+      summary: Set mode and setpoint of a whole room
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      requestBody: {$ref: "#/components/requestBodies/Setpoint"}
+      responses:
+        "200": {$ref: "#/components/responses/CommandResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
+        "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/backup:
+    get:
+      summary: A backup file of the Cube
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - name: format
+          in: query
+          schema: {type: string, enum: [json, yaml], default: json}
+      responses:
+        "200":
+          description: The backup, as massimo backup writes it
+          content:
+            application/json:
+              schema: {type: object, description: "See internal/backup for the structure"}
+            application/yaml:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/events:
+    get:
+      summary: Server-sent events for connection and state changes
+      description: |
+        On connect, one `state` event per device with its current data,
+        then an event per change the Cube reports. Kinds: connected,
+        disconnected, hello, metadata, config, state. A comment line
+        every 30 seconds keeps the stream alive.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Required when the server runs with MASSIMO_API_TOKEN or -token.
+  parameters:
+    sn:
+      name: sn
+      in: path
+      required: true
+      description: Cube serial number, case-insensitive
+      schema: {type: string, example: JEQ0192422}
+    rf:
+      name: rf
+      in: path
+      required: true
+      description: Device radio address, six hex digits
+      schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: "012ca9"}
+    id:
+      name: id
+      in: path
+      required: true
+      description: Room number as the Cube assigns it
+      schema: {type: integer, minimum: 1, maximum: 255}
+  requestBodies:
+    Setpoint:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Setpoint"}
+          examples:
+            manual: {value: {mode: manual, temp: 21}}
+            auto: {value: {mode: auto}}
+            vacation: {value: {mode: vacation, temp: 17, until: "2026-11-10 12:00"}}
+  responses:
+    CommandResult:
+      description: The Cube accepted the command
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok: {type: boolean}
+              discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
+              budget: {$ref: "#/components/schemas/Budget"}
+    BadRequest:
+      description: Bad input
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Unauthorized:
+      description: Missing or wrong token
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NotFound:
+      description: Unknown Cube, device or room
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Superseded:
+      description: A newer command for the same target replaced this one before it was sent
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    CubeError:
+      description: The Cube discarded the command or the connection failed
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NotReady:
+      description: The Cube has not sent its greeting yet
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: {type: string}
+    Budget:
+      type: object
+      description: What the Cube last reported about its radio limits
+      properties:
+        duty_cycle_pct: {type: integer, description: Share of the hourly radio budget already used}
+        free_memory_slots: {type: integer, description: Free slots for unacknowledged radiograms (about 50)}
+        updated_at: {type: string, format: date-time}
+    Cube:
+      type: object
+      properties:
+        serial: {type: string}
+        address: {type: string}
+        connected: {type: boolean}
+        firmware: {type: string, example: "1.1.3"}
+        rf_address: {type: string}
+        budget: {$ref: "#/components/schemas/Budget"}
+        updated: {type: string, format: date-time}
+        rooms: {type: integer}
+        devices: {type: integer}
+        queued: {type: integer, description: Commands waiting in the queue}
+        cube_time: {type: string, example: "2026-11-04 15:28"}
+    CubeDetail:
+      allOf:
+        - {$ref: "#/components/schemas/Cube"}
+        - type: object
+          properties:
+            config: {$ref: "#/components/schemas/CubeConfig"}
+            room_list:
+              type: array
+              items: {$ref: "#/components/schemas/Room"}
+    CubeConfig:
+      type: object
+      properties:
+        portal_enabled: {type: boolean}
+        portal_url: {type: string}
+        push_button_up: {type: integer}
+        push_button_down: {type: integer}
+        tz_winter: {$ref: "#/components/schemas/TimeZoneRule"}
+        tz_summer: {$ref: "#/components/schemas/TimeZoneRule"}
+    TimeZoneRule:
+      type: object
+      properties:
+        name: {type: string, example: CET}
+        month: {type: integer}
+        weekday: {type: integer}
+        hour: {type: integer}
+        offset_seconds: {type: integer}
+    Room:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        devices:
+          type: array
+          items: {$ref: "#/components/schemas/Device"}
+    DeviceType:
+      type: string
+      enum: [cube, radiator_thermostat, radiator_thermostat_plus, wall_thermostat, shutter_contact, eco_switch]
+    Mode:
+      type: string
+      enum: [auto, manual, vacation, boost]
+    State:
+      type: object
+      description: The device's last report; absent until it reported once
+      properties:
+        mode: {$ref: "#/components/schemas/Mode"}
+        setpoint: {type: number}
+        until: {type: string, description: "Vacation end, YYYY-MM-DD HH:MM"}
+        actual_temp: {type: number}
+        valve_pct: {type: integer}
+        window_open: {type: boolean}
+        battery_low: {type: boolean}
+        error: {type: boolean, description: Transmit error reported by the Cube}
+        link_error: {type: boolean}
+    Device:
+      type: object
+      properties:
+        rf_address: {type: string}
+        type: {$ref: "#/components/schemas/DeviceType"}
+        name: {type: string}
+        room_id: {type: integer}
+        serial: {type: string}
+        unlisted: {type: boolean, description: Paired but not assigned to a room}
+        state: {$ref: "#/components/schemas/State"}
+    SwitchPoint:
+      type: object
+      properties:
+        temp: {type: number}
+        until: {type: string, example: "07:00"}
+    WeekProgram:
+      type: object
+      description: Switch points per weekday; the last point of a day ends at 24:00
+      properties:
+        monday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+        tuesday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+        wednesday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+        thursday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+        friday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+        saturday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+        sunday: {type: array, items: {$ref: "#/components/schemas/SwitchPoint"}}
+    ThermostatConfig:
+      type: object
+      properties:
+        comfort_temp: {type: number}
+        eco_temp: {type: number}
+        max_setpoint: {type: number}
+        min_setpoint: {type: number}
+        temp_offset: {type: number}
+        window_open_temp: {type: number}
+        window_open_minutes: {type: integer}
+        boost_minutes: {type: integer}
+        boost_valve_pct: {type: integer}
+        decalc_day: {type: string}
+        decalc_hour: {type: integer}
+        max_valve_pct: {type: integer}
+        valve_offset_pct: {type: integer}
+        week_program: {$ref: "#/components/schemas/WeekProgram"}
+    WallThermostatConfig:
+      type: object
+      properties:
+        comfort_temp: {type: number}
+        eco_temp: {type: number}
+        max_setpoint: {type: number}
+        min_setpoint: {type: number}
+        temp_offset: {type: number}
+        window_open_temp: {type: number}
+        boost_minutes: {type: integer}
+        boost_valve_pct: {type: integer}
+        display_actual: {type: boolean, description: The display shows the measured temperature instead of the setpoint}
+        week_program: {$ref: "#/components/schemas/WeekProgram"}
+    DeviceDetail:
+      allOf:
+        - {$ref: "#/components/schemas/Device"}
+        - type: object
+          properties:
+            firmware: {type: integer}
+            thermostat: {$ref: "#/components/schemas/ThermostatConfig"}
+            wall_thermostat: {$ref: "#/components/schemas/WallThermostatConfig"}
+    Setpoint:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [auto, manual, vacation]
+        temp:
+          type: number
+          minimum: 4.5
+          maximum: 30.5
+          multipleOf: 0.5
+          description: Required for manual and vacation; optional for auto
+        until:
+          type: string
+          description: "Vacation end, YYYY-MM-DD HH:MM on a half hour; required for vacation"

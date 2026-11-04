@@ -417,7 +417,7 @@ func TestSetDayProgramExample(t *testing.T) {
 }
 
 func TestSetTemperatureVacation(t *testing.T) {
-	m, err := CmdSetTemperature(Target{RFAddress: 0x0fdaed, RoomID: 1}, 18, ModeVacation, Until{2011, 8, 29, 120})
+	m, err := CmdSetTemperature(Target{RFAddress: 0x0fdaed, RoomID: 1, Room: true}, 18, ModeVacation, Until{2011, 8, 29, 120})
 	if err != nil {
 		t.Fatal(err)
 	}

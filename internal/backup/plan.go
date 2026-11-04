@@ -156,10 +156,6 @@ func (p *Plan) planState(snap *cubelan.Snapshot, cur cube.DeviceMeta, want Devic
 	if same {
 		return nil
 	}
-	room := cur.RoomID
-	if c := snap.Config(want.RFAddress); c != nil {
-		room = c.RoomID
-	}
 	temp := 0.0
 	if s.Setpoint != nil {
 		temp = *s.Setpoint
@@ -171,13 +167,15 @@ func (p *Plan) planState(snap *cubelan.Snapshot, cur cube.DeviceMeta, want Devic
 	if s.Mode == cube.ModeAuto {
 		temp = 0 // follow the program
 	}
-	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: want.RFAddress, RoomID: room}, temp, s.Mode, until)
+	// A single device is addressed directly (room 0), as the original
+	// software does for a device outside a room.
+	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: want.RFAddress}, temp, s.Mode, until)
 	if err != nil {
 		return fmt.Errorf("device %s: state: %w", want.RFAddress, err)
 	}
 	what := fmt.Sprintf("%s %q: %s", want.RFAddress, name, describeState(s.Mode, s.Setpoint, s.Until))
 	what += " (now " + describeState(now.Mode, now.Setpoint, now.Until) + ")"
-	p.add(what, engine.Command{Key: "restore:state:" + want.RFAddress.String(), Target: want.RFAddress, RoomID: room, Lines: []cube.Message{m}})
+	p.add(what, engine.Command{Key: "restore:state:" + want.RFAddress.String(), Target: want.RFAddress, Lines: []cube.Message{m}})
 	return nil
 }
 

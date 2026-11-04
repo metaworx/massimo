@@ -83,7 +83,9 @@ command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
 `{"mode":"manual","temp":21.5}`, `{"mode":"auto"}` or
 `{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,
-`/backup?format=yaml`, and `/events` as server-sent events. Set
+`/backup?format=yaml`, and `/events` as server-sent events; see
+[docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
+[docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml). Set
 `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
 The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it.

@@ -167,7 +167,15 @@ func send(payload []byte) Message { return Message{Type: 's', Data: b64.EncodeTo
 
 // CmdSetTemperature sets setpoint and mode. For ModeVacation, until must be
 // set; for ModeAuto a zero temperature lets the device follow its week program.
+//
+// Addressing, as observed on hardware: a whole room takes the room flag
+// with its id (what the original software sends for a room); a single
+// device takes flags 0 and room 0. A room id without the flag is
+// discarded by the Cube.
 func CmdSetTemperature(t Target, temp float64, mode Mode, until Until) (Message, error) {
+	if !t.Room && t.RoomID != 0 {
+		return Message{}, fmt.Errorf("set temperature: a single device is addressed with room 0; use Room for a whole room")
+	}
 	var v uint8
 	if !(mode == ModeAuto && temp == 0) {
 		var err error

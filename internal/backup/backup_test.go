@@ -372,8 +372,8 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 	if len(p.Steps) != 1 || !strings.Contains(p.Steps[0].What, "manual 21.5°C (now manual 20.0°C)") || p.Steps[0].Command.Wakeup {
 		t.Fatalf("plan %+v", p.Steps)
 	}
-	// 00 00 40 000000 1514b6 06 6b: set temperature, manual (0x40) | 21.5 °C (43).
-	if got := p.Steps[0].Command.Lines[0].String(); got != "s:AABAAAAAFRS2Bms=" {
+	// 00 00 40 000000 1514b6 00 6b: set temperature, manual (0x40) | 21.5 °C (43), device addressed directly.
+	if got := p.Steps[0].Command.Lines[0].String(); got != "s:AABAAAAAFRS2AGs=" {
 		t.Fatalf("command %s", got)
 	}
 	// Without -state the plan ignores the state section.

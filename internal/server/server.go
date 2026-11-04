@@ -446,7 +446,7 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 	if !c.Type.IsRadiatorThermostat() && c.Type != cube.DeviceWallThermostat {
 		return fail(http.StatusBadRequest, "device %s is a %s and has no setpoint", rf, c.Type)
 	}
-	return s.setpoint(w, r, rt, cube.Target{RFAddress: rf, RoomID: c.RoomID}, rf, "device:"+rf.String())
+	return s.setpoint(w, r, rt, cube.Target{RFAddress: rf}, rf, "device:"+rf.String())
 }
 
 func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
