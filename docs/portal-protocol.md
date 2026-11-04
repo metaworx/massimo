@@ -350,6 +350,11 @@ room shown as auto at the new temperature in between). A client that
 needs the mode should wait for the next L line rather than read the
 one right after the command.
 
+A window contact showed the link-error bit (0x40 of the second flags
+byte) after its room's wall thermostat had been moved out and back in;
+the bit cleared with the contact's next transmission (one open and
+close of the window).
+
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
 
