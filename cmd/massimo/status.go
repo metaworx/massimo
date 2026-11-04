@@ -39,17 +39,17 @@ type statusRoom struct {
 }
 
 type statusReport struct {
-	Serial          string         `json:"serial"`
-	Firmware        string         `json:"firmware"`
-	DutyCyclePct    int            `json:"duty_cycle_pct"`
-	FreeMemorySlots int            `json:"free_memory_slots"`
+	Serial          string `json:"serial"`
+	Firmware        string `json:"firmware"`
+	DutyCyclePct    int    `json:"duty_cycle_pct"`
+	FreeMemorySlots int    `json:"free_memory_slots"`
 	// Pending is the number of radiograms the Cube has sent and not yet
 	// seen acknowledged (memory slots in use); their effect is not in
 	// the states yet.
-	Pending  int    `json:"pending_radiograms"`
-	CubeTime string `json:"cube_time"`
-	Rooms           []statusRoom   `json:"rooms"`
-	Unlisted        []statusDevice `json:"unlisted"`
+	Pending  int            `json:"pending_radiograms"`
+	CubeTime string         `json:"cube_time"`
+	Rooms    []statusRoom   `json:"rooms"`
+	Unlisted []statusDevice `json:"unlisted"`
 }
 
 // runStatus connects to a Cube and prints what it knows about every

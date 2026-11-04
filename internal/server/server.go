@@ -341,23 +341,23 @@ func (s *Server) cube(r *http.Request) (*runtime, error) {
 // Views.
 
 type cubeView struct {
-	Serial    string           `json:"serial"`
-	Address   string           `json:"address"`
-	Connected bool             `json:"connected"`
-	Firmware  string           `json:"firmware,omitempty"`
-	RFAddress string           `json:"rf_address,omitempty"`
-	Budget    cubelan.Budget   `json:"budget"`
+	Serial    string         `json:"serial"`
+	Address   string         `json:"address"`
+	Connected bool           `json:"connected"`
+	Firmware  string         `json:"firmware,omitempty"`
+	RFAddress string         `json:"rf_address,omitempty"`
+	Budget    cubelan.Budget `json:"budget"`
 	// Pending counts radiograms the Cube sent and no device has
 	// acknowledged yet (memory slots in use); their effect is not in
 	// the device states yet.
-	Pending  int       `json:"pending_radiograms"`
-	Updated  time.Time `json:"updated,omitempty"`
-	Rooms    int       `json:"rooms"`
-	Devices  int       `json:"devices"`
-	Queued   int       `json:"queued"`
-	Config    *cube.CubeConfig `json:"config,omitempty"`
-	RoomList  []roomView       `json:"room_list,omitempty"`
-	CubeTime  string           `json:"cube_time,omitempty"`
+	Pending  int              `json:"pending_radiograms"`
+	Updated  time.Time        `json:"updated,omitempty"`
+	Rooms    int              `json:"rooms"`
+	Devices  int              `json:"devices"`
+	Queued   int              `json:"queued"`
+	Config   *cube.CubeConfig `json:"config,omitempty"`
+	RoomList []roomView       `json:"room_list,omitempty"`
+	CubeTime string           `json:"cube_time,omitempty"`
 }
 
 type roomView struct {
