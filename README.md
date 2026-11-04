@@ -160,6 +160,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/firmware-extraction.md](docs/firmware-extraction.md): reading the Cube's firmware over JTAG, hardware facts and the procedure
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware
+- [docs/handover-session.md](docs/handover-session.md): where the last session stopped, open feedback, next steps
 
 ## Versions
 
