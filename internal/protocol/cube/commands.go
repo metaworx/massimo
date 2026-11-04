@@ -87,6 +87,12 @@ func CmdDeleteDevices(force bool, addrs ...RFAddress) Message {
 // cubeEpoch is the reference point of the v command's clock value.
 var cubeEpoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// CubeTime formats t as the v: command expects: seconds since
+// 2000-01-01 00:00 UTC as 8 hex digits.
+func CubeTime(t time.Time) string {
+	return fmt.Sprintf("%08x", uint32(t.UTC().Sub(cubeEpoch)/time.Second))
+}
+
 // CmdSetTime sets the Cube's clock and daylight-saving rules.
 func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	w, err := winter.Encode()
@@ -97,11 +103,10 @@ func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	secs := now.UTC().Sub(cubeEpoch) / time.Second
-	if secs < 0 || secs > 0xffffffff {
+	if now.Before(cubeEpoch) {
 		return Message{}, fmt.Errorf("time %s out of range", now)
 	}
-	return Message{Type: 'v', Data: fmt.Sprintf("%s,%08x", b64.EncodeToString(append(w, s...)), uint32(secs))}, nil
+	return Message{Type: 'v', Data: b64.EncodeToString(append(w, s...)) + "," + CubeTime(now)}, nil
 }
 
 // Radio command codes used in s messages.

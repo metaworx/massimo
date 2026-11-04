@@ -27,7 +27,7 @@ func runPortal(args []string) error {
 	ivHex := fs.String("iv", os.Getenv(ivEnv), "IV as 32 hex digits (or "+ivEnv+")")
 	serial := fs.String("serial", "", "only accept this Cube serial (default: any serial, same key)")
 	iLine := fs.String("i", "000051b1,00000000,ffffffff", "payload of the i: reply line; 'none' sends no i: line; {conn} is replaced by the Cube's connection id")
-	extra := fs.String("extra", "", "extra reply lines, separated by ';' (e.g. 'l:' to request the device list)")
+	extra := fs.String("extra", "", "extra reply lines, separated by ';'; {conn} and {now} are expanded (e.g. 'v:<tz>,{now}')")
 	dir := fs.String("dir", ".", "directory for portal-capture.jsonl")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo portal [flags]\n\nFake MAX! portal: decrypts and logs what a Cube sends, replies like the original.\n\n")

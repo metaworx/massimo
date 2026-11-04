@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -110,5 +111,15 @@ func TestReplierConnPlaceholder(t *testing.T) {
 	}
 	if got := DefaultReplier("", nil)("x", req); len(got) != 0 {
 		t.Fatalf("empty iLine must omit i:, got %v", got)
+	}
+}
+
+func TestExpandNowPlaceholder(t *testing.T) {
+	got := expandPlaceholders("v:abc,{now}", nil)
+	if len(got) != len("v:abc,")+8 || got[:6] != "v:abc," {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := strconv.ParseUint(got[6:], 16, 32); err != nil {
+		t.Fatalf("not hex: %q", got)
 	}
 }

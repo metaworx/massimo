@@ -38,6 +38,27 @@ type Exchange struct {
 // Replier decides what to answer to a decoded request.
 type Replier func(serial string, req []cube.Message) []cube.Message
 
+// expandPlaceholders replaces {conn} with the connection id from the Cube's
+// H line and {now} with the current time as the v: command expects it
+// (seconds since 2000-01-01 UTC, 8 hex digits).
+func expandPlaceholders(line string, req []cube.Message) string {
+	if strings.Contains(line, "{conn}") {
+		conn := "00000000"
+		for _, m := range req {
+			if m.Type == 'H' {
+				if h, err := cube.ParseHello(m.Data); err == nil && h.ConnectionID != "" {
+					conn = h.ConnectionID
+				}
+			}
+		}
+		line = strings.ReplaceAll(line, "{conn}", conn)
+	}
+	if strings.Contains(line, "{now}") {
+		line = strings.ReplaceAll(line, "{now}", cube.CubeTime(time.Now()))
+	}
+	return line
+}
+
 // DefaultReplier answers what the original portal was observed to answer:
 // an i: line, plus b:OK when the request carried a B: (login) line.
 // An empty iLine omits the i: line; its fields' meaning is unknown. The
@@ -46,26 +67,17 @@ func DefaultReplier(iLine string, extra []cube.Message) Replier {
 	return func(_ string, req []cube.Message) []cube.Message {
 		var out []cube.Message
 		if iLine != "" {
-			line := iLine
-			if strings.Contains(line, "{conn}") {
-				conn := "00000000"
-				for _, m := range req {
-					if m.Type == 'H' {
-						if h, err := cube.ParseHello(m.Data); err == nil && h.ConnectionID != "" {
-							conn = h.ConnectionID
-						}
-					}
-				}
-				line = strings.ReplaceAll(line, "{conn}", conn)
-			}
-			out = append(out, cube.Message{Type: 'i', Data: line})
+			out = append(out, cube.Message{Type: 'i', Data: expandPlaceholders(iLine, req)})
 		}
 		for _, m := range req {
 			if m.Type == 'B' {
 				out = append(out, cube.Message{Type: 'b', Data: "OK"})
 			}
 		}
-		return append(out, extra...)
+		for _, m := range extra {
+			out = append(out, cube.Message{Type: m.Type, Data: expandPlaceholders(m.Data, req)})
+		}
+		return out
 	}
 }
 
