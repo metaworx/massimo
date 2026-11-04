@@ -174,6 +174,68 @@ memory slot (50 → 38) because the Cube keeps the unacknowledged radiogram
 queued. At 100 % the Cube still accepted commands (`S:64,0,…`, not
 discarded). A driver must therefore watch both numbers.
 
+## What the PC software (1.4.6) knows about the portal
+
+Decompiled from the jars (javap), 2026-11-04. Classes under
+`de.eq3.max.al.local.remoteproxy`.
+
+- Lookup: `GET <LookupURL>` (default `http://www.max-portal.eq-3.de/lookup`)
+  with the `Opt`/`MAX-Serial` headers. `200` → the body is the device-app
+  URL; `301` → `Content-Location` is the new lookup URL (max. 3 hops). If
+  the result differs from the Cube's stored URL the software sends
+  `u:<url>` over the LAN. With the lookup disabled, `http://max.eq-3.de/cube`
+  is used.
+- PC requests are `H:<serial>,<rf>,<fw>\r\n` plus one line, encrypted
+  through the Cube's `e:`. Lines: `G:` (get credentials), `B:<user>,
+  <md5(pw+serial)>,<1|0>,<pw>` (set), `J:<1|0>` (remote access on/off),
+  `P:<key>,<value>` / `O:<key>` (user data), `V:` / `W:<code>` (product
+  activation). Replies are decrypted through `d:` and parsed as
+  `<letter>:<f0>,<f1>,…`: `b:OK`, `g:<user>,<true|false>`, `j:OK`,
+  `o:<value>`, `v:<activated>,<activationDate>,<expiryDate>,<daysTillExpiry>,
+  <informAboutExpiry>,<webShopURI>,<base64 businessName>[,<base64 texts>]`,
+  `w:<activated>,<expiryDate>,<daysTillExpiry>,<criteriaKeyViolation>`.
+- **The software never parses the `i:` line of a reply.** Its three fields
+  are not named anywhere. The LAN command is built as
+  `i:<interval>,<token>` with `token = 0`; the software only ever sends
+  `i:00000000,00000000` (after `b:OK`/`j:OK` with remote access on) or
+  `i:ffffffff,00000000` (off).
+- The software never sends device commands through the portal; everything
+  goes over TCP 62910. No portal server code is bundled.
+- Other constants: software version check `GET http://max.eq-3.de/software`,
+  software updates `http://www.max.eq-3.de/maxupdate/version.txt` and
+  `digest.txt`, downloads `http://www.max-portal.elv.de/max/lib/`,
+  notifications `http://max.eq-3.de/messaging`. The software refuses Cubes
+  with firmware outside 273..275 (1.1.3 = 275).
+
+## Cube UDP protocol (port 23272): discovery, network setup, firmware
+
+From `de.eq3.max.al.local.update.*` and `CubeFinder`. Requests go unicast
+to the Cube, or to 224.0.0.1 / 255.255.255.255 for discovery. Packet:
+
+    bytes 0..7   "eQ3Max*\0"
+    bytes 8..17  serial, padded with '*' ("**********" = any Cube)
+    byte 18      opcode
+    bytes 19..   payload
+
+Opcodes: `I` identify, `N` get IP, `B` enter bootloader, `U` init update,
+`W` write frame, `R` reboot, `c`/`C` get/set network configuration
+(ip, gateway, netmask, dns1, dns2, dhcp flag, encryption flag), `h`/`H`
+get/set portal URL (`H`: port big-endian 16 bit, host, ',', path).
+
+Replies: `"eQ3MaxAp"` (application) or `"eQ3MaxBl"` (bootloader), serial,
+`>`, opcode, data. For `I` the data is the RF address (4 bytes, leading
+zero) and the firmware version (2 bytes), as seen on the wire:
+`eQ3MaxApKEQ0537249>I 00 0b 95 73 01 13`.
+
+Firmware update: `N`, `I`, `B` (then wait for the bootloader to answer
+`N`), `U`, then one `W` per frame (`index16, length16, data`, reply
+`status, index16` with status 0 fail / 1 ok / 2 restart), then wait for
+the reboot. The frames come from `firmware.enc` in the jars: ASCII hex,
+each frame `length16` + data, 1170 frames alternating 274 and 18 bytes
+plus a final 34. **The PC software does not decrypt it**; the content has
+the entropy of ciphertext and the key lives in the Cube's bootloader, so
+the firmware cannot be analysed from the software alone.
+
 ## Open questions
 
 - Does `i:00000000,00000000` start the Cube's polling immediately, and at
@@ -181,4 +243,8 @@ discarded). A driver must therefore watch both numbers.
 - What does the Cube POST while polling (state? only `H:`?), and in which
   form does the portal deliver commands (`s:`-style lines in the reply?).
 - Is the IV identical on every Cube (firmware constant) or per device?
-- Meaning of the `i:` reply fields and of the third `B:` field.
+- Meaning of the `i:` reply fields. The LAN command is `i:<interval>,
+  <token>`; the reply has a third field. Hypothesis to test with long
+  measurements: the first field sets the poll interval (0x51b1 = 20913; in
+  tenths of a second that is 34.9 min, in the range of the gaps seen).
+- The third `B:` field is "remote access enabled".
