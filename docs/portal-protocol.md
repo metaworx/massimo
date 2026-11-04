@@ -85,6 +85,32 @@ response (body or `Content-Location` header) was the per-device portal URL,
 which was stored in the Cube with `u:` if it differed. The service is gone;
 the URL is now set directly.
 
+The Cube's factory default was a lookup URL as well: the C message of a
+Cube documented in 2014 (Bouni's protocol notes) still carries the stale
+tail `0/lookup` after `http://max.eq-3.de:80/cube\0`, which fits exactly
+`http://max-portal.eq-3.de:80/lookup`. So a Cube may itself follow the
+lookup procedure (GET, then POST to the returned URL). Untested with our
+portal: set `u:http://<host>:80/lookup` and watch for a GET.
+
+## What is public (research, 2026-11-04)
+
+The only published decrypted portal traffic is in the 2016 Insinuator
+article: the PC software's `B:` request and the real portal's reply
+`i:000051b1,00000000,ffffffff\r\nb:OK\r\n` plus zero padding. That `i:`
+line therefore answered a PC request, not a Cube poll; the reply to a
+poll was never published. No captures, dumps or replacement portals
+exist anywhere else (FHEM, openHAB, ioBroker, Home Assistant, GitHub,
+Wayback Machine checked; www.max-portal.eq-3.de was never archived).
+Other portal hosts: max-portal.elv.de (ELV), smarthome.md.de:8080
+(mobilcom-debitel).
+
+Hardware: the Cube is an Atmel AT91SAM7X256/512 (ARM7TDMI) with a TI
+CC1101 on a TRX868 module; JTAG on header ST3, UART0 on ST1, debug on
+ST2, erase jumper J1 (a-culfw CUBe port, ELVjournal 1/2012 schematic).
+The a-culfw reflash erases the chip, and nobody has published a dump of
+the stock firmware. A JTAG read-out of an unmodified Cube would be the
+only way to get it, and only if the chip's security bit is not set.
+
 ## Recovering the IV from a Cube
 
 Send 32 zero bytes to `e:` (`e:AAAA…AAA=`). In CBC with a zero first block,
