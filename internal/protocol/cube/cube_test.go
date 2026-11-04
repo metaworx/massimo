@@ -354,6 +354,12 @@ func TestCommandExamples(t *testing.T) {
 		{"manual 15 (captured)", mustMsg(CmdSetTemperature(room(0x14d08e, 1), 15, ModeManual, Until{})), "s:AARAAAAAFNCOAV4="},
 		{"auto (captured)", mustMsg(CmdSetTemperature(room(0x14ce3d, 3), 0, ModeAuto, Until{})), "s:AARAAAAAFM49AwA="},
 		{"temporary 6.5 until 2026-11-04 02:00 (captured)", mustMsg(CmdSetTemperature(room(0x14d08e, 1), 6.5, ModeVacation, Until{2026, 11, 4, 120})), "s:AARAAAAAFNCOAY2kmgQ="},
+		{"temperatures with -2 offset (captured)", mustMsg(CmdSetTemperatures(dev(0x14d08e), TemperatureSettings{
+			Comfort: 22, Eco: 15, Max: 30.5, Min: 4.5, Offset: -2, WindowOpen: 5, WindowOpenMinutes: 15,
+		})), "s:AAARAAAAFNCOACwePQkDCgM="},
+		{"valve config (captured)", mustMsg(CmdSetValveConfig(room(0x14d08e, 1), ValveSettings{
+			BoostMinutes: 5, BoostValvePct: 80, DecalcDay: Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0,
+		})), "s:AAQSAAAAFNCOATAM/wA="},
 		{"set time", mustMsg(CmdSetTime(
 			TimeZoneRule{"CET", 10, 0, 3, 3600}, TimeZoneRule{"CEST", 3, 0, 2, 7200},
 			cubeEpoch.Add(0x1fdda096*time.Second))), "v:Q0VUAAAKAAMAAA4QQ0VTVAADAAIAABwg,1fdda096"},
@@ -361,6 +367,26 @@ func TestCommandExamples(t *testing.T) {
 	for _, c := range cases {
 		if c.got.String() != c.want {
 			t.Errorf("%s: got %s want %s", c.name, c.got, c.want)
+		}
+	}
+}
+
+func TestSetDayProgramCaptured(t *testing.T) {
+	// Two day programs written by the original software; programs with
+	// fewer than 7 points are padded with the last point.
+	room := Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}
+	cases := []struct {
+		day  Weekday
+		prog DayProgram
+		want string
+	}{
+		{Wednesday, DayProgram{{19.5, 1105}, {21, 1215}, {17, 1330}, {12, 1440}}, "s:AAQQAAAAFNCOAQRO3VTzRQoxIDEgMSAxIA=="},
+		{Sunday, DayProgram{{17, 390}, {21, 480}, {19.5, 965}, {23, 1440}}, "s:AAQQAAAAFNCOAQFETlRgTsFdIF0gXSBdIA=="},
+	}
+	for _, c := range cases {
+		msgs, err := CmdSetDayProgram(room, c.day, c.prog)
+		if err != nil || len(msgs) != 1 || msgs[0].String() != c.want {
+			t.Errorf("%s: got %v %v, want %s", c.day, msgs, err, c.want)
 		}
 	}
 }

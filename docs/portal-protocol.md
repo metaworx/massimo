@@ -112,9 +112,23 @@ Captured on 2026-11-04 while operating the original UI:
 | Room 3 auto | `s:AARAAAAAFM49AwA=` | `S:` |
 | All rooms 6.5 °C until 04.11.2026 02:00 | `s:AARAAAAAFNCOAY2kmgQ=` … | `S:` |
 
-The `s:` encodings match `cube.CmdSetTemperature` byte for byte. While the
-UI is open the software polls `l:` every 10 s and disconnects after 30 s
-without user activity.
+A second capture (week program, presets, valve settings, renames):
+
+| UI action | Lines sent | Reply |
+|---|---|---|
+| Edit week program of room 1 | `z:1e,G,01` (wake the room for 30 s), then one `s:` (0x10) per changed day, e.g. `s:AAQQAAAAFNCOAQRO3VTzRQoxIDEgMSAxIA==` (Wednesday, 4 points padded with the last) | `A:`, then `S:` per day |
+| Temperature offset -2 °C | `r:` if in error state, then `s:AAARAAAAFNCOACwePQkDCgM=` (0x11; flags 00, room 00) | `S:` |
+| Boost 5 min / 80 % | `s:AAQSAAAAFNCOATAM/wA=` (0x12) | `S:` |
+| Rename room or device, reorder rooms | `m:00,<base64 metadata>` (index only, no count) | `A:` |
+
+All of these match the builders in `internal/protocol/cube` byte for byte.
+A 0x11 command to a device in error state that was **not** preceded by
+`r:` came back as discarded (`S:14,1,31`); the software then reports
+"Command discarded". While the UI is open the software polls `l:` every
+10 s and disconnects after 30 s without user activity.
+
+The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
+0x03 and 0xf1; it changed after failed transmissions to that device.
 
 Duty cycle and memory slots: with the thermostats out of range, each
 command raised the duty cycle (0x44 → 0x64 = 100 %) and consumed one free
