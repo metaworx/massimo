@@ -57,6 +57,8 @@ func main() {
 		err = runFakeCube(rest)
 	case "discover":
 		err = runDiscover(rest)
+	case "config":
+		err = runConfig(rest)
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -94,6 +96,7 @@ commands:
   restore         write a backup back to the Cube (only the differences)
   fakecube        serve a recorded greeting as if it were a Cube, for tests
   discover        list the Cubes on the local network (UDP broadcast)
+  config          show the settings in effect, with keys and IVs redacted
   version         print the version (also --version)
 `)
 }

@@ -27,8 +27,12 @@ const (
 )
 
 // selectedSN is the Cube chosen with -sn (or MASSIMO_CUBE_SN), or the
-// serial reported by the Cube that -addr pointed to.
-var selectedSN string
+// serial reported by the Cube that -addr pointed to. snExplicit says
+// whether it came from -sn.
+var (
+	selectedSN string
+	snExplicit bool
+)
 
 // perCubeVar returns the per-Cube name of a variable: MASSIMO_CUBE_KEY
 // becomes MASSIMO_CUBE_<SN>_KEY.
@@ -43,7 +47,7 @@ func useDeviceSerial(serial string) {
 	if serial == "" {
 		return
 	}
-	if selectedSN != "" && !strings.EqualFold(selectedSN, serial) {
+	if snExplicit && !strings.EqualFold(selectedSN, serial) {
 		fmt.Fprintf(os.Stderr, "warning: -sn %s given, but the cube at that address is %s; using %s\n", selectedSN, serial, serial)
 	}
 	selectedSN = serial
@@ -70,7 +74,7 @@ func globalOptions(args []string) ([]string, error) {
 		case "env":
 			os.Setenv("MASSIMO_ENV_FILE", value)
 		case "sn":
-			selectedSN = value
+			selectedSN, snExplicit = value, true
 		}
 	}
 	return args, nil
@@ -80,7 +84,7 @@ func globalOptions(args []string) ([]string, error) {
 // "massimo -sn X cube" and "massimo cube -sn X" work.
 func snFlag(fs *flag.FlagSet) {
 	fs.Func("sn", "serial number of the Cube to use (selects "+envPrefix+"<SN>_KEY etc.; default "+snEnv+")", func(v string) error {
-		selectedSN = v
+		selectedSN, snExplicit = v, true
 		return nil
 	})
 }

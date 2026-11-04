@@ -39,6 +39,7 @@ func TestGlobalOptionsAndCubeEnv(t *testing.T) {
 	if keys := perCubeKeys(); len(keys) != 1 || keys[0] != "KEQ0000001" {
 		t.Fatalf("per-cube keys %v", keys)
 	}
+	snExplicit = false
 	useDeviceSerial("KEQ0000001")
 	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
 		t.Fatalf("key after device serial %q", v)
