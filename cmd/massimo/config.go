@@ -92,7 +92,7 @@ func runConfig(args []string) error {
 // knownVariable reports whether a MASSIMO_* name is one the program reads.
 func knownVariable(k string) bool {
 	switch k {
-	case keyEnv, ivEnv, addrEnv, snEnv, ignoreEnv, proxyEnv, proxySerialEnv, "MASSIMO_ENV_FILE", "MASSIMO_API_TOKEN":
+	case keyEnv, ivEnv, addrEnv, snEnv, ignoreEnv, proxyEnv, proxySerialEnv, "MASSIMO_ENV_FILE", "MASSIMO_API_TOKEN", "MASSIMO_LOG":
 		return true
 	}
 	mid, ok := strings.CutPrefix(k, envPrefix)
