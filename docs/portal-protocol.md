@@ -164,6 +164,16 @@ while the same lines over the LAN work. How the original portal delivered
 commands to the Cube is still unknown; the reply channel is not it, at
 least not in this form.
 
+## One LAN client at a time
+
+The Cube serves a single TCP connection on port 62910. A second client,
+from the same or another computer, waits until the first one closes
+its connection or times out (observed with `massimo serve` holding the
+connection: `backup`, `status` and the original software all hung until
+`serve` was stopped). Every client therefore either shares one
+connection or takes turns, which is why Massimo's server should also
+act as a Cube for other clients.
+
 ## LAN commands verified against the original software (1.4.6)
 
 Captured on 2026-11-04 while operating the original UI:

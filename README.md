@@ -85,7 +85,9 @@ massimo serve -listen 127.0.0.1:8099
 ```
 
 keeps every Cube from the environment connected (one connection and one
-command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
+command queue per Cube; the Cube serves only one LAN client at a time, so
+while `serve` runs, other commands and the original software wait for
+it) and serves a JSON API: `/api/v1/cubes`,
 `/api/v1/cubes/{serial}` (with rooms), `/devices`, `/devices/{rf}`,
 `PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
 `{"mode":"manual","temp":21.5}`, `{"mode":"auto"}` or
