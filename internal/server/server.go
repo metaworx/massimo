@@ -261,7 +261,6 @@ type deviceState struct {
 	Serial    string          `json:"serial,omitempty"`
 	Unlisted  bool            `json:"unlisted,omitempty"`
 	State     *backup.State   `json:"state,omitempty"`
-	Seen      time.Time       `json:"seen,omitempty"`
 }
 
 type deviceDetail struct {
