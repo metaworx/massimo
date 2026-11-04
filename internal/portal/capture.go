@@ -24,6 +24,7 @@ import (
 type Exchange struct {
 	Time       time.Time         `json:"time"`
 	Remote     string            `json:"remote"`
+	Local      string            `json:"local"` // the listener address the request arrived on
 	Method     string            `json:"method"`
 	Path       string            `json:"path"`
 	Headers    map[string]string `json:"headers"`
@@ -161,7 +162,7 @@ func (c *Capture) devicePort() string {
 }
 
 func (c *Capture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ex := &Exchange{Time: time.Now(), Remote: r.RemoteAddr, Method: r.Method, Path: r.URL.RequestURI(), Headers: map[string]string{}}
+	ex := &Exchange{Time: time.Now(), Remote: r.RemoteAddr, Local: localAddr(r), Method: r.Method, Path: r.URL.RequestURI(), Headers: map[string]string{}}
 	for k, v := range r.Header {
 		ex.Headers[k] = strings.Join(v, ", ")
 	}
@@ -260,7 +261,7 @@ func (c *Capture) finish(w http.ResponseWriter, ex *Exchange, status int, body [
 
 func (c *Capture) record(ex *Exchange) {
 	if c.Log != nil {
-		attrs := []any{"remote", ex.Remote, "path", ex.Path, "serial", ex.Headers["Max-Serial"], "status", ex.Status}
+		attrs := []any{"remote", ex.Remote, "local", ex.Local, "path", ex.Path, "serial", ex.Headers["Max-Serial"], "status", ex.Status}
 		if ex.Error != "" {
 			attrs = append(attrs, "error", ex.Error)
 		}
@@ -289,4 +290,12 @@ func (c *Capture) record(ex *Exchange) {
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(ex)
+}
+
+// localAddr returns the address of the listener that accepted the request.
+func localAddr(r *http.Request) string {
+	if a, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok {
+		return a.String()
+	}
+	return ""
 }
