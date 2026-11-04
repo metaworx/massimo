@@ -168,13 +168,14 @@ func send(payload []byte) Message { return Message{Type: 's', Data: b64.EncodeTo
 // CmdSetTemperature sets setpoint and mode. For ModeVacation, until must be
 // set; for ModeAuto a zero temperature lets the device follow its week program.
 //
-// Addressing, as observed on hardware: a whole room takes the room flag
-// with its id (what the original software sends for a room); a single
-// device takes flags 0 and room 0. A room id without the flag is
-// discarded by the Cube.
+// Addressing, as observed on hardware: a device that belongs to a room
+// must be addressed as its room (room flag and id; the Cube discards a
+// direct command to a room member), which is also what the original
+// software sends. A device outside any room takes flags 0 and room 0.
+// SetpointTarget builds the right one.
 func CmdSetTemperature(t Target, temp float64, mode Mode, until Until) (Message, error) {
 	if !t.Room && t.RoomID != 0 {
-		return Message{}, fmt.Errorf("set temperature: a single device is addressed with room 0; use Room for a whole room")
+		return Message{}, fmt.Errorf("set temperature: a device in room %d must be addressed as the room (Room=true)", t.RoomID)
 	}
 	var v uint8
 	if !(mode == ModeAuto && temp == 0) {
@@ -195,6 +196,12 @@ func CmdSetTemperature(t Target, temp float64, mode Mode, until Until) (Message,
 		p = append(p, u...)
 	}
 	return send(p), nil
+}
+
+// SetpointTarget addresses a set-temperature command for a device: its
+// room when it has one, the device itself otherwise.
+func SetpointTarget(rf RFAddress, room uint8) Target {
+	return Target{RFAddress: rf, RoomID: room, Room: room != 0}
 }
 
 // CmdSetDayProgram writes the switch points of one weekday. Programs with

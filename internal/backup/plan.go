@@ -167,9 +167,11 @@ func (p *Plan) planState(snap *cubelan.Snapshot, cur cube.DeviceMeta, want Devic
 	if s.Mode == cube.ModeAuto {
 		temp = 0 // follow the program
 	}
-	// A single device is addressed directly (room 0), as the original
-	// software does for a device outside a room.
-	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: want.RFAddress}, temp, s.Mode, until)
+	room := cur.RoomID
+	if c := snap.Config(want.RFAddress); c != nil {
+		room = c.RoomID
+	}
+	m, err := cube.CmdSetTemperature(cube.SetpointTarget(want.RFAddress, room), temp, s.Mode, until)
 	if err != nil {
 		return fmt.Errorf("device %s: state: %w", want.RFAddress, err)
 	}

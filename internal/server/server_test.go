@@ -87,7 +87,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	}
 	// Setpoint on a device, then on a room.
 	for _, c := range []struct{ path, body, want string }{
-		{"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", `{"mode":"manual","temp":21.5}`, "s:AABAAAAAFRS2AGs="},
+		{"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", `{"mode":"manual","temp":21.5}`, "s:AARAAAAAFRS2Bms="},
 		{"/api/v1/cubes/KEQ0537249/rooms/6/setpoint", `{"mode":"auto"}`, "s:AARAAAAAFRS2BgA="},
 	} {
 		req, _ := http.NewRequest("PUT", ts.URL+c.path, strings.NewReader(c.body))

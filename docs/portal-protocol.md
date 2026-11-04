@@ -250,6 +250,12 @@ not a valve but the display mode: 0x01 shows the setpoint, 0x04 the
 measured temperature, set with radiogram 0x82 and one byte (4 or 0)
 after a room wakeup (`00 00 82 … 15667d 00 04`).
 
+Set temperature (0x40) addressing, verified 2026-11-04: a device that
+is in a room is only accepted as its room (flags 0x04, room id); both
+flags 0 with the room id and flags 0 with room 0 were discarded by the
+Cube for such a device. A device without a room (just paired) takes
+flags 0 and room 0.
+
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
 

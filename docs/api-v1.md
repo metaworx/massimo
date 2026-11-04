@@ -136,9 +136,11 @@ radio budget is exhausted) and returns
 {"ok": true, "discarded": false, "budget": {"duty_cycle_pct": 5, "free_memory_slots": 49, "updated_at": "…"}}
 ```
 
-The device is addressed directly. Devices in the same room share their
-setpoint through their links, so for a room with several thermostats
-use the room route. Boost cannot be started over the air.
+A device that belongs to a room is addressed as its room, because the
+Cube discards a direct command to a room member; every thermostat of
+that room therefore takes the new setpoint, which is how MAX! treats
+setpoints. A device outside any room is addressed directly. Boost
+cannot be started over the air.
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
 

@@ -98,10 +98,11 @@ paths:
     put:
       summary: Set mode and setpoint of one thermostat
       description: |
-        The device is addressed directly. Thermostats of the same room
-        share their setpoint through their links; for a room with several
-        thermostats use the room route. The request waits for the Cube's
-        answer, up to two minutes when the radio budget is exhausted.
+        A device in a room is addressed as its room, since the Cube
+        discards a direct command to a room member; every thermostat of
+        that room takes the setpoint. A device outside any room is
+        addressed directly. The request waits for the Cube's answer, up
+        to two minutes when the radio budget is exhausted.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       requestBody: {$ref: "#/components/requestBodies/Setpoint"}
       responses:
