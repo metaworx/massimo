@@ -29,6 +29,7 @@ func runPortal(args []string) error {
 	iLine := fs.String("i", "000051b1,00000000,ffffffff", "payload of the i: reply line; 'none' sends no i: line; {conn} is replaced by the Cube's connection id")
 	extra := fs.String("extra", "", "extra reply lines, separated by ';'; {conn} and {now} are expanded (e.g. 'v:<tz>,{now}')")
 	dir := fs.String("dir", ".", "directory for portal-capture.jsonl")
+	deviceURL := fs.String("device-url", "", "URL returned by /lookup (default: http://<this host>:<port>/cube)")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo portal [flags]\n\nFake MAX! portal: decrypts and logs what a Cube sends, replies like the original.\n\n")
 		fs.PrintDefaults()
@@ -66,10 +67,12 @@ func runPortal(args []string) error {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	cap := &portal.Capture{
-		Codecs: map[string]*portal.Codec{*serial: codec},
-		Reply:  portal.DefaultReplier(*iLine, extraMsgs),
-		Log:    logger,
-		Dir:    *dir,
+		Codecs:     map[string]*portal.Codec{*serial: codec},
+		Reply:      portal.DefaultReplier(*iLine, extraMsgs),
+		Log:        logger,
+		Dir:        *dir,
+		DeviceURL:  *deviceURL,
+		ListenPort: strings.TrimPrefix(portForURL(*listen), ":"),
 	}
 	logger.Info("fake portal listening", "addr", *listen, "serial", orAny(*serial), "capture", *dir+"/portal-capture.jsonl")
 	logger.Info("point the Cube here with: u:http://<this host>" + portForURL(*listen) + "/cube")

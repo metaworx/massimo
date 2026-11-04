@@ -123,3 +123,34 @@ func TestExpandNowPlaceholder(t *testing.T) {
 		t.Fatalf("not hex: %q", got)
 	}
 }
+
+func TestAccountRepliesAndLookup(t *testing.T) {
+	r := DefaultReplier("", nil)
+	login := []cube.Message{{Type: 'H', Data: "KEQ0537249,0b9573,0113"}, {Type: 'B', Data: "alice,hash,1,pw"}}
+	if got := r("KEQ0537249", login); len(got) != 1 || got[0].String() != "b:OK" {
+		t.Fatalf("login reply %v", got)
+	}
+	if got := r("KEQ0537249", []cube.Message{{Type: 'J', Data: "1"}}); len(got) != 1 || got[0].String() != "j:OK" {
+		t.Fatalf("J reply %v", got)
+	}
+	if got := r("KEQ0537249", []cube.Message{{Type: 'G'}}); len(got) != 1 || got[0].String() != "g:alice,true" {
+		t.Fatalf("G reply %v", got)
+	}
+
+	cap := &Capture{Codecs: map[string]*Codec{}, Reply: r, ListenPort: "8080"}
+	srv := httptest.NewServer(cap)
+	defer srv.Close()
+	req, _ := http.NewRequest("GET", srv.URL+"/lookup", nil)
+	req.Host = "www.max-portal.eq-3.de"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body bytes.Buffer
+	body.ReadFrom(resp.Body)
+	want := "http://www.max-portal.eq-3.de:8080/cube"
+	if resp.StatusCode != 200 || body.String() != want || resp.Header.Get("Content-Location") != want {
+		t.Fatalf("lookup: %d %q %q", resp.StatusCode, body.String(), resp.Header.Get("Content-Location"))
+	}
+}

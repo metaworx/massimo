@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,19 +60,44 @@ func expandPlaceholders(line string, req []cube.Message) string {
 	return line
 }
 
+// account is what the original portal knew about a Cube's remote access.
+type account struct {
+	user    string
+	enabled bool
+}
+
 // DefaultReplier answers what the original portal was observed to answer:
-// an i: line, plus b:OK when the request carried a B: (login) line.
+// an i: line, plus the replies the original PC software expects for its
+// account requests (B: login → b:OK, J: → j:OK, G: → g:<user>,<enabled>).
 // An empty iLine omits the i: line; its fields' meaning is unknown. The
 // placeholder {conn} is replaced by the connection id from the Cube's H line.
 func DefaultReplier(iLine string, extra []cube.Message) Replier {
-	return func(_ string, req []cube.Message) []cube.Message {
+	var mu sync.Mutex
+	accounts := map[string]*account{}
+	return func(serial string, req []cube.Message) []cube.Message {
+		mu.Lock()
+		defer mu.Unlock()
+		acc := accounts[serial]
+		if acc == nil {
+			acc = &account{}
+			accounts[serial] = acc
+		}
 		var out []cube.Message
 		if iLine != "" {
 			out = append(out, cube.Message{Type: 'i', Data: expandPlaceholders(iLine, req)})
 		}
 		for _, m := range req {
-			if m.Type == 'B' {
+			switch m.Type {
+			case 'B': // B:<user>,<md5>,<flag>,<password>
+				if user, _, ok := strings.Cut(m.Data, ","); ok {
+					acc.user = user
+				}
 				out = append(out, cube.Message{Type: 'b', Data: "OK"})
+			case 'J':
+				acc.enabled = m.Data == "1"
+				out = append(out, cube.Message{Type: 'j', Data: "OK"})
+			case 'G':
+				out = append(out, cube.Message{Type: 'g', Data: fmt.Sprintf("%s,%t", acc.user, acc.enabled)})
 			}
 		}
 		for _, m := range extra {
@@ -90,13 +116,46 @@ type Capture struct {
 	Log    *slog.Logger
 	Dir    string // if set, every exchange is appended to <Dir>/portal-capture.jsonl
 
+	// DeviceURL is what /lookup returns; empty derives http://<host>:<ListenPort>/cube
+	// from the request's Host header.
+	DeviceURL  string
+	ListenPort string // e.g. "8080"; used when DeviceURL is empty
+
 	mu sync.Mutex
+}
+
+func (c *Capture) devicePort() string {
+	if c.ListenPort == "" || c.ListenPort == "80" {
+		return ""
+	}
+	return ":" + c.ListenPort
 }
 
 func (c *Capture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex := &Exchange{Time: time.Now(), Remote: r.RemoteAddr, Method: r.Method, Path: r.URL.RequestURI(), Headers: map[string]string{}}
 	for k, v := range r.Header {
 		ex.Headers[k] = strings.Join(v, ", ")
+	}
+	if strings.HasSuffix(r.URL.Path, "/lookup") {
+		// The original PC software asked www.max-portal.eq-3.de/lookup for
+		// the Cube's portal URL before any portal request. With a hosts
+		// entry pointing that name here, it gets ours.
+		url := c.DeviceURL
+		if url == "" {
+			host, _, _ := net.SplitHostPort(r.Host)
+			if host == "" {
+				host = r.Host
+			}
+			url = "http://" + host + c.devicePort() + "/cube"
+		}
+		ex.Plaintext = url
+		w.Header().Set("Content-Location", url)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, url)
+		ex.Status = http.StatusOK
+		c.record(ex)
+		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ func runCube(args []string) error {
 	addr := fs.String("addr", "", "Cube address, host[:port] (default port 62910)")
 	wait := fs.Duration("wait", 2*time.Second, "how long to wait for replies after each command")
 	quiet := fs.Bool("quiet", false, "do not print the greeting")
-	portal := fs.String("portal", "", "'on' or 'off': enable or disable the Cube's own portal polling (sends the i: command)")
+	portal := fs.String("portal", "", "'on', 'off' or a number of seconds: control the Cube's own portal polling (sends the i: command)")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo cube -addr <ip> [flags] [line ...]\n\nSend protocol lines to a Cube over the LAN and print the replies.\n\n")
 		fs.PrintDefaults()
@@ -66,7 +67,11 @@ func runCube(args []string) error {
 	case "off":
 		lines = append(lines, cube.CmdSetPortalInterval(-1).String())
 	default:
-		return fmt.Errorf("cube: -portal must be 'on' or 'off'")
+		n, err := strconv.ParseInt(*portal, 10, 32)
+		if err != nil || n < 0 {
+			return fmt.Errorf("cube: -portal must be 'on', 'off' or a number of seconds")
+		}
+		lines = append(lines, cube.CmdSetPortalInterval(int32(n)).String())
 	}
 	for _, l := range lines {
 		if _, err := cube.ParseLine(l); err != nil {
