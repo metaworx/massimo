@@ -129,7 +129,8 @@ COMFORT and MANU open a one-screen panel with mode, duration and room
 selection, vacation per room inline, the device list behind the room
 name with offsets and locks, live updates plus polling with a refresh
 button, the Cube clock in the browser's or the Cube's time zone, and
-settings with an Expert switch for the technical details, a per-room
+a settings page with an Expert switch for the technical details, Rooms,
+Log and Settings as icon buttons at the right of the header, a per-room
 configuration area (name, temperatures, boost and descaling, device
 names and offsets, moves, the week programme with a day editor, copy to
 other rooms) and a log view of the Cube's events. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in

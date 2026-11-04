@@ -8,24 +8,44 @@
 <link rel="stylesheet" href="/ui/style.css">
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true" focusable="false">
+  <!-- The pair in use: icon-is before the measured temperature, icon-set
+       before the setpoint. Swap by editing these two symbols; the
+       alternatives below are unused. -->
+  <symbol id="icon-is" viewBox="0 0 24 24"><path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a3.5 3.5 0 1 1-4 0z"/><path d="M12 10v6"/></symbol>
+  <symbol id="icon-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="icon-is-gauge" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.4"/></symbol>
+  <symbol id="icon-set-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-10a6 6 0 1 1 12 0c0 4.5-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></symbol>
+  <symbol id="icon-set-dial" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v4.5l3 2"/><path d="M12 4v1.5"/></symbol>
+  <!-- navigation -->
+  <symbol id="icon-house" viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-6h4v6"/></symbol>
+  <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+</svg>
 <header class="top">
-  <div class="brand">
-    <h1>Massimo</h1>
-    <span id="version-short" class="muted mono small" title="server version"></span>
+  <div class="top-line">
+    <div class="top-left">
+      <div class="brand">
+        <h1>Massimo</h1>
+        <span id="version-short" class="muted mono small" title="server version"></span>
+      </div>
+      <div class="cube">
+        <label for="cube-select" class="muted">Cube</label>
+        <select id="cube-select"></select>
+        <span id="connection" class="pill"></span>
+      </div>
+      <span id="clock-plain" class="muted" title=""></span>
+      <span id="updated" class="muted" title="time of the last successful poll"></span>
+    </div>
+    <div class="top-right">
+      <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now">↻</button>
+      <span class="nav" role="tablist" aria-label="pages">
+        <button type="button" id="view-tiles" class="icon-btn nav-btn active" role="tab" aria-selected="true" aria-label="rooms" title="Rooms"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
+        <button type="button" id="view-log" class="icon-btn nav-btn" role="tab" aria-selected="false" aria-label="log" title="Log"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
+        <button type="button" id="view-settings" class="icon-btn nav-btn" role="tab" aria-selected="false" aria-label="settings" title="Settings"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+      </span>
+    </div>
   </div>
-  <div class="cube">
-    <label for="cube-select" class="muted">Cube</label>
-    <select id="cube-select"></select>
-    <span id="connection" class="pill"></span>
-  </div>
-  <span id="clock-plain" class="muted" title=""></span>
-  <span id="updated" class="muted" title="time of the last successful poll"></span>
-  <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now">↻</button>
-  <button type="button" id="settings-toggle" class="icon-btn" aria-label="settings" title="Settings">⚙</button>
-  <span class="view-switch" role="tablist">
-    <button type="button" id="view-tiles" class="tab active" role="tab" aria-selected="true">Rooms</button>
-    <button type="button" id="view-log" class="tab" role="tab" aria-selected="false">Log</button>
-  </span>
   <button type="button" id="reload-btn" class="primary hidden">New version on the server, reload</button>
   <dl id="budget" class="budget expert-only">
     <div><dt>Server</dt><dd id="version">–</dd></div>
@@ -39,32 +59,34 @@
     <div><dt>Pending</dt><dd id="pending-n">–</dd></div>
     <div><dt>Cube clock</dt><dd id="clock" title="">–</dd></div>
   </dl>
-  <section id="settings" class="panel settings hidden" aria-label="settings">
-    <h3>Settings</h3>
-    <label>Poll every
-      <span class="inline"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> s</span>
-    </label>
-    <label class="switch">
-      <input type="checkbox" id="expert-toggle">
-      <span class="slider" aria-hidden="true"></span>
-      <span class="switch-label">Expert mode (addresses, types, budget, version)</span>
-    </label>
-    <label>Cube clock shown in
-      <select id="clock-select">
-        <option value="browser">the browser's time zone</option>
-        <option value="cube">the Cube's time zone</option>
-      </select>
-    </label>
-    <div class="actions">
-      <button type="button" id="forget-token">Forget token</button>
-      <button type="button" id="settings-close">Close</button>
-    </div>
-  </section>
   <p id="pending" class="notice hidden"></p>
 </header>
 
 <main>
   <p id="message" class="message hidden"></p>
+
+  <section id="settings" class="tile settings hidden" aria-label="settings">
+    <header class="tile-head"><h2>Settings</h2></header>
+    <div class="settings-body">
+      <label>Poll every
+        <span class="inline"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> s</span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" id="expert-toggle">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label">Expert mode (addresses, types, budget, version)</span>
+      </label>
+      <label>Cube clock shown in
+        <select id="clock-select">
+          <option value="browser">the browser's time zone</option>
+          <option value="cube">the Cube's time zone</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button type="button" id="forget-token">Forget token</button>
+      </div>
+    </div>
+  </section>
 
   <section id="house" class="tile house hidden">
     <header class="tile-head"><h2>House</h2></header>
@@ -156,11 +178,11 @@
     <p class="notice not-ready hidden"></p>
     <div class="setpoint-row">
       <div class="temp-block">
-        <span class="temp-big temp-is">–</span>
+        <span class="temp-big"><svg class="ti" aria-hidden="true"><use href="#icon-is"/></svg><span class="temp-is">–</span></span>
         <span class="temp-label">IS</span>
       </div>
       <div class="temp-block">
-        <span class="temp-big setpoint-big"></span>
+        <span class="temp-big"><svg class="ti" aria-hidden="true"><use href="#icon-set"/></svg><span class="setpoint-big"></span></span>
         <span class="temp-label">SET</span>
       </div>
       <div class="stepper">
@@ -210,13 +232,15 @@
 
 <template id="device-template">
   <div class="device">
-    <div class="device-main">
+    <div class="device-head">
       <span class="device-name"></span>
-      <span class="device-type muted expert-only"></span>
-      <span class="device-rf muted mono expert-only"></span>
+      <span class="device-badges"></span>
     </div>
-    <div class="device-state"></div>
-    <div class="device-flags"></div>
+    <div class="device-sub muted">
+      <span class="device-type"></span>
+      <span class="device-rf mono"></span>
+    </div>
+    <div class="device-vals hidden"></div>
     <div class="device-actions"></div>
   </div>
 </template>
