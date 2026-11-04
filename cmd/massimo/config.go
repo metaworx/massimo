@@ -59,7 +59,7 @@ func runConfig(args []string) error {
 	fmt.Println("\nvariables:")
 	for _, k := range names {
 		v := os.Getenv(k)
-		if strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "_IV") {
+		if strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "_IV") || strings.HasSuffix(k, "_TOKEN") {
 			v = redact(v)
 		}
 		src := envSource[k]
