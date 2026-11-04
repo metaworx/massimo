@@ -61,6 +61,17 @@ func runServe(args []string) error {
 	if len(cubes) == 0 {
 		return fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS or use -addr)")
 	}
+	for i := range cubes {
+		name := ignoreEnv
+		if sn := cubes[i].Serial; sn != "" && os.Getenv(perCubeVar(ignoreEnv, sn)) != "" {
+			name = perCubeVar(ignoreEnv, sn)
+		}
+		ignore, err := parseIgnoreList(name, os.Getenv(name))
+		if err != nil {
+			return fmt.Errorf("serve: %w", err)
+		}
+		cubes[i].Ignore = ignore
+	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString()})
 	ln, err := net.Listen("tcp", *listen)

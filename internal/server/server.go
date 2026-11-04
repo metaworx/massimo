@@ -43,6 +43,9 @@ import (
 type CubeConfig struct {
 	Serial string // for the URL and the logs; "" takes the one the Cube reports
 	Addr   string // host[:port]
+	// Ignore hides devices (and the rooms that hold only them) from every
+	// view and keeps every write away from them; see backup.Ignored.
+	Ignore []cube.RFAddress
 }
 
 // Options configure a Server.
@@ -70,6 +73,7 @@ type runtime struct {
 	client *cubelan.Client
 	queue  *engine.Queue
 	serial string
+	ignore backup.Ignored
 
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
@@ -93,7 +97,7 @@ func New(opts Options) *Server {
 	}
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{}}
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), subs: map[chan event]struct{}{}}
+		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), ignore: backup.IgnoreSet(c.Ignore), subs: map[chan event]struct{}{}}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
 		rt.queue = engine.NewQueue(rt.client, opts.Queue)
 		key := strings.ToLower(c.Serial)
@@ -136,6 +140,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.cubes[strings.ToLower(h.Serial)] = rt
 					s.mu.Unlock()
 				}
+			}
+			if e.Device != 0 && rt.ignore[e.Device] {
+				continue
 			}
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
 			if e.Device != 0 {
@@ -296,7 +303,13 @@ func (s *Server) summary(rt *runtime) cubeView {
 		}
 	}
 	if md := snap.Metadata(); md != nil {
-		v.Rooms, v.Devices = len(md.Rooms), len(md.Devices)
+		hidden := rt.ignore.HiddenRooms(md)
+		v.Rooms = len(md.Rooms) - len(hidden)
+		for _, d := range md.Devices {
+			if !rt.ignore[d.RFAddress] {
+				v.Devices++
+			}
+		}
 	}
 	return v
 }
@@ -331,7 +344,7 @@ func (s *Server) devices(rt *runtime) []deviceState {
 	var out []deviceState
 	h := snap.Hello()
 	for _, rf := range snap.Devices() {
-		if h != nil && rf == h.RFAddress {
+		if h != nil && rf == h.RFAddress || rt.ignore[rf] {
 			continue
 		}
 		st, _ := snap.State(rf)
@@ -377,8 +390,12 @@ func (s *Server) rooms(rt *runtime) []roomView {
 		return nil
 	}
 	devs := s.devices(rt)
+	hidden := rt.ignore.HiddenRooms(md)
 	var out []roomView
 	for _, r := range md.Rooms {
+		if hidden[r.ID] {
+			continue
+		}
 		rv := roomView{ID: r.ID, Name: r.Name, Ready: true, Devices: []deviceState{}}
 		for _, d := range devs {
 			if d.RoomID == r.ID && !d.Unlisted {
@@ -421,7 +438,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	snap := rt.client.Snapshot()
 	st, ok := snap.State(rf)
 	c := snap.Config(rf)
-	if !ok && c == nil {
+	if !ok && c == nil || rt.ignore[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
 	st.RFAddress = rf
@@ -456,7 +473,7 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 	}
 	snap := rt.client.Snapshot()
 	c := snap.Config(rf)
-	if c == nil {
+	if c == nil || rt.ignore[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
 	if !c.Type.IsRadiatorThermostat() && c.Type != cube.DeviceWallThermostat {
@@ -478,7 +495,7 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
 	c := rt.client.Snapshot().Config(rf)
-	if c == nil {
+	if c == nil || rt.ignore[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
 	if !c.Type.IsRadiatorThermostat() && c.Type != cube.DeviceWallThermostat {
@@ -518,8 +535,9 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 	if md == nil {
 		return fail(http.StatusServiceUnavailable, "cube not connected yet")
 	}
+	hidden := rt.ignore.HiddenRooms(md)
 	for _, room := range md.Rooms {
-		if int(room.ID) == id {
+		if int(room.ID) == id && !hidden[room.ID] {
 			return s.setpoint(w, r, rt, cube.Target{RFAddress: room.RFAddress, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
 		}
 	}
@@ -557,7 +575,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 			status = http.StatusConflict
 		}
 		if errors.Is(res.Err, engine.ErrDiscarded) && t.Room {
-			if silent := neverReported(rt.client.Snapshot(), t.RoomID); len(silent) > 0 {
+			if silent := neverReported(rt.client.Snapshot(), t.RoomID, rt.ignore); len(silent) > 0 {
 				he := fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
 					res.Err, t.RoomID, strings.Join(silent, ", ")).(*httpError)
 				he.noState = silent
@@ -573,11 +591,11 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 // neverReported lists the devices the Cube places in a room that have
 // never sent a state. Observed on hardware: the Cube discards room
 // commands while such a member exists.
-func neverReported(snap *cubelan.Snapshot, room uint8) []string {
+func neverReported(snap *cubelan.Snapshot, room uint8, ignore backup.Ignored) []string {
 	var out []string
 	for _, rf := range snap.Devices() {
 		c := snap.Config(rf)
-		if c == nil || c.Type == cube.DeviceCube || c.RoomID != room {
+		if c == nil || c.Type == cube.DeviceCube || c.RoomID != room || ignore[rf] {
 			continue
 		}
 		if st, ok := snap.State(rf); !ok || !st.Valid {
@@ -596,7 +614,7 @@ func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) error {
 	if reply, err := rt.client.Send(r.Context(), cube.CmdGetNTP); err == nil {
 		ntp = cube.ParseNTPServers(reply.Data)
 	}
-	f, err := backup.Take(rt.client.Snapshot(), ntp, s.opts.Version, time.Now())
+	f, err := backup.Take(rt.client.Snapshot(), ntp, s.opts.Version, time.Now(), rt.cfg.Ignore...)
 	if err != nil {
 		return fail(http.StatusServiceUnavailable, "%v", err)
 	}
