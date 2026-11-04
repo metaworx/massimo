@@ -230,6 +230,17 @@ which held a radiator thermostat (0147b7) and two shutter contacts
    more to the new device.
 8. `m:` with the device added to the room and device list.
 
+Moving a device to another room (same software, wall thermostat from
+room 4 to room 5): wakeup of the old room, 0x23 remove group (`… 23 …
+15667d 00 04`), 0x21 remove link partner for every device of the old
+room in both directions (same addressing as 0x20), `m:` with the device
+taken out of the room, then wakeup of the new room, 0x20 add link partner
+for every device of the new room in both directions, 0x22 set group,
+`c:` fetch, 0x40 auto, 0x11 to the room's thermostats, 0x12, 0x10 × 7,
+0x11, `m:` with the device in the new room. Links are therefore the
+only per-device data that is not readable from the Cube; a restore
+derives them from the room layout.
+
 So wall thermostats take 0x11 and 0x12 with the same payloads as
 radiator thermostats, and their C line ends with offset, window-open
 temperature and boost (3 bytes after the week program at 0x16). Their L

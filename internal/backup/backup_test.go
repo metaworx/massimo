@@ -382,3 +382,42 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 		t.Fatalf("plan without State %+v", p.Steps)
 	}
 }
+
+func TestPlanMovesDeviceBetweenRooms(t *testing.T) {
+	_, c, _, f := take(t)
+	// Move the Schlafzimmer thermostat (room 6, alone) into Küche (room 3,
+	// with radiator thermostat 14ce3d).
+	for i := range f.Devices {
+		if f.Devices[i].RFAddress == 0x1514b6 {
+			f.Devices[i].RoomID = 3
+		}
+	}
+	p, err := NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{SkipPrograms: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var whats []string
+	for _, s := range p.Steps {
+		whats = append(whats, s.What)
+	}
+	if len(p.Steps) != 3 || !strings.Contains(whats[0], "room 6→3") || !strings.Contains(whats[1], "leave room 6 (0 partners)") || !strings.Contains(whats[2], "join room 3 (1 partners)") {
+		t.Fatalf("steps %v", whats)
+	}
+	out := p.Steps[1].Command
+	if out.RoomID != 6 || !out.Wakeup || len(out.Lines) != 1 || out.Lines[0].String() != "s:AAAjAAAAFRS2AAY=" {
+		t.Fatalf("leave %+v", out)
+	}
+	in := p.Steps[2].Command
+	if in.RoomID != 3 || !in.Wakeup || len(in.Lines) != 3 {
+		t.Fatalf("join %+v", in)
+	}
+	// 00 04 20 000000 14ce3d 03 1514b6 01: tell the room's radiator thermostat (room flag) about the new partner.
+	// 00 00 20 000000 1514b6 00 14ce3d 01: tell the moved device about it.
+	// 00 00 22 000000 1514b6 00 03: set the group.
+	want := []string{"s:AAQgAAAAFM49AxUUtgE=", "s:AAAgAAAAFRS2ABTOPQE=", "s:AAAiAAAAFRS2AAM="}
+	for i, w := range want {
+		if in.Lines[i].String() != w {
+			t.Fatalf("join line %d: %s, want %s", i, in.Lines[i].String(), w)
+		}
+	}
+}

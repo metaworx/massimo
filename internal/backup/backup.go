@@ -72,10 +72,6 @@ type Device struct {
 
 	Thermostat *cube.ThermostatConfig `json:"thermostat,omitempty"`
 	Wall       *cube.WallConfig       `json:"wall_thermostat,omitempty"`
-	// DisplayActual (wall thermostats): the display shows the measured
-	// temperature instead of the setpoint. The device reports it; the
-	// Cube's configuration record does not hold it.
-	DisplayActual *bool `json:"display_actual,omitempty"`
 
 	// State is what the device reported last (the L line): mode,
 	// setpoint, measured temperature, valve, flags. Informational, except
@@ -176,7 +172,7 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*Fi
 		if st, ok := snap.State(rf); ok {
 			d.State = stateOf(st)
 			if st.Valid && d.Wall != nil {
-				d.DisplayActual = st.DisplayActual
+				d.Wall.DisplayActual = st.DisplayActual
 			}
 		}
 		f.Devices = append(f.Devices, d)

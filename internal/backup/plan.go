@@ -387,27 +387,28 @@ func hasRoom(rooms []cube.RoomMeta, id uint8) bool {
 // planDevice compares one device's configuration and queues the radio
 // commands that differ, after a wakeup of its room.
 func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, want Device, opts PlanOptions) error {
-	if want.Thermostat == nil && want.Wall == nil {
-		return nil // nothing configurable (shutter contact, eco switch)
-	}
 	name := want.Name
 	if name == "" {
 		name = cur.Name
 	}
 	c := snap.Config(want.RFAddress)
 	if c == nil {
-		p.Notes = append(p.Notes, fmt.Sprintf("device %s %q: no configuration (C line) received yet; settings not compared", want.RFAddress, name))
+		if want.Thermostat != nil || want.Wall != nil {
+			p.Notes = append(p.Notes, fmt.Sprintf("device %s %q: no configuration (C line) received yet; settings not compared", want.RFAddress, name))
+		}
 		return nil
 	}
 	room := c.RoomID
+	if !opts.SkipSettings && want.RoomID != room && linkable(want.Type) {
+		p.planMove(f, snap, want, name, room)
+		room = want.RoomID
+	}
+	if want.Thermostat == nil && want.Wall == nil {
+		return nil // nothing else to configure (shutter contact, eco switch)
+	}
 	t := cube.Target{RFAddress: want.RFAddress, RoomID: room}
 	var lines []cube.Message
 	var what []string
-
-	if !opts.SkipSettings && want.RoomID != room {
-		lines = append(lines, cube.CmdSetGroup(want.RFAddress, want.RoomID, false))
-		what = append(what, fmt.Sprintf("room %d→%d", room, want.RoomID))
-	}
 
 	switch {
 	case want.Thermostat != nil && c.Thermostat != nil:
@@ -466,11 +467,11 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 				what = append(what, fmt.Sprintf("temperatures comfort %.1f eco %.1f max %.1f min %.1f offset %+.1f window %.1f",
 					w.ComfortTemp, w.EcoTemp, w.MaxSetpoint, w.MinSetpoint, w.TempOffset, w.WindowOpenTemp))
 			}
-			if want.DisplayActual != nil {
-				if now, ok := snap.State(want.RFAddress); ok && now.Valid && now.DisplayActual != nil && *now.DisplayActual != *want.DisplayActual {
-					lines = append(lines, cube.CmdSetDisplayActual(t, *want.DisplayActual))
+			if w.DisplayActual != nil {
+				if now, ok := snap.State(want.RFAddress); ok && now.Valid && now.DisplayActual != nil && *now.DisplayActual != *w.DisplayActual {
+					lines = append(lines, cube.CmdSetDisplayActual(t, *w.DisplayActual))
 					shown := "setpoint"
-					if *want.DisplayActual {
+					if *w.DisplayActual {
 						shown = "measured temperature"
 					}
 					what = append(what, "display shows "+shown)
@@ -506,6 +507,66 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 	p.add(fmt.Sprintf("%s %q: %s", want.RFAddress, name, strings.Join(what, ", ")),
 		engine.Command{Key: "restore:" + want.RFAddress.String(), Target: want.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
 	return nil
+}
+
+// linkable reports whether a device type takes part in room links.
+func linkable(t cube.DeviceType) bool {
+	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat || t == cube.DeviceShutterContact
+}
+
+// linkTarget addresses a link radiogram to a room member the way the
+// original software does: radiator thermostats with the room flag and
+// their room, every other device directly. The device being moved is
+// always addressed directly, as its group is being changed.
+func linkTarget(rf cube.RFAddress, typ cube.DeviceType, room uint8) cube.Target {
+	if typ.IsRadiatorThermostat() {
+		return cube.Target{RFAddress: rf, RoomID: room, Room: true}
+	}
+	return cube.Target{RFAddress: rf}
+}
+
+// planMove re-wires a device into another room as the original software
+// does: unlink it from every device of the old room in both directions
+// and remove its group, then link it with every device of the new room
+// in both directions and set the new group. Each half follows a wakeup
+// of the room concerned.
+func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name string, oldRoom uint8) {
+	rf, typ := want.RFAddress, want.Type
+	known := map[cube.RFAddress]cube.DeviceMeta{}
+	if md := snap.Metadata(); md != nil {
+		for _, d := range md.Devices {
+			known[d.RFAddress] = d
+		}
+	}
+	// Old partners: what the Cube lists in the old room now.
+	var out []cube.Message
+	for _, d := range known {
+		if d.RFAddress == rf || d.RoomID != oldRoom || !linkable(d.Type) {
+			continue
+		}
+		out = append(out, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
+		out = append(out, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, false, d.RFAddress, d.Type))
+	}
+	out = append(out, cube.CmdSetGroup(rf, oldRoom, true))
+	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, len(out)/2),
+		engine.Command{Key: "restore:move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: true, Lines: out})
+
+	// New partners: the backup's layout of the new room, limited to
+	// devices the Cube knows.
+	var in []cube.Message
+	for _, d := range f.Devices {
+		if d.RFAddress == rf || d.RoomID != want.RoomID || !linkable(d.Type) {
+			continue
+		}
+		if _, ok := known[d.RFAddress]; !ok {
+			continue
+		}
+		in = append(in, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, want.RoomID), true, rf, typ))
+		in = append(in, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, true, d.RFAddress, d.Type))
+	}
+	in = append(in, cube.CmdSetGroup(rf, want.RoomID, false))
+	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, len(in)/2),
+		engine.Command{Key: "restore:move-in:" + rf.String(), Target: rf, RoomID: want.RoomID, Wakeup: true, Lines: in})
 }
 
 // roomRadiator returns the configuration of a radiator thermostat in the

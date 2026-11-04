@@ -96,16 +96,20 @@ type ThermostatConfig struct {
 // software writes wall thermostats with the same 0x11 and 0x12 commands
 // as radiator thermostats.
 type WallConfig struct {
-	ComfortTemp    float64     `json:"comfort_temp"`
-	EcoTemp        float64     `json:"eco_temp"`
-	MaxSetpoint    float64     `json:"max_setpoint"`
-	MinSetpoint    float64     `json:"min_setpoint"`
-	TempOffset     float64     `json:"temp_offset"`
-	WindowOpenTemp float64     `json:"window_open_temp"`
-	BoostMinutes   int         `json:"boost_minutes"`
-	BoostValvePct  int         `json:"boost_valve_pct"`
-	WeekProgram    WeekProgram `json:"week_program"`
-	Extra          []byte      `json:"extra,omitempty"` // bytes beyond those, if any
+	ComfortTemp    float64 `json:"comfort_temp"`
+	EcoTemp        float64 `json:"eco_temp"`
+	MaxSetpoint    float64 `json:"max_setpoint"`
+	MinSetpoint    float64 `json:"min_setpoint"`
+	TempOffset     float64 `json:"temp_offset"`
+	WindowOpenTemp float64 `json:"window_open_temp"`
+	BoostMinutes   int     `json:"boost_minutes"`
+	BoostValvePct  int     `json:"boost_valve_pct"`
+	// DisplayActual: the display shows the measured temperature instead
+	// of the setpoint. Not part of the C record; the device reports it in
+	// its L entry and backups fill it in from there.
+	DisplayActual *bool       `json:"display_actual,omitempty"`
+	WeekProgram   WeekProgram `json:"week_program"`
+	Extra         []byte      `json:"extra,omitempty"` // bytes beyond those, if any
 }
 
 // Offsets inside the decoded C payload (including the leading length byte).
