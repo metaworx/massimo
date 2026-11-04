@@ -4,3 +4,9 @@
 portal-capture.jsonl
 /massimo
 /dist/
+# backups taken with "massimo backup" (contain device serials and names)
+massimo-backup-*
+/cube*.json
+/cube*.yaml
+/cube*.yml
+/backups/
