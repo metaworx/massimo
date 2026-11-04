@@ -22,6 +22,8 @@ import (
 type Server struct {
 	Greeting []cube.Message // sent on connect; the last one should be L
 	NTP      []string
+	Duty     int  // duty cycle reported in S replies (0..100)
+	Discard  bool // make S replies report the command as discarded
 
 	ln       net.Listener
 	mu       sync.Mutex
@@ -133,7 +135,11 @@ func (s *Server) serve(conn net.Conn) {
 		case 'l':
 			reply = last.Wire()
 		case 's', 'r':
-			reply = "S:00,0,31\r\n"
+			d := 0
+			if s.Discard {
+				d = 1
+			}
+			reply = fmt.Sprintf("S:%02x,%d,31\r\n", s.Duty, d)
 		case 'f':
 			if m.Data != "" {
 				s.NTP = strings.Split(m.Data, ",")

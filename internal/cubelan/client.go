@@ -41,6 +41,7 @@ type Client struct {
 	conn    net.Conn
 	pending *pendingReply
 	writeMu sync.Mutex
+	budget  budgetTracker
 }
 
 type pendingReply struct {
@@ -196,6 +197,9 @@ func (c *Client) handle(m cube.Message) {
 	if err != nil {
 		c.log.Warn("bad message from cube", "type", string(m.Type), "error", err)
 	}
+	if m.Type == 'H' {
+		c.noteBudget(c.snap.Hello())
+	}
 	for _, e := range evs {
 		c.emit(e)
 	}
@@ -304,12 +308,17 @@ func (c *Client) clearPending(p *pendingReply) {
 
 // SendRadio sends an s command and decodes the Cube's S reply.
 func (c *Client) SendRadio(ctx context.Context, m cube.Message) (*cube.SendResult, error) {
-	if m.Type != 's' {
-		return nil, fmt.Errorf("cubelan: SendRadio needs an s command, got %c", m.Type)
+	if m.Type != 's' && m.Type != 'r' {
+		return nil, fmt.Errorf("cubelan: SendRadio needs an s or r command, got %c", m.Type)
 	}
 	reply, err := c.Send(ctx, m)
 	if err != nil {
 		return nil, err
 	}
-	return cube.ParseSendResult(reply.Data)
+	res, err := cube.ParseSendResult(reply.Data)
+	if err != nil {
+		return nil, err
+	}
+	c.noteSendResult(res)
+	return res, nil
 }
