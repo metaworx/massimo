@@ -76,7 +76,8 @@ function renderRoom(room) {
   el.querySelector(".room-name").textContent = room.name;
   el.querySelector(".room-name-btn").addEventListener("click", () => toggleDevices(room));
   const actual = roomActual(room);
-  el.querySelector(".room-actual").textContent = actual === undefined ? "" : actual.toFixed(1) + "°";
+  el.querySelector(".temp-is").textContent = actual === undefined ? "–" : actual.toFixed(1) + "°";
+  el.querySelector(".temp-is").title = actual === undefined ? "no device of this room reports a measured temperature" : "measured temperature";
 
   renderNotReady(el, room);
   renderSetpoint(el, room);
@@ -135,8 +136,11 @@ function renderSetpoint(el, room) {
   const mode = s ? s.mode : null;
   const autoBtn = el.querySelector(".mode-auto");
   const manuBtn = el.querySelector(".mode-manual");
+  const holidayBtn = el.querySelector(".mode-holiday");
   autoBtn.classList.toggle("active", mode === "auto");
   manuBtn.classList.toggle("active", mode === "manual" || mode === "boost");
+  holidayBtn.classList.toggle("active", mode === "vacation");
+  holidayBtn.addEventListener("click", () => openVacation(room, el));
   autoBtn.addEventListener("click", () => sendRoomSetpoint(room, { mode: "auto" }, "auto"));
   manuBtn.addEventListener("click", () => {
     // The displayed setpoint, or the stepper's starting value when the
@@ -146,7 +150,11 @@ function renderSetpoint(el, room) {
   });
   const vac = el.querySelector(".mode-vacation");
   if (mode === "vacation") {
-    vac.textContent = "vacation until " + (s.until || "?");
+    const until = s.until || "?";
+    holidayBtn.title = "holiday until " + until;
+    vac.appendChild(textEl("span", "\u{1F9F3}", "suitcase"));
+    vac.appendChild(document.createTextNode(" until " + until));
+    vac.title = "holiday until " + until;
     vac.classList.remove("hidden");
   }
 }
@@ -596,7 +604,7 @@ function initTiles() {
   $("house-eco").addEventListener("click", () => openHouse("eco"));
   $("house-auto").addEventListener("click", () => openHouse("auto"));
   $("house-comfort").addEventListener("click", () => openHouse("comfort"));
-  $("house-more").addEventListener("click", () => openHouse("manual"));
+  $("house-manu").addEventListener("click", () => openHouse("manual"));
   $("house-cancel").addEventListener("click", closeHouse);
   housePanel().addEventListener("submit", (ev) => {
     ev.preventDefault();
