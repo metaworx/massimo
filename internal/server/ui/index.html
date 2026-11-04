@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Massimo</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Massimo</h1>
+    <span id="version" class="muted"></span>
+  </div>
+  <div class="cube">
+    <label for="cube-select" class="muted">Cube</label>
+    <select id="cube-select"></select>
+    <span id="connection" class="pill"></span>
+  </div>
+  <dl id="budget" class="budget">
+    <div><dt>Duty cycle</dt><dd id="duty">–</dd></div>
+    <div><dt>Free slots</dt><dd id="slots">–</dd></div>
+    <div><dt>Queued</dt><dd id="queued">–</dd></div>
+    <div><dt>Cube clock</dt><dd id="clock">–</dd></div>
+  </dl>
+  <p id="pending" class="notice hidden"></p>
+</header>
+
+<main>
+  <p id="message" class="message hidden"></p>
+  <section id="rooms"></section>
+  <section id="unlisted" class="hidden">
+    <h2>Not in any room</h2>
+    <div id="unlisted-devices"></div>
+  </section>
+</main>
+
+<dialog id="setpoint-dialog">
+  <form method="dialog" id="setpoint-form">
+    <h3 id="setpoint-title">Setpoint</h3>
+    <label>Mode
+      <select name="mode" id="setpoint-mode">
+        <option value="auto">auto (week program)</option>
+        <option value="manual">manual</option>
+        <option value="vacation">vacation</option>
+      </select>
+    </label>
+    <label id="setpoint-temp-label">Temperature °C
+      <input type="number" name="temp" id="setpoint-temp" min="4.5" max="30.5" step="0.5" value="20">
+    </label>
+    <label id="setpoint-until-label" class="hidden">Until
+      <input type="datetime-local" name="until" id="setpoint-until" step="1800">
+    </label>
+    <div class="actions">
+      <button type="button" id="setpoint-cancel">Cancel</button>
+      <button type="submit" class="primary">Send</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="token-dialog">
+  <form method="dialog" id="token-form">
+    <h3>API token</h3>
+    <p class="muted">The server requires a bearer token (MASSIMO_API_TOKEN).</p>
+    <label>Token <input type="password" id="token-input" autocomplete="off"></label>
+    <div class="actions"><button type="submit" class="primary">Use token</button></div>
+  </form>
+</dialog>
+
+<template id="room-template">
+  <article class="room">
+    <header class="room-head">
+      <h2 class="room-name"></h2>
+      <div class="room-actions">
+        <button type="button" class="room-setpoint">Setpoint</button>
+        <button type="button" class="room-delete hidden">Delete room</button>
+      </div>
+    </header>
+    <p class="notice not-ready hidden"></p>
+    <div class="devices"></div>
+  </article>
+</template>
+
+<template id="device-template">
+  <div class="device">
+    <div class="device-main">
+      <span class="device-name"></span>
+      <span class="device-type muted"></span>
+      <span class="device-rf muted mono"></span>
+    </div>
+    <div class="device-state"></div>
+    <div class="device-flags"></div>
+    <div class="device-actions"></div>
+  </div>
+</template>
+
+<script src="/ui/app.js"></script>
+</body>
+</html>
