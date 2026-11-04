@@ -323,4 +323,61 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 	if got := c.Snapshot().Metadata(); len(got.Devices) != 6 || got.Rooms[0].Name != "Renamed" {
 		t.Fatalf("snapshot after m: %d devices, room %q", len(got.Devices), got.Rooms[0].Name)
 	}
+
+	// Parked in a room with a high id, the room disappears as well.
+	cur := *c.Snapshot().Metadata()
+	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 200, Name: "parking"})
+	cur.Devices = append([]cube.DeviceMeta(nil), cur.Devices...)
+	for i := range cur.Devices {
+		if cur.Devices[i].RFAddress == hidden {
+			cur.Devices[i].RoomID = 200
+		}
+	}
+	cmds, _ = cube.WriteMetadataCommands(&cur)
+	_, data, _ := strings.Cut(cmds[0].Data, ",")
+	c.ApplyLocal(cube.Message{Type: 'M', Data: "00,01," + data})
+	conn2, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn2.Close()
+	r2 := cube.NewReader(conn2)
+	for {
+		m := readLine(t, r2)
+		if m.Type == 'M' {
+			_, rest, _ := strings.Cut(m.Data, ",")
+			_, data, _ := strings.Cut(rest, ",")
+			raw, _ := base64.StdEncoding.DecodeString(data)
+			md, _ = cube.DecodeMetadata(raw)
+		}
+		if m.Type == 'L' {
+			break
+		}
+	}
+	for _, r := range md.Rooms {
+		if r.ID == 200 {
+			t.Fatal("parking room 200 visible")
+		}
+	}
+	if len(md.Rooms) != 6 {
+		t.Fatalf("%d rooms", len(md.Rooms))
+	}
+	// A write without it gets the room and the device back.
+	md.Rooms[0].Name = "Again"
+	cmds, _ = cube.WriteMetadataCommands(md)
+	conn2.Write([]byte(cmds[0].Wire()))
+	if a := readLine(t, r2); a.Type != 'A' {
+		t.Fatalf("m: answered %s", a)
+	}
+	got := c.Snapshot().Metadata()
+	room200, dev := false, false
+	for _, r := range got.Rooms {
+		room200 = room200 || r.ID == 200
+	}
+	for _, d := range got.Devices {
+		dev = dev || (d.RFAddress == hidden && d.RoomID == 200)
+	}
+	if !room200 || !dev || got.Rooms[0].Name != "Again" {
+		t.Fatalf("metadata after write: %+v", got)
+	}
 }

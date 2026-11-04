@@ -58,6 +58,12 @@ type Options struct {
 	Logger *slog.Logger
 }
 
+// HiddenRoomMinID is the lowest room id of a parking room that the proxy
+// hides completely. A room with a lower id stays visible, empty, so a
+// client that allocates the lowest free id cannot reuse it; the original
+// software never allocates ids this high on its own.
+const HiddenRoomMinID = 100
+
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
 type Proxy struct {
 	opts Options
@@ -226,7 +232,7 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 // a new connection id and the current budget and clock, then M, C… and L.
 func (p *Proxy) greeting() []cube.Message {
 	snap := p.opts.Client.Snapshot()
-	lines := snap.LinesExcluding(p.opts.Ignore)
+	lines := snap.LinesExcluding(p.opts.Ignore, p.hiddenRooms(snap.Metadata()))
 	for i, m := range lines {
 		if m.Type == 'H' {
 			lines[i] = p.hello(snap.Hello())
@@ -378,6 +384,29 @@ func (p *Proxy) applyMetadata(lines []cube.Message) {
 		}
 		p.opts.Client.ApplyLocal(cube.Message{Type: 'M', Data: idx + "," + fmt.Sprintf("%02x", len(lines)) + "," + data})
 	}
+}
+
+// hiddenRooms lists the rooms left out of the greeting: those that hold
+// only ignored devices and have an id of HiddenRoomMinID or more.
+func (p *Proxy) hiddenRooms(md *cube.Metadata) map[uint8]bool {
+	if md == nil || len(p.opts.Ignore) == 0 {
+		return nil
+	}
+	count := map[uint8]int{}
+	for _, d := range md.Devices {
+		if p.opts.Ignore[d.RFAddress] {
+			count[d.RoomID]++
+		} else {
+			count[d.RoomID] = -1 << 20
+		}
+	}
+	out := map[uint8]bool{}
+	for id, n := range count {
+		if n > 0 && int(id) >= HiddenRoomMinID {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // discoveryReply builds the reply to a discovery request for the

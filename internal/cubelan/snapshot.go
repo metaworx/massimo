@@ -249,11 +249,12 @@ func (s *Snapshot) ConfigLine(rf cube.RFAddress) (cube.Message, bool) {
 // Lines reproduces the snapshot as protocol lines (H, M, C…, L), i.e. the
 // same text a fresh connection would receive. Used for backups and for the
 // simulator.
-func (s *Snapshot) Lines() []cube.Message { return s.LinesExcluding(nil) }
+func (s *Snapshot) Lines() []cube.Message { return s.LinesExcluding(nil, nil) }
 
-// LinesExcluding is Lines without the devices in skip: they are left out
-// of the metadata, the C lines and the L line. Their rooms stay, empty.
-func (s *Snapshot) LinesExcluding(skip map[cube.RFAddress]bool) []cube.Message {
+// LinesExcluding is Lines without the devices in skip, left out of the
+// metadata, the C lines and the L line, and without the rooms in
+// skipRooms. Rooms of skipped devices stay, empty, unless listed.
+func (s *Snapshot) LinesExcluding(skip map[cube.RFAddress]bool, skipRooms map[uint8]bool) []cube.Message {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []cube.Message
@@ -262,12 +263,17 @@ func (s *Snapshot) LinesExcluding(skip map[cube.RFAddress]bool) []cube.Message {
 	}
 	if s.metadata != nil {
 		md := s.metadata
-		if len(skip) > 0 {
+		if len(skip) > 0 || len(skipRooms) > 0 {
 			cp := *md
-			cp.Devices = nil
+			cp.Devices, cp.Rooms = nil, nil
 			for _, d := range md.Devices {
 				if !skip[d.RFAddress] {
 					cp.Devices = append(cp.Devices, d)
+				}
+			}
+			for _, r := range md.Rooms {
+				if !skipRooms[r.ID] {
+					cp.Rooms = append(cp.Rooms, r)
 				}
 			}
 			md = &cp

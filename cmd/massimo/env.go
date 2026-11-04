@@ -41,6 +41,9 @@ const (
 var (
 	selectedSN string
 	snExplicit bool
+	// noIgnore (-no-ignore) disables the ignore list for this run, so a
+	// backup or restore can touch the hidden devices.
+	noIgnore bool
 )
 
 // perCubeVar returns the per-Cube name of a variable: MASSIMO_CUBE_KEY
@@ -69,6 +72,10 @@ func globalOptions(args []string) ([]string, error) {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(args[0], "-"), "=")
 		switch name {
 		case "env", "sn":
+		case "no-ignore":
+			noIgnore = true
+			args = args[1:]
+			continue
 		default:
 			return args, nil // a command alias such as --version
 		}
@@ -161,6 +168,9 @@ func defaultAddr(addr *string, cmd string) error {
 // paired but never report, parked in a room of their own on the Cube
 // and hidden from every view. See docs/portal-protocol.md.
 func ignoredDevices() ([]cube.RFAddress, error) {
+	if noIgnore {
+		return nil, nil
+	}
 	name := ignoreEnv
 	if selectedSN != "" && os.Getenv(perCubeVar(ignoreEnv, selectedSN)) != "" {
 		name = perCubeVar(ignoreEnv, selectedSN)

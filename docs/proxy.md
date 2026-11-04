@@ -76,7 +76,13 @@ the README) are hidden from proxy clients too: they are left out of the
 greeting's metadata and C lines and of every L line, so `status` on
 another computer and the original software do not show them. Their
 parking room stays visible, empty, so that a client cannot reuse its
-id. A metadata write from a client is forwarded with the hidden devices
+id, unless the room's id is 100 or higher: the original software
+allocates the lowest free id and never reaches such a number, so a
+parking room with id 100 to 255 is hidden completely. Give the room
+such an id by editing a backup (room id and the devices' `room_id`) and
+restoring it with `massimo -no-ignore restore`, which moves the devices
+and sets the Cube's room byte for them. A metadata write from a client
+is forwarded with the hidden devices
 and their room put back, so a client that never saw them cannot remove
 them from the Cube; the server logs when it does that.
 

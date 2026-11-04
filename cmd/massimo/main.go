@@ -81,7 +81,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-sn <serial>] <command> [args]
+	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-sn <serial>] [-no-ignore] <command> [args]
 
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
@@ -89,7 +89,8 @@ override the path with -env or MASSIMO_ENV_FILE). Keep that file out of git.
 Several Cubes: put the serial into the variable names
 (MASSIMO_CUBE_KEQ0123456_KEY, _IV, _ADDRESS) and pick one with -sn or
 MASSIMO_CUBE_SN; with -sn and no address the Cube is discovered on the
-LAN. With -addr, the serial the Cube reports selects its key. -addr
+LAN. -no-ignore shows and touches the devices of MASSIMO_CUBE_<SN>_IGNORE
+for this run. With -addr, the serial the Cube reports selects its key. -addr
 defaults to MASSIMO_CUBE_ADDRESS.
 
 commands:

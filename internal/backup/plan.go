@@ -522,6 +522,19 @@ func linkable(t cube.DeviceType) bool {
 	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat || t == cube.DeviceShutterContact
 }
 
+// isThermostat reports whether t is a radiator or wall thermostat.
+func isThermostat(t cube.DeviceType) bool {
+	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat
+}
+
+// linkPair reports whether the original software links two room members:
+// every pair except two shutter contacts (observed: a contact moved
+// into a room with a thermostat and a contact was linked with the
+// thermostat only).
+func linkPair(a, b cube.DeviceType) bool {
+	return linkable(a) && linkable(b) && (isThermostat(a) || isThermostat(b))
+}
+
 // linkTarget addresses a link radiogram to a room member the way the
 // original software does: radiator thermostats with the room flag and
 // their room, every other device directly. The device being moved is
@@ -549,7 +562,7 @@ func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name strin
 	// Old partners: what the Cube lists in the old room now.
 	var out []cube.Message
 	for _, d := range known {
-		if d.RFAddress == rf || d.RoomID != oldRoom || !linkable(d.Type) {
+		if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) {
 			continue
 		}
 		out = append(out, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
@@ -563,7 +576,7 @@ func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name strin
 	// devices the Cube knows.
 	var in []cube.Message
 	for _, d := range f.Devices {
-		if d.RFAddress == rf || d.RoomID != want.RoomID || !linkable(d.Type) {
+		if d.RFAddress == rf || d.RoomID != want.RoomID || !linkPair(d.Type, typ) {
 			continue
 		}
 		if _, ok := known[d.RFAddress]; !ok {
