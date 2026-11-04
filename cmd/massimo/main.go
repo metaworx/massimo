@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// Command massimo is the command-line entry point. For now it only offers
-// "decode", which turns a captured Cube session into JSON.
+// Command massimo is the command-line entry point.
 package main
 
 import (
@@ -42,6 +41,12 @@ func main() {
 		err = runCube(os.Args[2:])
 	case "watch":
 		err = runWatch(os.Args[2:])
+	case "backup":
+		err = runBackup(os.Args[2:])
+	case "restore":
+		err = runRestore(os.Args[2:])
+	case "fakecube":
+		err = runFakeCube(os.Args[2:])
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -70,6 +75,9 @@ commands:
   portal          fake portal server that decrypts and logs what a Cube sends
   cube            send protocol lines to a Cube over the LAN
   watch           stay connected to a Cube and print state changes
+  backup          save the Cube's configuration to a JSON or YAML file
+  restore         write a backup back to the Cube (only the differences)
+  fakecube        serve a recorded greeting as if it were a Cube, for tests
   version         print the version (also --version)
 `)
 }

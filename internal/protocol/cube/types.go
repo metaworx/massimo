@@ -179,3 +179,42 @@ func (d Weekday) String() string {
 
 // MarshalText implements encoding.TextMarshaler.
 func (d Weekday) MarshalText() ([]byte, error) { return []byte(d.String()), nil }
+
+// UnmarshalText implements encoding.TextUnmarshaler using the names from
+// DeviceType.String.
+func (t *DeviceType) UnmarshalText(b []byte) error {
+	s := string(b)
+	for k, n := range deviceTypeNames {
+		if strings.EqualFold(s, n) {
+			*t = k
+			return nil
+		}
+	}
+	var n uint8
+	if _, err := fmt.Sscanf(s, "unknown_%d", &n); err == nil {
+		*t = DeviceType(n)
+		return nil
+	}
+	return fmt.Errorf("unknown device type %q", s)
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (m *Mode) UnmarshalText(b []byte) error {
+	v, err := ParseMode(string(b))
+	if err != nil {
+		return err
+	}
+	*m = v
+	return nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (d *Weekday) UnmarshalText(b []byte) error {
+	for i, n := range weekdayNames {
+		if strings.EqualFold(string(b), n) {
+			*d = Weekday(i)
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown weekday %q", string(b))
+}
