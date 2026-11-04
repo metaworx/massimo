@@ -18,18 +18,22 @@ thermostat, so Cube 2 keeps running the house.
 - MCU: Atmel **AT91SAM7X256**, ARM7TDMI, 256 KB internal flash at
   `0x00100000`, 64 KB SRAM at `0x00200000`, boot ROM (SAM-BA) at
   `0x00300000`. 3.3 V I/O. Radio: TI CC1101.
+- The two sides of the board are called here the **ST3 side** (JTAG
+  pads ST3, the 4-pin headers ST1 and ST2, J1, the serial-number
+  barcode label) and the **chip side** (the MCU IC2, the DataFlash IC1,
+  the MAC and KEY labels, the crystal).
 - JTAG header: **ST3**, the standard ARM 20-pin footprint, two rows of
   ten surface-mount pads at 2.54 mm pitch, unpopulated. Photo taken
-  2026-11-04 (pads next to ST1/ST2 and J1, top edge of the board).
+  2026-11-04 (pads next to ST1/ST2 and J1, at the board edge).
 - Standard ARM 20-pin pinout: 1 VTref (3.3 V), 2 Vsupply, 3 nTRST,
   5 TDI, 7 TMS, 9 TCK, 11 RTCK, 13 TDO, 15 nSRST, 17 DBGRQ, 19 DBGACK;
   every even pin 4 to 20 is GND.
 - Which end is pin 1 is **not yet known**. Find it with a multimeter,
   Cube powered: the row where every pad beeps to ground is the even
   row; on the other row the pad at 3.3 V at one end is pin 1.
-- Component side (photo 2026-11-04): IC2 is the **AT91SAM7X256-AU**
-  (date code 1322), 18.432 MHz crystal at Q1. **IC1 is an Atmel
-  AT45DB041D**, a 4 Mbit (512 KB) serial DataFlash in SOIC-8 next to the
+- Chip side (photo 2026-11-04): the MCU is IC2, the large 100-pin square
+  package marked ATMEL **AT91SAM7X256-AU** (date code 1322), 18.432 MHz
+  crystal at Q1. **IC1 is an Atmel AT45DB041D**, a 4 Mbit (512 KB) serial DataFlash in SOIC-8 next to the
   MAC label, so the Cube has external storage besides the MCU's 256 KB.
   The firmware update image's 256-byte frames match DataFlash pages
   (264 bytes with the extra 8), so the update is probably staged there,
@@ -66,6 +70,13 @@ supply and the USB goes only to the PC:
 
 Solder a 2x10 pin header (2.54 mm, surface mount or a through-hole one
 with the pins bent flat) or five wires straight onto the pads.
+
+Parts (Distrelec, checked 2026-11-04): FT232H module UM232H; SOIC-8
+test clip for the DataFlash: Pomona 5250, Distrelec 140-45-803; a 2x10
+straight pin header 2.54 mm, for example Würth 61302021121
+(through-hole, pins bent flat onto the pads; search Distrelec for
+"Stiftleiste 2x10 2.54" or take any equivalent); female-to-female
+jumper wires 2.54 mm.
 
 ## Software
 
