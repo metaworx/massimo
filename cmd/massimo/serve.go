@@ -26,13 +26,40 @@ func runServe(args []string) error {
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones")
 	poll := fs.Duration("poll", time.Minute, "how often to poll the device list")
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
+	var proxies []string
+	fs.Func("proxy", "answer as a Cube on this address (repeatable; default :62910 on every interface; \"off\" disables; with several Cubes give <serial>=<addr>)", func(v string) error {
+		proxies = append(proxies, v)
+		return nil
+	})
+	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (the original software keeps one answer per serial)")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo serve [-listen 127.0.0.1:8099] [-addr <ip>]\n\nKeep every Cube from the environment (MASSIMO_CUBE_<SN>_ADDRESS) connected\nand serve the JSON API; see internal/server for the routes.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]]\n\nKeep every Cube from the environment (MASSIMO_CUBE_<SN>_ADDRESS) connected,\nserve the JSON API (see internal/server for the routes) and answer as a Cube\non the LAN (port 62910 and UDP discovery), so that other programs and the\noriginal software connect to the server instead of the Cube, which serves\nonly one client at a time.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if len(proxies) == 0 {
+		proxies = []string{":62910"}
+	}
+	var listeners []server.ProxyListener
+	for _, v := range proxies {
+		if v == "" || v == "off" || v == "none" {
+			listeners = nil
+			break
+		}
+		pl := server.ProxyListener{DiscoverySerial: *proxySerial}
+		if sn, addr, ok := strings.Cut(v, "="); ok {
+			pl.Serial, v = sn, addr
+		}
+		if _, _, err := net.SplitHostPort(v); err != nil {
+			v = net.JoinHostPort(v, "62910")
+		}
+		pl.Addr = v
+		_, port, _ := net.SplitHostPort(v)
+		pl.Discovery = port == "62910"
+		listeners = append(listeners, pl)
 	}
 	var cubes []server.CubeConfig
 	switch {
@@ -73,7 +100,7 @@ func runServe(args []string) error {
 		cubes[i].Ignore = ignore
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString()})
+	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -84,6 +111,9 @@ func runServe(args []string) error {
 		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr)
 	}
 	logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "")
+	for _, pl := range listeners {
+		logger.Info("cube proxy listening", "addr", pl.Addr, "serial", pl.Serial, "discovery", pl.Discovery, "discovery_serial", pl.DiscoverySerial)
+	}
 	hs := &http.Server{Handler: srv.Handler()}
 	go func() {
 		<-ctx.Done()

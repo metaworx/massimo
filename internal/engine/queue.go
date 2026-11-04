@@ -52,6 +52,11 @@ type Command struct {
 	// Lines are sent in order. s: and r: lines are radio commands and
 	// consume budget; everything else is a plain Cube command.
 	Lines []cube.Message
+	// Passthrough sends the lines exactly as given, for clients of the
+	// LAN proxy that speak the Cube protocol themselves: no budget wait,
+	// no wakeup or error-reset prelude, no retry, and a discarded reply
+	// is reported in Replies rather than as ErrDiscarded.
+	Passthrough bool
 }
 
 // Result is the outcome of a Command.
@@ -59,6 +64,9 @@ type Result struct {
 	Discarded bool // the Cube rejected a radio command (budget exhausted)
 	Budget    cubelan.Budget
 	Err       error
+	// Replies holds the Cube's answer to each of the command's Lines, in
+	// order, up to the first failure. Radio replies are S lines.
+	Replies []cube.Message
 }
 
 // Errors reported through Result.Err.
@@ -268,18 +276,18 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 			needsRadio = true
 		}
 	}
-	if needsRadio {
+	if needsRadio && !cmd.Passthrough {
 		if err := q.waitForBudget(ctx); err != nil {
 			return Result{Err: err, Budget: q.gw.Budget()}
 		}
 	}
-	if cmd.Wakeup {
+	if cmd.Wakeup && !cmd.Passthrough {
 		if _, err := q.gw.Send(ctx, cube.CmdWakeup(q.opts.WakeupSeconds, cube.WakeupRoom, fmt.Sprintf("%02x", cmd.RoomID))); err != nil {
 			return Result{Err: fmt.Errorf("wakeup: %w", err), Budget: q.gw.Budget()}
 		}
 		q.sleep(ctx, q.opts.Gap)
 	}
-	if needsRadio && cmd.Target != 0 && q.deviceInError(cmd.Target) {
+	if needsRadio && !cmd.Passthrough && cmd.Target != 0 && q.deviceInError(cmd.Target) {
 		if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(cmd.Target)); err != nil {
 			return Result{Err: fmt.Errorf("reset error state: %w", err), Budget: q.gw.Budget()}
 		}
@@ -290,16 +298,23 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 			q.sleep(ctx, q.opts.Gap)
 		}
 		if !isRadio(l) {
-			if _, err := q.gw.Send(ctx, l); err != nil {
+			reply, err := q.gw.Send(ctx, l)
+			if err != nil {
 				res.Err = err
 				break
 			}
+			res.Replies = append(res.Replies, reply)
 			continue
 		}
 		r, err := q.gw.SendRadio(ctx, l)
 		if err != nil {
 			res.Err = err
 			break
+		}
+		if cmd.Passthrough {
+			res.Replies = append(res.Replies, sendResultLine(r))
+			res.Discarded = res.Discarded || r.Discarded
+			continue
 		}
 		if r.Discarded && cmd.Target != 0 {
 			// Observed on hardware: a command to a device in error state is
@@ -316,6 +331,7 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 				break
 			}
 		}
+		res.Replies = append(res.Replies, sendResultLine(r))
 		if r.Discarded {
 			q.opts.Logger.Warn("command discarded by the cube", "target", cmd.Target, "command", l.String(), "duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			res.Discarded = true
@@ -325,6 +341,15 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 	}
 	res.Budget = q.gw.Budget()
 	return res
+}
+
+// sendResultLine rebuilds the S line the Cube answered with.
+func sendResultLine(r *cube.SendResult) cube.Message {
+	d := 0
+	if r.Discarded {
+		d = 1
+	}
+	return cube.Message{Type: 'S', Data: fmt.Sprintf("%02x,%d,%02x", r.DutyCycle, d, r.FreeMemorySlots)}
 }
 
 func (q *Queue) deviceInError(rf cube.RFAddress) bool {

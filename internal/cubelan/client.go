@@ -306,6 +306,11 @@ func (c *Client) clearPending(p *pendingReply) {
 	c.mu.Unlock()
 }
 
+// ApplyLocal folds a message into the snapshot as if the Cube had sent
+// it. The LAN proxy uses it after a metadata write (m:) went through,
+// because the Cube does not echo the new M lines.
+func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
+
 // SendRadio sends an s command and decodes the Cube's S reply.
 func (c *Client) SendRadio(ctx context.Context, m cube.Message) (*cube.SendResult, error) {
 	if m.Type != 's' && m.Type != 'r' {
