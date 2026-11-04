@@ -134,6 +134,13 @@ func (s *Server) serve(conn net.Conn) {
 			return
 		case 'l':
 			reply = last.Wire()
+		case 'c':
+			reply = "A:\r\n"
+			for _, g := range s.Greeting {
+				if g.Type == 'C' && strings.HasPrefix(strings.ToLower(g.Data), strings.ToLower(strings.TrimSpace(m.Data))+",") {
+					reply = g.Wire()
+				}
+			}
 		case 's', 'r':
 			d := 0
 			if s.Discard {

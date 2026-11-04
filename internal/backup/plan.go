@@ -465,7 +465,7 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 		// does not store (window-open minutes, decalcification, valve
 		// limits) are taken from a radiator thermostat in the same room,
 		// else from the software's defaults.
-		ref := roomRadiator(snap, room, want.RFAddress)
+		ref := RoomRadiator(snap, room, want.RFAddress)
 		if !opts.SkipSettings {
 			if w.ComfortTemp != h.ComfortTemp || w.EcoTemp != h.EcoTemp || w.MaxSetpoint != h.MaxSetpoint || w.MinSetpoint != h.MinSetpoint ||
 				w.TempOffset != h.TempOffset || w.WindowOpenTemp != h.WindowOpenTemp {
@@ -556,46 +556,63 @@ func linkTarget(rf cube.RFAddress, typ cube.DeviceType, room uint8) cube.Target 
 // of the room concerned.
 func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name string, oldRoom uint8) {
 	rf, typ := want.RFAddress, want.Type
-	known := map[cube.RFAddress]cube.DeviceMeta{}
-	if md := snap.Metadata(); md != nil {
-		for _, d := range md.Devices {
-			known[d.RFAddress] = d
-		}
-	}
-	// Old partners: what the Cube lists in the old room now.
-	var out []cube.Message
-	for _, d := range known {
-		if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) {
-			continue
-		}
-		out = append(out, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
-		out = append(out, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, false, d.RFAddress, d.Type))
-	}
-	out = append(out, cube.CmdSetGroup(rf, oldRoom, true))
-	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, len(out)/2),
-		engine.Command{Key: "restore:move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: true, Lines: out})
-
 	// New partners: the backup's layout of the new room, limited to
 	// devices the Cube knows.
-	var in []cube.Message
-	for _, d := range f.Devices {
-		if d.RFAddress == rf || d.RoomID != want.RoomID || !linkPair(d.Type, typ) {
-			continue
+	known := map[cube.RFAddress]bool{}
+	if md := snap.Metadata(); md != nil {
+		for _, d := range md.Devices {
+			known[d.RFAddress] = true
 		}
-		if _, ok := known[d.RFAddress]; !ok {
-			continue
-		}
-		in = append(in, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, want.RoomID), true, rf, typ))
-		in = append(in, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, true, d.RFAddress, d.Type))
 	}
-	in = append(in, cube.CmdSetGroup(rf, want.RoomID, false))
-	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, len(in)/2),
-		engine.Command{Key: "restore:move-in:" + rf.String(), Target: rf, RoomID: want.RoomID, Wakeup: true, Lines: in})
+	var members []cube.DeviceMeta
+	for _, d := range f.Devices {
+		if d.RoomID == want.RoomID && known[d.RFAddress] {
+			members = append(members, cube.DeviceMeta{Type: d.Type, RFAddress: d.RFAddress, RoomID: d.RoomID})
+		}
+	}
+	out, in := MoveCommands(snap, rf, typ, oldRoom, want.RoomID, members)
+	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, len(out.Lines)/2), out)
+	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, len(in.Lines)/2), in)
 }
 
-// roomRadiator returns the configuration of a radiator thermostat in the
-// room (other than rf), or the original software's defaults.
-func roomRadiator(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) cube.ThermostatConfig {
+// MoveCommands builds the two commands that move a device to another
+// room the way the original software does: unlink it from every partner
+// of the old room (as the Cube lists it now) in both directions and
+// remove its group, then link it with every partner among newMembers in
+// both directions and set the new group, each half after a wakeup of
+// the room concerned. The metadata write that records the new room is
+// not included.
+func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta) (out, in engine.Command) {
+	var outLines []cube.Message
+	if md := snap.Metadata(); md != nil {
+		for _, d := range md.Devices {
+			if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) {
+				continue
+			}
+			outLines = append(outLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
+			outLines = append(outLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, false, d.RFAddress, d.Type))
+		}
+	}
+	outLines = append(outLines, cube.CmdSetGroup(rf, oldRoom, true))
+	out = engine.Command{Key: "move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: oldRoom != 0, Lines: outLines}
+
+	var inLines []cube.Message
+	for _, d := range newMembers {
+		if d.RFAddress == rf || !linkPair(d.Type, typ) {
+			continue
+		}
+		inLines = append(inLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, newRoom), true, rf, typ))
+		inLines = append(inLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, true, d.RFAddress, d.Type))
+	}
+	inLines = append(inLines, cube.CmdSetGroup(rf, newRoom, false))
+	in = engine.Command{Key: "move-in:" + rf.String(), Target: rf, RoomID: newRoom, Wakeup: true, Lines: inLines}
+	return out, in
+}
+
+// RoomRadiator returns the configuration of a radiator thermostat in the
+// room (other than rf), or the original software's defaults: the values
+// a wall thermostat does not store are taken from it when writing one.
+func RoomRadiator(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) cube.ThermostatConfig {
 	for _, other := range snap.Devices() {
 		if other == rf {
 			continue
