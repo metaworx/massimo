@@ -315,8 +315,23 @@ that room and deleting the room (by hand in the UI, logged as
 either; the next backup still listed them, unnamed, and a power cycle
 of the Cube did not drop them. The FHEM project notes that `t:` makes
 the Cube send a factory reset to the device, so a device that never
-answers is apparently never dropped. Workaround: assign each such device
-to a room of its own, so that it is a member of no room that matters.
+answers is apparently never dropped.
+
+Which room such a device blocks is decided by the room byte of its own
+C line, not by the metadata (experiment 2026-11-04, one ghost 001867):
+moving it into room 1 in the original software (`m:`, `z:`, 0x20 links,
+0x22 group 1) set its C-line room to 1 and room 1 commands were
+discarded at once; deleting it from room 1 (`z:`, 0x21, `t:01,1,…`,
+`m:` without it) left the C-line room at 1 and room 1 stayed blocked,
+the device being "new" again; putting it back into a parking room
+(`arrangeNewDevice`: 0x22 group 6, `c:`, `m:`) set the byte to 6 and
+room 1 accepted commands again. This is how the previous owner's
+leftovers blocked rooms 4 and 5 (their C lines said 4, 4 and 5 while
+they were unlisted). Earlier the same day, deleting the three ghosts
+from a parking room and then removing that room put the bytes back to
+4, 4 and 5, so removing the room seems to restore an older value;
+keep the parking room, with the ghosts in it, instead. The device types
+of the three ghosts are shutter contacts; their serials start with IEQ.
 
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
