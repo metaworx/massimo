@@ -45,6 +45,18 @@ massimo discover
 massimo portal-crypto iv -addr <cube-ip>
 ```
 
+```bash
+massimo portal -listen :80 -probe default -probe-target 1514b6:6 -probe-cube 192.168.1.46
+```
+
+Probe mode answers each poll with the next reply variant (an `s:` radio
+command in different forms) and judges it by the Cube's free memory
+slots in the following poll: an accepted radio command occupies a slot.
+With `-probe-cube` the portal sends `i:` over the LAN after each reply so
+the next poll comes within seconds. `-probe <file>` takes custom
+variants, one `name=text` per line with `\r\n` escapes and the
+placeholders `{i}`, `{s}`, `{shex}`, `{r}`, `{serial}`, `{rf}`, `{fw}`.
+
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address,
 firmware) via the UDP broadcast the original software uses; it needs UDP
 port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`

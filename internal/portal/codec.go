@@ -51,6 +51,12 @@ func (c *Codec) Decode(body []byte) ([]cube.Message, string, error) {
 	return msgs, text, err
 }
 
+// EncodeText encrypts reply text exactly as given (for experiments with
+// line endings and other forms).
+func (c *Codec) EncodeText(text string) ([]byte, error) {
+	return portalcrypto.Encrypt(c.key, c.iv, []byte(text))
+}
+
 // Encode joins the messages with CR LF and encrypts them.
 func (c *Codec) Encode(msgs []cube.Message) ([]byte, error) {
 	var sb strings.Builder

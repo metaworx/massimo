@@ -4,6 +4,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -12,6 +14,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/portal"
 	"go.metaworx.ch/massimo/internal/portal/portalcrypto"
@@ -31,6 +34,11 @@ func runPortal(args []string) error {
 	extra := fs.String("extra", "", "extra reply lines, separated by ';'; {conn} and {now} are expanded (e.g. 'v:<tz>,{now}')")
 	dir := fs.String("dir", ".", "directory for portal-capture.jsonl")
 	deviceURL := fs.String("device-url", "", "URL returned by /lookup (default: http://<this host>:<port>/cube)")
+	probe := fs.String("probe", "", "probe mode: 'default' or a file with name=text lines; each poll gets the next reply variant and the Cube's free slots tell whether it queued the radio command")
+	probeTarget := fs.String("probe-target", "", "device for the probe's s: command, <rf>[:<room>] (e.g. 1514b6:6)")
+	probeTemp := fs.Float64("probe-temp", 20, "setpoint of the probe's s: command (manual mode)")
+	probeCube := fs.String("probe-cube", "", "Cube LAN address: after each probe reply send i: there so the next poll comes quickly")
+	probeDelay := fs.Duration("probe-delay", 15*time.Second, "pause before that i: trigger")
 	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo portal [flags]\n\nFake MAX! portal: decrypts and logs what a Cube sends, replies like the original.\n\n")
@@ -100,6 +108,23 @@ func runPortal(args []string) error {
 		ListenPort: strings.TrimPrefix(portForURL(listens[0]), ":"),
 	}
 	cap.Version = versionString()
+	if *probe != "" {
+		prober, err := newProber(*probe, *probeTarget, *probeTemp, *iLine, logger)
+		if err != nil {
+			return err
+		}
+		if *probeCube != "" {
+			addr := *probeCube
+			prober.Delay = *probeDelay
+			prober.Trigger = func() {
+				if _, _, err := lanExchange(addr, cube.CmdSetPortalInterval(0).String(), 'A'); err != nil {
+					logger.Warn("probe trigger failed", "error", err)
+				}
+			}
+		}
+		cap.Probe = prober
+		logger.Info("probe mode", "variants", len(prober.Variants), "target", *probeTarget, "trigger", *probeCube != "")
+	}
 	// Listen on IPv4 explicitly: on Windows a dual-stack IPv6 listener can
 	// bind next to another program's IPv4 socket on the same port and then
 	// silently receive nothing, while IPv4 traffic goes to the other program.
@@ -151,4 +176,49 @@ func portForURL(listen string) string {
 		return listen[i:]
 	}
 	return ""
+}
+
+// newProber builds the reply-variant prober for the portal's probe mode.
+func newProber(spec, target string, temp float64, iLine string, logger *slog.Logger) (*portal.Prober, error) {
+	if target == "" {
+		return nil, fmt.Errorf("portal: -probe needs -probe-target <rf>[:<room>]")
+	}
+	rfText, roomText, _ := strings.Cut(target, ":")
+	rf, err := cube.ParseRFAddress(rfText)
+	if err != nil {
+		return nil, err
+	}
+	room := 0
+	if roomText != "" {
+		if _, err := fmt.Sscanf(roomText, "%d", &room); err != nil {
+			return nil, fmt.Errorf("portal: bad room in -probe-target: %w", err)
+		}
+	}
+	s, err := cube.CmdSetTemperature(cube.Target{RFAddress: rf, RoomID: uint8(room)}, temp, cube.ModeManual, cube.Until{})
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := base64.StdEncoding.DecodeString(s.Data)
+	var variants []portal.Variant
+	if spec == "default" {
+		variants = portal.DefaultVariants()
+	} else {
+		src, err := os.ReadFile(spec)
+		if err != nil {
+			return nil, err
+		}
+		if variants, err = portal.ParseVariants(string(src)); err != nil {
+			return nil, fmt.Errorf("%s: %w", spec, err)
+		}
+	}
+	if iLine == "" {
+		iLine = "000051b1,00000000,ffffffff"
+	}
+	return &portal.Prober{
+		Variants: variants,
+		Values:   map[string]string{"s": s.Data, "shex": hex.EncodeToString(raw), "r": cube.CmdResetError(rf).Data},
+		Default:  "i:" + iLine + "\r\n",
+		ILine:    iLine,
+		Log:      logger,
+	}, nil
 }

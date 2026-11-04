@@ -114,8 +114,10 @@ func DefaultReplier(iLine string, extra []cube.Message) Replier {
 type Capture struct {
 	Codecs map[string]*Codec // by serial; the key "" is used for unknown serials
 	Reply  Replier
-	Log    *slog.Logger
-	Dir    string // if set, every exchange is appended to <Dir>/portal-capture.jsonl
+	// Probe, if set, replaces Reply: each poll gets the next variant.
+	Probe *Prober
+	Log   *slog.Logger
+	Dir   string // if set, every exchange is appended to <Dir>/portal-capture.jsonl
 
 	// DeviceURL is what /lookup returns; empty derives http://<host>:<ListenPort>/cube
 	// from the request's Host header.
@@ -234,11 +236,18 @@ func (c *Capture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.finish(w, ex, http.StatusInternalServerError, nil)
 		return
 	}
-	reply := c.Reply(serial, msgs)
-	for _, m := range reply {
-		ex.ReplyLines = append(ex.ReplyLines, m.String())
+	var enc []byte
+	if c.Probe != nil {
+		text, lines := c.Probe.Reply(serial, msgs)
+		ex.ReplyLines = lines
+		enc, err = codec.EncodeText(text)
+	} else {
+		reply := c.Reply(serial, msgs)
+		for _, m := range reply {
+			ex.ReplyLines = append(ex.ReplyLines, m.String())
+		}
+		enc, err = codec.Encode(reply)
 	}
-	enc, err := codec.Encode(reply)
 	if err != nil {
 		ex.Error = "encode reply: " + err.Error()
 		c.finish(w, ex, http.StatusInternalServerError, nil)
