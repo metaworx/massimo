@@ -27,6 +27,10 @@ type DeviceState struct {
 	ActualTemp *float64 `json:"actual_temp,omitempty"` // nil when the device did not report one
 	Until      *Until   `json:"until,omitempty"`       // vacation mode end
 
+	// Wall thermostats only: the display shows the measured temperature
+	// (true) or the setpoint (false). Set with radio command 0x82.
+	DisplayActual *bool `json:"display_actual,omitempty"`
+
 	// Shutter contacts only.
 	WindowOpen *bool `json:"window_open,omitempty"`
 
@@ -103,6 +107,10 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 		if s.Type == DeviceWallThermostat && len(e) >= 13 {
 			t := float64(int(e[8]&0x80)<<1|int(e[12])) / 10
 			s.ActualTemp = &t
+			// Observed: byte 7 is 0x01 with the setpoint on the display
+			// and 0x04 after the "show measured temperature" command.
+			d := e[7]&0x04 != 0
+			s.DisplayActual = &d
 		}
 	}
 	return s

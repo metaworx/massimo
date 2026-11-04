@@ -466,6 +466,16 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 				what = append(what, fmt.Sprintf("temperatures comfort %.1f eco %.1f max %.1f min %.1f offset %+.1f window %.1f",
 					w.ComfortTemp, w.EcoTemp, w.MaxSetpoint, w.MinSetpoint, w.TempOffset, w.WindowOpenTemp))
 			}
+			if want.DisplayActual != nil {
+				if now, ok := snap.State(want.RFAddress); ok && now.Valid && now.DisplayActual != nil && *now.DisplayActual != *want.DisplayActual {
+					lines = append(lines, cube.CmdSetDisplayActual(t, *want.DisplayActual))
+					shown := "setpoint"
+					if *want.DisplayActual {
+						shown = "measured temperature"
+					}
+					what = append(what, "display shows "+shown)
+				}
+			}
 			if w.BoostMinutes != h.BoostMinutes || w.BoostValvePct != h.BoostValvePct {
 				m, err := cube.CmdSetValveConfig(t, cube.ValveSettings{BoostMinutes: w.BoostMinutes, BoostValvePct: w.BoostValvePct, DecalcDay: ref.DecalcDay,
 					DecalcHour: ref.DecalcHour, MaxValvePct: ref.MaxValvePct, ValveOffsetPct: ref.ValveOffsetPct})

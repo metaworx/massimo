@@ -235,7 +235,9 @@ radiator thermostats, and their C line ends with offset, window-open
 temperature and boost (3 bytes after the week program at 0x16). Their L
 entry (12 bytes) carries the setpoint at offset 8 and the measured
 temperature at 12 (with bit 7 of byte 8 as the ninth bit); byte 7 is
-not a valve.
+not a valve but the display mode: 0x01 shows the setpoint, 0x04 the
+measured temperature, set with radiogram 0x82 and one byte (4 or 0)
+after a room wakeup (`00 00 82 … 15667d 00 04`).
 
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.

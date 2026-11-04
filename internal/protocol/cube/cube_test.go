@@ -606,3 +606,20 @@ func TestWallThermostatConfigAndState(t *testing.T) {
 		t.Fatalf("new device %+v %v", nd, err)
 	}
 }
+
+func TestWallDisplayMode(t *testing.T) {
+	types := map[RFAddress]DeviceType{0x15667d: DeviceWallThermostat}
+	for _, c := range []struct {
+		data string
+		want bool
+	}{{"DBVmffYSGAEkAAAA7Q==", false}, {"DBVmffYSGAQkAAAA7Q==", true}} {
+		states, err := ParseDeviceList(c.data, types)
+		if err != nil || len(states) != 1 || states[0].DisplayActual == nil || *states[0].DisplayActual != c.want {
+			t.Fatalf("%s: %+v %v", c.data, states, err)
+		}
+	}
+	// The original software's radiogram for "show measured temperature".
+	if got := CmdSetDisplayActual(Target{RFAddress: 0x15667d}, true).String(); got != "s:AACCAAAAFWZ9AAQ=" {
+		t.Fatalf("display command %s", got)
+	}
+}
