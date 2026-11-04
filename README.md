@@ -118,8 +118,12 @@ command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 [docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
 [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml). Set
 `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
-The listener defaults to localhost; put a reverse proxy with TLS in
-front before exposing it.
+A first web UI, plain HTML and JavaScript embedded in the binary, is
+served at http://127.0.0.1:8099/ : rooms, devices and their states live,
+setpoints, locks and the deletion of empty rooms. It is meant for the
+LAN. The listener defaults to localhost; put a reverse proxy with TLS in
+front before exposing it, and the UI, which needs the same token as the
+API, with it.
 
 The Cube serves only one LAN client at a time, so `serve` is itself a
 Cube for everyone else: it listens on port 62910 on every interface

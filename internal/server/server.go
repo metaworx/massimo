@@ -18,7 +18,8 @@
 //	GET  /api/v1/cubes/{sn}/backup?format=yaml|json  a backup file
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
 //
-// With a token configured, every /api request needs "Authorization: Bearer <token>".
+// With a token configured, every /api request needs "Authorization: Bearer <token>"
+// (or ?token=<token>). A web UI for all of this is served at / (see ui.go).
 //
 // With proxy listeners configured, the server also answers as a Cube on
 // the LAN (TCP 62910 and UDP discovery), see internal/proxy.
@@ -280,7 +281,9 @@ func (s *Server) routes() {
 	})
 	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if s.opts.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.opts.Token {
+			// The token comes as a bearer header, or as ?token= for the
+			// event stream, which browsers open without headers.
+			if s.opts.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.opts.Token && r.URL.Query().Get("token") != s.opts.Token {
 				writeError(w, http.StatusUnauthorized, "missing or wrong token")
 				return
 			}
@@ -309,6 +312,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
+	s.uiRoutes(mux)
 	s.mux = mux
 }
 

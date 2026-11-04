@@ -11,6 +11,17 @@ Writes go through the queue, which serialises commands, respects the
 radio duty cycle and the Cube's memory slots, and resets a device's error
 state when needed.
 
+## Web UI
+
+The server also serves a small web page at `/` (files under `/ui/`)
+that shows the Cubes, rooms and devices from this API, follows the
+event stream, and sends setpoints, locks and room deletions. It is
+plain HTML and JavaScript embedded in the binary; it needs no setup.
+With a token configured, the page asks for it once and keeps it in the
+browser; the event stream takes the token as `?token=` because browsers
+open it without headers. The page and its files are public, the API
+behind them is not.
+
 ## Authentication
 
 With `MASSIMO_API_TOKEN` (or `-token`) set, every `/api` request must
