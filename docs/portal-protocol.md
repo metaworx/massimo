@@ -264,7 +264,8 @@ LockManualControls**, 0x81 DaylightSavingTimeMode, 0x82
 SwitchDisplaySetPointActual, 0xF0 WakeUp, 0xF1 Reset. Only `FrameType`
 itself references `LockManualControls`: the software has no UI for the
 key lock and never sends 0x80. The lock state is readable, as bit 0x20
-of the second flags byte of an L entry. Massimo sends 0x80 with one
+of the second flags byte of an L entry (confirmed on hardware: unlocking
+a thermostat at the device turned its flags from 0x1238 to 0x1218). Massimo sends 0x80 with one
 payload byte (1 lock, 0 unlock) like 0x82, directly to the device after
 a room wakeup; it is not yet verified on hardware. On the device the
 lock is toggled with Auto/Manu plus the second button, see the eQ-3
