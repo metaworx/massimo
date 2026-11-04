@@ -343,6 +343,13 @@ from a parking room and then removing that room put the bytes back to
 keep the parking room, with the ghosts in it, instead. The device types
 of the three ghosts are shutter contacts; their serials start with IEQ.
 
+After a 0x40 set-temperature command the Cube updates the setpoint in
+the room members' L entries at once, while the mode bits change only
+when the devices report back, about 45 s later in one observation (a
+room shown as auto at the new temperature in between). A client that
+needs the mode should wait for the next L line rather than read the
+one right after the command.
+
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
 
