@@ -123,11 +123,13 @@ command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
 A web UI, plain HTML and JavaScript embedded in the binary, is served
 at http://127.0.0.1:8099/ : one tile per room with the measured and
-the set temperature, up/down chevrons that send two seconds after the
-last click, AUTO, MANU and HOLIDAY, a House tile whose ECO, AUTO,
+the set temperature with a thermometer and a gauge icon, up/down
+chevrons that send two seconds after the last click, AUTO, MANU and
+HOLIDAY plus an info and a cog button for the device list and the
+configuration, a House tile whose ECO, AUTO,
 COMFORT and MANU open a one-screen panel with mode, duration and room
-selection, vacation per room inline, the device list behind the room
-name with offsets and locks, live updates plus polling with a refresh
+selection, vacation per room inline, the device list with coloured
+mode badges, offsets and locks, live updates plus polling with a refresh
 button, the Cube clock in the browser's or the Cube's time zone, and
 a settings page with an Expert switch for the technical details, Rooms,
 Log and Settings as icon buttons at the right of the header, a per-room

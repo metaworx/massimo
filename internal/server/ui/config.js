@@ -34,6 +34,7 @@ function configUI(room) {
 async function openConfig(room, el, tab) {
   closeMenu(el);
   const ui = roomUI(room);
+  ui.open = false; // one of device list and configuration at a time
   ui.config = { open: true, tab: tab || "room", loading: true, cfg: null, prog: null, edit: {}, result: null };
   rerenderRoom(room);
   try {
@@ -139,10 +140,15 @@ function renderConfig(el, room) {
   }
 }
 
+// renderTabs builds the configuration area's sub-navigation: the
+// section tabs in a tab list, and the close button outside it.
 function renderTabs(room, c) {
   const bar = document.createElement("div");
   bar.className = "config-tabs";
-  bar.setAttribute("role", "tablist");
+  const list = document.createElement("span");
+  list.className = "config-tablist";
+  list.setAttribute("role", "tablist");
+  list.setAttribute("aria-label", "configuration sections");
   for (const [key, label] of TABS) {
     const b = button(label, "tab" + (c.tab === key ? " active" : ""), () => {
       c.tab = key;
@@ -151,8 +157,9 @@ function renderTabs(room, c) {
     });
     b.setAttribute("role", "tab");
     b.setAttribute("aria-selected", c.tab === key ? "true" : "false");
-    bar.appendChild(b);
+    list.appendChild(b);
   }
+  bar.appendChild(list);
   const close = button("×", "tab close", () => closeConfig(room));
   close.title = "Close the configuration";
   close.setAttribute("aria-label", "close configuration");

@@ -18,14 +18,18 @@ this API, plain HTML and JavaScript embedded in the binary, no setup.
 It shows one tile per room in the manner of the original software: the
 measured temperature (IS, from a wall thermostat, or from a radiator
 thermostat when it reported one; "–" otherwise) and the setpoint (SET)
-side by side at the same size, with up and down chevrons next to SET
-(shown on hover, always on touch screens) that change it in 0.5 °C
-steps and send the value as a manual setpoint two seconds after the
-last click, with Save and Cancel while it waits; AUTO, MANU and
-HOLIDAY buttons, HOLIDAY opening the vacation panel and, while the room
-is in vacation mode, highlighted with the end date next to it; a menu
-with vacation, lock and unlock of the room's thermostats, the device
-list and, for an empty room, deletion. A House tile sets every room to
+side by side at the same size, each with a small icon above its label
+(a thermometer for IS, a gauge for SET), with up and down chevrons
+next to SET (shown on hover, always on touch screens) that change it
+in 0.5 °C steps and send the value as a manual setpoint two seconds
+after the last click, with Save and Cancel while it waits; AUTO, MANU
+and HOLIDAY buttons, HOLIDAY opening the vacation panel and, while the
+room is in vacation mode, highlighted with the end date next to it;
+AUTO and MANU close an open vacation panel. Right of the mode buttons
+an info button opens the device list and a cog the configuration, one
+of the two at a time, a click on the highlighted one closes it. The
+⋯ menu keeps lock and unlock of the room's thermostats and, for an
+empty room, deletion. A House tile sets every room to
 ECO or COMFORT (manual at the room's eco or comfort temperature from
 its thermostat's configuration), AUTO or MANU; each of its buttons
 opens an inline panel with everything on one screen, no wizard: the
@@ -36,9 +40,14 @@ an "All rooms" box, and Send, which runs the room commands one after
 another and lists the result per room. Enter in any field sends.
 Vacation for one room is an inline panel in its tile in the same way,
 and deleting an empty room asks inline.
-Clicking a room name opens its devices with their states, flags,
-temperature offsets and per-thermostat lock. Setpoints are set per
-room only, as in the original software. "Configure…" in a tile's menu
+The device list (room name or info button) shows each device with its
+mode or window state as a filled badge at the right (green auto and
+closed, amber manual, blue holiday, red open), warnings outlined
+before it, type and address on a second line, and the values in two
+columns with the decimals aligned: valve and offset left, set and
+actual right in bold with the gauge and thermometer icons, and the
+per-thermostat lock. Setpoints are set per room only, as in the
+original software. The cog of a tile
 expands the tile into the room's configuration, one screen per
 section with Send and Cancel, Enter sends: Room (rename), Temperatures
 (comfort, eco, open-window temperature and minutes, maximum and
@@ -53,7 +62,12 @@ last fixed at 24:00, a bar of the day above them; "Copy Mo to …"
 applies the edited day to the selected days; Send writes the changed
 days to the room), and Copy (this room's temperatures and device
 settings, optionally its week programme, to selected other rooms, one
-after another with a result per room). Three icon buttons at the
+after another with a result per room). Icon buttons carry labels for
+screen readers, the mode buttons are a group with their pressed
+state, the page icons a navigation with the current page marked,
+every control has a visible focus ring, and Escape closes an open menu
+or panel; the pages pass an axe-core check without violations. Three
+icon buttons at the
 right end of the header switch between the pages Rooms, Log and
 Settings: the log lists the Cube's recent events from
 `GET …/log` and then the live ones, one line each with the local time,

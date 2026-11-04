@@ -9,14 +9,16 @@
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true" focusable="false">
-  <!-- The pair in use: icon-is before the measured temperature, icon-set
-       before the setpoint. Swap by editing these two symbols; the
-       alternatives below are unused. -->
+  <!-- The pair in use: icon-is (a thermometer) for the measured
+       temperature, icon-set (a gauge) for the setpoint. Swap by editing
+       these two symbols; the alternatives below are unused. -->
   <symbol id="icon-is" viewBox="0 0 24 24"><path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a3.5 3.5 0 1 1-4 0z"/><path d="M12 10v6"/></symbol>
-  <symbol id="icon-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
-  <symbol id="icon-is-gauge" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.4"/></symbol>
+  <symbol id="icon-set" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.4"/></symbol>
+  <symbol id="icon-set-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
   <symbol id="icon-set-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-10a6 6 0 1 1 12 0c0 4.5-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></symbol>
   <symbol id="icon-set-dial" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v4.5l3 2"/><path d="M12 4v1.5"/></symbol>
+  <!-- tile tools -->
+  <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></symbol>
   <!-- navigation -->
   <symbol id="icon-house" viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-6h4v6"/></symbol>
   <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
@@ -39,11 +41,11 @@
     </div>
     <div class="top-right">
       <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now">↻</button>
-      <span class="nav" role="tablist" aria-label="pages">
-        <button type="button" id="view-tiles" class="icon-btn nav-btn active" role="tab" aria-selected="true" aria-label="rooms" title="Rooms"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-        <button type="button" id="view-log" class="icon-btn nav-btn" role="tab" aria-selected="false" aria-label="log" title="Log"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
-        <button type="button" id="view-settings" class="icon-btn nav-btn" role="tab" aria-selected="false" aria-label="settings" title="Settings"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
-      </span>
+      <nav class="nav" aria-label="pages">
+        <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
+        <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
+        <button type="button" id="view-settings" class="icon-btn nav-btn" aria-label="settings" title="Settings"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+      </nav>
     </div>
   </div>
   <button type="button" id="reload-btn" class="primary hidden">New version on the server, reload</button>
@@ -164,11 +166,8 @@
     <header class="tile-head">
       <button type="button" class="room-name-btn"><h2 class="room-name"></h2></button>
       <details class="menu">
-        <summary aria-label="room actions">⋯</summary>
+        <summary aria-label="room actions" title="Room actions">⋯</summary>
         <div class="menu-items">
-          <button type="button" class="menu-devices">Devices</button>
-          <button type="button" class="menu-config">Configure…</button>
-          <button type="button" class="menu-vacation">Vacation…</button>
           <button type="button" class="menu-lock">Lock thermostats</button>
           <button type="button" class="menu-unlock">Unlock thermostats</button>
           <button type="button" class="menu-delete">Delete room</button>
@@ -178,16 +177,16 @@
     <p class="notice not-ready hidden"></p>
     <div class="setpoint-row">
       <div class="temp-block">
-        <span class="temp-big"><svg class="ti" aria-hidden="true"><use href="#icon-is"/></svg><span class="temp-is">–</span></span>
-        <span class="temp-label">IS</span>
+        <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-is"/></svg><span class="temp-label">IS</span></span>
+        <span class="temp-big temp-is" aria-label="measured temperature">–</span>
       </div>
       <div class="temp-block">
-        <span class="temp-big"><svg class="ti" aria-hidden="true"><use href="#icon-set"/></svg><span class="setpoint-big"></span></span>
-        <span class="temp-label">SET</span>
+        <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-set"/></svg><span class="temp-label">SET</span></span>
+        <span class="temp-big setpoint-big" aria-label="set temperature"></span>
       </div>
       <div class="stepper">
-        <button type="button" class="step step-plus" aria-label="0.5 degrees more">&#x2303;</button>
-        <button type="button" class="step step-minus" aria-label="0.5 degrees less">&#x2304;</button>
+        <button type="button" class="step step-plus" aria-label="0.5 degrees more" title="0.5 °C more">&#x2303;</button>
+        <button type="button" class="step step-minus" aria-label="0.5 degrees less" title="0.5 °C less">&#x2304;</button>
       </div>
     </div>
     <div class="pending-row hidden">
@@ -195,11 +194,16 @@
       <button type="button" class="pending-cancel">Cancel</button>
     </div>
     <div class="mode-row">
-      <span class="muted">Mode</span>
-      <button type="button" class="mode-auto">AUTO</button>
-      <button type="button" class="mode-manual">MANU</button>
-      <button type="button" class="mode-holiday" title="holiday: a temperature until a date">HOLIDAY</button>
+      <span class="mode-group" role="group" aria-label="mode">
+        <button type="button" class="mode-auto" aria-pressed="false">AUTO</button>
+        <button type="button" class="mode-manual" aria-pressed="false">MANU</button>
+        <button type="button" class="mode-holiday" aria-pressed="false" title="holiday: a temperature until a date">HOLIDAY</button>
+      </span>
       <span class="mode-vacation hidden"></span>
+      <span class="tile-tools">
+        <button type="button" class="tool-btn tile-info" aria-label="devices of the room" title="Devices" aria-expanded="false"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg></button>
+        <button type="button" class="tool-btn tile-cog" aria-label="configure the room" title="Configure" aria-expanded="false"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+      </span>
     </div>
     <form class="panel vacation-panel hidden">
       <div class="panel-row">
