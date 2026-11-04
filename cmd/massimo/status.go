@@ -43,7 +43,11 @@ type statusReport struct {
 	Firmware        string         `json:"firmware"`
 	DutyCyclePct    int            `json:"duty_cycle_pct"`
 	FreeMemorySlots int            `json:"free_memory_slots"`
-	CubeTime        string         `json:"cube_time"`
+	// Pending is the number of radiograms the Cube has sent and not yet
+	// seen acknowledged (memory slots in use); their effect is not in
+	// the states yet.
+	Pending  int    `json:"pending_radiograms"`
+	CubeTime string `json:"cube_time"`
 	Rooms           []statusRoom   `json:"rooms"`
 	Unlisted        []statusDevice `json:"unlisted"`
 }
@@ -97,6 +101,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot, ignore []cube.RFAddress) statusR
 	if h != nil {
 		rep.Serial, rep.Firmware = h.Serial, h.FirmwareVersion
 		rep.DutyCyclePct, rep.FreeMemorySlots = h.DutyCycle, h.FreeMemorySlots
+		rep.Pending = cubelan.Budget{FreeMemorySlots: h.FreeMemorySlots}.Pending()
 		rep.CubeTime = strings.TrimSpace(h.CubeDate + " " + h.CubeTime)
 	}
 	md := snap.Metadata()
@@ -174,6 +179,9 @@ func statusFromSnapshot(snap *cubelan.Snapshot, ignore []cube.RFAddress) statusR
 
 func printStatus(rep statusReport) {
 	fmt.Printf("cube %s fw %s, duty cycle %d%%, %d free slots, clock %s\n", rep.Serial, rep.Firmware, rep.DutyCyclePct, rep.FreeMemorySlots, rep.CubeTime)
+	if rep.Pending > 0 {
+		fmt.Printf("%d radiogram(s) sent but not yet acknowledged by a device; the states above may still change\n", rep.Pending)
+	}
 	for _, r := range rep.Rooms {
 		ready := "ready"
 		if !r.Ready {

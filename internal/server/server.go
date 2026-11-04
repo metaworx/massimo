@@ -347,10 +347,14 @@ type cubeView struct {
 	Firmware  string           `json:"firmware,omitempty"`
 	RFAddress string           `json:"rf_address,omitempty"`
 	Budget    cubelan.Budget   `json:"budget"`
-	Updated   time.Time        `json:"updated,omitempty"`
-	Rooms     int              `json:"rooms"`
-	Devices   int              `json:"devices"`
-	Queued    int              `json:"queued"`
+	// Pending counts radiograms the Cube sent and no device has
+	// acknowledged yet (memory slots in use); their effect is not in
+	// the device states yet.
+	Pending  int       `json:"pending_radiograms"`
+	Updated  time.Time `json:"updated,omitempty"`
+	Rooms    int       `json:"rooms"`
+	Devices  int       `json:"devices"`
+	Queued   int       `json:"queued"`
 	Config    *cube.CubeConfig `json:"config,omitempty"`
 	RoomList  []roomView       `json:"room_list,omitempty"`
 	CubeTime  string           `json:"cube_time,omitempty"`
@@ -387,7 +391,8 @@ type deviceDetail struct {
 
 func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
-	v := cubeView{Serial: rt.serial, Address: rt.cfg.Addr, Budget: rt.client.Budget(), Queued: rt.queue.Len()}
+	b := rt.client.Budget()
+	v := cubeView{Serial: rt.serial, Address: rt.cfg.Addr, Budget: b, Pending: b.Pending(), Queued: rt.queue.Len()}
 	if h := snap.Hello(); h != nil {
 		v.Connected = !snap.Updated().IsZero()
 		v.Firmware, v.RFAddress, v.Updated = h.FirmwareVersion, h.RFAddress.String(), snap.Updated()

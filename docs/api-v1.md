@@ -64,6 +64,7 @@ Every configured Cube:
     "firmware": "1.1.3",
     "rf_address": "022839",
     "budget": {"duty_cycle_pct": 4, "free_memory_slots": 50, "updated_at": "2026-11-04T15:28:11+01:00"},
+    "pending_radiograms": 0,
     "updated": "2026-11-04T15:28:11+01:00",
     "rooms": 5,
     "devices": 16,
@@ -75,7 +76,11 @@ Every configured Cube:
 
 `budget` is what the Cube last reported: the share of the hourly radio
 budget already used, and the free memory slots (each unacknowledged
-radiogram occupies one). `queued` is the number of commands waiting.
+radiogram occupies one). `pending_radiograms` is the number of slots in
+use, that is commands the Cube has sent and no device has acknowledged
+yet; a setpoint shows in the states at once, but the mode follows only
+with the device's report, so a non-zero value says the states may
+still change. `queued` is the number of commands waiting in the server.
 
 ### GET /api/v1/cubes/{sn}
 
