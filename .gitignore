@@ -10,3 +10,6 @@ massimo-backup-*
 /cube*.yaml
 /cube*.yml
 /backups/
+
+# Claude Code agent worktrees
+/.claude/worktrees/
