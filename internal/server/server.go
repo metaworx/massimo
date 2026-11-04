@@ -502,7 +502,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		}
 		if errors.Is(res.Err, engine.ErrDiscarded) && t.Room {
 			if silent := neverReported(rt.client.Snapshot(), t.RoomID); len(silent) > 0 {
-				return fail(status, "%v: room %d has devices that never reported (%s); the cube refuses room commands until they answer or are removed",
+				return fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
 					res.Err, t.RoomID, strings.Join(silent, ", "))
 			}
 		}

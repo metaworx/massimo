@@ -33,10 +33,12 @@ input, `401` missing or wrong token, `404` unknown Cube, device or room,
 it was sent, `502` the Cube discarded the command or the connection
 failed, `503` the Cube has not sent its greeting yet.
 
-A room command is discarded by the Cube while a device in that room has
-never reported, for example a window contact with a dead battery; the
-error message then names the device. Replace its battery or remove it
-from the Cube.
+A room command is discarded by the Cube while it holds no state for a
+device in that room: one that never reported, or one that has not
+reported since the Cube restarted (window contacts only transmit on a
+window change). The error message then names the devices. Make them
+report (open and close the window, turn the thermostat's wheel), replace
+a dead battery, or remove the device from the Cube.
 
 ## Routes
 
