@@ -112,11 +112,10 @@ carries the full state: `H:` (long form, new connection id each time),
 
 Gaps between polls grew from about 4 to 10–12 minutes within the first
 hour after `i:00000000,00000000`, regardless of the reply (`i:` with
-various values, `{conn}` echoed, or no reply line at all). With
-`i:00000002,00000000` sent over the LAN the gap dropped to about 2:17, so
-the first field of the LAN `i:` command appears to be the poll interval
-**in minutes**, with 0 meaning a device default. (Needs a few more polls to
-confirm.) Both `u:` and `i:` make the Cube poll within about 20 s.
+various values, `{conn}` echoed, or no reply line at all). `i:00000078,00000000` (120) did not shorten the gaps, so the first field
+is not an interval in seconds; whether other units apply is untested.
+Both `u:` and `i:` make the Cube poll within about 20 s, which has to be
+kept apart from interval effects when measuring.
 
 **Commands in the reply are ignored.** Lines `f:…` (NTP servers), `v:…`
 (time zone) and `m:…` (metadata) sent in the poll reply had no effect,
