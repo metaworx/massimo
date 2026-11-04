@@ -163,7 +163,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
 			continue
 		}
-		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial,
+		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, Ignore: rt.ignore,
 			MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
 		if pl.Discovery {
 			if responder == nil {

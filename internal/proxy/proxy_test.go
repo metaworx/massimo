@@ -5,6 +5,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"net"
 	"strings"
@@ -234,5 +235,92 @@ func TestProxyDiscovery(t *testing.T) {
 	n, _, err = client.ReadFrom(buf)
 	if err != nil || string(buf[8:18]) != "XEQ0537249" {
 		t.Fatalf("second reply %q %v", buf[:n], err)
+	}
+}
+
+func TestProxyHidesIgnoredDevices(t *testing.T) {
+	fc, p, c, ctx := setup(t)
+	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
+	p.opts.Ignore = map[cube.RFAddress]bool{hidden: true}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.ServeTCP(ctx, ln)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	r := cube.NewReader(conn)
+	var md *cube.Metadata
+	seenC, lDevices := 0, 0
+	for {
+		m := readLine(t, r)
+		switch m.Type {
+		case 'M':
+			_, rest, _ := strings.Cut(m.Data, ",")
+			_, data, _ := strings.Cut(rest, ",")
+			raw, _ := base64.StdEncoding.DecodeString(data)
+			md, err = cube.DecodeMetadata(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+		case 'C':
+			if strings.HasPrefix(m.Data, hidden.String()+",") {
+				t.Fatal("C line of the hidden device sent")
+			}
+			seenC++
+		case 'L':
+			states, err := cube.ParseDeviceList(m.Data, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lDevices = len(states)
+			for _, st := range states {
+				if st.RFAddress == hidden {
+					t.Fatal("hidden device in the L line")
+				}
+			}
+		}
+		if m.Type == 'L' {
+			break
+		}
+	}
+	for _, d := range md.Devices {
+		if d.RFAddress == hidden {
+			t.Fatal("hidden device in the metadata")
+		}
+	}
+	if len(md.Rooms) != 6 || lDevices != 5 || seenC == 0 {
+		t.Fatalf("rooms %d, devices in L %d, C lines %d", len(md.Rooms), lDevices, seenC)
+	}
+	// The client renames a room and writes the metadata it saw, without
+	// the hidden device; the Cube receives it with the device put back.
+	md.Rooms[0].Name = "Renamed"
+	cmds, _ := cube.WriteMetadataCommands(md)
+	conn.Write([]byte(cmds[0].Wire()))
+	if a := readLine(t, r); a.Type != 'A' {
+		t.Fatalf("m: answered %s", a)
+	}
+	var sent *cube.Metadata
+	for _, m := range fc.Received() {
+		if m.Type == 'm' {
+			_, data, _ := strings.Cut(m.Data, ",")
+			raw, _ := base64.StdEncoding.DecodeString(data)
+			sent, _ = cube.DecodeMetadata(raw)
+		}
+	}
+	found := false
+	for _, d := range sent.Devices {
+		if d.RFAddress == hidden && d.RoomID == 6 {
+			found = true
+		}
+	}
+	if !found || sent.Rooms[0].Name != "Renamed" {
+		t.Fatalf("cube received metadata without the hidden device or the rename: %+v", sent)
+	}
+	if got := c.Snapshot().Metadata(); len(got.Devices) != 6 || got.Rooms[0].Name != "Renamed" {
+		t.Fatalf("snapshot after m: %d devices, room %q", len(got.Devices), got.Rooms[0].Name)
 	}
 }

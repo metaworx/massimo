@@ -69,6 +69,17 @@ per line, in order with the server's own commands. The queue adds no
 wakeup or error reset for them: a client that speaks the protocol sends
 its own `z:` and `r:` lines, as the original software does.
 
+## Hidden devices
+
+Devices on the server's ignore list (`MASSIMO_CUBE_<SERIAL>_IGNORE`, see
+the README) are hidden from proxy clients too: they are left out of the
+greeting's metadata and C lines and of every L line, so `status` on
+another computer and the original software do not show them. Their
+parking room stays visible, empty, so that a client cannot reuse its
+id. A metadata write from a client is forwarded with the hidden devices
+and their room put back, so a client that never saw them cannot remove
+them from the Cube; the server logs when it does that.
+
 ## Budget
 
 When the duty cycle the Cube last reported is at or above the queue's

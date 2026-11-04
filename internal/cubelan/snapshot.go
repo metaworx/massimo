@@ -216,12 +216,15 @@ func (s *Snapshot) Updated() time.Time {
 
 // DeviceListLine returns the L message a fresh connection would receive
 // now, or false before any device state is known.
-func (s *Snapshot) DeviceListLine() (cube.Message, bool) {
+func (s *Snapshot) DeviceListLine() (cube.Message, bool) { return s.DeviceListLineExcluding(nil) }
+
+// DeviceListLineExcluding is DeviceListLine without the devices in skip.
+func (s *Snapshot) DeviceListLineExcluding(skip map[cube.RFAddress]bool) (cube.Message, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var raw []byte
 	for _, rf := range s.order {
-		if st, ok := s.states[rf]; ok {
+		if st, ok := s.states[rf]; ok && !skip[rf] {
 			raw = append(raw, st.Raw...)
 		}
 	}
@@ -246,7 +249,11 @@ func (s *Snapshot) ConfigLine(rf cube.RFAddress) (cube.Message, bool) {
 // Lines reproduces the snapshot as protocol lines (H, M, C…, L), i.e. the
 // same text a fresh connection would receive. Used for backups and for the
 // simulator.
-func (s *Snapshot) Lines() []cube.Message {
+func (s *Snapshot) Lines() []cube.Message { return s.LinesExcluding(nil) }
+
+// LinesExcluding is Lines without the devices in skip: they are left out
+// of the metadata, the C lines and the L line. Their rooms stay, empty.
+func (s *Snapshot) LinesExcluding(skip map[cube.RFAddress]bool) []cube.Message {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []cube.Message
@@ -254,7 +261,18 @@ func (s *Snapshot) Lines() []cube.Message {
 		out = append(out, cube.Message{Type: 'H', Data: joinFields(s.hello.Fields)})
 	}
 	if s.metadata != nil {
-		if cmds, err := cube.WriteMetadataCommands(s.metadata); err == nil {
+		md := s.metadata
+		if len(skip) > 0 {
+			cp := *md
+			cp.Devices = nil
+			for _, d := range md.Devices {
+				if !skip[d.RFAddress] {
+					cp.Devices = append(cp.Devices, d)
+				}
+			}
+			md = &cp
+		}
+		if cmds, err := cube.WriteMetadataCommands(md); err == nil {
 			for _, c := range cmds {
 				// m:NN,<data> → M:NN,<count>,<data>
 				idx, data, _ := cutComma(c.Data)
@@ -268,13 +286,13 @@ func (s *Snapshot) Lines() []cube.Message {
 		}
 	}
 	for _, rf := range s.order {
-		if c, ok := s.configs[rf]; ok {
+		if c, ok := s.configs[rf]; ok && !skip[rf] {
 			out = append(out, cube.Message{Type: 'C', Data: rf.String() + "," + b64(c.Raw)})
 		}
 	}
 	var raw []byte
 	for _, rf := range s.order {
-		if st, ok := s.states[rf]; ok {
+		if st, ok := s.states[rf]; ok && !skip[rf] {
 			raw = append(raw, st.Raw...)
 		}
 	}

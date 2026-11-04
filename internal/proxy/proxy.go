@@ -13,6 +13,7 @@ package proxy
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -49,7 +50,12 @@ type Options struct {
 	// ReplyTimeout bounds how long a client waits for the Cube's answer
 	// to a passed-through command (default one minute).
 	ReplyTimeout time.Duration
-	Logger       *slog.Logger
+	// Ignore lists devices hidden from clients: they are left out of the
+	// greeting, the L line and the C lines, and put back, with their
+	// rooms, into every metadata write a client sends, so the Cube keeps
+	// them exactly as they are. Their rooms stay visible, empty.
+	Ignore map[cube.RFAddress]bool
+	Logger *slog.Logger
 }
 
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
@@ -130,7 +136,7 @@ func (p *Proxy) pushLoop(ctx context.Context, ch <-chan struct{}) {
 			if !ok {
 				return
 			}
-			l, ok := p.opts.Client.Snapshot().DeviceListLine()
+			l, ok := p.opts.Client.Snapshot().DeviceListLineExcluding(p.opts.Ignore)
 			if !ok {
 				continue
 			}
@@ -220,7 +226,7 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 // a new connection id and the current budget and clock, then M, C… and L.
 func (p *Proxy) greeting() []cube.Message {
 	snap := p.opts.Client.Snapshot()
-	lines := snap.Lines()
+	lines := snap.LinesExcluding(p.opts.Ignore)
 	for i, m := range lines {
 		if m.Type == 'H' {
 			lines[i] = p.hello(snap.Hello())
@@ -255,13 +261,13 @@ func (p *Proxy) local(m cube.Message) (cube.Message, bool) {
 	snap := p.opts.Client.Snapshot()
 	switch m.Type {
 	case 'l':
-		if l, ok := snap.DeviceListLine(); ok {
+		if l, ok := snap.DeviceListLineExcluding(p.opts.Ignore); ok {
 			return l, true
 		}
 		return cube.Message{}, true
 	case 'c':
 		rf, err := cube.ParseRFAddress(strings.TrimSpace(m.Data))
-		if err != nil {
+		if err != nil || p.opts.Ignore[rf] {
 			return cube.Message{}, true
 		}
 		if c, ok := snap.ConfigLine(rf); ok {
@@ -280,29 +286,98 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 			return []cube.Message{{Type: 'S', Data: fmt.Sprintf("%02x,1,%02x", b.DutyCyclePct, b.FreeMemorySlots)}}
 		}
 	}
+	lines := []cube.Message{m}
+	if m.Type == 'm' && len(p.opts.Ignore) > 0 {
+		if merged, ok := p.withIgnored(m); ok {
+			lines = merged
+		}
+	}
 	p.log.Debug("proxy: passing command to the cube", "remote", remote, "command", m.String())
 	wctx, cancel := context.WithTimeout(ctx, p.opts.ReplyTimeout)
 	defer cancel()
-	res := p.opts.Queue.Enqueue(engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: []cube.Message{m}}).Wait(wctx)
+	res := p.opts.Queue.Enqueue(engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: lines}).Wait(wctx)
 	if res.Err != nil {
 		p.log.Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
 	}
 	if m.Type == 'm' {
-		p.applyMetadata(m)
+		p.applyMetadata(lines)
+	}
+	// The client sent one line and expects one answer.
+	if len(res.Replies) > 1 {
+		return res.Replies[len(res.Replies)-1:]
 	}
 	return res.Replies
 }
 
-// applyMetadata updates the snapshot after a metadata write, which the
-// Cube acknowledges without echoing the new M lines.
-func (p *Proxy) applyMetadata(m cube.Message) {
+// withIgnored puts the hidden devices, and their rooms, back into a
+// client's metadata write, so that a client that never saw them cannot
+// remove them from the Cube. The result may need several m: parts.
+func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 	idx, data, ok := strings.Cut(m.Data, ",")
 	if !ok || idx != "00" {
-		p.log.Warn("proxy: multi-part metadata write not mirrored into the snapshot", "index", idx)
-		return
+		p.log.Warn("proxy: multi-part metadata write passed through unchanged; hidden devices may be lost", "index", idx)
+		return nil, false
 	}
-	p.opts.Client.ApplyLocal(cube.Message{Type: 'M', Data: "00,01," + data})
+	raw, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return nil, false
+	}
+	md, err := cube.DecodeMetadata(raw)
+	if err != nil {
+		p.log.Warn("proxy: metadata write not understood, passed through unchanged", "error", err)
+		return nil, false
+	}
+	cur := p.opts.Client.Snapshot().Metadata()
+	if cur == nil {
+		return nil, false
+	}
+	have := map[cube.RFAddress]bool{}
+	for _, d := range md.Devices {
+		have[d.RFAddress] = true
+	}
+	rooms := map[uint8]bool{}
+	for _, r := range md.Rooms {
+		rooms[r.ID] = true
+	}
+	added := 0
+	for _, d := range cur.Devices {
+		if !p.opts.Ignore[d.RFAddress] || have[d.RFAddress] {
+			continue
+		}
+		md.Devices = append(md.Devices, d)
+		added++
+		if d.RoomID != 0 && !rooms[d.RoomID] {
+			for _, r := range cur.Rooms {
+				if r.ID == d.RoomID {
+					md.Rooms = append(md.Rooms, r)
+					rooms[r.ID] = true
+				}
+			}
+		}
+	}
+	if added == 0 {
+		return nil, false
+	}
+	cmds, err := cube.WriteMetadataCommands(md)
+	if err != nil {
+		p.log.Warn("proxy: metadata write with hidden devices could not be encoded, passed through unchanged", "error", err)
+		return nil, false
+	}
+	p.log.Info("proxy: hidden devices put back into a client's metadata write", "devices", added)
+	return cmds, true
+}
+
+// applyMetadata updates the snapshot after a metadata write, which the
+// Cube acknowledges without echoing the new M lines.
+func (p *Proxy) applyMetadata(lines []cube.Message) {
+	for _, m := range lines {
+		idx, data, ok := strings.Cut(m.Data, ",")
+		if !ok {
+			return
+		}
+		p.opts.Client.ApplyLocal(cube.Message{Type: 'M', Data: idx + "," + fmt.Sprintf("%02x", len(lines)) + "," + data})
+	}
 }
 
 // discoveryReply builds the reply to a discovery request for the
