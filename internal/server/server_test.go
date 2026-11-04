@@ -78,6 +78,18 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	if len(devs) != 6 || devs[0].Name == "" {
 		t.Fatalf("devices %+v", devs)
 	}
+	var rooms []roomView
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
+	if len(rooms) != 6 {
+		t.Fatalf("rooms %+v", rooms)
+	}
+	for _, r := range rooms {
+		for _, d := range r.Devices {
+			if d.Reported != (d.State != nil) || (!d.Reported && r.Ready) {
+				t.Fatalf("room %d ready=%v device %+v", r.ID, r.Ready, d)
+			}
+		}
+	}
 	var d deviceDetail
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", &d) != 200 || d.Thermostat == nil || d.Thermostat.ComfortTemp != 21.5 || d.RoomID != 6 {
 		t.Fatalf("device %+v", d)

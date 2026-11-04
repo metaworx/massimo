@@ -228,7 +228,11 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
     CubeError:
-      description: The Cube discarded the command or the connection failed
+      description: >-
+        The Cube discarded the command or the connection failed. A room
+        command discarded because the Cube holds no state for some
+        members (they have not reported since the Cube restarted) also
+        carries `no_state`.
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
@@ -242,6 +246,10 @@ components:
       type: object
       properties:
         error: {type: string}
+        no_state:
+          type: array
+          items: {type: string}
+          description: Radio addresses of room members without state, when that caused the discard
     Budget:
       type: object
       description: What the Cube last reported about its radio limits
@@ -294,6 +302,7 @@ components:
       properties:
         id: {type: integer}
         name: {type: string}
+        ready: {type: boolean, description: Every device of the room has reported since the Cube restarted, so the Cube accepts room commands}
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
@@ -325,6 +334,7 @@ components:
         room_id: {type: integer}
         serial: {type: string}
         unlisted: {type: boolean, description: Paired but not assigned to a room}
+        reported: {type: boolean, description: The Cube holds state for the device (it transmitted since the Cube restarted)}
         state: {$ref: "#/components/schemas/State"}
     SwitchPoint:
       type: object

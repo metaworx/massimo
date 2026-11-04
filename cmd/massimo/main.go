@@ -49,6 +49,8 @@ func main() {
 		err = runCube(rest)
 	case "watch":
 		err = runWatch(rest)
+	case "status":
+		err = runStatus(rest)
 	case "backup":
 		err = runBackup(rest)
 	case "restore":
@@ -96,6 +98,7 @@ commands:
   portal          fake portal server that decrypts and logs what a Cube sends
   cube            send protocol lines to a Cube over the LAN
   watch           stay connected to a Cube and print state changes
+  status          show every device, its state and which rooms accept commands
   backup          save the Cube's configuration to a JSON or YAML file
   restore         write a backup back to the Cube (only the differences)
   fakecube        serve a recorded greeting as if it were a Cube, for tests

@@ -36,9 +36,14 @@ failed, `503` the Cube has not sent its greeting yet.
 A room command is discarded by the Cube while it holds no state for a
 device in that room: one that never reported, or one that has not
 reported since the Cube restarted (window contacts only transmit on a
-window change). The error message then names the devices. Make them
-report (open and close the window, turn the thermostat's wheel), replace
-a dead battery, or remove the device from the Cube.
+window change). The error message then names the devices and the
+response carries their addresses as `no_state`. Make them report (open
+and close the window, turn the thermostat's wheel), replace a dead
+battery, or remove the device from the Cube:
+
+```json
+{"error": "engine: command discarded by the cube: the cube holds no state for room 4 members 005447, 1570d3 …", "no_state": ["005447", "1570d3"]}
+```
 
 ## Routes
 
@@ -86,6 +91,7 @@ Rooms with their devices and live states:
   {
     "id": 5,
     "name": "Bad",
+    "ready": true,
     "devices": [
       {
         "rf_address": "012ca9",
@@ -93,6 +99,7 @@ Rooms with their devices and live states:
         "name": "Thermostat Bad",
         "room_id": 5,
         "serial": "JEQ0328398",
+        "reported": true,
         "state": {"mode": "auto", "setpoint": 22, "valve_pct": 0, "battery_low": false, "error": false, "link_error": false}
       }
     ]
@@ -101,8 +108,12 @@ Rooms with their devices and live states:
 ```
 
 Device types: `radiator_thermostat`, `radiator_thermostat_plus`,
-`wall_thermostat`, `shutter_contact`, `eco_switch`. `state` is absent
-until the device has reported once. Thermostats carry `mode` (`auto`,
+`wall_thermostat`, `shutter_contact`, `eco_switch`. `reported` says
+whether the Cube holds state for the device; it is false for every
+device after a Cube restart until the device transmits again (window
+contacts only do so on a window change), and `state` is then absent.
+`ready` on a room is true when all its devices have reported, which is
+the condition for the Cube to accept a room command. Thermostats carry `mode` (`auto`,
 `manual`, `vacation`, `boost`), `setpoint`, `actual_temp` when the device
 reported one, `valve_pct` for radiator thermostats, `until` for vacation
 mode; shutter contacts carry `window_open`. `error` is the Cube's

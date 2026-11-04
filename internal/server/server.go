@@ -176,6 +176,10 @@ func (s *Server) routes() {
 			if err := h(w, r); err != nil {
 				var he *httpError
 				if errors.As(err, &he) {
+					if len(he.noState) > 0 {
+						writeJSON(w, he.status, map[string]any{"error": he.msg, "no_state": he.noState})
+						return
+					}
 					writeError(w, he.status, he.msg)
 					return
 				}
@@ -198,6 +202,9 @@ func (s *Server) routes() {
 type httpError struct {
 	status int
 	msg    string
+	// noState lists room members the Cube holds no state for when a
+	// room command was discarded for that reason.
+	noState []string
 }
 
 func (e *httpError) Error() string { return e.msg }
@@ -248,8 +255,11 @@ type cubeView struct {
 }
 
 type roomView struct {
-	ID      uint8         `json:"id"`
-	Name    string        `json:"name"`
+	ID   uint8  `json:"id"`
+	Name string `json:"name"`
+	// Ready is true when every device of the room has reported since
+	// the Cube's last restart; the Cube discards room commands otherwise.
+	Ready   bool          `json:"ready"`
 	Devices []deviceState `json:"devices"`
 }
 
@@ -260,7 +270,10 @@ type deviceState struct {
 	RoomID    uint8           `json:"room_id"`
 	Serial    string          `json:"serial,omitempty"`
 	Unlisted  bool            `json:"unlisted,omitempty"`
-	State     *backup.State   `json:"state,omitempty"`
+	// Reported is true when the Cube holds state for the device, that
+	// is, the device has transmitted since the Cube's last restart.
+	Reported bool          `json:"reported"`
+	State    *backup.State `json:"state,omitempty"`
 }
 
 type deviceDetail struct {
@@ -304,6 +317,7 @@ func deviceView(snap *cubelan.Snapshot, rf cube.RFAddress, st cube.DeviceState) 
 			d.Serial, d.RoomID = c.Serial, c.RoomID
 		}
 	}
+	d.Reported = st.Valid
 	if st.Valid {
 		d.State = &backup.State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
 			WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError}
@@ -364,10 +378,11 @@ func (s *Server) rooms(rt *runtime) []roomView {
 	devs := s.devices(rt)
 	var out []roomView
 	for _, r := range md.Rooms {
-		rv := roomView{ID: r.ID, Name: r.Name, Devices: []deviceState{}}
+		rv := roomView{ID: r.ID, Name: r.Name, Ready: true, Devices: []deviceState{}}
 		for _, d := range devs {
 			if d.RoomID == r.ID && !d.Unlisted {
 				rv.Devices = append(rv.Devices, d)
+				rv.Ready = rv.Ready && d.Reported
 			}
 		}
 		out = append(out, rv)
@@ -502,8 +517,10 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		}
 		if errors.Is(res.Err, engine.ErrDiscarded) && t.Room {
 			if silent := neverReported(rt.client.Snapshot(), t.RoomID); len(silent) > 0 {
-				return fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
-					res.Err, t.RoomID, strings.Join(silent, ", "))
+				he := fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
+					res.Err, t.RoomID, strings.Join(silent, ", ")).(*httpError)
+				he.noState = silent
+				return he
 			}
 		}
 		return fail(status, "%v", res.Err)

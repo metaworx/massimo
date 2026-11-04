@@ -35,12 +35,19 @@ over the LAN: devices missing from the Cube are listed, and the restore can
 be repeated after they have been paired again.
 
 ```bash
+massimo status
 massimo watch -addr <cube-ip>
 massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt
 ```
 
-`watch` prints state changes as they happen; `fakecube` serves recorded
-data on port 62910 so everything can be tried without hardware.
+`status` lists every device the Cube knows, grouped by room, with its
+last state and whether the Cube holds state for it at all: after a Cube
+restart every device is "not reported" until it transmits again, window
+contacts only on a window change, and the Cube discards room commands
+while a room has such a member, so the room is marked not ready (`-json`
+for machines). `watch` prints state changes as they happen; `fakecube`
+serves recorded data on port 62910 so everything can be tried without
+hardware.
 
 ```bash
 massimo discover

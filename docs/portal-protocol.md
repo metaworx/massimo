@@ -264,19 +264,33 @@ with or without a wakeup, and the original software got the same
 `CommandDiscarded` for one of them. The Cube apparently refuses a group
 command while a member cannot acknowledge it.
 
-The contacts in question turned out to be fine; the culprits were three
-devices that are paired (C lines) but in no room (no M entry), which the
-original software lists as "new devices". `t:<count>,<force>,<base64
-addresses>` — the same line the software sends for "delete devices" —
-was answered with `A:` for each of them, but the devices stayed in the
-device list and the room commands stayed discarded. Moving them into a
-room in the original software, removing them from that room and
-deleting the room (all done by hand in the UI, as `arrangeNewDevice`,
-`removeDevices`, `removeRoom`) did not remove them either: the next
-backup still listed them, unnamed. The FHEM project notes that `t:`
-makes the Cube send a factory reset to the device, so a device that
-never answers is apparently never dropped. Whether a power cycle of the
-Cube completes the pending removals is still to be tested.
+The contacts in question turned out to be fine. The rule, confirmed
+after a power cycle of the Cube: **the Cube discards a room command
+while any member of the room has no state in the L line** (valid bit
+0x10 of the first flags byte clear). A restart clears every entry; a
+device gets its entry back when it next transmits. Radiator and wall
+thermostats do so on their own within minutes to hours, a window
+contact only on a window change, the eco switch only on a button press.
+Right after the restart only the rooms whose members had all reported
+accepted commands; opening and closing the two windows of a refused
+room and turning its thermostat's wheel made that room accept within a
+minute. The original software is subject to the same rule. A driver
+must therefore expect discards for a while after a Cube restart (seen
+as a reconnect) and may tell the user which devices it is waiting for.
+
+Devices that never report: three devices paired (C lines) but in no
+room (no M entry), listed by the original software as "new devices",
+never get an entry either. `t:<count>,<force>,<base64 addresses>` — the
+same line the software sends for "delete devices" — was answered with
+`A:` for each of them, but the devices stayed in the device list.
+Moving them into a room in the original software, removing them from
+that room and deleting the room (by hand in the UI, logged as
+`arrangeNewDevice`, `removeDevices`, `removeRoom`) did not remove them
+either; the next backup still listed them, unnamed, and a power cycle
+of the Cube did not drop them. The FHEM project notes that `t:` makes
+the Cube send a factory reset to the device, so a device that never
+answers is apparently never dropped. Workaround: assign each such device
+to a room of its own, so that it is a member of no room that matters.
 
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
