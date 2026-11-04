@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -74,9 +75,17 @@ func runPortal(args []string) error {
 		DeviceURL:  *deviceURL,
 		ListenPort: strings.TrimPrefix(portForURL(*listen), ":"),
 	}
-	logger.Info("fake portal listening", "addr", *listen, "serial", orAny(*serial), "capture", *dir+"/portal-capture.jsonl")
+	cap.Version = versionString()
+	// Listen on IPv4 explicitly: on Windows a dual-stack IPv6 listener can
+	// bind next to another program's IPv4 socket on the same port and then
+	// silently receive nothing, while IPv4 traffic goes to the other program.
+	ln, err := net.Listen("tcp4", *listen)
+	if err != nil {
+		return fmt.Errorf("portal: %w", err)
+	}
+	logger.Info("fake portal listening", "addr", ln.Addr().String(), "serial", orAny(*serial), "capture", *dir+"/portal-capture.jsonl")
 	logger.Info("point the Cube here with: u:http://<this host>" + portForURL(*listen) + "/cube")
-	return http.ListenAndServe(*listen, cap)
+	return http.Serve(ln, cap)
 }
 
 func orAny(s string) string {

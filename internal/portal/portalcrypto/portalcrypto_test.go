@@ -128,3 +128,14 @@ func TestRealCubeVectorsShowFixedIVCBC(t *testing.T) {
 		t.Error("equal blocks: looks like ECB")
 	}
 }
+
+// Two e: calls made by the original software on the same Cube: both
+// plaintexts start with the same 16 bytes ("H:KEQ0537249,0b9"), and so do
+// the ciphertexts, which again shows a fixed IV.
+func TestOriginalSoftwareVectorsShareFirstBlock(t *testing.T) {
+	a, _ := base64.StdEncoding.DecodeString("MgMYlNDXbqm4PhERXHoyI63jvEzCs4JW9bJfuLRj3mc=")
+	b, _ := base64.StdEncoding.DecodeString("MgMYlNDXbqm4PhERXHoyI7TkR6a30furU2UUMx9ekSrM0+6syRr8BxUnfXo2ghgiz5ST6wLMiCqKe+OpML32tetyIrXsaQ10+gVU/OCL9BBbpfUjZKdF38JsYr5/Sefi")
+	if !bytes.Equal(a[:16], b[:16]) || bytes.Equal(a[16:32], b[16:32]) {
+		t.Fatalf("unexpected block structure")
+	}
+}

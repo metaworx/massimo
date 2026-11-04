@@ -49,7 +49,7 @@ and then one of:
 
 | Line | Reply | Meaning |
 |---|---|---|
-| `B:<user>,<md5(password + serial)>,<0/1>,<password>` | `b:OK` or an error text | Create or update the portal account. The third field is a boolean whose meaning is not known. |
+| `B:<user>,<md5(password + serial)>,<enabled 0/1>,<password>` | `b:OK` or an error text | Create or update the portal account; the third field enables remote access. Verified with the original software against this implementation. |
 | `G:` | `g:<user>,<true/false>` | Read account and remote-access state (*unverified* field order). |
 | `J:1` / `J:0` | `j:OK` | Enable or disable remote access on the portal. |
 | `P:…` / `O:…` | `p:` / `o:` | Set/get user data. Not analysed. |
@@ -61,6 +61,21 @@ or -1 (disabled).
 The original portal was observed replying `i:000051b1,00000000,ffffffff`
 in front of `b:OK`. The PC software ignores that line; it may be meant for
 the Cube's own polling. Meaning of the fields: unknown.
+
+## The complete setup sequence (captured from the original software, 2026-11-04)
+
+With a hosts entry for `www.max-portal.eq-3.de` pointing at this server:
+
+1. `GET /lookup` (headers `Opt`, `MAX-Serial`) → `200`, body = device URL.
+2. LAN: `u:<device URL>` → `A:`.
+3. LAN `e:` of `H:<serial>,<rf>,<fw>` + `G:` → `POST <device URL>` → reply
+   decrypted with LAN `d:` → `g:<user>,<true|false>`.
+4. Same with `B:<user>,<md5>,1,<password>` → `b:OK`.
+5. LAN: `i:00000000,00000000` → `A:`. The Cube polls the device URL from then on.
+
+Note that the Cube resolves the device URL through the network's DNS, not
+the PC's hosts file, so the URL returned by `/lookup` must be reachable
+by the Cube (an IP address, or a name the router resolves).
 
 ## Lookup service
 

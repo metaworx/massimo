@@ -120,8 +120,37 @@ type Capture struct {
 	// from the request's Host header.
 	DeviceURL  string
 	ListenPort string // e.g. "8080"; used when DeviceURL is empty
+	Version    string // shown on the status page
 
-	mu sync.Mutex
+	mu       sync.Mutex
+	started  time.Time
+	requests int
+	lastPoll map[string]time.Time
+}
+
+// statusPage answers browsers and other GETs without a body with a short
+// text page, so that opening the portal address in a browser shows what is
+// running instead of offering a download.
+func (c *Capture) statusPage(w http.ResponseWriter, r *http.Request) {
+	c.mu.Lock()
+	if c.started.IsZero() {
+		c.started = time.Now()
+	}
+	started, requests := c.started, c.requests
+	polls := make([]string, 0, len(c.lastPoll))
+	for serial, t := range c.lastPoll {
+		polls = append(polls, fmt.Sprintf("  %s  last poll %s (%s ago)", serial, t.Format(time.RFC3339), time.Since(t).Round(time.Second)))
+	}
+	c.mu.Unlock()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprintf(w, "%s\nfake MAX! portal, up since %s, %d portal requests\n", c.Version, started.Format(time.RFC3339), requests)
+	fmt.Fprintf(w, "endpoints: POST /cube (Cube polls), GET /lookup (device URL)\n")
+	if len(polls) > 0 {
+		fmt.Fprintln(w, "cubes:")
+		for _, p := range polls {
+			fmt.Fprintln(w, p)
+		}
+	}
 }
 
 func (c *Capture) devicePort() string {
@@ -135,6 +164,10 @@ func (c *Capture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex := &Exchange{Time: time.Now(), Remote: r.RemoteAddr, Method: r.Method, Path: r.URL.RequestURI(), Headers: map[string]string{}}
 	for k, v := range r.Header {
 		ex.Headers[k] = strings.Join(v, ", ")
+	}
+	if r.Method == http.MethodGet && !strings.HasSuffix(r.URL.Path, "/lookup") {
+		c.statusPage(w, r)
+		return
 	}
 	if strings.HasSuffix(r.URL.Path, "/lookup") {
 		// The original PC software asked www.max-portal.eq-3.de/lookup for
@@ -182,6 +215,16 @@ func (c *Capture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	msgs, text, err := codec.Decode(body)
 	ex.Plaintext = text
+	c.mu.Lock()
+	if c.started.IsZero() {
+		c.started = time.Now()
+	}
+	c.requests++
+	if c.lastPoll == nil {
+		c.lastPoll = map[string]time.Time{}
+	}
+	c.lastPoll[serial] = time.Now()
+	c.mu.Unlock()
 	for _, m := range msgs {
 		ex.Lines = append(ex.Lines, m.String())
 	}

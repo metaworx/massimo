@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -137,7 +138,7 @@ func TestAccountRepliesAndLookup(t *testing.T) {
 		t.Fatalf("G reply %v", got)
 	}
 
-	cap := &Capture{Codecs: map[string]*Codec{}, Reply: r, ListenPort: "8080"}
+	cap := &Capture{Codecs: map[string]*Codec{}, Reply: r, ListenPort: "8080", Version: "massimo test"}
 	srv := httptest.NewServer(cap)
 	defer srv.Close()
 	req, _ := http.NewRequest("GET", srv.URL+"/lookup", nil)
@@ -152,5 +153,21 @@ func TestAccountRepliesAndLookup(t *testing.T) {
 	want := "http://www.max-portal.eq-3.de:8080/cube"
 	if resp.StatusCode != 200 || body.String() != want || resp.Header.Get("Content-Location") != want {
 		t.Fatalf("lookup: %d %q %q", resp.StatusCode, body.String(), resp.Header.Get("Content-Location"))
+	}
+}
+
+func TestStatusPageForBrowsers(t *testing.T) {
+	cap := &Capture{Codecs: map[string]*Codec{}, Reply: DefaultReplier("", nil), Version: "massimo test"}
+	srv := httptest.NewServer(cap)
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body bytes.Buffer
+	body.ReadFrom(resp.Body)
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") || !strings.Contains(body.String(), "massimo test") {
+		t.Fatalf("status page: %d %q %q", resp.StatusCode, resp.Header.Get("Content-Type"), body.String())
 	}
 }
