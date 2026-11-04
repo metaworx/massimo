@@ -40,9 +40,7 @@ func runServe(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if len(proxies) == 0 {
-		proxies = []string{":62910"}
-	}
+	fromEnv := len(proxies) == 0 // listeners come from MASSIMO_CUBE_<SN>_PROXY, resolved below
 	var listeners []server.ProxyListener
 	for _, v := range proxies {
 		if v == "" || v == "off" || v == "none" {
@@ -90,6 +88,27 @@ func runServe(args []string) error {
 	}
 	if len(cubes) == 0 {
 		return fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS or use -addr)")
+	}
+	if fromEnv {
+		// One listener per Cube on its MASSIMO_CUBE_<SN>_PROXY address (the
+		// address clients use); a single Cube without it listens on :62910.
+		for _, c := range cubes {
+			a := os.Getenv(perCubeVar(proxyEnv, c.Serial))
+			if a == "" && len(cubes) == 1 {
+				a = os.Getenv(proxyEnv)
+			}
+			if a == "" && len(cubes) == 1 {
+				a = ":62910"
+			}
+			if a == "" {
+				return fmt.Errorf("serve: several cubes configured; set %s for each, give -proxy <serial>=<addr>, or pick one with -sn", perCubeVar(proxyEnv, c.Serial))
+			}
+			if _, _, err := net.SplitHostPort(a); err != nil {
+				a = net.JoinHostPort(a, "62910")
+			}
+			_, port, _ := net.SplitHostPort(a)
+			listeners = append(listeners, server.ProxyListener{Serial: c.Serial, Addr: a, Discovery: port == "62910", DiscoverySerial: *proxySerial})
+		}
 	}
 	for i := range listeners {
 		pl := &listeners[i]

@@ -15,9 +15,28 @@ massimo serve -proxy off            # API only
 massimo serve -proxy JEQ0192422=:62910 -proxy KEQ0537249=:62911
 ```
 
-With several Cubes each listener names its Cube, or `-sn <serial>`
-restricts the server to one Cube. Discovery is answered only for a
-listener on port 62910, since a discovery reply carries no port.
+Without `-proxy`, each Cube listens on its `MASSIMO_CUBE_<SERIAL>_PROXY`
+address, which is also the address clients use, and a single Cube
+without that variable listens on `:62910`. With several Cubes each
+listener names its Cube, or `-sn <serial>` restricts the server to one
+Cube. Discovery is answered only for a listener on port 62910, since a
+discovery reply carries no port.
+
+## Several Cubes on one host
+
+A discovery reply carries no address either: the client connects to
+the IP the reply came from, port 62910. So every Cube needs an IP of
+its own on the host. Give the host a second address, on Linux for
+example `ip addr add 192.168.1.47/24 dev eth0` (or the equivalent in
+NetworkManager so it survives a reboot), and set
+
+```bash
+MASSIMO_CUBE_JEQ0192422_PROXY=192.168.1.44
+MASSIMO_CUBE_KEQ0537249_PROXY=192.168.1.47
+```
+
+The server then listens on each address and answers discovery for each
+Cube from its address, on one shared UDP socket.
 
 ## Clients find the proxy by themselves
 

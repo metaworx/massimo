@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -155,6 +156,7 @@ func (s *Server) Run(ctx context.Context) error {
 		go func() { defer wg.Done(); rt.queue.Run(ctx) }()
 		go func() { defer wg.Done(); s.pump(ctx, rt) }()
 	}
+	var responder *proxy.Responder
 	for _, pl := range s.opts.Proxy {
 		rt, err := s.proxyRuntime(pl)
 		if err != nil {
@@ -163,13 +165,31 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial,
 			MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
+		if pl.Discovery {
+			if responder == nil {
+				responder = proxy.NewResponder(s.log)
+			}
+			host, _, _ := net.SplitHostPort(pl.Addr)
+			if err := responder.Add(p, net.ParseIP(host)); err != nil {
+				s.log.Error("proxy discovery not started", "addr", pl.Addr, "error", err)
+			}
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := p.Run(ctx, pl.Addr, pl.Discovery); err != nil && ctx.Err() == nil {
+			if err := p.Run(ctx, pl.Addr); err != nil && ctx.Err() == nil {
 				s.log.Error("proxy listener failed", "addr", pl.Addr, "error", err)
 			}
 		}()
+	}
+	if responder != nil {
+		pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", cubelan.DiscoveryPort))
+		if err != nil {
+			s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
+		} else {
+			wg.Add(1)
+			go func() { defer wg.Done(); responder.Serve(ctx, pc) }()
+		}
 	}
 	wg.Wait()
 	return ctx.Err()

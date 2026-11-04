@@ -200,7 +200,11 @@ func TestProxyDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go p.ServeUDP(ctx, pc)
+	resp := NewResponder(nil)
+	if err := resp.Add(p, nil); err != nil {
+		t.Fatal(err)
+	}
+	go resp.Serve(ctx, pc)
 	client, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

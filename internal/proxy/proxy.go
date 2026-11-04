@@ -80,22 +80,13 @@ func New(opts Options) *Proxy {
 	return &Proxy{opts: opts, log: opts.Logger, conns: map[*session]struct{}{}}
 }
 
-// Run listens on tcpAddr for Cube-protocol clients and, with discovery
-// set, answers discovery requests on UDP port cubelan.DiscoveryPort. It
-// returns when ctx ends or the TCP listener fails. A failure to bind the
-// UDP port is logged and otherwise ignored.
-func (p *Proxy) Run(ctx context.Context, tcpAddr string, discovery bool) error {
+// Run listens on tcpAddr for Cube-protocol clients until ctx ends or
+// the listener fails. Discovery is served by a Responder shared by every
+// proxy of a host, see NewResponder.
+func (p *Proxy) Run(ctx context.Context, tcpAddr string) error {
 	ln, err := net.Listen("tcp", tcpAddr)
 	if err != nil {
 		return err
-	}
-	if discovery {
-		pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", cubelan.DiscoveryPort))
-		if err != nil {
-			p.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
-		} else {
-			go p.ServeUDP(ctx, pc)
-		}
 	}
 	return p.ServeTCP(ctx, ln)
 }
@@ -202,6 +193,11 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 			continue
 		}
 		if m.Type == 'q' {
+			// Let the client close first, as it expects from the Cube;
+			// a server-side close while it still reads shows up as an
+			// exception in the original software.
+			conn.SetReadDeadline(time.Now().Add(time.Second))
+			r.ReadRaw()
 			return
 		}
 		if reply, ok := p.local(m); ok {
@@ -309,11 +305,81 @@ func (p *Proxy) applyMetadata(m cube.Message) {
 	p.opts.Client.ApplyLocal(cube.Message{Type: 'M', Data: "00,01," + data})
 }
 
-// ServeUDP answers discovery requests on pc until ctx ends.
-func (p *Proxy) ServeUDP(ctx context.Context, pc net.PacketConn) error {
+// discoveryReply builds the reply to a discovery request for the
+// serial it names ("" for any), or returns false when the request is
+// not for this proxy's Cube.
+func (p *Proxy) discoveryReply(serial string, op byte) ([]byte, bool) {
+	h := p.opts.Client.Snapshot().Hello()
+	if h == nil {
+		return nil, false
+	}
+	mine := p.opts.DiscoverySerial
+	if mine == "" {
+		mine = h.Serial
+	}
+	if serial != "" && !strings.EqualFold(serial, h.Serial) && !strings.EqualFold(serial, mine) {
+		return nil, false
+	}
+	if op != cubelan.UDPIdentify {
+		p.log.Debug("proxy: discovery request not answered", "op", string(op), "serial", mine)
+		return nil, false
+	}
+	fw, _ := strconv.ParseUint(h.Firmware, 16, 16)
+	return cubelan.UDPReply(mine, cubelan.UDPIdentify, cubelan.UDPIdentifyData(h.RFAddress, uint16(fw))), true
+}
+
+// Responder answers discovery requests for several proxies on one UDP
+// socket. A discovery reply carries no address: the client takes the
+// packet's source address, so a proxy that listens on a specific IP
+// answers from that IP, which lets one host present several Cubes.
+type Responder struct {
+	log     *slog.Logger
+	mu      sync.Mutex
+	members []responderMember
+}
+
+type responderMember struct {
+	p    *Proxy
+	from *net.UDPConn // bound to the proxy's IP; nil answers from the shared socket
+}
+
+// NewResponder creates an empty responder; Add registers proxies.
+func NewResponder(log *slog.Logger) *Responder {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &Responder{log: log}
+}
+
+// Add registers a proxy. With ip set, replies for it are sent from a
+// socket bound to that IP.
+func (r *Responder) Add(p *Proxy, ip net.IP) error {
+	m := responderMember{p: p}
+	if ip != nil && !ip.IsUnspecified() {
+		c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: ip})
+		if err != nil {
+			return fmt.Errorf("discovery replies from %s: %w", ip, err)
+		}
+		m.from = c
+	}
+	r.mu.Lock()
+	r.members = append(r.members, m)
+	r.mu.Unlock()
+	return nil
+}
+
+// Serve answers requests on pc until ctx ends.
+func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 	go func() {
 		<-ctx.Done()
 		pc.Close()
+		r.mu.Lock()
+		for _, m := range r.members {
+			if m.from != nil {
+				m.from.Close()
+			}
+		}
+		r.mu.Unlock()
 	}()
 	buf := make([]byte, 1024)
 	for {
@@ -331,28 +397,28 @@ func (p *Proxy) ServeUDP(ctx context.Context, pc net.PacketConn) error {
 		if !ok {
 			continue
 		}
-		h := p.opts.Client.Snapshot().Hello()
-		if h == nil {
-			continue
+		u, _ := src.(*net.UDPAddr)
+		r.mu.Lock()
+		members := append([]responderMember(nil), r.members...)
+		r.mu.Unlock()
+		for _, m := range members {
+			reply, ok := m.p.discoveryReply(serial, op)
+			if !ok {
+				continue
+			}
+			send := func(to net.Addr) {
+				if m.from != nil {
+					m.from.WriteTo(reply, to)
+				} else {
+					pc.WriteTo(reply, to)
+				}
+			}
+			send(src)
+			// Clients such as the original software listen on the fixed port.
+			if u != nil && u.Port != cubelan.DiscoveryPort {
+				send(&net.UDPAddr{IP: u.IP, Port: cubelan.DiscoveryPort})
+			}
+			r.log.Debug("proxy: answered discovery", "from", src.String())
 		}
-		mine := p.opts.DiscoverySerial
-		if mine == "" {
-			mine = h.Serial
-		}
-		if serial != "" && !strings.EqualFold(serial, h.Serial) && !strings.EqualFold(serial, mine) {
-			continue
-		}
-		if op != cubelan.UDPIdentify {
-			p.log.Debug("proxy: discovery request not answered", "op", string(op), "from", src.String())
-			continue
-		}
-		fw, _ := strconv.ParseUint(h.Firmware, 16, 16)
-		reply := cubelan.UDPReply(mine, cubelan.UDPIdentify, cubelan.UDPIdentifyData(h.RFAddress, uint16(fw)))
-		pc.WriteTo(reply, src)
-		// Clients such as the original software listen on the fixed port.
-		if u, ok := src.(*net.UDPAddr); ok && u.Port != cubelan.DiscoveryPort {
-			pc.WriteTo(reply, &net.UDPAddr{IP: u.IP, Port: cubelan.DiscoveryPort})
-		}
-		p.log.Debug("proxy: answered discovery", "from", src.String(), "serial", mine)
 	}
 }
