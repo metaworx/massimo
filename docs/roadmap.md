@@ -3,6 +3,13 @@
 Owner's priorities as of 2026-11-04 evening, after a day on real
 hardware. The items are in order; the first ones are the next session.
 
+Done the same night (phase-0 up to the merge of UI round five): the
+configuration API (names, moves, device and room configuration, week
+programmes), the UI panels for them with the week programme editor and
+copy-to-rooms, the log view, Cube names from `.env`, and the UI details
+of item 3. What remains of items 1 to 3 is hardware verification of
+each new write path and the feedback that follows.
+
 1. **Room and device configuration in the API and the UI.** The
    original UI's Configuration menu per room: Temperatures (eco,
    comfort, window-open temperature, maximum), Device Settings (boost
