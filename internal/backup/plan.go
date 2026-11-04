@@ -44,6 +44,10 @@ type PlanOptions struct {
 	SkipSettings bool // preset temperatures and valve settings
 	SkipPrograms bool // week programs
 	SkipClock    bool // NTP servers and time zone rules
+	// State also re-applies each thermostat's mode and setpoint from the
+	// backup's state section (manual, auto or vacation). Off by default:
+	// state is normally live, not configuration.
+	State bool
 }
 
 // Current is the live state the plan compares the backup with.
@@ -119,7 +123,87 @@ func NewPlan(f *File, cur Current, opts PlanOptions) (*Plan, error) {
 			return nil, err
 		}
 	}
+	if opts.State {
+		for _, d := range present {
+			if err := p.planState(snap, known[d.RFAddress], d); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return p, nil
+}
+
+// planState re-applies mode and setpoint from the backup where the
+// device reports something else. Boost is not restored.
+func (p *Plan) planState(snap *cubelan.Snapshot, cur cube.DeviceMeta, want Device) error {
+	s := want.State
+	if s == nil || (want.Thermostat == nil && want.Wall == nil) || s.Mode == cube.ModeBoost {
+		return nil
+	}
+	name := want.Name
+	if name == "" {
+		name = cur.Name
+	}
+	now, ok := snap.State(want.RFAddress)
+	if !ok || !now.Valid {
+		p.Notes = append(p.Notes, fmt.Sprintf("device %s %q: no live state from the cube yet; mode and setpoint not compared", want.RFAddress, name))
+		return nil
+	}
+	same := now.Mode == s.Mode && floatPtrEq(now.Setpoint, s.Setpoint)
+	if s.Mode == cube.ModeVacation && !untilPtrEq(now.Until, s.Until) {
+		same = false
+	}
+	if same {
+		return nil
+	}
+	room := cur.RoomID
+	if c := snap.Config(want.RFAddress); c != nil {
+		room = c.RoomID
+	}
+	temp := 0.0
+	if s.Setpoint != nil {
+		temp = *s.Setpoint
+	}
+	var until cube.Until
+	if s.Until != nil {
+		until = *s.Until
+	}
+	if s.Mode == cube.ModeAuto {
+		temp = 0 // follow the program
+	}
+	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: want.RFAddress, RoomID: room}, temp, s.Mode, until)
+	if err != nil {
+		return fmt.Errorf("device %s: state: %w", want.RFAddress, err)
+	}
+	what := fmt.Sprintf("%s %q: %s", want.RFAddress, name, describeState(s.Mode, s.Setpoint, s.Until))
+	what += " (now " + describeState(now.Mode, now.Setpoint, now.Until) + ")"
+	p.add(what, engine.Command{Key: "restore:state:" + want.RFAddress.String(), Target: want.RFAddress, RoomID: room, Lines: []cube.Message{m}})
+	return nil
+}
+
+func describeState(mode cube.Mode, setpoint *float64, until *cube.Until) string {
+	s := mode.String()
+	if setpoint != nil && mode != cube.ModeAuto {
+		s += fmt.Sprintf(" %.1f°C", *setpoint)
+	}
+	if mode == cube.ModeVacation && until != nil {
+		s += " until " + until.String()
+	}
+	return s
+}
+
+func floatPtrEq(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func untilPtrEq(a, b *cube.Until) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func (p *Plan) add(what string, cmd engine.Command) {

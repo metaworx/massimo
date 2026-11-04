@@ -99,11 +99,12 @@ func runRestore(args []string) error {
 	dry := fs.Bool("dry-run", false, "only print what would be sent")
 	yes := fs.Bool("yes", false, "do not ask before sending")
 	portal := fs.Bool("portal", false, "also restore the portal URL and whether the Cube polls it")
+	state := fs.Bool("state", false, "also re-apply each thermostat's mode and setpoint from the backup's state section")
 	skip := fs.String("skip", "", "comma-separated groups to leave alone: names, settings, programs, clock")
 	gap := fs.Duration("gap", 200*time.Millisecond, "pause between commands")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo restore -addr <ip> -from <file> [-dry-run] [-yes] [-portal] [-skip groups]\n\nWrite a backup back to the Cube. Only settings that differ are sent.\nDevices in the backup that are not paired with the Cube are reported;\npairing cannot be restored over the LAN.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo restore -addr <ip> -from <file> [-dry-run] [-yes] [-portal] [-state] [-skip groups]\n\nWrite a backup back to the Cube. Only settings that differ are sent.\nDevices in the backup that are not paired with the Cube are reported;\npairing cannot be restored over the LAN.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -115,7 +116,7 @@ func runRestore(args []string) error {
 	if *from == "" {
 		return fmt.Errorf("restore: -from is required")
 	}
-	opts := backup.PlanOptions{Portal: *portal}
+	opts := backup.PlanOptions{Portal: *portal, State: *state}
 	for _, g := range strings.Split(*skip, ",") {
 		switch strings.TrimSpace(g) {
 		case "":

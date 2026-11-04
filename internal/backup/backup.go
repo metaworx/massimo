@@ -71,6 +71,32 @@ type Device struct {
 
 	Thermostat *cube.ThermostatConfig `json:"thermostat,omitempty"`
 	Wall       *cube.WallConfig       `json:"wall_thermostat,omitempty"`
+
+	// State is what the device reported last (the L line): mode,
+	// setpoint, measured temperature, valve, flags. Informational, except
+	// that a restore with the State option re-applies mode and setpoint.
+	State *State `json:"state,omitempty"`
+}
+
+// State is a device's live state at backup time.
+type State struct {
+	Mode       cube.Mode   `json:"mode"`
+	Setpoint   *float64    `json:"setpoint,omitempty"`
+	Until      *cube.Until `json:"until,omitempty"` // end of vacation mode
+	ActualTemp *float64    `json:"actual_temp,omitempty"`
+	ValvePct   *int        `json:"valve_pct,omitempty"`
+	WindowOpen *bool       `json:"window_open,omitempty"`
+	BatteryLow bool        `json:"battery_low"`
+	Error      bool        `json:"error"`
+	LinkError  bool        `json:"link_error"`
+}
+
+func stateOf(st cube.DeviceState) *State {
+	if !st.Valid {
+		return nil
+	}
+	return &State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
+		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError}
 }
 
 // Take builds a backup from the client's current snapshot. ntp may be nil
@@ -141,6 +167,9 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*Fi
 			if !hasMeta {
 				d.Serial, d.RoomID = c.Serial, c.RoomID
 			}
+		}
+		if st, ok := snap.State(rf); ok {
+			d.State = stateOf(st)
 		}
 		f.Devices = append(f.Devices, d)
 	}

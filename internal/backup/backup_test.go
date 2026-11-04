@@ -305,3 +305,79 @@ func TestPlanLeavesUnlistedDevicesAlone(t *testing.T) {
 		t.Fatalf("steps %+v", p.Steps)
 	}
 }
+
+// withLiveState gives the fixture's L entries a valid manual state.
+func withLiveState(t *testing.T, greeting []cube.Message, rf cube.RFAddress, setpoint float64) []cube.Message {
+	t.Helper()
+	out := append([]cube.Message(nil), greeting...)
+	for i, m := range out {
+		if m.Type != 'L' {
+			continue
+		}
+		b, err := base64.StdEncoding.DecodeString(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for off := 0; off < len(b); off += 1 + int(b[off]) {
+			if cube.RFAddressFromBytes(b[off+1:off+4]) == rf {
+				b[off+5] = 0x12 // valid, initialized
+				b[off+6] = 0x19 // manual, DST
+				b[off+8] = byte(setpoint * 2)
+			}
+		}
+		out[i].Data = base64.StdEncoding.EncodeToString(b)
+	}
+	return out
+}
+
+func TestBackupStateAndRestoreState(t *testing.T) {
+	greeting, _ := fakecube.LoadGreeting(fixture)
+	srv := &fakecube.Server{Greeting: withLiveState(t, greeting, 0x1514b6, 20)}
+	addr, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); srv.Close() })
+	c := cubelan.New(cubelan.Options{Addr: addr})
+	go c.Run(ctx)
+	<-c.Ready()
+	f, err := Take(c.Snapshot(), nil, "test", time.Date(2026, 11, 4, 14, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := f.Device(0x1514b6)
+	if d.State == nil || d.State.Mode != cube.ModeManual || d.State.Setpoint == nil || *d.State.Setpoint != 20 {
+		t.Fatalf("state %+v", d.State)
+	}
+	path := filepath.Join(t.TempDir(), "s.yaml")
+	if err := f.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if g, err := Load(path); err != nil || !reflect.DeepEqual(f, g) {
+		t.Fatalf("round trip: %v", err)
+	}
+	// Same state → nothing; a different setpoint → one s: command.
+	p, _ := NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{State: true})
+	if !p.Empty() {
+		t.Fatalf("plan %+v", p.Steps)
+	}
+	for i := range f.Devices {
+		if f.Devices[i].RFAddress == 0x1514b6 {
+			v := 21.5
+			f.Devices[i].State.Setpoint = &v
+		}
+	}
+	p, _ = NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{State: true})
+	if len(p.Steps) != 1 || !strings.Contains(p.Steps[0].What, "manual 21.5°C (now manual 20.0°C)") || p.Steps[0].Command.Wakeup {
+		t.Fatalf("plan %+v", p.Steps)
+	}
+	if got := p.Steps[0].Command.Lines[0].String(); got != "s:AARAAAAAFRS2BmsA" && !strings.HasPrefix(got, "s:AARAAAAAFRS2Bms") {
+		t.Fatalf("command %s", got)
+	}
+	// Without -state the plan ignores the state section.
+	p, _ = NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{})
+	if !p.Empty() {
+		t.Fatalf("plan without State %+v", p.Steps)
+	}
+}

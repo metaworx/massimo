@@ -134,6 +134,16 @@ func (u Until) String() string {
 // MarshalText implements encoding.TextMarshaler.
 func (u Until) MarshalText() ([]byte, error) { return []byte(u.String()), nil }
 
+// UnmarshalText parses the form written by String ("2026-11-04 13:30").
+func (u *Until) UnmarshalText(b []byte) error {
+	var y, mo, d, h, mi int
+	if _, err := fmt.Sscanf(string(b), "%d-%d-%d %d:%d", &y, &mo, &d, &h, &mi); err != nil {
+		return fmt.Errorf("until %q: want YYYY-MM-DD HH:MM", string(b))
+	}
+	*u = Until{Year: y, Month: mo, Day: d, Minutes: h*60 + mi}
+	return nil
+}
+
 // decodeUntilDate decodes the 2-byte date. The bit layout follows FHEM's
 // implementation, which matches the example in the protocol docs:
 //

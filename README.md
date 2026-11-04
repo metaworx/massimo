@@ -28,7 +28,9 @@ massimo restore -addr <cube-ip> -from backup.yaml -dry-run
 
 compares a backup (which may be edited by hand) with the Cube and shows
 what would be written; without `-dry-run` it asks and then sends only the
-differences, respecting the radio duty cycle. Pairing cannot be restored
+differences, respecting the radio duty cycle. Each device's live state
+(mode, setpoint, measured temperature, valve) is in the file for
+information; `-state` re-applies mode and setpoint too. Pairing cannot be restored
 over the LAN: devices missing from the Cube are listed, and the restore can
 be repeated after they have been paired again.
 
