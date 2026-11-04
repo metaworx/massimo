@@ -31,7 +31,7 @@ func runServe(args []string) error {
 		proxies = append(proxies, v)
 		return nil
 	})
-	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (the original software keeps one answer per serial)")
+	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (default "+proxySerialEnv+" or its per-Cube form; the original software keeps one answer per serial)")
 	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]]\n\nKeep every Cube from the environment (MASSIMO_CUBE_<SN>_ADDRESS) connected,\nserve the JSON API (see internal/server for the routes) and answer as a Cube\non the LAN (port 62910 and UDP discovery), so that other programs and the\noriginal software connect to the server instead of the Cube, which serves\nonly one client at a time.\n\n")
@@ -74,6 +74,9 @@ func runServe(args []string) error {
 				continue
 			}
 			if sn, ok := strings.CutSuffix(mid, "_ADDRESS"); ok && sn != "" && v != "" {
+				if snExplicit && !strings.EqualFold(sn, selectedSN) {
+					continue // -sn serves that one Cube only
+				}
 				sns = append(sns, sn)
 				cubes = append(cubes, server.CubeConfig{Serial: sn, Addr: v})
 			}
@@ -87,6 +90,21 @@ func runServe(args []string) error {
 	}
 	if len(cubes) == 0 {
 		return fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS or use -addr)")
+	}
+	for i := range listeners {
+		pl := &listeners[i]
+		if pl.Serial == "" && len(cubes) == 1 {
+			pl.Serial = cubes[0].Serial
+		}
+		if pl.Serial == "" {
+			return fmt.Errorf("serve: several cubes configured; name the cube of each proxy listener as -proxy <serial>=%s, or pick one with -sn", pl.Addr)
+		}
+		if pl.DiscoverySerial == "" {
+			pl.DiscoverySerial = os.Getenv(perCubeVar(proxySerialEnv, pl.Serial))
+		}
+		if pl.DiscoverySerial == "" {
+			pl.DiscoverySerial = os.Getenv(proxySerialEnv)
+		}
 	}
 	for i := range cubes {
 		name := ignoreEnv

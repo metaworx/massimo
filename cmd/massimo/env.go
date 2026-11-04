@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +27,12 @@ const (
 	addrEnv   = envPrefix + "ADDRESS"
 	snEnv     = envPrefix + "SN"
 	ignoreEnv = envPrefix + "IGNORE"
+	// proxyEnv is the address of a running `massimo serve` that answers
+	// as this Cube; commands try it before the Cube itself. proxySerialEnv
+	// is the serial serve uses in UDP discovery replies for the Cube.
+	proxyEnv       = envPrefix + "PROXY"
+	proxySerialEnv = envPrefix + "PROXY_SERIAL"
+	proxyProbe     = 2 * time.Second
 )
 
 // selectedSN is the Cube chosen with -sn (or MASSIMO_CUBE_SN), or the
@@ -103,8 +110,25 @@ func cubeEnv(name string) string {
 }
 
 // defaultAddr fills an empty -addr from the environment, or, when a
-// serial is selected, by discovering the Cube on the LAN.
+// serial is selected, by discovering the Cube on the LAN. A proxy
+// (MASSIMO_CUBE_<SN>_PROXY, a running `massimo serve`) is tried first,
+// with a short timeout, because the Cube itself serves one client at a
+// time and serve usually holds that connection.
 func defaultAddr(addr *string, cmd string) error {
+	if *addr == "" {
+		if p := cubeEnv(proxyEnv); p != "" {
+			if _, _, err := net.SplitHostPort(p); err != nil {
+				p = net.JoinHostPort(p, "62910")
+			}
+			if c, err := net.DialTimeout("tcp", p, proxyProbe); err == nil {
+				c.Close()
+				fmt.Fprintf(os.Stderr, "using the massimo proxy at %s\n", p)
+				*addr = p
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "proxy %s does not answer, using the cube directly\n", p)
+		}
+	}
 	if *addr == "" {
 		*addr = cubeEnv(addrEnv)
 	}

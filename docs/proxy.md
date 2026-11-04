@@ -15,9 +15,17 @@ massimo serve -proxy off            # API only
 massimo serve -proxy JEQ0192422=:62910 -proxy KEQ0537249=:62911
 ```
 
-With several Cubes each listener names its Cube. Discovery is answered
-only for a listener on port 62910, since a discovery reply carries no
-port.
+With several Cubes each listener names its Cube, or `-sn <serial>`
+restricts the server to one Cube. Discovery is answered only for a
+listener on port 62910, since a discovery reply carries no port.
+
+## Clients find the proxy by themselves
+
+Set `MASSIMO_CUBE_<SERIAL>_PROXY=<server host>` in `.env`. Every
+command except `serve` then connects to the proxy when it answers
+within two seconds and to the Cube itself otherwise, so `status`,
+`backup`, `restore`, `cube` and `watch` work the same whether the
+server is running or not. `-addr` bypasses this.
 
 ## What a client gets
 
@@ -64,7 +72,8 @@ one with the first letter changed:
 massimo serve -proxy-serial XEQ0192422
 ```
 
-The TCP greeting always carries the real serial. Alternatively block
+or, in `.env`, `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL=XEQ0192422`. The TCP
+greeting always carries the real serial. Alternatively block
 the Cube's UDP answers on the PC's firewall. If port 23272 is in use on
 the server's host, for example by `massimo discover`, the server runs
 without discovery and logs a warning; clients are then given the

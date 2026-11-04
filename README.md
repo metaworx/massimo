@@ -78,6 +78,16 @@ is discovered on the LAN. With `-addr`, the serial the Cube reports
 selects its key. `-env <file>` picks another env file. `massimo portal`
 serves every Cube that has a key and IV configured.
 
+`MASSIMO_CUBE_<SERIAL>_PROXY` (or `MASSIMO_CUBE_PROXY`) is the address
+of a running `massimo serve` that answers as that Cube; every command
+except `serve` tries it first, with a two-second timeout, and falls
+back to the Cube's own address, because the Cube serves one client at
+a time and `serve` usually holds that connection. `-addr` always wins.
+`MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` (or `MASSIMO_CUBE_PROXY_SERIAL`)
+is the serial `serve` uses in discovery replies, see
+[docs/proxy.md](docs/proxy.md). `serve -sn <serial>` serves that one
+Cube instead of every configured one.
+
 `MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) lists radio
 addresses, comma separated, that `serve`, `status` and `backup` leave
 out together with any room that holds nothing else, and that `restore`
