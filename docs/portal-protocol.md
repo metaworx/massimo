@@ -268,9 +268,10 @@ of the second flags byte of an L entry (confirmed on hardware: unlocking
 a thermostat at the device turned its flags from 0x1238 to 0x1218). Massimo sends 0x80 with one
 payload byte (1 lock, 0 unlock) like 0x82, directly to the device after
 a room wakeup (`z:1e,G,<room>` then `00 00 80 000000 <rf> 00 00`).
-Verified on hardware 2026-11-04: two locked radiator thermostats (fw 22)
-were unlocked over the air, the Cube answered `S:` not discarded, the
-lock bit was gone with the device's next report, and the duty cycle
+Verified on hardware 2026-11-04 in both directions: two locked radiator
+thermostats (fw 22) were unlocked over the air and one locked again,
+the Cube answered `S:` not discarded, the lock bit followed with the
+device's next report and the device showed the lock, and the duty cycle
 rose by 2 % per command. On the device the
 lock is toggled with Auto/Manu plus the second button, see the eQ-3
 manuals.

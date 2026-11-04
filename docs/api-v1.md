@@ -173,7 +173,7 @@ display, `panel_locked` in its state). Body `{"locked": false}`; the
 answer is the same as for a setpoint. The command is radiogram 0x80,
 which the original software lists but never sends; it is sent directly
 to the device after a wakeup of its room and takes effect immediately
-(verified on radiator thermostats). On the device itself the lock is toggled by pressing Auto/Manu
+(both directions verified on radiator thermostats). On the device itself the lock is toggled by pressing Auto/Manu
 and the second button (Boost or the moon/sun key, Mode/Menu and
 Boost/OK on a wall thermostat) together.
 

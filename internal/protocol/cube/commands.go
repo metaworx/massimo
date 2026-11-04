@@ -332,8 +332,8 @@ func CmdSetGroup(dev RFAddress, room uint8, remove bool) Message {
 // CmdLockControls locks (true) or unlocks (false) the buttons of a
 // thermostat, the "Kindersicherung/Bediensperre" that the device shows
 // as "LoC". Radiogram 0x80 is listed by the original software, which
-// never sends it; the one-byte payload mirrors 0x82. Unlocking was
-// verified on radiator thermostats (firmware 22).
+// never sends it; the one-byte payload mirrors 0x82. Both directions
+// are verified on radiator thermostats (firmware 22).
 func CmdLockControls(t Target, locked bool) Message {
 	v := byte(0)
 	if locked {
