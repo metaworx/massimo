@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, core: API access with the token, the header,
-// loading of cubes and rooms, the event stream, expert mode. The
-// tiles and their actions are in tiles.js.
+// The Massimo web UI, core: API access with the token, settings, the
+// header with the Cube clock, loading of cubes and rooms, polling and
+// the event stream. The tiles and their actions are in tiles.js.
 "use strict";
 
 const state = {
@@ -13,9 +13,12 @@ const state = {
   unlisted: [],
   token: null,
   events: null,
-  expert: false,
+  eventsOpen: false,
+  settings: { poll: 10, expert: false, clock: "browser" },
+  tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
-  ui: {}, // per room id: {open, pending, timer}
+  ui: {}, // per room id: {open, pending, timer, vacation, confirm}
+  pollTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -32,10 +35,20 @@ function readStored(key) {
 
 function store(key, value) {
   try {
-    localStorage.setItem(key, value);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch (e) {
     // private window or storage blocked: the value lives for this page only
   }
+}
+
+function loadSettings() {
+  const s = state.settings;
+  const poll = parseInt(readStored("massimo.poll"), 10);
+  if (poll >= 2) s.poll = poll;
+  s.expert = readStored("massimo.expert") === "1";
+  const clock = readStored("massimo.clock");
+  if (clock === "cube" || clock === "browser") s.clock = clock;
 }
 
 // --- API --------------------------------------------------------------
@@ -83,8 +96,10 @@ function askToken() {
       store("massimo.token", state.token);
       tokenPromise = null;
       resolve(state.token);
+      connectEvents();
     };
     dlg.showModal();
+    input.focus();
   });
   return tokenPromise;
 }
@@ -137,6 +152,78 @@ function deviceName(d) {
   return d.name || d.rf_address;
 }
 
+// localDateTimeValue formats a Date for a datetime-local input.
+function localDateTimeValue(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+// tomorrowMorning is the default "until" of a temporary setting.
+function tomorrowMorning() {
+  const d = new Date(Date.now() + 24 * 3600 * 1000);
+  d.setHours(6, 0, 0, 0);
+  return localDateTimeValue(d);
+}
+
+// --- cube clock -------------------------------------------------------
+
+// lastWeekday returns the day of month of the last given weekday
+// (0 = Sunday) in month (1..12) of year.
+function lastWeekday(year, month, weekday) {
+  const last = new Date(Date.UTC(year, month, 0)); // last day of month
+  const diff = (last.getUTCDay() - weekday + 7) % 7;
+  return last.getUTCDate() - diff;
+}
+
+// cubeOffset returns the UTC offset in seconds the Cube's zone has at
+// the given local wall-clock time, from its two daylight-saving rules:
+// summer from the last <weekday> of tz_summer.month at its hour to the
+// last <weekday> of tz_winter.month at its hour.
+function cubeOffset(tz, y, m, d, hh, mm) {
+  const w = tz.winter, s = tz.summer;
+  if (!w || !s || !s.month || !w.month || s.offset_seconds === w.offset_seconds) {
+    return w ? w.offset_seconds : null;
+  }
+  const minute = (month, day, hour) => ((month * 31 + day) * 24 + hour) * 60;
+  const now = minute(m, d, hh) + mm;
+  const start = minute(s.month, lastWeekday(y, s.month, s.weekday), s.hour);
+  const end = minute(w.month, lastWeekday(y, w.month, w.weekday), w.hour);
+  const summer = start < end ? now >= start && now < end : now >= start || now < end;
+  return summer ? s.offset_seconds : w.offset_seconds;
+}
+
+// cubeInstant converts the Cube's "YYYY-MM-DD HH:MM" wall-clock time
+// into a Date, or null when the rules are unknown.
+function cubeInstant(text, tz) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(text || "");
+  if (!m || !tz) return null;
+  const [y, mo, d, hh, mm] = m.slice(1).map(Number);
+  const off = cubeOffset(tz, y, mo, d, hh, mm);
+  if (off === null || off === undefined) return null;
+  return new Date(Date.UTC(y, mo - 1, d, hh, mm) - off * 1000);
+}
+
+function fmtInstant(date, timeZone) {
+  const opts = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false };
+  if (timeZone) opts.timeZone = timeZone;
+  return new Intl.DateTimeFormat(undefined, opts).format(date);
+}
+
+// clockText returns the clock to show and its tooltip.
+function clockText(cube) {
+  const raw = cube.cube_time || "";
+  const tz = state.tz[cube.serial];
+  const inst = cubeInstant(raw, tz);
+  if (!inst) return { text: raw || "–", title: "" };
+  const utc = fmtInstant(inst, "UTC") + " UTC";
+  if (state.settings.clock === "cube") {
+    const off = cubeOffset(tz, ...raw.split(/[- :]/).map(Number));
+    const name = (off === tz.summer.offset_seconds ? tz.summer.name : tz.winter.name) || "cube time";
+    return { text: raw + " " + name, title: utc };
+  }
+  return { text: fmtInstant(inst), title: utc };
+}
+
 // --- header -----------------------------------------------------------
 
 function renderHeader(cube) {
@@ -147,11 +234,15 @@ function renderHeader(cube) {
   $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
   $("slots").textContent = b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots);
   $("queued").textContent = cube.queued === undefined ? "–" : String(cube.queued);
-  $("clock").textContent = cube.cube_time || "–";
+  const clock = clockText(cube);
+  for (const id of ["clock", "clock-plain"]) {
+    $(id).textContent = clock.text;
+    $(id).title = clock.title;
+  }
   const p = $("pending");
   const n = cube.pending_radiograms || 0;
   if (n > 0) {
-    p.textContent = state.expert
+    p.textContent = state.settings.expert
       ? n + " radiogram" + (n === 1 ? "" : "s") + " not yet acknowledged, states may still change"
       : n + " pending, states may still change";
     p.classList.remove("hidden");
@@ -173,11 +264,15 @@ function renderCubeSelect() {
   sel.disabled = state.cubes.length < 2;
 }
 
-function applyExpert() {
-  document.body.classList.toggle("expert", state.expert);
-  $("expert-toggle").checked = state.expert;
+function applySettings() {
+  const s = state.settings;
+  document.body.classList.toggle("expert", s.expert);
+  $("expert-toggle").checked = s.expert;
+  $("poll-input").value = s.poll;
+  $("clock-select").value = s.clock;
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
+  startPolling();
 }
 
 // --- loading ----------------------------------------------------------
@@ -189,7 +284,21 @@ async function loadCubes() {
   }
   renderCubeSelect();
   const cube = state.cubes.find((c) => c.serial === state.serial);
-  if (cube) renderHeader(cube);
+  if (cube) {
+    if (!state.tz[cube.serial]) await loadTimeZone(cube.serial);
+    renderHeader(cube);
+  }
+}
+
+// loadTimeZone reads the Cube's daylight-saving rules once per Cube.
+async function loadTimeZone(serial) {
+  try {
+    const detail = await api("GET", "/api/v1/cubes/" + encodeURIComponent(serial));
+    const cfg = detail && detail.config;
+    state.tz[serial] = cfg && cfg.tz_winter ? { winter: cfg.tz_winter, summer: cfg.tz_summer } : false;
+  } catch (e) {
+    state.tz[serial] = false;
+  }
 }
 
 async function loadRooms() {
@@ -204,9 +313,31 @@ async function refresh() {
   try {
     await loadCubes();
     await loadRooms();
+    $("message").classList.add("hidden");
   } catch (e) {
     showMessage("Cannot load: " + e.message, false);
   }
+}
+
+function selectCube(serial) {
+  state.serial = serial;
+  store("massimo.serial", serial);
+  state.details = {};
+  state.ui = {};
+  refresh().then(connectEvents);
+}
+
+// --- polling ----------------------------------------------------------
+
+// startPolling refreshes the header every poll interval and the rooms
+// as well while the event stream is not connected.
+function startPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = setInterval(() => {
+    loadCubes().then(() => {
+      if (!state.eventsOpen) return loadRooms();
+    }).catch(() => {});
+  }, state.settings.poll * 1000);
 }
 
 // --- events -----------------------------------------------------------
@@ -215,12 +346,16 @@ function connectEvents() {
   if (state.events) {
     state.events.close();
     state.events = null;
+    state.eventsOpen = false;
   }
   if (!state.serial) return;
   let url = base() + "/events";
   if (state.token) url += "?token=" + encodeURIComponent(state.token);
   const es = new EventSource(url);
   state.events = es;
+  es.onopen = () => {
+    state.eventsOpen = true;
+  };
   es.addEventListener("state", (ev) => {
     const data = JSON.parse(ev.data);
     if (data.state) updateDevice(data.state);
@@ -230,34 +365,60 @@ function connectEvents() {
   es.addEventListener("connected", () => refresh());
   es.addEventListener("disconnected", () => loadCubes());
   es.onerror = () => {
-    // The browser retries by itself; make sure the header says so.
+    // The browser retries by itself; the poll covers the rooms meanwhile.
+    state.eventsOpen = false;
     loadCubes().catch(() => {});
   };
+}
+
+// --- settings panel ---------------------------------------------------
+
+function initSettings() {
+  const panel = $("settings");
+  $("settings-toggle").addEventListener("click", () => panel.classList.toggle("hidden"));
+  $("settings-close").addEventListener("click", () => panel.classList.add("hidden"));
+  $("poll-input").addEventListener("change", (ev) => {
+    const v = Math.max(2, parseInt(ev.target.value, 10) || 10);
+    state.settings.poll = v;
+    ev.target.value = v;
+    store("massimo.poll", String(v));
+    startPolling();
+  });
+  $("expert-toggle").addEventListener("change", (ev) => {
+    state.settings.expert = ev.target.checked;
+    store("massimo.expert", state.settings.expert ? "1" : "0");
+    applySettings();
+  });
+  $("clock-select").addEventListener("change", (ev) => {
+    state.settings.clock = ev.target.value;
+    store("massimo.clock", state.settings.clock);
+    applySettings();
+  });
+  $("forget-token").addEventListener("click", () => {
+    state.token = null;
+    store("massimo.token", null);
+    panel.classList.add("hidden");
+    refresh().then(connectEvents);
+  });
 }
 
 // --- wiring -----------------------------------------------------------
 
 function init() {
   state.token = readStored("massimo.token");
-  state.expert = readStored("massimo.expert") === "1";
-  applyExpert();
+  state.serial = readStored("massimo.serial");
+  loadSettings();
+  initSettings();
+  applySettings();
   api("GET", "/healthz").then((h) => {
     $("version").textContent = h && h.version ? h.version : "";
   }).catch(() => {});
-  $("cube-select").addEventListener("change", (ev) => {
-    state.serial = ev.target.value;
-    state.details = {};
-    state.ui = {};
-    refresh().then(connectEvents);
-  });
-  $("expert-toggle").addEventListener("change", (ev) => {
-    state.expert = ev.target.checked;
-    store("massimo.expert", state.expert ? "1" : "0");
-    applyExpert();
-  });
+  $("cube-select").addEventListener("change", (ev) => selectCube(ev.target.value));
   initTiles();
-  refresh().then(connectEvents);
-  setInterval(() => loadCubes().catch(() => {}), 60000);
+  refresh().then(() => {
+    store("massimo.serial", state.serial);
+    connectEvents();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

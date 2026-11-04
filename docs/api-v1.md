@@ -23,18 +23,33 @@ it waits; AUTO and MANU buttons; the measured temperature in the tile's
 corner; a menu with vacation, lock and unlock of the room's
 thermostats, the device list and, for an empty room, deletion. A House
 tile sets every room to ECO or COMFORT (manual at the room's eco or
-comfort temperature from its thermostat's configuration) or AUTO.
+comfort temperature from its thermostat's configuration) or AUTO;
+each of its buttons opens an inline panel with everything on one
+screen, no wizard: the mode (ECO, AUTO, COMFORT, or MANU with a
+temperature), "Permanently" or "Until" a date and time (tomorrow 06:00
+by default; a temperature with "Until" is sent as vacation mode), the
+rooms to apply it to with an "All rooms" box, and Send, which runs the
+room commands one after another and lists the result per room. Enter
+in any field sends. Vacation for one room is an inline panel in its
+tile in the same way, and deleting an empty room asks inline.
 Clicking a room name opens its devices with their states, flags,
 temperature offsets and per-thermostat lock. Setpoints are set per
-room only, as in the original software. An "Expert" switch in the
-header shows radio addresses, device types, the budget numbers, the
-version and the Cube clock; off by default. Results of every action
-appear in the tile, including the devices to nudge when the Cube
-discarded a room command. The page follows the event stream. With a
-token configured, the page asks for it once and keeps it in the
-browser; the event stream alone takes the token as `?token=` because
-browsers open it without headers, every other route needs the header.
-The page and its files are public, the API behind them is not.
+room only, as in the original software. The gear in the header opens
+the settings: the poll interval (10 s by default; the header is
+refreshed on it, and the rooms as well while the event stream is
+down), the Expert switch (radio addresses, device types, the budget
+numbers and the version; off by default), whether the Cube clock is
+shown in the browser's time zone or the Cube's own, and "forget
+token". The Cube clock is converted from the Cube's time zone rules
+(`config.tz_winter` and `tz_summer` of the cube detail); hovering it
+shows the same instant as UTC. The selected Cube and the settings are
+kept in the browser. Results of every action appear in the tile,
+including the devices to nudge when the Cube discarded a room command.
+The page follows the event stream. With a token configured, the page
+asks for it once and keeps it in the browser; the event stream alone
+takes the token as `?token=` because browsers open it without
+headers, every other route needs the header. The page and its files
+are public, the API behind them is not.
 
 ## Authentication
 
