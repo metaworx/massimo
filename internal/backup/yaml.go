@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
+
+var timeLike = regexp.MustCompile(`^[0-9]{1,2}:[0-9]{2}$`)
 
 // jsonToYAML converts JSON to YAML keeping the key order, so a backup
 // reads in the order of its fields rather than alphabetically.
@@ -68,7 +71,12 @@ func yamlNode(dec *json.Decoder) (*yaml.Node, error) {
 		}
 		return nil, fmt.Errorf("unexpected %v", v)
 	case string:
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v}, nil
+		n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v}
+		if timeLike.MatchString(v) {
+			// "06:30" would be a sexagesimal number for YAML 1.1 readers.
+			n.Style = yaml.DoubleQuotedStyle
+		}
+		return n, nil
 	case json.Number:
 		tag := "!!int"
 		if bytes.ContainsAny([]byte(v.String()), ".eE") {
