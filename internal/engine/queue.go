@@ -304,7 +304,8 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		if r.Discarded && cmd.Target != 0 {
 			// Observed on hardware: a command to a device in error state is
 			// discarded unless r: was sent first. Reset once and retry.
-			q.opts.Logger.Info("command discarded, resetting error state and retrying", "target", cmd.Target)
+			q.opts.Logger.Info("command discarded, resetting error state and retrying", "target", cmd.Target, "command", l.String(),
+				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(cmd.Target)); err != nil {
 				res.Err = err
 				break
@@ -316,6 +317,7 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 			}
 		}
 		if r.Discarded {
+			q.opts.Logger.Warn("command discarded by the cube", "target", cmd.Target, "command", l.String(), "duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			res.Discarded = true
 			res.Err = ErrDiscarded
 			break
