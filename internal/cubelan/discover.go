@@ -76,16 +76,26 @@ func parseUDPReply(b []byte) (serial string, boot bool, op byte, data []byte, ok
 
 // Discover broadcasts an identify request and collects the Cubes that
 // answer within wait. Each one is then asked for its network settings.
-func Discover(ctx context.Context, wait time.Duration) ([]Discovered, error) {
+// With unicast addresses given, the request goes to those instead of
+// being broadcast (for other subnets, or NAT setups such as WSL 2).
+func Discover(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Discovered, error) {
 	pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", DiscoveryPort))
 	if err != nil {
-		return nil, fmt.Errorf("discover: cannot bind UDP port %d (is the original MAX! software running?): %w", DiscoveryPort, err)
+		// Fall back to any port: a Cube that answers to the source port
+		// is still found; one that answers to 23272 is not.
+		pc, err = net.ListenPacket("udp4", ":0")
+		if err != nil {
+			return nil, fmt.Errorf("discover: cannot bind a UDP port: %w", err)
+		}
 	}
 	defer pc.Close()
 	req := udpRequest("", udpIdentify)
-	targets := []net.IP{udpBroadcast, udpMulticast}
-	for _, ip := range interfaceBroadcasts() {
-		targets = append(targets, ip)
+	targets := unicast
+	if len(targets) == 0 {
+		targets = []net.IP{udpBroadcast, udpMulticast}
+		for _, ip := range interfaceBroadcasts() {
+			targets = append(targets, ip)
+		}
 	}
 	for i := 0; i < 2; i++ {
 		for _, ip := range targets {

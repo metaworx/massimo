@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -20,14 +21,25 @@ func runDiscover(args []string) error {
 	fs := flag.NewFlagSet("discover", flag.ContinueOnError)
 	wait := fs.Duration("wait", 3*time.Second, "how long to wait for answers")
 	asJSON := fs.Bool("json", false, "print JSON instead of a table")
+	addrs := fs.String("addr", "", "comma-separated IPs to ask directly instead of broadcasting")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo discover [-wait 3s] [-json]\n\nFind Cubes on the local network with a UDP broadcast (port 23272).\nThe port must be free, and the broadcast must reach the Cube's network:\nfrom WSL 2 it does not, run the Windows binary there.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo discover [-wait 3s] [-json] [-addr ip,ip]\n\nFind Cubes on the local network with a UDP broadcast (port 23272).\nThe broadcast must reach the Cube's network: from WSL 2 in NAT mode it\ndoes not; use the Windows binary, mirrored networking, or -addr.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cubes, err := cubelan.Discover(context.Background(), *wait)
+	var unicast []net.IP
+	for _, a := range strings.Split(*addrs, ",") {
+		if a = strings.TrimSpace(a); a != "" {
+			ip := net.ParseIP(a)
+			if ip == nil {
+				return fmt.Errorf("discover: bad address %q", a)
+			}
+			unicast = append(unicast, ip)
+		}
+	}
+	cubes, err := cubelan.Discover(context.Background(), *wait, unicast...)
 	if err != nil {
 		return err
 	}
