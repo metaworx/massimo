@@ -196,7 +196,8 @@ A 0x11 command to a device in error state that was **not** preceded by
 Through `massimo restore` on a radiator thermostat: 0x11 preset
 temperatures (eco 17 → 16.5 shown on the device), 0x10 week program
 (one day), 0x12 valve settings (boost 5 → 10 min, shown as 600 s on the
-device), each after a `z:` room wakeup; `i:ffffffff,00000000` (portal
+device), each after a `z:` room wakeup; `m:` (rename of a wall
+thermostat, confirmed by the next M line); `i:ffffffff,00000000` (portal
 polling off, confirmed by the C line). Budget per write: two memory
 slots while in flight, duty cycle +3 % for 0x11/0x12, +8 % for one day
 of 0x10.
