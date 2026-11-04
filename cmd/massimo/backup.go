@@ -50,6 +50,7 @@ func runBackup(args []string) error {
 	addr := fs.String("addr", "", "Cube address, host[:port]")
 	out := fs.String("out", "", "output file; .yaml/.yml writes YAML, anything else JSON (default: massimo-backup-<serial>-<time>.json)")
 	yamlOut := fs.Bool("yaml", false, "write YAML instead of JSON when -out is not given")
+	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo backup -addr <ip> [-out file]\n\nSave the Cube's rooms, device names, thermostat settings, week programs,\nNTP servers and time zone rules, together with the raw protocol lines.\n\n")
 		fs.PrintDefaults()
@@ -57,8 +58,8 @@ func runBackup(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *addr == "" {
-		return fmt.Errorf("backup: -addr is required")
+	if err := defaultAddr(addr, "backup"); err != nil {
+		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -100,6 +101,7 @@ func runRestore(args []string) error {
 	portal := fs.Bool("portal", false, "also restore the portal URL and whether the Cube polls it")
 	skip := fs.String("skip", "", "comma-separated groups to leave alone: names, settings, programs, clock")
 	gap := fs.Duration("gap", 200*time.Millisecond, "pause between commands")
+	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo restore -addr <ip> -from <file> [-dry-run] [-yes] [-portal] [-skip groups]\n\nWrite a backup back to the Cube. Only settings that differ are sent.\nDevices in the backup that are not paired with the Cube are reported;\npairing cannot be restored over the LAN.\n\n")
 		fs.PrintDefaults()
@@ -107,8 +109,11 @@ func runRestore(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *addr == "" || *from == "" {
-		return fmt.Errorf("restore: -addr and -from are required")
+	if err := defaultAddr(addr, "restore"); err != nil {
+		return err
+	}
+	if *from == "" {
+		return fmt.Errorf("restore: -from is required")
 	}
 	opts := backup.PlanOptions{Portal: *portal}
 	for _, g := range strings.Split(*skip, ",") {

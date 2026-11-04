@@ -10,7 +10,12 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	args, err := globalOptions(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(2)
+	}
+	if len(args) < 1 {
 		usage()
 		os.Exit(2)
 	}
@@ -22,37 +27,42 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
-	switch os.Args[1] {
+	if selectedSN == "" {
+		selectedSN = os.Getenv(snEnv)
+	}
+	switch args[0] {
 	case "version", "--version", "-v", "-V", "help", "-h", "--help":
 	default:
 		// Every run announces its version on stderr, so logs and bug
 		// reports say which build produced them. stdout stays data-only.
 		fmt.Fprintln(os.Stderr, versionString())
 	}
-	var err error
-	switch os.Args[1] {
+	rest := args[1:]
+	switch args[0] {
 	case "decode":
-		err = runDecode(os.Args[2:])
+		err = runDecode(rest)
 	case "portal-crypto":
-		err = runPortalCrypto(os.Args[2:])
+		err = runPortalCrypto(rest)
 	case "portal":
-		err = runPortal(os.Args[2:])
+		err = runPortal(rest)
 	case "cube":
-		err = runCube(os.Args[2:])
+		err = runCube(rest)
 	case "watch":
-		err = runWatch(os.Args[2:])
+		err = runWatch(rest)
 	case "backup":
-		err = runBackup(os.Args[2:])
+		err = runBackup(rest)
 	case "restore":
-		err = runRestore(os.Args[2:])
+		err = runRestore(rest)
 	case "fakecube":
-		err = runFakeCube(os.Args[2:])
+		err = runFakeCube(rest)
+	case "discover":
+		err = runDiscover(rest)
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
 		usage()
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command %q\n", args[0])
 		usage()
 		os.Exit(2)
 	}
@@ -63,11 +73,15 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: massimo <command> [args]
+	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-sn <serial>] <command> [args]
 
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
-override the path with MASSIMO_ENV_FILE). Keep that file out of git.
+override the path with -env or MASSIMO_ENV_FILE). Keep that file out of git.
+Several Cubes: append the serial to the variable names
+(MASSIMO_CUBE_KEY_KEQ0123456, MASSIMO_CUBE_IV_..., MASSIMO_CUBE_ADDRESS_...)
+and pick one with -sn or MASSIMO_CUBE_SN. -addr defaults to
+MASSIMO_CUBE_ADDRESS.
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON
@@ -78,6 +92,7 @@ commands:
   backup          save the Cube's configuration to a JSON or YAML file
   restore         write a backup back to the Cube (only the differences)
   fakecube        serve a recorded greeting as if it were a Cube, for tests
+  discover        list the Cubes on the local network (UDP broadcast)
   version         print the version (also --version)
 `)
 }

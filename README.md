@@ -39,3 +39,18 @@ massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.
 
 `watch` prints state changes as they happen; `fakecube` serves recorded
 data on port 62910 so everything can be tried without hardware.
+
+```bash
+massimo discover
+massimo portal-crypto iv -addr <cube-ip>
+```
+
+`discover` lists the Cubes on the LAN (serial, IP, MAC, RF address,
+firmware) via the UDP broadcast the original software uses; it needs UDP
+port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`
+recovers a Cube's portal IV from one `e:` exchange.
+
+Several Cubes: put `MASSIMO_CUBE_KEY_<SERIAL>`, `MASSIMO_CUBE_IV_<SERIAL>`
+and `MASSIMO_CUBE_ADDRESS_<SERIAL>` into `.env` and select one with
+`-sn <serial>` (or `MASSIMO_CUBE_SN`); `-env <file>` picks another env
+file. `massimo portal` serves every Cube that has a key and IV configured.

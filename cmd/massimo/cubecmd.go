@@ -25,6 +25,7 @@ func runCube(args []string) error {
 	wait := fs.Duration("wait", 2*time.Second, "how long to wait for replies after each command")
 	quiet := fs.Bool("quiet", false, "do not print the greeting")
 	portal := fs.String("portal", "", "'on', 'off' or a number of seconds: control the Cube's own portal polling (sends the i: command)")
+	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo cube -addr <ip> [flags] [line ...]\n\nSend protocol lines to a Cube over the LAN and print the replies.\n\n")
 		fs.PrintDefaults()
@@ -32,8 +33,8 @@ func runCube(args []string) error {
 	if err := fs.Parse(reorderFlags(fs, args)); err != nil {
 		return err
 	}
-	if *addr == "" {
-		return fmt.Errorf("cube: -addr is required")
+	if err := defaultAddr(addr, "cube"); err != nil {
+		return err
 	}
 	if !strings.Contains(*addr, ":") {
 		*addr += ":62910"
@@ -112,4 +113,53 @@ func reorderFlags(fs *flag.FlagSet, args []string) []string {
 		}
 	}
 	return append(flags, pos...)
+}
+
+// lanExchange connects to a Cube, skips the greeting, sends one line and
+// returns the first reply of the wanted type (without CRLF) and the
+// Cube's serial number.
+func lanExchange(addr, line string, want byte) (reply, serial string, err error) {
+	if !strings.Contains(addr, ":") {
+		addr += ":62910"
+	}
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		return "", "", err
+	}
+	defer conn.Close()
+	defer conn.Write([]byte("q:\r\n"))
+	r := bufio.NewReaderSize(conn, 16<<10)
+	for {
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		l, err := r.ReadString('\n')
+		if err != nil {
+			return "", "", fmt.Errorf("greeting: %w", err)
+		}
+		m, err := cube.ParseLine(l)
+		if err != nil {
+			continue
+		}
+		if m.Type == 'H' {
+			if h, err := cube.ParseHello(m.Data); err == nil {
+				serial = h.Serial
+			}
+		}
+		if m.Type == 'L' {
+			break
+		}
+	}
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := conn.Write([]byte(line + "\r\n")); err != nil {
+		return "", serial, err
+	}
+	for {
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		l, err := r.ReadString('\n')
+		if err != nil {
+			return "", serial, fmt.Errorf("no %c reply: %w", want, err)
+		}
+		if m, err := cube.ParseLine(l); err == nil && m.Type == want {
+			return strings.TrimRight(l, "\r\n"), serial, nil
+		}
+	}
 }

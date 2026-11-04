@@ -15,8 +15,6 @@ import (
 	"go.metaworx.ch/massimo/internal/portal/portalcrypto"
 )
 
-const keyEnv = "MASSIMO_CUBE_KEY"
-
 func portalCryptoUsage() {
 	fmt.Fprint(os.Stderr, `usage: massimo portal-crypto <subcommand> [flags]
 
@@ -24,9 +22,11 @@ The Cube key is read from the environment variable `+keyEnv+` or, if that
 is unset, prompted for on the terminal. It is never written anywhere.
 
 subcommands:
+  iv -addr <cube ip>
+        Connect to the Cube, encrypt 32 zero bytes with e: and recover the
+        IV from the answer (and verify CBC chaining).
   iv -plain <base64> -cipher <E-line>
-        Recover the IV from one e:/E: exchange with the Cube and verify
-        CBC chaining if the data spans two or more blocks.
+        The same from an e:/E: exchange done by hand.
   check -iv <hex> -plain <base64> -cipher <E-line>
         Verify that encrypting plain with key and IV gives cipher.
   encrypt -iv <hex> [-text <string> | -plain <base64>]
@@ -54,8 +54,26 @@ func runPortalCrypto(args []string) error {
 	mac := fs.String("mac", "", "Cube MAC address, hex")
 	rf := fs.String("rf", "", "Cube RF address, hex")
 	extra := fs.String("extra", "", "additional identifiers to try, comma-separated (e.g. the chip ID)")
+	addr := fs.String("addr", "", "Cube address, host[:port]: do the e: exchange over the LAN (iv)")
+	snFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if sub == "iv" && *plainB64 == "" && *cipherB64 == "" {
+		if *addr == "" {
+			*addr = cubeEnv(addrEnv)
+		}
+		if *addr == "" {
+			return fmt.Errorf("iv: need -addr, or -plain and -cipher")
+		}
+		zero := make([]byte, 2*portalcrypto.BlockSize)
+		reply, serial, err := lanExchange(*addr, "e:"+base64.StdEncoding.EncodeToString(zero), 'E')
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "cube %s answered %s\n", serial, reply)
+		*plainB64 = base64.StdEncoding.EncodeToString(zero)
+		*cipherB64 = reply
 	}
 
 	var plain, ct, iv []byte
@@ -150,7 +168,7 @@ func runPortalCrypto(args []string) error {
 
 // readKey takes the key from the environment or prompts for it.
 func readKey() ([]byte, error) {
-	s := os.Getenv(keyEnv)
+	s := cubeEnv(keyEnv)
 	if s == "" {
 		fmt.Fprint(os.Stderr, "Cube key (from the QR code, k + 32 hex digits): ")
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')

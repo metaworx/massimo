@@ -22,6 +22,7 @@ func runWatch(args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	addr := fs.String("addr", "", "Cube address, host[:port]")
 	poll := fs.Duration("poll", 60*time.Second, "device list poll interval (0 = never)")
+	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo watch -addr <ip> [-poll 60s]\n\nStay connected to a Cube and print state changes.\n\n")
 		fs.PrintDefaults()
@@ -29,8 +30,8 @@ func runWatch(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *addr == "" {
-		return fmt.Errorf("watch: -addr is required")
+	if err := defaultAddr(addr, "watch"); err != nil {
+		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
