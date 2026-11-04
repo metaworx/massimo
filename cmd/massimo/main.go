@@ -59,6 +59,10 @@ func main() {
 		err = runDiscover(rest)
 	case "config":
 		err = runConfig(rest)
+	case "serve":
+		err = runServe(rest)
+	case "legacy":
+		err = runLegacy(rest)
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -97,6 +101,8 @@ commands:
   fakecube        serve a recorded greeting as if it were a Cube, for tests
   discover        list the Cubes on the local network (UDP broadcast)
   config          show the settings in effect, with keys and IVs redacted
+  serve           keep the Cubes connected and serve the JSON API
+  legacy          run the original MAX! software with filtered output
   version         print the version (also --version)
 `)
 }

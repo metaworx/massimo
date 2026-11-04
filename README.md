@@ -70,3 +70,32 @@ and `MASSIMO_CUBE_<SERIAL>_ADDRESS` into `.env` and select one with
 is discovered on the LAN. With `-addr`, the serial the Cube reports
 selects its key. `-env <file>` picks another env file. `massimo portal`
 serves every Cube that has a key and IV configured.
+
+## Server
+
+```bash
+massimo serve -listen 127.0.0.1:8099
+```
+
+keeps every Cube from the environment connected (one connection and one
+command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
+`/api/v1/cubes/{serial}` (with rooms), `/devices`, `/devices/{rf}`,
+`PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
+`{"mode":"manual","temp":21.5}`, `{"mode":"auto"}` or
+`{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,
+`/backup?format=yaml`, and `/events` as server-sent events. Set
+`MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
+The listener defaults to localhost; put a reverse proxy with TLS in
+front before exposing it.
+
+## Original software
+
+```bash
+massimo legacy -out max-session.log
+```
+
+starts the original MAX! software (Java 8, installation directory
+`C:\ProgramData\MAX` by default, `-dir` otherwise) and prints only the
+protocol-relevant lines: API and gateway calls, radiograms, send results.
+`-out` saves the complete output, `-all` shows it, `-width` shortens
+long lines.
