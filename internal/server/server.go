@@ -360,6 +360,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
+	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 }

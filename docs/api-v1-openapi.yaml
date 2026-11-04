@@ -94,6 +94,39 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/devices/{rf}:
+    put:
+      summary: Rename a device and/or move it to another room
+      description: A move unlinks the device from its old room's partners and relinks it with the new room's, as the original software does, then writes the metadata. room_id 0 is refused.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string, maxLength: 32}
+                room_id: {type: integer, minimum: 1, maximum: 255}
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  budget: {$ref: "#/components/schemas/Budget"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The device is paired but not assigned to a room
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/devices/{rf}/setpoint:
     put:
       summary: Set mode and setpoint of one thermostat
@@ -137,6 +170,31 @@ paths:
         "409": {$ref: "#/components/responses/Superseded"}
         "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/rooms/{id}:
+    put:
+      summary: Rename a room
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, maxLength: 32}
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/CubeError"}
     delete:
       summary: Remove an empty room
       description: Writes the Cube's metadata without the room. A room that still has devices, hidden ones included, is refused with 409.
@@ -172,6 +230,103 @@ paths:
         "409": {$ref: "#/components/responses/Superseded"}
         "502": {$ref: "#/components/responses/CubeError"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/rooms/{id}/config:
+    get:
+      summary: The room's settings, as the UI edits them
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RoomConfig"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      summary: Write settings to every thermostat of the room
+      description: Temperatures to radiator and wall thermostats, boost to both, descaling and valve limits to radiator thermostats, after one wakeup of the room. temp_offset and display_actual are per device.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      requestBody: {$ref: "#/components/requestBodies/Config"}
+      responses:
+        "200":
+          description: Per-device results; ok is true when every device took the write
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  devices:
+                    type: array
+                    items: {$ref: "#/components/schemas/DeviceResult"}
+                  budget: {$ref: "#/components/schemas/Budget"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/rooms/{id}/program:
+    get:
+      summary: The week programme of the room's first thermostat
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200":
+          description: Programme keyed by weekday, plus source (the device it comes from)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: "#/components/schemas/WeekProgram"}
+                  - type: object
+                    properties:
+                      source: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      summary: Write the week programme of the whole room
+      description: Any subset of days; one group radiogram 0x10 per day, which every thermostat of the room takes.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WeekProgram"}
+      responses:
+        "200": {$ref: "#/components/responses/CommandResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/devices/{rf}/config:
+    put:
+      summary: Write a thermostat's settings
+      description: Every field optional, merged into the current configuration; 0x11 for temperatures, 0x12 for boost, descaling and valve limits, 0x82 for display_actual (wall thermostats), after a wakeup of the room.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      requestBody: {$ref: "#/components/requestBodies/Config"}
+      responses:
+        "200": {$ref: "#/components/responses/CommandResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/devices/{rf}/program:
+    put:
+      summary: Write the week programme of one thermostat
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WeekProgram"}
+      responses:
+        "200": {$ref: "#/components/responses/CommandResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/backup:
     get:
       summary: A backup file of the Cube
@@ -234,6 +389,11 @@ components:
       description: Room number as the Cube assigns it
       schema: {type: integer, minimum: 1, maximum: 255}
   requestBodies:
+    Config:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ConfigWrite"}
     Setpoint:
       required: true
       content:
@@ -385,6 +545,60 @@ components:
         unlisted: {type: boolean, description: Paired but not assigned to a room}
         reported: {type: boolean, description: The Cube holds state for the device (it transmitted since the Cube restarted)}
         state: {$ref: "#/components/schemas/State"}
+    ConfigWrite:
+      type: object
+      description: Every field optional; merged into the device's current configuration
+      properties:
+        comfort_temp: {type: number, description: 4.5 to 30.5 in steps of 0.5}
+        eco_temp: {type: number}
+        max_setpoint: {type: number}
+        min_setpoint: {type: number}
+        temp_offset: {type: number, description: -3.5 to 3.5 in steps of 0.5; per device only}
+        window_open_temp: {type: number}
+        window_open_minutes: {type: integer, description: 0 to 60 in steps of 5}
+        boost_minutes: {type: integer, description: 0 to 30 in steps of 5, or 60}
+        boost_valve_pct: {type: integer, description: 0 to 100 in steps of 5}
+        decalc_day: {type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]}
+        decalc_hour: {type: integer, minimum: 0, maximum: 23}
+        max_valve_pct: {type: integer, minimum: 0, maximum: 100}
+        valve_offset_pct: {type: integer, minimum: 0, maximum: 100}
+        display_actual: {type: boolean, description: Wall thermostats only, per device only}
+    DeviceResult:
+      type: object
+      properties:
+        rf_address: {type: string}
+        name: {type: string}
+        ok: {type: boolean}
+        discarded: {type: boolean}
+        error: {type: string}
+    RoomConfig:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        source: {type: string, description: The thermostat the common fields come from}
+        comfort_temp: {type: number}
+        eco_temp: {type: number}
+        max_setpoint: {type: number}
+        min_setpoint: {type: number}
+        window_open_temp: {type: number}
+        window_open_minutes: {type: integer}
+        boost_minutes: {type: integer}
+        boost_valve_pct: {type: integer}
+        decalc_day: {type: string}
+        decalc_hour: {type: integer}
+        max_valve_pct: {type: integer}
+        valve_offset_pct: {type: integer}
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              rf_address: {type: string}
+              type: {$ref: "#/components/schemas/DeviceType"}
+              name: {type: string}
+              temp_offset: {type: number}
+              display_actual: {type: boolean}
     SwitchPoint:
       type: object
       properties:

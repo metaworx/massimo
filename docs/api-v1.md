@@ -232,6 +232,91 @@ Removes an empty room by writing the metadata without it; answers
 `{"ok": true, "rooms": 5}`. A room that still has devices, hidden ones
 included, is refused with `409`, and the ghost room is not found.
 
+### PUT /api/v1/cubes/{sn}/rooms/{id}
+
+Rename a room: `{"name": "Küche"}`, up to 32 bytes. A metadata write;
+answers `{"ok": true}`.
+
+### PUT /api/v1/cubes/{sn}/devices/{rf}
+
+Rename a device and/or move it to another room:
+`{"name": "Thermostat Küche", "room_id": 2}`, either field alone is
+fine. A move is done as the original software does it: the device is
+unlinked from every partner of its old room and its group removed,
+then linked with every partner of the new room and the new group set,
+each after a wakeup of the room concerned, then the metadata is
+written. `room_id` must name an existing room; 0 is refused, a device
+outside every room would be a ghost. A device that is paired but not
+assigned to a room answers `409`; pair it with the original software.
+
+### PUT /api/v1/cubes/{sn}/devices/{rf}/config
+
+Write a thermostat's settings. Every field is optional and merged into
+the device's current configuration:
+
+```json
+{"comfort_temp": 21, "eco_temp": 17, "max_setpoint": 30.5, "min_setpoint": 4.5,
+ "temp_offset": -0.5, "window_open_temp": 12, "window_open_minutes": 15,
+ "boost_minutes": 5, "boost_valve_pct": 80, "decalc_day": "saturday", "decalc_hour": 12,
+ "max_valve_pct": 100, "valve_offset_pct": 0, "display_actual": true}
+```
+
+Temperatures 4.5 to 30.5 in steps of 0.5, the offset −3.5 to 3.5,
+window minutes 0 to 60 in steps of 5, boost 0 to 30 in steps of 5 or
+60, boost valve 0 to 100 in steps of 5, hours 0 to 23, valve
+percentages 0 to 100; `display_actual` is for wall thermostats only.
+The temperature fields go as radiogram 0x11, the boost, descaling and
+valve fields as 0x12, the display as 0x82, each directly to the device
+after a wakeup of its room. Wall thermostats take the same radiograms;
+the values they do not store are filled in from a radiator thermostat
+of the room. Shutter contacts and eco switches answer `400`. The answer
+is the same as for a setpoint; afterwards the server re-reads the
+device's configuration from the Cube.
+
+### GET /api/v1/cubes/{sn}/rooms/{id}/config
+
+The room's settings as the UI edits them: the common fields above
+(without `temp_offset` and `display_actual`) from the room's first
+radiator thermostat, else its wall thermostat, named in `source`, and
+a `devices` list with each thermostat's `rf_address`, `type`, `name`,
+`temp_offset` and, for wall thermostats, `display_actual`.
+
+### PUT /api/v1/cubes/{sn}/rooms/{id}/config
+
+The same body as for a device, without `temp_offset` and
+`display_actual`, applied to every thermostat of the room after one
+wakeup: temperatures to radiator and wall thermostats, boost to both,
+descaling and valve limits to radiator thermostats only. The answer
+lists every device:
+
+```json
+{"ok": true, "devices": [{"rf_address": "012ca9", "name": "…", "ok": true, "discarded": false}], "budget": {…}}
+```
+
+`ok` is true when every device took the write; `502` only when none
+did.
+
+### GET /api/v1/cubes/{sn}/rooms/{id}/program
+
+The week programme of the room's first radiator thermostat (else its
+wall thermostat), keyed by weekday as in a backup, plus `source`.
+
+### PUT /api/v1/cubes/{sn}/rooms/{id}/program
+
+Write the week programme of a whole room, any subset of days:
+
+```json
+{"monday": [{"temp": 17, "until": "07:00"}, {"temp": 21, "until": "20:30"}, {"temp": 17, "until": "24:00"}],
+ "saturday": [{"temp": 19, "until": "24:00"}]}
+```
+
+Each day has 1 to 13 points with increasing times, the last at 24:00
+(`"0700"` and `"until_min": 420` are accepted as well). One radiogram
+0x10 per day (two for a day with more than 7 points) goes to the room
+as a group command, which every thermostat of the room takes, as the
+original software sends it. `PUT …/devices/{rf}/program` writes the
+same body to one thermostat directly. Both answer like a setpoint.
+
 ### PUT /api/v1/cubes/{sn}/devices/{rf}/lock
 
 Lock or unlock the buttons of one thermostat (the key lock, "LoC" on the
@@ -276,7 +361,6 @@ the one connection the Cube allows. See [proxy.md](proxy.md).
 
 ## Not in version 1
 
-Pairing and removing devices, renaming, week programs and settings
-writes, user accounts and ownership. Settings are written with
-`massimo restore` from an edited backup for now; pairing needs the
-original software.
+Pairing and removing devices, creating rooms, user accounts and
+ownership. Pairing and removing need the original software for now;
+`massimo restore` from an edited backup covers everything else in bulk.
