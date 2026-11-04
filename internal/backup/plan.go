@@ -220,12 +220,14 @@ func (p *Plan) planNames(f *File, snap *cubelan.Snapshot, present []Device) erro
 			want.Devices = append(want.Devices, cube.DeviceMeta{Type: d.Type, RFAddress: d.RFAddress, Serial: d.Serial, Name: d.Name, RoomID: d.RoomID})
 		}
 	}
-	// Rooms with no device left are dropped, as the original software does.
+	// Rooms from the backup that no device uses are not created; rooms the
+	// Cube already has are kept even when empty, so an unchanged Cube
+	// yields an empty plan.
 	used := map[uint8]bool{}
 	for _, d := range want.Devices {
 		used[d.RoomID] = true
 	}
-	want.Rooms = slices.DeleteFunc(want.Rooms, func(r cube.RoomMeta) bool { return !used[r.ID] })
+	want.Rooms = slices.DeleteFunc(want.Rooms, func(r cube.RoomMeta) bool { return !used[r.ID] && !hasRoom(cur.Rooms, r.ID) })
 
 	a, err := want.Encode()
 	if err != nil {
@@ -270,9 +272,16 @@ func (p *Plan) planNames(f *File, snap *cubelan.Snapshot, present []Device) erro
 			changes = append(changes, fmt.Sprintf("room %d: new %q", r.ID, r.Name))
 		}
 	}
+	for _, c := range cur.Rooms {
+		if !hasRoom(want.Rooms, c.ID) {
+			changes = append(changes, fmt.Sprintf("room %d: remove %q", c.ID, c.Name))
+		}
+	}
 	what := "write room and device names"
 	if len(changes) > 0 {
 		what += " (" + strings.Join(changes, "; ") + ")"
+	} else {
+		what += " (same names; order or room addresses differ)"
 	}
 	p.add(what, engine.Command{Key: "restore:names", Lines: cmds})
 	return nil

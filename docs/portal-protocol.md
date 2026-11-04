@@ -268,7 +268,8 @@ the firmware cannot be analysed from the software alone.
   which rate?
 - What does the Cube POST while polling (state? only `H:`?), and in which
   form does the portal deliver commands (`s:`-style lines in the reply?).
-- Is the IV identical on every Cube (firmware constant) or per device?
+- ~~Is the IV identical on every Cube or per device?~~ Per device: two
+  Cubes (KEQ…, JEQ…) have different IVs (2026-11-04).
 - Meaning of the `i:` reply fields. The LAN command is `i:<interval>,
   <token>`; the reply has a third field. Hypothesis to test with long
   measurements: the first field sets the poll interval (0x51b1 = 20913; in

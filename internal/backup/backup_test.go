@@ -182,3 +182,61 @@ func TestPlanAndRestore(t *testing.T) {
 		t.Fatalf("valve command %s", got[5])
 	}
 }
+
+// withEmptyRoom adds a room without devices to the greeting's metadata.
+func withEmptyRoom(t *testing.T, greeting []cube.Message) []cube.Message {
+	t.Helper()
+	out := append([]cube.Message(nil), greeting...)
+	for i, m := range out {
+		if m.Type != 'M' {
+			continue
+		}
+		p, err := cube.ParseMetadataPart(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		md, err := cube.ParseMetadata([]cube.MetadataPart{p})
+		if err != nil {
+			t.Fatal(err)
+		}
+		md.Rooms = append(md.Rooms, cube.RoomMeta{ID: 9, Name: "Leer"})
+		cmds, err := cube.WriteMetadataCommands(md)
+		if err != nil || len(cmds) != 1 {
+			t.Fatal(err)
+		}
+		_, data, _ := strings.Cut(cmds[0].Data, ",")
+		out[i].Data = "00,01," + data
+	}
+	return out
+}
+
+func TestPlanKeepsEmptyRooms(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakecube.Server{Greeting: withEmptyRoom(t, greeting)}
+	addr, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); srv.Close() })
+	c := cubelan.New(cubelan.Options{Addr: addr})
+	go c.Run(ctx)
+	<-c.Ready()
+	f, err := Take(c.Snapshot(), nil, "test", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.RoomName(9) != "Leer" {
+		t.Fatalf("empty room not in backup: %+v", f.Rooms)
+	}
+	p, err := NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Empty() {
+		t.Fatalf("plan not empty: %+v", p.Steps)
+	}
+}
