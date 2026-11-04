@@ -129,7 +129,8 @@ function showView(view) {
   const buttons = { tiles: "view-tiles", log: "view-log", settings: "view-settings" };
   for (const [name, id] of Object.entries(buttons)) {
     $(id).classList.toggle("active", view === name);
-    $(id).setAttribute("aria-selected", view === name ? "true" : "false");
+    if (view === name) $(id).setAttribute("aria-current", "page");
+    else $(id).removeAttribute("aria-current");
   }
   if (view === "log") loadLog();
 }

@@ -75,6 +75,7 @@ function renderRoom(room) {
   el.dataset.id = room.id;
   el.querySelector(".room-name").textContent = room.name;
   el.querySelector(".room-name-btn").addEventListener("click", () => toggleDevices(room));
+  renderTools(el, room);
   const actual = roomActual(room);
   el.querySelector(".temp-is").textContent = actual === undefined ? "–" : actual.toFixed(1) + "°";
   el.querySelector(".temp-is").title = actual === undefined ? "no device of this room reports a measured temperature" : "measured temperature";
@@ -116,10 +117,10 @@ function renderSetpoint(el, room) {
   const t = roomThermostat(room);
   const s = roomState(room);
   const row = el.querySelector(".setpoint-row");
-  const modeRow = el.querySelector(".mode-row");
+  const modeGroup = el.querySelector(".mode-group");
   if (!t) {
     row.classList.add("hidden");
-    modeRow.classList.add("hidden");
+    modeGroup.classList.add("hidden");
     return;
   }
   const big = el.querySelector(".setpoint-big");
@@ -138,9 +139,11 @@ function renderSetpoint(el, room) {
   const autoBtn = el.querySelector(".mode-auto");
   const manuBtn = el.querySelector(".mode-manual");
   const holidayBtn = el.querySelector(".mode-holiday");
-  autoBtn.classList.toggle("active", mode === "auto");
-  manuBtn.classList.toggle("active", mode === "manual" || mode === "boost");
-  holidayBtn.classList.toggle("active", mode === "vacation");
+  const pressed = [[autoBtn, mode === "auto"], [manuBtn, mode === "manual" || mode === "boost"], [holidayBtn, mode === "vacation"]];
+  for (const [btn, on] of pressed) {
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
   holidayBtn.addEventListener("click", () => openVacation(room, el));
   autoBtn.addEventListener("click", () => {
     leaveEditing(room);
@@ -164,22 +167,23 @@ function renderSetpoint(el, room) {
   }
 }
 
+// renderMenu wires the tile's ⋯ menu: lock and unlock of the room's
+// thermostats, and the deletion of an empty room. A room with devices
+// but no thermostat has nothing to offer, so its menu is hidden.
 function renderMenu(el, room) {
   const thermostats = room.devices.filter(isThermostat);
-  el.querySelector(".menu-devices").addEventListener("click", () => toggleDevices(room, el));
-  el.querySelector(".menu-config").addEventListener("click", () => openConfig(room, el));
-  const vacation = el.querySelector(".menu-vacation");
   const lock = el.querySelector(".menu-lock");
   const unlock = el.querySelector(".menu-unlock");
   const del = el.querySelector(".menu-delete");
   if (thermostats.length) {
-    vacation.addEventListener("click", () => openVacation(room, el));
     lock.addEventListener("click", () => lockRoom(room, true, el));
     unlock.addEventListener("click", () => lockRoom(room, false, el));
   } else {
-    vacation.classList.add("hidden");
     lock.classList.add("hidden");
     unlock.classList.add("hidden");
+  }
+  if (thermostats.length === 0 && room.devices.length > 0) {
+    el.querySelector(".menu").classList.add("hidden");
   }
   if (room.devices.length === 0) {
     del.addEventListener("click", () => {
@@ -197,6 +201,25 @@ function renderMenu(el, room) {
         if (other !== ev.target) other.open = false;
       }
     }
+  });
+}
+
+// renderTools wires the info and cog buttons of the mode row: the device
+// list and the configuration area, one of them open at a time, the
+// open one highlighted, a click on it closes it.
+function renderTools(el, room) {
+  const ui = roomUI(room);
+  const info = el.querySelector(".tile-info");
+  const cog = el.querySelector(".tile-cog");
+  const cfgOpen = !!(ui.config && ui.config.open);
+  info.classList.toggle("active", ui.open);
+  info.setAttribute("aria-expanded", ui.open ? "true" : "false");
+  cog.classList.toggle("active", cfgOpen);
+  cog.setAttribute("aria-expanded", cfgOpen ? "true" : "false");
+  info.addEventListener("click", () => toggleDevices(room, el));
+  cog.addEventListener("click", () => {
+    if (cfgOpen) closeConfig(room);
+    else openConfig(room, el);
   });
 }
 
@@ -296,8 +319,8 @@ function renderDeleteConfirm(el, room) {
 
 // --- devices ----------------------------------------------------------
 
-// deviceBadges lists the badges of a device: its mode or window state as
-// a neutral badge, then the warnings.
+// deviceBadges lists the badges of a device: the warnings, outlined,
+// then its mode or window state as a filled badge, always the last one.
 function deviceBadges(d) {
   const s = d.state || {};
   const out = [];
@@ -305,23 +328,41 @@ function deviceBadges(d) {
     out.push(["not reported", "warn"]);
     return out;
   }
-  if (s.window_open !== undefined) out.push([s.window_open ? "open" : "closed", "mode"]);
-  else if (s.mode && isThermostat(d)) out.push([s.mode === "vacation" ? "holiday" : s.mode, "mode"]);
   if (s.battery_low) out.push(["battery low", "bad"]);
   if (s.error) out.push(["transmit error", "bad"]);
   if (s.link_error) out.push(["link error", "warn"]);
   if (s.panel_locked) out.push(["locked", "warn"]);
+  if (s.window_open !== undefined) {
+    out.push(s.window_open ? ["open", "fill-bad"] : ["closed", "fill-ok"]);
+  } else if (s.mode && isThermostat(d)) {
+    const mode = s.mode === "vacation" ? "holiday" : s.mode === "boost" ? "manual" : s.mode;
+    const cls = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" }[mode] || "mode";
+    out.push([mode, cls]);
+  }
   return out;
 }
 
-// valueCell builds one cell of the values grid: label, number, unit.
-// The number sits right-aligned in a fixed-width span so the decimal
-// points of a column line up; an empty label makes a spacer.
-function valueCell(label, value, unit) {
+// iconEl returns a small inline icon referencing a symbol of the page.
+function iconEl(symbol, cls) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", cls);
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "#" + symbol);
+  svg.appendChild(use);
+  return svg;
+}
+
+// valueCell builds one cell of the values grid: label, number, unit and
+// an optional icon after it. The number sits right-aligned in a
+// fixed-width span so the decimal points of a column line up; an empty
+// label makes a spacer. Temperatures (icon given) are bold.
+function valueCell(label, value, unit, icon) {
   const cell = textEl("span", "", "cell");
   cell.appendChild(textEl("span", label, "k"));
-  cell.appendChild(textEl("span", value, "num"));
+  cell.appendChild(textEl("span", value, "num" + (icon ? " temp" : "")));
   cell.appendChild(textEl("span", value === "" ? "" : unit, "u"));
+  if (icon && value !== "") cell.appendChild(iconEl(icon, "di"));
   return cell;
 }
 
@@ -336,15 +377,15 @@ function deviceValues(grid, d, offset) {
     left.push(["offset", off, "°C"]);
   }
   const right = [];
-  right.push(["set", s.setpoint === undefined ? "–" : s.setpoint.toFixed(1), "°C"]);
-  right.push(["actual", s.actual_temp === undefined ? "–" : s.actual_temp.toFixed(1), "°C"]);
+  right.push(["set", s.setpoint === undefined ? "–" : s.setpoint.toFixed(1), "°C", "icon-set"]);
+  right.push(["actual", s.actual_temp === undefined ? "–" : s.actual_temp.toFixed(1), "°C", "icon-is"]);
   clear(grid);
   const rows = Math.max(left.length, right.length);
   for (let i = 0; i < rows; i++) {
     const l = left[i] || ["", "", ""];
     const r = right[i] || ["", "", ""];
     grid.appendChild(valueCell(l[0], l[1], l[2]));
-    grid.appendChild(valueCell(r[0], r[1], r[2]));
+    grid.appendChild(valueCell(r[0], r[1], r[2], r[3]));
   }
   if (s.until) {
     // The vacation end spans the grid, under the temperatures.
@@ -392,6 +433,7 @@ function fillDevices(container, room) {
 function toggleDevices(room, el) {
   const ui = roomUI(room);
   ui.open = !ui.open;
+  if (ui.open) ui.config = null; // one of device list and configuration at a time
   closeMenu(el);
   rerenderRoom(room);
 }
@@ -662,6 +704,24 @@ async function sendHouse() {
   loadCubes().catch(() => {});
 }
 
+// closePanels closes every open menu and inline panel (vacation, delete
+// confirm, House), for the Escape key.
+function closePanels() {
+  for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
+  if (!housePanel().classList.contains("hidden")) closeHouse();
+  for (const room of state.rooms) {
+    const ui = state.ui[room.id];
+    if (!ui) continue;
+    if (ui.vacation || ui.confirm) {
+      ui.vacation = false;
+      ui.vacationTemp = undefined;
+      ui.vacationUntil = undefined;
+      ui.confirm = false;
+      rerenderRoom(room);
+    }
+  }
+}
+
 // --- wiring -----------------------------------------------------------
 
 function initTiles() {
@@ -680,6 +740,10 @@ function initTiles() {
   });
   $("house-temp-plus").addEventListener("click", () => {
     $("house-temp").value = clampTemp(parseFloat($("house-temp").value) + STEP);
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    closePanels();
   });
   document.addEventListener("click", (ev) => {
     // Clicking outside closes an open menu, and the House panel once

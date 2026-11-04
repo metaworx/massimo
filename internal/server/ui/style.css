@@ -15,6 +15,11 @@
   --bad: #b3261e;
   --notice-bg: #fff4d6;
   --notice-fg: #5a3f00;
+  --fill-ok: #2d7a3a;
+  --fill-warn: #8a5f00;
+  --fill-bad: #b3261e;
+  --fill-info: #2456a6;
+  --fill-fg: #ffffff;
   --mono: ui-monospace, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
@@ -32,6 +37,11 @@
     --bad: #f28b82;
     --notice-bg: #3a3012;
     --notice-fg: #f1dfae;
+    --fill-ok: #6fc37c;
+    --fill-warn: #e3b341;
+    --fill-bad: #f28b82;
+    --fill-info: #8ab4f8;
+    --fill-fg: #151514;
   }
 }
 :root[data-theme="dark"] {
@@ -48,6 +58,11 @@
   --bad: #f28b82;
   --notice-bg: #3a3012;
   --notice-fg: #f1dfae;
+  --fill-ok: #6fc37c;
+  --fill-warn: #e3b341;
+  --fill-bad: #f28b82;
+  --fill-info: #8ab4f8;
+  --fill-fg: #151514;
 }
 
 * { box-sizing: border-box; }
@@ -327,28 +342,36 @@ button.subtle { color: var(--muted); }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px 28px;
-  padding: 16px 14px 6px;
+  gap: 8px 14px;
+  padding: 16px 12px 6px;
+  min-width: 0;
 }
+/* A temperature: a small column with the icon above the label, then the
+   number. */
 .temp-block {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-.temp-big {
-  font-size: 2.6rem;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  min-width: 4.6ch;
-  text-align: center;
-  display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
 }
+.temp-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  flex: none;
+}
+.temp-big {
+  font-size: 2.3rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  min-width: 4.2ch;
+  text-align: left;
+  display: inline-block;
+}
 .ti {
-  width: 0.65em;
-  height: 0.65em;
+  width: 1.25rem;
+  height: 1.25rem;
   flex: none;
   fill: none;
   stroke: var(--accent);
@@ -357,23 +380,24 @@ button.subtle { color: var(--muted); }
   stroke-linejoin: round;
 }
 @media (max-width: 359px) {
-  .ti { display: none; }
+  .temp-tag { display: none; }
 }
 .temp-label {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   letter-spacing: 0.1em;
   color: var(--muted);
+  line-height: 1;
 }
 .setpoint-big.pending { color: var(--accent); }
 .stepper {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-left: -16px;
+  margin-left: -6px;
 }
 .step {
-  width: 38px;
-  height: 30px;
+  width: 34px;
+  height: 28px;
   border-radius: 8px;
   border: none;
   background: var(--accent);
@@ -413,9 +437,22 @@ button.subtle { color: var(--muted); }
   letter-spacing: 0.02em;
   padding: 6px 14px;
 }
-.mode-row button { padding: 6px 10px; font-size: 0.85rem; }
-.mode-row > .muted { display: none; }
-.mode-row button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.mode-row .mode-group button { padding: 6px 10px; font-size: 0.85rem; }
+.mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.mode-row .mode-group button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.tile-tools { margin-left: auto; display: inline-flex; gap: 4px; }
+.mode-row .tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  color: var(--muted);
+}
+.tool-btn:hover { color: var(--fg); }
+.mode-row .tool-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.tool-btn .ni { width: 18px; height: 18px; flex: none; }
 .mode-vacation { color: var(--warn); font-size: 0.9rem; white-space: nowrap; }
 .suitcase { font-size: 1rem; }
 .house-modes {
@@ -463,7 +500,19 @@ button.subtle { color: var(--muted); }
 .device-vals .cell.wide { grid-column: 1 / -1; white-space: normal; }
 .device-vals .k { color: var(--muted); min-width: 3.6em; }
 .device-vals .num { display: inline-block; min-width: 4.4ch; text-align: right; }
+.device-vals .num.temp { font-weight: 700; }
 .device-vals .u { color: var(--muted); font-size: 0.85em; min-width: 1.6em; }
+.di {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  align-self: center;
+}
 .device-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .device-main { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .flag {
@@ -476,6 +525,11 @@ button.subtle { color: var(--muted); }
 .flag.warn { color: var(--warn); border-color: var(--warn); }
 .flag.bad { color: var(--bad); border-color: var(--bad); }
 .flag.ok { color: var(--ok); border-color: var(--ok); }
+/* filled badges for the mode and the window state, text always on them */
+.flag.fill-ok { background: var(--fill-ok); color: var(--fill-fg); border-color: var(--fill-ok); }
+.flag.fill-warn { background: var(--fill-warn); color: var(--fill-fg); border-color: var(--fill-warn); }
+.flag.fill-bad { background: var(--fill-bad); color: var(--fill-fg); border-color: var(--fill-bad); }
+.flag.fill-info { background: var(--fill-info); color: var(--fill-fg); border-color: var(--fill-info); }
 
 button, select, input {
   font: inherit;
@@ -487,6 +541,8 @@ button, select, input {
 }
 button { cursor: pointer; }
 button:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: default; }
 
@@ -528,6 +584,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   gap: 4px;
   margin-bottom: 10px;
 }
+.config-tablist { display: contents; }
 .config-tabs .tab { padding: 4px 10px; font-size: 0.85rem; }
 .config-tabs .tab.close { margin-left: auto; font-weight: 400; }
 .config-body h4 { margin: 12px 0 6px; font-size: 0.95rem; }
@@ -540,6 +597,9 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   gap: 4px 12px;
 }
 .cfg-label { color: var(--muted); }
+.cfg-field > .inline, .cfg-field > input, .cfg-field > select { margin-left: auto; }
+.cfg-field .inline > .muted { min-width: 2.6em; }
+.cfg-form input[type="number"] { text-align: right; }
 .cfg-form input[type="text"] { width: min(100%, 18em); }
 .cfg-form .actions { margin-top: 4px; }
 .cfg-device {
