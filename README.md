@@ -119,13 +119,14 @@ command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml). Set
 `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
 A web UI, plain HTML and JavaScript embedded in the binary, is served
-at http://127.0.0.1:8099/ : one tile per room with the setpoint, a −/+
-stepper that sends two seconds after the last click, AUTO and MANU, a
-House tile whose ECO, AUTO and COMFORT open a one-screen panel with
-mode, duration and room selection, vacation per room inline, the
-device list behind the room name with offsets and locks, live updates
-plus polling, the Cube clock in the browser's or the Cube's time zone,
-and settings with an Expert switch for the technical details. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
+at http://127.0.0.1:8099/ : one tile per room with the measured and
+the set temperature, up/down chevrons that send two seconds after the
+last click, AUTO, MANU and HOLIDAY, a House tile whose ECO, AUTO,
+COMFORT and MANU open a one-screen panel with mode, duration and room
+selection, vacation per room inline, the device list behind the room
+name with offsets and locks, live updates plus polling with a refresh
+button, the Cube clock in the browser's or the Cube's time zone, and
+settings with an Expert switch for the technical details. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it, and the UI, which needs the same token as the
 API, with it. `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.

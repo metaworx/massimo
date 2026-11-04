@@ -16,32 +16,39 @@ state when needed.
 The server also serves a web page at `/` (files under `/ui/`) built on
 this API, plain HTML and JavaScript embedded in the binary, no setup.
 It shows one tile per room in the manner of the original software: the
-setpoint large, a −/+ stepper (shown on hover, always on touch screens)
-that changes it in 0.5 °C steps and sends the value as a manual
-setpoint two seconds after the last click, with Save and Cancel while
-it waits; AUTO and MANU buttons; the measured temperature in the tile's
-corner; a menu with vacation, lock and unlock of the room's
-thermostats, the device list and, for an empty room, deletion. A House
-tile sets every room to ECO or COMFORT (manual at the room's eco or
-comfort temperature from its thermostat's configuration) or AUTO;
-each of its buttons opens an inline panel with everything on one
-screen, no wizard: the mode (ECO, AUTO, COMFORT, or MANU with a
-temperature), "Permanently" or "Until" a date and time (tomorrow 06:00
-by default; a temperature with "Until" is sent as vacation mode), the
-rooms to apply it to with an "All rooms" box, and Send, which runs the
-room commands one after another and lists the result per room. Enter
-in any field sends. Vacation for one room is an inline panel in its
-tile in the same way, and deleting an empty room asks inline.
+measured temperature (IS, from a wall thermostat, or from a radiator
+thermostat when it reported one; "–" otherwise) and the setpoint (SET)
+side by side at the same size, with up and down chevrons next to SET
+(shown on hover, always on touch screens) that change it in 0.5 °C
+steps and send the value as a manual setpoint two seconds after the
+last click, with Save and Cancel while it waits; AUTO, MANU and
+HOLIDAY buttons, HOLIDAY opening the vacation panel and, while the room
+is in vacation mode, highlighted with the end date next to it; a menu
+with vacation, lock and unlock of the room's thermostats, the device
+list and, for an empty room, deletion. A House tile sets every room to
+ECO or COMFORT (manual at the room's eco or comfort temperature from
+its thermostat's configuration), AUTO or MANU; each of its buttons
+opens an inline panel with everything on one screen, no wizard: the
+mode (ECO, AUTO, COMFORT, or MANU with a temperature), "Permanently"
+or "Until" a date and time (tomorrow 06:00 by default; a temperature
+with "Until" is sent as vacation mode), the rooms to apply it to with
+an "All rooms" box, and Send, which runs the room commands one after
+another and lists the result per room. Enter in any field sends.
+Vacation for one room is an inline panel in its tile in the same way,
+and deleting an empty room asks inline.
 Clicking a room name opens its devices with their states, flags,
 temperature offsets and per-thermostat lock. Setpoints are set per
 room only, as in the original software. The gear in the header opens
 the settings: the poll interval (10 s by default; the header is
 refreshed on it, and the rooms as well while the event stream is
-down), the Expert switch (radio addresses, device types, the budget
-numbers and the version; off by default), whether the Cube clock is
-shown in the browser's time zone or the Cube's own, and "forget
-token"; an Expert switch sits in the header as well, at the end of
-the row so that toggling it moves nothing to its left. On every poll
+down; the ↻ button in the header runs the same refresh at once, rooms
+included, and the header shows the time of the last successful poll
+with seconds), the Expert switch (off by default; on, a second header
+line shows the server version, the Cube's firmware, IP address and
+radio address, the duty cycle, free slots, queued and pending
+commands and the Cube clock, and the tiles show radio addresses and
+device types), whether the Cube clock is shown in the browser's time
+zone or the Cube's own, and "forget token". On every poll
 the page compares the server's version from `/healthz` with the one
 it was loaded with and reloads itself when they differ, immediately
 when nothing is open, otherwise it offers a "New version on the

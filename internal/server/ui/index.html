@@ -18,18 +18,19 @@
     <span id="connection" class="pill"></span>
   </div>
   <span id="clock-plain" class="muted" title=""></span>
+  <span id="updated" class="muted" title="time of the last successful poll"></span>
+  <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now">↻</button>
   <button type="button" id="settings-toggle" class="icon-btn" aria-label="settings" title="Settings">⚙</button>
   <button type="button" id="reload-btn" class="primary hidden">New version on the server, reload</button>
-  <label class="switch header-switch" title="Expert mode">
-    <input type="checkbox" id="expert-header">
-    <span class="slider" aria-hidden="true"></span>
-    <span class="switch-label">Expert</span>
-  </label>
-  <span id="version" class="muted expert-only"></span>
   <dl id="budget" class="budget expert-only">
+    <div><dt>Server</dt><dd id="version">–</dd></div>
+    <div><dt>Firmware</dt><dd id="cube-fw">–</dd></div>
+    <div><dt>Address</dt><dd id="cube-addr">–</dd></div>
+    <div><dt>Radio</dt><dd id="cube-rf" class="mono">–</dd></div>
     <div><dt>Duty cycle</dt><dd id="duty">–</dd></div>
     <div><dt>Free slots</dt><dd id="slots">–</dd></div>
     <div><dt>Queued</dt><dd id="queued">–</dd></div>
+    <div><dt>Pending</dt><dd id="pending-n">–</dd></div>
     <div><dt>Cube clock</dt><dd id="clock" title="">–</dd></div>
   </dl>
   <section id="settings" class="panel settings hidden" aria-label="settings">
@@ -66,7 +67,7 @@
       <button type="button" id="house-eco">ECO</button>
       <button type="button" id="house-auto">AUTO</button>
       <button type="button" id="house-comfort">COMFORT</button>
-      <button type="button" id="house-more" class="subtle">House…</button>
+      <button type="button" id="house-manu">MANU</button>
     </div>
     <form id="house-panel" class="panel hidden">
       <div class="panel-row">
@@ -125,7 +126,6 @@
   <article class="tile room">
     <header class="tile-head">
       <button type="button" class="room-name-btn"><h2 class="room-name"></h2></button>
-      <span class="room-actual" title="measured temperature"></span>
       <details class="menu">
         <summary aria-label="room actions">⋯</summary>
         <div class="menu-items">
@@ -139,9 +139,18 @@
     </header>
     <p class="notice not-ready hidden"></p>
     <div class="setpoint-row">
-      <button type="button" class="step step-minus" aria-label="0.5 degrees less">−</button>
-      <span class="setpoint-big"></span>
-      <button type="button" class="step step-plus" aria-label="0.5 degrees more">+</button>
+      <div class="temp-block">
+        <span class="temp-big temp-is">–</span>
+        <span class="temp-label">IS</span>
+      </div>
+      <div class="temp-block">
+        <span class="temp-big setpoint-big"></span>
+        <span class="temp-label">SET</span>
+      </div>
+      <div class="stepper">
+        <button type="button" class="step step-plus" aria-label="0.5 degrees more">&#x2303;</button>
+        <button type="button" class="step step-minus" aria-label="0.5 degrees less">&#x2304;</button>
+      </div>
     </div>
     <div class="pending-row hidden">
       <button type="button" class="pending-save primary">Save</button>
@@ -151,6 +160,7 @@
       <span class="muted">Mode</span>
       <button type="button" class="mode-auto">AUTO</button>
       <button type="button" class="mode-manual">MANU</button>
+      <button type="button" class="mode-holiday" title="holiday: a temperature until a date">HOLIDAY</button>
       <span class="mode-vacation hidden"></span>
     </div>
     <form class="panel vacation-panel hidden">

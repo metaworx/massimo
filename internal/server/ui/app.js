@@ -21,6 +21,7 @@ const state = {
   pollTimer: null,
   version: null, // the server version the page was loaded with
   newVersion: false,
+  lastPoll: null, // time of the last successful poll (browser time)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -236,6 +237,10 @@ function renderHeader(cube) {
   $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
   $("slots").textContent = b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots);
   $("queued").textContent = cube.queued === undefined ? "–" : String(cube.queued);
+  $("pending-n").textContent = String(cube.pending_radiograms || 0);
+  $("cube-fw").textContent = cube.firmware || "–";
+  $("cube-addr").textContent = cube.address || "–";
+  $("cube-rf").textContent = cube.rf_address || "–";
   const clock = clockText(cube);
   for (const id of ["clock", "clock-plain"]) {
     $(id).textContent = clock.text;
@@ -251,6 +256,20 @@ function renderHeader(cube) {
   } else {
     p.classList.add("hidden");
   }
+  renderUpdated();
+}
+
+// renderUpdated shows the time of the last successful poll with
+// seconds, in the browser's time; the Cube's clock has no seconds.
+function renderUpdated() {
+  const el = $("updated");
+  if (!state.lastPoll) {
+    el.textContent = "";
+    return;
+  }
+  const pad = (n) => String(n).padStart(2, "0");
+  const t = state.lastPoll;
+  el.textContent = "updated " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds());
 }
 
 function renderCubeSelect() {
@@ -270,7 +289,6 @@ function applySettings() {
   const s = state.settings;
   document.body.classList.toggle("expert", s.expert);
   $("expert-toggle").checked = s.expert;
-  $("expert-header").checked = s.expert;
   $("poll-input").value = s.poll;
   $("clock-select").value = s.clock;
   const cube = state.cubes.find((c) => c.serial === state.serial);
@@ -282,6 +300,7 @@ function applySettings() {
 
 async function loadCubes() {
   state.cubes = (await api("GET", "/api/v1/cubes")) || [];
+  state.lastPoll = new Date();
   if (!state.serial || !state.cubes.some((c) => c.serial === state.serial)) {
     state.serial = state.cubes.length ? state.cubes[0].serial : null;
   }
@@ -368,16 +387,20 @@ async function checkVersion() {
 
 // --- polling ----------------------------------------------------------
 
-// startPolling refreshes the header every poll interval and the rooms
-// as well while the event stream is not connected.
+// poll refreshes the header and runs the version check; the rooms are
+// refreshed as well while the event stream is not connected, or always
+// when the user asked (the refresh button).
+function poll(rooms) {
+  checkVersion();
+  return loadCubes().then(() => {
+    if (rooms || !state.eventsOpen) return loadRooms();
+  }).catch(() => {});
+}
+
+// startPolling runs poll every poll interval.
 function startPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
-  state.pollTimer = setInterval(() => {
-    checkVersion();
-    loadCubes().then(() => {
-      if (!state.eventsOpen) return loadRooms();
-    }).catch(() => {});
-  }, state.settings.poll * 1000);
+  state.pollTimer = setInterval(() => poll(false), state.settings.poll * 1000);
 }
 
 // --- events -----------------------------------------------------------
@@ -430,8 +453,14 @@ function initSettings() {
     applySettings();
   };
   $("expert-toggle").addEventListener("change", onExpert);
-  $("expert-header").addEventListener("change", onExpert);
   $("reload-btn").addEventListener("click", () => location.reload());
+  $("refresh-btn").addEventListener("click", (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    poll(true).finally(() => {
+      btn.disabled = false;
+    });
+  });
   $("clock-select").addEventListener("change", (ev) => {
     state.settings.clock = ev.target.value;
     store("massimo.clock", state.settings.clock);
