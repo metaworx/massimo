@@ -4,10 +4,12 @@
 package server
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUIServed(t *testing.T) {
@@ -25,8 +27,10 @@ func TestUIServed(t *testing.T) {
 	if code, ct, body := get("/"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="/ui/app.js">`) {
 		t.Fatalf("GET /: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	if code, ct, _ := get("/ui/app.js"); code != 200 || !strings.Contains(ct, "javascript") {
-		t.Fatalf("GET /ui/app.js: %d %s", code, ct)
+	for _, p := range []string{"/ui/app.js", "/ui/tiles.js"} {
+		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
+			t.Fatalf("GET %s: %d %s", p, code, ct)
+		}
 	}
 	if code, ct, _ := get("/ui/style.css"); code != 200 || !strings.HasPrefix(ct, "text/css") {
 		t.Fatalf("GET /ui/style.css: %d %s", code, ct)
@@ -36,11 +40,32 @@ func TestUIServed(t *testing.T) {
 			t.Fatalf("GET %s: %d, want 404", p, code)
 		}
 	}
-	// The API behind it still needs the token; the events stream takes it as a query parameter too.
+	// The API behind it still needs the token in the header; only the
+	// event stream takes it as a query parameter.
 	if code, _, _ := get("/api/v1/cubes"); code != 401 {
 		t.Fatalf("GET /api/v1/cubes without token: %d", code)
 	}
-	if code, _, _ := get("/api/v1/cubes?token=secret"); code != 200 {
-		t.Fatalf("GET /api/v1/cubes?token=secret: %d", code)
+	if code, _, _ := get("/api/v1/cubes?token=secret"); code != 401 {
+		t.Fatalf("GET /api/v1/cubes?token=secret: %d, want 401", code)
+	}
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events?token=secret", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("events?token=secret: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	req, _ = http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events?token=wrong", nil)
+	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Fatalf("events?token=wrong: %d, want 401", resp.StatusCode)
 	}
 }
