@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
 
 // Lines of the original software's output that tell what it does on the
@@ -77,10 +80,14 @@ func runLegacy(args []string) error {
 		if !*all && !legacyKeep.MatchString(line) {
 			continue
 		}
+		lan := derivedLANLine(line)
 		if *width > 0 && len(line) > *width {
 			line = line[:*width] + " …(" + fmt.Sprint(len(sc.Text())) + " chars)"
 		}
 		fmt.Println(strings.TrimRight(line, "\r"))
+		if lan != "" {
+			fmt.Println("    lan (derived) > " + lan)
+		}
 	}
 	if ps := cmd.ProcessState; ps != nil && !ps.Success() {
 		return fmt.Errorf("legacy: %s", ps)
@@ -93,4 +100,63 @@ func defaultLegacyDir() string {
 		return filepath.Join(os.Getenv("ProgramData"), "MAX")
 	}
 	return "."
+}
+
+// The software logs its gateway calls with arguments but never the LAN
+// lines it writes. The encodings are known, so the line is derived from
+// the call and printed beneath it, marked as derived.
+var (
+	reRadiogram = regexp.MustCompile(`commitDeviceRadiogram\(DeviceRadiogram\(opCode=([a-z]):, payload=\[([-0-9,]+)\]`)
+	reDelete    = regexp.MustCompile(`deleteDevices\(\[([0-9, ]+)\],(true|false)\)`)
+	reMetadata  = regexp.MustCompile(`sendMetaData\(([A-Za-z0-9+/=]+)`)
+	reWakeup    = regexp.MustCompile(`wakeUpRoom\(([0-9]+)\)`)
+	reConfig    = regexp.MustCompile(`getConfiguration\(([0-9]+)\)`)
+	reCall      = regexp.MustCompile(`CubeGateway:methodCalled\] \(\) --> ([A-Za-z]+)\(`)
+)
+
+func derivedLANLine(line string) string {
+	if m := reRadiogram.FindStringSubmatch(line); m != nil {
+		var raw []byte
+		for _, f := range strings.Split(m[2], ",") {
+			var v int
+			fmt.Sscanf(strings.TrimSpace(f), "%d", &v)
+			raw = append(raw, byte(v))
+		}
+		return m[1] + ":" + base64.StdEncoding.EncodeToString(raw)
+	}
+	if m := reDelete.FindStringSubmatch(line); m != nil {
+		var addrs []cube.RFAddress
+		for _, f := range strings.Split(m[1], ",") {
+			var v uint32
+			fmt.Sscanf(strings.TrimSpace(f), "%d", &v)
+			addrs = append(addrs, cube.RFAddress(v))
+		}
+		return cube.CmdDeleteDevices(m[2] == "true", addrs...).String()
+	}
+	if m := reMetadata.FindStringSubmatch(line); m != nil {
+		return "m:00," + m[1]
+	}
+	if m := reWakeup.FindStringSubmatch(line); m != nil {
+		var room int
+		fmt.Sscanf(m[1], "%d", &room)
+		return cube.CmdWakeup(30, cube.WakeupRoom, fmt.Sprintf("%02x", room)).String()
+	}
+	if m := reConfig.FindStringSubmatch(line); m != nil {
+		var v uint32
+		fmt.Sscanf(m[1], "%d", &v)
+		return "c:" + cube.RFAddress(v).String()
+	}
+	if m := reCall.FindStringSubmatch(line); m != nil {
+		switch m[1] {
+		case "getDeviceList":
+			return "l:"
+		case "fetchNewDevices":
+			return "n: (inclusion mode, if not already on)"
+		case "cancelInclusionMode":
+			return "x:"
+		case "disconnect":
+			return "q:"
+		}
+	}
+	return ""
 }

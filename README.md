@@ -99,5 +99,8 @@ massimo legacy -out max-session.log
 starts the original MAX! software (Java 8, installation directory
 `C:\ProgramData\MAX` by default, `-dir` otherwise) and prints only the
 protocol-relevant lines: API and gateway calls, radiograms, send results.
-`-out` saves the complete output, `-all` shows it, `-width` shortens
-long lines.
+The software never prints the LAN lines it writes, not even at debug
+level, so `legacy` reconstructs them from the logged gateway calls
+(`s:`, `t:`, `m:`, `z:`, `c:`, `l:`, `n:`, `x:`, `q:`) and prints each
+beneath its call, marked `lan (derived)`. `-out` saves the complete
+output, `-all` shows it, `-width` shortens long lines.

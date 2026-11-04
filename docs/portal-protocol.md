@@ -262,8 +262,21 @@ accepted, 0x40 to the two rooms that each held a paired contact that
 had never reported (no valid L entry) was discarded, for any recipient,
 with or without a wakeup, and the original software got the same
 `CommandDiscarded` for one of them. The Cube apparently refuses a group
-command while a member cannot acknowledge it. Remedy: a battery for the
-device, or `t:` to remove it.
+command while a member cannot acknowledge it.
+
+The contacts in question turned out to be fine; the culprits were three
+devices that are paired (C lines) but in no room (no M entry), which the
+original software lists as "new devices". `t:<count>,<force>,<base64
+addresses>` — the same line the software sends for "delete devices" —
+was answered with `A:` for each of them, but the devices stayed in the
+device list and the room commands stayed discarded. Moving them into a
+room in the original software, removing them from that room and
+deleting the room (all done by hand in the UI, as `arrangeNewDevice`,
+`removeDevices`, `removeRoom`) did not remove them either: the next
+backup still listed them, unnamed. The FHEM project notes that `t:`
+makes the Cube send a factory reset to the device, so a device that
+never answers is apparently never dropped. Whether a power cycle of the
+Cube completes the pending removals is still to be tested.
 
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
