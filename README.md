@@ -133,6 +133,13 @@ the server a different serial for discovery with `-proxy-serial`, for
 example the real one with the first letter changed, or block the Cube's
 UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 
+## Documentation
+
+- [docs/api-v1.md](docs/api-v1.md), [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml): the HTTP API
+- [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
+- [docs/portal-protocol.md](docs/portal-protocol.md): everything learned about the Cube, the portal and the radio commands
+- [docs/firmware-extraction.md](docs/firmware-extraction.md): reading the Cube's firmware over JTAG, hardware facts and the procedure
+
 ## Versions
 
 Pre-releases are tagged `v0.1.0-alpha.N`, one tag per feature, with

@@ -13,3 +13,7 @@ massimo-backup-*
 
 # Claude Code agent worktrees
 /.claude/worktrees/
+
+# Firmware dumps (eQ-3 proprietary, never commit)
+/firmware/
+*.bin
