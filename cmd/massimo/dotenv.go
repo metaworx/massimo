@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// envSource records where each variable came from: "file" when loadDotEnv
+// set it, "environment" when it was already set (the environment wins).
+var envSource = map[string]string{}
+
 // loadDotEnv reads KEY=VALUE lines from path and sets them in the process
 // environment unless the variable is already set. It exists so that secrets
 // such as the Cube key never have to be typed on a command line, where they
@@ -41,6 +45,9 @@ func loadDotEnv(path string) error {
 		}
 		if os.Getenv(k) == "" {
 			os.Setenv(k, v)
+			envSource[k] = "file"
+		} else {
+			envSource[k] = "environment, overrides " + path
 		}
 	}
 	return sc.Err()

@@ -58,7 +58,15 @@ func runConfig(args []string) error {
 		if strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "_IV") {
 			v = redact(v)
 		}
-		fmt.Printf("  %-40s %s\n", k, v)
+		src := envSource[k]
+		if src == "" {
+			src = "environment"
+		}
+		note := ""
+		if !knownVariable(k) {
+			note = "   <- unknown name, typo?"
+		}
+		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
 	if sns := perCubeKeys(); len(sns) > 0 {
 		sort.Strings(sns)
@@ -76,6 +84,24 @@ func runConfig(args []string) error {
 		}
 	}
 	return nil
+}
+
+// knownVariable reports whether a MASSIMO_* name is one the program reads.
+func knownVariable(k string) bool {
+	switch k {
+	case keyEnv, ivEnv, addrEnv, snEnv, "MASSIMO_ENV_FILE":
+		return true
+	}
+	mid, ok := strings.CutPrefix(k, envPrefix)
+	if !ok {
+		return false
+	}
+	for _, suffix := range []string{"_KEY", "_IV", "_ADDRESS"} {
+		if sn, ok := strings.CutSuffix(mid, suffix); ok && sn != "" && !strings.Contains(sn, "_") {
+			return true
+		}
+	}
+	return false
 }
 
 func orNone(s string) string {
