@@ -132,7 +132,7 @@ func (s *Server) serve(conn net.Conn) {
 			return
 		case 'l':
 			reply = last.Wire()
-		case 's':
+		case 's', 'r':
 			reply = "S:00,0,31\r\n"
 		case 'f':
 			if m.Data != "" {

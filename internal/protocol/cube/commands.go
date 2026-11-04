@@ -93,8 +93,10 @@ func CubeTime(t time.Time) string {
 	return fmt.Sprintf("%08x", uint32(t.UTC().Sub(cubeEpoch)/time.Second))
 }
 
-// CmdSetTime sets the Cube's clock and daylight-saving rules.
-func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
+// CmdSetTimeZone sets the Cube's daylight-saving rules (winter rule first).
+// This is what the original software sends; the Cube takes the time itself
+// from NTP. Verified on hardware (reply A:).
+func CmdSetTimeZone(winter, summer TimeZoneRule) (Message, error) {
 	w, err := winter.Encode()
 	if err != nil {
 		return Message{}, err
@@ -103,10 +105,33 @@ func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
+	return Message{Type: 'v', Data: b64.EncodeToString(append(w, s...))}, nil
+}
+
+// CmdSetTime is CmdSetTimeZone with the clock value appended, as shown in
+// the community protocol docs. Not observed from the original software.
+func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
+	m, err := CmdSetTimeZone(winter, summer)
+	if err != nil {
+		return Message{}, err
+	}
 	if now.Before(cubeEpoch) {
 		return Message{}, fmt.Errorf("time %s out of range", now)
 	}
-	return Message{Type: 'v', Data: b64.EncodeToString(append(w, s...)) + "," + CubeTime(now)}, nil
+	m.Data += "," + CubeTime(now)
+	return m, nil
+}
+
+// CmdResetError clears the transmit-error state of devices. The original
+// software sends it right before a radio command to a device whose last
+// transmission failed. The Cube answers with an S line. Verified on hardware.
+func CmdResetError(addrs ...RFAddress) Message {
+	var raw []byte
+	for _, a := range addrs {
+		b := a.Bytes()
+		raw = append(raw, b[:]...)
+	}
+	return Message{Type: 'r', Data: fmt.Sprintf("%02x,%s", len(addrs), b64.EncodeToString(raw))}
 }
 
 // Radio command codes used in s messages.

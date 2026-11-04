@@ -235,7 +235,7 @@ func (c *Client) write(m cube.Message) error {
 // reply return 0.
 func replyType(cmd byte) byte {
 	switch cmd {
-	case 's':
+	case 's', 'r':
 		return 'S'
 	case 'l':
 		return 'L'
@@ -249,7 +249,7 @@ func replyType(cmd byte) byte {
 		return 'C'
 	case 'n', 'x':
 		return 'N'
-	case 'u', 'i', 'v', 't', 'z', 'a', 'r', 'w', 'm':
+	case 'u', 'i', 'v', 't', 'z', 'a', 'w', 'm':
 		return 'A'
 	}
 	return 0

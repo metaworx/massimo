@@ -100,6 +100,28 @@ hour, with the reply `i:000051b1,00000000,ffffffff` and also with
 `i:0000003c,…`; the first `i:` field is therefore not a poll interval in
 seconds, or the reply is ignored.
 
+## LAN commands verified against the original software (1.4.6)
+
+Captured on 2026-11-04 while operating the original UI:
+
+| UI action | Line sent | Reply |
+|---|---|---|
+| Set time zone | `v:<base64 of winter rule + summer rule>` (24 bytes, **no time field**) | `A:` |
+| Any command to a device in error state | `r:<count>,<base64 addresses>` first | `S:` |
+| Room 1 manual 15 °C | `s:AARAAAAAFNCOAV4=` | `S:` |
+| Room 3 auto | `s:AARAAAAAFM49AwA=` | `S:` |
+| All rooms 6.5 °C until 04.11.2026 02:00 | `s:AARAAAAAFNCOAY2kmgQ=` … | `S:` |
+
+The `s:` encodings match `cube.CmdSetTemperature` byte for byte. While the
+UI is open the software polls `l:` every 10 s and disconnects after 30 s
+without user activity.
+
+Duty cycle and memory slots: with the thermostats out of range, each
+command raised the duty cycle (0x44 → 0x64 = 100 %) and consumed one free
+memory slot (50 → 38) because the Cube keeps the unacknowledged radiogram
+queued. At 100 % the Cube still accepted commands (`S:64,0,…`, not
+discarded). A driver must therefore watch both numbers.
+
 ## Open questions
 
 - Does `i:00000000,00000000` start the Cube's polling immediately, and at

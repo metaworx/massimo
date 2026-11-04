@@ -348,6 +348,12 @@ func TestCommandExamples(t *testing.T) {
 		{"portal on", CmdSetPortalInterval(0), "i:00000000,00000000"},
 		{"portal off", CmdSetPortalInterval(-1), "i:ffffffff,00000000"},
 		{"ntp", CmdSetNTP("nl.pool.ntp.org", "ntp.homematic.com"), "f:nl.pool.ntp.org,ntp.homematic.com"},
+		{"time zone (captured)", mustMsg(CmdSetTimeZone(
+			TimeZoneRule{"EET", 10, 0, 3, 7200}, TimeZoneRule{"EEST", 3, 0, 2, 10800})), "v:RUVUAAAKAAMAABwgRUVTVAADAAIAACow"},
+		{"reset error (captured)", CmdResetError(0x14d08e), "r:01,FNCO"},
+		{"manual 15 (captured)", mustMsg(CmdSetTemperature(room(0x14d08e, 1), 15, ModeManual, Until{})), "s:AARAAAAAFNCOAV4="},
+		{"auto (captured)", mustMsg(CmdSetTemperature(room(0x14ce3d, 3), 0, ModeAuto, Until{})), "s:AARAAAAAFM49AwA="},
+		{"temporary 6.5 until 2026-11-04 02:00 (captured)", mustMsg(CmdSetTemperature(room(0x14d08e, 1), 6.5, ModeVacation, Until{2026, 11, 4, 120})), "s:AARAAAAAFNCOAY2kmgQ="},
 		{"set time", mustMsg(CmdSetTime(
 			TimeZoneRule{"CET", 10, 0, 3, 3600}, TimeZoneRule{"CEST", 3, 0, 2, 7200},
 			cubeEpoch.Add(0x1fdda096*time.Second))), "v:Q0VUAAAKAAMAAA4QQ0VTVAADAAIAABwg,1fdda096"},
