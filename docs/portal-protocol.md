@@ -110,10 +110,19 @@ carries the full state: `H:` (long form, new connection id each time),
     Opt: "http://www.eq-3.com/MAX", ns=MAX
     MAX-Serial: <serial>
 
-Gaps between polls grew from about 4 to 10 minutes within the first half
-hour, with the reply `i:000051b1,00000000,ffffffff` and also with
-`i:0000003c,…`; the first `i:` field is therefore not a poll interval in
-seconds, or the reply is ignored.
+Gaps between polls grew from about 4 to 10–12 minutes within the first
+hour after `i:00000000,00000000`, regardless of the reply (`i:` with
+various values, `{conn}` echoed, or no reply line at all). With
+`i:00000002,00000000` sent over the LAN the gap dropped to about 2:17, so
+the first field of the LAN `i:` command appears to be the poll interval
+**in minutes**, with 0 meaning a device default. (Needs a few more polls to
+confirm.) Both `u:` and `i:` make the Cube poll within about 20 s.
+
+**Commands in the reply are ignored.** Lines `f:…` (NTP servers), `v:…`
+(time zone) and `m:…` (metadata) sent in the poll reply had no effect,
+while the same lines over the LAN work. How the original portal delivered
+commands to the Cube is still unknown; the reply channel is not it, at
+least not in this form.
 
 ## LAN commands verified against the original software (1.4.6)
 
