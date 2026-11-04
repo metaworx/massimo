@@ -500,10 +500,33 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		if errors.Is(res.Err, engine.ErrSuperseded) {
 			status = http.StatusConflict
 		}
+		if errors.Is(res.Err, engine.ErrDiscarded) && t.Room {
+			if silent := neverReported(rt.client.Snapshot(), t.RoomID); len(silent) > 0 {
+				return fail(status, "%v: room %d has devices that never reported (%s); the cube refuses room commands until they answer or are removed",
+					res.Err, t.RoomID, strings.Join(silent, ", "))
+			}
+		}
 		return fail(status, "%v", res.Err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
+}
+
+// neverReported lists the devices the Cube places in a room that have
+// never sent a state. Observed on hardware: the Cube discards room
+// commands while such a member exists.
+func neverReported(snap *cubelan.Snapshot, room uint8) []string {
+	var out []string
+	for _, rf := range snap.Devices() {
+		c := snap.Config(rf)
+		if c == nil || c.Type == cube.DeviceCube || c.RoomID != room {
+			continue
+		}
+		if st, ok := snap.State(rf); !ok || !st.Valid {
+			out = append(out, rf.String())
+		}
+	}
+	return out
 }
 
 func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) error {

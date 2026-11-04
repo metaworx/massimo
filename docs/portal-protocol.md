@@ -256,6 +256,15 @@ flags 0 with the room id and flags 0 with room 0 were discarded by the
 Cube for such a device. A device without a room (just paired) takes
 flags 0 and room 0.
 
+Room commands and never-reported members, 2026-11-04: on a Cube with
+four rooms, 0x40 to the two rooms whose members had all reported was
+accepted, 0x40 to the two rooms that each held a paired contact that
+had never reported (no valid L entry) was discarded, for any recipient,
+with or without a wakeup, and the original software got the same
+`CommandDiscarded` for one of them. The Cube apparently refuses a group
+command while a member cannot acknowledge it. Remedy: a battery for the
+device, or `t:` to remove it.
+
 The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
 0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
 

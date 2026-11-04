@@ -33,6 +33,11 @@ input, `401` missing or wrong token, `404` unknown Cube, device or room,
 it was sent, `502` the Cube discarded the command or the connection
 failed, `503` the Cube has not sent its greeting yet.
 
+A room command is discarded by the Cube while a device in that room has
+never reported, for example a window contact with a dead battery; the
+error message then names the device. Replace its battery or remove it
+from the Cube.
+
 ## Routes
 
 ### GET /healthz
