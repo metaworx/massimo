@@ -123,9 +123,26 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 			t.Fatalf("%s sent %v, want last %s", c.path, got, c.want)
 		}
 	}
+	// Key lock: wakeup of the room, then radiogram 0x80 to the device.
+	req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0537249/devices/1514b6/lock", strings.NewReader(`{"locked":false}`))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("lock: %d", resp.StatusCode)
+	}
+	var lines []string
+	for _, m := range fc.Received() {
+		lines = append(lines, m.String())
+	}
+	if n := len(lines); n < 2 || lines[n-1] != "s:AACAAAAAFRS2AAA=" || !strings.HasPrefix(lines[n-2], "z:1e,G,06") {
+		t.Fatalf("lock sent %v", lines)
+	}
 	// Bad requests.
-	req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", strings.NewReader(`{"mode":"boost"}`))
-	resp, _ := http.DefaultClient.Do(req)
+	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", strings.NewReader(`{"mode":"boost"}`))
+	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Fatalf("boost accepted: %d", resp.StatusCode)

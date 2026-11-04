@@ -112,6 +112,30 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
         "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/devices/{rf}/lock:
+    put:
+      summary: Lock or unlock the buttons of one thermostat
+      description: |
+        The key lock ("LoC" on the display, `panel_locked` in the state).
+        Radiogram 0x80, sent directly to the device after a wakeup of its
+        room.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locked]
+              properties:
+                locked: {type: boolean}
+      responses:
+        "200": {$ref: "#/components/responses/CommandResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Superseded"}
+        "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/rooms/{id}/setpoint:
     put:
       summary: Set mode and setpoint of a whole room
@@ -325,6 +349,7 @@ components:
         battery_low: {type: boolean}
         error: {type: boolean, description: Transmit error reported by the Cube}
         link_error: {type: boolean}
+        panel_locked: {type: boolean, description: Key lock active on the device; present when true}
     Device:
       type: object
       properties:

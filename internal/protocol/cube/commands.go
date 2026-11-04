@@ -144,6 +144,7 @@ const (
 	RFRemoveLink      = 0x21
 	RFSetGroupAddress = 0x22
 	RFRemoveGroup     = 0x23
+	RFLockControls    = 0x80 // "LockManualControls" in the original software
 	RFSetDisplayMode  = 0x82
 )
 
@@ -326,6 +327,18 @@ func CmdSetGroup(dev RFAddress, room uint8, remove bool) Message {
 		cmd = RFRemoveGroup
 	}
 	return send(append(Target{RFAddress: dev}.header(cmd), room))
+}
+
+// CmdLockControls locks (true) or unlocks (false) the buttons of a
+// thermostat, the "Kindersicherung/Bediensperre" that the device shows
+// as "LoC". Radiogram 0x80 is listed by the original software, which
+// never sends it; the one-byte payload mirrors 0x82.
+func CmdLockControls(t Target, locked bool) Message {
+	v := byte(0)
+	if locked {
+		v = 0x01
+	}
+	return send(append(t.header(RFLockControls), v))
 }
 
 // CmdSetDisplayActual makes a wall thermostat show the measured (true) or

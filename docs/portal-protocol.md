@@ -250,6 +250,26 @@ not a valve but the display mode: 0x01 shows the setpoint, 0x04 the
 measured temperature, set with radiogram 0x82 and one byte (4 or 0)
 after a room wakeup (`00 00 82 … 15667d 00 04`).
 
+The original software's `FrameType` enum (MaxEssentialsBackend 1.4.6)
+lists every radiogram the system knows, with the codes: 0x00
+SystemInformation (pair ping), 0x01 Inclusion (pair pong), 0x02 Answer,
+0x03 TimeInformation, 0x10 ConfigWeekTemperatureProfile, 0x11
+ConfigTemperatures, 0x12 ConfigValveFunctions, 0x20 AddLinkPartner, 0x21
+RemoveLinkPartner, 0x22 SetGroupAddress, 0x23 RemoveGroupAddress, 0x30
+ShutterContactState, 0x40 ControlMode (set temperature), 0x42
+SetPointAndCurrentTemperature (wall thermostat), 0x43
+ComfortTemperature, 0x44 EcoTemperature, 0x50 PushButtonState, 0x60
+HeatingThermostatState, 0x70 CurrentTemperatureAndHumidity, **0x80
+LockManualControls**, 0x81 DaylightSavingTimeMode, 0x82
+SwitchDisplaySetPointActual, 0xF0 WakeUp, 0xF1 Reset. Only `FrameType`
+itself references `LockManualControls`: the software has no UI for the
+key lock and never sends 0x80. The lock state is readable, as bit 0x20
+of the second flags byte of an L entry. Massimo sends 0x80 with one
+payload byte (1 lock, 0 unlock) like 0x82, directly to the device after
+a room wakeup; it is not yet verified on hardware. On the device the
+lock is toggled with Auto/Manu plus the second button, see the eQ-3
+manuals.
+
 Set temperature (0x40) addressing, verified 2026-11-04: a device that
 is in a room is only accepted as its room (flags 0x04, room id); both
 flags 0 with the room id and flags 0 with room 0 were discarded by the

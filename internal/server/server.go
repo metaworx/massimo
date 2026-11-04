@@ -194,6 +194,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/cubes/{sn}/devices/{rf}", s.getDevice)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/setpoint", s.setDeviceSetpoint)
 	api("PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint", s.setRoomSetpoint)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
 	s.mux = mux
@@ -320,7 +321,7 @@ func deviceView(snap *cubelan.Snapshot, rf cube.RFAddress, st cube.DeviceState) 
 	d.Reported = st.Valid
 	if st.Valid {
 		d.State = &backup.State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-			WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError}
+			WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
 	}
 	return d
 }
@@ -462,6 +463,46 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 		return fail(http.StatusBadRequest, "device %s is a %s and has no setpoint", rf, c.Type)
 	}
 	return s.setpoint(w, r, rt, cube.SetpointTarget(rf, c.RoomID), rf, "device:"+rf.String())
+}
+
+// setDeviceLock locks or unlocks the buttons of one thermostat with
+// radiogram 0x80, sent directly to the device after a wakeup of its
+// room, like the other per-device settings.
+func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
+	rt, err := s.cube(r)
+	if err != nil {
+		return err
+	}
+	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
+	if err != nil {
+		return fail(http.StatusBadRequest, "%v", err)
+	}
+	c := rt.client.Snapshot().Config(rf)
+	if c == nil {
+		return fail(http.StatusNotFound, "no device %s", rf)
+	}
+	if !c.Type.IsRadiatorThermostat() && c.Type != cube.DeviceWallThermostat {
+		return fail(http.StatusBadRequest, "device %s is a %s and has no key lock", rf, c.Type)
+	}
+	var req struct {
+		Locked *bool `json:"locked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Locked == nil {
+		return fail(http.StatusBadRequest, "body must be {\"locked\": true|false}")
+	}
+	m := cube.CmdLockControls(cube.Target{RFAddress: rf}, *req.Locked)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	res := rt.queue.Enqueue(engine.Command{Key: "lock:" + rf.String(), Priority: engine.PriorityHigh, Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: []cube.Message{m}}).Wait(ctx)
+	if res.Err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(res.Err, engine.ErrSuperseded) {
+			status = http.StatusConflict
+		}
+		return fail(status, "%v", res.Err)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
+	return nil
 }
 
 func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {

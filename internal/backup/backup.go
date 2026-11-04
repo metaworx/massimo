@@ -90,6 +90,8 @@ type State struct {
 	BatteryLow bool        `json:"battery_low"`
 	Error      bool        `json:"error"`
 	LinkError  bool        `json:"link_error"`
+	// PanelLocked is the device's key lock ("LoC" on the display).
+	PanelLocked bool `json:"panel_locked,omitempty"`
 }
 
 func stateOf(st cube.DeviceState) *State {
@@ -97,7 +99,7 @@ func stateOf(st cube.DeviceState) *State {
 		return nil
 	}
 	return &State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError}
+		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
 }
 
 // Take builds a backup from the client's current snapshot. ntp may be nil

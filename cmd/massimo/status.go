@@ -121,7 +121,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot) statusReport {
 		if st, ok := snap.State(rf); ok && st.Valid {
 			d.Reported = true
 			d.State = &backup.State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-				WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError}
+				WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
 		}
 		if d.Unlisted {
 			rep.Unlisted = append(rep.Unlisted, d)
@@ -219,6 +219,9 @@ func statusLine(d statusDevice) string {
 	}
 	if st.BatteryLow {
 		line += " BATTERY-LOW"
+	}
+	if st.PanelLocked {
+		line += " LOCKED"
 	}
 	return line
 }

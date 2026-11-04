@@ -107,5 +107,8 @@ func printState(s *cubelan.Snapshot, rf cube.RFAddress, name string) {
 	if st.BatteryLow {
 		line += " BATTERY-LOW"
 	}
+	if st.PanelLocked {
+		line += " LOCKED"
+	}
 	fmt.Println(line)
 }

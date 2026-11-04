@@ -619,6 +619,9 @@ func TestWallDisplayMode(t *testing.T) {
 		}
 	}
 	// The original software's radiogram for "show measured temperature".
+	if got := CmdLockControls(Target{RFAddress: 0x0147b7}, false).String(); got != "s:AACAAAAAAUe3AAA=" {
+		t.Fatalf("lock controls: %s", got)
+	}
 	if got := CmdSetDisplayActual(Target{RFAddress: 0x15667d}, true).String(); got != "s:AACCAAAAFWZ9AAQ=" {
 		t.Fatalf("display command %s", got)
 	}

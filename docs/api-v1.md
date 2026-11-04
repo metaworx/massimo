@@ -117,7 +117,8 @@ the condition for the Cube to accept a room command. Thermostats carry `mode` (`
 `manual`, `vacation`, `boost`), `setpoint`, `actual_temp` when the device
 reported one, `valve_pct` for radiator thermostats, `until` for vacation
 mode; shutter contacts carry `window_open`. `error` is the Cube's
-transmit error flag, `link_error` a failed link with a partner device.
+transmit error flag, `link_error` a failed link with a partner device,
+`panel_locked` (present when true) the key lock on the device.
 
 ### GET /api/v1/cubes/{sn}/devices
 
@@ -164,6 +165,17 @@ cannot be started over the air.
 
 Same body and answer, addressed to every device of the room, which is
 what the original software does.
+
+### PUT /api/v1/cubes/{sn}/devices/{rf}/lock
+
+Lock or unlock the buttons of one thermostat (the key lock, "LoC" on the
+display, `panel_locked` in its state). Body `{"locked": false}`; the
+answer is the same as for a setpoint. The command is radiogram 0x80,
+which the original software lists but never sends, so this is the first
+implementation; it is sent directly to the device after a wakeup of its
+room. On the device itself the lock is toggled by pressing Auto/Manu
+and the second button (Boost or the moon/sun key, Mode/Menu and
+Boost/OK on a wall thermostat) together.
 
 ### GET /api/v1/cubes/{sn}/backup?format=yaml|json
 
