@@ -27,11 +27,25 @@ thermostat, so Cube 2 keeps running the house.
 - Which end is pin 1 is **not yet known**. Find it with a multimeter,
   Cube powered: the row where every pad beeps to ground is the even
   row; on the other row the pad at 3.3 V at one end is pin 1.
+- Component side (photo 2026-11-04): IC2 is the **AT91SAM7X256-AU**
+  (date code 1322), 18.432 MHz crystal at Q1. **IC1 is an Atmel
+  AT45DB041D**, a 4 Mbit (512 KB) serial DataFlash in SOIC-8 next to the
+  MAC label, so the Cube has external storage besides the MCU's 256 KB.
+  The firmware update image's 256-byte frames match DataFlash pages
+  (264 bytes with the extra 8), so the update is probably staged there,
+  and the metadata, device configurations and portal settings likely
+  live there too. The DataFlash can be read in two ways: through JTAG
+  by running a small program in SRAM that reads it over SPI, or
+  directly with the FT232H's SPI mode and an SOIC-8 test clip while the
+  MCU is held in reset (NRST low), which keeps the MCU off the bus.
+  A sticker labelled KEY sits below the MCU (the portal key, kept out of
+  photos), a data-matrix label MAC next to IC1.
 - Not yet checked: whether the JTAG lines reach the chip without series
-  resistors or unpopulated jumpers (photo of the component side around
-  the MCU still to be taken), and whether the SAM7's security bit is
-  set, which disables JTAG and SAM-BA. OpenOCD reports it, see below.
-  If it is set, the only way in is a full erase, which we do not do.
+  resistors or unpopulated jumpers (the traces from ST3 are not visible
+  on either photo), and whether the SAM7's security bit is set, which
+  disables JTAG and SAM-BA. OpenOCD reports it, see below. If it is
+  set, the only way in is a full erase, which we do not do; the
+  DataFlash is readable with the clip regardless.
 
 ## Adapter
 
@@ -132,6 +146,20 @@ The dumps and anything derived from them stay out of the repository.
 Findings that matter for interoperability (protocol facts, formats,
 constants needed to talk to the Cube) go into portal-protocol.md as
 usual; the firmware itself and its key do not.
+
+## The DataFlash (IC1, AT45DB041D)
+
+Read it after the MCU flash, or first if JTAG is locked. With the
+FT232H in SPI mode (same MPSSE pins: D0 SCK, D1 MOSI, D2 MISO, D3 CS)
+and an SOIC-8 clip on IC1, hold the MCU in reset (ST3 pin 15 nSRST to
+ground, or NRST on the board) so it releases the bus, then read 2048
+pages of 264 bytes with the DataFlash "continuous array read" command
+(0xE8 or 0x0B with the page/byte addressing of the AT45DB041D, 9 bits
+per byte address, 11 bits per page). `flashrom` knows the AT45DB041D
+with the FT232H programmer (`flashrom -p ft2232_spi:type=232H -r
+dataflash.bin`), which is the quickest route if its wiring matches. The
+power for the clip comes from the Cube; do not back-feed 3.3 V from the
+adapter.
 
 ## Fallbacks
 
