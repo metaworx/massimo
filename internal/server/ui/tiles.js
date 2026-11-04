@@ -2,8 +2,9 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, tiles: one tile per room with the setpoint
-// stepper and the mode buttons, the House tile, the device list, and
-// the actions behind them. Uses the state, api and helpers of app.js.
+// stepper, the mode buttons and the inline panels (vacation, delete),
+// the House tile with its panel, the device list, and the actions
+// behind them. Uses the state, api and helpers of app.js.
 "use strict";
 
 const STEP = 0.5;
@@ -36,12 +37,17 @@ function roomActual(room) {
 }
 
 function roomUI(room) {
-  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null };
+  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false };
   return state.ui[room.id];
 }
 
 function clampTemp(v) {
   return Math.min(MAX_TEMP, Math.max(MIN_TEMP, Math.round(v * 2) / 2));
+}
+
+// apiUntil turns a datetime-local value into the API's "YYYY-MM-DD HH:MM".
+function apiUntil(value) {
+  return (value || "").replace("T", " ").slice(0, 16);
 }
 
 // --- rendering --------------------------------------------------------
@@ -51,6 +57,7 @@ function renderRooms() {
   clear(section);
   for (const r of state.rooms) section.appendChild(renderRoom(r));
   $("house").classList.toggle("hidden", !state.rooms.some(roomThermostat));
+  renderHouseRooms();
   const unl = $("unlisted");
   const list = $("unlisted-devices");
   clear(list);
@@ -74,6 +81,8 @@ function renderRoom(room) {
   renderNotReady(el, room);
   renderSetpoint(el, room);
   renderMenu(el, room);
+  renderVacation(el, room);
+  renderDeleteConfirm(el, room);
 
   const devs = el.querySelector(".devices");
   if (ui.open) {
@@ -159,7 +168,11 @@ function renderMenu(el, room) {
     unlock.classList.add("hidden");
   }
   if (room.devices.length === 0) {
-    del.addEventListener("click", () => deleteRoom(room));
+    del.addEventListener("click", () => {
+      closeMenu(el);
+      roomUI(room).confirm = true;
+      rerenderRoom(room);
+    });
   } else {
     del.classList.add("hidden");
   }
@@ -176,6 +189,82 @@ function renderMenu(el, room) {
 function closeMenu(el) {
   const m = el && el.querySelector("details.menu");
   if (m) m.open = false;
+}
+
+// renderVacation wires the inline vacation panel of a tile.
+function renderVacation(el, room) {
+  const ui = roomUI(room);
+  const panel = el.querySelector(".vacation-panel");
+  panel.classList.toggle("hidden", !ui.vacation);
+  const temp = panel.querySelector(".vacation-temp");
+  const until = panel.querySelector(".vacation-until");
+  if (ui.vacation) {
+    const s = roomState(room);
+    if (!temp.dataset.set) {
+      temp.value = ui.vacationTemp !== undefined ? ui.vacationTemp : (s && s.setpoint !== undefined ? s.setpoint : 17);
+      until.value = ui.vacationUntil || tomorrowMorning();
+      temp.dataset.set = "1";
+    }
+  }
+  const keep = () => {
+    ui.vacationTemp = parseFloat(temp.value);
+    ui.vacationUntil = until.value;
+  };
+  temp.addEventListener("change", keep);
+  until.addEventListener("change", keep);
+  panel.querySelector(".vacation-minus").addEventListener("click", () => {
+    temp.value = clampTemp(parseFloat(temp.value) - STEP);
+    keep();
+  });
+  panel.querySelector(".vacation-plus").addEventListener("click", () => {
+    temp.value = clampTemp(parseFloat(temp.value) + STEP);
+    keep();
+  });
+  panel.querySelector(".vacation-cancel").addEventListener("click", () => closeVacation(room));
+  panel.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    keep();
+    const t = clampTemp(parseFloat(temp.value));
+    const u = apiUntil(until.value);
+    if (!u) return;
+    closeVacation(room);
+    sendRoomSetpoint(room, { mode: "vacation", temp: t, until: u }, "vacation " + t.toFixed(1) + " °C until " + u);
+  });
+}
+
+function openVacation(room, el) {
+  closeMenu(el);
+  const ui = roomUI(room);
+  ui.vacation = true;
+  ui.vacationTemp = undefined;
+  ui.vacationUntil = undefined;
+  rerenderRoom(room);
+  const tile = document.querySelector('.room[data-id="' + room.id + '"]');
+  const input = tile && tile.querySelector(".vacation-until");
+  if (input) input.focus();
+}
+
+function closeVacation(room) {
+  const ui = roomUI(room);
+  ui.vacation = false;
+  ui.vacationTemp = undefined;
+  ui.vacationUntil = undefined;
+  rerenderRoom(room);
+}
+
+// renderDeleteConfirm wires the one-line confirmation of a room deletion.
+function renderDeleteConfirm(el, room) {
+  const ui = roomUI(room);
+  const box = el.querySelector(".delete-confirm");
+  box.classList.toggle("hidden", !ui.confirm);
+  box.querySelector(".delete-no").addEventListener("click", () => {
+    ui.confirm = false;
+    rerenderRoom(room);
+  });
+  box.querySelector(".delete-yes").addEventListener("click", () => {
+    ui.confirm = false;
+    deleteRoom(room);
+  });
 }
 
 // --- devices ----------------------------------------------------------
@@ -372,7 +461,6 @@ async function lockRoom(room, locked, el) {
 }
 
 async function deleteRoom(room) {
-  if (!window.confirm("Delete the empty room " + room.name + " from the cube?")) return;
   try {
     await api("DELETE", base() + "/rooms/" + room.id);
     showMessage("Room " + room.name + " deleted.", true);
@@ -382,81 +470,154 @@ async function deleteRoom(room) {
   await loadRooms();
 }
 
-// --- vacation ---------------------------------------------------------
-
-let vacationRoom = null;
-
-function openVacation(room, el) {
-  closeMenu(el);
-  vacationRoom = room;
-  const s = roomState(room);
-  $("vacation-title").textContent = "Vacation for " + room.name;
-  $("vacation-temp").value = s && s.setpoint !== undefined ? s.setpoint : 17;
-  const d = new Date(Date.now() + 24 * 3600 * 1000);
-  d.setMinutes(0, 0, 0);
-  $("vacation-until").value = localDateTimeValue(d);
-  $("vacation-dialog").showModal();
-}
-
-function localDateTimeValue(d) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
-}
-
-function sendVacation() {
-  const room = vacationRoom;
-  if (!room) return;
-  const temp = parseFloat($("vacation-temp").value);
-  // datetime-local gives "YYYY-MM-DDTHH:MM"; the API wants "YYYY-MM-DD HH:MM".
-  const until = $("vacation-until").value.replace("T", " ").slice(0, 16);
-  sendRoomSetpoint(room, { mode: "vacation", temp, until }, "vacation " + temp.toFixed(1) + " °C until " + until);
-}
-
 // --- house ------------------------------------------------------------
 
-// houseMode sets every room with a thermostat: auto, or manual at the
-// room's eco or comfort temperature from its thermostat's configuration.
-async function houseMode(mode) {
+function housePanel() {
+  return $("house-panel");
+}
+
+function houseMode() {
+  const checked = document.querySelector('input[name="house-mode"]:checked');
+  return checked ? checked.value : "auto";
+}
+
+function houseDuration() {
+  const checked = document.querySelector('input[name="house-duration"]:checked');
+  return checked ? checked.value : "permanent";
+}
+
+// renderHouseRooms fills the room checkboxes of the House panel.
+function renderHouseRooms() {
+  const box = $("house-rooms");
+  const wasChecked = {};
+  for (const cb of box.querySelectorAll("input[data-room]")) wasChecked[cb.dataset.room] = cb.checked;
+  clear(box);
+  const all = document.createElement("label");
+  const allCb = document.createElement("input");
+  allCb.type = "checkbox";
+  allCb.id = "house-all";
+  allCb.checked = true;
+  all.appendChild(allCb);
+  all.appendChild(document.createTextNode(" All rooms"));
+  box.appendChild(all);
+  for (const room of state.rooms) {
+    if (!roomThermostat(room)) continue;
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.room = String(room.id);
+    cb.checked = wasChecked[room.id] === undefined ? true : wasChecked[room.id];
+    cb.addEventListener("change", () => {
+      allCb.checked = [...box.querySelectorAll("input[data-room]")].every((x) => x.checked);
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + room.name));
+    box.appendChild(label);
+  }
+  allCb.checked = [...box.querySelectorAll("input[data-room]")].every((x) => x.checked);
+  allCb.addEventListener("change", () => {
+    for (const cb of box.querySelectorAll("input[data-room]")) cb.checked = allCb.checked;
+  });
+}
+
+// updateHousePanel shows or hides the parts that depend on the mode.
+function updateHousePanel() {
+  const mode = houseMode();
+  $("house-temp-row").classList.toggle("hidden", mode !== "manual");
+  $("house-duration-row").classList.toggle("hidden", mode === "auto");
+  $("house-until").disabled = houseDuration() !== "until";
+}
+
+function openHouse(mode) {
+  const panel = housePanel();
+  for (const r of document.querySelectorAll('input[name="house-mode"]')) r.checked = r.value === mode;
+  if (!$("house-until").value) $("house-until").value = tomorrowMorning();
+  const first = state.rooms.find(roomThermostat);
+  const s = first ? roomState(first) : null;
+  if (s && s.setpoint !== undefined) $("house-temp").value = s.setpoint;
+  $("house-result").classList.add("hidden");
+  panel.classList.remove("hidden");
+  updateHousePanel();
+  const focus = mode === "manual" ? $("house-temp") : panel.querySelector('input[name="house-mode"]:checked');
+  if (focus) focus.focus();
+}
+
+function closeHouse() {
+  housePanel().classList.add("hidden");
+}
+
+// sendHouse applies the panel: one room command after another, with the
+// per-room results in the panel.
+async function sendHouse() {
+  const mode = houseMode();
+  const until = houseDuration() === "until" && mode !== "auto" ? apiUntil($("house-until").value) : "";
+  const manualTemp = clampTemp(parseFloat($("house-temp").value) || DEFAULT_TEMP);
+  const ids = [...document.querySelectorAll("#house-rooms input[data-room]:checked")].map((cb) => Number(cb.dataset.room));
   const out = $("house-result");
+  out.classList.remove("hidden");
   out.className = "tile-result ok";
+  if (ids.length === 0) {
+    out.textContent = "No room selected.";
+    return;
+  }
   out.textContent = "Sending …";
   const results = [];
-  for (const room of state.rooms) {
+  let failed = false;
+  for (const room of state.rooms.filter((r) => ids.includes(r.id))) {
     const t = roomThermostat(room);
     if (!t) continue;
-    let body = { mode: "auto" };
     try {
-      if (mode !== "auto") {
+      let temp = manualTemp;
+      if (mode === "eco" || mode === "comfort") {
         const detail = await deviceDetail(t.rf_address);
         const cfg = detail.thermostat || detail.wall_thermostat || {};
-        const temp = mode === "eco" ? cfg.eco_temp : cfg.comfort_temp;
+        temp = mode === "eco" ? cfg.eco_temp : cfg.comfort_temp;
         if (temp === undefined) throw new Error("no " + mode + " temperature configured");
-        body = { mode: "manual", temp };
       }
+      let body = { mode: "auto" };
+      if (mode !== "auto") body = until ? { mode: "vacation", temp, until } : { mode: "manual", temp };
       const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
-      results.push(room.name + (res && res.discarded ? " discarded" : " ok"));
+      const what = mode === "auto" ? "auto" : temp.toFixed(1) + " °C" + (until ? " until " + until : "");
+      results.push(room.name + ": " + (res && res.discarded ? "discarded" : what + " ok"));
+      if (res && res.discarded) failed = true;
     } catch (e) {
-      results.push(room.name + " failed (" + e.message + ")");
+      results.push(room.name + ": " + e.message);
+      failed = true;
     }
-    out.textContent = results.join(", ");
+    out.textContent = results.join("\n");
   }
-  if (results.length === 0) out.textContent = "No room with a thermostat.";
-  out.className = "tile-result " + (results.some((r) => !r.endsWith(" ok")) ? "bad" : "ok");
+  out.className = "tile-result " + (failed ? "bad" : "ok");
   loadCubes().catch(() => {});
 }
 
 // --- wiring -----------------------------------------------------------
 
 function initTiles() {
-  $("house-eco").addEventListener("click", () => houseMode("eco"));
-  $("house-auto").addEventListener("click", () => houseMode("auto"));
-  $("house-comfort").addEventListener("click", () => houseMode("comfort"));
-  $("vacation-cancel").addEventListener("click", () => $("vacation-dialog").close());
-  $("vacation-form").addEventListener("submit", () => sendVacation());
+  $("house-eco").addEventListener("click", () => openHouse("eco"));
+  $("house-auto").addEventListener("click", () => openHouse("auto"));
+  $("house-comfort").addEventListener("click", () => openHouse("comfort"));
+  $("house-more").addEventListener("click", () => openHouse("manual"));
+  $("house-cancel").addEventListener("click", closeHouse);
+  housePanel().addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    sendHouse();
+  });
+  housePanel().addEventListener("change", updateHousePanel);
+  $("house-temp-minus").addEventListener("click", () => {
+    $("house-temp").value = clampTemp(parseFloat($("house-temp").value) - STEP);
+  });
+  $("house-temp-plus").addEventListener("click", () => {
+    $("house-temp").value = clampTemp(parseFloat($("house-temp").value) + STEP);
+  });
   document.addEventListener("click", (ev) => {
-    // Clicking outside closes an open menu.
+    // Clicking outside closes an open menu, and the House panel once
+    // it has sent.
     if (!ev.target.closest("details.menu")) {
       for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
+    }
+    const panel = housePanel();
+    if (!panel.classList.contains("hidden") && !ev.target.closest("#house") && !$("house-result").classList.contains("hidden")) {
+      closeHouse();
     }
   });
 }

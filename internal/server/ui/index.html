@@ -11,20 +11,48 @@
 <header class="top">
   <div class="brand">
     <h1>Massimo</h1>
-    <span id="version" class="muted expert-only"></span>
   </div>
   <div class="cube">
     <label for="cube-select" class="muted">Cube</label>
     <select id="cube-select"></select>
     <span id="connection" class="pill"></span>
   </div>
-  <label class="expert-toggle"><input type="checkbox" id="expert-toggle"> Expert</label>
+  <span id="clock-plain" class="muted" title=""></span>
+  <button type="button" id="settings-toggle" class="icon-btn" aria-label="settings" title="Settings">⚙</button>
+  <button type="button" id="reload-btn" class="primary hidden">New version on the server, reload</button>
+  <label class="switch header-switch" title="Expert mode">
+    <input type="checkbox" id="expert-header">
+    <span class="slider" aria-hidden="true"></span>
+    <span class="switch-label">Expert</span>
+  </label>
+  <span id="version" class="muted expert-only"></span>
   <dl id="budget" class="budget expert-only">
     <div><dt>Duty cycle</dt><dd id="duty">–</dd></div>
     <div><dt>Free slots</dt><dd id="slots">–</dd></div>
     <div><dt>Queued</dt><dd id="queued">–</dd></div>
-    <div><dt>Cube clock</dt><dd id="clock">–</dd></div>
+    <div><dt>Cube clock</dt><dd id="clock" title="">–</dd></div>
   </dl>
+  <section id="settings" class="panel settings hidden" aria-label="settings">
+    <h3>Settings</h3>
+    <label>Poll every
+      <span class="inline"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> s</span>
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="expert-toggle">
+      <span class="slider" aria-hidden="true"></span>
+      <span class="switch-label">Expert mode (addresses, types, budget, version)</span>
+    </label>
+    <label>Cube clock shown in
+      <select id="clock-select">
+        <option value="browser">the browser's time zone</option>
+        <option value="cube">the Cube's time zone</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button type="button" id="forget-token">Forget token</button>
+      <button type="button" id="settings-close">Close</button>
+    </div>
+  </section>
   <p id="pending" class="notice hidden"></p>
 </header>
 
@@ -38,8 +66,42 @@
       <button type="button" id="house-eco">ECO</button>
       <button type="button" id="house-auto">AUTO</button>
       <button type="button" id="house-comfort">COMFORT</button>
+      <button type="button" id="house-more" class="subtle">House…</button>
     </div>
-    <p id="house-result" class="tile-result hidden"></p>
+    <form id="house-panel" class="panel hidden">
+      <div class="panel-row">
+        <span class="muted">Mode</span>
+        <span class="seg" id="house-mode">
+          <label><input type="radio" name="house-mode" value="eco"> ECO</label>
+          <label><input type="radio" name="house-mode" value="auto"> AUTO</label>
+          <label><input type="radio" name="house-mode" value="comfort"> COMFORT</label>
+          <label><input type="radio" name="house-mode" value="manual"> MANU</label>
+        </span>
+        <span id="house-temp-row" class="inline hidden">
+          <button type="button" class="step small" id="house-temp-minus" aria-label="0.5 degrees less">−</button>
+          <input type="number" id="house-temp" min="4.5" max="30.5" step="0.5" value="20">
+          <button type="button" class="step small" id="house-temp-plus" aria-label="0.5 degrees more">+</button>
+          <span class="muted">°C</span>
+        </span>
+      </div>
+      <div class="panel-row" id="house-duration-row">
+        <span class="muted">Duration</span>
+        <span class="seg">
+          <label><input type="radio" name="house-duration" value="permanent" checked> Permanently</label>
+          <label><input type="radio" name="house-duration" value="until"> Until</label>
+        </span>
+        <input type="datetime-local" id="house-until" step="1800">
+      </div>
+      <div class="panel-row rooms-row">
+        <span class="muted">Rooms</span>
+        <div id="house-rooms" class="checks"></div>
+      </div>
+      <div class="actions">
+        <button type="button" id="house-cancel">Cancel</button>
+        <button type="submit" class="primary">Send</button>
+      </div>
+      <p id="house-result" class="tile-result hidden"></p>
+    </form>
   </section>
 
   <section id="rooms" class="tiles"></section>
@@ -49,22 +111,6 @@
     <div id="unlisted-devices" class="devices"></div>
   </section>
 </main>
-
-<dialog id="vacation-dialog">
-  <form method="dialog" id="vacation-form">
-    <h3 id="vacation-title">Vacation</h3>
-    <label>Temperature °C
-      <input type="number" id="vacation-temp" min="4.5" max="30.5" step="0.5" value="17">
-    </label>
-    <label>Until
-      <input type="datetime-local" id="vacation-until" step="1800" required>
-    </label>
-    <div class="actions">
-      <button type="button" id="vacation-cancel">Cancel</button>
-      <button type="submit" class="primary">Send</button>
-    </div>
-  </form>
-</dialog>
 
 <dialog id="token-dialog">
   <form method="dialog" id="token-form">
@@ -106,6 +152,29 @@
       <button type="button" class="mode-auto">AUTO</button>
       <button type="button" class="mode-manual">MANU</button>
       <span class="mode-vacation hidden"></span>
+    </div>
+    <form class="panel vacation-panel hidden">
+      <div class="panel-row">
+        <span class="muted">Vacation</span>
+        <span class="inline">
+          <button type="button" class="step small vacation-minus" aria-label="0.5 degrees less">−</button>
+          <input type="number" class="vacation-temp" min="4.5" max="30.5" step="0.5" value="17">
+          <button type="button" class="step small vacation-plus" aria-label="0.5 degrees more">+</button>
+          <span class="muted">°C until</span>
+        </span>
+        <input type="datetime-local" class="vacation-until" step="1800" required>
+      </div>
+      <div class="actions">
+        <button type="button" class="vacation-cancel">Cancel</button>
+        <button type="submit" class="primary">Send</button>
+      </div>
+    </form>
+    <div class="panel delete-confirm hidden">
+      <span>Delete this empty room from the cube?</span>
+      <div class="actions">
+        <button type="button" class="delete-no">Keep</button>
+        <button type="button" class="delete-yes primary">Delete</button>
+      </div>
     </div>
     <p class="tile-result hidden"></p>
     <div class="devices hidden"></div>
