@@ -38,7 +38,28 @@ Vacation for one room is an inline panel in its tile in the same way,
 and deleting an empty room asks inline.
 Clicking a room name opens its devices with their states, flags,
 temperature offsets and per-thermostat lock. Setpoints are set per
-room only, as in the original software. The gear in the header opens
+room only, as in the original software. "Configure…" in a tile's menu
+expands the tile into the room's configuration, one screen per
+section with Send and Cancel, Enter sends: Room (rename), Temperatures
+(comfort, eco, open-window temperature and minutes, maximum and
+minimum; only the changed fields are written, to every thermostat of
+the room, with the result per device), Devices (boost duration and
+valve opening, descaling day and hour, valve limits for the room, then
+per device its name, temperature offset, the display mode of a wall
+thermostat, and a move to another room behind an inline confirm), Week
+programme (day buttons, Shift+click selects several, "All days"; the
+day's switch points as rows "until … at … °C" with add and remove, the
+last fixed at 24:00, a bar of the day above them; "Copy Mo to …"
+applies the edited day to the selected days; Send writes the changed
+days to the room), and Copy (this room's temperatures and device
+settings, optionally its week programme, to selected other rooms, one
+after another with a result per room). The header switches between
+Rooms and Log: the log lists the Cube's recent events from
+`GET …/log` and then the live ones, one line each with the local time,
+kind, device and a short state text, with a filter box and a clear
+that only empties the view; the tiles keep their state meanwhile. The
+short server version stands next to the brand; the Cube selector
+shows the Cube's name when one is configured. The gear in the header opens
 the settings: the poll interval (10 s by default; the header is
 refreshed on it, and the rooms as well while the event stream is
 down; the ↻ button in the header runs the same refresh at once, rooms

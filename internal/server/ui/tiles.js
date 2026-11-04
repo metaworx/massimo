@@ -37,7 +37,7 @@ function roomActual(room) {
 }
 
 function roomUI(room) {
-  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false };
+  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null };
   return state.ui[room.id];
 }
 
@@ -84,6 +84,7 @@ function renderRoom(room) {
   renderMenu(el, room);
   renderVacation(el, room);
   renderDeleteConfirm(el, room);
+  renderConfig(el, room);
 
   const devs = el.querySelector(".devices");
   if (ui.open) {
@@ -162,6 +163,7 @@ function renderSetpoint(el, room) {
 function renderMenu(el, room) {
   const thermostats = room.devices.filter(isThermostat);
   el.querySelector(".menu-devices").addEventListener("click", () => toggleDevices(room, el));
+  el.querySelector(".menu-config").addEventListener("click", () => openConfig(room, el));
   const vacation = el.querySelector(".menu-vacation");
   const lock = el.querySelector(".menu-lock");
   const unlock = el.querySelector(".menu-unlock");
@@ -346,9 +348,22 @@ function toggleDevices(room, el) {
 }
 
 // rerenderRoom replaces a room's tile in place, keeping its UI state.
+// Removing a tile blurs a focused input, whose change handler may ask
+// for another render; that request is deferred until this one is done.
+let rendering = false;
 function rerenderRoom(room) {
+  if (rendering) {
+    queueMicrotask(() => rerenderRoom(room));
+    return;
+  }
   const old = document.querySelector('.room[data-id="' + room.id + '"]');
-  if (old) old.replaceWith(renderRoom(room));
+  if (!old) return;
+  rendering = true;
+  try {
+    old.replaceWith(renderRoom(room));
+  } finally {
+    rendering = false;
+  }
 }
 
 // updateDevice applies a state event to the room or the unlisted list.
