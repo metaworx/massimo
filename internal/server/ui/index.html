@@ -11,6 +11,7 @@
 <header class="top">
   <div class="brand">
     <h1>Massimo</h1>
+    <span id="version-short" class="muted mono small" title="server version"></span>
   </div>
   <div class="cube">
     <label for="cube-select" class="muted">Cube</label>
@@ -21,9 +22,14 @@
   <span id="updated" class="muted" title="time of the last successful poll"></span>
   <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now">↻</button>
   <button type="button" id="settings-toggle" class="icon-btn" aria-label="settings" title="Settings">⚙</button>
+  <span class="view-switch" role="tablist">
+    <button type="button" id="view-tiles" class="tab active" role="tab" aria-selected="true">Rooms</button>
+    <button type="button" id="view-log" class="tab" role="tab" aria-selected="false">Log</button>
+  </span>
   <button type="button" id="reload-btn" class="primary hidden">New version on the server, reload</button>
   <dl id="budget" class="budget expert-only">
     <div><dt>Server</dt><dd id="version">–</dd></div>
+    <div><dt>Built with</dt><dd id="version-rest">–</dd></div>
     <div><dt>Firmware</dt><dd id="cube-fw">–</dd></div>
     <div><dt>Address</dt><dd id="cube-addr">–</dd></div>
     <div><dt>Radio</dt><dd id="cube-rf" class="mono">–</dd></div>
@@ -111,6 +117,15 @@
     <header class="tile-head"><h2>Devices without a room</h2></header>
     <div id="unlisted-devices" class="devices"></div>
   </section>
+
+  <section id="logview" class="tile log hidden" aria-label="event log">
+    <header class="tile-head">
+      <h2>Log</h2>
+      <input type="search" id="log-filter" placeholder="filter" aria-label="filter the log">
+      <button type="button" id="log-clear">Clear</button>
+    </header>
+    <div id="log-lines" class="log-lines"></div>
+  </section>
 </main>
 
 <dialog id="token-dialog">
@@ -130,6 +145,7 @@
         <summary aria-label="room actions">⋯</summary>
         <div class="menu-items">
           <button type="button" class="menu-devices">Devices</button>
+          <button type="button" class="menu-config">Configure…</button>
           <button type="button" class="menu-vacation">Vacation…</button>
           <button type="button" class="menu-lock">Lock thermostats</button>
           <button type="button" class="menu-unlock">Unlock thermostats</button>
@@ -188,6 +204,7 @@
     </div>
     <p class="tile-result hidden"></p>
     <div class="devices hidden"></div>
+    <div class="config-area hidden"></div>
   </article>
 </template>
 
@@ -206,5 +223,7 @@
 
 <script src="/ui/app.js"></script>
 <script src="/ui/tiles.js"></script>
+<script src="/ui/config.js"></script>
+<script src="/ui/log.js"></script>
 </body>
 </html>

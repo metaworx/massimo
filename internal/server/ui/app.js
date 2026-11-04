@@ -278,7 +278,7 @@ function renderCubeSelect() {
   for (const c of state.cubes) {
     const o = document.createElement("option");
     o.value = c.serial;
-    o.textContent = c.serial + (c.connected ? "" : " (disconnected)");
+    o.textContent = (c.name ? c.name + " (" + c.serial + ")" : c.serial) + (c.connected ? "" : " (disconnected)");
     sel.appendChild(o);
   }
   sel.value = state.serial;
@@ -347,6 +347,7 @@ function selectCube(serial) {
   state.details = {};
   state.ui = {};
   refresh().then(connectEvents);
+  if (logState.open) loadLog();
 }
 
 // --- version ----------------------------------------------------------
@@ -358,9 +359,17 @@ function somethingOpen() {
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("token-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
-    if (ui.pending !== null || ui.vacation || ui.confirm || ui.open) return true;
+    if (ui.pending !== null || ui.vacation || ui.confirm || ui.open || ui.config) return true;
   }
   return false;
+}
+
+// splitVersion separates "massimo v0.1.0-alpha.4-3-gfb15396 (go1.26.8,
+// linux/amd64)" into the short version and the rest.
+function splitVersion(v) {
+  const m = /^(?:massimo\s+)?(\S+)\s*(.*)$/.exec(v || "");
+  if (!m) return { short: v || "", rest: "" };
+  return { short: m[1], rest: m[2].replace(/^\((.*)\)$/, "$1") };
 }
 
 // checkVersion compares the server's version with the one the page was
@@ -376,7 +385,10 @@ async function checkVersion() {
   const v = h && h.version ? h.version : "";
   if (state.version === null) {
     state.version = v;
-    $("version").textContent = v;
+    const parts = splitVersion(v);
+    $("version-short").textContent = parts.short;
+    $("version").textContent = parts.short;
+    $("version-rest").textContent = parts.rest || "–";
     return;
   }
   if (v === state.version) return;
@@ -419,14 +431,24 @@ function connectEvents() {
   es.onopen = () => {
     state.eventsOpen = true;
   };
+  let initial = true; // the connect burst of state events is not log traffic
+  setTimeout(() => {
+    initial = false;
+  }, 1500);
   es.addEventListener("state", (ev) => {
     const data = JSON.parse(ev.data);
     if (data.state) updateDevice(data.state);
+    if (!initial) appendLogEvent(data);
   });
-  es.addEventListener("hello", () => loadCubes());
-  es.addEventListener("metadata", () => loadRooms());
-  es.addEventListener("connected", () => refresh());
-  es.addEventListener("disconnected", () => loadCubes());
+  const logged = (handler) => (ev) => {
+    appendLogEvent(JSON.parse(ev.data));
+    handler();
+  };
+  es.addEventListener("hello", logged(() => loadCubes()));
+  es.addEventListener("metadata", logged(() => loadRooms()));
+  es.addEventListener("connected", logged(() => refresh()));
+  es.addEventListener("disconnected", logged(() => loadCubes()));
+  es.addEventListener("config", logged(() => {}));
   es.onerror = () => {
     // The browser retries by itself; the poll covers the rooms meanwhile.
     state.eventsOpen = false;
@@ -485,6 +507,7 @@ function init() {
   checkVersion();
   $("cube-select").addEventListener("change", (ev) => selectCube(ev.target.value));
   initTiles();
+  initLog();
   refresh().then(() => {
     store("massimo.serial", state.serial);
     connectEvents();
