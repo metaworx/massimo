@@ -136,6 +136,29 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
         "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/rooms/{id}:
+    delete:
+      summary: Remove an empty room
+      description: Writes the Cube's metadata without the room. A room that still has devices, hidden ones included, is refused with 409.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  rooms: {type: integer, description: Rooms left}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The room still has devices
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/rooms/{id}/setpoint:
     put:
       summary: Set mode and setpoint of a whole room

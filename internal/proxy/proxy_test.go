@@ -241,7 +241,7 @@ func TestProxyDiscovery(t *testing.T) {
 func TestProxyHidesIgnoredDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
 	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
-	p.opts.Ignore = map[cube.RFAddress]bool{hidden: true}
+	p.opts.Ignore = []cube.RFAddress{hidden}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -326,11 +326,11 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 
 	// Parked in a room with a high id, the room disappears as well.
 	cur := *c.Snapshot().Metadata()
-	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 200, Name: "parking"})
+	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 255, Name: "ghosts"})
 	cur.Devices = append([]cube.DeviceMeta(nil), cur.Devices...)
 	for i := range cur.Devices {
 		if cur.Devices[i].RFAddress == hidden {
-			cur.Devices[i].RoomID = 200
+			cur.Devices[i].RoomID = 255
 		}
 	}
 	cmds, _ = cube.WriteMetadataCommands(&cur)
@@ -355,8 +355,8 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 		}
 	}
 	for _, r := range md.Rooms {
-		if r.ID == 200 {
-			t.Fatal("parking room 200 visible")
+		if r.ID == 255 {
+			t.Fatal("parking room 255 visible")
 		}
 	}
 	if len(md.Rooms) != 6 {
@@ -370,14 +370,14 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 		t.Fatalf("m: answered %s", a)
 	}
 	got := c.Snapshot().Metadata()
-	room200, dev := false, false
+	room255, dev := false, false
 	for _, r := range got.Rooms {
-		room200 = room200 || r.ID == 200
+		room255 = room255 || r.ID == 255
 	}
 	for _, d := range got.Devices {
-		dev = dev || (d.RFAddress == hidden && d.RoomID == 200)
+		dev = dev || (d.RFAddress == hidden && d.RoomID == 255)
 	}
-	if !room200 || !dev || got.Rooms[0].Name != "Again" {
+	if !room255 || !dev || got.Rooms[0].Name != "Again" {
 		t.Fatalf("metadata after write: %+v", got)
 	}
 }

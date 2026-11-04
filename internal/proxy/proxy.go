@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -50,19 +51,16 @@ type Options struct {
 	// ReplyTimeout bounds how long a client waits for the Cube's answer
 	// to a passed-through command (default one minute).
 	ReplyTimeout time.Duration
-	// Ignore lists devices hidden from clients: they are left out of the
-	// greeting, the L line and the C lines, and put back, with their
-	// rooms, into every metadata write a client sends, so the Cube keeps
-	// them exactly as they are. Their rooms stay visible, empty.
-	Ignore map[cube.RFAddress]bool
-	Logger *slog.Logger
+	// Ignore lists devices hidden from clients, in addition to those of
+	// cube.GhostRoom: they are left out of the greeting, the L line and
+	// the C lines, and put back, with their rooms, into every metadata
+	// write a client sends, so the Cube keeps them exactly as they are.
+	// The ghost room is hidden too; other rooms stay visible, empty.
+	Ignore []cube.RFAddress
+	// ShowGhosts shows the ignored devices and the ghost room instead.
+	ShowGhosts bool
+	Logger     *slog.Logger
 }
-
-// HiddenRoomMinID is the lowest room id of a parking room that the proxy
-// hides completely. A room with a lower id stays visible, empty, so a
-// client that allocates the lowest free id cannot reuse it; the original
-// software never allocates ids this high on its own.
-const HiddenRoomMinID = 100
 
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
 type Proxy struct {
@@ -142,7 +140,8 @@ func (p *Proxy) pushLoop(ctx context.Context, ch <-chan struct{}) {
 			if !ok {
 				return
 			}
-			l, ok := p.opts.Client.Snapshot().DeviceListLineExcluding(p.opts.Ignore)
+			snap := p.opts.Client.Snapshot()
+			l, ok := snap.DeviceListLineExcluding(p.hidden(snap.Metadata()))
 			if !ok {
 				continue
 			}
@@ -232,7 +231,8 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 // a new connection id and the current budget and clock, then M, C… and L.
 func (p *Proxy) greeting() []cube.Message {
 	snap := p.opts.Client.Snapshot()
-	lines := snap.LinesExcluding(p.opts.Ignore, p.hiddenRooms(snap.Metadata()))
+	md := snap.Metadata()
+	lines := snap.LinesExcluding(p.hidden(md), p.hiddenRooms(md))
 	for i, m := range lines {
 		if m.Type == 'H' {
 			lines[i] = p.hello(snap.Hello())
@@ -265,15 +265,16 @@ func (p *Proxy) hello(h *cube.Hello) cube.Message {
 // message has type 0 when nothing is to be written.
 func (p *Proxy) local(m cube.Message) (cube.Message, bool) {
 	snap := p.opts.Client.Snapshot()
+	hidden := p.hidden(snap.Metadata())
 	switch m.Type {
 	case 'l':
-		if l, ok := snap.DeviceListLineExcluding(p.opts.Ignore); ok {
+		if l, ok := snap.DeviceListLineExcluding(hidden); ok {
 			return l, true
 		}
 		return cube.Message{}, true
 	case 'c':
 		rf, err := cube.ParseRFAddress(strings.TrimSpace(m.Data))
-		if err != nil || p.opts.Ignore[rf] {
+		if err != nil || hidden[rf] {
 			return cube.Message{}, true
 		}
 		if c, ok := snap.ConfigLine(rf); ok {
@@ -293,7 +294,7 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		}
 	}
 	lines := []cube.Message{m}
-	if m.Type == 'm' && len(p.opts.Ignore) > 0 {
+	if m.Type == 'm' && !p.opts.ShowGhosts {
 		if merged, ok := p.withIgnored(m); ok {
 			lines = merged
 		}
@@ -338,6 +339,7 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 	if cur == nil {
 		return nil, false
 	}
+	hidden := p.hidden(cur)
 	have := map[cube.RFAddress]bool{}
 	for _, d := range md.Devices {
 		have[d.RFAddress] = true
@@ -348,7 +350,7 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 	}
 	added := 0
 	for _, d := range cur.Devices {
-		if !p.opts.Ignore[d.RFAddress] || have[d.RFAddress] {
+		if !hidden[d.RFAddress] || have[d.RFAddress] {
 			continue
 		}
 		md.Devices = append(md.Devices, d)
@@ -386,27 +388,24 @@ func (p *Proxy) applyMetadata(lines []cube.Message) {
 	}
 }
 
-// hiddenRooms lists the rooms left out of the greeting: those that hold
-// only ignored devices and have an id of HiddenRoomMinID or more.
+// hidden is the set of devices left out for clients.
+func (p *Proxy) hidden(md *cube.Metadata) backup.Ignored {
+	return backup.Hidden(p.opts.Ignore, md, p.opts.ShowGhosts)
+}
+
+// hiddenRooms lists the rooms left out of the greeting: the ghost room,
+// when it holds only hidden devices. Other parking rooms stay visible,
+// empty, so that a client allocating the lowest free id cannot reuse
+// theirs.
 func (p *Proxy) hiddenRooms(md *cube.Metadata) map[uint8]bool {
-	if md == nil || len(p.opts.Ignore) == 0 {
+	if p.opts.ShowGhosts {
 		return nil
 	}
-	count := map[uint8]int{}
-	for _, d := range md.Devices {
-		if p.opts.Ignore[d.RFAddress] {
-			count[d.RoomID]++
-		} else {
-			count[d.RoomID] = -1 << 20
-		}
+	hidden := p.hidden(md).HiddenRooms(md)
+	if !hidden[cube.GhostRoom] {
+		return nil
 	}
-	out := map[uint8]bool{}
-	for id, n := range count {
-		if n > 0 && int(id) >= HiddenRoomMinID {
-			out[id] = true
-		}
-	}
-	return out
+	return map[uint8]bool{cube.GhostRoom: true}
 }
 
 // discoveryReply builds the reply to a discovery request for the

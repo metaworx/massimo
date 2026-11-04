@@ -52,6 +52,9 @@ type PlanOptions struct {
 	// compared nor reported, and the metadata written by the plan keeps
 	// them, and the rooms they are in, exactly as the Cube has them.
 	Ignore []cube.RFAddress
+	// ShowGhosts includes the devices of cube.GhostRoom, which are
+	// hidden by default like the Ignore list.
+	ShowGhosts bool
 }
 
 // Current is the live state the plan compares the backup with.
@@ -90,7 +93,7 @@ func NewPlan(f *File, cur Current, opts PlanOptions) (*Plan, error) {
 			known[rf] = cube.DeviceMeta{Type: c.Type, RFAddress: rf, Serial: c.Serial, RoomID: c.RoomID}
 		}
 	}
-	ig := IgnoreSet(opts.Ignore)
+	ig := Hidden(opts.Ignore, snap.Metadata(), opts.ShowGhosts)
 	var present, missing []Device
 	for _, d := range f.Devices {
 		if ig[d.RFAddress] {

@@ -72,11 +72,11 @@ func runBackup(args []string) error {
 		fmt.Fprintln(os.Stderr, "warning: NTP servers not read:", err)
 	}
 	useDeviceSerial(c.Snapshot().Hello().Serial)
-	ignore, err := ignoredDevices()
+	hidden, err := hiddenSet(c.Snapshot())
 	if err != nil {
 		return err
 	}
-	f, err := backup.Take(c.Snapshot(), ntp, versionString(), time.Now(), ignore...)
+	f, err := backup.Take(c.Snapshot(), ntp, versionString(), time.Now(), hidden)
 	if err != nil {
 		return err
 	}
@@ -151,6 +151,7 @@ func runRestore(args []string) error {
 	if opts.Ignore, err = ignoredDevices(); err != nil {
 		return err
 	}
+	opts.ShowGhosts = noIgnore
 	cur := backup.Current{Snapshot: c.Snapshot()}
 	if !opts.SkipClock {
 		if cur.NTP, err = fetchNTP(ctx, c); err != nil {

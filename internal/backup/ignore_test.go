@@ -16,7 +16,7 @@ import (
 func TestIgnoredDevicesAreHiddenButKept(t *testing.T) {
 	_, c, _ := connect(t)
 	// 1514b6 is the only device of room 6 in the fixture.
-	f, err := Take(c.Snapshot(), nil, "test", time.Now(), 0x1514b6)
+	f, err := Take(c.Snapshot(), nil, "test", time.Now(), IgnoreSet([]cube.RFAddress{0x1514b6}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestIgnoredDevicesAreHiddenButKept(t *testing.T) {
 		t.Fatalf("ignored device dropped or moved: %+v", md.Devices)
 	}
 	// An old backup that still lists the device does not touch it either.
-	f2, _ := Take(c.Snapshot(), nil, "test", time.Now())
+	f2, _ := Take(c.Snapshot(), nil, "test", time.Now(), nil)
 	for i := range f2.Devices {
 		if f2.Devices[i].RFAddress == 0x1514b6 {
 			f2.Devices[i].Name, f2.Devices[i].RoomID = "Moved", 1

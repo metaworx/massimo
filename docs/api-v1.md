@@ -131,14 +131,15 @@ Every device the Cube knows, in the Cube's order. Devices that are
 paired but not assigned to a room have `"unlisted": true` and no name;
 they do not appear under rooms.
 
-Devices listed in `MASSIMO_CUBE_<SN>_IGNORE` are invisible to the API:
-they are absent from every list and count, their addresses answer
-`404`, their events are not streamed, and a room that holds only such
-devices is absent as well, including from room commands. The use case
-is a device that is paired but never reports, which blocks every room
-command for the room the Cube counts it in and which the Cube never
-drops; it is parked in a room of its own on the Cube and hidden here
-(see [portal-protocol.md](portal-protocol.md)).
+Devices in room 255, the ghost room, and devices listed in
+`MASSIMO_CUBE_<SN>_IGNORE` are invisible to the API unless the server
+runs with `-show-ghosts`: they are absent from every list and count,
+their addresses answer `404`, their events are not streamed, and a
+room that holds only such devices is absent as well, including from
+room commands. The use case is a device that is paired but never
+reports, which blocks every room command for the room the Cube counts
+it in and which the Cube never drops; it is parked in room 255 on the
+Cube and hidden here (see [portal-protocol.md](portal-protocol.md)).
 
 ### GET /api/v1/cubes/{sn}/devices/{rf}
 
@@ -179,6 +180,12 @@ cannot be started over the air.
 
 Same body and answer, addressed to every device of the room, which is
 what the original software does.
+
+### DELETE /api/v1/cubes/{sn}/rooms/{id}
+
+Removes an empty room by writing the metadata without it; answers
+`{"ok": true, "rooms": 5}`. A room that still has devices, hidden ones
+included, is refused with `409`, and the ghost room is not found.
 
 ### PUT /api/v1/cubes/{sn}/devices/{rf}/lock
 

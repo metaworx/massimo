@@ -31,6 +31,7 @@ func runServe(args []string) error {
 		proxies = append(proxies, v)
 		return nil
 	})
+	showGhosts := fs.Bool("show-ghosts", false, "show the devices of room 255 and of the ignore lists in the API and to proxy clients instead of hiding them")
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (default "+proxySerialEnv+" or its per-Cube form; the original software keeps one answer per serial)")
 	snFlag(fs)
 	fs.Usage = func() {
@@ -137,7 +138,7 @@ func runServe(args []string) error {
 		cubes[i].Ignore = ignore
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners})
+	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners, ShowGhosts: *showGhosts || noIgnore})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err

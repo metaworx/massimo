@@ -6,7 +6,14 @@ LDFLAGS  = -s -w -X main.version=$(VERSION)
 PKG      = ./cmd/massimo
 OUT      = dist
 
-.PHONY: all build test vet windows linux linux-arm64 linux-armv7 clean
+.PHONY: all build test vet windows linux linux-arm64 linux-armv7 clean tag
+
+# tag marks HEAD as the next pre-release (v0.1.0-alpha.N+1 after the
+# latest v0.1.0-alpha.N) and pushes the tag; one tag per feature.
+tag:
+	@last=$$(git tag -l 'v0.1.0-alpha.*' | sort -t. -k3 -n | tail -1); \
+	n=$${last##*.}; next=v0.1.0-alpha.$$((n+1)); \
+	git tag -a $$next -m "$$next" && git push origin $$next && echo tagged $$next
 
 all: test build
 

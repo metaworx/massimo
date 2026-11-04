@@ -108,6 +108,24 @@ func stateOf(st cube.DeviceState) *State {
 // Cube and hidden from every view. See docs/portal-protocol.md.
 type Ignored map[cube.RFAddress]bool
 
+// Hidden builds the set of hidden devices: the listed ones plus, unless
+// showGhosts is set, every device the metadata places in cube.GhostRoom.
+func Hidden(addrs []cube.RFAddress, md *cube.Metadata, showGhosts bool) Ignored {
+	set := IgnoreSet(addrs)
+	if showGhosts || md == nil {
+		return set
+	}
+	for _, d := range md.Devices {
+		if d.RoomID == cube.GhostRoom {
+			if set == nil {
+				set = Ignored{}
+			}
+			set[d.RFAddress] = true
+		}
+	}
+	return set
+}
+
 // IgnoreSet builds the set from a list of addresses.
 func IgnoreSet(addrs []cube.RFAddress) Ignored {
 	if len(addrs) == 0 {
@@ -147,12 +165,12 @@ func (ig Ignored) HiddenRooms(md *cube.Metadata) map[uint8]bool {
 // when the servers were not requested; tool names the software version.
 // Ignored devices and the rooms that hold only them are left out of the
 // rooms and devices sections; the raw lines keep everything.
-func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, ignore ...cube.RFAddress) (*File, error) {
+func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, hidden Ignored) (*File, error) {
 	h := snap.Hello()
 	if h == nil {
 		return nil, fmt.Errorf("backup: no greeting from the cube yet")
 	}
-	ig := IgnoreSet(ignore)
+	ig := hidden
 	f := &File{
 		Version: Version,
 		TakenAt: now.Truncate(time.Second),
@@ -167,10 +185,10 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, igno
 		f.CubeConfig = &cc
 	}
 	md := snap.Metadata()
-	hidden := ig.HiddenRooms(md)
+	hiddenRooms := ig.HiddenRooms(md)
 	if md != nil {
 		for _, r := range md.Rooms {
-			if !hidden[r.ID] {
+			if !hiddenRooms[r.ID] {
 				f.Rooms = append(f.Rooms, r)
 			}
 		}

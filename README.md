@@ -88,17 +88,18 @@ is the serial `serve` uses in discovery replies, see
 [docs/proxy.md](docs/proxy.md). `serve -sn <serial>` serves that one
 Cube instead of every configured one.
 
-`MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) lists radio
-addresses, comma separated, that `serve`, `status` and `backup` leave
-out together with any room that holds nothing else, that `serve` also
-hides from every client of its proxy (so one list on the server
-suffices), and that `restore` never touches (`-no-ignore` before the command name switches the list
-off for one run, for example to edit the parking room with a backup and
-a restore): a device that is paired but never reports blocks every
-command to the room the Cube counts it in, and the Cube never drops it,
-so the way out is to park it in a room of its own on the Cube and hide
-it here (see docs/portal-protocol.md). A restore keeps such devices and
-their room exactly as the Cube has them.
+Room 255 is the ghost room: a device that is paired but never reports
+blocks every command to the room the Cube counts it in, and the Cube
+never drops it, so the way out is to park it in room 255 on the Cube
+(edit a backup and restore it, see docs/portal-protocol.md). Every
+massimo command, the API and the proxy then hide that room and its
+devices without any configuration, so `status` on another computer and
+the original software do not see them either, and `restore` keeps them
+exactly as the Cube has them. `-show-ghosts` before the command name
+(`serve -show-ghosts` for the server) shows and touches them for one
+run, for example to move a device out again.
+`MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) hides further
+radio addresses, comma separated, in the same way.
 
 ## Server
 
@@ -131,6 +132,12 @@ discovery answer per serial, and the real Cube answers first, so give
 the server a different serial for discovery with `-proxy-serial`, for
 example the real one with the first letter changed, or block the Cube's
 UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
+
+## Versions
+
+Pre-releases are tagged `v0.1.0-alpha.N`, one tag per feature, with
+`make tag`; `make` builds carry that version, `go run` builds report
+the commit only with `go run -buildvcs=true`.
 
 ## Original software
 

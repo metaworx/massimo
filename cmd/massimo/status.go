@@ -78,11 +78,11 @@ func runStatus(args []string) error {
 		return err
 	}
 	useDeviceSerial(c.Snapshot().Hello().Serial)
-	ignore, err := ignoredDevices()
+	hidden, err := hiddenSet(c.Snapshot())
 	if err != nil {
 		return err
 	}
-	rep := statusFromSnapshot(c.Snapshot(), ignore)
+	rep := statusFromSnapshot(c.Snapshot(), hidden)
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -94,9 +94,8 @@ func runStatus(args []string) error {
 
 // statusFromSnapshot builds the report; ignored devices and the rooms
 // that hold only them are left out.
-func statusFromSnapshot(snap *cubelan.Snapshot, ignore []cube.RFAddress) statusReport {
+func statusFromSnapshot(snap *cubelan.Snapshot, ig backup.Ignored) statusReport {
 	var rep statusReport
-	ig := backup.IgnoreSet(ignore)
 	h := snap.Hello()
 	if h != nil {
 		rep.Serial, rep.Firmware = h.Serial, h.FirmwareVersion

@@ -47,7 +47,7 @@ func connect(t *testing.T) (*fakecube.Server, *cubelan.Client, context.Context) 
 func take(t *testing.T) (*fakecube.Server, *cubelan.Client, context.Context, *File) {
 	t.Helper()
 	srv, c, ctx := connect(t)
-	f, err := Take(c.Snapshot(), []string{"ntp.homematic.com", "ntp.homematic.com"}, "test", time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC))
+	f, err := Take(c.Snapshot(), []string{"ntp.homematic.com", "ntp.homematic.com"}, "test", time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestPlanKeepsEmptyRooms(t *testing.T) {
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
 	<-c.Ready()
-	f, err := Take(c.Snapshot(), nil, "test", time.Now())
+	f, err := Take(c.Snapshot(), nil, "test", time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestPlanLeavesUnlistedDevicesAlone(t *testing.T) {
 	c2 := cubelan.New(cubelan.Options{Addr: addr})
 	go c2.Run(ctx)
 	<-c2.Ready()
-	f, err = Take(c2.Snapshot(), nil, "test", time.Now())
+	f, err = Take(c2.Snapshot(), nil, "test", time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
 	<-c.Ready()
-	f, err := Take(c.Snapshot(), nil, "test", time.Date(2026, 11, 4, 14, 0, 0, 0, time.UTC))
+	f, err := Take(c.Snapshot(), nil, "test", time.Date(2026, 11, 4, 14, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
