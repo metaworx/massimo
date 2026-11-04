@@ -111,6 +111,7 @@ Every configured Cube:
 [
   {
     "serial": "JEQ0192422",
+    "name": "Ground floor",
     "address": "192.168.1.9",
     "connected": true,
     "firmware": "1.1.3",
@@ -341,6 +342,13 @@ A backup file as `massimo backup` writes it: rooms, devices with
 configuration and state, Cube settings, NTP servers, plus the raw
 protocol lines. YAML comes as an attachment named
 `massimo-backup-<serial>-<time>.yaml`.
+
+### GET /api/v1/cubes/{sn}/log?limit=200
+
+The last events of the Cube, oldest first, the same objects the event
+stream sends (`kind`, `device`, `state`, `error`, `time`); the server
+keeps the last 500. For a log view that starts with history and
+continues with the stream.
 
 ### GET /api/v1/cubes/{sn}/events
 

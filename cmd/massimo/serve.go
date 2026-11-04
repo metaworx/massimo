@@ -138,6 +138,12 @@ func runServe(args []string) error {
 			return fmt.Errorf("serve: %w", err)
 		}
 		cubes[i].Ignore = ignore
+		if sn := cubes[i].Serial; sn != "" {
+			cubes[i].Name = os.Getenv(perCubeVar(nameEnv, sn))
+		}
+		if cubes[i].Name == "" && len(cubes) == 1 {
+			cubes[i].Name = os.Getenv(nameEnv)
+		}
 	}
 	var logOut io.Writer = os.Stderr
 	if *logPath != "" {

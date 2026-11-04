@@ -49,6 +49,7 @@ import (
 type CubeConfig struct {
 	Serial string // for the URL and the logs; "" takes the one the Cube reports
 	Addr   string // host[:port]
+	Name   string // a user-friendly name shown next to the serial, optional
 	// Ignore hides devices (and the rooms that hold only them) from every
 	// view and keeps every write away from them; see backup.Ignored.
 	Ignore []cube.RFAddress
@@ -103,6 +104,8 @@ type runtime struct {
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
 	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
+	logMu  sync.Mutex
+	events []event // the last logSize events, for GET …/log
 }
 
 // subscribePush returns a channel that gets a signal whenever the Cube
@@ -125,6 +128,29 @@ type event struct {
 	Error  string      `json:"error,omitempty"`
 	State  interface{} `json:"state,omitempty"`
 	Time   time.Time   `json:"time"`
+}
+
+// logSize is how many events a Cube's log keeps for GET …/log.
+const logSize = 500
+
+// remember appends an event to the runtime's log ring.
+func (rt *runtime) remember(ev event) {
+	rt.logMu.Lock()
+	defer rt.logMu.Unlock()
+	rt.events = append(rt.events, ev)
+	if len(rt.events) > logSize {
+		rt.events = rt.events[len(rt.events)-logSize:]
+	}
+}
+
+// recent returns the last n events, oldest first.
+func (rt *runtime) recent(n int) []event {
+	rt.logMu.Lock()
+	defer rt.logMu.Unlock()
+	if n <= 0 || n > len(rt.events) {
+		n = len(rt.events)
+	}
+	return append([]event(nil), rt.events[len(rt.events)-n:]...)
 }
 
 // New creates a server; Run starts the Cube connections.
@@ -255,6 +281,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Err != nil {
 				ev.Error = e.Err.Error()
 			}
+			rt.remember(ev)
 			rt.subsMu.Lock()
 			for ch := range rt.subs {
 				select {
@@ -360,6 +387,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
+	api("GET /api/v1/cubes/{sn}/log", s.getLog)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
@@ -406,6 +434,7 @@ func (s *Server) cube(r *http.Request) (*runtime, error) {
 
 type cubeView struct {
 	Serial    string         `json:"serial"`
+	Name      string         `json:"name,omitempty"`
 	Address   string         `json:"address"`
 	Connected bool           `json:"connected"`
 	Firmware  string         `json:"firmware,omitempty"`
@@ -456,7 +485,7 @@ type deviceDetail struct {
 func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
-	v := cubeView{Serial: rt.serial, Address: rt.cfg.Addr, Budget: b, Pending: b.Pending(), Queued: rt.queue.Len()}
+	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.cfg.Addr, Budget: b, Pending: b.Pending(), Queued: rt.queue.Len()}
 	if h := snap.Hello(); h != nil {
 		v.Connected = !snap.Updated().IsZero()
 		v.Firmware, v.RFAddress, v.Updated = h.FirmwareVersion, h.RFAddress.String(), snap.Updated()
@@ -520,6 +549,27 @@ func (s *Server) devices(rt *runtime) []deviceState {
 }
 
 // Handlers.
+
+// getLog returns the last events of a Cube (the same objects the event
+// stream sends), oldest first; ?limit=N caps the number (default 200).
+func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
+	rt, err := s.cube(r)
+	if err != nil {
+		return err
+	}
+	n := 200
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err = strconv.Atoi(v); err != nil || n < 1 {
+			return fail(http.StatusBadRequest, "bad limit %q", v)
+		}
+	}
+	evs := rt.recent(n)
+	if evs == nil {
+		evs = []event{}
+	}
+	writeJSON(w, http.StatusOK, evs)
+	return nil
+}
 
 func (s *Server) listCubes(w http.ResponseWriter, r *http.Request) error {
 	var out []cubeView

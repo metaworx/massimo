@@ -346,6 +346,20 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/log:
+    get:
+      summary: The last events of the Cube, oldest first
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {name: limit, in: query, schema: {type: integer, default: 200, maximum: 500}}
+      responses:
+        "200":
+          description: Events as the stream sends them
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/events:
     get:
       summary: Server-sent events for connection and state changes
@@ -469,6 +483,7 @@ components:
       type: object
       properties:
         serial: {type: string}
+        name: {type: string, description: User-friendly name from MASSIMO_CUBE_<SN>_NAME, when set}
         address: {type: string}
         connected: {type: boolean}
         firmware: {type: string, example: "1.1.3"}

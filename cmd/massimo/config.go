@@ -47,6 +47,7 @@ func runConfig(args []string) error {
 	fmt.Printf("ignored:       %s\n", orNone(cubeEnv(ignoreEnv)))
 	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(proxyEnv)))
 	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(proxySerialEnv)))
+	fmt.Printf("name:          %s\n", orNone(cubeEnv(nameEnv)))
 
 	var names []string
 	for _, kv := range os.Environ() {
@@ -92,14 +93,14 @@ func runConfig(args []string) error {
 // knownVariable reports whether a MASSIMO_* name is one the program reads.
 func knownVariable(k string) bool {
 	switch k {
-	case keyEnv, ivEnv, addrEnv, snEnv, ignoreEnv, proxyEnv, proxySerialEnv, "MASSIMO_ENV_FILE", "MASSIMO_API_TOKEN", "MASSIMO_LOG":
+	case keyEnv, ivEnv, addrEnv, snEnv, ignoreEnv, proxyEnv, proxySerialEnv, nameEnv, "MASSIMO_ENV_FILE", "MASSIMO_API_TOKEN", "MASSIMO_LOG":
 		return true
 	}
 	mid, ok := strings.CutPrefix(k, envPrefix)
 	if !ok {
 		return false
 	}
-	for _, suffix := range []string{"_KEY", "_IV", "_ADDRESS", "_IGNORE", "_PROXY", "_PROXY_SERIAL"} {
+	for _, suffix := range []string{"_KEY", "_IV", "_ADDRESS", "_IGNORE", "_PROXY", "_PROXY_SERIAL", "_NAME"} {
 		if sn, ok := strings.CutSuffix(mid, suffix); ok && sn != "" && !strings.Contains(sn, "_") {
 			return true
 		}

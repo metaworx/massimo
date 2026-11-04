@@ -100,6 +100,9 @@ exactly as the Cube has them. `-show-ghosts` before the command name
 run, for example to move a device out again.
 `MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) hides further
 radio addresses, comma separated, in the same way.
+`MASSIMO_CUBE_<SERIAL>_NAME` gives the Cube a user-friendly name that
+the API and the UI show next to the serial, until names live in a
+database.
 
 ## Server
 

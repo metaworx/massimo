@@ -33,6 +33,7 @@ const (
 	// is the serial serve uses in UDP discovery replies for the Cube.
 	proxyEnv       = envPrefix + "PROXY"
 	proxySerialEnv = envPrefix + "PROXY_SERIAL"
+	nameEnv        = envPrefix + "NAME" // a user-friendly name for the Cube
 	proxyProbe     = 2 * time.Second
 )
 
