@@ -53,14 +53,15 @@ last fixed at 24:00, a bar of the day above them; "Copy Mo to …"
 applies the edited day to the selected days; Send writes the changed
 days to the room), and Copy (this room's temperatures and device
 settings, optionally its week programme, to selected other rooms, one
-after another with a result per room). The header switches between
-Rooms and Log: the log lists the Cube's recent events from
+after another with a result per room). Three icon buttons at the
+right end of the header switch between the pages Rooms, Log and
+Settings: the log lists the Cube's recent events from
 `GET …/log` and then the live ones, one line each with the local time,
 kind, device and a short state text, with a filter box and a clear
 that only empties the view; the tiles keep their state meanwhile. The
 short server version stands next to the brand; the Cube selector
-shows the Cube's name when one is configured. The gear in the header opens
-the settings: the poll interval (10 s by default; the header is
+shows the Cube's name when one is configured. The settings page has
+the poll interval (10 s by default; the header is
 refreshed on it, and the rooms as well while the event stream is
 down; the ↻ button in the header runs the same refresh at once, rooms
 included, and the header shows the time of the last successful poll
@@ -69,7 +70,13 @@ line shows the server version, the Cube's firmware, IP address and
 radio address, the duty cycle, free slots, queued and pending
 commands and the Cube clock, and the tiles show radio addresses and
 device types), whether the Cube clock is shown in the browser's time
-zone or the Cube's own, and "forget token". On every poll
+zone or the Cube's own, and "forget token". In the tiles a thermometer
+marks the measured temperature (IS) and a target the setpoint (SET);
+AUTO and MANU close an open holiday panel and drop a pending stepper
+value. The device list shows per device its name with the mode or
+window state as a badge and the warnings next to it, the type and
+address beneath, and valve, offset, set and actual in a grid with the
+decimal points aligned. On every poll
 the page compares the server's version from `/healthz` with the one
 it was loaded with and reloads itself when they differ, immediately
 when nothing is open, otherwise it offers a "New version on the

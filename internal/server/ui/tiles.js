@@ -142,11 +142,15 @@ function renderSetpoint(el, room) {
   manuBtn.classList.toggle("active", mode === "manual" || mode === "boost");
   holidayBtn.classList.toggle("active", mode === "vacation");
   holidayBtn.addEventListener("click", () => openVacation(room, el));
-  autoBtn.addEventListener("click", () => sendRoomSetpoint(room, { mode: "auto" }, "auto"));
+  autoBtn.addEventListener("click", () => {
+    leaveEditing(room);
+    sendRoomSetpoint(room, { mode: "auto" }, "auto");
+  });
   manuBtn.addEventListener("click", () => {
-    // The displayed setpoint, or the stepper's starting value when the
-    // room has not reported one yet.
-    const temp = shown !== null ? shown : DEFAULT_TEMP;
+    // The room's setpoint, or the stepper's starting value when the room
+    // has not reported one yet; a pending stepper value is dropped.
+    leaveEditing(room);
+    const temp = current !== null ? current : DEFAULT_TEMP;
     sendRoomSetpoint(room, { mode: "manual", temp }, "manual " + temp.toFixed(1) + " °C");
   });
   const vac = el.querySelector(".mode-vacation");
@@ -242,6 +246,19 @@ function renderVacation(el, room) {
   });
 }
 
+// leaveEditing closes the tile's vacation panel and drops a pending
+// stepper value, for a mode button that takes over.
+function leaveEditing(room) {
+  const ui = roomUI(room);
+  if (ui.timer) clearTimeout(ui.timer);
+  ui.timer = null;
+  ui.pending = null;
+  ui.vacation = false;
+  ui.vacationTemp = undefined;
+  ui.vacationUntil = undefined;
+  rerenderRoom(room);
+}
+
 function openVacation(room, el) {
   closeMenu(el);
   const ui = roomUI(room);
@@ -279,28 +296,64 @@ function renderDeleteConfirm(el, room) {
 
 // --- devices ----------------------------------------------------------
 
-function deviceStateText(d) {
-  if (!d.reported) return ["not reported since the cube restarted"];
-  const parts = [];
+// deviceBadges lists the badges of a device: its mode or window state as
+// a neutral badge, then the warnings.
+function deviceBadges(d) {
   const s = d.state || {};
-  if (s.window_open !== undefined) parts.push(s.window_open ? "window open" : "window closed");
-  if (s.mode && isThermostat(d)) parts.push(s.mode);
-  if (s.setpoint !== undefined) parts.push("set " + fmtTemp(s.setpoint));
-  if (s.actual_temp !== undefined) parts.push("actual " + fmtTemp(s.actual_temp));
-  if (s.valve_pct !== undefined) parts.push("valve " + s.valve_pct + " %");
-  if (s.until) parts.push("until " + s.until);
-  if (parts.length === 0) parts.push("reported");
-  return parts;
+  const out = [];
+  if (!d.reported) {
+    out.push(["not reported", "warn"]);
+    return out;
+  }
+  if (s.window_open !== undefined) out.push([s.window_open ? "open" : "closed", "mode"]);
+  else if (s.mode && isThermostat(d)) out.push([s.mode === "vacation" ? "holiday" : s.mode, "mode"]);
+  if (s.battery_low) out.push(["battery low", "bad"]);
+  if (s.error) out.push(["transmit error", "bad"]);
+  if (s.link_error) out.push(["link error", "warn"]);
+  if (s.panel_locked) out.push(["locked", "warn"]);
+  return out;
 }
 
-function deviceFlags(d) {
+// valueCell builds one cell of the values grid: label, number, unit.
+// The number sits right-aligned in a fixed-width span so the decimal
+// points of a column line up; an empty label makes a spacer.
+function valueCell(label, value, unit) {
+  const cell = textEl("span", "", "cell");
+  cell.appendChild(textEl("span", label, "k"));
+  cell.appendChild(textEl("span", value, "num"));
+  cell.appendChild(textEl("span", value === "" ? "" : unit, "u"));
+  return cell;
+}
+
+// deviceValues fills the two-column values grid of a thermostat: valve
+// and offset on the left, set and actual on the right.
+function deviceValues(grid, d, offset) {
   const s = d.state || {};
-  const flags = [];
-  if (s.battery_low) flags.push(["battery low", "bad"]);
-  if (s.error) flags.push(["transmit error", "bad"]);
-  if (s.link_error) flags.push(["link error", "warn"]);
-  if (s.panel_locked) flags.push(["locked", "warn"]);
-  return flags;
+  const left = [];
+  if (s.valve_pct !== undefined) left.push(["valve", String(s.valve_pct), "%"]);
+  if (isThermostat(d)) {
+    const off = offset === undefined ? "" : (offset > 0 ? "+" : "") + offset.toFixed(1);
+    left.push(["offset", off, "°C"]);
+  }
+  const right = [];
+  right.push(["set", s.setpoint === undefined ? "–" : s.setpoint.toFixed(1), "°C"]);
+  right.push(["actual", s.actual_temp === undefined ? "–" : s.actual_temp.toFixed(1), "°C"]);
+  clear(grid);
+  const rows = Math.max(left.length, right.length);
+  for (let i = 0; i < rows; i++) {
+    const l = left[i] || ["", "", ""];
+    const r = right[i] || ["", "", ""];
+    grid.appendChild(valueCell(l[0], l[1], l[2]));
+    grid.appendChild(valueCell(r[0], r[1], r[2]));
+  }
+  if (s.until) {
+    // The vacation end spans the grid, under the temperatures.
+    const cell = textEl("span", "", "cell wide");
+    cell.appendChild(textEl("span", "until", "k"));
+    cell.appendChild(textEl("span", s.until, ""));
+    grid.appendChild(cell);
+  }
+  grid.classList.toggle("hidden", rows === 0);
 }
 
 function renderDevice(d) {
@@ -309,20 +362,16 @@ function renderDevice(d) {
   el.querySelector(".device-name").textContent = d.name || "(unnamed)";
   el.querySelector(".device-type").textContent = d.type.replace(/_/g, " ");
   el.querySelector(".device-rf").textContent = d.rf_address;
-  const st = el.querySelector(".device-state");
-  for (const p of deviceStateText(d)) st.appendChild(textEl("span", p));
-  if (isThermostat(d)) {
-    const offset = textEl("span", "", "device-offset muted");
-    st.appendChild(offset);
+  const badges = el.querySelector(".device-badges");
+  for (const [label, cls] of deviceBadges(d)) badges.appendChild(textEl("span", label, "flag " + cls));
+  const grid = el.querySelector(".device-vals");
+  if (isThermostat(d) && d.reported) {
+    deviceValues(grid, d, undefined);
     deviceDetail(d.rf_address).then((detail) => {
       const cfg = detail.thermostat || detail.wall_thermostat;
-      if (cfg && cfg.temp_offset !== undefined) {
-        offset.textContent = "offset " + (cfg.temp_offset > 0 ? "+" : "") + cfg.temp_offset.toFixed(1) + " °C";
-      }
+      if (cfg && cfg.temp_offset !== undefined) deviceValues(grid, d, cfg.temp_offset);
     }).catch(() => {});
   }
-  const fl = el.querySelector(".device-flags");
-  for (const [label, cls] of deviceFlags(d)) fl.appendChild(textEl("span", label, "flag " + cls));
   const actions = el.querySelector(".device-actions");
   if (isThermostat(d)) {
     const locked = !!(d.state && d.state.panel_locked);

@@ -459,9 +459,7 @@ function connectEvents() {
 // --- settings panel ---------------------------------------------------
 
 function initSettings() {
-  const panel = $("settings");
-  $("settings-toggle").addEventListener("click", () => panel.classList.toggle("hidden"));
-  $("settings-close").addEventListener("click", () => panel.classList.add("hidden"));
+  // The settings page is opened with the cog in the header (showView).
   $("poll-input").addEventListener("change", (ev) => {
     const v = Math.max(2, parseInt(ev.target.value, 10) || 10);
     state.settings.poll = v;

@@ -116,26 +116,28 @@ async function loadLog() {
   renderLog();
 }
 
-// showView switches the main area between the tiles and the log; the
-// tiles keep their state while hidden.
+// showView switches the main area between the three pages: the tiles
+// ("tiles"), the log ("log") and the settings ("settings"). The tiles
+// keep their state while hidden. The page is kept in memory only.
 function showView(view) {
   logState.open = view === "log";
   for (const id of ["house", "rooms", "unlisted"]) {
-    const el = $(id);
-    if (view === "log") el.classList.add("view-hidden");
-    else el.classList.remove("view-hidden");
+    $(id).classList.toggle("view-hidden", view !== "tiles");
   }
   $("logview").classList.toggle("hidden", view !== "log");
-  $("view-tiles").classList.toggle("active", view !== "log");
-  $("view-log").classList.toggle("active", view === "log");
-  $("view-tiles").setAttribute("aria-selected", view !== "log" ? "true" : "false");
-  $("view-log").setAttribute("aria-selected", view === "log" ? "true" : "false");
+  $("settings").classList.toggle("hidden", view !== "settings");
+  const buttons = { tiles: "view-tiles", log: "view-log", settings: "view-settings" };
+  for (const [name, id] of Object.entries(buttons)) {
+    $(id).classList.toggle("active", view === name);
+    $(id).setAttribute("aria-selected", view === name ? "true" : "false");
+  }
   if (view === "log") loadLog();
 }
 
 function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   $("view-log").addEventListener("click", () => showView("log"));
+  $("view-settings").addEventListener("click", () => showView("settings"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
     renderLog();
