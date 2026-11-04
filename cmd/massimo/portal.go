@@ -119,7 +119,9 @@ func runPortal(args []string) error {
 			prober.Trigger = func() {
 				if _, _, err := lanExchange(addr, cube.CmdSetPortalInterval(0).String(), 'A'); err != nil {
 					logger.Warn("probe trigger failed", "error", err)
+					return
 				}
+				logger.Info("probe trigger: sent i: over the LAN, the cube should poll within seconds")
 			}
 		}
 		cap.Probe = prober
@@ -220,5 +222,7 @@ func newProber(spec, target string, temp float64, iLine string, logger *slog.Log
 		Default:  "i:" + iLine + "\r\n",
 		ILine:    iLine,
 		Log:      logger,
+		Target:   rf,
+		Temp:     temp,
 	}, nil
 }

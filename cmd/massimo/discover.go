@@ -50,6 +50,9 @@ func runDiscover(args []string) error {
 	}
 	if len(cubes) == 0 {
 		fmt.Println("no cube answered")
+		for _, hint := range firewallHints() {
+			fmt.Println("hint:", hint)
+		}
 		return nil
 	}
 	fmt.Printf("%-12s %-15s %-18s %-8s %-8s %s\n", "SERIAL", "IP", "MAC", "RF", "FW", "NETWORK")
