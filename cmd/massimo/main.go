@@ -23,6 +23,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+	switch os.Args[1] {
+	case "version", "--version", "-v", "-V", "help", "-h", "--help":
+	default:
+		// Every run announces its version on stderr, so logs and bug
+		// reports say which build produced them. stdout stays data-only.
+		fmt.Fprintln(os.Stderr, versionString())
+	}
 	var err error
 	switch os.Args[1] {
 	case "decode":

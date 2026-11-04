@@ -10,12 +10,12 @@ import (
 	"strings"
 )
 
-// version is set at build time from the git tag, e.g.
-//
-//	go build -ldflags "-X main.version=v0.1.0" ./cmd/massimo
-//
-// The Makefile does this with `git describe --tags`. Without it the version
-// is derived from the VCS information Go records in the binary.
+// version is set at build time by the Makefile from
+// `git describe --tags --always --dirty`, which yields exactly the tag when
+// HEAD is tagged (v0.1.0), the tag plus distance and commit hash otherwise
+// (v0.1.0-3-g1a2b3c4), and a -dirty suffix when the working tree has
+// uncommitted changes. Without the Makefile, the version is derived from
+// the VCS information Go records in the binary (hash and modified flag).
 var version = ""
 
 func versionString() string {
