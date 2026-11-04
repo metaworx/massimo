@@ -214,6 +214,35 @@ func (s *Snapshot) Updated() time.Time {
 	return s.updated
 }
 
+// DeviceListLine returns the L message a fresh connection would receive
+// now, or false before any device state is known.
+func (s *Snapshot) DeviceListLine() (cube.Message, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var raw []byte
+	for _, rf := range s.order {
+		if st, ok := s.states[rf]; ok {
+			raw = append(raw, st.Raw...)
+		}
+	}
+	if raw == nil {
+		return cube.Message{}, false
+	}
+	return cube.Message{Type: 'L', Data: b64(raw)}, true
+}
+
+// ConfigLine returns the C message for one device, or false if its
+// configuration is unknown.
+func (s *Snapshot) ConfigLine(rf cube.RFAddress) (cube.Message, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	c, ok := s.configs[rf]
+	if !ok {
+		return cube.Message{}, false
+	}
+	return cube.Message{Type: 'C', Data: rf.String() + "," + b64(c.Raw)}, true
+}
+
 // Lines reproduces the snapshot as protocol lines (H, M, C…, L), i.e. the
 // same text a fresh connection would receive. Used for backups and for the
 // simulator.

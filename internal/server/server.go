@@ -19,6 +19,9 @@
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
 //
 // With a token configured, every /api request needs "Authorization: Bearer <token>".
+//
+// With proxy listeners configured, the server also answers as a Cube on
+// the LAN (TCP 62910 and UDP discovery), see internal/proxy.
 package server
 
 import (
@@ -37,6 +40,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/proxy"
 )
 
 // CubeConfig names one Cube to serve.
@@ -53,6 +57,21 @@ type Options struct {
 	Logger       *slog.Logger
 	Version      string
 	Queue        engine.Options
+	// Proxy lists the LAN listeners on which the server itself answers
+	// as a Cube (see internal/proxy), one per Cube.
+	Proxy []ProxyListener
+}
+
+// ProxyListener describes one Cube-protocol listener of the server.
+type ProxyListener struct {
+	Serial string // which Cube; empty with a single configured Cube
+	Addr   string // host:port to listen on, usually ":62910"
+	// Discovery answers UDP discovery requests for this Cube; only
+	// meaningful for a listener on the Cube's port 62910.
+	Discovery bool
+	// DiscoverySerial replaces the serial in discovery replies (the
+	// original software keeps one answer per serial).
+	DiscoverySerial string
 }
 
 // Server is the HTTP API over a set of Cubes.
@@ -73,6 +92,21 @@ type runtime struct {
 
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
+	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
+}
+
+// subscribePush returns a channel that gets a signal whenever the Cube
+// reported device state, for the LAN proxy.
+func (rt *runtime) subscribePush() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	rt.subsMu.Lock()
+	rt.push[ch] = struct{}{}
+	rt.subsMu.Unlock()
+	return ch, func() {
+		rt.subsMu.Lock()
+		delete(rt.push, ch)
+		rt.subsMu.Unlock()
+	}
 }
 
 type event struct {
@@ -93,7 +127,7 @@ func New(opts Options) *Server {
 	}
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{}}
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), subs: map[chan event]struct{}{}}
+		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
 		rt.queue = engine.NewQueue(rt.client, opts.Queue)
 		key := strings.ToLower(c.Serial)
@@ -117,8 +151,40 @@ func (s *Server) Run(ctx context.Context) error {
 		go func() { defer wg.Done(); rt.queue.Run(ctx) }()
 		go func() { defer wg.Done(); s.pump(ctx, rt) }()
 	}
+	for _, pl := range s.opts.Proxy {
+		rt, err := s.proxyRuntime(pl)
+		if err != nil {
+			s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
+			continue
+		}
+		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial,
+			MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := p.Run(ctx, pl.Addr, pl.Discovery); err != nil && ctx.Err() == nil {
+				s.log.Error("proxy listener failed", "addr", pl.Addr, "error", err)
+			}
+		}()
+	}
 	wg.Wait()
 	return ctx.Err()
+}
+
+// proxyRuntime picks the Cube a proxy listener serves.
+func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if pl.Serial == "" {
+		if len(s.order) != 1 {
+			return nil, fmt.Errorf("several cubes configured, name one as <serial>=%s", pl.Addr)
+		}
+		return s.cubes[s.order[0]], nil
+	}
+	if rt, ok := s.cubes[strings.ToLower(pl.Serial)]; ok {
+		return rt, nil
+	}
+	return nil, fmt.Errorf("no cube %s configured", pl.Serial)
 }
 
 // pump forwards client events to the SSE subscribers and learns the
@@ -152,6 +218,14 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				select {
 				case ch <- ev:
 				default: // slow subscriber: drop
+				}
+			}
+			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected {
+				for ch := range rt.push {
+					select {
+					case ch <- struct{}{}:
+					default: // a signal is already pending
+					}
 				}
 			}
 			rt.subsMu.Unlock()

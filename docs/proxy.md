@@ -1,0 +1,79 @@
+# The LAN proxy: `massimo serve` as a Cube
+
+The Cube serves a single TCP client on port 62910. While `massimo
+serve` holds that connection, every other program waits: the other
+massimo commands, the original software, FHEM, openHAB. The server
+therefore answers as a Cube itself, on every interface, port 62910, and
+the other programs connect to the server instead. Only the server
+talks to the Cube, and its command queue sees every radio command,
+so the duty cycle and the memory slots are accounted for once.
+
+```bash
+massimo serve                       # proxy on :62910, discovery on UDP 23272
+massimo serve -proxy 192.168.1.5    # one interface
+massimo serve -proxy off            # API only
+massimo serve -proxy JEQ0192422=:62910 -proxy KEQ0537249=:62911
+```
+
+With several Cubes each listener names its Cube. Discovery is answered
+only for a listener on port 62910, since a discovery reply carries no
+port.
+
+## What a client gets
+
+On connect, the greeting a real Cube sends: `H` with a fresh connection
+id, the current duty cycle, free memory slots and clock, then `M`, the
+`C` line of every device and `L`. When the Cube reports a state change,
+the new `L` line is pushed to every connected client, as the Cube does.
+Several clients may be connected at the same time.
+
+| Client line | Handling |
+|---|---|
+| `l:` | answered from the server's copy, the Cube is not asked |
+| `c:<rf>` | answered from the server's copy; passed through when unknown |
+| `q:` | closes the connection |
+| `s:`, `r:` | passed through the queue; the Cube's `S:` is relayed |
+| `m:` | passed through, `A:` relayed, the server's copy of the metadata updated |
+| `z:`, `t:`, `v:`, `f:`, `u:`, `i:`, `a:`, `w:`, `e:`, `d:` | passed through, the reply relayed |
+| `n:`, `x:` | passed through; a reply is relayed if the Cube sends one in time |
+
+Passed-through lines go to the Cube exactly as sent, one queue entry
+per line, in order with the server's own commands. The queue adds no
+wakeup or error reset for them: a client that speaks the protocol sends
+its own `z:` and `r:` lines, as the original software does.
+
+## Budget
+
+When the duty cycle the Cube last reported is at or above the queue's
+limit (95 %), a radio command from a client is not sent; the client
+receives `S:<duty>,1,<slots>`, a discarded answer, which is what the
+Cube itself does at 100 %. Below the limit the command is sent and the
+real answer relayed.
+
+## Discovery
+
+The server answers the UDP discovery request (port 23272, opcode `I`)
+with the Cube's radio address and firmware and its own IP address, so
+`massimo discover` and the original software list it. The real Cube
+answers too, under the same serial. The original software keeps only
+the first answer per serial, so it may never show the proxy; give the
+server a different serial for discovery replies, for example the real
+one with the first letter changed:
+
+```bash
+massimo serve -proxy-serial XEQ0192422
+```
+
+The TCP greeting always carries the real serial. Alternatively block
+the Cube's UDP answers on the PC's firewall. If port 23272 is in use on
+the server's host, for example by `massimo discover`, the server runs
+without discovery and logs a warning; clients are then given the
+address by hand.
+
+## Not supported yet
+
+Pairing through the proxy: `n:` is passed through, but the `N:` line
+the Cube sends when a device pairs may arrive after the queue stopped
+waiting, and the server's device list is not refreshed. Pair with a
+direct connection for now. The proxy has no authentication, like the
+Cube; bind it to a trusted LAN.

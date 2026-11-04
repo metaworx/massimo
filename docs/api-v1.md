@@ -202,6 +202,12 @@ Kinds: `connected`, `disconnected` (the server reconnects by itself),
 changed), `config` (a device configuration arrived), `state`. A comment
 line is sent every 30 seconds to keep the connection alive.
 
+## The LAN proxy
+
+Besides the API, `massimo serve` answers as a Cube on TCP port 62910
+and UDP discovery, so that programs speaking the Cube protocol share
+the one connection the Cube allows. See [proxy.md](proxy.md).
+
 ## Not in version 1
 
 Pairing and removing devices, renaming, week programs and settings

@@ -104,7 +104,7 @@ commands:
   fakecube        serve a recorded greeting as if it were a Cube, for tests
   discover        list the Cubes on the local network (UDP broadcast)
   config          show the settings in effect, with keys and IVs redacted
-  serve           keep the Cubes connected and serve the JSON API
+  serve           keep the Cubes connected, serve the JSON API and act as a Cube on the LAN
   legacy          run the original MAX! software with filtered output
   version         print the version (also --version)
 `)

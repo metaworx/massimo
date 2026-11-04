@@ -85,9 +85,7 @@ massimo serve -listen 127.0.0.1:8099
 ```
 
 keeps every Cube from the environment connected (one connection and one
-command queue per Cube; the Cube serves only one LAN client at a time, so
-while `serve` runs, other commands and the original software wait for
-it) and serves a JSON API: `/api/v1/cubes`,
+command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `/api/v1/cubes/{serial}` (with rooms), `/devices`, `/devices/{rf}`,
 `PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
 `{"mode":"manual","temp":21.5}`, `{"mode":"auto"}` or
@@ -99,6 +97,18 @@ it) and serves a JSON API: `/api/v1/cubes`,
 `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
 The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it.
+
+The Cube serves only one LAN client at a time, so `serve` is itself a
+Cube for everyone else: it listens on port 62910 on every interface
+(`-proxy <addr>[:<port>]`, repeatable, `-proxy off` to disable) and
+answers UDP discovery. Every other massimo command and the original
+software connect to the host running `serve` (`-addr <serve host>`)
+and work beside it: reads are answered from the server's copy, writes
+go through its queue to the Cube. The original software keeps only one
+discovery answer per serial, and the real Cube answers first, so give
+the server a different serial for discovery with `-proxy-serial`, for
+example the real one with the first letter changed, or block the Cube's
+UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 
 ## Original software
 
@@ -113,4 +123,7 @@ The software never prints the LAN lines it writes, not even at debug
 level, so `legacy` reconstructs them from the logged gateway calls
 (`s:`, `t:`, `m:`, `z:`, `c:`, `l:`, `n:`, `x:`, `q:`) and prints each
 beneath its call, marked `lan (derived)`. `-out` saves the complete
-output, `-all` shows it, `-width` shortens long lines.
+output, `-all` shows it, `-width` shortens long lines. With `serve`
+running, point the software at the serve host rather than the Cube: in
+its Cube list pick the entry with the serve host's address (started
+with `-proxy-serial`, it appears under that serial).
