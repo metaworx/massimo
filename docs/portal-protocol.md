@@ -117,6 +117,21 @@ is not an interval in seconds; whether other units apply is untested.
 Both `u:` and `i:` make the Cube poll within about 20 s, which has to be
 kept apart from interval effects when measuring.
 
+Capture of 2026-11-04 02:04–02:21 (PC side, Wireshark): `i:00000078,00000000`
+over the LAN was followed by a poll 6 s later; the next attempt came 7 min
+18 s after that, as eight SYNs over 15 s that nothing answered (the portal
+was not listening on that port at the time), then a RST. Unanswered
+attempts therefore look like missing polls in the portal log; the gaps of
+29, 58 and 91 minutes seen later that morning are close to multiples of
+one period and probably include such failed attempts. A Wireshark capture
+on the portal host filtered on the Cube's address shows them.
+
+In the same capture the duty cycle went from 0 to 68 % and all six
+thermostats got the error flag (L entry byte 5 = 0x0c, byte 4 = 0x03)
+between 02:05 and 02:10 without any LAN command: the Cube spends radio
+time on its own retries to unreachable devices (they were not mounted).
+A client must expect budget to disappear without having sent anything.
+
 **Commands in the reply are ignored.** Lines `f:…` (NTP servers), `v:…`
 (time zone) and `m:…` (metadata) sent in the poll reply had no effect,
 while the same lines over the LAN work. How the original portal delivered
