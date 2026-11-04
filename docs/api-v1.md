@@ -126,6 +126,15 @@ Every device the Cube knows, in the Cube's order. Devices that are
 paired but not assigned to a room have `"unlisted": true` and no name;
 they do not appear under rooms.
 
+Devices listed in `MASSIMO_CUBE_<SN>_IGNORE` are invisible to the API:
+they are absent from every list and count, their addresses answer
+`404`, their events are not streamed, and a room that holds only such
+devices is absent as well, including from room commands. The use case
+is a device that is paired but never reports, which blocks every room
+command for the room the Cube counts it in and which the Cube never
+drops; it is parked in a room of its own on the Cube and hidden here
+(see [portal-protocol.md](portal-protocol.md)).
+
 ### GET /api/v1/cubes/{sn}/devices/{rf}
 
 One device with its configuration: `firmware`, and for thermostats

@@ -102,13 +102,57 @@ func stateOf(st cube.DeviceState) *State {
 		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
 }
 
+// Ignored is a set of devices to leave out of a backup and of a restore
+// plan: devices that are paired but never report (they would block room
+// commands if they were moved) are parked in a room of their own on the
+// Cube and hidden from every view. See docs/portal-protocol.md.
+type Ignored map[cube.RFAddress]bool
+
+// IgnoreSet builds the set from a list of addresses.
+func IgnoreSet(addrs []cube.RFAddress) Ignored {
+	if len(addrs) == 0 {
+		return nil
+	}
+	set := Ignored{}
+	for _, rf := range addrs {
+		set[rf] = true
+	}
+	return set
+}
+
+// HiddenRooms lists the rooms of md that hold only ignored devices (and
+// at least one): they are hidden together with their devices.
+func (ig Ignored) HiddenRooms(md *cube.Metadata) map[uint8]bool {
+	hidden := map[uint8]bool{}
+	if md == nil || len(ig) == 0 {
+		return hidden
+	}
+	count := map[uint8]int{}
+	for _, d := range md.Devices {
+		if ig[d.RFAddress] {
+			count[d.RoomID]++
+		} else {
+			count[d.RoomID] = -1 << 20
+		}
+	}
+	for id, n := range count {
+		if n > 0 && id != 0 {
+			hidden[id] = true
+		}
+	}
+	return hidden
+}
+
 // Take builds a backup from the client's current snapshot. ntp may be nil
 // when the servers were not requested; tool names the software version.
-func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*File, error) {
+// Ignored devices and the rooms that hold only them are left out of the
+// rooms and devices sections; the raw lines keep everything.
+func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, ignore ...cube.RFAddress) (*File, error) {
 	h := snap.Hello()
 	if h == nil {
 		return nil, fmt.Errorf("backup: no greeting from the cube yet")
 	}
+	ig := IgnoreSet(ignore)
 	f := &File{
 		Version: Version,
 		TakenAt: now.Truncate(time.Second),
@@ -123,8 +167,13 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*Fi
 		f.CubeConfig = &cc
 	}
 	md := snap.Metadata()
+	hidden := ig.HiddenRooms(md)
 	if md != nil {
-		f.Rooms = append(f.Rooms, md.Rooms...)
+		for _, r := range md.Rooms {
+			if !hidden[r.ID] {
+				f.Rooms = append(f.Rooms, r)
+			}
+		}
 	}
 	// Devices in the order of the Cube's own list, then any the Cube only
 	// sent a configuration for.
@@ -142,7 +191,7 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time) (*Fi
 		}
 	}
 	for _, rf := range order {
-		if rf == h.RFAddress {
+		if rf == h.RFAddress || ig[rf] {
 			continue
 		}
 		c := snap.Config(rf)

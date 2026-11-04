@@ -73,7 +73,12 @@ func runStatus(args []string) error {
 	if err != nil {
 		return err
 	}
-	rep := statusFromSnapshot(c.Snapshot())
+	useDeviceSerial(c.Snapshot().Hello().Serial)
+	ignore, err := ignoredDevices()
+	if err != nil {
+		return err
+	}
+	rep := statusFromSnapshot(c.Snapshot(), ignore)
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -83,8 +88,11 @@ func runStatus(args []string) error {
 	return nil
 }
 
-func statusFromSnapshot(snap *cubelan.Snapshot) statusReport {
+// statusFromSnapshot builds the report; ignored devices and the rooms
+// that hold only them are left out.
+func statusFromSnapshot(snap *cubelan.Snapshot, ignore []cube.RFAddress) statusReport {
 	var rep statusReport
+	ig := backup.IgnoreSet(ignore)
 	h := snap.Hello()
 	if h != nil {
 		rep.Serial, rep.Firmware = h.Serial, h.FirmwareVersion
@@ -99,8 +107,9 @@ func statusFromSnapshot(snap *cubelan.Snapshot) statusReport {
 			roomName[r.ID] = r.Name
 		}
 	}
+	hidden := ig.HiddenRooms(md)
 	for _, rf := range snap.Devices() {
-		if h != nil && rf == h.RFAddress {
+		if h != nil && rf == h.RFAddress || ig[rf] {
 			continue
 		}
 		d := statusDevice{RFAddress: rf.String(), Unlisted: true}
@@ -131,6 +140,9 @@ func statusFromSnapshot(snap *cubelan.Snapshot) statusReport {
 	}
 	if md != nil {
 		for _, r := range md.Rooms {
+			if hidden[r.ID] {
+				continue
+			}
 			sr := statusRoom{ID: r.ID, Name: r.Name, Ready: true, Devices: byRoom[r.ID]}
 			if sr.Devices == nil {
 				sr.Devices = []statusDevice{}

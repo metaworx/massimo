@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
 
 // Environment variables. Each of them has a per-Cube variant with the
@@ -24,6 +25,7 @@ const (
 	ivEnv     = envPrefix + "IV"
 	addrEnv   = envPrefix + "ADDRESS"
 	snEnv     = envPrefix + "SN"
+	ignoreEnv = envPrefix + "IGNORE"
 )
 
 // selectedSN is the Cube chosen with -sn (or MASSIMO_CUBE_SN), or the
@@ -128,6 +130,32 @@ func defaultAddr(addr *string, cmd string) error {
 		return fmt.Errorf("%s: -addr is required (or set %s, or -sn)", cmd, addrEnv)
 	}
 	return nil
+}
+
+// ignoredDevices returns the devices listed in MASSIMO_CUBE_<SN>_IGNORE
+// (or MASSIMO_CUBE_IGNORE) for the selected Cube: devices that are
+// paired but never report, parked in a room of their own on the Cube
+// and hidden from every view. See docs/portal-protocol.md.
+func ignoredDevices() ([]cube.RFAddress, error) {
+	name := ignoreEnv
+	if selectedSN != "" && os.Getenv(perCubeVar(ignoreEnv, selectedSN)) != "" {
+		name = perCubeVar(ignoreEnv, selectedSN)
+	}
+	return parseIgnoreList(name, os.Getenv(name))
+}
+
+// parseIgnoreList reads a comma or space separated list of radio
+// addresses; name is the variable, for the error message.
+func parseIgnoreList(name, value string) ([]cube.RFAddress, error) {
+	var out []cube.RFAddress
+	for _, f := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == ';' }) {
+		rf, err := cube.ParseRFAddress(f)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		out = append(out, rf)
+	}
+	return out, nil
 }
 
 // perCubeKeys lists the serial numbers that have MASSIMO_CUBE_<SN>_KEY

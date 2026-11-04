@@ -78,6 +78,15 @@ is discovered on the LAN. With `-addr`, the serial the Cube reports
 selects its key. `-env <file>` picks another env file. `massimo portal`
 serves every Cube that has a key and IV configured.
 
+`MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) lists radio
+addresses, comma separated, that `serve`, `status` and `backup` leave
+out together with any room that holds nothing else, and that `restore`
+never touches: a device that is paired but never reports blocks every
+command to the room the Cube counts it in, and the Cube never drops it,
+so the way out is to park it in a room of its own on the Cube and hide
+it here (see docs/portal-protocol.md). A restore keeps such devices and
+their room exactly as the Cube has them.
+
 ## Server
 
 ```bash

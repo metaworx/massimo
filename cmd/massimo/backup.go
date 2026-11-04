@@ -71,7 +71,12 @@ func runBackup(args []string) error {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "warning: NTP servers not read:", err)
 	}
-	f, err := backup.Take(c.Snapshot(), ntp, versionString(), time.Now())
+	useDeviceSerial(c.Snapshot().Hello().Serial)
+	ignore, err := ignoredDevices()
+	if err != nil {
+		return err
+	}
+	f, err := backup.Take(c.Snapshot(), ntp, versionString(), time.Now(), ignore...)
 	if err != nil {
 		return err
 	}
@@ -140,6 +145,10 @@ func runRestore(args []string) error {
 	defer stop()
 	c, err := connectCube(ctx, *addr)
 	if err != nil {
+		return err
+	}
+	useDeviceSerial(c.Snapshot().Hello().Serial)
+	if opts.Ignore, err = ignoredDevices(); err != nil {
 		return err
 	}
 	cur := backup.Current{Snapshot: c.Snapshot()}
