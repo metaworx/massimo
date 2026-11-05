@@ -179,7 +179,10 @@ battery, or remove the device from the Cube:
 
 ### GET /healthz
 
-`{"ok": true, "version": "massimo v0.1.0 …"}`
+`{"ok": true, "version": "massimo v0.1.0 …", "started_at": "2026-11-05T18:20:00+01:00"}`
+
+`started_at` is when the server process started; a new time with the
+same version means the server was restarted.
 
 ### GET /api/v1/cubes
 

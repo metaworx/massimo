@@ -131,12 +131,13 @@ type ProxyListener struct {
 
 // Server is the HTTP API over a set of Cubes.
 type Server struct {
-	opts  Options
-	log   *slog.Logger
-	mu    sync.RWMutex
-	cubes map[string]*runtime // by serial, lower case
-	order []string
-	mux   *http.ServeMux
+	opts    Options
+	log     *slog.Logger
+	started time.Time // when the server was created, for /healthz
+	mu      sync.RWMutex
+	cubes   map[string]*runtime // by serial, lower case
+	order   []string
+	mux     *http.ServeMux
 
 	limiter *authLimiter
 	tickets *ticketStore
@@ -223,7 +224,7 @@ func New(opts Options) *Server {
 	if opts.PollInterval == 0 {
 		opts.PollInterval = time.Minute
 	}
-	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{},
+	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}}
 	for _, c := range opts.Cubes {
@@ -459,7 +460,7 @@ func (s *Server) Handler() http.Handler { return s.mux }
 func (s *Server) routes() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.opts.Version})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started})
 	})
 	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {

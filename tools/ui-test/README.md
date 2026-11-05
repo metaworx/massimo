@@ -3,7 +3,7 @@
 `make ui-test` runs `run.sh`. The script:
 
 1. builds massimo;
-2. starts the fake Cube (`massimo fakecube`) with `greeting.txt`, which is the protocol fixture from internal/protocol/cube/testdata plus an `L:` line with device states (measured temperatures included) and a window contact, "Fenster Kind 1", that reports an open window;
+2. starts the fake Cube (`massimo fakecube`), which also answers discovery, with `greeting.txt`, which is the protocol fixture from internal/protocol/cube/testdata plus an `L:` line with device states (measured temperatures included) and a window contact, "Fenster Kind 1", that reports an open window;
 3. starts `massimo serve` against the fake Cube, with the API token `ui-test-token`;
 4. runs `smoke.py` with Playwright (Chromium).
 
@@ -17,7 +17,7 @@ The smoke test runs at 1100 and 390 px, in English and in German (from the brows
 - the event stream opens with tickets only, never with the token, and after a refused stream (the test hands out a used ticket first, which the server answers with 401) the page opens it again with a new ticket;
 - the room with the open window shows "Open" on its tile, and only that room; the badge goes when a state event closes the window;
 - the measured temperature shows its age; after a state event makes the first room's thermostat 30 hours old and stale, the tile warns, the temperature is greyed, and the device list shows the stale badge and the values' ages, with the exact times in expert mode;
-- the Cube choice's "Search for new Cubes…" shows "Searching…" until the server answers, then lists the found Cube as not selectable, with its env lines under the header; a `cube_found` event adds another one live; a refused search (503) shows the server's message. The discovery answer and the extra Cube in `GET /api/v1/cubes` are stubbed, since the fake Cube does not answer discovery;
+- the Cube choice's "Search for new Cubes…" shows "Searching…" until the server answers, then lists the Cube the fake Cube announces in discovery (KEQ0000000, not configured) as not selectable, with its env lines under the header and its `cube_found` in the log; an injected `cube_found` event adds another one live; a refused search (a stubbed 503) shows the server's message. The fake Cube answers discovery on loopback (`-discovery`, `UI_TEST_DISCOVERY_PORT`, 23919) and the server asks it there (`-discover-target`); the server's own discovery socket is UDP 23272 as always, so where another program holds that port the search answers 503 and the test skips the checks that need an answer;
 - there is no console error, no page error and no horizontal scroll.
 
 It sends nothing to the fake Cube. The state events of the last two points are applied in the page (`updateDevice`), since the fake Cube does not change its states.

@@ -94,13 +94,14 @@ device list arrives just after it, not at that exact time.
 Then (branch claude/ui-cube-discover, the owner's wish): "Search for new
 Cubes…" at the end of the Cube choice runs `POST /api/v1/cubes/discover`;
 Cubes with `configured: false` appear in the choice, not selectable,
-and under the header with the env lines to add (`_ADDRESS`, which
-serve needs, and `_KEY`/`_IV` for the portal); `cube_found` events add
-them live. Built against the API shape agreed with the coordinating
-session before the server side was merged; `make ui-test` stubs the
-discovery answer. Open: which Cubes count as configured on the server
-(serve connects to those with an address, not those with a key and
-IV).
+and under the header with the env lines to add (`_ADDRESS`, or a
+`_NAME` alone, which makes serve follow the discovered address);
+`cube_found` events add them live and show in the log, also from
+`/log`. `make ui-test` has the fake Cube answer discovery on loopback
+(`fakecube -discovery`, `serve -discover-target`). PR 16 went in with
+the version built before the server side; the follow-up branch
+claude/ui-cube-discover-api brings it in line, and adds `started_at` to
+`/healthz`, shown in the expert header as "Server started".
 
 ## State
 

@@ -219,6 +219,21 @@ func TestServerToken(t *testing.T) {
 	}
 }
 
+func TestHealthzStarted(t *testing.T) {
+	before := time.Now()
+	_, ts, _ := start(t, "secret")
+	var h struct {
+		OK        bool      `json:"ok"`
+		StartedAt time.Time `json:"started_at"`
+	}
+	if code := getJSON(t, ts, "", "/healthz", &h); code != 200 {
+		t.Fatalf("healthz: %d", code)
+	}
+	if !h.OK || h.StartedAt.Before(before.Add(-time.Second)) || h.StartedAt.After(time.Now()) {
+		t.Fatalf("healthz %+v, want ok and started_at since %v", h, before)
+	}
+}
+
 func TestPeriodicRefreshReconnects(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {

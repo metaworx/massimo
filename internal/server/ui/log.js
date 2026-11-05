@@ -50,11 +50,20 @@ function logStateText(s) {
 // state event is made when the line is drawn, in the current language.
 function logLine(ev) {
   const time = ev.time ? new Date(ev.time) : new Date();
-  return { time, kind: ev.kind || "", device: ev.device || "", state: ev.kind === "state" ? ev.state : null, text: ev.error || "" };
+  return {
+    time,
+    kind: ev.kind || "",
+    device: ev.device || "",
+    state: ev.kind === "state" ? ev.state : null,
+    cube: ev.kind === "cube_found" ? ev.cube : null,
+    text: ev.error || "",
+  };
 }
 
 function logText(line) {
-  return line.state ? logStateText(line.state) : line.text;
+  if (line.state) return logStateText(line.state);
+  if (line.cube) return t("discover.log", { serial: line.cube.serial, address: line.cube.address || "–" });
+  return line.text;
 }
 
 // logKind is the event kind as shown; the class keeps the API's name.

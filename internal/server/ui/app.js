@@ -575,7 +575,9 @@ function addFound(c) {
 
 // renderFound lists, under the header, the Cubes found on the LAN that
 // the server does not serve, and how to add them: the lines for the
-// server's env file, ready to copy.
+// server's env file, ready to copy. The address makes serve take the
+// Cube; a name alone would as well, serve then follows the address the
+// Cube answers discovery from.
 function renderFound() {
   const box = $("cube-found");
   const n = state.found.length;
@@ -601,7 +603,7 @@ function renderFound() {
   const lines = [];
   for (const c of state.found) {
     const p = "MASSIMO_CUBE_" + c.serial + "_";
-    lines.push(p + "ADDRESS=" + (c.address || ""), p + "KEY=", p + "IV=");
+    lines.push(p + "ADDRESS=" + (c.address || ""), p + "NAME=");
   }
   body.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
   body.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
@@ -641,6 +643,23 @@ function splitVersion(v) {
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
 // otherwise it offers a button.
+// renderStarted shows in expert mode when the server process started,
+// and how long ago (an older server sends no time).
+function renderStarted(iso) {
+  const dd = $("server-started");
+  if (dd.dataset.iso === (iso || "")) return;
+  dd.dataset.iso = iso || "";
+  clear(dd);
+  const ms = Date.parse(iso || "");
+  if (isNaN(ms)) {
+    dd.textContent = "–";
+    return;
+  }
+  dd.appendChild(document.createTextNode(fmtInstant(new Date(ms))));
+  const age = ageEl(iso, false, true);
+  if (age) dd.appendChild(age);
+}
+
 async function checkVersion() {
   let h;
   try {
@@ -649,6 +668,7 @@ async function checkVersion() {
     return;
   }
   const v = h && h.version ? h.version : "";
+  renderStarted(h && h.started_at);
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);
@@ -753,10 +773,8 @@ async function connectEvents() {
   es.addEventListener("config", logged(() => {}));
   es.addEventListener("cube_found", (ev) => {
     const data = JSON.parse(ev.data);
-    const c = data && data.serial ? data : data && data.cube;
-    if (!c) return;
-    appendLogEvent({ kind: "cube_found", time: c.found_at, error: t("discover.log", { serial: c.serial, address: c.address || "–" }) });
-    addFound(c);
+    appendLogEvent(data);
+    addFound(data.cube);
   });
   es.onerror = () => {
     if (gen !== eventsGen) return;
