@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, core: API access with the token, settings, the
-// header with the Cube clock, loading of cubes and rooms, polling and
-// the event stream. The tiles and their actions are in tiles.js.
+// The Massimo web UI, core: API access with the token, the DOM and
+// formatting helpers the other files share (textEl, button,
+// submitButton, badgeEl, iconEl, fmtTemp; fmtNum is in i18n.js),
+// settings, the header with the Cube clock, loading of cubes and rooms,
+// polling and the event stream. The tiles and their actions are in
+// tiles.js.
 "use strict";
 
 const state = {
@@ -144,8 +147,37 @@ function showMessage(text, ok) {
   m.className = "message " + (ok ? "ok" : "bad");
 }
 
-function fmtTemp(v) {
-  return v === undefined || v === null ? "" : fmtNum(v, 1) + " °C";
+// submitButton is a form's primary submit button.
+function submitButton(label) {
+  const b = document.createElement("button");
+  b.type = "submit";
+  b.className = "primary";
+  b.textContent = label;
+  return b;
+}
+
+// badgeEl is a small outlined or filled label (.flag) of a kind: ok,
+// warn, bad, mode, fill-ok, fill-warn, fill-bad.
+function badgeEl(text, kind) {
+  return textEl("span", text, "flag " + kind);
+}
+
+// iconEl returns a small inline icon referencing a symbol of the page.
+function iconEl(symbol, cls) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", cls);
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "#" + symbol);
+  svg.appendChild(use);
+  return svg;
+}
+
+// fmtTemp is a temperature with one decimal and a unit ("°C" unless
+// given), "–" when unknown.
+function fmtTemp(v, unit) {
+  if (v === undefined || v === null) return "–";
+  return fmtNum(v, 1) + (unit === undefined ? " °C" : unit);
 }
 
 function isThermostat(d) {
@@ -187,7 +219,7 @@ function helpParts(key, label) {
   btn.setAttribute("aria-controls", text.id);
   btn.setAttribute("aria-label", t("help.button", { label }));
   btn.title = t("help.title");
-  btn.appendChild(helpIcon());
+  btn.appendChild(iconEl("icon-help", "hi"));
   const show = (on) => {
     text.classList.toggle("hidden", !on);
     btn.classList.toggle("active", on);
@@ -201,16 +233,6 @@ function helpParts(key, label) {
     show(on);
   });
   return { btn, text };
-}
-
-function helpIcon() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "hi");
-  svg.setAttribute("aria-hidden", "true");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", "#icon-help");
-  svg.appendChild(use);
-  return svg;
 }
 
 // initHelpSlots puts a help button into every element of the page with
@@ -554,7 +576,7 @@ function initSettings() {
   $("forget-token").addEventListener("click", () => {
     state.token = null;
     store("massimo.token", null);
-    panel.classList.add("hidden");
+    showView("tiles");
     refresh().then(connectEvents);
   });
 }
@@ -577,6 +599,11 @@ function renderLangSelect() {
     sel.appendChild(o);
   }
   sel.value = i18n.setting;
+  const note = $("lang-note");
+  const texts = machineNote();
+  clear(note);
+  note.classList.toggle("hidden", !texts);
+  if (texts) for (const s of texts) note.appendChild(textEl("span", s));
 }
 
 // applyLanguage redraws every text after a change of language.

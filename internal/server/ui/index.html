@@ -96,7 +96,9 @@
         <label for="lang-select" data-i18n="settings.language">Language</label>
         <span data-help="language" data-help-label="settings.language"></span>
         <select id="lang-select" class="setting-control"></select>
+        <p id="lang-note" class="muted small lang-note hidden"></p>
       </div>
+      <p class="muted small settings-note" data-i18n="settings.reloadNote">While this page is open, a new server version does not reload the page by itself; the reload button appears in the header instead.</p>
       <div class="actions">
         <button type="button" id="forget-token" data-i18n="settings.forgetToken">Forget token</button>
       </div>
@@ -223,6 +225,7 @@
         <button type="button" class="mode-holiday" aria-pressed="false" title="holiday: a temperature until a date" data-i18n="mode.holiday" data-i18n-attr="title:room.holidayTitle">HOLIDAY</button>
       </span>
       <span class="mode-vacation hidden"></span>
+      <span class="mode-mixed hidden"></span>
       <span class="tile-tools">
         <button type="button" class="tool-btn tile-info" aria-label="devices of the room" title="Devices" aria-expanded="false" data-i18n-attr="aria-label:room.devices title:room.devicesTitle"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg></button>
         <button type="button" class="tool-btn tile-cog" aria-label="configure the room" title="Configure" aria-expanded="false" data-i18n-attr="aria-label:room.configure title:room.configureTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>

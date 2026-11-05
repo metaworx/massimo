@@ -296,11 +296,7 @@ function formActions(onCancel, sendLabel, extra) {
   const right = document.createElement("span");
   right.className = "actions-right";
   right.appendChild(button(t("action.cancel"), "", onCancel));
-  const send = document.createElement("button");
-  send.type = "submit";
-  send.className = "primary";
-  send.textContent = sendLabel || t("action.send");
-  right.appendChild(send);
+  right.appendChild(submitButton(sendLabel || t("action.send")));
   actions.appendChild(right);
   return actions;
 }
@@ -511,11 +507,7 @@ function renderDeviceForm(room, c, d) {
   }
   const actions = document.createElement("div");
   actions.className = "actions";
-  const send = document.createElement("button");
-  send.type = "submit";
-  send.className = "primary";
-  send.textContent = t("action.send");
-  actions.appendChild(send);
+  actions.appendChild(submitButton(t("action.send")));
   form.appendChild(actions);
   return form;
 }
@@ -736,7 +728,7 @@ function renderDayBar(points) {
     seg.style.flexGrow = String(Math.max(1, end - start));
     const warm = hi > lo ? (pt.temp - lo) / (hi - lo) : 0.5;
     seg.style.setProperty("--warm", warm.toFixed(2));
-    seg.title = clockOf(start) + " – " + pt.until + ": " + fmtNum(pt.temp, 1) + " °C";
+    seg.title = clockOf(start) + " – " + pt.until + ": " + fmtTemp(pt.temp);
     bar.appendChild(seg);
     start = end;
   }

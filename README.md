@@ -140,10 +140,9 @@ configuration area (name, temperatures, boost and descaling, device
 names and offsets, moves, the week programme with a day editor that
 edits the days sharing a programme together, copy of rooms' settings
 to other rooms), a help button next to every setting, and a log view of
-the Cube's events. The page speaks English and German (from the
-browser, or chosen in the settings); the translation table in
-`internal/server/ui/i18n.js` has room for French, Italian, Dutch and
-Polish. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
+the Cube's events. The page speaks English, German, French, Italian,
+Dutch and Polish (from the browser, or chosen in the settings), from
+the translation table in `internal/server/ui/i18n.js`. [docs/ui.md](docs/ui.md) describes how to use it. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it, and the UI, which needs the same token as the
 API, with it. `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
@@ -163,6 +162,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 ## Documentation
 
 - [docs/api-v1.md](docs/api-v1.md), [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml): the HTTP API
+- [docs/ui.md](docs/ui.md): using the web UI
 - [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
 - [docs/portal-protocol.md](docs/portal-protocol.md): everything learned about the Cube, the portal and the radio commands
 - [docs/firmware-extraction.md](docs/firmware-extraction.md): reading the Cube's firmware over JTAG, hardware facts and the procedure
@@ -172,6 +172,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware
 - [docs/handover-session.md](docs/handover-session.md): where the last session stopped, open feedback, next steps
 - [docs/review-2026-11-05.md](docs/review-2026-11-05.md): code review with findings, extraction proposals and the coding standard
+- [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`, the web UI smoke test with Playwright, and its setup
 
 ## Versions
 
