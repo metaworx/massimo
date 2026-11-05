@@ -3,7 +3,17 @@
 The design proposal the project started from, kept here as the frame
 for docs/roadmap.md. Written before phase 0; the "Status" section says
 what has happened since. Names: the product is Massimo; "the bridge"
-below means the same thing.
+below means the same thing. The evaluation that preceded it, the
+licence reasoning and the two routes to a public server are in
+docs/background.md, with the sources.
+
+References used throughout: [Bouni/max-cube-protocol](https://github.com/Bouni/max-cube-protocol)
+(LAN protocol), [FHEM MAX modules](https://fhem.de/commandref.html#MAX)
+(radio protocol reference), [ERNW: Analyzing an IoT Device](https://insinuator.net/2016/04/discover-the-unknown-analyzing-an-iot-device/)
+(portal transport, firmware), [LoxBerry](https://www.loxwiki.eu/display/LOXBERRY)
+and [Loxone virtual inputs/outputs](https://www.loxone.com/enen/kb/virtual-inputs/)
+(integration targets), [dktzde/maxcube](https://github.com/dktzde/maxcube)
+(Cube reflashed as a radio stick).
 
 ## Status (2026-11-05)
 

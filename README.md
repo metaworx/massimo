@@ -158,6 +158,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
 - [docs/portal-protocol.md](docs/portal-protocol.md): everything learned about the Cube, the portal and the radio commands
 - [docs/firmware-extraction.md](docs/firmware-extraction.md): reading the Cube's firmware over JTAG, hardware facts and the procedure
+- [docs/background.md](docs/background.md): the evaluation before the project, licence reasoning, routes to a public server, sources
 - [docs/design.md](docs/design.md): the design proposal, target environments, phases and their status
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware
