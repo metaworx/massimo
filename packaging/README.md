@@ -4,7 +4,8 @@
 next to the Cubes, such as a Raspberry Pi. `massimo install` sets it up as
 a systemd service with the files of this directory, which are compiled into
 the binary; "Install by hand" below lists the same steps. On Windows it
-installs a Windows service instead (see "Windows").
+installs a Windows service instead (see "Windows"), on a Mac
+LaunchDaemons (see "macOS").
 
 - `systemd/massimo.service`: the unit. Runs as the user `massimo`, reads
   its settings from `/etc/massimo/env`, listens on port 8099 on every
@@ -14,6 +15,9 @@ installs a Windows service instead (see "Windows").
   update helper, which installs a new release when the web UI or the API
   asks for one (see Updating).
 - `logrotate/massimo`: weekly rotation of that log.
+- `launchd/ch.metaworx.massimo.plist` and
+  `launchd/ch.metaworx.massimo-update.plist`: the service and the update
+  helper on macOS (see "macOS").
 
 Each Cube accepts exactly one TCP client. Only one `massimo serve` can be
 connected to a Cube at a time, so stop any other server (and close the
@@ -262,7 +266,9 @@ sudo systemctl enable --now massimo-update.path
 `massimo.service` passes `-update-request /var/lib/massimo/update-request`
 to `serve`, which enables the button under Settings → Software. The
 helper's log is in `journalctl -u massimo-update`, its last result in
-`/var/lib/massimo-update/status.json` and in the UI.
+`/var/lib/massimo-update/status.json` and in the UI. On macOS the same
+request starts the LaunchDaemon `ch.metaworx.massimo-update` instead
+(see "macOS").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`, a secret of
 the repository's `signing` environment that only `v*` tags can use; its
@@ -307,6 +313,84 @@ place, then restarts the service through the service manager; `-rollback`
 works as on Linux. The web UI cannot start updates on Windows yet: that
 needs a helper like the systemd path unit, and the server's update
 endpoint still refuses on Windows.
+
+## macOS
+
+On a Mac (macOS on Apple silicon or Intel), with `massimo-darwin-arm64`
+or `massimo-darwin-amd64` from a release and your settings in the
+current folder:
+
+```sh
+chmod +x massimo-darwin-arm64
+sudo ./massimo-darwin-arm64 install -dry-run -settings .env
+sudo ./massimo-darwin-arm64 install -settings .env
+```
+
+The release binaries are ad-hoc signed (which Apple silicon requires),
+not notarized. A download with `curl` runs as it is; one through a
+browser carries the quarantine attribute, and Gatekeeper refuses to start
+it until that is removed: `xattr -d com.apple.quarantine
+massimo-darwin-arm64`. The installed copy and the updates the helper
+downloads carry none.
+
+The layout is the Linux one, since macOS keeps `/etc` and `/var` (as
+`/private/etc` and `/private/var`) for the system's own daemons and
+leaves them alone on system updates; so the paths here, in the API docs
+and in the update helper are the same everywhere:
+
+- the binary `/usr/local/bin/massimo` (the folder is made when missing,
+  as on a fresh Apple silicon Mac);
+- the hidden system user and group `_massimo` (made with `dscl`, the
+  first free ID from 400; it has no shell and no login), which runs the
+  server;
+- the settings `/etc/massimo/env` (without `-settings`, a template to fill
+  in), mode 0600, owned by `_massimo`;
+- the state `/var/lib/massimo` and the helper's status
+  `/var/lib/massimo-update/status.json`;
+- the log `/var/log/massimo/serve.log`: launchd appends the server's
+  output to it, so there is no `-log` and no `MASSIMO_LOG` (install warns
+  if the settings set one, as every line would come twice). macOS has no
+  `copytruncate` for a log a process keeps open, so it is not rotated;
+  it grows by about what the Linux one does per week.
+- the LaunchDaemon `ch.metaworx.massimo` in `/Library/LaunchDaemons`:
+  started at boot without anyone logging in, restarted 10 s after it
+  fails, running `massimo -env /etc/massimo/env serve -listen :8099
+  -update-request /var/lib/massimo/update-request`;
+- the update helper `ch.metaworx.massimo-update` (root), which launchd
+  starts when the server writes `/var/lib/massimo/update-request`: the
+  counterpart of the systemd path unit, so the web UI can start updates
+  as on Linux (see "From the web UI"). Its log is
+  `/var/log/massimo-update.log`.
+
+`-listen <addr>` changes the address, and installing again keeps it (it
+is read back from the installed property list); the helper's health
+check follows it. macOS lets a user other than root listen on a port
+below 1024 only on every address, so `-listen :80` works and
+`-listen 192.168.1.5:80` does not (install warns). With the application
+firewall on, install allows incoming connections for the binary;
+otherwise there is nothing to do.
+
+Control it with `launchctl` (all with `sudo`):
+
+```sh
+launchctl print system/ch.metaworx.massimo                             # state, PID, last exit
+launchctl kickstart -k system/ch.metaworx.massimo                      # restart
+launchctl bootout system/ch.metaworx.massimo                           # stop until the next boot
+launchctl bootstrap system /Library/LaunchDaemons/ch.metaworx.massimo.plist   # start again
+```
+
+Running `install` again replaces the binary and the property lists and
+restarts the server. `install -remove` unloads both LaunchDaemons and
+removes them and the binary; `-purge` also the settings, the state, the
+logs and the user. Updates by hand:
+
+```sh
+sudo massimo update -restart ch.metaworx.massimo -health http://127.0.0.1:8099/healthz
+```
+
+As on Linux the new binary is renamed into place (which macOS needs for
+a signed binary: one overwritten in place is killed), the old one kept as
+`massimo.prev`, and `-rollback` goes back.
 
 ## Resource use
 
