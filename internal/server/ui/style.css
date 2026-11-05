@@ -229,6 +229,7 @@ body.expert #clock-plain { display: none; }
 .setting > select.setting-control { width: 100%; }
 .settings input[type="number"] { width: 6em; }
 .settings .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 0 10px; }
+.settings .settings-note { margin: 4px 0 8px; }
 .settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
 .settings .update p { margin: 4px 0; overflow-wrap: anywhere; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
