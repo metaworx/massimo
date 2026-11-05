@@ -188,7 +188,7 @@ jobs:
           sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | head -3
           up
           curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
-          test "$(stat -f %Su:%Lp /etc/massimo/env)" = _massimo:600
+          test "$(sudo stat -f %Su:%Lp /etc/massimo/env)" = _massimo:600
           if cat /etc/massimo/env 2>/dev/null; then echo "::error::settings readable"; exit 1; fi
           dscl . -read /Users/_massimo IsHidden UserShell
 
