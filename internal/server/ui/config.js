@@ -210,16 +210,46 @@ function renderTabs(room, c) {
   return bar;
 }
 
-// field builds a labelled input and binds it to the edit model.
-function field(label, input, unit) {
-  const wrap = document.createElement("label");
+// field builds a labelled input with an optional help button and
+// explanation. The input is given an id for its label when it has none.
+let fieldSeq = 0;
+function field(label, input, unit, help) {
+  const wrap = document.createElement("div");
   wrap.className = "cfg-field";
-  wrap.appendChild(textEl("span", label, "cfg-label"));
+  const head = document.createElement("span");
+  head.className = "cfg-head";
+  const lab = textEl("label", label, "cfg-label");
+  const target = input.matches("input, select") ? input : input.querySelector("input, select");
+  if (target) {
+    if (!target.id) target.id = "cfg-input-" + ++fieldSeq;
+    lab.htmlFor = target.id;
+  }
+  head.appendChild(lab);
+  let text = null;
+  if (help) {
+    const h = helpParts(help, label);
+    head.appendChild(h.btn);
+    text = h.text;
+  }
+  wrap.appendChild(head);
   const box = document.createElement("span");
   box.className = "inline";
   box.appendChild(input);
   if (unit) box.appendChild(textEl("span", unit, "muted"));
   wrap.appendChild(box);
+  if (text) wrap.appendChild(text);
+  return wrap;
+}
+
+// withHelp puts a help button and its explanation next to a control
+// that carries its own label, such as a switch.
+function withHelp(el, help, label) {
+  const wrap = document.createElement("div");
+  wrap.className = "cfg-field with-help";
+  const h = helpParts(help, label);
+  wrap.appendChild(el);
+  wrap.appendChild(h.btn);
+  wrap.appendChild(h.text);
   return wrap;
 }
 
@@ -292,7 +322,7 @@ function renderRoomTab(room, c) {
   name.addEventListener("input", () => {
     c.edit.name = name.value;
   });
-  form.appendChild(field("Room name", name));
+  form.appendChild(field("Room name", name, "", "roomName"));
   const hint = textEl("p", "Up to " + NAME_BYTES + " bytes; umlauts take two.", "muted small");
   form.appendChild(hint);
   form.appendChild(formActions(() => closeConfig(room)));
@@ -326,12 +356,12 @@ function renderTempsTab(room, c) {
   const set = (k) => (v) => {
     e[k] = v;
   };
-  form.appendChild(field("Comfort temperature", numberInput(e.comfort_temp, MIN_TEMP, MAX_TEMP, STEP, set("comfort_temp")), "°C"));
-  form.appendChild(field("Eco temperature", numberInput(e.eco_temp, MIN_TEMP, MAX_TEMP, STEP, set("eco_temp")), "°C"));
-  form.appendChild(field("Open window", numberInput(e.window_open_temp, MIN_TEMP, MAX_TEMP, STEP, set("window_open_temp")), "°C"));
-  form.appendChild(field("Open window for", numberInput(e.window_open_minutes, 0, 60, 5, set("window_open_minutes")), "min"));
-  form.appendChild(field("Maximum temperature", numberInput(e.max_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("max_setpoint")), "°C"));
-  form.appendChild(field("Minimum temperature", numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), "°C"));
+  form.appendChild(field("Comfort temperature", numberInput(e.comfort_temp, MIN_TEMP, MAX_TEMP, STEP, set("comfort_temp")), "°C", "comfort"));
+  form.appendChild(field("Eco temperature", numberInput(e.eco_temp, MIN_TEMP, MAX_TEMP, STEP, set("eco_temp")), "°C", "eco"));
+  form.appendChild(field("Open window", numberInput(e.window_open_temp, MIN_TEMP, MAX_TEMP, STEP, set("window_open_temp")), "°C", "windowTemp"));
+  form.appendChild(field("Open window for", numberInput(e.window_open_minutes, 0, 60, 5, set("window_open_minutes")), "min", "windowMinutes"));
+  form.appendChild(field("Maximum temperature", numberInput(e.max_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("max_setpoint")), "°C", "maxTemp"));
+  form.appendChild(field("Minimum temperature", numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), "°C", "minTemp"));
   form.appendChild(sourceNote(c));
   form.appendChild(formActions(() => closeConfig(room)));
   return form;
@@ -394,17 +424,19 @@ function renderDevicesTab(room, c) {
       e[k] = v;
     };
     form.appendChild(textEl("h4", "Radiator thermostats of the room"));
-    form.appendChild(field("Boost duration", numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), "min"));
-    form.appendChild(field("Boost valve opening", numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), "%"));
+    form.appendChild(field("Boost duration", numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), "min", "boostMinutes"));
+    form.appendChild(field("Boost valve opening", numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), "%", "boostValve"));
     const dayOpts = DAYS.map((d) => [d, d.charAt(0).toUpperCase() + d.slice(1)]);
     const decalc = document.createElement("span");
     decalc.className = "inline";
     decalc.appendChild(selectInput(dayOpts, e.decalc_day, set("decalc_day")));
-    decalc.appendChild(numberInput(e.decalc_hour, 0, 23, 1, set("decalc_hour")));
+    const hour = numberInput(e.decalc_hour, 0, 23, 1, set("decalc_hour"));
+    hour.setAttribute("aria-label", "descaling hour");
+    decalc.appendChild(hour);
     decalc.appendChild(textEl("span", ":00", "muted"));
-    form.appendChild(field("Descaling run", decalc));
-    form.appendChild(field("Maximum valve opening", numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), "%"));
-    form.appendChild(field("Valve offset", numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), "%"));
+    form.appendChild(field("Descaling run", decalc, "", "decalc"));
+    form.appendChild(field("Maximum valve opening", numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), "%", "maxValve"));
+    form.appendChild(field("Valve offset", numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), "%", "valveOffset"));
     form.appendChild(formActions(() => closeConfig(room)));
     wrap.appendChild(form);
   }
@@ -434,31 +466,23 @@ function renderDeviceForm(room, c, d) {
   name.addEventListener("input", () => {
     e.name = name.value;
   });
-  form.appendChild(field("Name", name));
+  form.appendChild(field("Name", name, "", "deviceName"));
   if (isThermostat(d)) {
     form.appendChild(field("Temperature offset", numberInput(e.temp_offset, -3.5, 3.5, 0.5, (v) => {
       e.temp_offset = v;
-    }), "°C"));
+    }), "°C", "tempOffset"));
     if (d.type === "wall_thermostat") {
-      const sw = document.createElement("label");
-      sw.className = "switch";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = !!e.display_actual;
-      cb.addEventListener("change", () => {
-        e.display_actual = cb.checked;
+      const sw = switchEl("Display the measured temperature", e.display_actual, (on) => {
+        e.display_actual = on;
       });
-      sw.appendChild(cb);
-      sw.appendChild(textEl("span", "", "slider"));
-      sw.appendChild(textEl("span", "Display the measured temperature", "switch-label"));
-      form.appendChild(sw);
+      form.appendChild(withHelp(sw, "displayActual", "Display the measured temperature"));
     }
   }
   const others = state.rooms.map((r) => [String(r.id), r.name + (r.id === room.id ? " (this room)" : "")]);
   form.appendChild(field("Room", selectInput(others, e.room_id, (v) => {
     e.room_id = Number(v);
     e.confirmMove = false;
-  })));
+  }), "", "deviceRoom"));
   if (e.confirmMove) {
     const box = document.createElement("div");
     box.className = "panel delete-confirm";
@@ -585,10 +609,11 @@ function renderProgramTab(room, c) {
     days.appendChild(b);
   }
   form.appendChild(days);
-  form.appendChild(switchEl("Only " + DAY_LONG[p.day], p.only, (on) => {
+  const only = switchEl("Only " + DAY_LONG[p.day], p.only, (on) => {
     p.only = on;
     rerenderRoom(room);
-  }));
+  });
+  form.appendChild(withHelp(only, "onlyDay", "Only " + DAY_LONG[p.day]));
   const together = DAYS.filter((d) => p.selected.has(d));
   const scope = p.only || together.length < 2
     ? "Changes apply to " + DAY_LONG[p.day] + " only."

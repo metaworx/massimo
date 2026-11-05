@@ -168,6 +168,85 @@ function tomorrowMorning() {
   return localDateTimeValue(d);
 }
 
+// --- help -------------------------------------------------------------
+
+// HELP is the short explanation of each setting, after what the
+// original MAX! software's manual says the setting does.
+const HELP = {
+  roomName: "The room's name, stored on the Cube and shown by every program that talks to it.",
+  comfort: "The comfort temperature (sun symbol). The thermostats switch to it with their comfort/eco button.",
+  eco: "The eco or set-back temperature (moon symbol), for nights and absences. The thermostats switch to it with their comfort/eco button.",
+  windowTemp: "The temperature the thermostats set while a window is open: reported by a window contact of the room, or detected by a radiator thermostat from a sudden drop in temperature.",
+  windowMinutes: "How long a radiator thermostat keeps the open-window temperature after it detected an open window by itself. With a window contact the temperature is kept until the window closes.",
+  maxTemp: "The highest temperature that can be set on the thermostats of the room.",
+  minTemp: "The lowest temperature that can be set on the thermostats of the room.",
+  boostMinutes: "How long the Boost function, started with the Boost button on a thermostat, keeps the valve open.",
+  boostValve: "How far the valve opens during Boost.",
+  decalc: "Once a week the radiator thermostats open and close their valves fully so that they do not seize up (descaling). The day and hour of that run.",
+  maxValve: "The furthest the valve opens in normal operation; lower it if a radiator heats too strongly when fully open.",
+  valveOffset: "Shifts the valve position by a fixed percentage, for valves that do not close or open where expected. Normally 0 %.",
+  deviceName: "The device's name, stored on the Cube.",
+  tempOffset: "Corrects the temperature this thermostat measures, from −3.5 to +3.5 °C, when the room is warmer or colder than it is next to the thermostat.",
+  displayActual: "The wall thermostat's display shows the measured room temperature instead of the set temperature.",
+  deviceRoom: "Moves the device to another room; it is then linked with the thermostats of that room and follows its settings.",
+  onlyDay: "On: changes apply to the edited day only. Off: changes apply to every selected day at once, the days that have the same programme.",
+  poll: "How often the page asks the server for the Cube's state. Changes reported by the devices arrive in between as they happen.",
+  expert: "Shows radio addresses, device types, the Cube's radio budget and the server version.",
+  clock: "The Cube keeps its own time zone. Show its clock converted to the browser's time zone, or as the Cube has it.",
+};
+
+const helpOpen = new Set(); // keys of the explanations shown
+let helpSeq = 0;
+
+// helpParts returns a labelled button that toggles the explanation of a
+// setting, and the explanation, hidden until asked for. An open
+// explanation stays open when its tile is drawn again.
+function helpParts(key, label) {
+  const text = textEl("p", HELP[key] || "", "help-text");
+  text.id = "help-" + key + "-" + ++helpSeq;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "help-btn";
+  btn.setAttribute("aria-controls", text.id);
+  btn.setAttribute("aria-label", "help: " + label);
+  btn.title = "What does this do?";
+  btn.appendChild(helpIcon());
+  const show = (on) => {
+    text.classList.toggle("hidden", !on);
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-expanded", on ? "true" : "false");
+  };
+  show(helpOpen.has(key));
+  btn.addEventListener("click", () => {
+    const on = !helpOpen.has(key);
+    if (on) helpOpen.add(key);
+    else helpOpen.delete(key);
+    show(on);
+  });
+  return { btn, text };
+}
+
+function helpIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "hi");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "#icon-help");
+  svg.appendChild(use);
+  return svg;
+}
+
+// initHelpSlots puts a help button into every element of the page with
+// a data-help key, and its explanation at the end of the slot's parent.
+function initHelpSlots() {
+  for (const slot of document.querySelectorAll("[data-help]")) {
+    const h = helpParts(slot.dataset.help, slot.dataset.helpLabel || "");
+    clear(slot);
+    slot.appendChild(h.btn);
+    slot.parentElement.appendChild(h.text);
+  }
+}
+
 // --- cube clock -------------------------------------------------------
 
 // lastWeekday returns the day of month of the last given weekday
@@ -500,6 +579,7 @@ function init() {
   state.token = readStored("massimo.token");
   state.serial = readStored("massimo.serial");
   loadSettings();
+  initHelpSlots();
   initSettings();
   applySettings();
   checkVersion();
