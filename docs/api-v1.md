@@ -625,6 +625,33 @@ changed), `config` (a device configuration arrived), `state`,
 is not configured, see POST /cubes/discover). A comment line is sent every 30 seconds
 to keep the connection alive.
 
+A `state` event that follows an earlier one for the same device also
+says what changed, whoever changed it, the server, another client or
+someone at the device:
+
+```
+event: state
+data: {"kind":"state","device":"05cdc6","state":{…},
+       "changes":{"window_open":{"from":false,"to":true},"setpoint":{"from":18,"to":5}},"time":"…"}
+```
+
+`changes` has one entry per value of `state` that differs (the same
+names: `mode`, `setpoint`, `actual_temp`, `valve_pct`, `window_open`,
+`until`, `battery_low`, `error`, `link_error`, `panel_locked`), with
+`from` and `to`; a value the device did not have is `null`, so a
+measured temperature the thermostat stopped reporting is
+`{"from": 19.9, "to": null}`. `reported` appears when the Cube gained
+or lost the device's state (`{"from": false, "to": true}` for a device
+that reported for the first time since the Cube's restart). Every
+`state` event has at least one change except a device's first one since
+the server started (the connect burst, and the state events the stream
+sends a new client on connect), which has no `changes`; a reconnect
+compares with the state before it. `GET …/log` keeps `changes` as well.
+A change shows when the Cube's device list has it: when the Cube sends
+the list on its own, or at the server's next poll, at most a minute
+later (`serve -poll`); a thermostat reports some values only later than
+others, for example its window-open temperature after the contact.
+
 With a token configured the stream needs `?ticket=<ticket>` (below) or
 the bearer header; `?token=<token>` still works, deprecated.
 

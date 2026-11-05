@@ -486,7 +486,10 @@ paths:
         then an event per change the Cube reports. Kinds: connected,
         disconnected, hello, metadata, config, state, pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
-        cube_found (with a Cube that is not configured in "cube"). A comment line
+        cube_found (with a Cube that is not configured in "cube"). A state
+        event after a device's first one has "changes": per changed value
+        of state, {"from": …, "to": …} (null for a value the device did not
+        have), and "reported" when the Cube gained or lost its state. A comment line
         every 30 seconds keeps the stream alive. Browsers open it
         without headers: pass a ticket from POST …/events/ticket.
       security:

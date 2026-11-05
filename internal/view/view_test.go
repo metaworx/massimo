@@ -165,3 +165,34 @@ func TestAgesAndStale(t *testing.T) {
 		}
 	}
 }
+
+func TestChanges(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+	b := func(v bool) *bool { return &v }
+	before := &State{Mode: cube.ModeAuto, Setpoint: f(18), ActualTemp: f(19.9), WindowOpen: b(false)}
+	after := &State{Mode: cube.ModeManual, Setpoint: f(21), WindowOpen: b(true)}
+	c := Changes(before, after)
+	want := map[string]Change{
+		"mode":        {From: "auto", To: "manual"},
+		"setpoint":    {From: 18.0, To: 21.0},
+		"actual_temp": {From: 19.9, To: nil},
+		"window_open": {From: false, To: true},
+	}
+	if len(c) != len(want) {
+		t.Fatalf("changes %v", c)
+	}
+	for k, w := range want {
+		if !sameValue(c[k], w) {
+			t.Errorf("%s: %v, want %v", k, c[k], w)
+		}
+	}
+	if c := Changes(after, after); c != nil {
+		t.Fatalf("no change gave %v", c)
+	}
+	if c := Changes(nil, after); !sameValue(c["reported"], Change{From: false, To: true}) || !sameValue(c["mode"], Change{From: nil, To: "manual"}) {
+		t.Fatalf("first report %v", c)
+	}
+	if c := Changes(after, nil); len(c) != 1+len(stateFields(after)) || !sameValue(c["reported"], Change{From: true, To: false}) {
+		t.Fatalf("state lost %v", c)
+	}
+}

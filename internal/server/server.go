@@ -42,6 +42,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -160,6 +161,10 @@ type runtime struct {
 	showHidden bool
 	follow     *followUp // re-reads after writes, see followup.go
 
+	// last is each device's state as the last state event had it, for
+	// the changes of the next one; only the pump uses it.
+	last map[cube.RFAddress]*view.State
+
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
 	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
@@ -186,6 +191,9 @@ type event struct {
 	Device string      `json:"device,omitempty"`
 	Error  string      `json:"error,omitempty"`
 	State  interface{} `json:"state,omitempty"`
+	// Changes says, for a "state" event, which values differ from the
+	// device's previous state event and how; absent on the first one.
+	Changes map[string]view.Change `json:"changes,omitempty"`
 	// Paired is the device that joined, for a "paired" event.
 	Paired *cube.NewDevice `json:"paired,omitempty"`
 	// Cube is the Cube discovery found, for a "cube_found" event.
@@ -228,7 +236,7 @@ func New(opts Options) *Server {
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}}
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
+		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
 			follow: newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
 		rt.queue = engine.NewQueue(rt.client, opts.Queue)
@@ -379,7 +387,15 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					dv := view.DeviceOf(rt.client.Snapshot(), e.Device)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
-						s.log.Info("device state", stateAttrs(rt.serial, dv)...)
+						if prev, had := rt.last[e.Device]; had {
+							ev.Changes = view.Changes(prev, dv.State)
+						}
+						rt.last[e.Device] = dv.State
+						attrs := stateAttrs(rt.serial, dv)
+						if len(ev.Changes) > 0 {
+							attrs = append(attrs, "changed", changedNames(ev.Changes))
+						}
+						s.log.Info("device state", attrs...)
 					}
 				}
 			}
@@ -411,6 +427,16 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			rt.subsMu.Unlock()
 		}
 	}
+}
+
+// changedNames lists the names of the changed values, sorted.
+func changedNames(c map[string]view.Change) string {
+	names := make([]string, 0, len(c))
+	for k := range c {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
 }
 
 // stateAttrs builds the log attributes of a device state change: the
