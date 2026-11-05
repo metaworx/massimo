@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+
+package install
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+type recorder struct{ cmds []string }
+
+func (r *recorder) run(name string, args ...string) error {
+	r.cmds = append(r.cmds, name+" "+strings.Join(args, " "))
+	return nil
+}
+
+func (r *recorder) has(prefix string) bool {
+	for _, c := range r.cmds {
+		if strings.HasPrefix(c, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func setup(t *testing.T) (root, bin string) {
+	root = t.TempDir()
+	os.MkdirAll(filepath.Join(root, LogrotateDir), 0o755)
+	bin = filepath.Join(t.TempDir(), "massimo-linux-armv6")
+	os.WriteFile(bin, []byte("binary v1"), 0o755)
+	return root, bin
+}
+
+func read(t *testing.T, p string) string {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestInstallFresh(t *testing.T) {
+	root, bin := setup(t)
+	rec := &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(root, BinPath)) != "binary v1" {
+		t.Fatal("binary")
+	}
+	if fi, _ := os.Stat(filepath.Join(root, BinPath)); fi.Mode().Perm() != 0o755 {
+		t.Fatalf("binary mode %v", fi.Mode())
+	}
+	env := filepath.Join(root, EnvPath)
+	if fi, err := os.Stat(env); err != nil || fi.Mode().Perm() != 0o600 || !strings.Contains(read(t, env), "MASSIMO_CUBE_<SN>_ADDRESS") {
+		t.Fatalf("env: %v %v", fi, err)
+	}
+	unit := read(t, filepath.Join(root, UnitDir, "massimo.service"))
+	if !strings.Contains(unit, updateFlag) {
+		t.Fatal("massimo.service lacks the update request flag")
+	}
+	for _, f := range []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", LogrotateDir + "/massimo"} {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			t.Error(err)
+		}
+	}
+	for _, c := range []string{"useradd --system", "chown massimo:massimo " + filepath.Join(root, EnvPath), "systemctl daemon-reload", "systemctl enable massimo.service", "systemctl enable --now massimo-update.path"} {
+		if !rec.has(c) {
+			t.Errorf("no %q in %q", c, rec.cmds)
+		}
+	}
+	// A fresh template holds no Cubes: enabled, not started.
+	if rec.has("systemctl restart") || !strings.Contains(out.String(), "not started") {
+		t.Fatalf("started with the template: %q\n%s", rec.cmds, out.String())
+	}
+}
+
+func TestInstallAgainKeepsSettingsAndEdits(t *testing.T) {
+	root, bin := setup(t)
+	if err := Install(Options{Root: root, Binary: bin, Out: &bytes.Buffer{}, Run: (&recorder{}).run}); err != nil {
+		t.Fatal(err)
+	}
+	env := filepath.Join(root, EnvPath)
+	os.WriteFile(env, []byte("MASSIMO_CUBE_KEQ0000001_ADDRESS=10.0.0.1\n"), 0o600)
+	unit := filepath.Join(root, UnitDir, "massimo.service")
+	os.WriteFile(unit, []byte("edited by hand\n"), 0o644)
+	os.WriteFile(bin, []byte("binary v2"), 0o755)
+	settings := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(settings, []byte("OTHER=1\n"), 0o600)
+
+	rec := &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, Settings: settings, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(root, BinPath)) != "binary v2" {
+		t.Fatal("binary not updated")
+	}
+	if !strings.Contains(read(t, env), "10.0.0.1") {
+		t.Fatal("existing settings overwritten")
+	}
+	if read(t, unit+".bak") != "edited by hand\n" || !strings.Contains(read(t, unit), "ExecStart=") {
+		t.Fatal("edited unit not kept as .bak")
+	}
+	if !rec.has("systemctl restart massimo.service") {
+		t.Fatalf("not restarted: %q", rec.cmds)
+	}
+	if !strings.Contains(out.String(), "massimo-update.path is current") {
+		t.Fatalf("unchanged unit not reported:\n%s", out.String())
+	}
+}
+
+func TestInstallWithoutHelperAndWithSettings(t *testing.T) {
+	root, bin := setup(t)
+	settings := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(settings, []byte("MASSIMO_CUBE_KEQ0000001_ADDRESS=10.0.0.1\n"), 0o600)
+	rec := &recorder{}
+	if err := Install(Options{Root: root, Binary: bin, Settings: settings, NoUpdateHelper: true, Out: &bytes.Buffer{}, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(read(t, filepath.Join(root, UnitDir, "massimo.service")), updateFlag) {
+		t.Fatal("update flag left in without the helper")
+	}
+	if _, err := os.Stat(filepath.Join(root, UnitDir, "massimo-update.path")); err == nil {
+		t.Fatal("helper installed")
+	}
+	if !strings.Contains(read(t, filepath.Join(root, EnvPath)), "10.0.0.1") || !rec.has("systemctl restart massimo.service") || rec.has("systemctl enable --now massimo-update.path") {
+		t.Fatalf("settings or start: %q", rec.cmds)
+	}
+}
+
+func TestDryRunChangesNothing(t *testing.T) {
+	root, bin := setup(t)
+	rec := &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, DryRun: true, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.cmds) != 0 {
+		t.Fatalf("ran %q", rec.cmds)
+	}
+	for _, p := range []string{BinPath, EnvPath, UnitDir + "/massimo.service"} {
+		if _, err := os.Stat(filepath.Join(root, p)); err == nil {
+			t.Errorf("%s written", p)
+		}
+	}
+	if !strings.Contains(out.String(), "would write "+UnitDir+"/massimo.service") {
+		t.Fatal(out.String())
+	}
+}
+
+func TestRemove(t *testing.T) {
+	root, bin := setup(t)
+	Install(Options{Root: root, Binary: bin, Out: &bytes.Buffer{}, Run: (&recorder{}).run})
+	rec := &recorder{}
+	if err := Remove(Options{Root: root, Out: &bytes.Buffer{}, Run: rec.run}, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{BinPath, UnitDir + "/massimo.service", UnitDir + "/massimo-update.path", LogrotateDir + "/massimo"} {
+		if _, err := os.Stat(filepath.Join(root, p)); err == nil {
+			t.Errorf("%s still there", p)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, EnvPath)); err != nil {
+		t.Fatal("settings removed without -purge")
+	}
+	if !rec.has("systemctl disable --now massimo-update.path massimo.service") || rec.has("userdel") {
+		t.Fatalf("%q", rec.cmds)
+	}
+	rec = &recorder{}
+	if err := Remove(Options{Root: root, Out: &bytes.Buffer{}, Run: rec.run}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, EnvDir)); err == nil || !rec.has("userdel massimo") {
+		t.Fatalf("purge: %v %q", err, rec.cmds)
+	}
+}

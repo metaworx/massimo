@@ -1,7 +1,6 @@
 # systemd unit for "massimo serve": keeps the Cubes connected, serves the
 # JSON API and web UI on port 8099 and answers as a Cube on TCP 62910 and
-# UDP 23272. Install by hand as described in packaging/README.md (a future
-# "massimo service install" will write the same unit).
+# UDP 23272. "massimo install" writes it (see packaging/README.md).
 
 [Unit]
 Description=Massimo server for MAX! Cubes

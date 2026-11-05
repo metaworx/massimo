@@ -1,9 +1,9 @@
 # Running `massimo serve` as a service
 
 `massimo serve` is meant to run all the time on a small always-on Linux box
-next to the Cubes, such as a Raspberry Pi. This directory has what a manual
-install needs; a future `massimo service install` (roadmap item 8) will do
-the same steps.
+next to the Cubes, such as a Raspberry Pi. `massimo install` sets it up as
+a systemd service with the files of this directory, which are compiled into
+the binary; "Install by hand" below lists the same steps.
 
 - `systemd/massimo.service`: the unit. Runs as the user `massimo`, reads
   its settings from `/etc/massimo/env`, listens on port 8099 on every
@@ -63,6 +63,36 @@ ssh_pwauth: false
 
 The Pi 1 has no network over USB (its micro-USB port only powers it), so
 it needs Ethernet. The first boot takes about ten minutes.
+
+## Install with `massimo install`
+
+On the box, with the binary for it (from a release, or built and copied
+over), as root:
+
+```bash
+curl -fLO https://github.com/metaworx/massimo/releases/latest/download/massimo-linux-armv6
+chmod +x massimo-linux-armv6
+sudo ./massimo-linux-armv6 install -dry-run
+sudo ./massimo-linux-armv6 install
+```
+
+(`releases/latest` skips pre-releases; while there are only alphas, take
+the URL from the releases page.) It installs the binary as
+`/usr/local/bin/massimo`, creates the system user `massimo` and
+`/etc/massimo/env` (a commented template, or a copy of `-settings <.env>`),
+writes `massimo.service`, the update helper `massimo-update.path` and
+`.service` and the log rotation, enables them, and starts the service
+unless the settings are still the template. Fill in `/etc/massimo/env` as
+described below, then `sudo systemctl start massimo`.
+
+Running `install` again, from a newer binary, replaces the binary and the
+units and restarts the service; existing settings are kept, and a unit
+that differs from the new one (edited with `systemctl edit --full`) is kept
+as `<unit>.bak`. Local changes belong in a drop-in (`systemctl edit
+massimo`), which install never touches. `-no-update-helper` leaves the
+helper out, `-no-start` only enables. `massimo install -remove` stops and
+removes the service, its units and the binary; `-purge` also removes the
+settings, the state, the logs and the user.
 
 ## Install by hand
 

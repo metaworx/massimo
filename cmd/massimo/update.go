@@ -206,7 +206,7 @@ func refuseOS() error {
 		// Windows keeps a running .exe locked against writes but lets it
 		// be renamed: an updater there renames massimo.exe away, writes
 		// the new one, and restarts the service through the service
-		// manager, which needs `massimo service install` (roadmap) and an
+		// manager, which needs `massimo install` for Windows (roadmap) and an
 		// administrator or a service running as LocalSystem.
 		return errors.New("massimo update does not replace binaries on Windows yet; download the release by hand (massimo update -check shows it)")
 	}

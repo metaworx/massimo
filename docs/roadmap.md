@@ -54,10 +54,11 @@ each new write path and the feedback that follows.
    and an Ed25519-signed manifest published as a GitHub release, with the
    tag's branch as its update channel; `massimo update` (`-check`,
    `-rollback`, health check with automatic rollback), and the web UI's
-   update button through a root helper unit (packaging/README.md). Open:
-   `serve` and the future `edge` mode installable as a Windows service and
-   a systemd unit (`massimo service install`), which Windows updates need
-   too (rename the running .exe, restart through the service manager).
+   update button through a root helper unit (packaging/README.md);
+   `massimo install` sets serve up as a systemd service, with the update
+   helper. Open: install on macOS (a LaunchDaemon) and Windows (a Windows
+   service, which Windows updates need too: rename the running .exe,
+   restart through the service manager), and the future `edge` mode.
 9. **Timestamps per value**: keep the time each value was last received
    from the Cube, per device and field, in the snapshot, the API
    (`state` fields with their `*_at` times or a `received` map) and the
