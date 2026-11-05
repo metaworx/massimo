@@ -26,7 +26,11 @@ internal/update/release-key.pem); `make release-alpha` fast-forwards
 `alpha` to `main` and tags it with the channel, pushed together; `massimo
 update` and the web UI's Settings → Software install releases through
 the root helper units in packaging/systemd (packaging/README.md,
-"Updating").
+"Updating"). On Windows, `massimo install` makes a Windows service and
+`massimo update -restart massimo` updates it from an administrator
+prompt (packaging/README.md, "Windows"); CI tests that on a Windows
+runner, and runs govulncheck with the toolchain pinned in the workflows
+(Go 1.26, newest patch; go.mod keeps the minimum, 1.24).
 
 ## State
 

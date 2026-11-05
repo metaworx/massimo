@@ -56,9 +56,12 @@ each new write path and the feedback that follows.
    `-rollback`, health check with automatic rollback), and the web UI's
    update button through a root helper unit (packaging/README.md);
    `massimo install` sets serve up as a systemd service, with the update
-   helper. Open: install on macOS (a LaunchDaemon) and Windows (a Windows
-   service, which Windows updates need too: rename the running .exe,
-   restart through the service manager), and the future `edge` mode.
+   helper, or as a Windows service (updated from an administrator prompt:
+   the running .exe is renamed aside, the service restarted through the
+   service manager; tested on a CI Windows runner); govulncheck in CI.
+   Open: the web UI starting updates on Windows (a helper and the server's
+   endpoint), install on macOS (a LaunchDaemon, once a Mac is there to
+   test on), and the future `edge` mode.
 9. **Timestamps per value**: keep the time each value was last received
    from the Cube, per device and field, in the snapshot, the API
    (`state` fields with their `*_at` times or a `received` map) and the
