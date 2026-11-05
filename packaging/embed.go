@@ -8,7 +8,9 @@ package packaging
 
 import "embed"
 
-// Files holds systemd/ and logrotate/ as they are in the repository.
+// Files holds systemd/, logrotate/ and launchd/ as they are in the
+// repository.
 //
 //go:embed systemd/massimo.service systemd/massimo-update.path systemd/massimo-update.service logrotate/massimo
+//go:embed launchd/ch.metaworx.massimo.plist launchd/ch.metaworx.massimo-update.plist
 var Files embed.FS
