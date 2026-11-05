@@ -55,6 +55,14 @@ each new write path and the feedback that follows.
    its own binary (signed checksums, `-check` only mode); `serve` and
    the future `edge` mode installable as a Windows service and a
    systemd unit (`massimo service install`).
-9. Later: Loxone, a radio-stick driver without a Cube.
+9. **Timestamps per value**: keep the time each value was last received
+   from the Cube, per device and field, in the snapshot, the API
+   (`state` fields with their `*_at` times or a `received` map) and the
+   UI (age next to the value, greyed when stale). It matters most for
+   radiator thermostats, which report their measured temperature only
+   occasionally, so an old IS value should not pass as current; also
+   for valve position, window state and battery. Add a last-contact time
+   per device and a "not seen for N hours" warning.
+10. Later: Loxone, a radio-stick driver without a Cube.
 
 Open UI feedback from 2026-11-04 is listed in handover-session.md.

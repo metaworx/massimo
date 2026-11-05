@@ -1,8 +1,19 @@
 # Handover from the session of 2026-11-04
 
-For the next session, local or cloud. Branch `phase-0`, head 495ee52
-plus this file; tags up to `v0.1.0-alpha.N` (run `make tag` after each
+For the next session, local or cloud. Branch `phase-0`, head 78855c5
+and later; tags up to `v0.1.0-alpha.N` (run `make tag` after each
 feature). Read README.md, then docs/roadmap.md, then this file.
+
+Done on 2026-11-05 after the UI rounds: docs/design.md and
+docs/background.md (the proposal, the evaluation, the sources), the
+code review docs/review-2026-11-05.md with its first tier fixed
+(constant-time token check, security headers on the UI, one state
+constructor `backup.StateOf`, one metadata mirror
+`Client.ApplyMetadataWrite`, comments on six helpers, the OpenAPI
+coverage test, MANU without a guessed setpoint, pending radiograms
+against the Cube's observed slot capacity), release engineering on the
+roadmap, the ufw ports in docs/proxy.md. The review's second tier is
+still open.
 
 ## State
 
