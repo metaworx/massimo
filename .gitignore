@@ -17,3 +17,6 @@ massimo-backup-*
 # Firmware dumps (eQ-3 proprietary, never commit)
 /firmware/
 *.bin
+
+# Python environment of the web UI smoke test
+/tools/ui-test/.venv/

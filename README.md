@@ -172,6 +172,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware
 - [docs/handover-session.md](docs/handover-session.md): where the last session stopped, open feedback, next steps
 - [docs/review-2026-11-05.md](docs/review-2026-11-05.md): code review with findings, extraction proposals and the coding standard
+- [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`, the web UI smoke test with Playwright, and its setup
 
 ## Versions
 
