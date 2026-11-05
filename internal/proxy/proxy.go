@@ -383,15 +383,7 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 
 // applyMetadata updates the snapshot after a metadata write, which the
 // Cube acknowledges without echoing the new M lines.
-func (p *Proxy) applyMetadata(lines []cube.Message) {
-	for _, m := range lines {
-		idx, data, ok := strings.Cut(m.Data, ",")
-		if !ok {
-			return
-		}
-		p.opts.Client.ApplyLocal(cube.Message{Type: 'M', Data: idx + "," + fmt.Sprintf("%02x", len(lines)) + "," + data})
-	}
-}
+func (p *Proxy) applyMetadata(lines []cube.Message) { p.opts.Client.ApplyMetadataWrite(lines) }
 
 // hidden is the set of devices left out for clients.
 func (p *Proxy) hidden(md *cube.Metadata) backup.Ignored {

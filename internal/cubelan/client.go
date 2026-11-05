@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -310,6 +311,19 @@ func (c *Client) clearPending(p *pendingReply) {
 // it. The LAN proxy uses it after a metadata write (m:) went through,
 // because the Cube does not echo the new M lines.
 func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
+
+// ApplyMetadataWrite mirrors a metadata write (the m: commands as sent,
+// one per part) into the snapshot, since the Cube acknowledges such a
+// write without echoing the new M lines.
+func (c *Client) ApplyMetadataWrite(cmds []cube.Message) {
+	for _, m := range cmds {
+		idx, data, ok := strings.Cut(m.Data, ",")
+		if !ok {
+			return
+		}
+		c.ApplyLocal(cube.Message{Type: 'M', Data: idx + "," + fmt.Sprintf("%02x", len(cmds)) + "," + data})
+	}
+}
 
 // SendRadio sends an s command and decodes the Cube's S reply.
 func (c *Client) SendRadio(ctx context.Context, m cube.Message) (*cube.SendResult, error) {

@@ -94,6 +94,10 @@ type State struct {
 	PanelLocked bool `json:"panel_locked,omitempty"`
 }
 
+// StateOf is the live state of a device as backups, the API and status
+// show it, or nil while the Cube holds no state for the device.
+func StateOf(st cube.DeviceState) *State { return stateOf(st) }
+
 func stateOf(st cube.DeviceState) *State {
 	if !st.Valid {
 		return nil

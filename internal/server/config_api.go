@@ -151,10 +151,7 @@ func (s *Server) writeMetadata(ctx context.Context, rt *runtime, md *cube.Metada
 	if res.Err != nil {
 		return fail(http.StatusBadGateway, "%v", res.Err)
 	}
-	for _, m := range lines {
-		idx, data, _ := strings.Cut(m.Data, ",")
-		rt.client.ApplyLocal(cube.Message{Type: 'M', Data: idx + "," + fmt.Sprintf("%02x", len(lines)) + "," + data})
-	}
+	rt.client.ApplyMetadataWrite(lines)
 	return nil
 }
 

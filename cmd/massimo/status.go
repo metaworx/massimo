@@ -133,8 +133,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot, ig backup.Ignored) statusReport 
 		d.Room = roomName[d.RoomID]
 		if st, ok := snap.State(rf); ok && st.Valid {
 			d.Reported = true
-			d.State = &backup.State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-				WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
+			d.State = backup.StateOf(st)
 		}
 		if d.Unlisted {
 			rep.Unlisted = append(rep.Unlisted, d)

@@ -532,10 +532,7 @@ func deviceView(snap *cubelan.Snapshot, rf cube.RFAddress, st cube.DeviceState) 
 		}
 	}
 	d.Reported = st.Valid
-	if st.Valid {
-		d.State = &backup.State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-			WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
-	}
+	d.State = backup.StateOf(st)
 	return d
 }
 
@@ -793,10 +790,7 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 	if res.Err != nil {
 		return fail(http.StatusBadGateway, "%v", res.Err)
 	}
-	for _, m := range lines {
-		idx, data, _ := strings.Cut(m.Data, ",")
-		rt.client.ApplyLocal(cube.Message{Type: 'M', Data: idx + "," + fmt.Sprintf("%02x", len(lines)) + "," + data})
-	}
+	rt.client.ApplyMetadataWrite(lines)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rooms": len(cp.Rooms)})
 	return nil
 }
