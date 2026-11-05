@@ -1,0 +1,37 @@
+# systemd unit for "massimo serve": keeps the Cubes connected, serves the
+# JSON API and web UI on port 8099 and answers as a Cube on TCP 62910 and
+# UDP 23272. Install by hand as described in packaging/README.md (a future
+# "massimo service install" will write the same unit).
+
+[Unit]
+Description=Massimo server for MAX! Cubes
+Documentation=https://go.metaworx.ch/massimo
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=massimo
+Group=massimo
+# Settings and secrets (MASSIMO_CUBE_<SN>_ADDRESS, _KEY, _IV, _PROXY,
+# MASSIMO_API_TOKEN) are read by massimo itself from this file, mode 0600,
+# owned by massimo. Add "-proxy off" for a first run without the LAN proxy.
+ExecStart=/usr/local/bin/massimo -env /etc/massimo/env serve -listen :8099 -log /var/log/massimo/serve.log
+Restart=on-failure
+RestartSec=10s
+WorkingDirectory=/var/lib/massimo
+StateDirectory=massimo
+LogsDirectory=massimo
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

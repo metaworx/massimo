@@ -6,7 +6,7 @@ LDFLAGS  = -s -w -X main.version=$(VERSION)
 PKG      = ./cmd/massimo
 OUT      = dist
 
-.PHONY: all build test vet windows linux linux-arm64 linux-armv7 clean tag
+.PHONY: all build test vet windows linux linux-arm64 linux-armv7 linux-armv6 clean tag
 
 # tag marks HEAD as the next pre-release (v0.1.0-alpha.N+1 after the
 # latest v0.1.0-alpha.N) and pushes the tag; one tag per feature.
@@ -39,6 +39,11 @@ linux-arm64:
 # Raspberry Pi 2/3/4 with a 32-bit OS (LoxBerry on Raspberry Pi OS 32-bit).
 linux-armv7:
 	GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "$(LDFLAGS)" -o $(OUT)/massimo-linux-armv7 $(PKG)
+
+# Raspberry Pi 1 (Model A/B/B+) and Pi Zero / Zero W: ARMv6 (BCM2835), which
+# the armv7 build crashes on with an illegal instruction.
+linux-armv6:
+	GOOS=linux GOARCH=arm GOARM=6 go build -ldflags "$(LDFLAGS)" -o $(OUT)/massimo-linux-armv6 $(PKG)
 
 clean:
 	rm -rf massimo $(OUT)

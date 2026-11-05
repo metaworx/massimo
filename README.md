@@ -12,7 +12,10 @@ with or endorsed by eQ-3.
 
 ## Command line
 
-Build with `make` (or `make windows` for a Windows binary in `dist/`).
+Build with `make` (or `make windows` for a Windows binary in `dist/`;
+`make linux-armv7` for a Raspberry Pi 2/3/4 and `make linux-armv6` for a
+Pi 1 or Pi Zero, both with a 32-bit OS). [packaging/README.md](packaging/README.md)
+says how to run `massimo serve` as a systemd service.
 `massimo help` lists the commands; the ones useful today:
 
 ```bash
