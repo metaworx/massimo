@@ -3,8 +3,8 @@
 `make ui-test` runs `run.sh`. The script:
 
 1. builds massimo;
-2. starts the fake Cube (`massimo fakecube`) with `greeting.txt`, which is the protocol fixture from internal/protocol/cube/testdata plus an `L:` line with device states;
-3. starts `massimo serve` against the fake Cube;
+2. starts the fake Cube (`massimo fakecube`) with `greeting.txt`, which is the protocol fixture from internal/protocol/cube/testdata plus an `L:` line with device states (measured temperatures included) and a window contact, "Fenster Kind 1", that reports an open window;
+3. starts `massimo serve` against the fake Cube, with the API token `ui-test-token`;
 4. runs `smoke.py` with Playwright (Chromium).
 
 Both servers run on loopback ports of their own (62919 and 8119; set `UI_TEST_CUBE_PORT` and `UI_TEST_API_PORT` to change them). They run in an empty temporary directory without the caller's environment, so a `.env` or `MASSIMO_*` variables can't point them at real hardware. Both are stopped at the end.
@@ -14,9 +14,12 @@ The smoke test runs at 1100 and 390 px, in English and in German (from the brows
 - the page loads with room tiles and the right language;
 - a tile's device list and its configuration open, every configuration tab shows, and the configuration closes;
 - the log and the settings page open;
+- the event stream opens with tickets only, never with the token, and after a refused stream (the test hands out a used ticket first, which the server answers with 401) the page opens it again with a new ticket;
+- the room with the open window shows "Open" on its tile, and only that room; the badge goes when a state event closes the window;
+- the measured temperature shows its age; after a state event makes the first room's thermostat 30 hours old and stale, the tile warns, the temperature is greyed, and the device list shows the stale badge and the values' ages, with the exact times in expert mode;
 - there is no console error, no page error and no horizontal scroll.
 
-It sends nothing to the fake Cube.
+It sends nothing to the fake Cube. The state events of the last two points are applied in the page (`updateDevice`), since the fake Cube does not change its states.
 
 When Playwright for Python is missing, `make ui-test` says so and exits 0.
 

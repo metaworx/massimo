@@ -3,10 +3,10 @@
 
 // The Massimo web UI, core: API access with the token, the DOM and
 // formatting helpers the other files share (textEl, button,
-// submitButton, badgeEl, iconEl, fmtTemp; fmtNum is in i18n.js),
+// submitButton, badgeEl, iconEl, fmtTemp, ageEl; fmtNum is in i18n.js),
 // settings, the header with the Cube clock, loading of cubes and rooms,
-// polling and the event stream. The tiles and their actions are in
-// tiles.js.
+// polling and the event stream with its tickets. The tiles and their
+// actions are in tiles.js.
 "use strict";
 
 const state = {
@@ -178,6 +178,78 @@ function iconEl(symbol, cls) {
 function fmtTemp(v, unit) {
   if (v === undefined || v === null) return "–";
   return fmtNum(v, 1) + (unit === undefined ? " °C" : unit);
+}
+
+// --- ages of values ---------------------------------------------------
+
+// observedSince is when the server first heard from the selected Cube,
+// in ms (NaN when unknown).
+function observedSince() {
+  const c = state.cubes.find((x) => x.serial === state.serial);
+  return c && c.observed_since ? Date.parse(c.observed_since) : NaN;
+}
+
+// SINCE_MS: a value received this soon after observedSince came with the
+// Cube's first device list, so it was already there and may be older.
+const SINCE_MS = 5000;
+
+// fmtUnit is n minutes, hours or days in the language's short form
+// ("5 min", "3 Std.").
+function fmtUnit(n, unit) {
+  try {
+    return new Intl.NumberFormat(i18n.lang, { style: "unit", unit, unitDisplay: "short" }).format(n);
+  } catch (e) {
+    return n + " " + unit.charAt(0);
+  }
+}
+
+// fmtAge is how long ago an instant (ms) was, briefly: "now", "12 min",
+// "5 h", from two days on in days. A value that was already there when
+// the server connected (since) gets "≥": it may be older.
+function fmtAge(ms, since) {
+  const sec = Math.max(0, (Date.now() - ms) / 1000);
+  if (sec < 60 && !since) return t("age.now");
+  let text;
+  if (sec < 3600) text = fmtUnit(Math.floor(sec / 60), "minute");
+  else if (sec < 48 * 3600) text = fmtUnit(Math.floor(sec / 3600), "hour");
+  else text = fmtUnit(Math.floor(sec / 86400), "day");
+  return since ? "≥ " + text : text;
+}
+
+// fmtShortTime is an instant (ms) as day, month and time.
+function fmtShortTime(ms) {
+  const opts = { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false };
+  return new Intl.DateTimeFormat(i18n.lang, opts).format(new Date(ms));
+}
+
+// ageEl shows how old a value is that the server received at iso (an API
+// time): the age, the exact time as its tooltip and, in expert mode,
+// after it; greyed when stale. refreshAges keeps it current. null when
+// there is no time.
+function ageEl(iso, stale) {
+  const ms = Date.parse(iso || "");
+  if (isNaN(ms)) return null;
+  const el = textEl("span", "", "age" + (stale ? " stale" : ""));
+  el.dataset.at = String(ms);
+  const since = ms - observedSince();
+  if (since >= 0 && since < SINCE_MS) el.dataset.since = "1";
+  el.appendChild(textEl("span", "", "age-text"));
+  el.appendChild(textEl("span", "", "age-exact expert-only"));
+  fillAge(el);
+  return el;
+}
+
+function fillAge(el) {
+  const ms = Number(el.dataset.at);
+  const since = el.dataset.since === "1";
+  el.firstChild.textContent = fmtAge(ms, since);
+  el.lastChild.textContent = fmtShortTime(ms);
+  el.title = t(since ? "age.titleSince" : "age.title", { time: fmtInstant(new Date(ms)) });
+}
+
+// refreshAges updates every age on the page; it runs once a minute.
+function refreshAges() {
+  for (const el of document.querySelectorAll(".age[data-at]")) fillAge(el);
 }
 
 function isThermostat(d) {
@@ -498,19 +570,55 @@ function startPolling() {
 
 // --- events -----------------------------------------------------------
 
-function connectEvents() {
-  if (state.events) {
-    state.events.close();
-    state.events = null;
-    state.eventsOpen = false;
-  }
+// The stream opens with a single-use ticket from POST …/events/ticket,
+// since a browser cannot send the token header on it; without a token
+// on the server the ticket is not needed but answered all the same, and
+// a missing or wrong token shows up there, on an authenticated call. A
+// connection uses its ticket up, so after an error the page closes the
+// stream itself and opens a new one with a fresh ticket, waiting longer
+// after each failure: the browser's own retry would reuse the ticket,
+// and a used ticket counts as a failed token check. The poll covers the
+// rooms meanwhile.
+const EVENTS_RETRY_MS = 2000;
+const EVENTS_RETRY_MAX_MS = 60000;
+let eventsGen = 0; // counts the connections; an outdated one does nothing
+let eventsRetry = EVENTS_RETRY_MS;
+let eventsTimer = null;
+
+function closeEvents() {
+  eventsGen++;
+  if (eventsTimer) clearTimeout(eventsTimer);
+  eventsTimer = null;
+  if (state.events) state.events.close();
+  state.events = null;
+  state.eventsOpen = false;
+}
+
+function retryEvents(gen) {
+  eventsTimer = setTimeout(() => {
+    eventsTimer = null;
+    if (gen === eventsGen) connectEvents();
+  }, eventsRetry);
+  eventsRetry = Math.min(eventsRetry * 2, EVENTS_RETRY_MAX_MS);
+}
+
+async function connectEvents() {
+  closeEvents();
+  const gen = eventsGen;
   if (!state.serial) return;
-  let url = base() + "/events";
-  if (state.token) url += "?token=" + encodeURIComponent(state.token);
-  const es = new EventSource(url);
+  let ticket;
+  try {
+    ticket = (await api("POST", base() + "/events/ticket")).ticket;
+  } catch (e) {
+    if (gen === eventsGen) retryEvents(gen);
+    return;
+  }
+  if (gen !== eventsGen) return; // another connect or close came first
+  const es = new EventSource(base() + "/events?ticket=" + encodeURIComponent(ticket));
   state.events = es;
   es.onopen = () => {
     state.eventsOpen = true;
+    eventsRetry = EVENTS_RETRY_MS;
   };
   let initial = true; // the connect burst of state events is not log traffic
   setTimeout(() => {
@@ -531,9 +639,12 @@ function connectEvents() {
   es.addEventListener("disconnected", logged(() => loadCubes()));
   es.addEventListener("config", logged(() => {}));
   es.onerror = () => {
-    // The browser retries by itself; the poll covers the rooms meanwhile.
+    if (gen !== eventsGen) return;
+    es.close();
+    state.events = null;
     state.eventsOpen = false;
     loadCubes().catch(() => {});
+    retryEvents(gen);
   };
 }
 
@@ -637,6 +748,7 @@ function init() {
     store("massimo.serial", state.serial);
     connectEvents();
   });
+  setInterval(refreshAges, 60000);
 }
 
 document.addEventListener("DOMContentLoaded", init);

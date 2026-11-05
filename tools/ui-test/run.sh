@@ -5,9 +5,10 @@
 # The web UI smoke test (make ui-test): builds massimo, starts the fake
 # Cube with the greeting next to this script and the server against it,
 # both on loopback ports of their own and in an empty directory (no .env,
-# no MASSIMO_* variables), then runs smoke.py with Playwright. Without
-# Playwright it says so and exits 0, so `make ui-test` never fails on a
-# machine that cannot run it.
+# no MASSIMO_* variables but a test API token, so the page goes through
+# the token and the stream tickets), then runs smoke.py with Playwright.
+# Without Playwright it says so and exits 0, so `make ui-test` never
+# fails on a machine that cannot run it.
 #
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_CUBE_PORT (62919),
@@ -27,6 +28,7 @@ fi
 
 cube_port=${UI_TEST_CUBE_PORT:-62919}
 api_port=${UI_TEST_API_PORT:-8119}
+token=ui-test-token
 work=$(mktemp -d)
 pids=""
 cleanup() {
@@ -40,13 +42,13 @@ cd "$work"
 env -i PATH="$PATH" HOME="$HOME" ./massimo fakecube -greeting "$here/greeting.txt" \
 	-listen "127.0.0.1:$cube_port" > fakecube.log 2>&1 &
 pids="$pids $!"
-env -i PATH="$PATH" HOME="$HOME" ./massimo serve -addr "127.0.0.1:$cube_port" -proxy off \
+env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" ./massimo serve -addr "127.0.0.1:$cube_port" -proxy off \
 	-listen "127.0.0.1:$api_port" -update-status "$work/no-update-status.json" > serve.log 2>&1 &
 pids="$pids $!"
 
 url="http://127.0.0.1:$api_port/"
 i=0
-until curl -sf "${url}api/v1/cubes" 2>/dev/null | grep -q '"connected": *true'; do
+until curl -sf -H "Authorization: Bearer $token" "${url}api/v1/cubes" 2>/dev/null | grep -q '"connected": *true'; do
 	i=$((i + 1))
 	if [ $i -gt 50 ]; then
 		echo "ui-test: the server did not connect to the fake Cube; its log:" >&2
@@ -56,4 +58,4 @@ until curl -sf "${url}api/v1/cubes" 2>/dev/null | grep -q '"connected": *true'; 
 	sleep 0.2
 done
 
-"$py" "$here/smoke.py" "$url"
+"$py" "$here/smoke.py" "$url" "$token"

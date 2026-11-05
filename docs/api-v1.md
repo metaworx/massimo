@@ -113,8 +113,11 @@ including the devices to nudge when the Cube discarded a room command.
 The page follows the event stream. With a token configured, the page
 asks for it once and keeps it in the browser; every route needs the
 header except the event stream, which browsers open without headers
-and which takes a ticket (see Authentication; the page still uses the
-deprecated `?token=`). The page and its files
+and which takes a ticket (see Authentication): the page gets a new one
+for every connection and, after an error, closes the stream and opens
+it again with a fresh ticket, waiting longer after each failure. The
+tiles and the device list show how old the values are from `received`
+and `last_seen`, and warn about stale devices. The page and its files
 are public, the API behind them is not.
 
 ## Authentication

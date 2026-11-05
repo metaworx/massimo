@@ -7,7 +7,8 @@ as on a desktop, and follows the system's light or dark mode.
 
 When the server has an API token (`MASSIMO_API_TOKEN`), the page asks for
 it once and keeps it in the browser. Settings → Forget token removes it
-again.
+again. The live updates come over a stream that opens with a
+single-use ticket, so the token never appears in a URL.
 
 ## Header
 
@@ -28,7 +29,21 @@ again.
 Every room has a tile:
 
 - **IS** is the measured temperature: the wall thermostat's, else the
-  first radiator thermostat's that reported one.
+  first radiator thermostat's that reported one. Under it is how long
+  ago the server received it ("12 min", "5 h", "3 days"); the tooltip
+  has the exact time. "≥" means the value was already there when the
+  server connected to the Cube, so it may be older. Radiator
+  thermostats send the measured temperature only now and then, mostly
+  after the valve moved.
+- **Open** in the tile's head means a window contact of the room
+  reports an open window. It shows how long ago the window was opened
+  and, as tooltip, which contacts are open; it goes as soon as the
+  window is closed.
+- **"Values may be old"**: a thermostat of the room has not been heard
+  from for more than 24 hours, and the note says how long. It may be
+  out of range or its batteries flat, but a thermostat whose valve
+  stays shut outside the heating season can be quiet as well. Its
+  values are greyed.
 - **SET** is the set temperature. The up and down chevrons next to it
   change it in steps of 0.5 °C; the value is sent 2 seconds after the last click, or at once
   with **Save**; **Cancel** drops it. A temperature set this way puts the
@@ -42,7 +57,11 @@ Every room has a tile:
   a room that has no devices.
 - The room name or the **i** button opens the device list: every device with its
   values (valve, set and measured temperature, offset) and badges for
-  battery, transmission errors, lock, window and mode.
+  battery, transmission errors, lock, window and mode. Valve, measured
+  temperature, window and a low battery show how old they are; in
+  expert mode also the exact time, and when the device was last heard
+  from. A device that has not been heard from for more than 24 hours
+  has a "Not seen for …" badge.
 - The cog button opens the room's configuration:
   - **Room**: the name.
   - **Temperatures**: comfort, eco, open window and its duration, maximum
