@@ -53,81 +53,9 @@ func runServe(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	fromEnv := len(proxies) == 0 // listeners come from MASSIMO_CUBE_<SN>_PROXY, resolved below
-	var listeners []server.ProxyListener
-	for _, v := range proxies {
-		if v == "" || v == "off" || v == "none" {
-			listeners = nil
-			break
-		}
-		pl := server.ProxyListener{DiscoverySerial: *proxySerial}
-		if sn, addr, ok := strings.Cut(v, "="); ok {
-			pl.Serial, v = sn, addr
-		}
-		pl.Addr = env.WithPort(v)
-		_, port, _ := net.SplitHostPort(pl.Addr)
-		pl.Discovery = port == env.CubePort
-		listeners = append(listeners, pl)
-	}
-	var cubes []server.CubeConfig
-	switch {
-	case *addr != "":
-		cubes = append(cubes, server.CubeConfig{Serial: selectedSN, Addr: *addr})
-	default:
-		sns, addrs := env.Serials(env.Address)
-		for _, sn := range sns {
-			if snExplicit && !strings.EqualFold(sn, selectedSN) {
-				continue // -sn serves that one Cube only
-			}
-			cubes = append(cubes, server.CubeConfig{Serial: sn, Addr: addrs[sn]})
-		}
-		if len(cubes) == 0 {
-			if a := os.Getenv(env.Address); a != "" {
-				cubes = append(cubes, server.CubeConfig{Serial: selectedSN, Addr: a})
-			}
-		}
-	}
-	if len(cubes) == 0 {
-		return fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS or use -addr)")
-	}
-	// A plain variable applies to a single Cube only where two Cubes must
-	// not share the value: the proxy address, its serial and the name.
-	single := len(cubes) == 1
-	if fromEnv {
-		// One listener per Cube on its MASSIMO_CUBE_<SN>_PROXY address (the
-		// address clients use); a single Cube without it listens on :62910.
-		for _, c := range cubes {
-			a := env.Own(env.Proxy, c.Serial, single)
-			if a == "" && single {
-				a = ":" + env.CubePort
-			}
-			if a == "" {
-				return fmt.Errorf("serve: several cubes configured; set %s for each, give -proxy <serial>=<addr>, or pick one with -sn", env.PerCube(env.Proxy, c.Serial))
-			}
-			a = env.WithPort(a)
-			_, port, _ := net.SplitHostPort(a)
-			listeners = append(listeners, server.ProxyListener{Serial: c.Serial, Addr: a, Discovery: port == env.CubePort, DiscoverySerial: *proxySerial})
-		}
-	}
-	for i := range listeners {
-		pl := &listeners[i]
-		if pl.Serial == "" && single {
-			pl.Serial = cubes[0].Serial
-		}
-		if pl.Serial == "" {
-			return fmt.Errorf("serve: several cubes configured; name the cube of each proxy listener as -proxy <serial>=%s, or pick one with -sn", pl.Addr)
-		}
-		if pl.DiscoverySerial == "" {
-			pl.DiscoverySerial = env.Own(env.ProxySerial, pl.Serial, single)
-		}
-	}
-	for i := range cubes {
-		list, err := env.HiddenList(cubes[i].Serial)
-		if err != nil {
-			return fmt.Errorf("serve: %w", err)
-		}
-		cubes[i].Hidden = list
-		cubes[i].Name = env.Own(env.Name, cubes[i].Serial, single)
+	cubes, listeners, err := serveTargets(*addr, proxies, *proxySerial)
+	if err != nil {
+		return err
 	}
 	var logOut io.Writer = os.Stderr
 	if *logPath != "" {
@@ -166,4 +94,89 @@ func runServe(args []string) error {
 		return err
 	}
 	return nil
+}
+
+// serveTargets resolves the Cubes to serve and the proxy listeners from
+// -addr, -proxy, -proxy-serial and the environment. A single Cube may
+// have no serial (MASSIMO_CUBE_ADDRESS without -sn): the server then
+// takes the serial the Cube reports.
+func serveTargets(addr string, proxies []string, proxySerial string) ([]server.CubeConfig, []server.ProxyListener, error) {
+	fromEnv := len(proxies) == 0 // listeners come from MASSIMO_CUBE_<SN>_PROXY, resolved below
+	var listeners []server.ProxyListener
+	for _, v := range proxies {
+		if v == "" || v == "off" || v == "none" {
+			listeners = nil
+			break
+		}
+		pl := server.ProxyListener{DiscoverySerial: proxySerial}
+		if sn, addr, ok := strings.Cut(v, "="); ok {
+			pl.Serial, v = sn, addr
+		}
+		pl.Addr = env.WithPort(v)
+		_, port, _ := net.SplitHostPort(pl.Addr)
+		pl.Discovery = port == env.CubePort
+		listeners = append(listeners, pl)
+	}
+	var cubes []server.CubeConfig
+	switch {
+	case addr != "":
+		cubes = append(cubes, server.CubeConfig{Serial: selectedSN, Addr: addr})
+	default:
+		sns, addrs := env.Serials(env.Address)
+		for _, sn := range sns {
+			if snExplicit && !strings.EqualFold(sn, selectedSN) {
+				continue // -sn serves that one Cube only
+			}
+			cubes = append(cubes, server.CubeConfig{Serial: sn, Addr: addrs[sn]})
+		}
+		if len(cubes) == 0 {
+			if a := os.Getenv(env.Address); a != "" {
+				cubes = append(cubes, server.CubeConfig{Serial: selectedSN, Addr: a})
+			}
+		}
+	}
+	if len(cubes) == 0 {
+		return nil, nil, fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS or use -addr)")
+	}
+	// A plain variable applies to a single Cube only where two Cubes must
+	// not share the value: the proxy address, its serial and the name.
+	single := len(cubes) == 1
+	if fromEnv {
+		// One listener per Cube on its MASSIMO_CUBE_<SN>_PROXY address (the
+		// address clients use); a single Cube without it listens on :62910.
+		for _, c := range cubes {
+			a := env.Own(env.Proxy, c.Serial, single)
+			if a == "" && single {
+				a = ":" + env.CubePort
+			}
+			if a == "" {
+				return nil, nil, fmt.Errorf("serve: several cubes configured; set %s for each, give -proxy <serial>=<addr>, or pick one with -sn", env.PerCube(env.Proxy, c.Serial))
+			}
+			a = env.WithPort(a)
+			_, port, _ := net.SplitHostPort(a)
+			listeners = append(listeners, server.ProxyListener{Serial: c.Serial, Addr: a, Discovery: port == env.CubePort, DiscoverySerial: proxySerial})
+		}
+	}
+	for i := range listeners {
+		pl := &listeners[i]
+		if pl.Serial == "" && single {
+			// "" too for a Cube without a configured serial: the server
+			// takes the one it reports.
+			pl.Serial = cubes[0].Serial
+		} else if pl.Serial == "" {
+			return nil, nil, fmt.Errorf("serve: several cubes configured; name the cube of each proxy listener as -proxy <serial>=%s, or pick one with -sn", pl.Addr)
+		}
+		if pl.DiscoverySerial == "" {
+			pl.DiscoverySerial = env.Own(env.ProxySerial, pl.Serial, single)
+		}
+	}
+	for i := range cubes {
+		list, err := env.HiddenList(cubes[i].Serial)
+		if err != nil {
+			return nil, nil, fmt.Errorf("serve: %w", err)
+		}
+		cubes[i].Hidden = list
+		cubes[i].Name = env.Own(env.Name, cubes[i].Serial, single)
+	}
+	return cubes, listeners, nil
 }
