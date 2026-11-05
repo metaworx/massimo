@@ -152,7 +152,7 @@ func HiddenList(sn string) ([]cube.RFAddress, error) {
 }
 
 // HiddenSet is the set of devices to leave out for the Cube sn: its
-// hidden list plus the devices of cube.GhostRoom in md, or nothing when
+// hidden list plus the devices of cube.HiddenRoom in md, or nothing when
 // show is set.
 func HiddenSet(sn string, md *cube.Metadata, show bool) (view.Hidden, error) {
 	if show {

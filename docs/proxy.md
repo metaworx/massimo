@@ -71,20 +71,20 @@ its own `z:` and `r:` lines, as the original software does.
 
 ## Hidden devices
 
-The devices of room 255, the ghost room, and those on the server's
-ignore list (`MASSIMO_CUBE_<SERIAL>_IGNORE`, see the README) are hidden
+The devices of room 255 and those on the server's hidden list
+(`MASSIMO_CUBE_<SERIAL>_IGNORE`, see the README) are hidden
 from proxy clients too: they are left out of the greeting's metadata
 and C lines and of every L line, so `status` on another computer and
 the original software do not show them. Room 255 itself is hidden as
 well; the original software allocates the lowest free id and never
-reaches 255, so it cannot reuse it. Any other room of ignored devices
-stays visible, empty. Park ghosts in room 255 by editing a backup (the
-room id and the devices' `room_id`) and restoring it with
-`massimo -show-ghosts restore`, which moves the devices and sets the
+reaches 255, so it cannot reuse it. Any other room of hidden devices
+stays visible, empty. Park devices that never report in room 255 by
+editing a backup (the room id and the devices' `room_id`) and restoring
+it with `massimo -show-hidden restore`, which moves the devices and sets the
 Cube's room byte for them. A metadata write from a client is forwarded
 with the hidden devices and their room put back, so a client that never
 saw them cannot remove them from the Cube; the server logs when it does
-that. `serve -show-ghosts` switches all of this off.
+that. `serve -show-hidden` switches all of this off.
 
 ## Firewall
 

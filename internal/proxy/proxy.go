@@ -52,14 +52,14 @@ type Options struct {
 	// ReplyTimeout bounds how long a client waits for the Cube's answer
 	// to a passed-through command (default one minute).
 	ReplyTimeout time.Duration
-	// Ignore lists devices hidden from clients, in addition to those of
-	// cube.GhostRoom: they are left out of the greeting, the L line and
+	// Hidden lists devices hidden from clients, in addition to those of
+	// cube.HiddenRoom: they are left out of the greeting, the L line and
 	// the C lines, and put back, with their rooms, into every metadata
 	// write a client sends, so the Cube keeps them exactly as they are.
-	// The ghost room is hidden too; other rooms stay visible, empty.
-	Ignore []cube.RFAddress
-	// ShowGhosts shows the ignored devices and the ghost room instead.
-	ShowGhosts bool
+	// Room 255 is hidden too; other rooms stay visible, empty.
+	Hidden []cube.RFAddress
+	// ShowHidden shows the hidden devices and room 255 instead.
+	ShowHidden bool
 	Logger     *slog.Logger
 }
 
@@ -300,8 +300,8 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		}
 	}
 	lines := []cube.Message{m}
-	if m.Type == 'm' && !p.opts.ShowGhosts {
-		if merged, ok := p.withIgnored(m); ok {
+	if m.Type == 'm' && !p.opts.ShowHidden {
+		if merged, ok := p.withHidden(m); ok {
 			lines = merged
 		}
 	}
@@ -323,10 +323,10 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 	return res.Replies
 }
 
-// withIgnored puts the hidden devices, and their rooms, back into a
+// withHidden puts the hidden devices, and their rooms, back into a
 // client's metadata write, so that a client that never saw them cannot
 // remove them from the Cube. The result may need several m: parts.
-func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
+func (p *Proxy) withHidden(m cube.Message) ([]cube.Message, bool) {
 	idx, data, ok := strings.Cut(m.Data, ",")
 	if !ok || idx != "00" {
 		p.log.Warn("proxy: multi-part metadata write passed through unchanged; hidden devices may be lost", "index", idx)
@@ -360,22 +360,22 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 
 // hidden is the set of devices left out for clients.
 func (p *Proxy) hidden(md *cube.Metadata) view.Hidden {
-	return view.NewHidden(p.opts.Ignore, md, p.opts.ShowGhosts)
+	return view.NewHidden(p.opts.Hidden, md, p.opts.ShowHidden)
 }
 
-// hiddenRooms lists the rooms left out of the greeting: the ghost room,
+// hiddenRooms lists the rooms left out of the greeting: room 255,
 // when it holds only hidden devices. Other parking rooms stay visible,
 // empty, so that a client allocating the lowest free id cannot reuse
 // theirs.
 func (p *Proxy) hiddenRooms(md *cube.Metadata) map[uint8]bool {
-	if p.opts.ShowGhosts {
+	if p.opts.ShowHidden {
 		return nil
 	}
 	hidden := p.hidden(md).Rooms(md)
-	if !hidden[cube.GhostRoom] {
+	if !hidden[cube.HiddenRoom] {
 		return nil
 	}
-	return map[uint8]bool{cube.GhostRoom: true}
+	return map[uint8]bool{cube.HiddenRoom: true}
 }
 
 // discoveryReply builds the reply to a discovery request for the

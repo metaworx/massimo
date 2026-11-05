@@ -13,7 +13,7 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	t.Setenv("MASSIMO_ENV_FILE", "")
 	t.Cleanup(func() { selectedSN, snExplicit, showHidden = "", false, false })
 	selectedSN = ""
-	rest, err := globalOptions([]string{"-env", "x.env", "--sn=keq0000001", "-no-ignore", "cube", "-addr", "y"})
+	rest, err := globalOptions([]string{"-env", "x.env", "--sn=keq0000001", "-show-hidden", "cube", "-addr", "y"})
 	if err != nil || len(rest) != 3 || rest[0] != "cube" {
 		t.Fatalf("rest %v err %v", rest, err)
 	}
@@ -32,7 +32,7 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 		t.Fatalf("given addr %q err %v", addr, err)
 	}
 	if l, err := hiddenDevices(); err != nil || l != nil {
-		t.Fatalf("hidden with -no-ignore %v %v", l, err)
+		t.Fatalf("hidden with -show-hidden %v %v", l, err)
 	}
 	if rest, _ := globalOptions([]string{"--version"}); len(rest) != 1 || rest[0] != "--version" {
 		t.Fatalf("version alias %v", rest)

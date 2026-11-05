@@ -12,14 +12,14 @@ import (
 )
 
 // Metadata is the room and device list stored in the Cube (M messages).
-// GhostRoom is the room id, by convention, of the parking room for
-// devices that are paired but never report ("ghosts"): the Cube counts
+// HiddenRoom is the room id, by convention, of the parking room for
+// devices that are paired but never report (hidden devices): the Cube counts
 // such a device as a member of the room in its C line and discards every
 // command to that room, and it never drops the device. Massimo hides the
 // devices of this room and the room itself everywhere unless asked to
 // show them. The original software allocates the lowest free id and so
 // never reaches 255 on its own.
-const GhostRoom uint8 = 255
+const HiddenRoom uint8 = 255
 
 type Metadata struct {
 	Header   [2]byte      `json:"-"` // observed as 'V', 0x02; preserved for round trips

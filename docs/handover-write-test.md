@@ -22,7 +22,7 @@ value that does not come back as sent, and record what happened.
 ## Before
 
 ```bash
-go run ./cmd/massimo -show-ghosts backup -sn JEQ0192422 -out verify-before.yaml
+go run ./cmd/massimo -show-hidden backup -sn JEQ0192422 -out verify-before.yaml
 ```
 
 Note the duty cycle and the free slots from `status`; every step below
@@ -35,7 +35,7 @@ Each step: do the change in the UI (Configure… in the tile's ⋯ menu)
 or with the curl line, wait for the answer in the panel, then run
 
 ```bash
-go run ./cmd/massimo -show-ghosts backup -sn JEQ0192422 -out verify-after.yaml && diff verify-before.yaml verify-after.yaml
+go run ./cmd/massimo -show-hidden backup -sn JEQ0192422 -out verify-after.yaml && diff verify-before.yaml verify-after.yaml
 ```
 
 The diff must show exactly the intended change in the device's
@@ -104,4 +104,4 @@ any failure, the duty cycle before and after.
   first may need a second attempt.
 - The Cube drops unanswered radiograms slowly (about one per half
   hour); `status` shows them as pending.
-- Nothing here changes the ghost room (255) or its devices.
+- Nothing here changes room 255, the room for hidden devices, or its devices.

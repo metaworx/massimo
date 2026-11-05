@@ -328,7 +328,7 @@ the Cube send a factory reset to the device, so a device that never
 answers is apparently never dropped.
 
 Which room such a device blocks is decided by the room byte of its own
-C line, not by the metadata (experiment 2026-11-04, one ghost 001867):
+C line, not by the metadata (experiment 2026-11-04, one never-reporting device 001867):
 moving it into room 1 in the original software (`m:`, `z:`, 0x20 links,
 0x22 group 1) set its C-line room to 1 and room 1 commands were
 discarded at once; deleting it from room 1 (`z:`, 0x21, `t:01,1,…`,
@@ -337,11 +337,11 @@ the device being "new" again; putting it back into a parking room
 (`arrangeNewDevice`: 0x22 group 6, `c:`, `m:`) set the byte to 6 and
 room 1 accepted commands again. This is how the previous owner's
 leftovers blocked rooms 4 and 5 (their C lines said 4, 4 and 5 while
-they were unlisted). Earlier the same day, deleting the three ghosts
+they were unlisted). Earlier the same day, deleting the three never-reporting devices
 from a parking room and then removing that room put the bytes back to
 4, 4 and 5, so removing the room seems to restore an older value;
-keep the parking room, with the ghosts in it, instead. The device types
-of the three ghosts are shutter contacts; their serials start with IEQ.
+keep the parking room, with the devices in it, instead. The device
+types of the three are shutter contacts; their serials start with IEQ.
 
 After a 0x40 set-temperature command the Cube updates the setpoint in
 the room members' L entries at once, while the mode bits change only

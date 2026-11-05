@@ -80,14 +80,14 @@ func TestDoRereadsConfig(t *testing.T) {
 
 func TestKeepHidden(t *testing.T) {
 	cur := &cube.Metadata{
-		Rooms:   []cube.RoomMeta{{ID: 1, Name: "a"}, {ID: cube.GhostRoom, Name: "parked"}},
-		Devices: []cube.DeviceMeta{{RFAddress: 0x000001, RoomID: 1}, {RFAddress: 0x000002, RoomID: cube.GhostRoom}},
+		Rooms:   []cube.RoomMeta{{ID: 1, Name: "a"}, {ID: cube.HiddenRoom, Name: "parked"}},
+		Devices: []cube.DeviceMeta{{RFAddress: 0x000001, RoomID: 1}, {RFAddress: 0x000002, RoomID: cube.HiddenRoom}},
 	}
 	write := &cube.Metadata{Rooms: []cube.RoomMeta{{ID: 1, Name: "b"}}, Devices: []cube.DeviceMeta{{RFAddress: 0x000001, RoomID: 1}}}
 	if n := KeepHidden(write, cur, view.NewHidden(nil, cur, false)); n != 1 {
 		t.Fatalf("added %d", n)
 	}
-	if len(write.Devices) != 2 || len(write.Rooms) != 2 || write.Rooms[1].ID != cube.GhostRoom || write.Rooms[0].Name != "b" {
+	if len(write.Devices) != 2 || len(write.Rooms) != 2 || write.Rooms[1].ID != cube.HiddenRoom || write.Rooms[0].Name != "b" {
 		t.Fatalf("merged %+v", write)
 	}
 }

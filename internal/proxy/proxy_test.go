@@ -238,10 +238,10 @@ func TestProxyDiscovery(t *testing.T) {
 	}
 }
 
-func TestProxyHidesIgnoredDevices(t *testing.T) {
+func TestProxyHidesHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
 	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
-	p.opts.Ignore = []cube.RFAddress{hidden}
+	p.opts.Hidden = []cube.RFAddress{hidden}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 
 	// Parked in a room with a high id, the room disappears as well.
 	cur := *c.Snapshot().Metadata()
-	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 255, Name: "ghosts"})
+	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 255, Name: "parked"})
 	cur.Devices = append([]cube.DeviceMeta(nil), cur.Devices...)
 	for i := range cur.Devices {
 		if cur.Devices[i].RFAddress == hidden {

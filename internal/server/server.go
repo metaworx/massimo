@@ -55,9 +55,10 @@ type CubeConfig struct {
 	Serial string // for the URL and the logs; "" takes the one the Cube reports
 	Addr   string // host[:port]
 	Name   string // a user-friendly name shown next to the serial, optional
-	// Ignore hides devices (and the rooms that hold only them) from every
-	// view and keeps every write away from them; see view.Hidden.
-	Ignore []cube.RFAddress
+	// Hidden hides devices (and the rooms that hold only them) from every
+	// view and keeps every write away from them, in addition to those of
+	// cube.HiddenRoom; see view.Hidden. From MASSIMO_CUBE_<SN>_IGNORE.
+	Hidden []cube.RFAddress
 }
 
 // Options configure a Server.
@@ -71,9 +72,9 @@ type Options struct {
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	Proxy []ProxyListener
-	// ShowGhosts shows the devices of cube.GhostRoom and the ignore
-	// lists' devices everywhere instead of hiding them.
-	ShowGhosts bool
+	// ShowHidden shows the hidden devices (those of cube.HiddenRoom and
+	// of the Hidden lists) everywhere instead of hiding them.
+	ShowHidden bool
 	// Update configures the update endpoints (update_api.go).
 	Update UpdateOptions
 }
@@ -107,7 +108,7 @@ type runtime struct {
 	client     *cubelan.Client
 	queue      *engine.Queue
 	serial     string
-	showGhosts bool
+	showHidden bool
 
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
@@ -171,7 +172,7 @@ func New(opts Options) *Server {
 	}
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{}}
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showGhosts: opts.ShowGhosts, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
+		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
 		rt.queue = engine.NewQueue(rt.client, opts.Queue)
 		key := strings.ToLower(c.Serial)
@@ -202,7 +203,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
 			continue
 		}
-		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, Ignore: rt.cfg.Ignore, ShowGhosts: rt.showGhosts,
+		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, Hidden: rt.cfg.Hidden, ShowHidden: rt.showHidden,
 			MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
 		if pl.Discovery {
 			if responder == nil {
@@ -239,9 +240,9 @@ func (s *Server) Run(ctx context.Context) error {
 func (rt *runtime) writer() cubeio.Writer { return cubeio.Writer{Client: rt.client, Queue: rt.queue} }
 
 // hidden is the set of devices left out of every view: the configured
-// ignore list plus the devices the Cube places in the ghost room.
+// hidden list plus the devices the Cube places in room 255.
 func (rt *runtime) hidden() view.Hidden {
-	return view.NewHidden(rt.cfg.Ignore, rt.client.Snapshot().Metadata(), rt.showGhosts)
+	return view.NewHidden(rt.cfg.Hidden, rt.client.Snapshot().Metadata(), rt.showHidden)
 }
 
 // proxyRuntime picks the Cube a proxy listener serves.

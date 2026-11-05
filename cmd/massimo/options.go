@@ -22,8 +22,9 @@ import (
 var (
 	selectedSN string
 	snExplicit bool
-	// showHidden (-no-ignore, -show-ghosts) shows the hidden devices for
-	// this run, so a backup or restore can touch them.
+	// showHidden (-show-hidden; -no-ignore and -show-ghosts are older
+	// names) shows the hidden devices for this run, so a backup or
+	// restore can touch them.
 	showHidden bool
 )
 
@@ -41,14 +42,14 @@ func useDeviceSerial(serial string) {
 }
 
 // globalOptions parses options that precede the command name:
-// -env <file>, -sn <serial> and -no-ignore. It returns the remaining
+// -env <file>, -sn <serial> and -show-hidden. It returns the remaining
 // arguments.
 func globalOptions(args []string) ([]string, error) {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(args[0], "-"), "=")
 		switch name {
 		case "env", "sn":
-		case "no-ignore", "show-ghosts":
+		case "show-hidden", "no-ignore", "show-ghosts":
 			showHidden = true
 			args = args[1:]
 			continue
@@ -99,7 +100,7 @@ func defaultAddr(addr *string, cmd string) error {
 }
 
 // hiddenDevices returns the hidden list of the selected Cube, or nothing
-// with -no-ignore.
+// with -show-hidden.
 func hiddenDevices() ([]cube.RFAddress, error) {
 	if showHidden {
 		return nil, nil

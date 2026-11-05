@@ -18,7 +18,7 @@ import (
 )
 
 // In the fixture 1514b6 is the only device of room 6.
-func TestIgnoredDevicesInvisible(t *testing.T) {
+func TestHiddenDevicesInvisible(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr, Ignore: []cube.RFAddress{0x1514b6}}}, Queue: engine.Options{Gap: time.Millisecond}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr, Hidden: []cube.RFAddress{0x1514b6}}}, Queue: engine.Options{Gap: time.Millisecond}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
@@ -48,7 +48,7 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
 	for _, d := range devs {
 		if d.RFAddress == "1514b6" {
-			t.Fatal("ignored device listed")
+			t.Fatal("hidden device listed")
 		}
 	}
 	if len(devs) != 5 {
@@ -62,7 +62,7 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 		}
 	}
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", nil) != 404 {
-		t.Fatal("ignored device not 404")
+		t.Fatal("hidden device not 404")
 	}
 	for _, c := range []struct{ path, body string }{
 		{"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", `{"mode":"auto"}`},
@@ -87,12 +87,12 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 	n, _ := resp.Body.Read(body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || strings.Contains(string(body[:n]), `"rf_address": "1514b6"`) {
-		t.Fatalf("backup %d lists the ignored device", resp.StatusCode)
+		t.Fatalf("backup %d lists the hidden device", resp.StatusCode)
 	}
 }
 
-// With ShowGhosts the listed devices are shown too.
-func TestShowGhostsShowsListedDevices(t *testing.T) {
+// With ShowHidden the listed devices are shown too.
+func TestShowHiddenShowsListedDevices(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestShowGhostsShowsListedDevices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr, Ignore: []cube.RFAddress{0x1514b6}}}, ShowGhosts: true, Queue: engine.Options{Gap: time.Millisecond}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr, Hidden: []cube.RFAddress{0x1514b6}}}, ShowHidden: true, Queue: engine.Options{Gap: time.Millisecond}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
@@ -114,5 +114,5 @@ func TestShowGhostsShowsListedDevices(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("listed device hidden despite ShowGhosts")
+	t.Fatal("listed device hidden despite ShowHidden")
 }

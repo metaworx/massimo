@@ -50,13 +50,13 @@ type PlanOptions struct {
 	// backup's state section (manual, auto or vacation). Off by default:
 	// state is normally live, not configuration.
 	State bool
-	// Ignore lists devices the plan must never touch: they are neither
-	// compared nor reported, and the metadata written by the plan keeps
-	// them, and the rooms they are in, exactly as the Cube has them.
-	Ignore []cube.RFAddress
-	// ShowGhosts includes the devices of cube.GhostRoom, which are
-	// hidden by default like the Ignore list.
-	ShowGhosts bool
+	// Hidden lists devices the plan must never touch, in addition to
+	// those of cube.HiddenRoom: they are neither compared nor reported,
+	// and the metadata written by the plan keeps them, and the rooms they
+	// are in, exactly as the Cube has them.
+	Hidden []cube.RFAddress
+	// ShowHidden includes the hidden devices.
+	ShowHidden bool
 }
 
 // Current is the live state the plan compares the backup with.
@@ -95,7 +95,7 @@ func NewPlan(f *File, cur Current, opts PlanOptions) (*Plan, error) {
 			known[rf] = cube.DeviceMeta{Type: c.Type, RFAddress: rf, Serial: c.Serial, RoomID: c.RoomID}
 		}
 	}
-	ig := view.NewHidden(opts.Ignore, snap.Metadata(), opts.ShowGhosts)
+	ig := view.NewHidden(opts.Hidden, snap.Metadata(), opts.ShowHidden)
 	var present, missing []Device
 	for _, d := range f.Devices {
 		if ig[d.RFAddress] {

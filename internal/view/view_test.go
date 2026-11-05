@@ -102,10 +102,10 @@ func TestHiddenRoomsAndDevices(t *testing.T) {
 	}
 }
 
-func TestGhostRoomIsHidden(t *testing.T) {
+func TestRoom255IsHidden(t *testing.T) {
 	md := &cube.Metadata{
-		Rooms:   []cube.RoomMeta{{ID: 1, Name: "a"}, {ID: cube.GhostRoom, Name: "parked"}},
-		Devices: []cube.DeviceMeta{{RFAddress: 0x000001, RoomID: 1}, {RFAddress: 0x000002, RoomID: cube.GhostRoom}},
+		Rooms:   []cube.RoomMeta{{ID: 1, Name: "a"}, {ID: cube.HiddenRoom, Name: "parked"}},
+		Devices: []cube.DeviceMeta{{RFAddress: 0x000001, RoomID: 1}, {RFAddress: 0x000002, RoomID: cube.HiddenRoom}},
 	}
 	h := NewHidden(nil, md, false)
 	if !h[0x000002] || h[0x000001] {

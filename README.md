@@ -91,16 +91,18 @@ is the serial `serve` uses in discovery replies, see
 [docs/proxy.md](docs/proxy.md). `serve -sn <serial>` serves that one
 Cube instead of every configured one.
 
-Room 255 is the ghost room: a device that is paired but never reports
-blocks every command to the room the Cube counts it in, and the Cube
-never drops it, so the way out is to park it in room 255 on the Cube
-(edit a backup and restore it, see docs/portal-protocol.md). Every
+Room 255 is the room for hidden devices: a device that is paired but
+never reports blocks every command to the room the Cube counts it in,
+and the Cube never drops it, so the way out is to park it in room 255
+on the Cube (edit a backup and restore it, see
+docs/portal-protocol.md). Every
 massimo command, the API and the proxy then hide that room and its
 devices without any configuration, so `status` on another computer and
 the original software do not see them either, and `restore` keeps them
-exactly as the Cube has them. `-show-ghosts` before the command name
-(`serve -show-ghosts` for the server) shows and touches them for one
-run, for example to move a device out again.
+exactly as the Cube has them. `-show-hidden` before the command name
+(`serve -show-hidden` for the server; `-show-ghosts` and `-no-ignore`
+are older names) shows and touches them for one run, for example to
+move a device out again.
 `MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) hides further
 radio addresses, comma separated, in the same way.
 `MASSIMO_CUBE_<SERIAL>_NAME` gives the Cube a user-friendly name that

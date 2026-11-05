@@ -67,7 +67,7 @@ func TestHiddenList(t *testing.T) {
 	if _, err := ParseList("MASSIMO_CUBE_IGNORE", "zz"); err == nil || !strings.Contains(err.Error(), "MASSIMO_CUBE_IGNORE") {
 		t.Fatalf("bad entry accepted: %v", err)
 	}
-	md := &cube.Metadata{Devices: []cube.DeviceMeta{{RFAddress: 0x000002, RoomID: cube.GhostRoom}}}
+	md := &cube.Metadata{Devices: []cube.DeviceMeta{{RFAddress: 0x000002, RoomID: cube.HiddenRoom}}}
 	h, err := HiddenSet("keq0000002", md, false)
 	if err != nil || !h[0x005c32] || !h[0x000002] || len(h) != 2 {
 		t.Fatalf("hidden set %v %v", h, err)

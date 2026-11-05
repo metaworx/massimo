@@ -226,9 +226,9 @@ Every device the Cube knows, in the Cube's order. Devices that are
 paired but not assigned to a room have `"unlisted": true` and no name;
 they do not appear under rooms.
 
-Devices in room 255, the ghost room, and devices listed in
-`MASSIMO_CUBE_<SN>_IGNORE` are invisible to the API unless the server
-runs with `-show-ghosts`: they are absent from every list and count,
+Hidden devices, those in room 255 and those listed in
+`MASSIMO_CUBE_<SN>_IGNORE`, are invisible to the API unless the server
+runs with `-show-hidden`: they are absent from every list and count,
 their addresses answer `404`, their events are not streamed, and a
 room that holds only such devices is absent as well, including from
 room commands. The use case is a device that is paired but never
@@ -280,7 +280,7 @@ what the original software does.
 
 Removes an empty room by writing the metadata without it; answers
 `{"ok": true, "rooms": 5}`. A room that still has devices, hidden ones
-included, is refused with `409`, and the ghost room is not found.
+included, is refused with `409`, and room 255 is not found.
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}
 
@@ -296,7 +296,8 @@ unlinked from every partner of its old room and its group removed,
 then linked with every partner of the new room and the new group set,
 each after a wakeup of the room concerned, then the metadata is
 written. `room_id` must name an existing room; 0 is refused, a device
-outside every room would be a ghost. A device that is paired but not
+outside every room would be a device that blocks no room but cannot
+be addressed by one either. A device that is paired but not
 assigned to a room answers `409`; pair it with the original software.
 
 ### PUT /api/v1/cubes/{sn}/devices/{rf}/config

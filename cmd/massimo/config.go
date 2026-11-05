@@ -43,7 +43,7 @@ func runConfig(args []string) error {
 	fmt.Printf("key in effect: %s\n", redact(cubeEnv(env.Key)))
 	fmt.Printf("iv in effect:  %s\n", redact(cubeEnv(env.IV)))
 	fmt.Printf("address:       %s\n", orNone(cubeEnv(env.Address)))
-	fmt.Printf("ignored:       %s\n", orNone(cubeEnv(env.Ignore)))
+	fmt.Printf("hidden:        %s\n", orNone(cubeEnv(env.Ignore)))
 	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(env.Proxy)))
 	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(env.ProxySerial)))
 	fmt.Printf("name:          %s\n", orNone(cubeEnv(env.Name)))

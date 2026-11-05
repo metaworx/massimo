@@ -38,7 +38,9 @@ func runServe(args []string) error {
 		proxies = append(proxies, v)
 		return nil
 	})
-	showGhosts := fs.Bool("show-ghosts", false, "show the devices of room 255 and of the ignore lists in the API and to proxy clients instead of hiding them")
+	var showAll bool
+	fs.BoolVar(&showAll, "show-hidden", false, "show the hidden devices (those of room 255 and of "+env.Ignore+") in the API and to proxy clients")
+	fs.BoolVar(&showAll, "show-ghosts", false, "older name of -show-hidden")
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (default "+env.ProxySerial+" or its per-Cube form; the original software keeps one answer per serial)")
 	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the root update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+" (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
 	updateStatus := fs.String("update-status", update.DefaultStatusPath, "the update helper's status file")
@@ -123,7 +125,7 @@ func runServe(args []string) error {
 		if err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
-		cubes[i].Ignore = list
+		cubes[i].Hidden = list
 		cubes[i].Name = env.Own(env.Name, cubes[i].Serial, single)
 	}
 	var logOut io.Writer = os.Stderr
@@ -136,7 +138,7 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
-	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners, ShowGhosts: *showGhosts || showHidden,
+	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners, ShowHidden: showAll || showHidden,
 		Update: server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
