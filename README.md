@@ -171,12 +171,19 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 ## Versions
 
 Development happens on `main`. `make release-alpha` promotes `main` to
-the branch `alpha` and tags it as the next pre-release `v0.1.0-alpha.N`,
-which the release workflow builds, signs and publishes; boxes following
-the update channel `alpha` then get it from `massimo update` or the web UI
-(see [packaging/README.md](packaging/README.md#updating)). `make` builds
-carry the version from `git describe`, `go run` builds report the commit
-only with `go run -buildvcs=true`.
+the branch `alpha` and tags it as the next pre-release, which the release
+workflow builds, signs and publishes. Everything below `v1.0.0`, and every
+version with a suffix (`-alpha.N`, `-beta.N`, …), is a pre-release; only
+a plain `vX.Y.Z` from `v1.0.0` on is stable. Below `v1.0.0` a minor
+release may break things. A new feature or breaking change starts the
+next minor (`make release-alpha BUMP=minor` gives `v0.2.0-alpha.1`), a fix
+or another round counts the suffix up (`v0.2.0-alpha.2`); the suffix names
+the channel, so promoting to a later `beta` branch tags `-beta.N`.
+
+Boxes following the update channel `alpha` get each release from `massimo
+update` or the web UI (see [packaging/README.md](packaging/README.md#updating)).
+`make` builds carry the version from `git describe`, `go run` builds
+report the commit only with `go run -buildvcs=true`.
 
 ## Original software
 

@@ -3,8 +3,9 @@
 For the next session, local or cloud. Develop on `main` (pull requests
 go there); `alpha` (called `phase-0` until 2026-11-05) is the release
 branch and update channel of the alpha releases, promoted from `main`
-with `make release-alpha` after each feature; tags up to
-`v0.1.0-alpha.N`. Read README.md, then docs/roadmap.md, then this file.
+with `make release-alpha` (`BUMP=minor` for a feature: v0.2.0-alpha.1,
+v0.3.0-alpha.1, …; without it for a fix: v0.2.0-alpha.2); README.md,
+"Versions". Read README.md, then docs/roadmap.md, then this file.
 
 Done on 2026-11-05 after the UI rounds: docs/design.md and
 docs/background.md (the proposal, the evaluation, the sources), the
