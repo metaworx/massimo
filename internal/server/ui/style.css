@@ -170,7 +170,6 @@ body.expert #clock-plain { display: none; }
 .switch input:checked + .slider { background: var(--accent); }
 .switch input:checked + .slider::after { left: 21px; }
 .switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
-.settings label.switch { flex-direction: row; }
 #clock-plain { font-variant-numeric: tabular-nums; cursor: default; }
 .budget {
   display: flex;
@@ -223,9 +222,17 @@ body.expert #clock-plain { display: none; }
 }
 .settings { max-width: 520px; margin-bottom: 16px; }
 .settings-body { padding: 12px 14px 4px; }
-.settings label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.setting { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-bottom: 12px; }
+.setting .setting-control { flex-basis: 100%; }
+.setting > .switch { flex: 1 1 0; min-width: 0; }
+.setting select.setting-control { flex-basis: auto; max-width: 100%; }
+.setting > select.setting-control { width: 100%; }
 .settings input[type="number"] { width: 6em; }
 .settings .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 0 10px; }
+.lang-note { flex-basis: 100%; margin: 2px 0 0; }
+.lang-note span { display: block; }
+.lang-note span + span { margin-top: 4px; font-style: italic; }
+.settings .settings-note { margin: 4px 0 8px; }
 .settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
 .settings .update p { margin: 4px 0; overflow-wrap: anywhere; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -456,6 +463,8 @@ button.subtle { color: var(--muted); }
 .mode-row .tool-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tool-btn .ni { width: 18px; height: 18px; flex: none; }
 .mode-vacation { color: var(--warn); font-size: 0.9rem; white-space: nowrap; }
+.mode-mixed { color: var(--warn); font-size: 0.9rem; white-space: nowrap; cursor: help; }
+.mode-row .mode-group button.partial { border-color: var(--accent); border-style: dashed; }
 .suitcase { font-size: 1rem; }
 .house-modes {
   display: flex;
@@ -600,10 +609,10 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 }
 .cfg-label { color: var(--muted); }
 .cfg-field > .inline, .cfg-field > input, .cfg-field > select { margin-left: auto; }
-.cfg-field .inline > .muted { min-width: 2.6em; }
-.cfg-form input[type="number"] { text-align: right; }
+.cfg-field .inline > .muted { min-width: 2.2em; }
+.cfg-form input[type="number"] { text-align: right; width: 4.8em; }
 .cfg-form input[type="text"] { width: min(100%, 18em); }
-.cfg-form .actions { margin-top: 4px; }
+.cfg-form .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .cfg-device {
   border-top: 1px solid var(--line);
   padding-top: 8px;
@@ -631,7 +640,21 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   border-radius: 50%;
   background: var(--warn);
 }
-.day-bar .day.all { font-weight: 400; color: var(--muted); }
+.day-bar .day.all, .day-bar .day.copy { font-weight: 400; }
+.day-bar .day.all { color: var(--muted); }
+.day-bar .day.chosen { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.day-bar .day:disabled { opacity: 0.35; }
+/* the seven days share a row evenly, whatever the tile's width */
+.day-bar.week { flex-wrap: nowrap; }
+.day-bar.week .day { flex: 1 1 0; min-width: 0; padding: 4px 2px; }
+.day-copy { display: flex; flex-direction: column; gap: 6px; }
+.day-copy h4 { margin: 4px 0 0; }
+.day-copy .day.copy { margin-left: auto; }
+.cfg-form p { margin: 0; }
+/* resets at the left end of an actions row, Cancel and Send at the right */
+.actions { flex-wrap: wrap; }
+.actions-left { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
+.actions-right { display: inline-flex; gap: 8px; margin-left: auto; }
 .prog-bar {
   display: flex;
   height: 28px;
@@ -690,3 +713,40 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .log-line.kind-connected .log-kind { color: var(--ok); }
 .log-device { font-weight: 600; }
 .log-text { color: var(--muted); }
+
+/* copy tab */
+.copy-section { display: flex; flex-direction: column; gap: 6px; }
+.copy-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.copy-head h4 { margin: 8px auto 6px 0; }
+.copy-head button { padding: 4px 10px; font-size: 0.85rem; }
+.copy-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(13em, 1fr)); gap: 8px 16px; }
+.copy-list .switch { color: var(--fg); }
+
+/* help: a small round button next to a setting, the text below it */
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  flex: none;
+}
+.help-btn:hover, .help-btn.active { color: var(--accent); border-color: var(--line); }
+.hi { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.help-text {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--card-head);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+.cfg-head { display: inline-flex; align-items: center; gap: 2px; }
+.cfg-field.with-help { justify-content: flex-start; gap: 4px 6px; }

@@ -25,8 +25,21 @@ function roomThermostat(room) {
 }
 
 function roomState(room) {
-  const t = roomThermostat(room);
-  return t && t.state ? t.state : null;
+  const th = roomThermostat(room);
+  return th && th.state ? th.state : null;
+}
+
+// roomModes lists the modes of the room's thermostats, boost counted as
+// manual: one entry when they agree, several when a device was set on
+// its own (by another client or at the device).
+function roomModes(room) {
+  const modes = [];
+  for (const d of room.devices) {
+    if (!isThermostat(d) || !d.state || !d.state.mode) continue;
+    const m = d.state.mode === "boost" ? "manual" : d.state.mode;
+    if (!modes.includes(m)) modes.push(m);
+  }
+  return modes;
 }
 
 function roomActual(room) {
@@ -77,8 +90,8 @@ function renderRoom(room) {
   el.querySelector(".room-name-btn").addEventListener("click", () => toggleDevices(room));
   renderTools(el, room);
   const actual = roomActual(room);
-  el.querySelector(".temp-is").textContent = actual === undefined ? "–" : actual.toFixed(1) + "°";
-  el.querySelector(".temp-is").title = actual === undefined ? "no device of this room reports a measured temperature" : "measured temperature";
+  el.querySelector(".temp-is").textContent = fmtTemp(actual, "°");
+  el.querySelector(".temp-is").title = t(actual === undefined ? "room.noMeasured" : "room.measured");
 
   renderNotReady(el, room);
   renderSetpoint(el, room);
@@ -99,7 +112,7 @@ function renderNotReady(el, room) {
   const notReady = el.querySelector(".not-ready");
   if (room.ready) return;
   const silent = room.devices.filter((d) => !d.reported);
-  notReady.textContent = "Room commands are discarded until every device has reported";
+  notReady.textContent = t("room.notReady");
   if (silent.length) {
     notReady.appendChild(document.createTextNode(": "));
     silent.forEach((d, i) => {
@@ -114,11 +127,11 @@ function renderNotReady(el, room) {
 
 function renderSetpoint(el, room) {
   const ui = roomUI(room);
-  const t = roomThermostat(room);
+  const th = roomThermostat(room);
   const s = roomState(room);
   const row = el.querySelector(".setpoint-row");
   const modeGroup = el.querySelector(".mode-group");
-  if (!t) {
+  if (!th) {
     row.classList.add("hidden");
     modeGroup.classList.add("hidden");
     return;
@@ -126,7 +139,7 @@ function renderSetpoint(el, room) {
   const big = el.querySelector(".setpoint-big");
   const current = s && s.setpoint !== undefined ? s.setpoint : null;
   const shown = ui.pending !== null ? ui.pending : current;
-  big.textContent = shown === null ? "–" : shown.toFixed(1) + "°";
+  big.textContent = fmtTemp(shown, "°");
   big.classList.toggle("pending", ui.pending !== null);
   el.querySelector(".step-minus").addEventListener("click", () => stepSetpoint(room, -STEP));
   el.querySelector(".step-plus").addEventListener("click", () => stepSetpoint(room, STEP));
@@ -135,19 +148,36 @@ function renderSetpoint(el, room) {
   el.querySelector(".pending-save").addEventListener("click", () => flushSetpoint(room));
   el.querySelector(".pending-cancel").addEventListener("click", () => cancelSetpoint(room));
 
-  const mode = s ? s.mode : null;
+  const modes = roomModes(room);
+  const mixed = modes.length > 1;
+  const mode = mixed ? null : s ? s.mode : null;
   const autoBtn = el.querySelector(".mode-auto");
   const manuBtn = el.querySelector(".mode-manual");
   const holidayBtn = el.querySelector(".mode-holiday");
-  const pressed = [[autoBtn, mode === "auto"], [manuBtn, mode === "manual" || mode === "boost"], [holidayBtn, mode === "vacation"]];
-  for (const [btn, on] of pressed) {
+  // With mixed modes no button is pressed; those in use are marked as
+  // partly pressed, and a note names the devices and their modes.
+  const pressed = [[autoBtn, "auto"], [manuBtn, "manual"], [holidayBtn, "vacation"]];
+  for (const [btn, m] of pressed) {
+    const on = mixed ? false : mode === m || (m === "manual" && mode === "boost");
+    const part = mixed && modes.includes(m);
     btn.classList.toggle("active", on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.classList.toggle("partial", part);
+    btn.setAttribute("aria-pressed", part ? "mixed" : on ? "true" : "false");
+  }
+  const mixedNote = el.querySelector(".mode-mixed");
+  if (mixed) {
+    const list = room.devices
+      .filter((d) => isThermostat(d) && d.state && d.state.mode)
+      .map((d) => (d.name || d.rf_address) + ": " + modeName(d.state.mode))
+      .join(", ");
+    mixedNote.textContent = t("room.mixed");
+    mixedNote.title = t("room.mixedTitle", { list });
+    mixedNote.classList.remove("hidden");
   }
   holidayBtn.addEventListener("click", () => openVacation(room, el));
   autoBtn.addEventListener("click", () => {
     leaveEditing(room);
-    sendRoomSetpoint(room, { mode: "auto" }, "auto");
+    sendRoomSetpoint(room, { mode: "auto" }, t("label.auto"));
   });
   manuBtn.addEventListener("click", () => {
     // Manual keeps the room's current setpoint; a pending stepper value
@@ -155,18 +185,18 @@ function renderSetpoint(el, room) {
     // picks a temperature with the stepper, which sends manual itself.
     leaveEditing(room);
     if (current === null) {
-      showTileResult(room.id, "no setpoint known yet; choose one with the stepper", false);
+      showTileResult(room.id, t("room.noSetpoint"), false);
       return;
     }
-    sendRoomSetpoint(room, { mode: "manual", temp: current }, "manual " + current.toFixed(1) + " °C");
+    sendRoomSetpoint(room, { mode: "manual", temp: current }, t("label.manual", { temp: fmtNum(current, 1) }));
   });
   const vac = el.querySelector(".mode-vacation");
   if (mode === "vacation") {
     const until = s.until || "?";
-    holidayBtn.title = "holiday until " + until;
+    holidayBtn.title = t("room.holidayUntil", { until });
     vac.appendChild(textEl("span", "\u{1F9F3}", "suitcase"));
-    vac.appendChild(document.createTextNode(" until " + until));
-    vac.title = "holiday until " + until;
+    vac.appendChild(document.createTextNode(" " + t("room.until", { until })));
+    vac.title = t("room.holidayUntil", { until });
     vac.classList.remove("hidden");
   }
 }
@@ -265,11 +295,11 @@ function renderVacation(el, room) {
   panel.addEventListener("submit", (ev) => {
     ev.preventDefault();
     keep();
-    const t = clampTemp(parseFloat(temp.value));
+    const v = clampTemp(parseFloat(temp.value));
     const u = apiUntil(until.value);
     if (!u) return;
     closeVacation(room);
-    sendRoomSetpoint(room, { mode: "vacation", temp: t, until: u }, "vacation " + t.toFixed(1) + " °C until " + u);
+    sendRoomSetpoint(room, { mode: "vacation", temp: v, until: u }, t("label.vacation", { temp: fmtNum(v, 1), until: u }));
   });
 }
 
@@ -329,32 +359,21 @@ function deviceBadges(d) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) {
-    out.push(["not reported", "warn"]);
+    out.push([t("badge.notReported"), "warn"]);
     return out;
   }
-  if (s.battery_low) out.push(["battery low", "bad"]);
-  if (s.error) out.push(["transmit error", "bad"]);
-  if (s.link_error) out.push(["link error", "warn"]);
-  if (s.panel_locked) out.push(["locked", "warn"]);
+  if (s.battery_low) out.push([t("badge.batteryLow"), "bad"]);
+  if (s.error) out.push([t("badge.transmitError"), "bad"]);
+  if (s.link_error) out.push([t("badge.linkError"), "warn"]);
+  if (s.panel_locked) out.push([t("badge.locked"), "warn"]);
   if (s.window_open !== undefined) {
-    out.push(s.window_open ? ["open", "fill-bad"] : ["closed", "fill-ok"]);
+    out.push(s.window_open ? [t("badge.open"), "fill-bad"] : [t("badge.closed"), "fill-ok"]);
   } else if (s.mode && isThermostat(d)) {
     const mode = s.mode === "vacation" ? "holiday" : s.mode === "boost" ? "manual" : s.mode;
     const cls = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" }[mode] || "mode";
-    out.push([mode, cls]);
+    out.push([modeName(s.mode === "boost" ? "manual" : s.mode), cls]);
   }
   return out;
-}
-
-// iconEl returns a small inline icon referencing a symbol of the page.
-function iconEl(symbol, cls) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", cls);
-  svg.setAttribute("aria-hidden", "true");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", "#" + symbol);
-  svg.appendChild(use);
-  return svg;
 }
 
 // valueCell builds one cell of the values grid: label, number, unit and
@@ -375,14 +394,14 @@ function valueCell(label, value, unit, icon) {
 function deviceValues(grid, d, offset) {
   const s = d.state || {};
   const left = [];
-  if (s.valve_pct !== undefined) left.push(["valve", String(s.valve_pct), "%"]);
+  if (s.valve_pct !== undefined) left.push([t("val.valve"), String(s.valve_pct), "%"]);
   if (isThermostat(d)) {
-    const off = offset === undefined ? "" : (offset > 0 ? "+" : "") + offset.toFixed(1);
-    left.push(["offset", off, "°C"]);
+    const off = offset === undefined ? "" : (offset > 0 ? "+" : "") + fmtNum(offset, 1);
+    left.push([t("val.offset"), off, "°C"]);
   }
   const right = [];
-  right.push(["set", s.setpoint === undefined ? "–" : s.setpoint.toFixed(1), "°C", "icon-set"]);
-  right.push(["actual", s.actual_temp === undefined ? "–" : s.actual_temp.toFixed(1), "°C", "icon-is"]);
+  right.push([t("val.set"), fmtTemp(s.setpoint, ""), "°C", "icon-set"]);
+  right.push([t("val.actual"), fmtTemp(s.actual_temp, ""), "°C", "icon-is"]);
   clear(grid);
   const rows = Math.max(left.length, right.length);
   for (let i = 0; i < rows; i++) {
@@ -394,7 +413,7 @@ function deviceValues(grid, d, offset) {
   if (s.until) {
     // The vacation end spans the grid, under the temperatures.
     const cell = textEl("span", "", "cell wide");
-    cell.appendChild(textEl("span", "until", "k"));
+    cell.appendChild(textEl("span", t("val.until"), "k"));
     cell.appendChild(textEl("span", s.until, ""));
     grid.appendChild(cell);
   }
@@ -404,11 +423,11 @@ function deviceValues(grid, d, offset) {
 function renderDevice(d) {
   const el = $("device-template").content.firstElementChild.cloneNode(true);
   el.dataset.rf = d.rf_address;
-  el.querySelector(".device-name").textContent = d.name || "(unnamed)";
-  el.querySelector(".device-type").textContent = d.type.replace(/_/g, " ");
+  el.querySelector(".device-name").textContent = d.name || t("device.unnamed");
+  el.querySelector(".device-type").textContent = typeName(d.type);
   el.querySelector(".device-rf").textContent = d.rf_address;
   const badges = el.querySelector(".device-badges");
-  for (const [label, cls] of deviceBadges(d)) badges.appendChild(textEl("span", label, "flag " + cls));
+  for (const [label, kind] of deviceBadges(d)) badges.appendChild(badgeEl(label, kind));
   const grid = el.querySelector(".device-vals");
   if (isThermostat(d) && d.reported) {
     deviceValues(grid, d, undefined);
@@ -420,7 +439,7 @@ function renderDevice(d) {
   const actions = el.querySelector(".device-actions");
   if (isThermostat(d)) {
     const locked = !!(d.state && d.state.panel_locked);
-    actions.appendChild(button(locked ? "Unlock" : "Lock", "", () => setLock(d, !locked)));
+    actions.appendChild(button(t(locked ? "device.unlock" : "device.lock"), "", () => setLock(d, !locked)));
   }
   return el;
 }
@@ -428,7 +447,7 @@ function renderDevice(d) {
 function fillDevices(container, room) {
   clear(container);
   if (room.devices.length === 0) {
-    container.appendChild(textEl("p", "No devices in this room.", "muted"));
+    container.appendChild(textEl("p", t("room.noDevices"), "muted"));
     return;
   }
   for (const d of room.devices) container.appendChild(renderDevice(d));
@@ -483,18 +502,31 @@ function updateDevice(d) {
 // --- results ----------------------------------------------------------
 
 function resultText(label, res) {
-  let text = label + ": ok";
-  if (res && res.budget) text += " (duty cycle " + res.budget.duty_cycle_pct + " %, " + res.budget.free_memory_slots + " free slots)";
-  if (res && res.discarded) text = label + ": discarded by the cube";
+  if (res && res.discarded) return t("result.discarded", { label });
+  let text = t("result.ok", { label });
+  if (res && res.budget) text = t("result.budget", { text, duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots });
   return text;
 }
 
 function errorText(label, e) {
-  let text = label + ": " + e.message;
+  let text = t("result.error", { label, error: e.message });
   if (e.data && e.data.no_state) {
-    text += " Devices without state: " + e.data.no_state.join(", ") + ". Open and close the window, or turn the thermostat's wheel, then retry.";
+    text += " " + t("result.noState", { devices: e.data.no_state.join(", ") });
   }
   return text;
+}
+
+// modeName is a device mode as a word, typeName a device type.
+function modeName(mode) {
+  const key = "mode.name." + mode;
+  const s = t(key);
+  return s === key ? mode : s;
+}
+
+function typeName(type) {
+  const key = "type." + type;
+  const s = t(key);
+  return s === key ? type.replace(/_/g, " ") : s;
 }
 
 function showTileResult(roomId, text, ok) {
@@ -541,11 +573,11 @@ async function flushSetpoint(room) {
   const temp = ui.pending;
   ui.pending = null;
   rerenderRoom(room);
-  await sendRoomSetpoint(room, { mode: "manual", temp }, "manual " + temp.toFixed(1) + " °C");
+  await sendRoomSetpoint(room, { mode: "manual", temp }, t("label.manual", { temp: fmtNum(temp, 1) }));
 }
 
 async function sendRoomSetpoint(room, body, label) {
-  showTileResult(room.id, label + ": waiting for the cube …", true);
+  showTileResult(room.id, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
     showTileResult(room.id, resultText(label, res), !(res && res.discarded));
@@ -559,9 +591,9 @@ async function sendRoomSetpoint(room, body, label) {
 }
 
 async function setLock(d, locked) {
-  const label = (locked ? "lock " : "unlock ") + deviceName(d);
+  const label = t(locked ? "label.lock" : "label.unlock", { name: deviceName(d) });
   const roomId = d.room_id;
-  showTileResult(roomId, label + ": waiting for the cube …", true);
+  showTileResult(roomId, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/devices/" + d.rf_address + "/lock", { locked });
     showTileResult(roomId, resultText(label, res), !(res && res.discarded));
@@ -581,9 +613,9 @@ async function lockRoom(room, locked, el) {
 async function deleteRoom(room) {
   try {
     await api("DELETE", base() + "/rooms/" + room.id);
-    showMessage("Room " + room.name + " deleted.", true);
+    showMessage(t("room.deleted", { name: room.name }), true);
   } catch (e) {
-    showMessage("Delete room " + room.name + ": " + e.message, false);
+    showMessage(t("room.deleteFailed", { name: room.name, error: e.message }), false);
   }
   await loadRooms();
 }
@@ -616,7 +648,7 @@ function renderHouseRooms() {
   allCb.id = "house-all";
   allCb.checked = true;
   all.appendChild(allCb);
-  all.appendChild(document.createTextNode(" All rooms"));
+  all.appendChild(document.createTextNode(" " + t("house.allRooms")));
   box.appendChild(all);
   for (const room of state.rooms) {
     if (!roomThermostat(room)) continue;
@@ -675,31 +707,31 @@ async function sendHouse() {
   out.classList.remove("hidden");
   out.className = "tile-result ok";
   if (ids.length === 0) {
-    out.textContent = "No room selected.";
+    out.textContent = t("house.noRoom");
     return;
   }
-  out.textContent = "Sending …";
+  out.textContent = t("house.sending");
   const results = [];
   let failed = false;
   for (const room of state.rooms.filter((r) => ids.includes(r.id))) {
-    const t = roomThermostat(room);
-    if (!t) continue;
+    const th = roomThermostat(room);
+    if (!th) continue;
     try {
       let temp = manualTemp;
       if (mode === "eco" || mode === "comfort") {
-        const detail = await deviceDetail(t.rf_address);
+        const detail = await deviceDetail(th.rf_address);
         const cfg = detail.thermostat || detail.wall_thermostat || {};
         temp = mode === "eco" ? cfg.eco_temp : cfg.comfort_temp;
-        if (temp === undefined) throw new Error("no " + mode + " temperature configured");
+        if (temp === undefined) throw new Error(t(mode === "eco" ? "house.noEco" : "house.noComfort"));
       }
       let body = { mode: "auto" };
       if (mode !== "auto") body = until ? { mode: "vacation", temp, until } : { mode: "manual", temp };
       const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
-      const what = mode === "auto" ? "auto" : temp.toFixed(1) + " °C" + (until ? " until " + until : "");
-      results.push(room.name + ": " + (res && res.discarded ? "discarded" : what + " ok"));
+      const what = mode === "auto" ? t("house.auto") : t(until ? "house.tempUntil" : "house.temp", { temp: fmtNum(temp, 1), until });
+      results.push(res && res.discarded ? t("house.roomDiscarded", { room: room.name }) : t("house.roomOk", { room: room.name, what }));
       if (res && res.discarded) failed = true;
     } catch (e) {
-      results.push(room.name + ": " + e.message);
+      results.push(t("house.roomError", { room: room.name, error: e.message }));
       failed = true;
     }
     out.textContent = results.join("\n");

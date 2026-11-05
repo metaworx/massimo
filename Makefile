@@ -15,7 +15,7 @@ CROSS    = CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-linux-armv6 \
            massimo-darwin-amd64 massimo-darwin-arm64 massimo-windows-amd64.exe
 
-.PHONY: all build test vet windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross release clean release-alpha
+.PHONY: all build test vet ui-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross release clean release-alpha
 
 # Development happens on main; a release promotes main to a release
 # branch, which is also the update channel boxes follow (internal/update).
@@ -58,6 +58,11 @@ test:
 
 vet:
 	go vet ./...
+
+# Web UI smoke test with Playwright against the fake Cube; skipped when
+# Playwright for Python is not installed (tools/ui-test/README.md).
+ui-test:
+	tools/ui-test/run.sh
 
 # Cross builds; each lands in $(OUT)/.
 windows:

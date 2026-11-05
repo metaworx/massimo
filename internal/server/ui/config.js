@@ -8,20 +8,26 @@
 "use strict";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const DAY_SHORT = { monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th", friday: "Fr", saturday: "Sa", sunday: "Su" };
 const MAX_POINTS = 13;
 const NAME_BYTES = 32;
-const TABS = [
-  ["room", "Room"],
-  ["temps", "Temperatures"],
-  ["devices", "Devices"],
-  ["program", "Week programme"],
-  ["copy", "Copy"],
-];
+const TABS = ["room", "temps", "devices", "program", "copy"];
 // The common fields of a room's configuration, as GET /rooms/{id}/config
 // returns them and PUT /rooms/{id}/config takes them.
 const TEMP_FIELDS = ["comfort_temp", "eco_temp", "window_open_temp", "window_open_minutes", "max_setpoint", "min_setpoint"];
 const VALVE_FIELDS = ["boost_minutes", "boost_valve_pct", "decalc_day", "decalc_hour", "max_valve_pct", "valve_offset_pct"];
+
+// dayShort and dayLong name a weekday ("monday" …) in the language.
+function dayShort(day) {
+  return t("dayShort." + day);
+}
+
+function dayLong(day) {
+  return t("day." + day);
+}
+
+function dayList(days) {
+  return days.map(dayShort).join(", ");
+}
 
 // --- model ------------------------------------------------------------
 
@@ -80,8 +86,10 @@ function freshEdit(room, cfg) {
 }
 
 // programModel turns the API's week programme into the editor's model:
-// a copy per day, the selected days, the day being edited, the days
-// changed so far.
+// an editable copy per day and the loaded one (orig) for reset and for
+// telling the changed days, the day being edited, the selected days
+// (those with the edited day's programme, edited together unless
+// "only" is on), and the days ticked in the copy section.
 function programModel(prog) {
   const days = {};
   for (const day of DAYS) {
@@ -89,7 +97,47 @@ function programModel(prog) {
     days[day] = pts.map((p) => ({ temp: p.temp, until: p.until }));
     if (days[day].length === 0) days[day] = [{ temp: 17, until: "24:00" }];
   }
-  return { days, source: prog ? prog.source : "", selected: new Set(["monday"]), day: "monday", dirty: new Set() };
+  const p = { days, orig: copyDays(days), source: prog ? prog.source : "", day: "monday", selected: new Set(), only: false, copyTo: new Set() };
+  selectDay(p, "monday");
+  return p;
+}
+
+function copyPoints(pts) {
+  return pts.map((pt) => ({ temp: pt.temp, until: pt.until }));
+}
+
+function copyDays(days) {
+  const out = {};
+  for (const day of DAYS) out[day] = copyPoints(days[day]);
+  return out;
+}
+
+function samePoints(a, b) {
+  return a.length === b.length && a.every((pt, i) => pt.temp === b[i].temp && pt.until === b[i].until);
+}
+
+// dirtyDays lists the days whose programme differs from the loaded one.
+function dirtyDays(p) {
+  return DAYS.filter((d) => !samePoints(p.days[d], p.orig[d]));
+}
+
+// selectDay makes day the edited day and selects every day that has
+// the same programme.
+function selectDay(p, day) {
+  p.day = day;
+  p.selected = new Set(DAYS.filter((d) => samePoints(p.days[d], p.days[day])));
+  for (const d of p.selected) p.copyTo.delete(d);
+}
+
+// programEdited is called after every change to the edited day: with
+// "only" on, the change sets the day apart and the other days leave the
+// selection; with it off, the change goes to every selected day.
+function programEdited(p) {
+  if (p.only) {
+    p.selected = new Set([p.day]);
+    return;
+  }
+  for (const d of p.selected) if (d !== p.day) p.days[d] = copyPoints(p.days[p.day]);
 }
 
 // --- rendering --------------------------------------------------------
@@ -109,12 +157,12 @@ function renderConfig(el, room) {
   body.className = "config-body";
   area.appendChild(body);
   if (c.loading) {
-    body.appendChild(textEl("p", "Loading the configuration …", "muted"));
+    body.appendChild(textEl("p", t("cfg.loading"), "muted"));
     return;
   }
   if (c.error) {
-    body.appendChild(textEl("p", "Cannot load the configuration: " + c.error, "tile-result bad"));
-    body.appendChild(button("Close", "", () => closeConfig(room)));
+    body.appendChild(textEl("p", t("cfg.cannotLoad", { error: c.error }), "tile-result bad"));
+    body.appendChild(button(t("action.close"), "", () => closeConfig(room)));
     return;
   }
   switch (c.tab) {
@@ -148,9 +196,9 @@ function renderTabs(room, c) {
   const list = document.createElement("span");
   list.className = "config-tablist";
   list.setAttribute("role", "tablist");
-  list.setAttribute("aria-label", "configuration sections");
-  for (const [key, label] of TABS) {
-    const b = button(label, "tab" + (c.tab === key ? " active" : ""), () => {
+  list.setAttribute("aria-label", t("cfg.sections"));
+  for (const key of TABS) {
+    const b = button(t("cfg.tab." + key), "tab" + (c.tab === key ? " active" : ""), () => {
       c.tab = key;
       c.result = null;
       rerenderRoom(room);
@@ -161,22 +209,52 @@ function renderTabs(room, c) {
   }
   bar.appendChild(list);
   const close = button("×", "tab close", () => closeConfig(room));
-  close.title = "Close the configuration";
-  close.setAttribute("aria-label", "close configuration");
+  close.title = t("cfg.closeTitle");
+  close.setAttribute("aria-label", t("cfg.close"));
   bar.appendChild(close);
   return bar;
 }
 
-// field builds a labelled input and binds it to the edit model.
-function field(label, input, unit) {
-  const wrap = document.createElement("label");
+// field builds a labelled input with an optional help button and
+// explanation. The input is given an id for its label when it has none.
+let fieldSeq = 0;
+function field(label, input, unit, help) {
+  const wrap = document.createElement("div");
   wrap.className = "cfg-field";
-  wrap.appendChild(textEl("span", label, "cfg-label"));
+  const head = document.createElement("span");
+  head.className = "cfg-head";
+  const lab = textEl("label", label, "cfg-label");
+  const target = input.matches("input, select") ? input : input.querySelector("input, select");
+  if (target) {
+    if (!target.id) target.id = "cfg-input-" + ++fieldSeq;
+    lab.htmlFor = target.id;
+  }
+  head.appendChild(lab);
+  let text = null;
+  if (help) {
+    const h = helpParts(help, label);
+    head.appendChild(h.btn);
+    text = h.text;
+  }
+  wrap.appendChild(head);
   const box = document.createElement("span");
   box.className = "inline";
   box.appendChild(input);
   if (unit) box.appendChild(textEl("span", unit, "muted"));
   wrap.appendChild(box);
+  if (text) wrap.appendChild(text);
+  return wrap;
+}
+
+// withHelp puts a help button and its explanation next to a control
+// that carries its own label, such as a switch.
+function withHelp(el, help, label) {
+  const wrap = document.createElement("div");
+  wrap.className = "cfg-field with-help";
+  const h = helpParts(help, label);
+  wrap.appendChild(el);
+  wrap.appendChild(h.btn);
+  wrap.appendChild(h.text);
   return wrap;
 }
 
@@ -204,15 +282,22 @@ function selectInput(options, value, onChange) {
   return s;
 }
 
-function formActions(onCancel, sendLabel) {
+// formActions builds the Cancel and Send row; extra buttons (resets)
+// go to its left end.
+function formActions(onCancel, sendLabel, extra) {
   const actions = document.createElement("div");
   actions.className = "actions";
-  actions.appendChild(button("Cancel", "", onCancel));
-  const send = document.createElement("button");
-  send.type = "submit";
-  send.className = "primary";
-  send.textContent = sendLabel || "Send";
-  actions.appendChild(send);
+  if (extra && extra.length) {
+    const left = document.createElement("span");
+    left.className = "actions-left";
+    for (const b of extra) left.appendChild(b);
+    actions.appendChild(left);
+  }
+  const right = document.createElement("span");
+  right.className = "actions-right";
+  right.appendChild(button(t("action.cancel"), "", onCancel));
+  right.appendChild(submitButton(sendLabel || t("action.send")));
+  actions.appendChild(right);
   return actions;
 }
 
@@ -238,8 +323,8 @@ function renderRoomTab(room, c) {
   name.addEventListener("input", () => {
     c.edit.name = name.value;
   });
-  form.appendChild(field("Room name", name));
-  const hint = textEl("p", "Up to " + NAME_BYTES + " bytes; umlauts take two.", "muted small");
+  form.appendChild(field(t("cfg.roomName"), name, "", "roomName"));
+  const hint = textEl("p", t("cfg.nameHint", { n: NAME_BYTES }), "muted small");
   form.appendChild(hint);
   form.appendChild(formActions(() => closeConfig(room)));
   return form;
@@ -251,33 +336,33 @@ function byteLength(s) {
 
 async function sendRoomName(room, c) {
   const name = c.edit.name.trim();
-  if (!name) return setConfigResult(room, c, "A name is required.", false);
-  if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, "The name is longer than " + NAME_BYTES + " bytes.", false);
-  if (name === room.name) return setConfigResult(room, c, "The name is unchanged.", true);
-  setConfigResult(room, c, "Renaming …", true);
+  if (!name) return setConfigResult(room, c, t("cfg.nameRequired"), false);
+  if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.nameTooLong", { n: NAME_BYTES }), false);
+  if (name === room.name) return setConfigResult(room, c, t("cfg.nameUnchanged"), true);
+  setConfigResult(room, c, t("cfg.renaming"), true);
   try {
     await api("PUT", base() + "/rooms/" + room.id, { name });
-    setConfigResult(room, c, "Room renamed to " + name + ".", true);
+    setConfigResult(room, c, t("cfg.renamed", { name }), true);
     await loadRooms();
   } catch (e) {
-    setConfigResult(room, c, "Rename: " + e.message, false);
+    setConfigResult(room, c, t("cfg.renameFailed", { error: e.message }), false);
   }
 }
 
 // --- temperatures tab -------------------------------------------------
 
 function renderTempsTab(room, c) {
-  const form = configForm(() => sendRoomConfig(room, c, TEMP_FIELDS, "Temperatures"));
+  const form = configForm(() => sendRoomConfig(room, c, TEMP_FIELDS, t("cfg.tab.temps")));
   const e = c.edit.common;
   const set = (k) => (v) => {
     e[k] = v;
   };
-  form.appendChild(field("Comfort temperature", numberInput(e.comfort_temp, MIN_TEMP, MAX_TEMP, STEP, set("comfort_temp")), "°C"));
-  form.appendChild(field("Eco temperature", numberInput(e.eco_temp, MIN_TEMP, MAX_TEMP, STEP, set("eco_temp")), "°C"));
-  form.appendChild(field("Open window", numberInput(e.window_open_temp, MIN_TEMP, MAX_TEMP, STEP, set("window_open_temp")), "°C"));
-  form.appendChild(field("Open window for", numberInput(e.window_open_minutes, 0, 60, 5, set("window_open_minutes")), "min"));
-  form.appendChild(field("Maximum temperature", numberInput(e.max_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("max_setpoint")), "°C"));
-  form.appendChild(field("Minimum temperature", numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), "°C"));
+  form.appendChild(field(t("cfg.comfort"), numberInput(e.comfort_temp, MIN_TEMP, MAX_TEMP, STEP, set("comfort_temp")), "°C", "comfort"));
+  form.appendChild(field(t("cfg.eco"), numberInput(e.eco_temp, MIN_TEMP, MAX_TEMP, STEP, set("eco_temp")), "°C", "eco"));
+  form.appendChild(field(t("cfg.windowTemp"), numberInput(e.window_open_temp, MIN_TEMP, MAX_TEMP, STEP, set("window_open_temp")), "°C", "windowTemp"));
+  form.appendChild(field(t("cfg.windowMinutes"), numberInput(e.window_open_minutes, 0, 60, 5, set("window_open_minutes")), t("unit.minutes"), "windowMinutes"));
+  form.appendChild(field(t("cfg.maxTemp"), numberInput(e.max_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("max_setpoint")), "°C", "maxTemp"));
+  form.appendChild(field(t("cfg.minTemp"), numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), "°C", "minTemp"));
   form.appendChild(sourceNote(c));
   form.appendChild(formActions(() => closeConfig(room)));
   return form;
@@ -286,7 +371,7 @@ function renderTempsTab(room, c) {
 function sourceNote(c) {
   const src = c.cfg && c.cfg.source;
   const dev = src && c.cfg.devices.find((d) => d.rf_address === src);
-  const text = src ? "Values as stored on " + (dev && dev.name ? dev.name : src) + "; a change goes to every thermostat of the room." : "No thermostat in this room.";
+  const text = src ? t("cfg.valuesFrom", { device: dev && dev.name ? dev.name : src }) : t("cfg.noThermostat");
   return textEl("p", text, "muted small");
 }
 
@@ -305,8 +390,8 @@ function changedFields(c, fields) {
 
 async function sendRoomConfig(room, c, fields, label) {
   const body = changedFields(c, fields);
-  if (Object.keys(body).length === 0) return setConfigResult(room, c, label + ": nothing changed.", true);
-  setConfigResult(room, c, label + ": waiting for the cube …", true);
+  if (Object.keys(body).length === 0) return setConfigResult(room, c, t("cfg.nothingChanged", { label }), true);
+  setConfigResult(room, c, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/config", body);
     setConfigResult(room, c, deviceResults(label, res), !!(res && res.ok));
@@ -319,12 +404,14 @@ async function sendRoomConfig(room, c, fields, label) {
 }
 
 function deviceResults(label, res) {
-  const lines = [label + (res && res.ok ? ": ok" : ": not every device took it")];
+  const lines = [t(res && res.ok ? "result.ok" : "cfg.notAll", { label })];
   for (const d of (res && res.devices) || []) {
-    let t = (d.name || d.rf_address) + ": " + (d.ok ? "ok" : d.discarded ? "discarded" : d.error || "failed");
-    lines.push(t);
+    const name = d.name || d.rf_address;
+    if (d.ok) lines.push(t("cfg.devOk", { name }));
+    else if (d.discarded) lines.push(t("cfg.devDiscarded", { name }));
+    else lines.push(t("cfg.devFailed", { name, error: d.error || t("cfg.failed") }));
   }
-  if (res && res.budget) lines.push("duty cycle " + res.budget.duty_cycle_pct + " %, " + res.budget.free_memory_slots + " free slots");
+  if (res && res.budget) lines.push(t("cfg.budgetLine", { duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots }));
   return lines.join("\n");
 }
 
@@ -334,29 +421,31 @@ function renderDevicesTab(room, c) {
   const wrap = document.createElement("div");
   const thermostats = room.devices.filter(isThermostat);
   if (thermostats.length) {
-    const form = configForm(() => sendRoomConfig(room, c, VALVE_FIELDS, "Device settings"));
+    const form = configForm(() => sendRoomConfig(room, c, VALVE_FIELDS, t("cfg.deviceSettings")));
     const e = c.edit.common;
     const set = (k) => (v) => {
       e[k] = v;
     };
-    form.appendChild(textEl("h4", "Radiator thermostats of the room"));
-    form.appendChild(field("Boost duration", numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), "min"));
-    form.appendChild(field("Boost valve opening", numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), "%"));
-    const dayOpts = DAYS.map((d) => [d, d.charAt(0).toUpperCase() + d.slice(1)]);
+    form.appendChild(textEl("h4", t("cfg.radiators")));
+    form.appendChild(field(t("cfg.boostMinutes"), numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), t("unit.minutes"), "boostMinutes"));
+    form.appendChild(field(t("cfg.boostValve"), numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), "%", "boostValve"));
+    const dayOpts = DAYS.map((d) => [d, dayLong(d)]);
     const decalc = document.createElement("span");
     decalc.className = "inline";
     decalc.appendChild(selectInput(dayOpts, e.decalc_day, set("decalc_day")));
-    decalc.appendChild(numberInput(e.decalc_hour, 0, 23, 1, set("decalc_hour")));
+    const hour = numberInput(e.decalc_hour, 0, 23, 1, set("decalc_hour"));
+    hour.setAttribute("aria-label", t("cfg.decalcHour"));
+    decalc.appendChild(hour);
     decalc.appendChild(textEl("span", ":00", "muted"));
-    form.appendChild(field("Descaling run", decalc));
-    form.appendChild(field("Maximum valve opening", numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), "%"));
-    form.appendChild(field("Valve offset", numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), "%"));
+    form.appendChild(field(t("cfg.decalc"), decalc, "", "decalc"));
+    form.appendChild(field(t("cfg.maxValve"), numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), "%", "maxValve"));
+    form.appendChild(field(t("cfg.valveOffset"), numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), "%", "valveOffset"));
     form.appendChild(formActions(() => closeConfig(room)));
     wrap.appendChild(form);
   }
-  const h = textEl("h4", "Devices");
+  const h = textEl("h4", t("cfg.devices"));
   wrap.appendChild(h);
-  if (room.devices.length === 0) wrap.appendChild(textEl("p", "No devices in this room.", "muted"));
+  if (room.devices.length === 0) wrap.appendChild(textEl("p", t("room.noDevices"), "muted"));
   for (const d of room.devices) wrap.appendChild(renderDeviceForm(room, c, d));
   return wrap;
 }
@@ -370,7 +459,7 @@ function renderDeviceForm(room, c, d) {
   const head = document.createElement("div");
   head.className = "device-main";
   head.appendChild(textEl("span", d.name || d.rf_address, "device-name"));
-  head.appendChild(textEl("span", d.type.replace(/_/g, " "), "muted expert-only"));
+  head.appendChild(textEl("span", typeName(d.type), "muted expert-only"));
   head.appendChild(textEl("span", d.rf_address, "muted mono expert-only"));
   form.appendChild(head);
   const name = document.createElement("input");
@@ -380,44 +469,36 @@ function renderDeviceForm(room, c, d) {
   name.addEventListener("input", () => {
     e.name = name.value;
   });
-  form.appendChild(field("Name", name));
+  form.appendChild(field(t("cfg.name"), name, "", "deviceName"));
   if (isThermostat(d)) {
-    form.appendChild(field("Temperature offset", numberInput(e.temp_offset, -3.5, 3.5, 0.5, (v) => {
+    form.appendChild(field(t("cfg.tempOffset"), numberInput(e.temp_offset, -3.5, 3.5, 0.5, (v) => {
       e.temp_offset = v;
-    }), "°C"));
+    }), "°C", "tempOffset"));
     if (d.type === "wall_thermostat") {
-      const sw = document.createElement("label");
-      sw.className = "switch";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = !!e.display_actual;
-      cb.addEventListener("change", () => {
-        e.display_actual = cb.checked;
+      const sw = switchEl(t("cfg.displayActual"), e.display_actual, (on) => {
+        e.display_actual = on;
       });
-      sw.appendChild(cb);
-      sw.appendChild(textEl("span", "", "slider"));
-      sw.appendChild(textEl("span", "Display the measured temperature", "switch-label"));
-      form.appendChild(sw);
+      form.appendChild(withHelp(sw, "displayActual", t("cfg.displayActual")));
     }
   }
-  const others = state.rooms.map((r) => [String(r.id), r.name + (r.id === room.id ? " (this room)" : "")]);
-  form.appendChild(field("Room", selectInput(others, e.room_id, (v) => {
+  const others = state.rooms.map((r) => [String(r.id), r.id === room.id ? t("cfg.thisRoom", { name: r.name }) : r.name]);
+  form.appendChild(field(t("cfg.room"), selectInput(others, e.room_id, (v) => {
     e.room_id = Number(v);
     e.confirmMove = false;
-  })));
+  }), "", "deviceRoom"));
   if (e.confirmMove) {
     const box = document.createElement("div");
     box.className = "panel delete-confirm";
     const target = state.rooms.find((r) => r.id === e.room_id);
-    box.appendChild(textEl("span", "Move " + (d.name || d.rf_address) + " to " + (target ? target.name : e.room_id) + "? This re-links the device with both rooms, several radiograms."));
+    box.appendChild(textEl("span", t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id })));
     const actions = document.createElement("div");
     actions.className = "actions";
-    actions.appendChild(button("Keep", "", () => {
+    actions.appendChild(button(t("action.keep"), "", () => {
       e.confirmMove = false;
       e.room_id = room.id;
       rerenderRoom(room);
     }));
-    actions.appendChild(button("Move", "primary", () => {
+    actions.appendChild(button(t("cfg.move"), "primary", () => {
       e.confirmMove = false;
       sendDevice(room, c, d, true);
     }));
@@ -426,11 +507,7 @@ function renderDeviceForm(room, c, d) {
   }
   const actions = document.createElement("div");
   actions.className = "actions";
-  const send = document.createElement("button");
-  send.type = "submit";
-  send.className = "primary";
-  send.textContent = "Send";
-  actions.appendChild(send);
+  actions.appendChild(submitButton(t("action.send")));
   form.appendChild(actions);
   return form;
 }
@@ -443,7 +520,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
   const meta = {};
   const name = e.name.trim();
   if (name && name !== (d.name || "")) {
-    if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, label + ": the name is longer than " + NAME_BYTES + " bytes.", false);
+    if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.devNameTooLong", { name: label, n: NAME_BYTES }), false);
     meta.name = name;
   }
   if (e.room_id !== room.id) {
@@ -458,14 +535,14 @@ async function sendDevice(room, c, d, moveConfirmed) {
   const loaded = ((c.cfg && c.cfg.devices) || []).find((x) => x.rf_address === d.rf_address) || {};
   if (isThermostat(d) && e.temp_offset !== undefined && Number(e.temp_offset) !== Number(loaded.temp_offset)) cfg.temp_offset = Number(e.temp_offset);
   if (d.type === "wall_thermostat" && e.display_actual !== undefined && e.display_actual !== loaded.display_actual) cfg.display_actual = e.display_actual;
-  if (Object.keys(meta).length === 0 && Object.keys(cfg).length === 0) return setConfigResult(room, c, label + ": nothing changed.", true);
-  setConfigResult(room, c, label + ": waiting for the cube …", true);
+  if (Object.keys(meta).length === 0 && Object.keys(cfg).length === 0) return setConfigResult(room, c, t("cfg.nothingChanged", { label }), true);
+  setConfigResult(room, c, t("result.waiting", { label }), true);
   const lines = [];
   let ok = true;
   try {
     if (Object.keys(cfg).length) {
       const res = await api("PUT", base() + "/devices/" + d.rf_address + "/config", cfg);
-      lines.push(resultText(label + " settings", res));
+      lines.push(resultText(t("cfg.devSettings", { name: label }), res));
       if (res && res.discarded) ok = false;
       loaded.temp_offset = cfg.temp_offset !== undefined ? cfg.temp_offset : loaded.temp_offset;
       if (cfg.display_actual !== undefined) loaded.display_actual = cfg.display_actual;
@@ -473,7 +550,8 @@ async function sendDevice(room, c, d, moveConfirmed) {
     }
     if (Object.keys(meta).length) {
       const res = await api("PUT", base() + "/devices/" + d.rf_address, meta);
-      lines.push(label + (meta.room_id !== undefined ? " moved" : " renamed") + ": ok" + (res && res.budget ? " (duty cycle " + res.budget.duty_cycle_pct + " %)" : ""));
+      const done = t(meta.room_id !== undefined ? "cfg.devMoved" : "cfg.devRenamed", { name: label });
+      lines.push(res && res.budget ? t("cfg.dutySuffix", { text: done, duty: res.budget.duty_cycle_pct }) : done);
     }
   } catch (e2) {
     lines.push(errorText(label, e2));
@@ -506,54 +584,134 @@ function clockOf(minutes) {
   return pad(Math.floor(minutes / 60)) + ":" + pad(minutes % 60);
 }
 
+// renderProgramTab is the week programme editor: the day buttons (a
+// click edits that day and selects every day with the same programme),
+// the "Only {day}" switch, the day as a bar and as rows of switch
+// points, the copy section, and the resets left of Cancel and Send.
 function renderProgramTab(room, c) {
   const p = c.prog;
   const form = configForm(() => sendProgram(room, c));
+  const dirty = new Set(dirtyDays(p));
   const days = document.createElement("div");
-  days.className = "day-bar";
+  days.className = "day-bar week";
+  days.setAttribute("role", "group");
+  days.setAttribute("aria-label", t("prog.dayToEdit"));
   for (const day of DAYS) {
-    const b = button(DAY_SHORT[day], "day" + (p.selected.has(day) ? " selected" : "") + (p.day === day ? " editing" : "") + (p.dirty.has(day) ? " dirty" : ""), (ev) => {
-      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
-        if (p.selected.has(day) && p.selected.size > 1) p.selected.delete(day);
-        else p.selected.add(day);
-      } else {
-        p.day = day;
-        p.selected.add(day);
-      }
+    const editing = p.day === day;
+    const sel = p.selected.has(day);
+    const b = button(dayShort(day), "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : ""), () => {
+      selectDay(p, day);
       rerenderRoom(room);
     });
-    b.title = "Click to edit this day, Shift+click to add it to the selection";
+    b.setAttribute("aria-pressed", editing ? "true" : "false");
+    let name = dayLong(day);
+    if (sel && !editing) name = t("prog.editedTogether", { day: name });
+    if (dirty.has(day)) name = t("prog.changed", { day: name });
+    b.setAttribute("aria-label", name);
+    b.title = t("prog.dayTitle", { day: dayLong(day) });
     days.appendChild(b);
   }
-  days.appendChild(button("All days", "day all", () => {
-    for (const day of DAYS) p.selected.add(day);
-    rerenderRoom(room);
-  }));
-  days.appendChild(button("Only " + DAY_SHORT[p.day], "day all", () => {
-    p.selected = new Set([p.day]);
-    rerenderRoom(room);
-  }));
   form.appendChild(days);
-  form.appendChild(renderDayBar(p.days[p.day]));
-  form.appendChild(renderPoints(room, c, p.day));
-  const tools = document.createElement("div");
-  tools.className = "cfg-tools";
-  const others = [...p.selected].filter((d) => d !== p.day);
-  const copyBtn = button("Copy " + DAY_SHORT[p.day] + " to " + (others.length ? others.map((d) => DAY_SHORT[d]).join(", ") : "selected days"), "", () => {
-    for (const d of others) {
-      p.days[d] = p.days[p.day].map((pt) => ({ temp: pt.temp, until: pt.until }));
-      p.dirty.add(d);
-    }
+  const onlyLabel = t("prog.only", { day: dayLong(p.day) });
+  const only = switchEl(onlyLabel, p.only, (on) => {
+    p.only = on;
     rerenderRoom(room);
   });
-  copyBtn.disabled = others.length === 0;
-  tools.appendChild(copyBtn);
-  form.appendChild(tools);
+  form.appendChild(withHelp(only, "onlyDay", onlyLabel));
+  const together = DAYS.filter((d) => p.selected.has(d));
+  const scope = p.only || together.length < 2
+    ? t("prog.appliesOnly", { day: dayLong(p.day) })
+    : t("prog.appliesTogether", { days: dayList(together) });
+  form.appendChild(textEl("p", scope, "muted small"));
+  form.appendChild(renderDayBar(p.days[p.day]));
+  form.appendChild(renderPoints(room, c, p.day));
+  form.appendChild(renderDayCopy(room, p));
   const src = p.source;
   const dev = src && c.cfg && c.cfg.devices.find((d) => d.rf_address === src);
-  form.appendChild(textEl("p", (src ? "Programme as stored on " + (dev && dev.name ? dev.name : src) + ". " : "") + "Send writes the changed days to every thermostat of the room" + (p.dirty.size ? " (" + [...p.dirty].map((d) => DAY_SHORT[d]).join(", ") + ")" : "") + ".", "muted small"));
-  form.appendChild(formActions(() => closeConfig(room)));
+  const note = dirty.size ? t("prog.sendNoteDays", { days: dayList([...dirty]) }) : t("prog.sendNote");
+  form.appendChild(textEl("p", (src ? t("prog.storedOn", { device: dev && dev.name ? dev.name : src }) + " " : "") + note, "muted small"));
+  const resetDay = button(t("prog.resetDay"), "", () => {
+    p.days[p.day] = copyPoints(p.orig[p.day]);
+    selectDay(p, p.day);
+    rerenderRoom(room);
+  });
+  resetDay.disabled = !dirty.has(p.day);
+  resetDay.title = t("prog.resetDayTitle", { day: dayLong(p.day) });
+  const resetAll = button(t("prog.resetAll"), "", () => {
+    p.days = copyDays(p.orig);
+    p.copyTo = new Set();
+    selectDay(p, p.day);
+    rerenderRoom(room);
+  });
+  resetAll.disabled = dirty.size === 0;
+  resetAll.title = t("prog.resetAllTitle");
+  form.appendChild(formActions(() => closeConfig(room), "", [resetDay, resetAll]));
   return form;
+}
+
+// renderDayCopy is the copy section: every day as a toggle, the days
+// already sharing the edited day's programme greyed out, "All days",
+// and Copy, which gives the ticked days the edited day's programme.
+// With "only" off they then join the selection and are edited together.
+function renderDayCopy(room, p) {
+  const box = document.createElement("div");
+  box.className = "day-copy";
+  box.setAttribute("role", "group");
+  const title = t("prog.copyTo", { day: dayLong(p.day) });
+  box.setAttribute("aria-label", title);
+  box.appendChild(textEl("h4", title));
+  const row = document.createElement("div");
+  row.className = "day-bar week";
+  const free = DAYS.filter((d) => !p.selected.has(d));
+  for (const day of DAYS) {
+    const on = p.copyTo.has(day);
+    const b = button(dayShort(day), "day" + (on ? " chosen" : ""), () => {
+      if (p.copyTo.has(day)) p.copyTo.delete(day);
+      else p.copyTo.add(day);
+      rerenderRoom(room);
+    });
+    b.disabled = p.selected.has(day);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.setAttribute("aria-label", b.disabled ? t("prog.hasProgramme", { day: dayLong(day) }) : dayLong(day));
+    row.appendChild(b);
+  }
+  const all = button(t("prog.allDays"), "day all", () => {
+    for (const d of free) p.copyTo.add(d);
+    rerenderRoom(room);
+  });
+  all.disabled = free.length === 0 || free.every((d) => p.copyTo.has(d));
+  box.appendChild(row);
+  const tools = document.createElement("div");
+  tools.className = "day-bar";
+  tools.appendChild(all);
+  const copy = button(t("prog.copy"), "day copy", () => {
+    for (const d of p.copyTo) {
+      p.days[d] = copyPoints(p.days[p.day]);
+      if (!p.only) p.selected.add(d);
+    }
+    p.copyTo = new Set();
+    rerenderRoom(room);
+  });
+  copy.disabled = p.copyTo.size === 0;
+  tools.appendChild(copy);
+  box.appendChild(tools);
+  return box;
+}
+
+// switchEl builds a slide switch: a checkbox styled as a switch.
+function switchEl(label, checked, onChange) {
+  const sw = document.createElement("label");
+  sw.className = "switch";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!checked;
+  cb.addEventListener("change", () => onChange(cb.checked));
+  sw.appendChild(cb);
+  const slider = textEl("span", "", "slider");
+  slider.setAttribute("aria-hidden", "true");
+  sw.appendChild(slider);
+  sw.appendChild(textEl("span", label, "switch-label"));
+  return sw;
 }
 
 // renderDayBar draws the day as segments proportional to their length.
@@ -566,28 +724,33 @@ function renderDayBar(points) {
   for (const pt of points) {
     const end = minutesOf(pt.until);
     // A label only when the segment is wide enough to hold it.
-    const seg = textEl("span", end - start >= 120 ? pt.temp.toFixed(1) + "°" : "", "prog-seg");
+    const seg = textEl("span", end - start >= 120 ? fmtNum(pt.temp, 1) + "°" : "", "prog-seg");
     seg.style.flexGrow = String(Math.max(1, end - start));
     const warm = hi > lo ? (pt.temp - lo) / (hi - lo) : 0.5;
     seg.style.setProperty("--warm", warm.toFixed(2));
-    seg.title = clockOf(start) + " – " + pt.until + ": " + pt.temp.toFixed(1) + " °C";
+    seg.title = clockOf(start) + " – " + pt.until + ": " + fmtTemp(pt.temp);
     bar.appendChild(seg);
     start = end;
   }
   return bar;
 }
 
-// renderPoints lists the switch points of a day as editable rows.
+// renderPoints lists the switch points of a day as editable rows; every
+// change goes through programEdited.
 function renderPoints(room, c, day) {
   const p = c.prog;
   const pts = p.days[day];
+  const edited = () => {
+    programEdited(p);
+    rerenderRoom(room);
+  };
   const list = document.createElement("div");
   list.className = "prog-points";
   pts.forEach((pt, i) => {
     const last = i === pts.length - 1;
     const row = document.createElement("div");
     row.className = "prog-point";
-    row.appendChild(textEl("span", "until", "muted"));
+    row.appendChild(textEl("span", t("prog.until"), "muted"));
     if (last) {
       row.appendChild(textEl("span", "24:00", "prog-end"));
     } else {
@@ -596,42 +759,41 @@ function renderPoints(room, c, day) {
       time.step = "300";
       time.value = pt.until;
       time.required = true;
+      time.setAttribute("aria-label", t("prog.pointUntil", { n: i + 1 }));
       time.addEventListener("change", () => {
         if (!time.value) return;
         pt.until = time.value;
         pts.sort((a, b) => minutesOf(a.until) - minutesOf(b.until));
-        p.dirty.add(day);
-        rerenderRoom(room);
+        edited();
       });
       row.appendChild(time);
     }
-    row.appendChild(textEl("span", "at", "muted"));
-    row.appendChild(numberInput(pt.temp, MIN_TEMP, MAX_TEMP, STEP, (v) => {
+    row.appendChild(textEl("span", t("prog.at"), "muted"));
+    const temp = numberInput(pt.temp, MIN_TEMP, MAX_TEMP, STEP, (v) => {
       if (v === undefined) return;
       pt.temp = clampTemp(v);
-      p.dirty.add(day);
-      rerenderRoom(room);
-    }));
+      edited();
+    });
+    temp.setAttribute("aria-label", t("prog.pointTemp", { n: i + 1 }));
+    row.appendChild(temp);
     row.appendChild(textEl("span", "°C", "muted"));
     if (!last) {
       const rm = button("−", "step small", () => {
         pts.splice(i, 1);
-        p.dirty.add(day);
-        rerenderRoom(room);
+        edited();
       });
-      rm.title = "Remove this switch point";
-      rm.setAttribute("aria-label", "remove switch point");
+      rm.title = t("prog.removeTitle");
+      rm.setAttribute("aria-label", t("prog.remove"));
       row.appendChild(rm);
     } else if (pts.length < MAX_POINTS) {
       const add = button("+", "step small", () => {
         const prev = pts.length > 1 ? minutesOf(pts[pts.length - 2].until) : 0;
         const mid = Math.round(((prev + 1440) / 2) / 5) * 5;
         pts.splice(pts.length - 1, 0, { temp: pt.temp, until: clockOf(Math.min(1435, Math.max(prev + 5, mid))) });
-        p.dirty.add(day);
-        rerenderRoom(room);
+        edited();
       });
-      add.title = "Add a switch point";
-      add.setAttribute("aria-label", "add switch point");
+      add.title = t("prog.addTitle");
+      add.setAttribute("aria-label", t("prog.add"));
       row.appendChild(add);
     }
     list.appendChild(row);
@@ -640,32 +802,34 @@ function renderPoints(room, c, day) {
 }
 
 function validateDay(pts) {
-  if (pts.length < 1 || pts.length > MAX_POINTS) return "a day needs 1 to " + MAX_POINTS + " switch points";
+  if (pts.length < 1 || pts.length > MAX_POINTS) return t("prog.errPoints", { n: MAX_POINTS });
   let prev = 0;
   for (let i = 0; i < pts.length; i++) {
     const m = minutesOf(pts[i].until);
-    if (i < pts.length - 1 && m <= prev) return "times must increase";
+    if (i < pts.length - 1 && m <= prev) return t("prog.errTimes");
     prev = m;
   }
-  if (pts[pts.length - 1].until !== "24:00") return "the last point must end at 24:00";
+  if (pts[pts.length - 1].until !== "24:00") return t("prog.errEnd");
   return "";
 }
 
+// sendProgram writes the days that differ from the loaded programme;
+// once the Cube took them they count as loaded.
 async function sendProgram(room, c) {
   const p = c.prog;
   const body = {};
-  for (const day of p.dirty) {
+  for (const day of dirtyDays(p)) {
     const err = validateDay(p.days[day]);
-    if (err) return setConfigResult(room, c, DAY_SHORT[day] + ": " + err + ".", false);
-    body[day] = p.days[day].map((pt) => ({ temp: pt.temp, until: pt.until }));
+    if (err) return setConfigResult(room, c, t("prog.dayError", { day: dayShort(day), error: err }), false);
+    body[day] = copyPoints(p.days[day]);
   }
-  if (Object.keys(body).length === 0) return setConfigResult(room, c, "Week programme: nothing changed.", true);
-  const label = "Week programme (" + Object.keys(body).map((d) => DAY_SHORT[d]).join(", ") + ")";
-  setConfigResult(room, c, label + ": waiting for the cube …", true);
+  if (Object.keys(body).length === 0) return setConfigResult(room, c, t("prog.nothing"), true);
+  const label = t("prog.label", { days: dayList(Object.keys(body)) });
+  setConfigResult(room, c, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/program", body);
+    if (!(res && res.discarded)) for (const d of Object.keys(body)) p.orig[d] = copyPoints(body[d]);
     setConfigResult(room, c, resultText(label, res), !(res && res.discarded));
-    if (!(res && res.discarded)) p.dirty = new Set();
     state.details = {};
   } catch (e) {
     setConfigResult(room, c, errorText(label, e), false);
@@ -675,82 +839,108 @@ async function sendProgram(room, c) {
 
 // --- copy tab ---------------------------------------------------------
 
+// renderCopyTab copies this room's stored settings to other rooms: the
+// Rooms section, a switch per room with "All rooms" and "None", and the
+// Settings section, a switch per group of settings.
 function renderCopyTab(room, c) {
-  if (!c.copy) c.copy = { rooms: new Set(), program: false };
+  if (!c.copy) c.copy = { rooms: new Set(), temps: true, program: false, radiator: true };
+  const k = c.copy;
   const form = configForm(() => sendCopy(room, c));
-  form.appendChild(textEl("p", "Apply this room's temperatures and device settings to other rooms.", "muted small"));
-  const box = document.createElement("div");
-  box.className = "checks";
+  form.appendChild(textEl("p", t("copy.intro"), "muted small"));
   const others = state.rooms.filter((r) => r.id !== room.id && roomThermostat(r));
-  const all = document.createElement("label");
-  const allCb = document.createElement("input");
-  allCb.type = "checkbox";
-  allCb.checked = others.length > 0 && others.every((r) => c.copy.rooms.has(r.id));
-  allCb.addEventListener("change", () => {
-    c.copy.rooms = new Set(allCb.checked ? others.map((r) => r.id) : []);
+
+  const rooms = document.createElement("div");
+  rooms.className = "copy-section";
+  rooms.setAttribute("role", "group");
+  rooms.setAttribute("aria-label", t("copy.roomsAria"));
+  const head = document.createElement("div");
+  head.className = "copy-head";
+  head.appendChild(textEl("h4", t("copy.rooms")));
+  const allBtn = button(t("copy.allRooms"), "", () => {
+    k.rooms = new Set(others.map((r) => r.id));
     rerenderRoom(room);
   });
-  all.appendChild(allCb);
-  all.appendChild(document.createTextNode(" All rooms"));
-  box.appendChild(all);
-  for (const r of others) {
-    const label = document.createElement("label");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = c.copy.rooms.has(r.id);
-    cb.addEventListener("change", () => {
-      if (cb.checked) c.copy.rooms.add(r.id);
-      else c.copy.rooms.delete(r.id);
-      allCb.checked = others.every((x) => c.copy.rooms.has(x.id));
-    });
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(" " + r.name));
-    box.appendChild(label);
-  }
-  form.appendChild(box);
-  const prog = document.createElement("label");
-  prog.className = "checks";
-  const progCb = document.createElement("input");
-  progCb.type = "checkbox";
-  progCb.checked = c.copy.program;
-  progCb.addEventListener("change", () => {
-    c.copy.program = progCb.checked;
+  allBtn.disabled = others.length === 0 || others.every((r) => k.rooms.has(r.id));
+  head.appendChild(allBtn);
+  const noneBtn = button(t("copy.none"), "", () => {
+    k.rooms = new Set();
+    rerenderRoom(room);
   });
-  prog.appendChild(progCb);
-  prog.appendChild(document.createTextNode(" Also copy the week programme (7 radiograms per room)"));
-  form.appendChild(prog);
-  form.appendChild(formActions(() => closeConfig(room)));
+  noneBtn.disabled = k.rooms.size === 0;
+  head.appendChild(noneBtn);
+  rooms.appendChild(head);
+  const list = document.createElement("div");
+  list.className = "copy-list";
+  if (others.length === 0) list.appendChild(textEl("p", t("copy.noOther"), "muted"));
+  for (const r of others) {
+    list.appendChild(switchEl(r.name, k.rooms.has(r.id), (on) => {
+      if (on) k.rooms.add(r.id);
+      else k.rooms.delete(r.id);
+      rerenderRoom(room);
+    }));
+  }
+  rooms.appendChild(list);
+  form.appendChild(rooms);
+
+  const settings = document.createElement("div");
+  settings.className = "copy-section";
+  settings.setAttribute("role", "group");
+  settings.setAttribute("aria-label", t("copy.settingsAria"));
+  settings.appendChild(textEl("h4", t("copy.settings")));
+  const slist = document.createElement("div");
+  slist.className = "copy-list";
+  slist.appendChild(switchEl(t("copy.temps"), k.temps, (on) => {
+    k.temps = on;
+  }));
+  const prog = switchEl(t("copy.program"), k.program && !!c.prog, (on) => {
+    k.program = on;
+  });
+  if (!c.prog) prog.querySelector("input").disabled = true;
+  slist.appendChild(prog);
+  slist.appendChild(switchEl(t("copy.radiator"), k.radiator, (on) => {
+    k.radiator = on;
+  }));
+  settings.appendChild(slist);
+  form.appendChild(settings);
+  form.appendChild(formActions(() => closeConfig(room), t("copy.send")));
   return form;
 }
 
-// sendCopy writes this room's common configuration, and optionally its
-// programme, to every selected room, one after another.
+// sendCopy writes this room's stored settings to every selected room,
+// one room after another: temperatures and radiator settings in one
+// config write, the week programme as a second write.
 async function sendCopy(room, c) {
-  const ids = [...c.copy.rooms];
-  if (ids.length === 0) return setConfigResult(room, c, "No room selected.", false);
-  if (!c.cfg || !c.cfg.source) return setConfigResult(room, c, "This room has no thermostat to copy from.", false);
+  const k = c.copy;
+  const ids = [...k.rooms];
+  if (ids.length === 0) return setConfigResult(room, c, t("copy.noRoom"), false);
+  const program = k.program && c.prog;
+  if (!k.temps && !k.radiator && !program) return setConfigResult(room, c, t("copy.noSetting"), false);
+  if (!c.cfg || !c.cfg.source) return setConfigResult(room, c, t("copy.noSource"), false);
+  const fields = (k.temps ? TEMP_FIELDS : []).concat(k.radiator ? VALVE_FIELDS : []);
   const body = {};
-  for (const f of TEMP_FIELDS.concat(VALVE_FIELDS)) body[f] = c.cfg[f];
-  const program = {};
-  if (c.copy.program) for (const day of DAYS) program[day] = c.prog.days[day].map((pt) => ({ temp: pt.temp, until: pt.until }));
+  for (const f of fields) if (c.cfg[f] !== undefined && c.cfg[f] !== null) body[f] = c.cfg[f];
+  const days = program ? copyDays(c.prog.orig) : null;
   const lines = [];
   let allOk = true;
   for (const id of ids) {
     const target = state.rooms.find((r) => r.id === id);
     const name = target ? target.name : String(id);
-    setConfigResult(room, c, lines.concat([name + ": sending …"]).join("\n"), allOk);
+    setConfigResult(room, c, lines.concat([t("copy.sending", { room: name })]).join("\n"), allOk);
+    const parts = [];
     try {
-      const res = await api("PUT", base() + "/rooms/" + id + "/config", body);
-      let text = name + ": settings " + (res && res.ok ? "ok" : "not on every device");
-      if (!(res && res.ok)) allOk = false;
-      if (c.copy.program) {
-        const pr = await api("PUT", base() + "/rooms/" + id + "/program", program);
-        text += ", programme " + (pr && pr.discarded ? "discarded" : "ok");
+      if (Object.keys(body).length) {
+        const res = await api("PUT", base() + "/rooms/" + id + "/config", body);
+        parts.push(t(res && res.ok ? "copy.settingsOk" : "copy.settingsPartial"));
+        if (!(res && res.ok)) allOk = false;
+      }
+      if (days) {
+        const pr = await api("PUT", base() + "/rooms/" + id + "/program", days);
+        parts.push(t(pr && pr.discarded ? "copy.programDiscarded" : "copy.programOk"));
         if (pr && pr.discarded) allOk = false;
       }
-      lines.push(text);
+      lines.push(t("copy.roomResult", { room: name, parts: parts.join(", ") }));
     } catch (e) {
-      lines.push(name + ": " + e.message);
+      lines.push(t("copy.roomResult", { room: name, parts: parts.concat([e.message]).join(", ") }));
       allOk = false;
     }
   }
