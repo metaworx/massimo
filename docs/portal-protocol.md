@@ -6,6 +6,68 @@ from the behaviour of the original local software (version 1.4.6), and from
 experiments with real Cubes (firmware 1.1.3) in 2026. Facts marked
 *unverified* still need confirmation on hardware.
 
+Despite the title, this is the single record of what is known about the
+Cube's behaviour, on the LAN as well as towards the portal.
+
+## Contents
+
+- [Verified on hardware](#verified-on-hardware), the summary
+- [Transport](#transport)
+- [Two clients of the portal](#two-clients-of-the-portal)
+- [Local commands involved (TCP 62910)](#local-commands-involved-tcp-62910)
+- [Portal requests made by the PC software](#portal-requests-made-by-the-pc-software)
+- [The complete setup sequence](#the-complete-setup-sequence-captured-from-the-original-software-2026-11-04)
+- [Lookup service](#lookup-service)
+- [What is public](#what-is-public-research-2026-11-04)
+- [Recovering the IV from a Cube](#recovering-the-iv-from-a-cube)
+- [Observed polling](#observed-polling-cube-firmware-113-november-2026)
+- [One LAN client at a time](#one-lan-client-at-a-time)
+- [LAN commands verified against the original software](#lan-commands-verified-against-the-original-software-146)
+  - [Verified on hardware with Massimo](#verified-on-hardware-with-massimo-2026-11-04-cube-jeq-live-devices)
+  - [Pairing a device, as the original software does it](#pairing-a-device-as-the-original-software-does-it),
+    followed by moves, wall thermostats, the key lock, set-temperature
+    addressing, room commands and never-reporting devices
+- [What the PC software (1.4.6) knows about the portal](#what-the-pc-software-146-knows-about-the-portal)
+- [Cube UDP protocol (port 23272)](#cube-udp-protocol-port-23272-discovery-network-setup-firmware)
+- [Open questions](#open-questions)
+
+## Verified on hardware
+
+On two Cubes with firmware 1.1.3 and their thermostats, wall
+thermostats and window contacts, November 2026; the sections below give
+the details and dates. Everything else comes from captures of the
+original software (1.4.6), its decompiled code or public analyses, and
+says so.
+
+- **Encryption**: AES-128-CBC with a per-Cube key (the QR code) and a
+  per-Cube IV, which `e:` with zero bytes reveals over the LAN.
+- **Portal polling**: after `u:` and `i:00000000,00000000` the Cube
+  POSTs its full state (H, M, C…, L) every few minutes; command lines in
+  the reply have no effect.
+- **One LAN client at a time** on TCP 62910; a second one waits.
+- **Written by Massimo and seen on the devices**: 0x11 preset
+  temperatures, 0x10 one day of the week programme, 0x12 valve settings
+  (each after a `z:` room wakeup), `m:` renames, `i:ffffffff,00000000`
+  (portal polling off), 0x80 key lock in both directions; their cost in
+  duty cycle and memory slots.
+- **Set temperature (0x40)**: a device in a room is accepted only when
+  addressed as its room. The setpoint shows in the L line at once, the
+  mode only with the devices' next report.
+- **Room commands are discarded while any member has no state** (no
+  valid L entry): after a Cube restart until every member has
+  transmitted, and for good with a paired device that never reports.
+  The room that counts is the room byte of the device's C line, not the
+  metadata. Such a device cannot be deleted (`t:` is acknowledged, the
+  device stays), so it is parked in room 255 and hidden.
+- **Budget**: the Cube still accepts commands at 100 % duty cycle, and
+  every unacknowledged radiogram holds a memory slot; the Cube also
+  spends radio time on its own retries.
+- **Key lock state** is bit 0x20 of the second flags byte of an L entry.
+
+Not yet verified with Massimo on hardware: the configuration endpoints
+of the API and the UI panels on them (test plan in
+docs/handover-write-test.md), and pairing.
+
 ## Transport
 
 - `POST <portal url>` (default `http://max.eq-3.de:80/cube`), headers
@@ -328,20 +390,21 @@ the Cube send a factory reset to the device, so a device that never
 answers is apparently never dropped.
 
 Which room such a device blocks is decided by the room byte of its own
-C line, not by the metadata (experiment 2026-11-04, one never-reporting device 001867):
-moving it into room 1 in the original software (`m:`, `z:`, 0x20 links,
-0x22 group 1) set its C-line room to 1 and room 1 commands were
-discarded at once; deleting it from room 1 (`z:`, 0x21, `t:01,1,…`,
+C line, not by the metadata (experiment 2026-11-04, one never-reporting
+device 001867): moving it into room 1 in the original software (`m:`,
+`z:`, 0x20 links, 0x22 group 1) set its C-line room to 1 and room 1
+commands were discarded at once; deleting it from room 1 (`z:`, 0x21, `t:01,1,…`,
 `m:` without it) left the C-line room at 1 and room 1 stayed blocked,
 the device being "new" again; putting it back into a parking room
 (`arrangeNewDevice`: 0x22 group 6, `c:`, `m:`) set the byte to 6 and
 room 1 accepted commands again. This is how the previous owner's
 leftovers blocked rooms 4 and 5 (their C lines said 4, 4 and 5 while
-they were unlisted). Earlier the same day, deleting the three never-reporting devices
-from a parking room and then removing that room put the bytes back to
-4, 4 and 5, so removing the room seems to restore an older value;
-keep the parking room, with the devices in it, instead. The device
-types of the three are shutter contacts; their serials start with IEQ.
+they were unlisted). Earlier the same day, deleting the three
+never-reporting devices from a parking room and then removing that room
+put the bytes back to 4, 4 and 5, so removing the room seems to restore
+an older value; keep the parking room, with the devices in it, instead.
+The device types of the three are shutter contacts; their serials start
+with IEQ.
 
 After a 0x40 set-temperature command the Cube updates the setpoint in
 the room members' L entries at once, while the mode bits change only
