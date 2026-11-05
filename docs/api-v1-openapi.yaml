@@ -99,7 +99,6 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
-  /api/v1/cubes/{sn}/devices/{rf}:
     put:
       summary: Rename a device and/or move it to another room, or add a paired device to one
       description: >-

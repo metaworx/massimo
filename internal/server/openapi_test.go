@@ -33,7 +33,13 @@ func TestOpenAPICoversRoutes(t *testing.T) {
 	documented := map[string]bool{}
 	for _, line := range strings.Split(string(spec), "\n") {
 		if strings.HasPrefix(line, "  /api/v1/") && strings.HasSuffix(line, ":") {
-			documented[strings.TrimSuffix(strings.TrimSpace(line), ":")] = true
+			p := strings.TrimSuffix(strings.TrimSpace(line), ":")
+			if documented[p] {
+				// YAML parsers keep only the last of duplicate keys, so
+				// the methods of the first would be lost.
+				t.Errorf("path %s appears twice in docs/api-v1-openapi.yaml; list all its methods under one key", p)
+			}
+			documented[p] = true
 		}
 	}
 	if len(registered) == 0 || len(documented) == 0 {
