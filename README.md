@@ -146,9 +146,15 @@ Select-String massimo-windows-amd64.exe SHA256SUMS
 ```
 
 The two hashes must match. With the `.env` from above in the same
-folder, open http://127.0.0.1:8099/. The binary is not code-signed: a
-download with `curl.exe` starts without a word, one through a browser
-may make SmartScreen warn. For the proxy and discovery, Windows Defender
+folder, open http://127.0.0.1:8099/. The binary is not code-signed. A
+download with `curl.exe` starts without a word; one made with a browser
+carries the mark of the web, and a double-click on it in Explorer meets
+SmartScreen's "Windows protected your PC" dialog with "Unknown
+publisher" ([screenshot](docs/images/windows-smartscreen-unknown-publisher.png)):
+"Run anyway" runs it, and starting it from a console shows no dialog at
+all. The installed service and `massimo update` are not affected
+([the test report](docs/windows-test-2026-11-05.md), observation 8).
+For the proxy and discovery, Windows Defender
 Firewall must let the program receive on TCP 62910 and UDP 23272 on the
 private network (the installed service gets a rule for that, a `serve`
 started by hand does not), and the original MAX! software must not be
@@ -172,7 +178,8 @@ LocalSystem, restarted after 10 s on failure, listening on `:8099`;
 rule "Massimo" for the program on private and domain networks. On a
 network Windows classes as public the rule does not apply and other
 devices get no answer: `Get-NetConnectionProfile` shows the profile,
-`Set-NetConnectionProfile` makes a home network private.
+`Set-NetConnectionProfile` makes a home network private; check it again
+after a reboot, which can match the network to another, public profile.
 
 ```powershell
 sc.exe start massimo
