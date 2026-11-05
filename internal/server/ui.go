@@ -24,10 +24,12 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 		panic(err)
 	}
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		securityHeaders(w)
 		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFileFS(w, r, sub, "index.html")
 	})
 	mux.HandleFunc("GET /ui/{file}", func(w http.ResponseWriter, r *http.Request) {
+		securityHeaders(w)
 		name := r.PathValue("file")
 		if name == "index.html" || strings.Contains(name, "/") {
 			http.NotFound(w, r)
@@ -40,4 +42,12 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFileFS(w, r, sub, name)
 	})
+}
+
+// securityHeaders restricts the page to its own origin: scripts, styles
+// and requests only from the server itself, no framing, no MIME sniffing.
+func securityHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 }

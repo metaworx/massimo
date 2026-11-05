@@ -86,6 +86,16 @@ with the hidden devices and their room put back, so a client that never
 saw them cannot remove them from the Cube; the server logs when it does
 that. `serve -show-ghosts` switches all of this off.
 
+## Firewall
+
+On a host with ufw, the ports to open on the LAN interface: 62910/tcp
+(proxy), 23272/udp (discovery), and the API's port when it listens on
+a LAN address (8099/tcp by default):
+
+```bash
+sudo ufw allow 62910/tcp && sudo ufw allow 23272/udp && sudo ufw allow 8099/tcp
+```
+
 ## Budget
 
 When the duty cycle the Cube last reported is at or above the queue's

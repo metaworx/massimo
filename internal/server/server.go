@@ -27,6 +27,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -355,9 +356,9 @@ func (s *Server) routes() {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			// The token comes as a bearer header; the event stream alone
 			// also takes ?token=, because browsers open it without headers.
-			if s.opts.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.opts.Token {
+			if s.opts.Token != "" && !tokenMatches(s.opts.Token, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
 				isEvents := r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events")
-				if !isEvents || r.URL.Query().Get("token") != s.opts.Token {
+				if !isEvents || !tokenMatches(s.opts.Token, r.URL.Query().Get("token")) {
 					writeError(w, http.StatusUnauthorized, "missing or wrong token")
 					return
 				}
@@ -413,6 +414,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	enc.Encode(v)
+}
+
+// tokenMatches compares a presented token with the configured one in
+// constant time, so that response timing reveals nothing about it.
+func tokenMatches(want, got string) bool {
+	return got != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
