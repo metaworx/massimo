@@ -157,11 +157,14 @@ func (c *Client) session(ctx context.Context) (bool, error) {
 			c.handle(m)
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
-				c.once.Do(func() { close(c.ready) })
+				// Swap the greeted channel before anyone can see the
+				// client as ready, so that a Reconnect right after Ready
+				// waits for the next greeting, not this one.
 				c.mu.Lock()
 				close(c.greeted)
 				c.greeted = make(chan struct{})
 				c.mu.Unlock()
+				c.once.Do(func() { close(c.ready) })
 				c.emit(Event{Kind: EventConnected})
 				c.log.Info("cube connected", "addr", c.opts.Addr)
 			}
