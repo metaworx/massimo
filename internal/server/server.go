@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -232,6 +233,10 @@ func (s *Server) Run(ctx context.Context) error {
 	wg.Wait()
 	return ctx.Err()
 }
+
+// writer sends commands to the runtime's Cube and keeps its snapshot in
+// step.
+func (rt *runtime) writer() cubeio.Writer { return cubeio.Writer{Client: rt.client, Queue: rt.queue} }
 
 // hidden is the set of devices left out of every view: the configured
 // ignore list plus the devices the Cube places in the ghost room.
@@ -693,17 +698,11 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 			cp.Rooms = append(cp.Rooms, room)
 		}
 	}
-	lines, err := cube.WriteMetadataCommands(&cp)
-	if err != nil {
-		return err
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "metadata", Priority: engine.PriorityHigh, Lines: lines}).Wait(ctx)
-	if res.Err != nil {
-		return fail(http.StatusBadGateway, "%v", res.Err)
+	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
+		return err
 	}
-	rt.client.ApplyMetadataWrite(lines)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rooms": len(cp.Rooms)})
 	return nil
 }

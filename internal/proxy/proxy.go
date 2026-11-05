@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -307,13 +308,13 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 	p.log.Debug("proxy: passing command to the cube", "remote", remote, "command", m.String())
 	wctx, cancel := context.WithTimeout(ctx, p.opts.ReplyTimeout)
 	defer cancel()
-	res := p.opts.Queue.Enqueue(engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: lines}).Wait(wctx)
+	// A metadata write is mirrored into the snapshot, which the Cube
+	// does not echo it to.
+	w := cubeio.Writer{Client: p.opts.Client, Queue: p.opts.Queue}
+	res := w.Do(wctx, engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: lines})
 	if res.Err != nil {
 		p.log.Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
-	}
-	if m.Type == 'm' {
-		p.applyMetadata(lines)
 	}
 	// The client sent one line and expects one answer.
 	if len(res.Replies) > 1 {
@@ -344,31 +345,7 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 	if cur == nil {
 		return nil, false
 	}
-	hidden := p.hidden(cur)
-	have := map[cube.RFAddress]bool{}
-	for _, d := range md.Devices {
-		have[d.RFAddress] = true
-	}
-	rooms := map[uint8]bool{}
-	for _, r := range md.Rooms {
-		rooms[r.ID] = true
-	}
-	added := 0
-	for _, d := range cur.Devices {
-		if !hidden[d.RFAddress] || have[d.RFAddress] {
-			continue
-		}
-		md.Devices = append(md.Devices, d)
-		added++
-		if d.RoomID != 0 && !rooms[d.RoomID] {
-			for _, r := range cur.Rooms {
-				if r.ID == d.RoomID {
-					md.Rooms = append(md.Rooms, r)
-					rooms[r.ID] = true
-				}
-			}
-		}
-	}
+	added := cubeio.KeepHidden(md, cur, p.hidden(cur))
 	if added == 0 {
 		return nil, false
 	}
@@ -380,10 +357,6 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 	p.log.Info("proxy: hidden devices put back into a client's metadata write", "devices", added)
 	return cmds, true
 }
-
-// applyMetadata updates the snapshot after a metadata write, which the
-// Cube acknowledges without echoing the new M lines.
-func (p *Proxy) applyMetadata(lines []cube.Message) { p.opts.Client.ApplyMetadataWrite(lines) }
 
 // hidden is the set of devices left out for clients.
 func (p *Proxy) hidden(md *cube.Metadata) view.Hidden {
