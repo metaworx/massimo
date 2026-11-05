@@ -837,3 +837,185 @@ mode.
     and the roles are what the UI edits of (a) ask for) or the
     preferences and the log come first because the colour-scheme work
     is waiting for them.
+
+## Later
+
+The answers from the design conversation of 2026-11-05 at night, after
+docs/store-later.md (the owner's questions on encryption at rest and
+on sync with a public server, and what version 1 prepares for them),
+kept here so that the server mode starts from them. Nothing in
+version 1 changes because of them beyond what docs/store-later.md
+lists.
+
+### The purpose is data protection
+
+The reason for end-to-end encryption is liability: data the operator
+cannot read is data there is little to be liable for. That holds,
+with a limit: encrypted personal data is still personal data under
+the GDPR and the nDSG (the terms, the hosting location and the access
+controls remain duties), but the exposure collapses, and the duty to
+notify the people themselves of a breach falls away when the data was
+unintelligible to whoever took it (GDPR art. 34(3)(a); the Swiss duty
+is risk-based, and encryption is what lowers the risk).
+
+Portal mode breaks the argument. The Cube's portal traffic is
+encrypted with the Cube's own key and IV, and whatever terminates it
+has the plaintext; it cannot be the app, because the Cube expects its
+reply within its poll cycle and a phone is not always there. So
+portal mode is "the edge runs in the cloud for you": the same engine
+and the same store, hosted instead of on a Pi, with something of the
+operator's holding the Cube key around the clock. That gives two
+tiers with two promises, and the terms say which one a customer is
+on:
+
+- **Edge mode**: zero knowledge is possible; the server relays and
+  stores what it cannot open.
+- **Portal mode**: the server processes plaintext; the case rests on
+  the ordinary measures (encryption at rest with the operator's keys,
+  access control, hosting, terms).
+
+### Where the data lives on the server
+
+Per-tenant files, not encrypted rows in a shared database. Row
+encryption with plaintext structure (section 1.4 of
+docs/store-later.md) exists so that a server could still index events
+by Cube and time; in the model where the edge owns the site the
+server never needs that:
+
+- On the **edge tier** the server holds one encrypted blob per tenant
+  and site that it cannot open (the latest snapshot the edge pushed,
+  the backups) and a small account database it must read (users,
+  memberships, billing) that carries no heating data.
+- On the **portal tier** the hosted engine is the edge code, so its
+  store is one SQLite file per tenant with the schema of section 5,
+  the same code and the same migrations. One file per tenant is a
+  known pattern at scale (replication of the files to object storage
+  for durability) and is the compliance-friendly form: erasure is
+  deleting the file and its backups, portability is handing the file
+  over, and a query cannot cross tenants. The PostgreSQL route of
+  design.md (row-level security in one database) is for cross-tenant
+  work only, which the account database does.
+
+The server runs ZFS with encryption already, so at rest is settled
+without touching the application: one dataset per tenant with its own
+key gives the files their own key, snapshots and erasure. The caveat
+is the same for every server-held key, ZFS, MariaDB or MySQL with
+their built-in tablespace encryption, PostgreSQL with `pgcrypto` or
+Percona's `pg_tde`, SQLCipher through cgo on a server build, `fscrypt`
+with a key per directory: they protect a stolen disk and a leaked
+backup, which is what the portal tier and the account database need,
+and none of them is the operator-cannot-read promise. Only keys the
+server never has give that, which is why the edge tier needs none of
+them for site data. No second DBMS in the stack unless scale asks.
+
+### Who queries what on the edge tier
+
+Clients connect through the server, because the edge is behind NAT
+with a changing address, but the server is a relay, not a database:
+
+- **Edge online**, the normal case: the app's request goes through
+  the server to the edge, which answers from its own store, live, the
+  same API as on the LAN. The encryption is between app and edge,
+  with a session key the two agree through the relay; the server
+  copies frames it cannot read. Every query the UI makes today is
+  answered as today, one hop later.
+- **Edge offline**: the server hands out the last encrypted snapshot
+  the edge pushed (state, metadata, the recent history: tens of
+  kilobytes for a house); the app decrypts it and shows it as "state
+  as of 14:32, edge offline", read-only. The log filter runs in the
+  browser already today, so a snapshot is enough. Commands queue at
+  the server, encrypted, and go down when the edge is back, with the
+  states the `commands` table tracks.
+
+Ruled out on this tier: searching a long history without downloading
+it, notifications composed on the server (the edge composes them,
+the server pushes an opaque payload), and anything running on the
+server while the edge is down, which is moot without a Cube to act
+on. Whoever needs those is on the portal tier.
+
+### The edge's connection
+
+One persistent outbound WebSocket over TLS to port 443, opened by
+the edge, a ping every 30 to 60 seconds (home routers drop idle TCP
+mappings after a few minutes), reconnection with jittered backoff
+capped at about a minute; the server marks the site offline after
+about 90 seconds without a ping and the app shows it. Not polling: a
+press on the phone's chevron should reach the Cube in a second or
+two, polling fast enough for that costs more than the pings and is
+still slower, and the Cube's own portal, which polls every few
+seconds, is the sluggishness the edge replaces. Cost on a Pi 1: one
+connection, one goroutine, a few bytes a minute; on the server one
+goroutine per edge.
+
+Over the one connection, multiplexed as streams with a small frame
+header: commands down; states, events, snapshots and replication up;
+and the relayed app sessions, one stream each, the same API framed
+over the stream. At connect: the server's certificate from the public
+CA, and the edge's Ed25519 device key signing a server challenge,
+which is simpler on a Pi than client certificates and is the "device
+certificate or token" of design.md section 6. A long-polling fallback
+for networks that block WebSockets fits behind the same framing
+later.
+
+### Trusting the code: the page comes from the edge
+
+The weak point of end to end in a browser is that the page is only
+as trustworthy as whoever serves it: a compromised or coerced server
+could serve a page that leaks the key, so "we could not read it"
+would become "we would have had to change the code to read it". The
+owner's answer: the edge signs what it serves, the client pins the
+edge's key after the user has checked its fingerprint once, at setup,
+and the server only caches; a tampered server is recognised.
+
+That works, with one condition: the verifier must be anchored outside
+the server, because a verifier that arrives from the server is
+replaced with the page. Two anchors do it, and both are standard
+browser mechanics rather than a custom scheme:
+
+1. **A web app installed from the edge, on the LAN.** The edge serves
+   the page over its own TLS; the user confirms the edge's certificate
+   fingerprint once (the same fingerprint the edge shows at setup, as
+   text and as the QR of design.md section 8). The browser installs
+   the service worker from the edge's origin, and from then on the
+   page's code lives in the browser and updates only from that origin,
+   which is unreachable away from home, so the server can never
+   replace it; data goes to the server's relay as a plain fetch. The
+   service worker, trusted because it came from the edge, is then the
+   verifier for everything after: a new bundle relayed through the
+   server is accepted only with a valid signature from the pinned
+   edge key, which is exactly the owner's signing scheme, with the
+   service worker as the place it runs. The same key authenticates
+   the edge in the end-to-end session, so the one fingerprint check
+   covers code and data.
+2. **An installed app shell** (the Capacitor shells of design.md
+   section 8): the shell is the anchor, it holds the pinned key and
+   verifies the bundles it loads, wherever they came from.
+
+Residual risks, to be named in the terms: a user who never installed
+from the LAN uses the server-served page and is on the weaker
+promise; a browser may evict the cached code under storage pressure
+(the app asks for persistent storage); a self-signed certificate on
+the edge needs the one-time confirmation, which users skip unless the
+setup makes it a step (a public certificate for a name that resolves
+to the LAN address avoids the dialog); the edge's key lives in its
+state directory, so replacing the Pi by copying the directory keeps
+the pin, and a new key means re-pairing every client.
+
+### Tenants, sites, edges and Cubes
+
+- **Cube to tenant is n:1.** A tenant, a household or an
+  organisation, has one or more Cubes; a Cube belongs to one tenant at
+  a time and is transferred by an update with an audit row, never
+  owned twice. People reach another tenant's Cubes through a
+  membership or a share, not through a Cube with two tenants.
+- **Tenant to edge is 1:n, through sites.** A tenant has one or more
+  sites; a site has one edge (the box holding the Cubes' single LAN
+  connections) or none on the portal tier; a site has n Cubes, and
+  one edge serves several Cubes already today. A box serving two
+  tenants (a property manager's) is the manager being a member of
+  each tenant, not a shared edge.
+- **Version 1** has `tenant_id`, and `origin` (the node identity of
+  docs/store-later.md) is the site's identity, since a standalone box
+  is one site. The identity lives in the store and the state
+  directory and survives a replaced Pi by copying them; a `sites`
+  table comes with the server.
