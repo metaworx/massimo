@@ -32,7 +32,7 @@ release-alpha:
 		echo "release-alpha: alpha has commits that main lacks; bring them into main first" >&2; exit 1; fi; \
 	if done=$$(git describe --tags --exact-match $$sha 2>/dev/null); then \
 		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
-	last=$$(git tag -l 'v0.1.0-alpha.*' | sort -t. -k3 -n | tail -1); \
+	last=$$(git tag -l 'v0.1.0-alpha.*' | sort -t. -k4,4n | tail -1); \
 	n=$${last##*.}; next=v0.1.0-alpha.$$((n+1)); \
 	git tag -a $$next -m "$$next" -m "channel: alpha" $$sha && \
 	git push --atomic origin $$sha:refs/heads/alpha refs/tags/$$next && \
