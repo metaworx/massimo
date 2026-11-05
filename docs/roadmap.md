@@ -1,5 +1,10 @@
 # Roadmap
 
+The frame for this list is docs/design.md: target environments
+(standalone, edge, server), the architecture, the drivers, Loxone
+ownership, multi-user and the public server, and the phases with
+their status. This file is the near-term order within that frame.
+
 Owner's priorities as of 2026-11-04 evening, after a day on real
 hardware. The items are in order; the first ones are the next session.
 
