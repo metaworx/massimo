@@ -90,7 +90,7 @@ function renderRoom(room) {
   el.querySelector(".room-name-btn").addEventListener("click", () => toggleDevices(room));
   renderTools(el, room);
   const actual = roomActual(room);
-  el.querySelector(".temp-is").textContent = actual === undefined ? "–" : fmtNum(actual, 1) + "°";
+  el.querySelector(".temp-is").textContent = fmtTemp(actual, "°");
   el.querySelector(".temp-is").title = t(actual === undefined ? "room.noMeasured" : "room.measured");
 
   renderNotReady(el, room);
@@ -139,7 +139,7 @@ function renderSetpoint(el, room) {
   const big = el.querySelector(".setpoint-big");
   const current = s && s.setpoint !== undefined ? s.setpoint : null;
   const shown = ui.pending !== null ? ui.pending : current;
-  big.textContent = shown === null ? "–" : fmtNum(shown, 1) + "°";
+  big.textContent = fmtTemp(shown, "°");
   big.classList.toggle("pending", ui.pending !== null);
   el.querySelector(".step-minus").addEventListener("click", () => stepSetpoint(room, -STEP));
   el.querySelector(".step-plus").addEventListener("click", () => stepSetpoint(room, STEP));
@@ -376,17 +376,6 @@ function deviceBadges(d) {
   return out;
 }
 
-// iconEl returns a small inline icon referencing a symbol of the page.
-function iconEl(symbol, cls) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", cls);
-  svg.setAttribute("aria-hidden", "true");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", "#" + symbol);
-  svg.appendChild(use);
-  return svg;
-}
-
 // valueCell builds one cell of the values grid: label, number, unit and
 // an optional icon after it. The number sits right-aligned in a
 // fixed-width span so the decimal points of a column line up; an empty
@@ -411,8 +400,8 @@ function deviceValues(grid, d, offset) {
     left.push([t("val.offset"), off, "°C"]);
   }
   const right = [];
-  right.push([t("val.set"), s.setpoint === undefined ? "–" : fmtNum(s.setpoint, 1), "°C", "icon-set"]);
-  right.push([t("val.actual"), s.actual_temp === undefined ? "–" : fmtNum(s.actual_temp, 1), "°C", "icon-is"]);
+  right.push([t("val.set"), fmtTemp(s.setpoint, ""), "°C", "icon-set"]);
+  right.push([t("val.actual"), fmtTemp(s.actual_temp, ""), "°C", "icon-is"]);
   clear(grid);
   const rows = Math.max(left.length, right.length);
   for (let i = 0; i < rows; i++) {
@@ -438,7 +427,7 @@ function renderDevice(d) {
   el.querySelector(".device-type").textContent = typeName(d.type);
   el.querySelector(".device-rf").textContent = d.rf_address;
   const badges = el.querySelector(".device-badges");
-  for (const [label, cls] of deviceBadges(d)) badges.appendChild(textEl("span", label, "flag " + cls));
+  for (const [label, kind] of deviceBadges(d)) badges.appendChild(badgeEl(label, kind));
   const grid = el.querySelector(".device-vals");
   if (isThermostat(d) && d.reported) {
     deviceValues(grid, d, undefined);
