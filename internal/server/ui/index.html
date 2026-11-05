@@ -19,6 +19,7 @@
   <symbol id="icon-set-dial" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v4.5l3 2"/><path d="M12 4v1.5"/></symbol>
   <!-- tile tools -->
   <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></symbol>
+  <symbol id="icon-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/></symbol>
   <!-- navigation -->
   <symbol id="icon-house" viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-6h4v6"/></symbol>
   <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
@@ -29,37 +30,37 @@
     <div class="top-left">
       <div class="brand">
         <h1>Massimo</h1>
-        <span id="version-short" class="muted mono small" title="server version"></span>
+        <span id="version-short" class="muted mono small" title="server version" data-i18n-attr="title:header.serverVersion"></span>
       </div>
       <div class="cube">
-        <label for="cube-select" class="muted">Cube</label>
+        <label for="cube-select" class="muted" data-i18n="header.cube">Cube</label>
         <select id="cube-select"></select>
         <span id="connection" class="pill"></span>
       </div>
       <span id="clock-plain" class="muted" title=""></span>
-      <span id="updated" class="muted" title="time of the last successful poll"></span>
+      <span id="updated" class="muted" title="time of the last successful poll" data-i18n-attr="title:header.updatedTitle"></span>
     </div>
     <div class="top-right">
-      <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now">↻</button>
-      <nav class="nav" aria-label="pages">
-        <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-        <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
-        <button type="button" id="view-settings" class="icon-btn nav-btn" aria-label="settings" title="Settings"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+      <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now" data-i18n-attr="aria-label:header.refresh title:header.refreshTitle">↻</button>
+      <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
+        <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
+        <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
+        <button type="button" id="view-settings" class="icon-btn nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
       </nav>
     </div>
   </div>
-  <button type="button" id="reload-btn" class="primary hidden">New version on the server, reload</button>
+  <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
   <dl id="budget" class="budget expert-only">
-    <div><dt>Server</dt><dd id="version">–</dd></div>
-    <div><dt>Built with</dt><dd id="version-rest">–</dd></div>
-    <div><dt>Firmware</dt><dd id="cube-fw">–</dd></div>
-    <div><dt>Address</dt><dd id="cube-addr">–</dd></div>
-    <div><dt>Radio</dt><dd id="cube-rf" class="mono">–</dd></div>
-    <div><dt>Duty cycle</dt><dd id="duty">–</dd></div>
-    <div><dt>Free slots</dt><dd id="slots">–</dd></div>
-    <div><dt>Queued</dt><dd id="queued">–</dd></div>
-    <div><dt>Pending</dt><dd id="pending-n">–</dd></div>
-    <div><dt>Cube clock</dt><dd id="clock" title="">–</dd></div>
+    <div><dt data-i18n="budget.server">Server</dt><dd id="version">–</dd></div>
+    <div><dt data-i18n="budget.built">Built with</dt><dd id="version-rest">–</dd></div>
+    <div><dt data-i18n="budget.firmware">Firmware</dt><dd id="cube-fw">–</dd></div>
+    <div><dt data-i18n="budget.address">Address</dt><dd id="cube-addr">–</dd></div>
+    <div><dt data-i18n="budget.radio">Radio</dt><dd id="cube-rf" class="mono">–</dd></div>
+    <div><dt data-i18n="budget.duty">Duty cycle</dt><dd id="duty">–</dd></div>
+    <div><dt data-i18n="budget.slots">Free slots</dt><dd id="slots">–</dd></div>
+    <div><dt data-i18n="budget.queued">Queued</dt><dd id="queued">–</dd></div>
+    <div><dt data-i18n="budget.pending">Pending</dt><dd id="pending-n">–</dd></div>
+    <div><dt data-i18n="budget.clock">Cube clock</dt><dd id="clock" title="">–</dd></div>
   </dl>
   <p id="pending" class="notice hidden"></p>
 </header>
@@ -67,79 +68,93 @@
 <main>
   <p id="message" class="message hidden"></p>
 
-  <section id="settings" class="tile settings hidden" aria-label="settings">
-    <header class="tile-head"><h2>Settings</h2></header>
+  <section id="settings" class="tile settings hidden" aria-label="settings" data-i18n-attr="aria-label:nav.settings">
+    <header class="tile-head"><h2 data-i18n="settings.title">Settings</h2></header>
     <div class="settings-body">
-      <label>Poll every
-        <span class="inline"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> s</span>
-      </label>
-      <label class="switch">
-        <input type="checkbox" id="expert-toggle">
-        <span class="slider" aria-hidden="true"></span>
-        <span class="switch-label">Expert mode (addresses, types, budget, version)</span>
-      </label>
-      <label>Cube clock shown in
-        <select id="clock-select">
-          <option value="browser">the browser's time zone</option>
-          <option value="cube">the Cube's time zone</option>
+      <div class="setting">
+        <label for="poll-input" data-i18n="settings.poll">Poll every</label>
+        <span data-help="poll" data-help-label="settings.poll"></span>
+        <span class="inline setting-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
+      </div>
+      <div class="setting">
+        <label class="switch">
+          <input type="checkbox" id="expert-toggle">
+          <span class="slider" aria-hidden="true"></span>
+          <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
+        </label>
+        <span data-help="expert" data-help-label="settings.expertShort"></span>
+      </div>
+      <div class="setting">
+        <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
+        <span data-help="clock" data-help-label="settings.clock"></span>
+        <select id="clock-select" class="setting-control">
+          <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
+          <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
         </select>
-      </label>
+      </div>
+      <div class="setting">
+        <label for="lang-select" data-i18n="settings.language">Language</label>
+        <span data-help="language" data-help-label="settings.language"></span>
+        <select id="lang-select" class="setting-control"></select>
+        <p id="lang-note" class="muted small lang-note hidden"></p>
+      </div>
+      <p class="muted small settings-note" data-i18n="settings.reloadNote">While this page is open, a new server version does not reload the page by itself; the reload button appears in the header instead.</p>
       <div class="actions">
-        <button type="button" id="forget-token">Forget token</button>
+        <button type="button" id="forget-token" data-i18n="settings.forgetToken">Forget token</button>
       </div>
       <div class="update" aria-live="polite">
-        <span class="muted">Software</span>
+        <span class="muted" data-i18n="update.title">Software</span>
         <p id="update-text">–</p>
         <p><a id="update-link" class="hidden" target="_blank" rel="noopener noreferrer"></a></p>
         <p id="update-helper" class="muted small"></p>
         <div class="actions">
-          <button type="button" id="update-check">Check for updates</button>
-          <button type="button" id="update-btn" class="primary hidden">Update</button>
+          <button type="button" id="update-check" data-i18n="update.check">Check for updates</button>
+          <button type="button" id="update-btn" class="primary hidden" data-i18n="update.button">Update</button>
         </div>
       </div>
     </div>
   </section>
 
   <section id="house" class="tile house hidden">
-    <header class="tile-head"><h2>House</h2></header>
+    <header class="tile-head"><h2 data-i18n="house.title">House</h2></header>
     <div class="house-modes">
-      <span class="muted">Mode</span>
-      <button type="button" id="house-eco">ECO</button>
-      <button type="button" id="house-auto">AUTO</button>
-      <button type="button" id="house-comfort">COMFORT</button>
-      <button type="button" id="house-manu">MANU</button>
+      <span class="muted" data-i18n="house.mode">Mode</span>
+      <button type="button" id="house-eco" data-i18n="mode.eco">ECO</button>
+      <button type="button" id="house-auto" data-i18n="mode.auto">AUTO</button>
+      <button type="button" id="house-comfort" data-i18n="mode.comfort">COMFORT</button>
+      <button type="button" id="house-manu" data-i18n="mode.manu">MANU</button>
     </div>
     <form id="house-panel" class="panel hidden">
       <div class="panel-row">
-        <span class="muted">Mode</span>
+        <span class="muted" data-i18n="house.mode">Mode</span>
         <span class="seg" id="house-mode">
-          <label><input type="radio" name="house-mode" value="eco"> ECO</label>
-          <label><input type="radio" name="house-mode" value="auto"> AUTO</label>
-          <label><input type="radio" name="house-mode" value="comfort"> COMFORT</label>
-          <label><input type="radio" name="house-mode" value="manual"> MANU</label>
+          <label><input type="radio" name="house-mode" value="eco"> <span data-i18n="mode.eco">ECO</span></label>
+          <label><input type="radio" name="house-mode" value="auto"> <span data-i18n="mode.auto">AUTO</span></label>
+          <label><input type="radio" name="house-mode" value="comfort"> <span data-i18n="mode.comfort">COMFORT</span></label>
+          <label><input type="radio" name="house-mode" value="manual"> <span data-i18n="mode.manu">MANU</span></label>
         </span>
         <span id="house-temp-row" class="inline hidden">
-          <button type="button" class="step small" id="house-temp-minus" aria-label="0.5 degrees less">−</button>
+          <button type="button" class="step small" id="house-temp-minus" aria-label="0.5 degrees less" data-i18n-attr="aria-label:temp.less">−</button>
           <input type="number" id="house-temp" min="4.5" max="30.5" step="0.5" value="20">
-          <button type="button" class="step small" id="house-temp-plus" aria-label="0.5 degrees more">+</button>
+          <button type="button" class="step small" id="house-temp-plus" aria-label="0.5 degrees more" data-i18n-attr="aria-label:temp.more">+</button>
           <span class="muted">°C</span>
         </span>
       </div>
       <div class="panel-row" id="house-duration-row">
-        <span class="muted">Duration</span>
+        <span class="muted" data-i18n="house.duration">Duration</span>
         <span class="seg">
-          <label><input type="radio" name="house-duration" value="permanent" checked> Permanently</label>
-          <label><input type="radio" name="house-duration" value="until"> Until</label>
+          <label><input type="radio" name="house-duration" value="permanent" checked> <span data-i18n="house.permanent">Permanently</span></label>
+          <label><input type="radio" name="house-duration" value="until"> <span data-i18n="house.until">Until</span></label>
         </span>
         <input type="datetime-local" id="house-until" step="1800">
       </div>
       <div class="panel-row rooms-row">
-        <span class="muted">Rooms</span>
+        <span class="muted" data-i18n="house.rooms">Rooms</span>
         <div id="house-rooms" class="checks"></div>
       </div>
       <div class="actions">
-        <button type="button" id="house-cancel">Cancel</button>
-        <button type="submit" class="primary">Send</button>
+        <button type="button" id="house-cancel" data-i18n="action.cancel">Cancel</button>
+        <button type="submit" class="primary" data-i18n="action.send">Send</button>
       </div>
       <p id="house-result" class="tile-result hidden"></p>
     </form>
@@ -148,15 +163,15 @@
   <section id="rooms" class="tiles"></section>
 
   <section id="unlisted" class="tile hidden">
-    <header class="tile-head"><h2>Devices without a room</h2></header>
+    <header class="tile-head"><h2 data-i18n="unlisted.title">Devices without a room</h2></header>
     <div id="unlisted-devices" class="devices"></div>
   </section>
 
-  <section id="logview" class="tile log hidden" aria-label="event log">
+  <section id="logview" class="tile log hidden" aria-label="event log" data-i18n-attr="aria-label:log.aria">
     <header class="tile-head">
-      <h2>Log</h2>
-      <input type="search" id="log-filter" placeholder="filter" aria-label="filter the log">
-      <button type="button" id="log-clear">Clear</button>
+      <h2 data-i18n="log.title">Log</h2>
+      <input type="search" id="log-filter" placeholder="filter" aria-label="filter the log" data-i18n-attr="placeholder:log.filter aria-label:log.filterAria">
+      <button type="button" id="log-clear" data-i18n="log.clear">Clear</button>
     </header>
     <div id="log-lines" class="log-lines"></div>
   </section>
@@ -164,10 +179,10 @@
 
 <dialog id="token-dialog">
   <form method="dialog" id="token-form">
-    <h3>API token</h3>
-    <p class="muted">The server requires a bearer token (MASSIMO_API_TOKEN).</p>
-    <label>Token <input type="password" id="token-input" autocomplete="off"></label>
-    <div class="actions"><button type="submit" class="primary">Use token</button></div>
+    <h3 data-i18n="token.title">API token</h3>
+    <p class="muted" data-i18n="token.text">The server requires a bearer token (MASSIMO_API_TOKEN).</p>
+    <label><span data-i18n="token.label">Token</span> <input type="password" id="token-input" autocomplete="off"></label>
+    <div class="actions"><button type="submit" class="primary" data-i18n="token.use">Use token</button></div>
   </form>
 </dialog>
 
@@ -176,66 +191,67 @@
     <header class="tile-head">
       <button type="button" class="room-name-btn"><h2 class="room-name"></h2></button>
       <details class="menu">
-        <summary aria-label="room actions" title="Room actions">⋯</summary>
+        <summary aria-label="room actions" title="Room actions" data-i18n-attr="aria-label:room.actions title:room.actionsTitle">⋯</summary>
         <div class="menu-items">
-          <button type="button" class="menu-lock">Lock thermostats</button>
-          <button type="button" class="menu-unlock">Unlock thermostats</button>
-          <button type="button" class="menu-delete">Delete room</button>
+          <button type="button" class="menu-lock" data-i18n="room.lock">Lock thermostats</button>
+          <button type="button" class="menu-unlock" data-i18n="room.unlock">Unlock thermostats</button>
+          <button type="button" class="menu-delete" data-i18n="room.delete">Delete room</button>
         </div>
       </details>
     </header>
     <p class="notice not-ready hidden"></p>
     <div class="setpoint-row">
       <div class="temp-block">
-        <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-is"/></svg><span class="temp-label">IS</span></span>
-        <span class="temp-big temp-is" aria-label="measured temperature">–</span>
+        <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-is"/></svg><span class="temp-label" data-i18n="room.is">IS</span></span>
+        <span class="temp-big temp-is" aria-label="measured temperature" data-i18n-attr="aria-label:room.measured">–</span>
       </div>
       <div class="temp-block">
-        <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-set"/></svg><span class="temp-label">SET</span></span>
-        <span class="temp-big setpoint-big" aria-label="set temperature"></span>
+        <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-set"/></svg><span class="temp-label" data-i18n="room.set">SET</span></span>
+        <span class="temp-big setpoint-big" aria-label="set temperature" data-i18n-attr="aria-label:room.setTemp"></span>
       </div>
       <div class="stepper">
-        <button type="button" class="step step-plus" aria-label="0.5 degrees more" title="0.5 °C more">&#x2303;</button>
-        <button type="button" class="step step-minus" aria-label="0.5 degrees less" title="0.5 °C less">&#x2304;</button>
+        <button type="button" class="step step-plus" aria-label="0.5 degrees more" title="0.5 °C more" data-i18n-attr="aria-label:temp.more title:temp.moreTitle">&#x2303;</button>
+        <button type="button" class="step step-minus" aria-label="0.5 degrees less" title="0.5 °C less" data-i18n-attr="aria-label:temp.less title:temp.lessTitle">&#x2304;</button>
       </div>
     </div>
     <div class="pending-row hidden">
-      <button type="button" class="pending-save primary">Save</button>
-      <button type="button" class="pending-cancel">Cancel</button>
+      <button type="button" class="pending-save primary" data-i18n="action.save">Save</button>
+      <button type="button" class="pending-cancel" data-i18n="action.cancel">Cancel</button>
     </div>
     <div class="mode-row">
-      <span class="mode-group" role="group" aria-label="mode">
-        <button type="button" class="mode-auto" aria-pressed="false">AUTO</button>
-        <button type="button" class="mode-manual" aria-pressed="false">MANU</button>
-        <button type="button" class="mode-holiday" aria-pressed="false" title="holiday: a temperature until a date">HOLIDAY</button>
+      <span class="mode-group" role="group" aria-label="mode" data-i18n-attr="aria-label:room.modeGroup">
+        <button type="button" class="mode-auto" aria-pressed="false" data-i18n="mode.auto">AUTO</button>
+        <button type="button" class="mode-manual" aria-pressed="false" data-i18n="mode.manu">MANU</button>
+        <button type="button" class="mode-holiday" aria-pressed="false" title="holiday: a temperature until a date" data-i18n="mode.holiday" data-i18n-attr="title:room.holidayTitle">HOLIDAY</button>
       </span>
       <span class="mode-vacation hidden"></span>
+      <span class="mode-mixed hidden"></span>
       <span class="tile-tools">
-        <button type="button" class="tool-btn tile-info" aria-label="devices of the room" title="Devices" aria-expanded="false"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg></button>
-        <button type="button" class="tool-btn tile-cog" aria-label="configure the room" title="Configure" aria-expanded="false"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+        <button type="button" class="tool-btn tile-info" aria-label="devices of the room" title="Devices" aria-expanded="false" data-i18n-attr="aria-label:room.devices title:room.devicesTitle"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg></button>
+        <button type="button" class="tool-btn tile-cog" aria-label="configure the room" title="Configure" aria-expanded="false" data-i18n-attr="aria-label:room.configure title:room.configureTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
       </span>
     </div>
     <form class="panel vacation-panel hidden">
       <div class="panel-row">
-        <span class="muted">Vacation</span>
+        <span class="muted" data-i18n="room.vacation">Vacation</span>
         <span class="inline">
-          <button type="button" class="step small vacation-minus" aria-label="0.5 degrees less">−</button>
+          <button type="button" class="step small vacation-minus" aria-label="0.5 degrees less" data-i18n-attr="aria-label:temp.less">−</button>
           <input type="number" class="vacation-temp" min="4.5" max="30.5" step="0.5" value="17">
-          <button type="button" class="step small vacation-plus" aria-label="0.5 degrees more">+</button>
-          <span class="muted">°C until</span>
+          <button type="button" class="step small vacation-plus" aria-label="0.5 degrees more" data-i18n-attr="aria-label:temp.more">+</button>
+          <span class="muted" data-i18n="room.degUntil">°C until</span>
         </span>
         <input type="datetime-local" class="vacation-until" step="1800" required>
       </div>
       <div class="actions">
-        <button type="button" class="vacation-cancel">Cancel</button>
-        <button type="submit" class="primary">Send</button>
+        <button type="button" class="vacation-cancel" data-i18n="action.cancel">Cancel</button>
+        <button type="submit" class="primary" data-i18n="action.send">Send</button>
       </div>
     </form>
     <div class="panel delete-confirm hidden">
-      <span>Delete this empty room from the cube?</span>
+      <span data-i18n="room.deleteConfirm">Delete this empty room from the cube?</span>
       <div class="actions">
-        <button type="button" class="delete-no">Keep</button>
-        <button type="button" class="delete-yes primary">Delete</button>
+        <button type="button" class="delete-no" data-i18n="action.keep">Keep</button>
+        <button type="button" class="delete-yes primary" data-i18n="action.delete">Delete</button>
       </div>
     </div>
     <p class="tile-result hidden"></p>
@@ -259,6 +275,7 @@
   </div>
 </template>
 
+<script src="/ui/i18n.js"></script>
 <script src="/ui/app.js"></script>
 <script src="/ui/tiles.js"></script>
 <script src="/ui/config.js"></script>

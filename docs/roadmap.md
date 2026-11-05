@@ -46,9 +46,11 @@ each new write path and the feedback that follows.
 6. **Users and a database**: owner arbitration per Cube, settings such
    as the hidden devices editable in the UI, SQLite; internal/env is the
    one place the configuration is read today, to be replaced by it.
-7. Internationalisation of the UI with a translation table, then the
-   languages of the original software: German, English, French,
-   Italian, Dutch, Polish.
+7. **Translations** of the UI: done for the languages of the original
+   software (English, German, French, Italian, Dutch, Polish) in
+   `internal/server/ui/i18n.js`; open: a review of FR/IT/NL/PL by
+   native speakers, and the server's error texts, which still reach the
+   UI in English.
 8. **Release engineering**: done: CI (gofmt, vet, tests, cross build) on
    every push and pull request; on a `v*` tag, binaries for Linux (amd64,
    arm64, armv7, armv6), macOS (amd64, arm64) and Windows, `SHA256SUMS`
