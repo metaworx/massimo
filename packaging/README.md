@@ -31,6 +31,31 @@ Pick the binary for the board (all need a 32-bit or 64-bit Linux to match):
 one dies there with "illegal instruction"), `armv7l` the armv7 build,
 `aarch64` the arm64 build.
 
+## Preparing a Raspberry Pi 1
+
+The current Raspberry Pi OS Lite (32-bit) still runs on the Pi 1 and needs
+about 2.8 GB, so a 4 GB card is enough. Raspberry Pi Imager can preset the
+user, SSH key and hostname. When writing the image by hand, the boot
+partition's `user-data` (cloud-init) does the same on first boot, for
+example:
+
+```yaml
+#cloud-config
+hostname: massimo
+users:
+- name: pi
+  groups: users,adm,sudo,netdev
+  shell: /bin/bash
+  sudo: ALL=(ALL) NOPASSWD:ALL
+  ssh_authorized_keys:
+  - ssh-ed25519 AAAA... you@host
+enable_ssh: true
+ssh_pwauth: false
+```
+
+The Pi 1 has no network over USB (its micro-USB port only powers it), so
+it needs Ethernet. The first boot takes about ten minutes.
+
 ## Install by hand
 
 From the build machine (here for a Pi 1 at `pi.local`, user `pi`):
@@ -63,10 +88,19 @@ What to set there:
 
 - `MASSIMO_CUBE_<SN>_ADDRESS`, `_KEY`, `_IV` for every Cube.
 - `MASSIMO_CUBE_<SN>_PROXY`: the address this box answers on for that
-  Cube, i.e. one of the box's own IP addresses. With several Cubes each
-  needs its own address (port 62910 and discovery can be bound once per
-  address), so give the box a second address, or start with `-proxy off`
-  added to `ExecStart` (`sudo systemctl edit --full massimo`).
+  Cube, one of the box's own IP addresses. Each Cube needs its own
+  address, because port 62910 can be bound once per address. Keeping the
+  box's own address free and adding one extra address per Cube is the
+  tidiest setup; addresses outside the router's DHCP range, on Raspberry
+  Pi OS (NetworkManager):
+
+  ```bash
+  sudo nmcli con mod "Wired connection 1" +ipv4.addresses 192.168.1.49/24 +ipv4.addresses 192.168.1.50/24
+  sudo nmcli device reapply eth0
+  ```
+
+  For a first run without the proxy, add `-proxy off` to `ExecStart`
+  (`sudo systemctl edit --full massimo`).
 - `MASSIMO_CUBE_<SN>_PROXY_SERIAL` if the original software should see a
   serial other than the Cube's.
 - `MASSIMO_API_TOKEN` to require a Bearer token on the API.
@@ -107,4 +141,16 @@ sudo systemctl restart massimo
 
 ## Resource use
 
-MEASUREMENTS
+Measured on a Raspberry Pi 1 Model B (BCM2835, 700 MHz, 512 MB of which
+426 MB are left to Linux) with Raspberry Pi OS Lite 32-bit (trixie),
+serving two Cubes with about 30 devices, the API, the web UI and two proxy
+listeners:
+
+- `massimo` resident memory: 7 MB after start, 9 MB after five minutes
+  (`VmRSS` in `/proc/<pid>/status`; the Pi kernel has memory accounting
+  off, so `systemctl status` shows no memory line).
+- CPU: under 1 % on average, about 1 s of CPU time for the first five
+  minutes; both Cubes connected within a second of starting.
+- The whole system uses about 110 MB (`free -m`), leaving over 300 MB
+  available; the root filesystem needs 2.1 GB.
+- The web UI's page loads in about 0.25 s over the 100 Mbit Ethernet.
