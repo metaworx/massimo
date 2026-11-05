@@ -81,6 +81,17 @@ it. Not yet seen on real hardware; a value received within 5 s of
 `observed_since` counts as already there ("≥"), since the first
 device list arrives just after it, not at that exact time.
 
+Then (branch claude/ui-cube-discover, the owner's wish): "Search for new
+Cubes…" at the end of the Cube choice runs `POST /api/v1/cubes/discover`;
+Cubes with `configured: false` appear in the choice, not selectable,
+and under the header with the env lines to add (`_ADDRESS`, which
+serve needs, and `_KEY`/`_IV` for the portal); `cube_found` events add
+them live. Built against the API shape agreed with the coordinating
+session before the server side was merged; `make ui-test` stubs the
+discovery answer. Open: which Cubes count as configured on the server
+(serve connects to those with an address, not those with a key and
+IV).
+
 ## State
 
 - `massimo serve` keeps both Cubes connected, serves the JSON API
@@ -140,9 +151,9 @@ device list arrives just after it, not at that exact time.
    and 2 are addressed (re-reads and a budget reconnect after writes,
    accepted commands in the log); step 7, moving a device, is still to
    run.
-2. The owner's review of the UI rounds (PR 3, PR 5 and the ages,
-   Open and ticket branch claude/ui-value-ages) on the boxes, and the
-   open UI points above.
+2. The owner's review of the UI rounds (PR 3, PR 5, PR 12 and the Cube
+   search, branch claude/ui-cube-discover) on the boxes, and the open
+   UI points above.
 3. Pairing new devices (roadmap item 4): the server side is in (API
    `POST/GET/DELETE …/pairing`, `paired` events, `PUT …/devices/{rf}`
    with `room_id` for a device in no room, pairing through the proxy);
