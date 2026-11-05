@@ -410,6 +410,51 @@ Kinds: `connected`, `disconnected` (the server reconnects by itself),
 changed), `config` (a device configuration arrived), `state`. A comment
 line is sent every 30 seconds to keep the connection alive.
 
+### GET /api/v1/update?refresh=1
+
+Whether a newer signed release is out on the server's update channel
+(the branch it was built from, or `MASSIMO_UPDATE_CHANNEL`). The server
+asks GitHub at most every ten minutes; `refresh` asks now.
+
+```json
+{
+  "current": "v0.1.0-alpha.9",
+  "channel": "phase-0",
+  "latest": "v0.1.0-alpha.10",
+  "release_url": "https://github.com/metaworx/massimo/releases/tag/v0.1.0-alpha.10",
+  "available": true,
+  "checked_at": "2026-11-05T13:40:00+01:00",
+  "can_update": true,
+  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "phase-0", "time": "…"}
+}
+```
+
+`latest` is only a release whose manifest verifies against the key
+compiled into the server (see `internal/update`). `check_error` says why
+a check failed. `can_update` is true when POST would start an update;
+otherwise `blocked` says why it cannot be started from here (no API
+token, no update helper, Windows). `helper` is the update helper's last
+run: `state` is one of `checking`, `installing`, `restarting`, `done`,
+`up-to-date`, `failed`, `rolled-back`, with `message` on failure.
+
+### POST /api/v1/update
+
+Asks the update helper to install the newest release on the channel:
+the server writes the channel into its request file, and the helper
+(`massimo-update.service`, running as root; see
+[packaging/README.md](../packaging/README.md)) downloads and verifies the
+release, test-runs it, replaces the binary, restarts the server and
+rolls back if the new version does not answer `/healthz`. The request
+names no version and no file, so the most the API can do is install the
+newest signed release. Answers `202` with `{"ok":true,"requested":"v…",
+"channel":"…"}`; follow the progress with GET.
+
+Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even
+though the other routes are open. `403` also when no helper is
+configured (`serve -update-request`) or on Windows; `409` when already up
+to date, when the channel has no release or while an update is running;
+`502` when GitHub could not be asked.
+
 ## The LAN proxy
 
 Besides the API, `massimo serve` answers as a Cube on TCP port 62910

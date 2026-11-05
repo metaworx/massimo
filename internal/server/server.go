@@ -17,6 +17,8 @@
 //	PUT  /api/v1/cubes/{sn}/rooms/{id}/setpoint      same body, addressed to the whole room
 //	GET  /api/v1/cubes/{sn}/backup?format=yaml|json  a backup file
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
+//	GET  /api/v1/update                              newest signed release on the update channel
+//	POST /api/v1/update                              ask the update helper to install it (needs a token)
 //
 // With a token configured, every /api request needs "Authorization: Bearer <token>"
 // (the event stream also accepts ?token=<token>). A web UI for all of this is served at / (see ui.go).
@@ -70,6 +72,8 @@ type Options struct {
 	// ShowGhosts shows the devices of cube.GhostRoom and the ignore
 	// lists' devices everywhere instead of hiding them.
 	ShowGhosts bool
+	// Update configures the update endpoints (update_api.go).
+	Update UpdateOptions
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -92,6 +96,8 @@ type Server struct {
 	cubes map[string]*runtime // by serial, lower case
 	order []string
 	mux   *http.ServeMux
+
+	updates updateCheck
 }
 
 type runtime struct {
@@ -389,6 +395,8 @@ func (s *Server) routes() {
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
 	api("GET /api/v1/cubes/{sn}/log", s.getLog)
+	api("GET /api/v1/update", s.getUpdate)
+	api("POST /api/v1/update", s.startUpdate)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux

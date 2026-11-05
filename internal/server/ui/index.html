@@ -87,6 +87,16 @@
       <div class="actions">
         <button type="button" id="forget-token">Forget token</button>
       </div>
+      <div class="update" aria-live="polite">
+        <span class="muted">Software</span>
+        <p id="update-text">–</p>
+        <p><a id="update-link" class="hidden" target="_blank" rel="noopener noreferrer"></a></p>
+        <p id="update-helper" class="muted small"></p>
+        <div class="actions">
+          <button type="button" id="update-check">Check for updates</button>
+          <button type="button" id="update-btn" class="primary hidden">Update</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -253,5 +263,6 @@
 <script src="/ui/tiles.js"></script>
 <script src="/ui/config.js"></script>
 <script src="/ui/log.js"></script>
+<script src="/ui/update.js"></script>
 </body>
 </html>

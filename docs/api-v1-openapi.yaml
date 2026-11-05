@@ -377,6 +377,52 @@ paths:
               schema: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/update:
+    get:
+      summary: The newest signed release on the update channel
+      parameters:
+        - {name: refresh, in: query, description: Ask GitHub now instead of reusing a check of the last ten minutes, schema: {type: string}}
+      responses:
+        "200":
+          description: Versions and whether an update can be started
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UpdateInfo"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      summary: Ask the update helper to install the newest release
+      description: |
+        Needs a configured API token even where the other routes are open.
+        The helper (massimo-update.service, root) verifies the release
+        signature and checksum, replaces the binary, restarts the server and
+        rolls back if the new version does not come up.
+      responses:
+        "202":
+          description: Requested; follow the progress with GET
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  requested: {type: string, description: The release tag that is newest now}
+                  channel: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403":
+          description: No API token configured, no update helper, or Windows
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: Up to date, no release on the channel, or an update is running
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "502":
+          description: The release check failed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
 components:
   securitySchemes:
     bearer:
@@ -464,6 +510,29 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    UpdateInfo:
+      type: object
+      properties:
+        current: {type: string, description: The running version}
+        channel: {type: string, description: The update channel, a branch name}
+        latest: {type: string, description: Newest signed release on the channel}
+        release_url: {type: string}
+        available: {type: boolean, description: latest is newer than current}
+        checked_at: {type: string, format: date-time}
+        check_error: {type: string}
+        can_update: {type: boolean, description: POST would start an update}
+        blocked: {type: string, description: Why an update cannot be started from the API}
+        helper: {$ref: "#/components/schemas/UpdateStatus"}
+    UpdateStatus:
+      type: object
+      description: The update helper's last run
+      properties:
+        state: {type: string, enum: [checking, installing, restarting, done, up-to-date, failed, rolled-back]}
+        from: {type: string}
+        to: {type: string}
+        channel: {type: string}
+        message: {type: string}
+        time: {type: string, format: date-time}
     Error:
       type: object
       properties:

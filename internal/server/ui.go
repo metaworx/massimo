@@ -13,7 +13,7 @@ import (
 // The web UI: plain HTML, CSS and JavaScript, no build step. It is
 // served at / (the page) and /ui/ (the files) and talks to the API.
 //
-//go:embed ui/index.html ui/app.js ui/tiles.js ui/config.js ui/log.js ui/style.css
+//go:embed ui/index.html ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/style.css
 var uiFiles embed.FS
 
 // uiRoutes registers the page and its files. The token check applies to

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/server"
+	"go.metaworx.ch/massimo/internal/update"
 )
 
 // runServe starts the HTTP API over every configured Cube.
@@ -35,6 +36,8 @@ func runServe(args []string) error {
 	})
 	showGhosts := fs.Bool("show-ghosts", false, "show the devices of room 255 and of the ignore lists in the API and to proxy clients instead of hiding them")
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (default "+proxySerialEnv+" or its per-Cube form; the original software keeps one answer per serial)")
+	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the root update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+" (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
+	updateStatus := fs.String("update-status", update.DefaultStatusPath, "the update helper's status file")
 	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>]\n\nKeep every Cube from the environment (MASSIMO_CUBE_<SN>_ADDRESS) connected,\nserve the JSON API (see internal/server for the routes) and answer as a Cube\non the LAN (port 62910 and UDP discovery), so that other programs and the\noriginal software connect to the server instead of the Cube, which serves\nonly one client at a time.\n\n")
@@ -155,7 +158,8 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
-	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners, ShowGhosts: *showGhosts || noIgnore})
+	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners, ShowGhosts: *showGhosts || noIgnore,
+		Update: server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
