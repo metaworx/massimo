@@ -205,8 +205,33 @@ def run(page, label, lang):
     check(page.locator("#settings").is_visible(), f"{label}: settings open")
     page.wait_for_timeout(500)
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the settings")
+    update_busy(page, label)
     page.locator("#view-tiles").click()
     check(page.locator(".room").first.is_visible(), f"{label}: back to the tiles")
+
+
+def update_json(state, to, available):
+    return ('{"current": "v0.0.0-test", "channel": "alpha", "latest": "%s", "available": %s, "can_update": %s, '
+            '"helper": {"state": "%s", "to": "%s", "time": "2026-01-01T00:00:00Z"}}'
+            % (to, "true" if available else "false", "true" if available else "false", state, to))
+
+
+def update_busy(page, label):
+    """While the update helper works, both buttons of the Software section
+    are greyed out, also when the page only learns it from GET
+    /api/v1/update (a reload during an update, or an update started from
+    another browser), and come back once the helper reports done."""
+    page.route("**/api/v1/update*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=update_json("installing", "v0.0.1-test", True)))
+    page.locator("#update-check").click()
+    check(wait_until(page, "document.getElementById('update-check').disabled && document.getElementById('update-btn').disabled", 5),
+          f"{label}: Software buttons greyed out while the helper installs")
+    page.unroute("**/api/v1/update*")
+    page.route("**/api/v1/update*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=update_json("done", "v0.0.1-test", False)))
+    check(wait_until(page, "!document.getElementById('update-check').disabled && !document.getElementById('update-btn').disabled", 10),
+          f"{label}: Software buttons back once the helper is done")
+    page.unroute("**/api/v1/update*")
 
 
 def used_ticket_first(refused):
