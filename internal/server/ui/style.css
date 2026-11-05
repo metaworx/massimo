@@ -224,6 +224,7 @@ body.expert #clock-plain { display: none; }
 .settings-body { padding: 12px 14px 4px; }
 .setting { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-bottom: 12px; }
 .setting .setting-control { flex-basis: 100%; }
+.setting > .switch { flex: 1 1 0; min-width: 0; }
 .setting select.setting-control { flex-basis: auto; max-width: 100%; }
 .setting > select.setting-control { width: 100%; }
 .settings input[type="number"] { width: 6em; }

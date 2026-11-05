@@ -8,21 +8,26 @@
 "use strict";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const DAY_SHORT = { monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th", friday: "Fr", saturday: "Sa", sunday: "Su" };
-const DAY_LONG = { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 const MAX_POINTS = 13;
 const NAME_BYTES = 32;
-const TABS = [
-  ["room", "Room"],
-  ["temps", "Temperatures"],
-  ["devices", "Devices"],
-  ["program", "Week programme"],
-  ["copy", "Copy"],
-];
+const TABS = ["room", "temps", "devices", "program", "copy"];
 // The common fields of a room's configuration, as GET /rooms/{id}/config
 // returns them and PUT /rooms/{id}/config takes them.
 const TEMP_FIELDS = ["comfort_temp", "eco_temp", "window_open_temp", "window_open_minutes", "max_setpoint", "min_setpoint"];
 const VALVE_FIELDS = ["boost_minutes", "boost_valve_pct", "decalc_day", "decalc_hour", "max_valve_pct", "valve_offset_pct"];
+
+// dayShort and dayLong name a weekday ("monday" …) in the language.
+function dayShort(day) {
+  return t("dayShort." + day);
+}
+
+function dayLong(day) {
+  return t("day." + day);
+}
+
+function dayList(days) {
+  return days.map(dayShort).join(", ");
+}
 
 // --- model ------------------------------------------------------------
 
@@ -152,12 +157,12 @@ function renderConfig(el, room) {
   body.className = "config-body";
   area.appendChild(body);
   if (c.loading) {
-    body.appendChild(textEl("p", "Loading the configuration …", "muted"));
+    body.appendChild(textEl("p", t("cfg.loading"), "muted"));
     return;
   }
   if (c.error) {
-    body.appendChild(textEl("p", "Cannot load the configuration: " + c.error, "tile-result bad"));
-    body.appendChild(button("Close", "", () => closeConfig(room)));
+    body.appendChild(textEl("p", t("cfg.cannotLoad", { error: c.error }), "tile-result bad"));
+    body.appendChild(button(t("action.close"), "", () => closeConfig(room)));
     return;
   }
   switch (c.tab) {
@@ -191,9 +196,9 @@ function renderTabs(room, c) {
   const list = document.createElement("span");
   list.className = "config-tablist";
   list.setAttribute("role", "tablist");
-  list.setAttribute("aria-label", "configuration sections");
-  for (const [key, label] of TABS) {
-    const b = button(label, "tab" + (c.tab === key ? " active" : ""), () => {
+  list.setAttribute("aria-label", t("cfg.sections"));
+  for (const key of TABS) {
+    const b = button(t("cfg.tab." + key), "tab" + (c.tab === key ? " active" : ""), () => {
       c.tab = key;
       c.result = null;
       rerenderRoom(room);
@@ -204,8 +209,8 @@ function renderTabs(room, c) {
   }
   bar.appendChild(list);
   const close = button("×", "tab close", () => closeConfig(room));
-  close.title = "Close the configuration";
-  close.setAttribute("aria-label", "close configuration");
+  close.title = t("cfg.closeTitle");
+  close.setAttribute("aria-label", t("cfg.close"));
   bar.appendChild(close);
   return bar;
 }
@@ -290,11 +295,11 @@ function formActions(onCancel, sendLabel, extra) {
   }
   const right = document.createElement("span");
   right.className = "actions-right";
-  right.appendChild(button("Cancel", "", onCancel));
+  right.appendChild(button(t("action.cancel"), "", onCancel));
   const send = document.createElement("button");
   send.type = "submit";
   send.className = "primary";
-  send.textContent = sendLabel || "Send";
+  send.textContent = sendLabel || t("action.send");
   right.appendChild(send);
   actions.appendChild(right);
   return actions;
@@ -322,8 +327,8 @@ function renderRoomTab(room, c) {
   name.addEventListener("input", () => {
     c.edit.name = name.value;
   });
-  form.appendChild(field("Room name", name, "", "roomName"));
-  const hint = textEl("p", "Up to " + NAME_BYTES + " bytes; umlauts take two.", "muted small");
+  form.appendChild(field(t("cfg.roomName"), name, "", "roomName"));
+  const hint = textEl("p", t("cfg.nameHint", { n: NAME_BYTES }), "muted small");
   form.appendChild(hint);
   form.appendChild(formActions(() => closeConfig(room)));
   return form;
@@ -335,33 +340,33 @@ function byteLength(s) {
 
 async function sendRoomName(room, c) {
   const name = c.edit.name.trim();
-  if (!name) return setConfigResult(room, c, "A name is required.", false);
-  if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, "The name is longer than " + NAME_BYTES + " bytes.", false);
-  if (name === room.name) return setConfigResult(room, c, "The name is unchanged.", true);
-  setConfigResult(room, c, "Renaming …", true);
+  if (!name) return setConfigResult(room, c, t("cfg.nameRequired"), false);
+  if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.nameTooLong", { n: NAME_BYTES }), false);
+  if (name === room.name) return setConfigResult(room, c, t("cfg.nameUnchanged"), true);
+  setConfigResult(room, c, t("cfg.renaming"), true);
   try {
     await api("PUT", base() + "/rooms/" + room.id, { name });
-    setConfigResult(room, c, "Room renamed to " + name + ".", true);
+    setConfigResult(room, c, t("cfg.renamed", { name }), true);
     await loadRooms();
   } catch (e) {
-    setConfigResult(room, c, "Rename: " + e.message, false);
+    setConfigResult(room, c, t("cfg.renameFailed", { error: e.message }), false);
   }
 }
 
 // --- temperatures tab -------------------------------------------------
 
 function renderTempsTab(room, c) {
-  const form = configForm(() => sendRoomConfig(room, c, TEMP_FIELDS, "Temperatures"));
+  const form = configForm(() => sendRoomConfig(room, c, TEMP_FIELDS, t("cfg.tab.temps")));
   const e = c.edit.common;
   const set = (k) => (v) => {
     e[k] = v;
   };
-  form.appendChild(field("Comfort temperature", numberInput(e.comfort_temp, MIN_TEMP, MAX_TEMP, STEP, set("comfort_temp")), "°C", "comfort"));
-  form.appendChild(field("Eco temperature", numberInput(e.eco_temp, MIN_TEMP, MAX_TEMP, STEP, set("eco_temp")), "°C", "eco"));
-  form.appendChild(field("Open window", numberInput(e.window_open_temp, MIN_TEMP, MAX_TEMP, STEP, set("window_open_temp")), "°C", "windowTemp"));
-  form.appendChild(field("Open window for", numberInput(e.window_open_minutes, 0, 60, 5, set("window_open_minutes")), "min", "windowMinutes"));
-  form.appendChild(field("Maximum temperature", numberInput(e.max_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("max_setpoint")), "°C", "maxTemp"));
-  form.appendChild(field("Minimum temperature", numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), "°C", "minTemp"));
+  form.appendChild(field(t("cfg.comfort"), numberInput(e.comfort_temp, MIN_TEMP, MAX_TEMP, STEP, set("comfort_temp")), "°C", "comfort"));
+  form.appendChild(field(t("cfg.eco"), numberInput(e.eco_temp, MIN_TEMP, MAX_TEMP, STEP, set("eco_temp")), "°C", "eco"));
+  form.appendChild(field(t("cfg.windowTemp"), numberInput(e.window_open_temp, MIN_TEMP, MAX_TEMP, STEP, set("window_open_temp")), "°C", "windowTemp"));
+  form.appendChild(field(t("cfg.windowMinutes"), numberInput(e.window_open_minutes, 0, 60, 5, set("window_open_minutes")), t("unit.minutes"), "windowMinutes"));
+  form.appendChild(field(t("cfg.maxTemp"), numberInput(e.max_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("max_setpoint")), "°C", "maxTemp"));
+  form.appendChild(field(t("cfg.minTemp"), numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), "°C", "minTemp"));
   form.appendChild(sourceNote(c));
   form.appendChild(formActions(() => closeConfig(room)));
   return form;
@@ -370,7 +375,7 @@ function renderTempsTab(room, c) {
 function sourceNote(c) {
   const src = c.cfg && c.cfg.source;
   const dev = src && c.cfg.devices.find((d) => d.rf_address === src);
-  const text = src ? "Values as stored on " + (dev && dev.name ? dev.name : src) + "; a change goes to every thermostat of the room." : "No thermostat in this room.";
+  const text = src ? t("cfg.valuesFrom", { device: dev && dev.name ? dev.name : src }) : t("cfg.noThermostat");
   return textEl("p", text, "muted small");
 }
 
@@ -389,8 +394,8 @@ function changedFields(c, fields) {
 
 async function sendRoomConfig(room, c, fields, label) {
   const body = changedFields(c, fields);
-  if (Object.keys(body).length === 0) return setConfigResult(room, c, label + ": nothing changed.", true);
-  setConfigResult(room, c, label + ": waiting for the cube …", true);
+  if (Object.keys(body).length === 0) return setConfigResult(room, c, t("cfg.nothingChanged", { label }), true);
+  setConfigResult(room, c, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/config", body);
     setConfigResult(room, c, deviceResults(label, res), !!(res && res.ok));
@@ -403,12 +408,14 @@ async function sendRoomConfig(room, c, fields, label) {
 }
 
 function deviceResults(label, res) {
-  const lines = [label + (res && res.ok ? ": ok" : ": not every device took it")];
+  const lines = [t(res && res.ok ? "result.ok" : "cfg.notAll", { label })];
   for (const d of (res && res.devices) || []) {
-    let t = (d.name || d.rf_address) + ": " + (d.ok ? "ok" : d.discarded ? "discarded" : d.error || "failed");
-    lines.push(t);
+    const name = d.name || d.rf_address;
+    if (d.ok) lines.push(t("cfg.devOk", { name }));
+    else if (d.discarded) lines.push(t("cfg.devDiscarded", { name }));
+    else lines.push(t("cfg.devFailed", { name, error: d.error || t("cfg.failed") }));
   }
-  if (res && res.budget) lines.push("duty cycle " + res.budget.duty_cycle_pct + " %, " + res.budget.free_memory_slots + " free slots");
+  if (res && res.budget) lines.push(t("cfg.budgetLine", { duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots }));
   return lines.join("\n");
 }
 
@@ -418,31 +425,31 @@ function renderDevicesTab(room, c) {
   const wrap = document.createElement("div");
   const thermostats = room.devices.filter(isThermostat);
   if (thermostats.length) {
-    const form = configForm(() => sendRoomConfig(room, c, VALVE_FIELDS, "Device settings"));
+    const form = configForm(() => sendRoomConfig(room, c, VALVE_FIELDS, t("cfg.deviceSettings")));
     const e = c.edit.common;
     const set = (k) => (v) => {
       e[k] = v;
     };
-    form.appendChild(textEl("h4", "Radiator thermostats of the room"));
-    form.appendChild(field("Boost duration", numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), "min", "boostMinutes"));
-    form.appendChild(field("Boost valve opening", numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), "%", "boostValve"));
-    const dayOpts = DAYS.map((d) => [d, d.charAt(0).toUpperCase() + d.slice(1)]);
+    form.appendChild(textEl("h4", t("cfg.radiators")));
+    form.appendChild(field(t("cfg.boostMinutes"), numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), t("unit.minutes"), "boostMinutes"));
+    form.appendChild(field(t("cfg.boostValve"), numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), "%", "boostValve"));
+    const dayOpts = DAYS.map((d) => [d, dayLong(d)]);
     const decalc = document.createElement("span");
     decalc.className = "inline";
     decalc.appendChild(selectInput(dayOpts, e.decalc_day, set("decalc_day")));
     const hour = numberInput(e.decalc_hour, 0, 23, 1, set("decalc_hour"));
-    hour.setAttribute("aria-label", "descaling hour");
+    hour.setAttribute("aria-label", t("cfg.decalcHour"));
     decalc.appendChild(hour);
     decalc.appendChild(textEl("span", ":00", "muted"));
-    form.appendChild(field("Descaling run", decalc, "", "decalc"));
-    form.appendChild(field("Maximum valve opening", numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), "%", "maxValve"));
-    form.appendChild(field("Valve offset", numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), "%", "valveOffset"));
+    form.appendChild(field(t("cfg.decalc"), decalc, "", "decalc"));
+    form.appendChild(field(t("cfg.maxValve"), numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), "%", "maxValve"));
+    form.appendChild(field(t("cfg.valveOffset"), numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), "%", "valveOffset"));
     form.appendChild(formActions(() => closeConfig(room)));
     wrap.appendChild(form);
   }
-  const h = textEl("h4", "Devices");
+  const h = textEl("h4", t("cfg.devices"));
   wrap.appendChild(h);
-  if (room.devices.length === 0) wrap.appendChild(textEl("p", "No devices in this room.", "muted"));
+  if (room.devices.length === 0) wrap.appendChild(textEl("p", t("room.noDevices"), "muted"));
   for (const d of room.devices) wrap.appendChild(renderDeviceForm(room, c, d));
   return wrap;
 }
@@ -456,7 +463,7 @@ function renderDeviceForm(room, c, d) {
   const head = document.createElement("div");
   head.className = "device-main";
   head.appendChild(textEl("span", d.name || d.rf_address, "device-name"));
-  head.appendChild(textEl("span", d.type.replace(/_/g, " "), "muted expert-only"));
+  head.appendChild(textEl("span", typeName(d.type), "muted expert-only"));
   head.appendChild(textEl("span", d.rf_address, "muted mono expert-only"));
   form.appendChild(head);
   const name = document.createElement("input");
@@ -466,20 +473,20 @@ function renderDeviceForm(room, c, d) {
   name.addEventListener("input", () => {
     e.name = name.value;
   });
-  form.appendChild(field("Name", name, "", "deviceName"));
+  form.appendChild(field(t("cfg.name"), name, "", "deviceName"));
   if (isThermostat(d)) {
-    form.appendChild(field("Temperature offset", numberInput(e.temp_offset, -3.5, 3.5, 0.5, (v) => {
+    form.appendChild(field(t("cfg.tempOffset"), numberInput(e.temp_offset, -3.5, 3.5, 0.5, (v) => {
       e.temp_offset = v;
     }), "°C", "tempOffset"));
     if (d.type === "wall_thermostat") {
-      const sw = switchEl("Display the measured temperature", e.display_actual, (on) => {
+      const sw = switchEl(t("cfg.displayActual"), e.display_actual, (on) => {
         e.display_actual = on;
       });
-      form.appendChild(withHelp(sw, "displayActual", "Display the measured temperature"));
+      form.appendChild(withHelp(sw, "displayActual", t("cfg.displayActual")));
     }
   }
-  const others = state.rooms.map((r) => [String(r.id), r.name + (r.id === room.id ? " (this room)" : "")]);
-  form.appendChild(field("Room", selectInput(others, e.room_id, (v) => {
+  const others = state.rooms.map((r) => [String(r.id), r.id === room.id ? t("cfg.thisRoom", { name: r.name }) : r.name]);
+  form.appendChild(field(t("cfg.room"), selectInput(others, e.room_id, (v) => {
     e.room_id = Number(v);
     e.confirmMove = false;
   }), "", "deviceRoom"));
@@ -487,15 +494,15 @@ function renderDeviceForm(room, c, d) {
     const box = document.createElement("div");
     box.className = "panel delete-confirm";
     const target = state.rooms.find((r) => r.id === e.room_id);
-    box.appendChild(textEl("span", "Move " + (d.name || d.rf_address) + " to " + (target ? target.name : e.room_id) + "? This re-links the device with both rooms, several radiograms."));
+    box.appendChild(textEl("span", t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id })));
     const actions = document.createElement("div");
     actions.className = "actions";
-    actions.appendChild(button("Keep", "", () => {
+    actions.appendChild(button(t("action.keep"), "", () => {
       e.confirmMove = false;
       e.room_id = room.id;
       rerenderRoom(room);
     }));
-    actions.appendChild(button("Move", "primary", () => {
+    actions.appendChild(button(t("cfg.move"), "primary", () => {
       e.confirmMove = false;
       sendDevice(room, c, d, true);
     }));
@@ -507,7 +514,7 @@ function renderDeviceForm(room, c, d) {
   const send = document.createElement("button");
   send.type = "submit";
   send.className = "primary";
-  send.textContent = "Send";
+  send.textContent = t("action.send");
   actions.appendChild(send);
   form.appendChild(actions);
   return form;
@@ -521,7 +528,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
   const meta = {};
   const name = e.name.trim();
   if (name && name !== (d.name || "")) {
-    if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, label + ": the name is longer than " + NAME_BYTES + " bytes.", false);
+    if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.devNameTooLong", { name: label, n: NAME_BYTES }), false);
     meta.name = name;
   }
   if (e.room_id !== room.id) {
@@ -536,14 +543,14 @@ async function sendDevice(room, c, d, moveConfirmed) {
   const loaded = ((c.cfg && c.cfg.devices) || []).find((x) => x.rf_address === d.rf_address) || {};
   if (isThermostat(d) && e.temp_offset !== undefined && Number(e.temp_offset) !== Number(loaded.temp_offset)) cfg.temp_offset = Number(e.temp_offset);
   if (d.type === "wall_thermostat" && e.display_actual !== undefined && e.display_actual !== loaded.display_actual) cfg.display_actual = e.display_actual;
-  if (Object.keys(meta).length === 0 && Object.keys(cfg).length === 0) return setConfigResult(room, c, label + ": nothing changed.", true);
-  setConfigResult(room, c, label + ": waiting for the cube …", true);
+  if (Object.keys(meta).length === 0 && Object.keys(cfg).length === 0) return setConfigResult(room, c, t("cfg.nothingChanged", { label }), true);
+  setConfigResult(room, c, t("result.waiting", { label }), true);
   const lines = [];
   let ok = true;
   try {
     if (Object.keys(cfg).length) {
       const res = await api("PUT", base() + "/devices/" + d.rf_address + "/config", cfg);
-      lines.push(resultText(label + " settings", res));
+      lines.push(resultText(t("cfg.devSettings", { name: label }), res));
       if (res && res.discarded) ok = false;
       loaded.temp_offset = cfg.temp_offset !== undefined ? cfg.temp_offset : loaded.temp_offset;
       if (cfg.display_actual !== undefined) loaded.display_actual = cfg.display_actual;
@@ -551,7 +558,8 @@ async function sendDevice(room, c, d, moveConfirmed) {
     }
     if (Object.keys(meta).length) {
       const res = await api("PUT", base() + "/devices/" + d.rf_address, meta);
-      lines.push(label + (meta.room_id !== undefined ? " moved" : " renamed") + ": ok" + (res && res.budget ? " (duty cycle " + res.budget.duty_cycle_pct + " %)" : ""));
+      const done = t(meta.room_id !== undefined ? "cfg.devMoved" : "cfg.devRenamed", { name: label });
+      lines.push(res && res.budget ? t("cfg.dutySuffix", { text: done, duty: res.budget.duty_cycle_pct }) : done);
     }
   } catch (e2) {
     lines.push(errorText(label, e2));
@@ -595,51 +603,56 @@ function renderProgramTab(room, c) {
   const days = document.createElement("div");
   days.className = "day-bar week";
   days.setAttribute("role", "group");
-  days.setAttribute("aria-label", "day to edit");
+  days.setAttribute("aria-label", t("prog.dayToEdit"));
   for (const day of DAYS) {
     const editing = p.day === day;
     const sel = p.selected.has(day);
-    const b = button(DAY_SHORT[day], "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : ""), () => {
+    const b = button(dayShort(day), "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : ""), () => {
       selectDay(p, day);
       rerenderRoom(room);
     });
     b.setAttribute("aria-pressed", editing ? "true" : "false");
-    b.setAttribute("aria-label", DAY_LONG[day] + (sel && !editing ? ", edited together" : "") + (dirty.has(day) ? ", changed" : ""));
-    b.title = "Edit " + DAY_LONG[day] + " and the days with the same programme";
+    let name = dayLong(day);
+    if (sel && !editing) name = t("prog.editedTogether", { day: name });
+    if (dirty.has(day)) name = t("prog.changed", { day: name });
+    b.setAttribute("aria-label", name);
+    b.title = t("prog.dayTitle", { day: dayLong(day) });
     days.appendChild(b);
   }
   form.appendChild(days);
-  const only = switchEl("Only " + DAY_LONG[p.day], p.only, (on) => {
+  const onlyLabel = t("prog.only", { day: dayLong(p.day) });
+  const only = switchEl(onlyLabel, p.only, (on) => {
     p.only = on;
     rerenderRoom(room);
   });
-  form.appendChild(withHelp(only, "onlyDay", "Only " + DAY_LONG[p.day]));
+  form.appendChild(withHelp(only, "onlyDay", onlyLabel));
   const together = DAYS.filter((d) => p.selected.has(d));
   const scope = p.only || together.length < 2
-    ? "Changes apply to " + DAY_LONG[p.day] + " only."
-    : "Changes apply to " + together.map((d) => DAY_SHORT[d]).join(", ") + " together.";
+    ? t("prog.appliesOnly", { day: dayLong(p.day) })
+    : t("prog.appliesTogether", { days: dayList(together) });
   form.appendChild(textEl("p", scope, "muted small"));
   form.appendChild(renderDayBar(p.days[p.day]));
   form.appendChild(renderPoints(room, c, p.day));
   form.appendChild(renderDayCopy(room, p));
   const src = p.source;
   const dev = src && c.cfg && c.cfg.devices.find((d) => d.rf_address === src);
-  form.appendChild(textEl("p", (src ? "Programme as stored on " + (dev && dev.name ? dev.name : src) + ". " : "") + "Send writes the changed days to every thermostat of the room" + (dirty.size ? " (" + [...dirty].map((d) => DAY_SHORT[d]).join(", ") + ")" : "") + ".", "muted small"));
-  const resetDay = button("Reset day", "", () => {
+  const note = dirty.size ? t("prog.sendNoteDays", { days: dayList([...dirty]) }) : t("prog.sendNote");
+  form.appendChild(textEl("p", (src ? t("prog.storedOn", { device: dev && dev.name ? dev.name : src }) + " " : "") + note, "muted small"));
+  const resetDay = button(t("prog.resetDay"), "", () => {
     p.days[p.day] = copyPoints(p.orig[p.day]);
     selectDay(p, p.day);
     rerenderRoom(room);
   });
   resetDay.disabled = !dirty.has(p.day);
-  resetDay.title = "Back to the programme of " + DAY_LONG[p.day] + " as loaded";
-  const resetAll = button("Reset all", "", () => {
+  resetDay.title = t("prog.resetDayTitle", { day: dayLong(p.day) });
+  const resetAll = button(t("prog.resetAll"), "", () => {
     p.days = copyDays(p.orig);
     p.copyTo = new Set();
     selectDay(p, p.day);
     rerenderRoom(room);
   });
   resetAll.disabled = dirty.size === 0;
-  resetAll.title = "Back to the week programme as loaded";
+  resetAll.title = t("prog.resetAllTitle");
   form.appendChild(formActions(() => closeConfig(room), "", [resetDay, resetAll]));
   return form;
 }
@@ -652,7 +665,7 @@ function renderDayCopy(room, p) {
   const box = document.createElement("div");
   box.className = "day-copy";
   box.setAttribute("role", "group");
-  const title = "Copy " + DAY_LONG[p.day] + " to …";
+  const title = t("prog.copyTo", { day: dayLong(p.day) });
   box.setAttribute("aria-label", title);
   box.appendChild(textEl("h4", title));
   const row = document.createElement("div");
@@ -660,17 +673,17 @@ function renderDayCopy(room, p) {
   const free = DAYS.filter((d) => !p.selected.has(d));
   for (const day of DAYS) {
     const on = p.copyTo.has(day);
-    const b = button(DAY_SHORT[day], "day" + (on ? " chosen" : ""), () => {
+    const b = button(dayShort(day), "day" + (on ? " chosen" : ""), () => {
       if (p.copyTo.has(day)) p.copyTo.delete(day);
       else p.copyTo.add(day);
       rerenderRoom(room);
     });
     b.disabled = p.selected.has(day);
     b.setAttribute("aria-pressed", on ? "true" : "false");
-    b.setAttribute("aria-label", DAY_LONG[day] + (b.disabled ? ", has this programme" : ""));
+    b.setAttribute("aria-label", b.disabled ? t("prog.hasProgramme", { day: dayLong(day) }) : dayLong(day));
     row.appendChild(b);
   }
-  const all = button("All days", "day all", () => {
+  const all = button(t("prog.allDays"), "day all", () => {
     for (const d of free) p.copyTo.add(d);
     rerenderRoom(room);
   });
@@ -679,7 +692,7 @@ function renderDayCopy(room, p) {
   const tools = document.createElement("div");
   tools.className = "day-bar";
   tools.appendChild(all);
-  const copy = button("Copy", "day copy", () => {
+  const copy = button(t("prog.copy"), "day copy", () => {
     for (const d of p.copyTo) {
       p.days[d] = copyPoints(p.days[p.day]);
       if (!p.only) p.selected.add(d);
@@ -719,11 +732,11 @@ function renderDayBar(points) {
   for (const pt of points) {
     const end = minutesOf(pt.until);
     // A label only when the segment is wide enough to hold it.
-    const seg = textEl("span", end - start >= 120 ? pt.temp.toFixed(1) + "°" : "", "prog-seg");
+    const seg = textEl("span", end - start >= 120 ? fmtNum(pt.temp, 1) + "°" : "", "prog-seg");
     seg.style.flexGrow = String(Math.max(1, end - start));
     const warm = hi > lo ? (pt.temp - lo) / (hi - lo) : 0.5;
     seg.style.setProperty("--warm", warm.toFixed(2));
-    seg.title = clockOf(start) + " – " + pt.until + ": " + pt.temp.toFixed(1) + " °C";
+    seg.title = clockOf(start) + " – " + pt.until + ": " + fmtNum(pt.temp, 1) + " °C";
     bar.appendChild(seg);
     start = end;
   }
@@ -745,7 +758,7 @@ function renderPoints(room, c, day) {
     const last = i === pts.length - 1;
     const row = document.createElement("div");
     row.className = "prog-point";
-    row.appendChild(textEl("span", "until", "muted"));
+    row.appendChild(textEl("span", t("prog.until"), "muted"));
     if (last) {
       row.appendChild(textEl("span", "24:00", "prog-end"));
     } else {
@@ -754,7 +767,7 @@ function renderPoints(room, c, day) {
       time.step = "300";
       time.value = pt.until;
       time.required = true;
-      time.setAttribute("aria-label", "switch point " + (i + 1) + ", until");
+      time.setAttribute("aria-label", t("prog.pointUntil", { n: i + 1 }));
       time.addEventListener("change", () => {
         if (!time.value) return;
         pt.until = time.value;
@@ -763,13 +776,13 @@ function renderPoints(room, c, day) {
       });
       row.appendChild(time);
     }
-    row.appendChild(textEl("span", "at", "muted"));
+    row.appendChild(textEl("span", t("prog.at"), "muted"));
     const temp = numberInput(pt.temp, MIN_TEMP, MAX_TEMP, STEP, (v) => {
       if (v === undefined) return;
       pt.temp = clampTemp(v);
       edited();
     });
-    temp.setAttribute("aria-label", "switch point " + (i + 1) + ", temperature");
+    temp.setAttribute("aria-label", t("prog.pointTemp", { n: i + 1 }));
     row.appendChild(temp);
     row.appendChild(textEl("span", "°C", "muted"));
     if (!last) {
@@ -777,8 +790,8 @@ function renderPoints(room, c, day) {
         pts.splice(i, 1);
         edited();
       });
-      rm.title = "Remove this switch point";
-      rm.setAttribute("aria-label", "remove switch point");
+      rm.title = t("prog.removeTitle");
+      rm.setAttribute("aria-label", t("prog.remove"));
       row.appendChild(rm);
     } else if (pts.length < MAX_POINTS) {
       const add = button("+", "step small", () => {
@@ -787,8 +800,8 @@ function renderPoints(room, c, day) {
         pts.splice(pts.length - 1, 0, { temp: pt.temp, until: clockOf(Math.min(1435, Math.max(prev + 5, mid))) });
         edited();
       });
-      add.title = "Add a switch point";
-      add.setAttribute("aria-label", "add switch point");
+      add.title = t("prog.addTitle");
+      add.setAttribute("aria-label", t("prog.add"));
       row.appendChild(add);
     }
     list.appendChild(row);
@@ -797,14 +810,14 @@ function renderPoints(room, c, day) {
 }
 
 function validateDay(pts) {
-  if (pts.length < 1 || pts.length > MAX_POINTS) return "a day needs 1 to " + MAX_POINTS + " switch points";
+  if (pts.length < 1 || pts.length > MAX_POINTS) return t("prog.errPoints", { n: MAX_POINTS });
   let prev = 0;
   for (let i = 0; i < pts.length; i++) {
     const m = minutesOf(pts[i].until);
-    if (i < pts.length - 1 && m <= prev) return "times must increase";
+    if (i < pts.length - 1 && m <= prev) return t("prog.errTimes");
     prev = m;
   }
-  if (pts[pts.length - 1].until !== "24:00") return "the last point must end at 24:00";
+  if (pts[pts.length - 1].until !== "24:00") return t("prog.errEnd");
   return "";
 }
 
@@ -815,12 +828,12 @@ async function sendProgram(room, c) {
   const body = {};
   for (const day of dirtyDays(p)) {
     const err = validateDay(p.days[day]);
-    if (err) return setConfigResult(room, c, DAY_SHORT[day] + ": " + err + ".", false);
+    if (err) return setConfigResult(room, c, t("prog.dayError", { day: dayShort(day), error: err }), false);
     body[day] = copyPoints(p.days[day]);
   }
-  if (Object.keys(body).length === 0) return setConfigResult(room, c, "Week programme: nothing changed.", true);
-  const label = "Week programme (" + Object.keys(body).map((d) => DAY_SHORT[d]).join(", ") + ")";
-  setConfigResult(room, c, label + ": waiting for the cube …", true);
+  if (Object.keys(body).length === 0) return setConfigResult(room, c, t("prog.nothing"), true);
+  const label = t("prog.label", { days: dayList(Object.keys(body)) });
+  setConfigResult(room, c, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/program", body);
     if (!(res && res.discarded)) for (const d of Object.keys(body)) p.orig[d] = copyPoints(body[d]);
@@ -841,23 +854,23 @@ function renderCopyTab(room, c) {
   if (!c.copy) c.copy = { rooms: new Set(), temps: true, program: false, radiator: true };
   const k = c.copy;
   const form = configForm(() => sendCopy(room, c));
-  form.appendChild(textEl("p", "Copy what is stored for this room (not unsent changes) to other rooms.", "muted small"));
+  form.appendChild(textEl("p", t("copy.intro"), "muted small"));
   const others = state.rooms.filter((r) => r.id !== room.id && roomThermostat(r));
 
   const rooms = document.createElement("div");
   rooms.className = "copy-section";
   rooms.setAttribute("role", "group");
-  rooms.setAttribute("aria-label", "rooms to copy to");
+  rooms.setAttribute("aria-label", t("copy.roomsAria"));
   const head = document.createElement("div");
   head.className = "copy-head";
-  head.appendChild(textEl("h4", "Rooms"));
-  const allBtn = button("All rooms", "", () => {
+  head.appendChild(textEl("h4", t("copy.rooms")));
+  const allBtn = button(t("copy.allRooms"), "", () => {
     k.rooms = new Set(others.map((r) => r.id));
     rerenderRoom(room);
   });
   allBtn.disabled = others.length === 0 || others.every((r) => k.rooms.has(r.id));
   head.appendChild(allBtn);
-  const noneBtn = button("None", "", () => {
+  const noneBtn = button(t("copy.none"), "", () => {
     k.rooms = new Set();
     rerenderRoom(room);
   });
@@ -866,7 +879,7 @@ function renderCopyTab(room, c) {
   rooms.appendChild(head);
   const list = document.createElement("div");
   list.className = "copy-list";
-  if (others.length === 0) list.appendChild(textEl("p", "No other room with a thermostat.", "muted"));
+  if (others.length === 0) list.appendChild(textEl("p", t("copy.noOther"), "muted"));
   for (const r of others) {
     list.appendChild(switchEl(r.name, k.rooms.has(r.id), (on) => {
       if (on) k.rooms.add(r.id);
@@ -880,24 +893,24 @@ function renderCopyTab(room, c) {
   const settings = document.createElement("div");
   settings.className = "copy-section";
   settings.setAttribute("role", "group");
-  settings.setAttribute("aria-label", "settings to copy");
-  settings.appendChild(textEl("h4", "Settings"));
+  settings.setAttribute("aria-label", t("copy.settingsAria"));
+  settings.appendChild(textEl("h4", t("copy.settings")));
   const slist = document.createElement("div");
   slist.className = "copy-list";
-  slist.appendChild(switchEl("Temperatures", k.temps, (on) => {
+  slist.appendChild(switchEl(t("copy.temps"), k.temps, (on) => {
     k.temps = on;
   }));
-  const prog = switchEl("Week programme (7 radiograms per room)", k.program && !!c.prog, (on) => {
+  const prog = switchEl(t("copy.program"), k.program && !!c.prog, (on) => {
     k.program = on;
   });
   if (!c.prog) prog.querySelector("input").disabled = true;
   slist.appendChild(prog);
-  slist.appendChild(switchEl("Radiator settings (boost, descaling, valve)", k.radiator, (on) => {
+  slist.appendChild(switchEl(t("copy.radiator"), k.radiator, (on) => {
     k.radiator = on;
   }));
   settings.appendChild(slist);
   form.appendChild(settings);
-  form.appendChild(formActions(() => closeConfig(room), "Copy"));
+  form.appendChild(formActions(() => closeConfig(room), t("copy.send")));
   return form;
 }
 
@@ -907,10 +920,10 @@ function renderCopyTab(room, c) {
 async function sendCopy(room, c) {
   const k = c.copy;
   const ids = [...k.rooms];
-  if (ids.length === 0) return setConfigResult(room, c, "No room selected.", false);
+  if (ids.length === 0) return setConfigResult(room, c, t("copy.noRoom"), false);
   const program = k.program && c.prog;
-  if (!k.temps && !k.radiator && !program) return setConfigResult(room, c, "No setting selected.", false);
-  if (!c.cfg || !c.cfg.source) return setConfigResult(room, c, "This room has no thermostat to copy from.", false);
+  if (!k.temps && !k.radiator && !program) return setConfigResult(room, c, t("copy.noSetting"), false);
+  if (!c.cfg || !c.cfg.source) return setConfigResult(room, c, t("copy.noSource"), false);
   const fields = (k.temps ? TEMP_FIELDS : []).concat(k.radiator ? VALVE_FIELDS : []);
   const body = {};
   for (const f of fields) if (c.cfg[f] !== undefined && c.cfg[f] !== null) body[f] = c.cfg[f];
@@ -920,22 +933,22 @@ async function sendCopy(room, c) {
   for (const id of ids) {
     const target = state.rooms.find((r) => r.id === id);
     const name = target ? target.name : String(id);
-    setConfigResult(room, c, lines.concat([name + ": sending …"]).join("\n"), allOk);
+    setConfigResult(room, c, lines.concat([t("copy.sending", { room: name })]).join("\n"), allOk);
     const parts = [];
     try {
       if (Object.keys(body).length) {
         const res = await api("PUT", base() + "/rooms/" + id + "/config", body);
-        parts.push("settings " + (res && res.ok ? "ok" : "not on every device"));
+        parts.push(t(res && res.ok ? "copy.settingsOk" : "copy.settingsPartial"));
         if (!(res && res.ok)) allOk = false;
       }
       if (days) {
         const pr = await api("PUT", base() + "/rooms/" + id + "/program", days);
-        parts.push("programme " + (pr && pr.discarded ? "discarded" : "ok"));
+        parts.push(t(pr && pr.discarded ? "copy.programDiscarded" : "copy.programOk"));
         if (pr && pr.discarded) allOk = false;
       }
-      lines.push(name + ": " + parts.join(", "));
+      lines.push(t("copy.roomResult", { room: name, parts: parts.join(", ") }));
     } catch (e) {
-      lines.push(name + ": " + parts.concat([e.message]).join(", "));
+      lines.push(t("copy.roomResult", { room: name, parts: parts.concat([e.message]).join(", ") }));
       allOk = false;
     }
   }

@@ -14,7 +14,7 @@ const state = {
   token: null,
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
@@ -52,6 +52,7 @@ function loadSettings() {
   s.expert = readStored("massimo.expert") === "1";
   const clock = readStored("massimo.clock");
   if (clock === "cube" || clock === "browser") s.clock = clock;
+  s.lang = readStored("massimo.lang") || "auto";
 }
 
 // --- API --------------------------------------------------------------
@@ -66,9 +67,9 @@ async function api(method, path, body) {
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (resp.status === 401) {
-    const t = await askToken();
-    if (t) return api(method, path, body);
-    throw new Error("missing or wrong token");
+    const token = await askToken();
+    if (token) return api(method, path, body);
+    throw new Error(t("api.badToken"));
   }
   let data = null;
   const text = await resp.text();
@@ -144,7 +145,7 @@ function showMessage(text, ok) {
 }
 
 function fmtTemp(v) {
-  return v === undefined || v === null ? "" : v.toFixed(1) + " °C";
+  return v === undefined || v === null ? "" : fmtNum(v, 1) + " °C";
 }
 
 function isThermostat(d) {
@@ -170,46 +171,22 @@ function tomorrowMorning() {
 
 // --- help -------------------------------------------------------------
 
-// HELP is the short explanation of each setting, after what the
-// original MAX! software's manual says the setting does.
-const HELP = {
-  roomName: "The room's name, stored on the Cube and shown by every program that talks to it.",
-  comfort: "The comfort temperature (sun symbol). The thermostats switch to it with their comfort/eco button.",
-  eco: "The eco or set-back temperature (moon symbol), for nights and absences. The thermostats switch to it with their comfort/eco button.",
-  windowTemp: "The temperature the thermostats set while a window is open: reported by a window contact of the room, or detected by a radiator thermostat from a sudden drop in temperature.",
-  windowMinutes: "How long a radiator thermostat keeps the open-window temperature after it detected an open window by itself. With a window contact the temperature is kept until the window closes.",
-  maxTemp: "The highest temperature that can be set on the thermostats of the room.",
-  minTemp: "The lowest temperature that can be set on the thermostats of the room.",
-  boostMinutes: "How long the Boost function, started with the Boost button on a thermostat, keeps the valve open.",
-  boostValve: "How far the valve opens during Boost.",
-  decalc: "Once a week the radiator thermostats open and close their valves fully so that they do not seize up (descaling). The day and hour of that run.",
-  maxValve: "The furthest the valve opens in normal operation; lower it if a radiator heats too strongly when fully open.",
-  valveOffset: "Shifts the valve position by a fixed percentage, for valves that do not close or open where expected. Normally 0 %.",
-  deviceName: "The device's name, stored on the Cube.",
-  tempOffset: "Corrects the temperature this thermostat measures, from −3.5 to +3.5 °C, when the room is warmer or colder than it is next to the thermostat.",
-  displayActual: "The wall thermostat's display shows the measured room temperature instead of the set temperature.",
-  deviceRoom: "Moves the device to another room; it is then linked with the thermostats of that room and follows its settings.",
-  onlyDay: "On: changes apply to the edited day only. Off: changes apply to every selected day at once, the days that have the same programme.",
-  poll: "How often the page asks the server for the Cube's state. Changes reported by the devices arrive in between as they happen.",
-  expert: "Shows radio addresses, device types, the Cube's radio budget and the server version.",
-  clock: "The Cube keeps its own time zone. Show its clock converted to the browser's time zone, or as the Cube has it.",
-};
-
 const helpOpen = new Set(); // keys of the explanations shown
 let helpSeq = 0;
 
 // helpParts returns a labelled button that toggles the explanation of a
-// setting, and the explanation, hidden until asked for. An open
-// explanation stays open when its tile is drawn again.
+// setting (help.<key> in the translation table), and the explanation,
+// hidden until asked for. An open explanation stays open when its tile
+// is drawn again.
 function helpParts(key, label) {
-  const text = textEl("p", HELP[key] || "", "help-text");
+  const text = textEl("p", t("help." + key), "help-text");
   text.id = "help-" + key + "-" + ++helpSeq;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "help-btn";
   btn.setAttribute("aria-controls", text.id);
-  btn.setAttribute("aria-label", "help: " + label);
-  btn.title = "What does this do?";
+  btn.setAttribute("aria-label", t("help.button", { label }));
+  btn.title = t("help.title");
   btn.appendChild(helpIcon());
   const show = (on) => {
     text.classList.toggle("hidden", !on);
@@ -237,10 +214,14 @@ function helpIcon() {
 }
 
 // initHelpSlots puts a help button into every element of the page with
-// a data-help key, and its explanation at the end of the slot's parent.
+// a data-help key (data-help-label: the key of the setting's label), and
+// its explanation at the end of the slot's parent; again after a change
+// of language.
 function initHelpSlots() {
   for (const slot of document.querySelectorAll("[data-help]")) {
-    const h = helpParts(slot.dataset.help, slot.dataset.helpLabel || "");
+    const h = helpParts(slot.dataset.help, t(slot.dataset.helpLabel || ""));
+    if (slot.helpText) slot.helpText.remove();
+    slot.helpText = h.text;
     clear(slot);
     slot.appendChild(h.btn);
     slot.parentElement.appendChild(h.text);
@@ -300,7 +281,7 @@ function clockText(cube) {
   const utc = fmtInstant(inst, "UTC") + " UTC";
   if (state.settings.clock === "cube") {
     const off = cubeOffset(tz, ...raw.split(/[- :]/).map(Number));
-    const name = (off === tz.summer.offset_seconds ? tz.summer.name : tz.winter.name) || "cube time";
+    const name = (off === tz.summer.offset_seconds ? tz.summer.name : tz.winter.name) || t("header.cubeTime");
     return { text: raw + " " + name, title: utc };
   }
   return { text: fmtInstant(inst), title: utc };
@@ -310,7 +291,7 @@ function clockText(cube) {
 
 function renderHeader(cube) {
   const conn = $("connection");
-  conn.textContent = cube.connected ? "connected" : "disconnected";
+  conn.textContent = t(cube.connected ? "header.connected" : "header.disconnected");
   conn.className = "pill " + (cube.connected ? "ok" : "bad");
   const b = cube.budget || {};
   $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
@@ -328,9 +309,7 @@ function renderHeader(cube) {
   const p = $("pending");
   const n = cube.pending_radiograms || 0;
   if (n > 0) {
-    p.textContent = state.settings.expert
-      ? n + " radiogram" + (n === 1 ? "" : "s") + " not yet acknowledged, states may still change"
-      : n + " pending, states may still change";
+    p.textContent = state.settings.expert ? tn("header.pendingExpert", n) : t("header.pending", { n });
     p.classList.remove("hidden");
   } else {
     p.classList.add("hidden");
@@ -347,8 +326,8 @@ function renderUpdated() {
     return;
   }
   const pad = (n) => String(n).padStart(2, "0");
-  const t = state.lastPoll;
-  el.textContent = "updated " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds());
+  const last = state.lastPoll;
+  el.textContent = t("header.updated", { time: pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds()) });
 }
 
 function renderCubeSelect() {
@@ -357,7 +336,8 @@ function renderCubeSelect() {
   for (const c of state.cubes) {
     const o = document.createElement("option");
     o.value = c.serial;
-    o.textContent = (c.name ? c.name + " (" + c.serial + ")" : c.serial) + (c.connected ? "" : " (disconnected)");
+    const name = c.name ? c.name + " (" + c.serial + ")" : c.serial;
+    o.textContent = c.connected ? name : t("header.cubeDisconnected", { name });
     sel.appendChild(o);
   }
   sel.value = state.serial;
@@ -416,7 +396,7 @@ async function refresh() {
     await loadRooms();
     $("message").classList.add("hidden");
   } catch (e) {
-    showMessage("Cannot load: " + e.message, false);
+    showMessage(t("msg.cannotLoad", { error: e.message }), false);
   }
 }
 
@@ -565,6 +545,12 @@ function initSettings() {
     store("massimo.clock", state.settings.clock);
     applySettings();
   });
+  $("lang-select").addEventListener("change", (ev) => {
+    state.settings.lang = ev.target.value;
+    store("massimo.lang", state.settings.lang === "auto" ? null : state.settings.lang);
+    setLanguage(state.settings.lang);
+    applyLanguage();
+  });
   $("forget-token").addEventListener("click", () => {
     state.token = null;
     store("massimo.token", null);
@@ -575,10 +561,43 @@ function initSettings() {
 
 // --- wiring -----------------------------------------------------------
 
+// renderLangSelect fills the language choice: from the browser, then
+// every language with a translation table, by its own name.
+function renderLangSelect() {
+  const sel = $("lang-select");
+  clear(sel);
+  const auto = document.createElement("option");
+  auto.value = "auto";
+  auto.textContent = t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")";
+  sel.appendChild(auto);
+  for (const l of languages()) {
+    const o = document.createElement("option");
+    o.value = l;
+    o.textContent = LANGUAGE_NAMES[l] || l;
+    sel.appendChild(o);
+  }
+  sel.value = i18n.setting;
+}
+
+// applyLanguage redraws every text after a change of language.
+function applyLanguage() {
+  applyI18n(document);
+  initHelpSlots();
+  renderLangSelect();
+  renderCubeSelect();
+  const cube = state.cubes.find((c) => c.serial === state.serial);
+  if (cube) renderHeader(cube);
+  renderRooms();
+  renderLog();
+}
+
 function init() {
   state.token = readStored("massimo.token");
   state.serial = readStored("massimo.serial");
   loadSettings();
+  setLanguage(state.settings.lang);
+  applyI18n(document);
+  renderLangSelect();
   initHelpSlots();
   initSettings();
   applySettings();
