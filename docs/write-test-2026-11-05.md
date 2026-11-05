@@ -54,12 +54,16 @@ each, lower than the 2 to 3 % the plan expected). Free memory slots:
    restarted before each check, which makes the Cube send all its data
    afresh. Follow-up: re-read the configuration (and the H line) once
    the pending count of the Cube drops, or poll it for a few minutes
-   after a write.
+   after a write. Addressed on 2026-11-05: the server re-reads the
+   device's C line after 15 s, 30 s, 1, 2 and 2 minutes until it
+   changes, and reconnects for the budget afterwards if radiograms were
+   pending (docs/api-v1.md, under GET /cubes).
 2. **The log cannot show the sequence the plan asks for.** The command
    queue only logs discarded commands and budget waits, so the `z:`,
    `s:` and `c:` lines and the Cube's answer of an accepted command do
    not appear in the serve log. Follow-up: log accepted commands too,
-   with target, command and budget.
+   with target, command and budget. Addressed on 2026-11-05: "room woken
+   up" and "command accepted by the cube" lines.
 3. **One radiogram stayed pending for about 35 minutes.** After step 1a
    the Cube held two radiograms, and one of them stayed pending until
    about 16:17, while all later writes were delivered. It cleared by

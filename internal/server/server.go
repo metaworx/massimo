@@ -81,9 +81,16 @@ type Options struct {
 	// full by reconnecting, so that a write the Cube acknowledged but did
 	// not apply does not leave it wrong until the next restart; 0 never.
 	RefreshInterval time.Duration
-	Logger          *slog.Logger
-	Version         string
-	Queue           engine.Options
+	// FollowUpDelays are the pauses between the re-reads of a device's
+	// C line after a configuration write, FollowUpReconnectGap the least
+	// time between two reconnects for the budget after writes (only with
+	// RefreshInterval set); see followup.go. Zero values take the
+	// defaults.
+	FollowUpDelays       []time.Duration
+	FollowUpReconnectGap time.Duration
+	Logger               *slog.Logger
+	Version              string
+	Queue                engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	Proxy []ProxyListener
@@ -126,6 +133,7 @@ type runtime struct {
 	queue      *engine.Queue
 	serial     string
 	showHidden bool
+	follow     *followUp // re-reads after writes, see followup.go
 
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
@@ -192,7 +200,8 @@ func New(opts Options) *Server {
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{},
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil)}
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
+		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
+			follow: newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
 		rt.queue = engine.NewQueue(rt.client, opts.Queue)
 		key := strings.ToLower(c.Serial)
@@ -215,6 +224,8 @@ func (s *Server) Run(ctx context.Context) error {
 		go func() { defer wg.Done(); rt.client.Run(ctx) }()
 		go func() { defer wg.Done(); rt.queue.Run(ctx) }()
 		go func() { defer wg.Done(); s.pump(ctx, rt) }()
+		wg.Add(1)
+		go func() { defer wg.Done(); s.followUps(ctx, rt) }()
 		if s.opts.RefreshInterval > 0 {
 			wg.Add(1)
 			go func() { defer wg.Done(); s.refresh(ctx, rt) }()
@@ -714,6 +725,7 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 		}
 		return fail(status, "%v", res.Err)
 	}
+	rt.afterWrite()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
@@ -810,6 +822,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	if err := s.commandError(rt, res, roomCmd); err != nil {
 		return err
 	}
+	rt.afterWrite()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }

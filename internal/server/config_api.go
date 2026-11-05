@@ -282,6 +282,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 	if newRoom != cur.RoomID {
 		rt.writer().Reread(ctx, rf)
+		rt.afterWrite(rf) // the C line names the new room once the device acknowledged
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil
@@ -316,6 +317,7 @@ func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
+	rt.afterWrite(c.RFAddress) // the C line names the room once the device acknowledged
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil
 }
@@ -507,6 +509,7 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
+	rt.afterWrite(rf)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
@@ -599,12 +602,17 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	okCount := 0
 	var out []deviceResult
+	var written []cube.RFAddress
 	for _, rf := range order {
 		if results[rf].OK {
 			okCount++
 			rt.writer().Reread(ctx, rf)
+			written = append(written, rf)
 		}
 		out = append(out, *results[rf])
+	}
+	if okCount > 0 {
+		rt.afterWrite(written...)
 	}
 	if okCount == 0 {
 		if err := s.commandError(rt, res, 0); err != nil {
@@ -756,6 +764,7 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
+	rt.afterWrite(rf)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
@@ -794,6 +803,7 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err := s.commandError(rt, res, room.ID); err != nil {
 		return err
 	}
+	rt.afterWrite(append(radiators, walls...)...)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }

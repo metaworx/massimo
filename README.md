@@ -164,7 +164,12 @@ including every device state change, to a file as well. Every six hours
 (`-refresh`, `0` to switch it off) `serve` reconnects to each Cube, in
 turn with the queued commands, and re-reads everything the Cube holds,
 so a write the Cube acknowledged but did not apply cannot leave the
-server's copy wrong for long.
+server's copy wrong for long. After a configuration write it reads the
+device's configuration again for about six minutes until the device has
+taken it, and after radio writes it reconnects once for the Cube's
+budget if radiograms were pending, at most every 15 minutes (only while
+`-refresh` is on). The log lists every wakeup and every radio command
+the Cube accepted, with its duty cycle and free slots.
 
 The Cube serves only one LAN client at a time, so `serve` is itself a
 Cube for everyone else: it listens on port 62910 on every interface
