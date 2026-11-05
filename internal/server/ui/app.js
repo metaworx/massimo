@@ -589,6 +589,7 @@ function applyLanguage() {
   if (cube) renderHeader(cube);
   renderRooms();
   renderLog();
+  if (updState.info) renderUpdate(updState.info);
 }
 
 function init() {
