@@ -149,10 +149,10 @@ func runRestore(args []string) error {
 		return err
 	}
 	useDeviceSerial(c.Snapshot().Hello().Serial)
-	if opts.Ignore, err = ignoredDevices(); err != nil {
+	if opts.Ignore, err = hiddenDevices(); err != nil {
 		return err
 	}
-	opts.ShowGhosts = noIgnore
+	opts.ShowGhosts = showHidden
 	cur := backup.Current{Snapshot: c.Snapshot()}
 	if !opts.SkipClock {
 		if cur.NTP, err = fetchNTP(ctx, c); err != nil {

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/portal"
 	"go.metaworx.ch/massimo/internal/portal/portalcrypto"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -28,7 +29,7 @@ func runPortal(args []string) error {
 	fs := flag.NewFlagSet("portal", flag.ContinueOnError)
 	var listens listenList
 	fs.Var(&listens, "listen", "address to listen on, [ip]:port; repeat for several (default :8080)")
-	ivHex := fs.String("iv", "", "IV as 32 hex digits (default "+ivEnv+")")
+	ivHex := fs.String("iv", "", "IV as 32 hex digits (default "+env.IV+")")
 	serial := fs.String("serial", "", "only accept this Cube serial (default: any serial, same key)")
 	iLine := fs.String("i", "000051b1,00000000,ffffffff", "payload of the i: reply line; 'none' sends no i: line; {conn} is replaced by the Cube's connection id")
 	extra := fs.String("extra", "", "extra reply lines, separated by ';'; {conn} and {now} are expanded (e.g. 'v:<tz>,{now}')")
@@ -53,23 +54,24 @@ func runPortal(args []string) error {
 	// One codec per Cube that has MASSIMO_CUBE_KEY_<SN> and _IV_<SN>, plus
 	// the default key/IV for any other serial.
 	codecs := map[string]*portal.Codec{}
-	for _, sn := range perCubeKeys() {
-		ivs := os.Getenv(perCubeVar(ivEnv, sn))
+	sns, _ := env.Serials(env.Key)
+	for _, sn := range sns {
+		ivs := os.Getenv(env.PerCube(env.IV, sn))
 		if ivs == "" {
-			return fmt.Errorf("portal: %s is set but %s is not", perCubeVar(keyEnv, sn), perCubeVar(ivEnv, sn))
+			return fmt.Errorf("portal: %s is set but %s is not", env.PerCube(env.Key, sn), env.PerCube(env.IV, sn))
 		}
-		c, err := codecFor(os.Getenv(perCubeVar(keyEnv, sn)), ivs)
+		c, err := codecFor(os.Getenv(env.PerCube(env.Key, sn)), ivs)
 		if err != nil {
 			return fmt.Errorf("portal: cube %s: %w", sn, err)
 		}
 		codecs[sn] = c
 	}
 	if *ivHex == "" {
-		*ivHex = cubeEnv(ivEnv)
+		*ivHex = cubeEnv(env.IV)
 	}
 	if *ivHex != "" || len(codecs) == 0 {
 		if *ivHex == "" {
-			return fmt.Errorf("portal: need -iv or %s (recover it with 'portal-crypto iv -addr <ip>')", ivEnv)
+			return fmt.Errorf("portal: need -iv or %s (recover it with 'portal-crypto iv -addr <ip>')", env.IV)
 		}
 		key, err := readKey()
 		if err != nil {

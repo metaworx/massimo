@@ -7,6 +7,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 func main() {
@@ -19,16 +21,12 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-	envFile := os.Getenv("MASSIMO_ENV_FILE")
-	if envFile == "" {
-		envFile = ".env"
-	}
-	if err := loadDotEnv(envFile); err != nil {
+	if err := env.LoadFile(env.File()); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 	if selectedSN == "" {
-		selectedSN = os.Getenv(snEnv)
+		selectedSN = os.Getenv(env.SN)
 	}
 	switch args[0] {
 	case "version", "--version", "-v", "-V", "help", "-h", "--help":

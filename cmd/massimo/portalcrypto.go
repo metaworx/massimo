@@ -12,13 +12,14 @@ import (
 	"os"
 	"strings"
 
+	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/portal/portalcrypto"
 )
 
 func portalCryptoUsage() {
 	fmt.Fprint(os.Stderr, `usage: massimo portal-crypto <subcommand> [flags]
 
-The Cube key is read from the environment variable `+keyEnv+` or, if that
+The Cube key is read from the environment variable `+env.Key+` or, if that
 is unset, prompted for on the terminal. It is never written anywhere.
 
 subcommands:
@@ -165,7 +166,7 @@ func runPortalCrypto(args []string) error {
 
 // readKey takes the key from the environment or prompts for it.
 func readKey() ([]byte, error) {
-	s := cubeEnv(keyEnv)
+	s := cubeEnv(env.Key)
 	if s == "" {
 		fmt.Fprint(os.Stderr, "Cube key (from the QR code, k + 32 hex digits): ")
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
