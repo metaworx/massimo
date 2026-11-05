@@ -155,7 +155,7 @@ function renderSetpoint(el, room) {
     // picks a temperature with the stepper, which sends manual itself.
     leaveEditing(room);
     if (current === null) {
-      showResult(room, "no setpoint known yet; choose one with the stepper", false);
+      showTileResult(room.id, "no setpoint known yet; choose one with the stepper", false);
       return;
     }
     sendRoomSetpoint(room, { mode: "manual", temp: current }, "manual " + current.toFixed(1) + " °C");
