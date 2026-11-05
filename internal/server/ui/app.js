@@ -554,7 +554,7 @@ function initSettings() {
   $("forget-token").addEventListener("click", () => {
     state.token = null;
     store("massimo.token", null);
-    panel.classList.add("hidden");
+    showView("tiles");
     refresh().then(connectEvents);
   });
 }
