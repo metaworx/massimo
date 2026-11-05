@@ -69,19 +69,26 @@ func launchdPlists(listen string, noHelper bool) (serve, helper []byte, err erro
 	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
 		return nil, nil, fmt.Errorf("-listen %q: bad port", listen)
 	}
-	if serve, err = fs.ReadFile(packaging.Files, "launchd/"+Label+".plist"); err != nil {
+	if serve, err = readPlist(Label); err != nil {
 		return nil, nil, err
 	}
 	serve = bytes.Replace(serve, []byte("<string>"+listenMark+"</string>"), []byte("<string>"+xmlEscape(listen)+"</string>"), 1)
 	if noHelper {
 		serve = bytes.Replace(serve, []byte(updateArgsServe), nil, 1)
 	}
-	if helper, err = fs.ReadFile(packaging.Files, "launchd/"+HelperLabel+".plist"); err != nil {
+	if helper, err = readPlist(HelperLabel); err != nil {
 		return nil, nil, err
 	}
 	// Twice: in the comment and in the arguments.
 	helper = bytes.ReplaceAll(helper, []byte(healthMark), []byte(xmlEscape(healthURL(host, port))))
 	return serve, helper, nil
+}
+
+// readPlist reads an embedded property list with Unix line ends, which a
+// checkout on Windows (autocrlf) would otherwise turn into CRLF.
+func readPlist(label string) ([]byte, error) {
+	b, err := fs.ReadFile(packaging.Files, "launchd/"+label+".plist")
+	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")), err
 }
 
 func xmlEscape(s string) string {
