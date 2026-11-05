@@ -437,6 +437,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/background.md](docs/background.md): the evaluation before the project, licence reasoning, routes to a public server, sources
 - [docs/design.md](docs/design.md): the design proposal, target environments, phases and their status
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
+- [docs/store.md](docs/store.md): the design of the server's persistent storage: engine, schema, users and roles, migration of installed boxes
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware, [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
 - [docs/testing-windows.md](docs/testing-windows.md): the test plan for the Windows service on a real PC, [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
 - [docs/handover-session.md](docs/handover-session.md): where the last session stopped, open feedback, next steps
