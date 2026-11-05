@@ -15,8 +15,21 @@ constructor `backup.StateOf`, one metadata mirror
 `Client.ApplyMetadataWrite`, comments on six helpers, the OpenAPI
 coverage test, MANU without a guessed setpoint, pending radiograms
 against the Cube's observed slot capacity), release engineering on the
-roadmap, the ufw ports in docs/proxy.md. The review's second tier is
-still open.
+roadmap, the ufw ports in docs/proxy.md.
+
+The review's second tier, also on 2026-11-05: three extractions,
+internal/view (the read model: hidden set, visible rooms and devices,
+the room-ready rule `Silent`, the pending count), internal/cubeio (writes
+that keep the snapshot in step, used by the API, the proxy and the
+restore planner) and internal/env (every variable lookup, the .env
+loader, the address resolution); "hidden" as the one term
+(`-show-hidden`, older flags kept); the proxy refuses `t:` for hidden
+devices; `serve -refresh` reconnects to each Cube every six hours; the
+README's Cube variables as a table; a summary at the top of
+docs/portal-protocol.md. Each item in the review says where it went.
+Still open there: security 2 and 3 (token rate limit, stream ticket),
+logic 3 (documented), 6 and 7 and duplication 6 (UI), the Playwright
+smoke test.
 
 Release engineering (roadmap 8): the repository is public; CI and the
 release workflow are in .github/workflows; a tag publishes signed
