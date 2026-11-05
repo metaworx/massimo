@@ -17,6 +17,7 @@ The smoke test runs at 1100 and 390 px, in English and in German (from the brows
 - the event stream opens with tickets only, never with the token, and after a refused stream (the test hands out a used ticket first, which the server answers with 401) the page opens it again with a new ticket;
 - the room with the open window shows "Open" on its tile, and only that room; the badge goes when a state event closes the window;
 - the measured temperature shows its age; after a state event makes the first room's thermostat 30 hours old and stale, the tile warns, the temperature is greyed, and the device list shows the stale badge and the values' ages, with the exact times in expert mode;
+- the Cube choice's "Search for new Cubes…" shows "Searching…" until the server answers, then lists the found Cube as not selectable, with its env lines under the header; a `cube_found` event adds another one live; a refused search (503) shows the server's message. The discovery answer and the extra Cube in `GET /api/v1/cubes` are stubbed, since the fake Cube does not answer discovery;
 - there is no console error, no page error and no horizontal scroll.
 
 It sends nothing to the fake Cube. The state events of the last two points are applied in the page (`updateDevice`), since the fake Cube does not change its states.
