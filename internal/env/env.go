@@ -178,9 +178,11 @@ func WithPort(addr string) string {
 // `massimo serve`) is tried first, with a short timeout, because the
 // Cube itself serves one client at a time and serve usually holds that
 // connection; then MASSIMO_CUBE_<SN>_ADDRESS; then, with a serial, UDP
-// discovery on the LAN. Progress goes to log; cmd names the command in
-// errors.
-func ResolveAddr(cmd, sn string, log io.Writer) (string, error) {
+// discovery on the LAN. When a proxy is configured but does not answer,
+// the Cube itself is used only with direct set: a command that took the
+// Cube's only slot while serve restarts would keep serve from
+// reconnecting. Progress goes to log; cmd names the command in errors.
+func ResolveAddr(cmd, sn string, direct bool, log io.Writer) (string, error) {
 	if p := Get(Proxy, sn); p != "" {
 		p = WithPort(p)
 		if c, err := net.DialTimeout("tcp", p, proxyProbe); err == nil {
@@ -188,7 +190,10 @@ func ResolveAddr(cmd, sn string, log io.Writer) (string, error) {
 			fmt.Fprintf(log, "using the massimo proxy at %s\n", p)
 			return p, nil
 		}
-		fmt.Fprintf(log, "proxy %s does not answer, using the cube directly\n", p)
+		if !direct {
+			return "", fmt.Errorf("%s: the massimo proxy at %s does not answer (is massimo serve running?); -direct connects to the cube itself for this run, -addr to a given address", cmd, p)
+		}
+		fmt.Fprintf(log, "proxy %s does not answer, using the cube directly (-direct)\n", p)
 	}
 	if a := Get(Address, sn); a != "" {
 		return a, nil

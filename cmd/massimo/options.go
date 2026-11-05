@@ -26,6 +26,9 @@ var (
 	// names) shows the hidden devices for this run, so a backup or
 	// restore can touch them.
 	showHidden bool
+	// direct (-direct) lets a command connect to the Cube itself for
+	// this run when the configured proxy does not answer.
+	direct bool
 )
 
 // useDeviceSerial switches to the Cube that answered on the LAN. When a
@@ -42,8 +45,8 @@ func useDeviceSerial(serial string) {
 }
 
 // globalOptions parses options that precede the command name:
-// -env <file>, -sn <serial> and -show-hidden. It returns the remaining
-// arguments.
+// -env <file>, -sn <serial>, -show-hidden and -direct. It returns the
+// remaining arguments.
 func globalOptions(args []string) ([]string, error) {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(args[0], "-"), "=")
@@ -51,6 +54,10 @@ func globalOptions(args []string) ([]string, error) {
 		case "env", "sn":
 		case "show-hidden", "no-ignore", "show-ghosts":
 			showHidden = true
+			args = args[1:]
+			continue
+		case "direct":
+			direct = true
 			args = args[1:]
 			continue
 		default:
@@ -91,7 +98,7 @@ func defaultAddr(addr *string, cmd string) error {
 	if *addr != "" {
 		return nil
 	}
-	a, err := env.ResolveAddr(cmd, selectedSN, os.Stderr)
+	a, err := env.ResolveAddr(cmd, selectedSN, direct, os.Stderr)
 	if err != nil {
 		return err
 	}

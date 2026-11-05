@@ -3,7 +3,11 @@
 
 package main
 
-import "testing"
+import (
+	"net"
+	"strings"
+	"testing"
+)
 
 func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_KEY", "default")
@@ -41,5 +45,36 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	useDeviceSerial("KEQ0000001")
 	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
 		t.Fatalf("key after device serial %q", v)
+	}
+}
+
+func TestDirectAllowsTheCubeWhenTheProxyIsDown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := ln.Addr().String()
+	ln.Close()
+	t.Setenv("MASSIMO_CUBE_ADDRESS", "")
+	t.Setenv("MASSIMO_CUBE_PROXY", "")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", dead)
+	t.Cleanup(func() { selectedSN, snExplicit, direct = "", false, false })
+	selectedSN, snExplicit, direct = "KEQ0000001", true, false
+	addr := ""
+	if err := defaultAddr(&addr, "backup"); err == nil || !strings.Contains(err.Error(), "-direct") {
+		t.Fatalf("without -direct: addr %q err %v", addr, err)
+	}
+	addr = "given"
+	if err := defaultAddr(&addr, "backup"); err != nil || addr != "given" {
+		t.Fatalf("-addr wins: %q %v", addr, err)
+	}
+	rest, err := globalOptions([]string{"-direct", "backup"})
+	if err != nil || len(rest) != 1 || rest[0] != "backup" || !direct {
+		t.Fatalf("rest %v err %v direct %v", rest, err, direct)
+	}
+	addr = ""
+	if err := defaultAddr(&addr, "backup"); err != nil || addr != "10.0.0.1" {
+		t.Fatalf("with -direct: addr %q err %v", addr, err)
 	}
 }

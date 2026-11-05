@@ -83,7 +83,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-sn <serial>] [-show-hidden] <command> [args]
+	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-sn <serial>] [-show-hidden] [-direct] <command> [args]
 
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
@@ -95,7 +95,10 @@ LAN. Devices in room 255 (the parking room for devices that never
 report) and those in MASSIMO_CUBE_<SN>_IGNORE are hidden everywhere;
 -show-hidden (older names -show-ghosts, -no-ignore) shows and touches
 them for this run. With -addr, the serial the Cube reports selects its
-key. -addr defaults to MASSIMO_CUBE_ADDRESS.
+key. -addr defaults to MASSIMO_CUBE_ADDRESS. With MASSIMO_CUBE_<SN>_PROXY
+set, commands connect to that running massimo serve and stop if it does
+not answer within two seconds, so as not to take the Cube's only client
+slot from serve; -direct connects to the Cube itself for this run instead.
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON
