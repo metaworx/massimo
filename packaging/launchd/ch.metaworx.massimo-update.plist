@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The update helper on macOS, the counterpart of massimo-update.path and
+  .service: launchd starts it when the server (running as _massimo) creates
+  /var/lib/massimo/update-request, as POST /api/v1/update does. It takes
+  the request (which names nothing but the update channel), finds the
+  newest release on that channel on GitHub, checks its signature against
+  the key compiled into the installed massimo and the binary's SHA-256
+  against the signed manifest, test-runs the new binary, replaces
+  /usr/local/bin/massimo (keeping the old one as massimo.prev), restarts
+  ch.metaworx.massimo and rolls back unless /healthz (@HEALTH@, matching
+  the server's listen address) then reports the new version.
+
+  It runs as root because the server cannot write /usr/local/bin; it reads
+  nothing _massimo can write except the request file, and in particular
+  not /etc/massimo/env. Its log is outside /var/log/massimo, which
+  _massimo owns.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ch.metaworx.massimo-update</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/massimo</string>
+		<string>update</string>
+		<string>-request</string>
+		<string>/var/lib/massimo/update-request</string>
+		<string>-status</string>
+		<string>/var/lib/massimo-update/status.json</string>
+		<string>-restart</string>
+		<string>ch.metaworx.massimo</string>
+		<string>-health</string>
+		<string>@HEALTH@</string>
+	</array>
+	<key>WatchPaths</key>
+	<array>
+		<string>/var/lib/massimo/update-request</string>
+	</array>
+	<!-- No .env file is read: the working directory is / and this one does not exist. -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>MASSIMO_ENV_FILE</key>
+		<string>/nonexistent/.env</string>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>/</string>
+	<key>StandardOutPath</key>
+	<string>/var/log/massimo-update.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/massimo-update.log</string>
+</dict>
+</plist>

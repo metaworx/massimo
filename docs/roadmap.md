@@ -65,10 +65,13 @@ each new write path and the feedback that follows.
    `massimo install` sets serve up as a systemd service, with the update
    helper, or as a Windows service (updated from an administrator prompt:
    the running .exe is renamed aside, the service restarted through the
-   service manager; tested on a CI Windows runner); govulncheck in CI.
-   Open: the web UI starting updates on Windows (a helper and the server's
-   endpoint), install on macOS (a LaunchDaemon, once a Mac is there to
-   test on), and the future `edge` mode.
+   service manager; tested on a CI Windows runner), or on macOS as the
+   LaunchDaemon ch.metaworx.massimo (user `_massimo`) with the update
+   helper ch.metaworx.massimo-update, so the web UI's button works there
+   too (tested on macOS 27.2 arm64 and a CI macOS runner); govulncheck in
+   CI. Open: the web UI starting updates on Windows (a helper and the
+   server's endpoint); on macOS log rotation, notarization, and a `.pkg`
+   or Homebrew formula if wanted; and the future `edge` mode.
 9. **Timestamps per value**: keep the time each value was last received
    from the Cube, per device and field, in the snapshot, the API
    (`state` fields with their `*_at` times or a `received` map) and the

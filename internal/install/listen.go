@@ -36,16 +36,21 @@ func listenDropIns(addr string) (serve, health string, err error) {
 	if n < 1024 {
 		serve += "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"
 	}
-	// Asked from the box itself: an address on every interface is asked on
-	// the loopback, a specific one on itself.
+	health = head + "Environment=MASSIMO_HEALTH=" + healthURL(host, port) + "\n"
+	return serve, health, nil
+}
+
+// healthURL is the server's /healthz for a listen address, asked from
+// the box itself: an address on every interface is asked on the
+// loopback, a specific one on itself.
+func healthURL(host, port string) string {
 	switch ip := net.ParseIP(host); {
 	case host == "" || ip != nil && ip.IsUnspecified() && ip.To4() != nil:
 		host = "127.0.0.1"
 	case ip != nil && ip.IsUnspecified():
 		host = "::1"
 	}
-	health = head + "Environment=MASSIMO_HEALTH=http://" + net.JoinHostPort(host, port) + "/healthz\n"
-	return serve, health, nil
+	return "http://" + net.JoinHostPort(host, port) + "/healthz"
 }
 
 // listen writes the drop-ins for Options.Listen, or with none given

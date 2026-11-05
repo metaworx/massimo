@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -140,15 +141,25 @@ func goarm() string {
 
 // Client talks to the GitHub releases API.
 type Client struct {
-	API  string // https://api.github.com
-	Repo string
-	HTTP *http.Client
-	Key  ed25519.PublicKey
+	API   string // https://api.github.com
+	Repo  string
+	HTTP  *http.Client
+	Key   ed25519.PublicKey
+	Token string // optional, for the API only: see TokenVar
 }
 
-// NewClient returns a client for Repo with the compiled-in key.
+// TokenVar names an optional GitHub token for the release list. Without
+// one GitHub allows 60 API requests an hour per address, which a shared
+// address (a CI runner, a large NAT) can use up; a token of any kind,
+// with no rights at all, raises that. It only lifts the limit: what is
+// installed is still decided by the signature against the compiled-in
+// key.
+const TokenVar = "MASSIMO_GITHUB_TOKEN"
+
+// NewClient returns a client for Repo with the compiled-in key and the
+// token from TokenVar, if set.
 func NewClient() *Client {
-	return &Client{API: "https://api.github.com", Repo: Repo, HTTP: &http.Client{Timeout: 2 * time.Minute}, Key: ReleaseKey()}
+	return &Client{API: "https://api.github.com", Repo: Repo, HTTP: &http.Client{Timeout: 2 * time.Minute}, Key: ReleaseKey(), Token: os.Getenv(TokenVar)}
 }
 
 type ghRelease struct {
@@ -169,6 +180,10 @@ func (c *Client) get(ctx context.Context, url string, limit int64, accept string
 	}
 	if accept != "" {
 		req.Header.Set("Accept", accept)
+	}
+	// Only to the API: the release files come from other hosts.
+	if c.Token != "" && strings.HasPrefix(url, c.API+"/") {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {

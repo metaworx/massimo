@@ -50,7 +50,17 @@ the root helper units in packaging/systemd (packaging/README.md,
 "Updating"). On Windows, `massimo install` makes a Windows service and
 `massimo update -restart massimo` updates it from an administrator
 prompt (packaging/README.md, "Windows"); CI tests that on a Windows
-runner, and runs govulncheck with the toolchain pinned in the workflows
+runner. On macOS `massimo install` makes two LaunchDaemons, the server as
+the hidden user `_massimo` and the root update helper started by
+launchd's WatchPaths on the request file, with the Linux paths
+(packaging/README.md, "macOS"); `massimo update -restart
+ch.metaworx.massimo` restarts it with `launchctl kickstart -k`. Tested on
+a Mac (install, -listen, the web UI update to v0.3.0-alpha.1, rollback
+by hand and automatic, remove -purge) and in a CI job on macos-latest.
+The release check asks GitHub's API without a token, limited to 60
+requests an hour per address; MASSIMO_GITHUB_TOKEN lifts that, and CI
+passes the job's token (the shared macOS runners hit the limit).
+CI also runs govulncheck with the toolchain pinned in the workflows
 (Go 1.26, newest patch; go.mod keeps the minimum, 1.24).
 
 Done later on 2026-11-05 (branch claude/ui-feedback-9b6fa2, four ui

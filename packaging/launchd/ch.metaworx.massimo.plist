@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon for "massimo serve" on macOS: keeps the Cubes connected,
+  serves the JSON API and web UI and answers as a Cube on TCP 62910 and
+  UDP 23272. "massimo install" writes it to /Library/LaunchDaemons with the
+  listen address in place of @LISTEN@ (default :8099, kept by later
+  installs) and loads it with launchctl bootstrap (see packaging/README.md).
+
+  It runs as the hidden system user _massimo. Settings and secrets are read
+  by massimo itself from /etc/massimo/env (mode 0600, owned by _massimo).
+  -update-request lets the web UI ask the update helper
+  (ch.metaworx.massimo-update, root) to install a newer release.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ch.metaworx.massimo</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/massimo</string>
+		<string>-env</string>
+		<string>/etc/massimo/env</string>
+		<string>serve</string>
+		<string>-listen</string>
+		<string>@LISTEN@</string>
+		<string>-update-request</string>
+		<string>/var/lib/massimo/update-request</string>
+	</array>
+	<key>UserName</key>
+	<string>_massimo</string>
+	<key>GroupName</key>
+	<string>_massimo</string>
+	<key>WorkingDirectory</key>
+	<string>/var/lib/massimo</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<!-- Restarted when it fails, like Restart=on-failure, at most every 10 s. -->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<!--
+	  The log: serve writes it to stderr, which launchd appends to this
+	  file (install makes it, owned by _massimo, in a directory only root
+	  may write). No -log and no MASSIMO_LOG, or every line comes twice.
+	-->
+	<key>StandardErrorPath</key>
+	<string>/var/log/massimo/serve.log</string>
+</dict>
+</plist>

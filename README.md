@@ -21,7 +21,8 @@ builds every release binary into `dist/`, one at a time with `make linux`,
 architectures) and `make windows`; `make release` adds `SHA256SUMS` and the
 release manifest; `make vet`, `make test` and `make clean` do what they
 say. `massimo install` sets `massimo serve` up as a systemd service on
-Linux or as a Windows service, see [packaging/README.md](packaging/README.md).
+Linux, a Windows service or LaunchDaemons on macOS, see
+[packaging/README.md](packaging/README.md).
 `massimo help` lists the commands; the ones useful today:
 
 ```bash

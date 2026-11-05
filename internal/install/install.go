@@ -2,17 +2,11 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // Package install sets massimo serve up as a service of the operating
-// system: today a systemd service on Linux, the steps packaging/README.md
+// system: a systemd service on Linux, the steps packaging/README.md
 // describes for an install by hand, with the unit files embedded from
-// packaging/. Running it again updates the binary and the units and
-// restarts the service; Remove undoes it.
-//
-// Other systems would need: macOS a LaunchDaemon property list in
-// /Library/LaunchDaemons loaded with `launchctl bootstrap system`, a
-// service user made with dscl (or root) and an update helper of its own;
-// Windows the binary registered with the service manager, which the
-// binary must then answer to (golang.org/x/sys/windows/svc), settings
-// under %ProgramData%, and updates that rename the running .exe aside.
+// packaging/; a Windows service (windows.go); and LaunchDaemons on macOS
+// (darwin.go). Running it again updates the binary and the service
+// definition and restarts the service; Remove undoes it.
 package install
 
 import (
@@ -67,6 +61,10 @@ type Options struct {
 	// Run runs a command (useradd, chown, systemctl); nil runs it, or
 	// with Root set, does nothing.
 	Run func(name string, args ...string) error
+	// Output runs a command that only reads (dscl on macOS) and returns
+	// what it printed, also in a dry run; nil runs it, or with Root set,
+	// returns nothing.
+	Output func(name string, args ...string) ([]byte, error)
 	// LocalAddrs lists this machine's addresses for the proxy check;
 	// nil asks the network interfaces.
 	LocalAddrs func() ([]net.IP, error)
@@ -74,6 +72,7 @@ type Options struct {
 
 type installer struct {
 	Options
+	svcUser string // the account the service runs as: User, or DarwinUser
 }
 
 func newInstaller(o Options) *installer {
@@ -93,7 +92,16 @@ func newInstaller(o Options) *installer {
 			}
 		}
 	}
-	return &installer{o}
+	if o.Output == nil {
+		if o.Root != "" {
+			o.Output = func(string, ...string) ([]byte, error) { return nil, nil }
+		} else {
+			o.Output = func(name string, args ...string) ([]byte, error) {
+				return exec.Command(name, args...).Output()
+			}
+		}
+	}
+	return &installer{Options: o, svcUser: User}
 }
 
 func (in *installer) path(p string) string { return filepath.Join(in.Root, p) }
@@ -250,7 +258,7 @@ func (in *installer) settings() (bool, error) {
 			return false, err
 		}
 	}
-	if err := in.run("chown", User+":"+User, dir); err != nil {
+	if err := in.run("chown", in.svcUser+":"+in.svcUser, dir); err != nil {
 		return false, err
 	}
 	if err := in.run("chmod", "0750", dir); err != nil {
@@ -265,6 +273,9 @@ func (in *installer) settings() (bool, error) {
 		return true, nil
 	}
 	content, startable := []byte(envTemplate), false
+	if in.svcUser == DarwinUser {
+		content = []byte(darwinEnvTemplate())
+	}
 	if in.Settings != "" {
 		b, err := os.ReadFile(in.Settings)
 		if err != nil {
@@ -280,7 +291,7 @@ func (in *installer) settings() (bool, error) {
 			return false, err
 		}
 	}
-	return startable, in.run("chown", User+":"+User, env)
+	return startable, in.run("chown", in.svcUser+":"+in.svcUser, env)
 }
 
 // checkSettings warns about settings the service will trip over. A proxy
