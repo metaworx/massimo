@@ -1,0 +1,43 @@
+name: CI
+
+# Every push to any branch and every pull request: formatting, vet, the
+# tests, and a cross build of every release binary, so that a tag finds
+# nothing new to fail on. Tags are tested again by release.yml.
+on:
+  push:
+    branches: [ '**' ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Vet and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # git describe needs the tags
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would change these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: Cross build
+        run: make cross

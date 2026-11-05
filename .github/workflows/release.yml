@@ -1,0 +1,143 @@
+name: Release
+
+# A version tag (v1.2.3, v0.1.0-alpha.10) is tested, built for every
+# platform, signed and published as a GitHub release, which
+# `massimo update` installs (internal/update).
+#
+# Three jobs, the key in one: `build` runs the toolchain and the
+# third-party actions and holds no secret; `sign` holds the release key
+# through the `signing` environment, which only v* tags may use, runs
+# nothing but openssl and gh on what build handed over, checks the
+# signature against the public key compiled into massimo before
+# publishing, and publishes exactly what it signed.
+#
+# The update channel of a release is the branch the tag was made on, as
+# `make tag` writes it into the tag message ("channel: phase-0"); for a
+# tag without that line, the one branch on GitHub holding its commit.
+on:
+  push:
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      channel: ${{ steps.meta.outputs.channel }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Release metadata
+        id: meta
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          # checkout leaves the tag without its annotation; fetch it again.
+          git fetch --quiet --force origin "refs/tags/${tag}:refs/tags/${tag}"
+          sha="$(git rev-parse "${tag}^{commit}")"
+          if [ "$(git describe --tags --exact-match "$sha")" != "$tag" ]; then
+            echo "::error::git describe does not name ${tag} for ${sha}."
+            exit 1
+          fi
+          channel="$(git for-each-ref --format='%(contents)' "refs/tags/${tag}" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]')"
+          if [ -z "$channel" ]; then
+            branches="$(git branch -r --format='%(refname:lstrip=3)' --contains "$sha" | grep -vx HEAD || true)"
+            if [ "$(printf '%s\n' "$branches" | grep -c .)" != 1 ]; then
+              echo "::error::${tag} names no channel, and its commit is on these branches, not on exactly one: ${branches:-none}"
+              exit 1
+            fi
+            channel="$branches"
+          fi
+          if ! printf '%s' "$channel" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$'; then
+            echo "::error::invalid channel '${channel}'."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" "origin/${channel}"; then
+            echo "::error::${tag} names channel ${channel}, but ${sha} is not on that branch on GitHub."
+            exit 1
+          fi
+          # 0.x is pre-release by definition, as is any -suffix.
+          prerelease=false
+          case "$tag" in v0.*|*-*) prerelease=true ;; esac
+          echo "release ${tag} (${sha}) on channel ${channel}, prerelease ${prerelease}"
+          {
+            echo "tag=${tag}"
+            echo "channel=${channel}"
+            echo "prerelease=${prerelease}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: Build every binary, SHA256SUMS and the manifest
+        run: make release VERSION="${{ steps.meta.outputs.tag }}" CHANNEL="${{ steps.meta.outputs.channel }}"
+
+      - name: Hand the files to the signing job
+        uses: actions/upload-artifact@v6
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+
+  sign:
+    name: Sign and publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+      CHANNEL: ${{ needs.build.outputs.channel }}
+      PRERELEASE: ${{ needs.build.outputs.prerelease }}
+    steps:
+      # The public key and the tag's message; nothing from here is run.
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: release
+          path: dist
+
+      - name: Sign the manifest
+        env:
+          MASSIMO_RELEASE_KEY: ${{ secrets.MASSIMO_RELEASE_KEY }}
+        run: |
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MASSIMO_RELEASE_KEY" > "$key"
+          openssl pkeyutl -sign -inkey "$key" -rawin -in dist/massimo-release.json | base64 -w0 > dist/massimo-release.json.sig
+          echo >> dist/massimo-release.json.sig
+
+      # The signature must verify against the key massimo has compiled in,
+      # or no installed binary would accept the release.
+      - name: Verify against the compiled-in key
+        run: |
+          base64 -d dist/massimo-release.json.sig > "$RUNNER_TEMP/sig.bin"
+          openssl pkeyutl -verify -pubin -inkey internal/update/release-key.pem -rawin \
+            -in dist/massimo-release.json -sigfile "$RUNNER_TEMP/sig.bin"
+          (cd dist && sha256sum -c SHA256SUMS)
+          grep -q "\"tag\": \"${TAG}\"" dist/massimo-release.json
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          notes="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes "$notes" "${flags[@]}" dist/*
