@@ -3,7 +3,52 @@
 For the next session, on a fresh checkout. Read README.md, then
 docs/roadmap.md, then this file. The sessions that wrote today's code
 ran on the Linux Mint box, which is being retired; they cannot move,
-so this file is the whole context they leave behind.
+so this file is the whole context they leave behind. The section
+"Session on jaguar" below says what the first session there did with it.
+
+## Session on jaguar, 2026-11-05 night
+
+The first session on jaguar checked the setup below, wrote
+docs/proposal-2026-11-05.md (the owner's wishes evaluated, the order,
+the split into sessions, the decisions) and ran four tracks in
+parallel; the next tracks run as sessions of their own, started from
+the briefs the session left as chips in the app.
+
+- Setup: Go 1.26.8, `gh`, signing (a good signature on every commit of
+  the session), tests and thirty race runs pass. `.env` corrected to the
+  Pi's addresses (house Cube `.118`, proxy `.201`, `MASSIMO_CUBE_SN` the
+  house Cube, the spare Cube's lines commented out). The Playwright
+  venv is in tools/ui-test/.venv and `make ui-test` passes. WSL is in
+  NAT mode; the Pi's API (`.200`) and proxy port (`.201:62910`) answer
+  from here, so hardware work goes through the Pi.
+- Merged the same night: #22 (`.env.*` and `*.log` ignored), #25 (both
+  Software buttons greyed out while an update runs).
+- Open pull requests, the checks in each body: #26 the README's
+  Installing section per operating system (with the SmartScreen
+  findings of the Windows test), #27 docs/store.md, #28 the restore
+  API, #29 colour schemes. #29 and the UI briefs below all touch
+  app.js, index.html, i18n.js and style.css, so merge #29 first.
+- Decisions waiting for the owner: docs/store.md section 10 (eleven,
+  each with a recommendation), the built-in colour schemes, and the
+  proposal's section 7.
+- Briefs ready as sessions (chips in the app on jaguar; if they are
+  gone, the proposal's section 6 and docs/roadmap.md say what each
+  does): the pairing panel, then copying the room's settings to a new
+  device and removing a device; the notice when the server is gone;
+  the small follow-ups, one pull request each (no direct Cube fallback
+  with a configured proxy plus `-direct`, go.mod 1.26 with `x/sys` ≥
+  0.44, `.gitattributes`, `observed_since`, the DHCP flag in
+  `discover`); the hardware checks with the owner through the Pi;
+  backup and restore in the UI on top of #28.
+- Found on the way: `MASSIMO_UPDATE_CHANNEL` and `MASSIMO_GITHUB_TOKEN`
+  are read by the code but missing from `env.Known`, so `massimo
+  config` calls them unknown names (for stage (a) of the store or any
+  follow-up). The app on jaguar cannot bind pull requests from this
+  checkout's SSH origin, so CI results are read with `gh`.
+- Housekeeping still to do: delete the remote branches
+  `claude/pi-install-c5930f` and `claude/youthful-mirzakhani-9ed831`,
+  and the merged branches of this session once their pull requests are
+  in; the owner's items in "Next steps" 1.
 
 Branches and releases: develop on `main` (pull requests go there, the
 owner merges); `alpha` is the release branch and the update channel of
@@ -323,15 +368,19 @@ repeated.
 
 ## Next steps in order
 
-1. Set the checkout up on jaguar (above), carry the secrets, delete
-   the copies on the Mint box, reserve the M7 addresses, delete the
-   Mac's sudoers file.
-2. The hardware checks above, pairing first, at the Cube with the
-   owner.
-3. The pairing panel in the UI (docs/api-v1.md, Pairing), then copying
-   the room's settings to a new device and an API to remove a device.
-4. The CLI's proxy fallback and the other small follow-ups above.
-5. Users and a database: the design document, then the owner's
-   decisions, then code (roadmap 6).
-6. Firmware dump when the adapter is in (docs/firmware-extraction.md).
-7. Loxone (roadmap 10).
+1. The owner's items from the setup section: carry the secrets, delete
+   the copies on the Mint box, put the release key into KeePassXC,
+   reserve the M7 addresses, delete the Mac's sudoers file, remove the
+   Mint key from the Pi.
+2. Merge the open pull requests (#26 to #29, #29 before the other UI
+   work), delete the merged branches.
+3. The hardware checks above, pairing first, at the Cube with the
+   owner, through the Pi (brief ready).
+4. The UI sessions from the briefs: backup and restore, the pairing
+   panel (then copying the room's settings to a new device and an API
+   to remove a device), the notice when the server is gone.
+5. The small follow-ups (brief ready).
+6. Users and a database: the owner's decisions on docs/store.md, then
+   stage (a) of the code (roadmap 6).
+7. Firmware dump when the adapter is in (docs/firmware-extraction.md).
+8. Loxone (roadmap 16).
