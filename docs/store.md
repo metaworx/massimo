@@ -309,14 +309,42 @@ CREATE TABLE tenants (
 );
 INSERT INTO tenants (id, name, created_at) VALUES (1, 'default', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
 
+CREATE TABLE roles (
+    id         INTEGER PRIMARY KEY,
+    tenant_id  INTEGER NOT NULL REFERENCES tenants (id),
+    key        TEXT    NOT NULL,              -- 'owner', 'manager', 'operator', 'guest', 'viewer', 'integration', or the key of a created role
+    name       TEXT    NOT NULL DEFAULT '',   -- display name; '' shows the key's translated default
+    builtin    INTEGER NOT NULL DEFAULT 0,    -- 1: seeded; owner is builtin and immutable
+    disabled   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL,
+    UNIQUE (tenant_id, key)
+);
+
+CREATE TABLE role_capabilities (
+    role_id    INTEGER NOT NULL REFERENCES roles (id) ON DELETE CASCADE,
+    capability TEXT    NOT NULL,              -- a key from the table in section 6
+    PRIMARY KEY (role_id, capability)
+);
+
+CREATE TABLE capabilities_disabled (
+    tenant_id   INTEGER NOT NULL REFERENCES tenants (id),
+    capability  TEXT    NOT NULL,
+    disabled_at TEXT    NOT NULL,
+    disabled_by INTEGER REFERENCES users (id),
+    PRIMARY KEY (tenant_id, capability)
+);
+
 CREATE TABLE users (
     id            INTEGER PRIMARY KEY,
     tenant_id     INTEGER NOT NULL REFERENCES tenants (id),
     name          TEXT    NOT NULL,              -- the login name, lower case
     display_name  TEXT    NOT NULL DEFAULT '',
     password_hash TEXT    NOT NULL DEFAULT '',   -- argon2id in PHC string form; '' = no password login (keys only)
-    role          TEXT    NOT NULL CHECK (role IN ('owner', 'operator', 'viewer', 'integration')),
+    role_id       INTEGER NOT NULL REFERENCES roles (id),
     disabled      INTEGER NOT NULL DEFAULT 0,
+    expires_at    TEXT,                          -- guests: disabled from this time on
+    invited_by    INTEGER REFERENCES users (id),
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL,
     last_login_at TEXT,
@@ -467,10 +495,20 @@ Notes on the tables:
   limits (ten in a minute, five minutes) stay. Rows outside the window
   and the lockout are pruned on every write to the table, which keeps
   it bounded as `maxTracked` does today.
-- Identifiers are rowids. The export format of design.md section 7
-  wants stable identifiers (UUIDv7) and natural keys; the natural keys
-  are here (serial, user name, time), the UUIDs come with the export
-  feature as a column, not now (open decision 7).
+- Identifiers: the rowid stays the internal key, and every row that
+  will be replicated or exported (`users`, `tokens`, `cubes`,
+  `preferences`, `events`, `audit`, `backups`, later `commands`) also
+  carries `uuid TEXT NOT NULL UNIQUE`, a UUIDv7 (decision 7, taken
+  2026-11-06; docs/server.md says why). The owned tables (`users`,
+  `tokens`, `cubes`, `settings`, `preferences`, `backups`) also carry
+  `version INTEGER`, `deleted_at TEXT` and `origin TEXT` (decision 14,
+  taken), and the first migration seeds `settings` with `node.id`.
+  The listing above leaves those columns out so that it stays
+  readable; the migration file has them.
+- `roles`, `role_capabilities` and `capabilities_disabled` are the
+  capability model of section 6; the first migration seeds the six
+  default roles with their sets. `users.role_id` replaces the role
+  text; `expires_at` and `invited_by` are for guests.
 
 ### Migrations
 
@@ -499,24 +537,99 @@ is `0001_initial.sql`, the whole schema above. Rules:
   per released version), and opening a newer additive version with an
   older reader.
 
-## 6. Users and roles
+## 6. Users, roles and capabilities
 
-Roles from design.md section 6 trimmed to what a standalone box
-needs; groups, shares and guests come with the server mode.
+A capability model, decided by the owner on 2026-11-06. Every route
+is guarded by a **capability**; a **role** is a set of capabilities;
+a user has one role. The default roles and their sets are seeded at
+the first start and can be changed afterwards by whoever holds the
+`roles` capability, with one exception: `owner` always has every
+capability and cannot be edited, disabled or deleted, and the store
+refuses to disable or delete the last enabled owner user. The default
+roles keep their keys (`owner`, `manager`, `operator`, `guest`,
+`viewer`, `integration`), so that the code, the documentation and the
+translations can refer to them; each has a display name that can be
+overwritten, which is how a role is "renamed"; further roles can be
+created with any set of capabilities and deleted when no user has
+them. A capability can be disabled, which denies it to every role but
+`owner` (for example `pair` while nobody should pair, or `update` on
+a box the owner updates by hand); that needs the `capabilities`
+capability, which only `owner` has by default. A role can be
+disabled, which is the `roles.disable` capability; a disabled role's
+users keep their login and are refused everything, and the page says
+why.
 
-| Role | May |
-|---|---|
-| `viewer` | read everything: `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET /api/v1/update`, `GET /api/v1/me`, their own preferences |
-| `operator` | viewer, plus the writes to the heating: `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint`, `PUT …/devices/{rf}/lock`, `PUT …/rooms/{id}` (rename), `PUT …/devices/{rf}` (name, room), `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, `DELETE …/rooms/{id}`, `POST`/`DELETE …/pairing`, `POST /api/v1/cubes/discover`, `GET …/backup`, the backup list and the restore of stage (e) |
-| `owner` | everything: operator, plus the server: `POST /api/v1/cubes` (add a found Cube), `PUT`/`DELETE /api/v1/cubes/{sn}` (name, address, proxy, hidden, remove), `GET`/`PUT /api/v1/settings`, the users and tokens routes, `GET /api/v1/audit`, `POST /api/v1/update`, the data of other users |
-| `integration` | what a home automation needs and nothing it does not: the reads of viewer, the two setpoint routes and the lock; no configuration, no pairing, no users, no update |
+The capabilities, what each allows, and the routes it guards:
 
-The mapping is a table in `internal/server/auth.go` from route pattern
-to the least role, checked in the `api()` wrapper after the token is
-resolved, so a new route without an entry fails closed and the test
-that compares the routes with the OpenAPI file (`openapi_test.go`)
-also checks that every route has a role. The OpenAPI file documents
-the role per operation.
+| Capability | Allows | Routes |
+|---|---|---|
+| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, the update state | `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/update`, `GET /api/v1/me`, one's own preferences |
+| `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
+| `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
+| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
+| `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
+| `structure` | move devices, delete rooms, remove devices | `PUT …/devices/{rf}` with `room_id`, `DELETE …/rooms/{id}`, `DELETE …/devices/{rf}` |
+| `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
+| `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
+| `backup` | download a backup, list the stored ones | `GET …/backup`, the list of stage (e) |
+| `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
+| `guests` | create, invite, disable and remove users whose role is `guest`, with an end date | the users routes, limited to guests |
+| `users` | every user: create, role, disable, password reset, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
+| `roles` | change a role's capabilities, rename a role, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
+| `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
+| `capabilities` | disable and enable a capability | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
+| `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
+| `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
+| `update` | start a software update | `POST /api/v1/update` |
+| `audit` | read the audit | `GET /api/v1/audit` |
+
+The default roles, as seeded. `owner` has every capability.
+
+| Capability | `manager` | `operator` | `guest` | `viewer` | `integration` |
+|---|---|---|---|---|---|
+| `read` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `setpoint` | ✓ | ✓ | ✓ | | ✓ |
+| `lock` | ✓ | ✓ | | | ✓ |
+| `configure` | ✓ | ✓ | ✓ | | |
+| `rename` | ✓ | | | | |
+| `structure` | ✓ | | | | |
+| `pair` | ✓ | | | | |
+| `discover` | ✓ | ✓ | | | |
+| `backup` | ✓ | ✓ | | | |
+| `restore` | ✓ | | | | |
+| `guests` | ✓ | | | | |
+| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `audit` | | | | | |
+
+So `manager` is `operator` plus guests, pairing, names, structure and
+restore; `operator` runs the heating, locks, configures, discovers
+and takes backups; `guest` is `operator` without the lock, backups
+and discovery; `viewer` reads; `integration` is what a home
+automation needs and nothing it does not. Moves and deletions
+(`structure`) go with the names to `manager`, because a move changes
+the house as a name does; if `operator` should keep them, that is
+one row of the seed.
+
+Guests are users with the role `guest`, created by a holder of
+`guests` with an invitation (a one-time code or link; the guest sets
+a password) and an optional end date, after which the user is
+disabled: the time-limited share of design.md section 6 in its
+simplest form, with `users.expires_at` and `users.invited_by` in the
+schema. A holder of `guests` may only create, change and remove users
+whose role is `guest`; everything else needs `users`.
+
+The mapping is a table in `internal/server/auth.go` from route
+pattern to capability, checked in the `api()` wrapper after the token
+is resolved: the user's role, its capabilities minus the disabled
+ones, nothing for a disabled role, everything for `owner`. A new
+route without an entry fails closed, and the test that compares the
+routes with the OpenAPI file (`openapi_test.go`) also checks that
+every route has a capability; the OpenAPI file documents the
+capability per operation. The two routes whose capability depends on
+the body (`PUT …/devices/{rf}`: `name` is `rename`, `room_id` is
+`structure`) are checked in the handler after decoding, and the
+table lists both. The list of capabilities is Go code, not a table,
+because a capability is a line in the route table; the roles and
+their sets are rows (section 5), seeded by the first migration.
 
 ### Bootstrap and compatibility
 
@@ -551,7 +664,8 @@ the role per operation.
 `POST /api/v1/login` with `{"user": "anna", "password": "…"}` answers
 `{"token": "…", "expires_at": "…", "user": {"name": …, "role": …}}`;
 `POST /api/v1/logout` revokes the session; `GET /api/v1/me` returns
-the user and the role, so the page can hide what the role may not do.
+the user, the role and its effective capabilities, so the page can
+hide what the role may not do.
 The page keeps the token in `localStorage` as `massimo.token` and
 sends the header, exactly as it does with the API token today, so the
 change in app.js is the login form in place of the token prompt (name
@@ -715,29 +829,38 @@ ui-test` at 1100 and 390 px before the merge.
 
 ### (b) Users, login, tokens, audit
 
-- Packages and files: `internal/store/users.go`, `tokens.go`,
-  `audit.go`, `lockout.go`; `internal/server/auth.go` rewritten around
-  the store (token lookup by hash, roles per route, the limiter on
-  `auth_failures`), `login_api.go` (new), `users_api.go` (new), the
-  audit hook in `api()`; `cmd/massimo/user.go` (new);
-  `golang.org/x/crypto` for argon2id; `internal/server/ui`: `login.js`
-  (new), app.js (the token prompt becomes the login form, role-based
-  hiding), i18n.js (one `auth.*` block).
+- Packages and files: `internal/store/users.go`, `roles.go`,
+  `tokens.go`, `audit.go`, `lockout.go`; `internal/server/auth.go`
+  rewritten around the store (token lookup by hash, the capability per
+  route and the effective set per user, the limiter on
+  `auth_failures`), `login_api.go` (new), `users_api.go` (new),
+  `roles_api.go` (new), the audit hook in `api()`;
+  `cmd/massimo/user.go` (new); `golang.org/x/crypto` for argon2id;
+  `internal/server/ui`: `login.js` (new), app.js (the token prompt
+  becomes the login form, hiding by capability), i18n.js (one `auth.*`
+  block).
 - API: `POST /api/v1/login`, `POST /api/v1/logout`, `GET /api/v1/me`;
   `GET`/`POST /api/v1/users`, `GET`/`PUT`/`DELETE /api/v1/users/{name}`,
   `GET`/`POST /api/v1/users/{name}/tokens`, `DELETE
-  /api/v1/users/{name}/tokens/{id}`; `GET /api/v1/audit?before=&limit=&user=`.
-  Every existing route gets its least role.
-- UI: the login page; Settings → Users (owner): the list, add, role,
-  disable, reset password, the sessions and keys with revoke; the
-  first-owner form when there are no users; "Forget token" becomes
-  "Log out".
+  /api/v1/users/{name}/tokens/{id}`; `GET`/`POST /api/v1/roles`,
+  `PUT`/`DELETE /api/v1/roles/{key}`, `PUT /api/v1/roles/{key}/disabled`;
+  `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}`;
+  `GET /api/v1/audit?before=&limit=&user=`. Every existing route gets
+  its capability.
+- UI: the login page; Settings → Users: the list, add, invite a guest
+  with an end date, role, disable, reset password, the sessions and
+  keys with revoke; Settings → Roles: the capability grid per role,
+  rename, create, disable, and the switch per capability; the
+  first-owner form when there are no users, answered only to clients
+  on the local network; "Forget token" becomes "Log out".
 - Tests: the bootstrap from `MASSIMO_API_TOKEN` (the old token keeps
   full rights; a changed token is added; a removed one is revoked);
-  each role against each route (a table test over the route list);
-  the lockout across a server restart; the audit row of every write
-  handler with the fake Cube; the smoke test logs in as an operator
-  and sees no Settings → Users.
+  each default role against each route (a table test over the route
+  list), a created role, a disabled capability, a disabled role, the
+  immutable owner and the last owner; a guest's end date; the lockout
+  across a server restart; the audit row of every write handler with
+  the fake Cube; the smoke test logs in as an operator and sees no
+  Settings → Users.
 
 ### (c) Preferences
 
@@ -800,9 +923,31 @@ mode.
 
 ## 10. Open decisions for the owner
 
-1. The engine: SQLite through `modernc.org/sqlite` as recommended
-   (about 5 MB more per binary, ten modules, Go 1.26 in `go.mod`), or
-   bbolt with the log and the backups as files.
+Status on 2026-11-06: the owner took 4 (the form, for local-network
+clients only), 7 (UUIDv7), replaced 6 by the capability model of
+section 6, and took every other item as recommended, 2, 3, 5 and 8
+to 18 included. Item 1, the engine, is open; the comparison it asked
+for is below, and stage (a) waits for it.
+
+1. The engine, open. For SQLite through `modernc.org/sqlite`: SQL
+   with indexes and queries for the log, the audit and the backup
+   history; one file per tenant on the portal tier with the same code
+   (docs/server.md) and the same SQL for PostgreSQL later;
+   transactions and migrations as plain SQL files; the `sqlite3` tool
+   on any box to look at a file. Against: about 5 MB more per binary
+   and eight modules more (section 2, measured), `go 1.26` in
+   `go.mod`, a translated C code base as the dependency (large, but
+   maintained and widely used), more surface for govulncheck. For
+   `go.etcd.io/bbolt`: one small pure-Go module, 0.4 MB, transactions
+   over key-value buckets, nothing translated from C. Against: no
+   queries, so every list is a scan or a hand-built index kept in
+   step by the code; the log and the backups as files beside it, each
+   with its own retention; no path to the per-tenant files of the
+   hosted engine or to PostgreSQL; no tool to inspect a file; a store
+   interface that would have to hide two very different shapes if
+   the choice ever changed. The recommendation stays SQLite; bbolt is
+   the right answer only if the dependency weight outweighs the log,
+   the audit and the server mode.
 2. Secrets: keys, IVs and the API token stay in `.env` in version 1
    (recommended), or move into the store encrypted with a key from
    `.env` from the start.
@@ -810,23 +955,25 @@ mode.
    store wins with a notice and a "take the file's value" button
    (recommended), or the file wins, which keeps file-based
    administration but silently undoes UI edits at every restart.
-4. The first owner without `MASSIMO_API_TOKEN`: the one-time form in
-   the UI that works while there are no users (recommended, since
-   that is the no-authentication mode anyway), or `massimo user add`
-   only.
+4. Taken: the first owner without `MASSIMO_API_TOKEN` is created with
+   the one-time form in the UI, which works while there are no users
+   and is answered only to clients on the local network: the
+   request's own address is loopback, a private range (RFC 1918) or
+   link-local; `X-Forwarded-For` is not trusted, so behind a reverse
+   proxy the form is not offered and `massimo user add` on the box is
+   the way.
 5. Retention defaults: events 30 days, automatic backups 90 days,
    manual and before-restore backups 365 days; and whether `events`
    should also be capped by size for the SD card.
-6. Roles: the four as described, in particular that `operator` may
-   pair, discover, rename and change programmes and that `integration`
-   may only read and set setpoints and the lock; and whether
-   `MASSIMO_API_TOKEN` should bootstrap an `owner` (recommended, it is
-   what the token means today) or an `integration` key with the file's
-   owner created separately.
-7. Identifiers: UUIDv7 from version 1 on every row that will be
-   replicated or exported (recommended since docs/server.md, which says
-   why and what it costs), or rowids now and UUIDs with the export
-   feature.
+6. Replaced by the capability model of section 6: six default roles
+   (`owner`, `manager`, `operator`, `guest`, `viewer`, `integration`)
+   as sets of capabilities, adjustable except `owner`, with renames,
+   further roles, and capabilities and roles that can be disabled.
+   `MASSIMO_API_TOKEN` bootstraps an `owner`. One row of the seed to
+   confirm: moves and deletions (`structure`) with `manager`, not
+   with `operator`.
+7. Taken: UUIDv7 from version 1 on every row that will be replicated
+   or exported (docs/server.md says why and what it costs).
 8. Browser sessions in the `Authorization` header stored in
    `localStorage`, as the token is today (recommended, no cookies and
    no CSRF), or a cookie session with CSRF tokens.
