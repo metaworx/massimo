@@ -788,7 +788,7 @@ func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	}
 	days, err := json.Marshal(prog)
 	if err != nil {
-		return err
+		return fail(http.StatusInternalServerError, "week programme of %s: %v", all[0], err)
 	}
 	var out map[string]any
 	json.Unmarshal(days, &out)

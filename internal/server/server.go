@@ -384,6 +384,9 @@ func (s *Server) routes() {
 					writeError(w, he.status, he.msg)
 					return
 				}
+				// Every handler error should come through fail; one that
+				// does not is a bug, logged so that it gets noticed.
+				s.log.Error("api: error not mapped to a status", "method", r.Method, "path", r.URL.Path, "error", err)
 				writeError(w, http.StatusInternalServerError, err.Error())
 			}
 		})
@@ -779,7 +782,7 @@ func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) error {
 	yaml := r.URL.Query().Get("format") == "yaml"
 	data, err := f.Marshal(yaml)
 	if err != nil {
-		return err
+		return fail(http.StatusInternalServerError, "backup: %v", err)
 	}
 	if yaml {
 		w.Header().Set("Content-Type", "application/yaml")
