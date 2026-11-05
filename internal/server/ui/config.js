@@ -9,6 +9,7 @@
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_SHORT = { monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th", friday: "Fr", saturday: "Sa", sunday: "Su" };
+const DAY_LONG = { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 const MAX_POINTS = 13;
 const NAME_BYTES = 32;
 const TABS = [
@@ -80,8 +81,10 @@ function freshEdit(room, cfg) {
 }
 
 // programModel turns the API's week programme into the editor's model:
-// a copy per day, the selected days, the day being edited, the days
-// changed so far.
+// an editable copy per day and the loaded one (orig) for reset and for
+// telling the changed days, the day being edited, the selected days
+// (those with the edited day's programme, edited together unless
+// "only" is on), and the days ticked in the copy section.
 function programModel(prog) {
   const days = {};
   for (const day of DAYS) {
@@ -89,7 +92,47 @@ function programModel(prog) {
     days[day] = pts.map((p) => ({ temp: p.temp, until: p.until }));
     if (days[day].length === 0) days[day] = [{ temp: 17, until: "24:00" }];
   }
-  return { days, source: prog ? prog.source : "", selected: new Set(["monday"]), day: "monday", dirty: new Set() };
+  const p = { days, orig: copyDays(days), source: prog ? prog.source : "", day: "monday", selected: new Set(), only: false, copyTo: new Set() };
+  selectDay(p, "monday");
+  return p;
+}
+
+function copyPoints(pts) {
+  return pts.map((pt) => ({ temp: pt.temp, until: pt.until }));
+}
+
+function copyDays(days) {
+  const out = {};
+  for (const day of DAYS) out[day] = copyPoints(days[day]);
+  return out;
+}
+
+function samePoints(a, b) {
+  return a.length === b.length && a.every((pt, i) => pt.temp === b[i].temp && pt.until === b[i].until);
+}
+
+// dirtyDays lists the days whose programme differs from the loaded one.
+function dirtyDays(p) {
+  return DAYS.filter((d) => !samePoints(p.days[d], p.orig[d]));
+}
+
+// selectDay makes day the edited day and selects every day that has
+// the same programme.
+function selectDay(p, day) {
+  p.day = day;
+  p.selected = new Set(DAYS.filter((d) => samePoints(p.days[d], p.days[day])));
+  for (const d of p.selected) p.copyTo.delete(d);
+}
+
+// programEdited is called after every change to the edited day: with
+// "only" on, the change sets the day apart and the other days leave the
+// selection; with it off, the change goes to every selected day.
+function programEdited(p) {
+  if (p.only) {
+    p.selected = new Set([p.day]);
+    return;
+  }
+  for (const d of p.selected) if (d !== p.day) p.days[d] = copyPoints(p.days[p.day]);
 }
 
 // --- rendering --------------------------------------------------------
@@ -204,15 +247,26 @@ function selectInput(options, value, onChange) {
   return s;
 }
 
-function formActions(onCancel, sendLabel) {
+// formActions builds the Cancel and Send row; extra buttons (resets)
+// go to its left end.
+function formActions(onCancel, sendLabel, extra) {
   const actions = document.createElement("div");
   actions.className = "actions";
-  actions.appendChild(button("Cancel", "", onCancel));
+  if (extra && extra.length) {
+    const left = document.createElement("span");
+    left.className = "actions-left";
+    for (const b of extra) left.appendChild(b);
+    actions.appendChild(left);
+  }
+  const right = document.createElement("span");
+  right.className = "actions-right";
+  right.appendChild(button("Cancel", "", onCancel));
   const send = document.createElement("button");
   send.type = "submit";
   send.className = "primary";
   send.textContent = sendLabel || "Send";
-  actions.appendChild(send);
+  right.appendChild(send);
+  actions.appendChild(right);
   return actions;
 }
 
@@ -506,54 +560,128 @@ function clockOf(minutes) {
   return pad(Math.floor(minutes / 60)) + ":" + pad(minutes % 60);
 }
 
+// renderProgramTab is the week programme editor: the day buttons (a
+// click edits that day and selects every day with the same programme),
+// the "Only {day}" switch, the day as a bar and as rows of switch
+// points, the copy section, and the resets left of Cancel and Send.
 function renderProgramTab(room, c) {
   const p = c.prog;
   const form = configForm(() => sendProgram(room, c));
+  const dirty = new Set(dirtyDays(p));
   const days = document.createElement("div");
-  days.className = "day-bar";
+  days.className = "day-bar week";
+  days.setAttribute("role", "group");
+  days.setAttribute("aria-label", "day to edit");
   for (const day of DAYS) {
-    const b = button(DAY_SHORT[day], "day" + (p.selected.has(day) ? " selected" : "") + (p.day === day ? " editing" : "") + (p.dirty.has(day) ? " dirty" : ""), (ev) => {
-      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
-        if (p.selected.has(day) && p.selected.size > 1) p.selected.delete(day);
-        else p.selected.add(day);
-      } else {
-        p.day = day;
-        p.selected.add(day);
-      }
+    const editing = p.day === day;
+    const sel = p.selected.has(day);
+    const b = button(DAY_SHORT[day], "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : ""), () => {
+      selectDay(p, day);
       rerenderRoom(room);
     });
-    b.title = "Click to edit this day, Shift+click to add it to the selection";
+    b.setAttribute("aria-pressed", editing ? "true" : "false");
+    b.setAttribute("aria-label", DAY_LONG[day] + (sel && !editing ? ", edited together" : "") + (dirty.has(day) ? ", changed" : ""));
+    b.title = "Edit " + DAY_LONG[day] + " and the days with the same programme";
     days.appendChild(b);
   }
-  days.appendChild(button("All days", "day all", () => {
-    for (const day of DAYS) p.selected.add(day);
-    rerenderRoom(room);
-  }));
-  days.appendChild(button("Only " + DAY_SHORT[p.day], "day all", () => {
-    p.selected = new Set([p.day]);
-    rerenderRoom(room);
-  }));
   form.appendChild(days);
+  form.appendChild(switchEl("Only " + DAY_LONG[p.day], p.only, (on) => {
+    p.only = on;
+    rerenderRoom(room);
+  }));
+  const together = DAYS.filter((d) => p.selected.has(d));
+  const scope = p.only || together.length < 2
+    ? "Changes apply to " + DAY_LONG[p.day] + " only."
+    : "Changes apply to " + together.map((d) => DAY_SHORT[d]).join(", ") + " together.";
+  form.appendChild(textEl("p", scope, "muted small"));
   form.appendChild(renderDayBar(p.days[p.day]));
   form.appendChild(renderPoints(room, c, p.day));
-  const tools = document.createElement("div");
-  tools.className = "cfg-tools";
-  const others = [...p.selected].filter((d) => d !== p.day);
-  const copyBtn = button("Copy " + DAY_SHORT[p.day] + " to " + (others.length ? others.map((d) => DAY_SHORT[d]).join(", ") : "selected days"), "", () => {
-    for (const d of others) {
-      p.days[d] = p.days[p.day].map((pt) => ({ temp: pt.temp, until: pt.until }));
-      p.dirty.add(d);
-    }
-    rerenderRoom(room);
-  });
-  copyBtn.disabled = others.length === 0;
-  tools.appendChild(copyBtn);
-  form.appendChild(tools);
+  form.appendChild(renderDayCopy(room, p));
   const src = p.source;
   const dev = src && c.cfg && c.cfg.devices.find((d) => d.rf_address === src);
-  form.appendChild(textEl("p", (src ? "Programme as stored on " + (dev && dev.name ? dev.name : src) + ". " : "") + "Send writes the changed days to every thermostat of the room" + (p.dirty.size ? " (" + [...p.dirty].map((d) => DAY_SHORT[d]).join(", ") + ")" : "") + ".", "muted small"));
-  form.appendChild(formActions(() => closeConfig(room)));
+  form.appendChild(textEl("p", (src ? "Programme as stored on " + (dev && dev.name ? dev.name : src) + ". " : "") + "Send writes the changed days to every thermostat of the room" + (dirty.size ? " (" + [...dirty].map((d) => DAY_SHORT[d]).join(", ") + ")" : "") + ".", "muted small"));
+  const resetDay = button("Reset day", "", () => {
+    p.days[p.day] = copyPoints(p.orig[p.day]);
+    selectDay(p, p.day);
+    rerenderRoom(room);
+  });
+  resetDay.disabled = !dirty.has(p.day);
+  resetDay.title = "Back to the programme of " + DAY_LONG[p.day] + " as loaded";
+  const resetAll = button("Reset all", "", () => {
+    p.days = copyDays(p.orig);
+    p.copyTo = new Set();
+    selectDay(p, p.day);
+    rerenderRoom(room);
+  });
+  resetAll.disabled = dirty.size === 0;
+  resetAll.title = "Back to the week programme as loaded";
+  form.appendChild(formActions(() => closeConfig(room), "", [resetDay, resetAll]));
   return form;
+}
+
+// renderDayCopy is the copy section: every day as a toggle, the days
+// already sharing the edited day's programme greyed out, "All days",
+// and Copy, which gives the ticked days the edited day's programme.
+// With "only" off they then join the selection and are edited together.
+function renderDayCopy(room, p) {
+  const box = document.createElement("div");
+  box.className = "day-copy";
+  box.setAttribute("role", "group");
+  const title = "Copy " + DAY_LONG[p.day] + " to …";
+  box.setAttribute("aria-label", title);
+  box.appendChild(textEl("h4", title));
+  const row = document.createElement("div");
+  row.className = "day-bar week";
+  const free = DAYS.filter((d) => !p.selected.has(d));
+  for (const day of DAYS) {
+    const on = p.copyTo.has(day);
+    const b = button(DAY_SHORT[day], "day" + (on ? " chosen" : ""), () => {
+      if (p.copyTo.has(day)) p.copyTo.delete(day);
+      else p.copyTo.add(day);
+      rerenderRoom(room);
+    });
+    b.disabled = p.selected.has(day);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.setAttribute("aria-label", DAY_LONG[day] + (b.disabled ? ", has this programme" : ""));
+    row.appendChild(b);
+  }
+  const all = button("All days", "day all", () => {
+    for (const d of free) p.copyTo.add(d);
+    rerenderRoom(room);
+  });
+  all.disabled = free.length === 0 || free.every((d) => p.copyTo.has(d));
+  box.appendChild(row);
+  const tools = document.createElement("div");
+  tools.className = "day-bar";
+  tools.appendChild(all);
+  const copy = button("Copy", "day copy", () => {
+    for (const d of p.copyTo) {
+      p.days[d] = copyPoints(p.days[p.day]);
+      if (!p.only) p.selected.add(d);
+    }
+    p.copyTo = new Set();
+    rerenderRoom(room);
+  });
+  copy.disabled = p.copyTo.size === 0;
+  tools.appendChild(copy);
+  box.appendChild(tools);
+  return box;
+}
+
+// switchEl builds a slide switch: a checkbox styled as a switch.
+function switchEl(label, checked, onChange) {
+  const sw = document.createElement("label");
+  sw.className = "switch";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!checked;
+  cb.addEventListener("change", () => onChange(cb.checked));
+  sw.appendChild(cb);
+  const slider = textEl("span", "", "slider");
+  slider.setAttribute("aria-hidden", "true");
+  sw.appendChild(slider);
+  sw.appendChild(textEl("span", label, "switch-label"));
+  return sw;
 }
 
 // renderDayBar draws the day as segments proportional to their length.
@@ -577,10 +705,15 @@ function renderDayBar(points) {
   return bar;
 }
 
-// renderPoints lists the switch points of a day as editable rows.
+// renderPoints lists the switch points of a day as editable rows; every
+// change goes through programEdited.
 function renderPoints(room, c, day) {
   const p = c.prog;
   const pts = p.days[day];
+  const edited = () => {
+    programEdited(p);
+    rerenderRoom(room);
+  };
   const list = document.createElement("div");
   list.className = "prog-points";
   pts.forEach((pt, i) => {
@@ -596,28 +729,28 @@ function renderPoints(room, c, day) {
       time.step = "300";
       time.value = pt.until;
       time.required = true;
+      time.setAttribute("aria-label", "switch point " + (i + 1) + ", until");
       time.addEventListener("change", () => {
         if (!time.value) return;
         pt.until = time.value;
         pts.sort((a, b) => minutesOf(a.until) - minutesOf(b.until));
-        p.dirty.add(day);
-        rerenderRoom(room);
+        edited();
       });
       row.appendChild(time);
     }
     row.appendChild(textEl("span", "at", "muted"));
-    row.appendChild(numberInput(pt.temp, MIN_TEMP, MAX_TEMP, STEP, (v) => {
+    const temp = numberInput(pt.temp, MIN_TEMP, MAX_TEMP, STEP, (v) => {
       if (v === undefined) return;
       pt.temp = clampTemp(v);
-      p.dirty.add(day);
-      rerenderRoom(room);
-    }));
+      edited();
+    });
+    temp.setAttribute("aria-label", "switch point " + (i + 1) + ", temperature");
+    row.appendChild(temp);
     row.appendChild(textEl("span", "°C", "muted"));
     if (!last) {
       const rm = button("−", "step small", () => {
         pts.splice(i, 1);
-        p.dirty.add(day);
-        rerenderRoom(room);
+        edited();
       });
       rm.title = "Remove this switch point";
       rm.setAttribute("aria-label", "remove switch point");
@@ -627,8 +760,7 @@ function renderPoints(room, c, day) {
         const prev = pts.length > 1 ? minutesOf(pts[pts.length - 2].until) : 0;
         const mid = Math.round(((prev + 1440) / 2) / 5) * 5;
         pts.splice(pts.length - 1, 0, { temp: pt.temp, until: clockOf(Math.min(1435, Math.max(prev + 5, mid))) });
-        p.dirty.add(day);
-        rerenderRoom(room);
+        edited();
       });
       add.title = "Add a switch point";
       add.setAttribute("aria-label", "add switch point");
@@ -651,21 +783,23 @@ function validateDay(pts) {
   return "";
 }
 
+// sendProgram writes the days that differ from the loaded programme;
+// once the Cube took them they count as loaded.
 async function sendProgram(room, c) {
   const p = c.prog;
   const body = {};
-  for (const day of p.dirty) {
+  for (const day of dirtyDays(p)) {
     const err = validateDay(p.days[day]);
     if (err) return setConfigResult(room, c, DAY_SHORT[day] + ": " + err + ".", false);
-    body[day] = p.days[day].map((pt) => ({ temp: pt.temp, until: pt.until }));
+    body[day] = copyPoints(p.days[day]);
   }
   if (Object.keys(body).length === 0) return setConfigResult(room, c, "Week programme: nothing changed.", true);
   const label = "Week programme (" + Object.keys(body).map((d) => DAY_SHORT[d]).join(", ") + ")";
   setConfigResult(room, c, label + ": waiting for the cube …", true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/program", body);
+    if (!(res && res.discarded)) for (const d of Object.keys(body)) p.orig[d] = copyPoints(body[d]);
     setConfigResult(room, c, resultText(label, res), !(res && res.discarded));
-    if (!(res && res.discarded)) p.dirty = new Set();
     state.details = {};
   } catch (e) {
     setConfigResult(room, c, errorText(label, e), false);

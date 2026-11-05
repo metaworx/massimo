@@ -603,7 +603,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .cfg-field .inline > .muted { min-width: 2.6em; }
 .cfg-form input[type="number"] { text-align: right; }
 .cfg-form input[type="text"] { width: min(100%, 18em); }
-.cfg-form .actions { margin-top: 4px; }
+.cfg-form .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .cfg-device {
   border-top: 1px solid var(--line);
   padding-top: 8px;
@@ -631,7 +631,21 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   border-radius: 50%;
   background: var(--warn);
 }
-.day-bar .day.all { font-weight: 400; color: var(--muted); }
+.day-bar .day.all, .day-bar .day.copy { font-weight: 400; }
+.day-bar .day.all { color: var(--muted); }
+.day-bar .day.chosen { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.day-bar .day:disabled { opacity: 0.35; }
+/* the seven days share a row evenly, whatever the tile's width */
+.day-bar.week { flex-wrap: nowrap; }
+.day-bar.week .day { flex: 1 1 0; min-width: 0; padding: 4px 2px; }
+.day-copy { display: flex; flex-direction: column; gap: 6px; }
+.day-copy h4 { margin: 4px 0 0; }
+.day-copy .day.copy { margin-left: auto; }
+.cfg-form p { margin: 0; }
+/* resets at the left end of an actions row, Cancel and Send at the right */
+.actions { flex-wrap: wrap; }
+.actions-left { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
+.actions-right { display: inline-flex; gap: 8px; margin-left: auto; }
 .prog-bar {
   display: flex;
   height: 28px;
