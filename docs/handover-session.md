@@ -1,9 +1,10 @@
 # Handover from the session of 2026-11-04
 
-For the next session, local or cloud. Branch `alpha` (called `phase-0`
-until 2026-11-05; it is the update channel of the alpha releases), head
-78855c5 and later; tags up to `v0.1.0-alpha.N` (run `make tag` on
-`alpha` after each feature). Read README.md, then docs/roadmap.md, then this file.
+For the next session, local or cloud. Develop on `main` (pull requests
+go there); `alpha` (called `phase-0` until 2026-11-05) is the release
+branch and update channel of the alpha releases, promoted from `main`
+with `make release-alpha` after each feature; tags up to
+`v0.1.0-alpha.N`. Read README.md, then docs/roadmap.md, then this file.
 
 Done on 2026-11-05 after the UI rounds: docs/design.md and
 docs/background.md (the proposal, the evaluation, the sources), the
@@ -20,8 +21,8 @@ Release engineering (roadmap 8): the repository is public; CI and the
 release workflow are in .github/workflows; a tag publishes signed
 releases (the key is the `signing` environment's `MASSIMO_RELEASE_KEY`,
 only usable by `v*` tags; the public half is
-internal/update/release-key.pem); `make tag` writes the branch into the
-tag as the update channel and pushes branch and tag together; `massimo
+internal/update/release-key.pem); `make release-alpha` fast-forwards
+`alpha` to `main` and tags it with the channel, pushed together; `massimo
 update` and the web UI's Settings → Software install releases through
 the root helper units in packaging/systemd (packaging/README.md,
 "Updating").

@@ -192,17 +192,19 @@ and the web UI is at `http://<box>:8099/`.
 
 ## Updating
 
-Releases are made from tags (`make tag`), built, signed and published by
-`.github/workflows/release.yml`. Each release belongs to an **update
-channel**, the branch the tag was made on; a binary follows the channel of
-the branch it was built from (`massimo version` does not show it, `massimo
-update -check` does), or `MASSIMO_UPDATE_CHANNEL`. A release is installed
-only when it is newer than the running version, so switching the channel
-never goes back in version. The alpha releases come from the branch
-`alpha` (v0.1.0-alpha.10 and .11 were made on its old name `phase-0`; a
-binary of those follows `phase-0` until `MASSIMO_UPDATE_CHANNEL=alpha` is
-set); `-version <tag>` installs a given release,
-older ones too.
+Development happens on `main`; `make release-alpha` promotes it to the
+release branch `alpha` and tags it, and `.github/workflows/release.yml`
+builds, signs and publishes the release. Each release belongs to an
+**update channel**, its release branch: `alpha` for the
+`v0.1.0-alpha.N` releases, later `beta` and a stable one the same way. A
+release binary follows its channel; a binary built from another branch
+follows that branch, which has no releases, unless
+`MASSIMO_UPDATE_CHANNEL=alpha` is set (`massimo update -check` shows the
+channel). A release is installed only when it is newer than the running
+version, so switching the channel never goes back in version;
+`-version <tag>` installs a given release, older ones too.
+v0.1.0-alpha.10 and .11 were made before the branch was renamed and
+follow `phase-0`; on those, set `MASSIMO_UPDATE_CHANNEL=alpha`.
 
 By hand, as root:
 

@@ -15,19 +15,28 @@ CROSS    = CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-linux-armv6 \
            massimo-darwin-amd64 massimo-darwin-arm64 massimo-windows-amd64.exe
 
-.PHONY: all build test vet windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross release clean tag
+.PHONY: all build test vet windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross release clean release-alpha
 
-# tag marks HEAD as the next pre-release (v0.1.0-alpha.N+1 after the
-# latest v0.1.0-alpha.N) and pushes the branch and the tag together; one
-# tag per feature. The tag message names the branch, which becomes the
-# release's update channel (.github/workflows/release.yml).
-tag:
-	@branch=$$(git rev-parse --abbrev-ref HEAD); \
-	if [ "$$branch" = HEAD ]; then echo "tag: HEAD is not on a branch" >&2; exit 1; fi; \
+# Development happens on main; a release promotes main to a release
+# branch, which is also the update channel boxes follow (internal/update).
+# release-alpha fast-forwards alpha on GitHub to main's head and tags it as
+# the next v0.1.0-alpha.N with "channel: alpha" in the (signed) tag
+# message, both pushed atomically; .github/workflows/release.yml then
+# builds, signs and publishes the release. Push main first. It refuses when
+# alpha has commits main lacks (alpha is only ever fast-forwarded) and when
+# main's head is released already.
+release-alpha:
+	@git fetch --quiet --tags origin main alpha && \
+	sha=$$(git rev-parse origin/main) && \
+	if ! git merge-base --is-ancestor origin/alpha $$sha; then \
+		echo "release-alpha: alpha has commits that main lacks; bring them into main first" >&2; exit 1; fi; \
+	if done=$$(git describe --tags --exact-match $$sha 2>/dev/null); then \
+		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
 	last=$$(git tag -l 'v0.1.0-alpha.*' | sort -t. -k3 -n | tail -1); \
 	n=$${last##*.}; next=v0.1.0-alpha.$$((n+1)); \
-	git tag -a $$next -m "$$next" -m "channel: $$branch" && \
-	git push --atomic origin "$$branch" "$$next" && echo tagged $$next on $$branch
+	git tag -a $$next -m "$$next" -m "channel: alpha" $$sha && \
+	git push --atomic origin $$sha:refs/heads/alpha refs/tags/$$next && \
+	echo "released $$next ($$sha) on alpha; follow it at https://github.com/metaworx/massimo/actions"
 
 all: test build
 

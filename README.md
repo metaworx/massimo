@@ -170,9 +170,13 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 
 ## Versions
 
-Pre-releases are tagged `v0.1.0-alpha.N`, one tag per feature, with
-`make tag`; `make` builds carry that version, `go run` builds report
-the commit only with `go run -buildvcs=true`.
+Development happens on `main`. `make release-alpha` promotes `main` to
+the branch `alpha` and tags it as the next pre-release `v0.1.0-alpha.N`,
+which the release workflow builds, signs and publishes; boxes following
+the update channel `alpha` then get it from `massimo update` or the web UI
+(see [packaging/README.md](packaging/README.md#updating)). `make` builds
+carry the version from `git describe`, `go run` builds report the commit
+only with `go run -buildvcs=true`.
 
 ## Original software
 

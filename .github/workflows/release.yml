@@ -11,9 +11,11 @@ name: Release
 # signature against the public key compiled into massimo before
 # publishing, and publishes exactly what it signed.
 #
-# The update channel of a release is the branch the tag was made on, as
-# `make tag` writes it into the tag message ("channel: alpha"); for a
-# tag without that line, the one branch on GitHub holding its commit.
+# The update channel of a release is the release branch it was promoted
+# to, as `make release-alpha` writes it into the tag message ("channel:
+# alpha"); for a tag without that line, the one branch on GitHub holding
+# its commit. Development happens on main; the release branches only ever
+# fast-forward to it.
 on:
   push:
     tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
