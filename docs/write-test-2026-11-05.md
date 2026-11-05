@@ -4,8 +4,8 @@ Steps 1 to 6 of [handover-write-test.md](handover-write-test.md) were
 run against the live house Cube JEQ0192422 (firmware 1.1.3). They used
 room 2 and its only radiator thermostat 05cdc6 (firmware 22), not room 1,
 because room 1's thermostat has its keys locked, so its eco and boost
-buttons cannot be pressed to check a value. Step 7 (moving a device) was
-not run; it needs a separate go.
+buttons cannot be pressed to check a value. Step 7 (moving a device)
+followed later the same day, see [Step 7](#step-7-moving-the-window-contact).
 
 **Result: every step passed.** Every write was accepted by the Cube (none
 discarded) and came back from the Cube exactly as sent. After every
@@ -39,6 +39,38 @@ Each revert left the configuration identical to the first backup.
 Duty cycle: 4 % before, 14 % after the eight radio writes (about 1.25 %
 each, lower than the 2 to 3 % the plan expected). Free memory slots:
 50 before and after.
+
+## Step 7: moving the window contact
+
+Room 2's window contact 183962 was moved to room 1 and back with
+`PUT …/devices/183962 {"room_id": …}`, the window opened and closed
+after each move. Duty cycle 4 % before.
+
+- **7a, room 2 → room 1: passed.** Answer ok. The Cube listed the
+  contact under room 1 at once, the configuration diff showed only its
+  `room_id: 2 -> 1`, and 4 radiograms were pending (duty cycle 12 %, then
+  15 %). After the window was opened and closed, the contact had fetched
+  them all: 0 pending, 50 free slots, room 1 ready.
+- **7b, room 1 → room 2: passed, with a leftover link error.** Answer ok,
+  the contact back under room 2, configuration diff against the first
+  backup empty, 4 radiograms pending (duty cycle 18 %). Before the
+  window could be opened, a network outage power-cycled the Cube and the
+  Pi (the Cube twice; it needed a second power cycle to answer on TCP
+  again). Afterwards the Cube had no radiograms pending, so whether the
+  contact fetched all four is unknown. Functional check: with the window
+  open, room 2's thermostat went to its window-open temperature (5 °C)
+  within a minute and back to 18 °C a minute after closing, and room 1's
+  thermostat was unaffected, so the contact is linked to room 2's
+  thermostat again. But the contact's reports now alternate between
+  `link_error` set and clear (set at 18:03 and 18:06, clear at 18:05),
+  which it did not do before the test; most likely a link to a room 1
+  device was not removed because a radiogram was lost in the power
+  cycles. Fix if it stays: move the contact to room 1 and back once more.
+
+A Cube restart drops radiograms it still waits to deliver. A move whose
+radiograms are lost leaves the Cube's metadata right but the device's
+links half done, and nothing reports that except the device's
+link-error flag.
 
 ## Findings
 
@@ -75,7 +107,15 @@ each, lower than the 2 to 3 % the plan expected). Free memory slots:
 ## Open items from the install (until confirmed)
 
 - DHCP reservations in the mobile router's network: the Cube at .118
-  and the Pi at .48.
+  and the Pi. Without one the Pi's DHCP address changed from .48 to .41
+  after the outage; it stayed reachable on its fixed .200.
+- Room 2's window contact 183962: the link error from step 7b, see
+  above.
+- During the update helper's restart of `serve` the proxy was gone for a
+  few seconds, and `massimo status` on another machine fell back to the
+  Cube itself, taking its only client slot until it gave up. Commands
+  run from other machines should name the proxy with `-addr` instead of
+  relying on the fallback.
 - The Pi's fixed addresses .200 (web UI and API) and .201 (Cube proxy)
   are outside the router's DHCP range of 20 to 199 (confirmed by
   Martin). The earlier .49 and .50 are no longer used.
