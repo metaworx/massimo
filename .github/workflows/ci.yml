@@ -98,6 +98,8 @@ jobs:
 
       - name: Install, run, update and remove the service
         shell: bash
+        env:
+          MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
@@ -175,12 +177,17 @@ jobs:
       # update from the web UI's request through the root helper, a
       # rollback, and a removal that leaves nothing behind.
       - name: Install, run, update and remove the LaunchDaemons
+        # Without a token GitHub allows 60 API requests an hour per address,
+        # which the shared macOS runners use up (the release check then gets
+        # 403); it only lifts that limit.
+        env:
+          MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo ./cmd/massimo
           ./massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
-          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\n' > ci.env
+          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
           health=http://127.0.0.1:18099/healthz
           up() { for i in $(seq 30); do curl -fsS "$health" && return; sleep 2; done; return 1; }
 
@@ -195,6 +202,14 @@ jobs:
           # Installing again keeps the address and restarts the service.
           sudo ./massimo install
           up
+
+          # The helper reads no settings: the token goes into its own
+          # environment (launchctl setenv is barred by SIP).
+          helper=/Library/LaunchDaemons/ch.metaworx.massimo-update.plist
+          sudo /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:MASSIMO_GITHUB_TOKEN string $MASSIMO_GITHUB_TOKEN" "$helper"
+          sudo launchctl bootout system/ch.metaworx.massimo-update
+          for i in $(seq 50); do sudo launchctl print system/ch.metaworx.massimo-update >/dev/null 2>&1 || break; sleep 0.2; done
+          sudo launchctl bootstrap system "$helper"
 
           # As the web UI does it: the server writes the request, launchd
           # starts the helper, which installs the newest alpha or rolls
