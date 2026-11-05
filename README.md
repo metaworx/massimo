@@ -74,40 +74,47 @@ firmware) via the UDP broadcast the original software uses; it needs UDP
 port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`
 recovers a Cube's portal IV from one `e:` exchange.
 
-Several Cubes: put `MASSIMO_CUBE_<SERIAL>_KEY`, `MASSIMO_CUBE_<SERIAL>_IV`
-and `MASSIMO_CUBE_<SERIAL>_ADDRESS` into `.env` and select one with
-`-sn <serial>` (default `MASSIMO_CUBE_SN`); without an address the Cube
-is discovered on the LAN. With `-addr`, the serial the Cube reports
-selects its key. `-env <file>` picks another env file. `massimo portal`
-serves every Cube that has a key and IV configured.
+### Cube variables
 
-`MASSIMO_CUBE_<SERIAL>_PROXY` (or `MASSIMO_CUBE_PROXY`) is the address
-of a running `massimo serve` that answers as that Cube; every command
-except `serve` tries it first, with a two-second timeout, and falls
-back to the Cube's own address, because the Cube serves one client at
-a time and `serve` usually holds that connection. `-addr` always wins.
-`MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` (or `MASSIMO_CUBE_PROXY_SERIAL`)
-is the serial `serve` uses in discovery replies, see
-[docs/proxy.md](docs/proxy.md). `serve -sn <serial>` serves that one
-Cube instead of every configured one.
+The Cubes are configured in the environment or in `.env` in the current
+directory (`KEY=VALUE` lines, `-env <file>` or `MASSIMO_ENV_FILE` for
+another file; the environment wins over the file). Keep the file out of
+git; `massimo config` shows what is in effect, secrets redacted.
+
+Every variable has a per-Cube form with the serial in it,
+`MASSIMO_CUBE_<SERIAL>_KEY` for `MASSIMO_CUBE_KEY`, which wins for that
+Cube; the plain form applies to any Cube unless the table says
+otherwise.
+
+| Variable (per-Cube form) | Meaning |
+|---|---|
+| `MASSIMO_CUBE_<SERIAL>_ADDRESS` | The Cube's address, host[:port]. `serve` serves every Cube that has one. |
+| `MASSIMO_CUBE_<SERIAL>_KEY` | The Cube's key from its QR code (`k` and 32 hex digits), for the portal commands. |
+| `MASSIMO_CUBE_<SERIAL>_IV` | The Cube's portal IV, recovered with `portal-crypto iv`. `portal` serves every Cube that has a key and an IV. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` tries it first, with a two-second timeout, and falls back to the Cube's own address, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
+| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial, until names live in a database. The plain form only with a single Cube. |
+| `MASSIMO_CUBE_SN` | The Cube to use when no `-sn` is given. |
+
+`-sn <serial>` selects a Cube: every command then reads that Cube's
+variables and, without an address, discovers the Cube on the LAN; with
+`-addr` instead, the serial the Cube reports selects them. `-addr` always
+wins over the variables. `serve -sn <serial>` serves that one Cube
+instead of every configured one.
 
 Room 255 is the room for hidden devices: a device that is paired but
 never reports blocks every command to the room the Cube counts it in,
 and the Cube never drops it, so the way out is to park it in room 255
 on the Cube (edit a backup and restore it, see
-docs/portal-protocol.md). Every
-massimo command, the API and the proxy then hide that room and its
-devices without any configuration, so `status` on another computer and
-the original software do not see them either, and `restore` keeps them
-exactly as the Cube has them. `-show-hidden` before the command name
-(`serve -show-hidden` for the server; `-show-ghosts` and `-no-ignore`
-are older names) shows and touches them for one run, for example to
-move a device out again.
-`MASSIMO_CUBE_<SERIAL>_IGNORE` (or `MASSIMO_CUBE_IGNORE`) hides further
-radio addresses, comma separated, in the same way.
-`MASSIMO_CUBE_<SERIAL>_NAME` gives the Cube a user-friendly name that
-the API and the UI show next to the serial, until names live in a
-database.
+docs/portal-protocol.md). Every massimo command, the API and the proxy
+then hide that room and its devices without any configuration, so
+`status` on another computer and the original software do not see them
+either, and `restore` keeps them exactly as the Cube has them. The
+devices in `MASSIMO_CUBE_<SERIAL>_IGNORE` are hidden in the same way.
+`-show-hidden` before the command name (`serve -show-hidden` for the
+server; `-show-ghosts` and `-no-ignore` are older names) shows and
+touches them for one run, for example to move a device out again.
 
 ## Server
 
