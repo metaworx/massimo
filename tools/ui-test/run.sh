@@ -10,9 +10,15 @@
 # Without Playwright it says so and exits 0, so `make ui-test` never
 # fails on a machine that cannot run it.
 #
+# The fake Cube also answers UDP discovery, as a Cube that is not
+# configured (KEQ0000000), on a loopback port the server asks instead of
+# broadcasting; the server's own discovery socket is UDP 23272 as always,
+# so a search answers 503 where another program holds that port, and
+# smoke.py then skips the checks that need an answer.
+#
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_CUBE_PORT (62919),
-# UI_TEST_API_PORT (8119).
+# UI_TEST_API_PORT (8119), UI_TEST_DISCOVERY_PORT (23919).
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -28,6 +34,7 @@ fi
 
 cube_port=${UI_TEST_CUBE_PORT:-62919}
 api_port=${UI_TEST_API_PORT:-8119}
+discovery_port=${UI_TEST_DISCOVERY_PORT:-23919}
 token=ui-test-token
 work=$(mktemp -d)
 pids=""
@@ -40,10 +47,11 @@ trap cleanup EXIT INT TERM
 (cd "$root" && go build -o "$work/massimo" ./cmd/massimo)
 cd "$work"
 env -i PATH="$PATH" HOME="$HOME" ./massimo fakecube -greeting "$here/greeting.txt" \
-	-listen "127.0.0.1:$cube_port" > fakecube.log 2>&1 &
+	-listen "127.0.0.1:$cube_port" -discovery "127.0.0.1:$discovery_port" > fakecube.log 2>&1 &
 pids="$pids $!"
 env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" ./massimo serve -addr "127.0.0.1:$cube_port" -proxy off \
-	-listen "127.0.0.1:$api_port" -update-status "$work/no-update-status.json" > serve.log 2>&1 &
+	-listen "127.0.0.1:$api_port" -update-status "$work/no-update-status.json" \
+	-discover-target "127.0.0.1:$discovery_port" -discover-interval 0 > serve.log 2>&1 &
 pids="$pids $!"
 
 url="http://127.0.0.1:$api_port/"

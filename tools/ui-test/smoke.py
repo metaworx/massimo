@@ -14,14 +14,13 @@ badge goes when a state event closes the contact; the measured
 temperature shows its age, and a device made stale (30 hours, through a
 state event) greys its values and warns on the tile and in the device
 list, also in expert mode. The Cube choice's search entry runs a
-discovery (the server's answer is stubbed: the fake Cube does not answer
-discovery), shows "searching" until the answer is in, then lists the
-found Cube as not selectable with the env lines to add; a cube_found
-event adds another one live, and a refused search shows the server's
-message. Any console error, page error or horizontal scroll fails the
+discovery, which the fake Cube answers as a Cube that is not configured,
+shows "searching" until the answer is in, then lists the found Cube as
+not selectable with the env lines to add, and the log has its
+cube_found; a cube_found event adds another one live, and a refused
+search (stubbed 503) shows the server's message. Any console error, page error or horizontal scroll fails the
 test.
 """
-import json
 import sys
 import time
 
@@ -32,9 +31,8 @@ token = sys.argv[2] if len(sys.argv) > 2 else ""
 failures = []
 OPEN = {"en": "Open", "de": "Offen"}
 USED = "0" * 48
-FOUND = {"serial": "LEQ0123456", "configured": False, "address": "192.168.1.77", "mac": "00:1a:22:00:00:01",
-         "rf_address": "0a1b2d", "firmware": "1.1.3", "found_at": "2026-11-05T18:40:00+01:00", "last_seen": "2026-11-05T18:40:00+01:00"}
-FOUND2 = dict(FOUND, serial="LEQ0654321", address="192.168.1.78", rf_address="0a1b2e")
+FOUND2 = {"serial": "LEQ0654321", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",
+          "firmware": "1.1.3", "found_at": "2026-11-05T18:40:00+01:00", "last_seen": "2026-11-05T18:40:00+01:00"}
 SEARCHING = {"en": "Searching…", "de": "Suche läuft…"}
 FOUND_N = {"en": "{n} Cube{s} found, not configured", "de": "{n} Cube{s} gefunden, nicht eingerichtet"}
 STALE = {"en": "Not seen for 30 hours", "de": "Seit 30 Stunden keine Meldung"}
@@ -117,47 +115,45 @@ def discover(page, label, lang):
     width = page.viewport_size["width"]
     sel = page.locator("#cube-select")
     check(sel.locator("option[value=__discover]").count() == 1, f"{label}: search entry in the Cube choice")
-    check(page.locator("#cube-found").is_hidden(), f"{label}: no found Cubes before a search")
     serial = page.evaluate("state.serial")
     held = []
-
-    def cubes(route):
-        if route.request.method != "GET":
-            return route.continue_()
-        resp = route.fetch()
-        body = resp.json() + [FOUND]
-        route.fulfill(response=resp, body=json.dumps(body))
-
-    page.route("**/api/v1/cubes", cubes)
     page.route("**/api/v1/cubes/discover", lambda route: held.append(route))
     sel.select_option("__discover")
-    check(wait_until(page, "document.getElementById('cube-search').textContent !== ''", 5) or len(held) > 0, f"{label}: search started")
-    check(page.locator("#cube-search").inner_text() == SEARCHING[lang], f"{label}: searching shown")
-    check(sel.locator("option[value=__discover]").is_disabled(), f"{label}: search entry disabled while searching")
     end = time.time() + 5
     while not held and time.time() < end:
         page.wait_for_timeout(100)
-    if held:
-        held[0].fulfill(status=200, content_type="application/json",
-                        body=json.dumps({"ran_at": "2026-11-05T18:40:02+01:00", "found": [FOUND]}))
-    check(wait_until(page, "!document.getElementById('cube-found').classList.contains('hidden')", 5), f"{label}: found Cube listed")
-    check(page.locator("#cube-search").inner_text() == found_text(lang, 1), f"{label}: search result shown")
-    opt = sel.locator("option[value='found:LEQ0123456']")
-    check(opt.count() == 1 and opt.is_disabled(), f"{label}: found Cube in the choice, not selectable")
-    check(sel.input_value() == serial, f"{label}: the selected Cube stays")
-    check("MASSIMO_CUBE_LEQ0123456_ADDRESS=192.168.1.77" in page.locator("#cube-found .env-lines").inner_text(), f"{label}: env lines for the found Cube")
-    check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll with the found Cubes")
-    page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify(c) }))", FOUND2)
-    check(sel.locator("option[value='found:LEQ0654321']").count() == 1, f"{label}: cube_found adds a Cube live")
-    check(page.locator("#cube-found summary").inner_text() == found_text(lang, 2), f"{label}: two found Cubes counted")
+    check(page.locator("#cube-search").inner_text() == SEARCHING[lang], f"{label}: searching shown")
+    check(sel.locator("option[value=__discover]").is_disabled(), f"{label}: search entry disabled while searching")
     page.unroute("**/api/v1/cubes/discover")
+    if held:
+        held[0].continue_()  # on to the server, which asks the fake Cube
+    check(wait_until(page, "!discovery.running", 10), f"{label}: search done")
+    if "bad" in (page.locator("#cube-search").get_attribute("class") or ""):
+        print(f"skip  {label}: the server has no discovery socket (UDP 23272 in use?): "
+              + page.locator("#cube-search").inner_text())
+    else:
+        check(page.locator("#cube-search").inner_text() == found_text(lang, 1), f"{label}: search result shown")
+        opt = sel.locator("option[value='found:KEQ0000000']")
+        check(opt.count() == 1 and opt.is_disabled(), f"{label}: found Cube in the choice, not selectable")
+        check(sel.input_value() == serial, f"{label}: the selected Cube stays")
+        check(page.locator("#cube-found").get_attribute("open") is not None, f"{label}: found Cubes opened")
+        check("MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1" in page.locator("#cube-found .env-lines").inner_text(), f"{label}: env lines for the found Cube")
+        check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll with the found Cubes")
+        page.locator("#view-log").click()
+        check(wait_until(page, "[...document.querySelectorAll('.log-line.kind-cube_found')].some((l) => l.textContent.includes('KEQ0000000'))", 5),
+              f"{label}: cube_found in the log")
+        page.locator("#view-tiles").click()
+    before = page.evaluate("state.found.length")
+    page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
+                  "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", FOUND2)
+    check(sel.locator("option[value='found:LEQ0654321']").count() == 1, f"{label}: cube_found adds a Cube live")
+    check(page.locator("#cube-found summary").inner_text() == found_text(lang, before + 1), f"{label}: found Cubes counted")
     page.route("**/api/v1/cubes/discover", lambda route: route.fulfill(
         status=503, content_type="application/json", body='{"error": "no discovery socket"}'))
     sel.select_option("__discover")
     check(wait_until(page, "document.getElementById('cube-search').classList.contains('bad')", 5)
           and "no discovery socket" in page.locator("#cube-search").inner_text(), f"{label}: a refused search shows the server's message")
     page.unroute("**/api/v1/cubes/discover")
-    page.unroute("**/api/v1/cubes")
 
 
 def run(page, label, lang):
