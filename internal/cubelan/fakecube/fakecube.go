@@ -35,7 +35,8 @@ type Server struct {
 	received []cube.Message
 	conns    int
 	open     map[net.Conn]bool
-	joined   bool // the Pair device has joined
+	joined   bool                    // the Pair device has joined
+	configs  map[string]cube.Message // C lines set with SetConfig, by address
 }
 
 // paired returns the Pair device once it has joined.
@@ -65,6 +66,26 @@ func NewDeviceLine(d cube.NewDevice) cube.Message {
 	b := append([]byte{byte(d.Type)}, rf[:]...)
 	b = append(append(b, fmt.Sprintf("%-10.10s", d.Serial)...), 0xff)
 	return cube.Message{Type: 'N', Data: base64.StdEncoding.EncodeToString(b)}
+}
+
+// SetConfig makes c: for the line's device answer with line from now on,
+// as the real Cube does once a device acknowledged a configuration write.
+func (s *Server) SetConfig(line cube.Message) {
+	rf, _, _ := strings.Cut(strings.ToLower(line.Data), ",")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.configs == nil {
+		s.configs = map[string]cube.Message{}
+	}
+	s.configs[rf] = line
+}
+
+// config returns the C line set for rf with SetConfig.
+func (s *Server) config(rf string) (cube.Message, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.configs[strings.ToLower(strings.TrimSpace(rf))]
+	return c, ok
 }
 
 // LoadGreeting reads protocol lines from a capture file.
@@ -191,6 +212,9 @@ func (s *Server) serve(conn net.Conn) {
 				if g.Type == 'C' && strings.HasPrefix(strings.ToLower(g.Data), strings.ToLower(strings.TrimSpace(m.Data))+",") {
 					reply = g.Wire()
 				}
+			}
+			if c, ok := s.config(m.Data); ok {
+				reply = c.Wire()
 			}
 		case 's', 'r':
 			d := 0

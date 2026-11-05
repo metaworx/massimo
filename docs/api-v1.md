@@ -212,6 +212,22 @@ still change. `queued` is the number of commands waiting in the server.
 `observed_since` is when the server first heard from the Cube (see the
 ages of device values below).
 
+The Cube reports its budget only in the answer to a radio command and
+when a connection starts, so `budget` and `pending_radiograms` do not
+change on their own while devices acknowledge. After radio writes
+through the API, once the devices had two minutes and the re-reads
+below are done, the server reconnects to the Cube for a fresh report if
+radiograms were still pending, at most every 15 minutes and only while
+the periodic refresh (`serve -refresh`) is on; the stream then sends
+`hello` and `connected`, and `connected` is false for the moment of the
+reconnect. Likewise the Cube changes a device's configuration only once
+the device has acknowledged a write, which took one to four minutes on
+hardware: after a configuration, programme or room write the server
+reads the device's configuration again after 15 s, 30 s, 1, 2 and 2
+minutes, until it changed, and the stream sends a `config` event when
+it does. Until then `GET …/devices/{rf}` and the room configuration show
+the old values.
+
 ### GET /api/v1/cubes/{sn}
 
 The same object with `config` (portal URL and flag, push button
