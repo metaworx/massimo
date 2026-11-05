@@ -1,0 +1,39 @@
+# The update helper: started by massimo-update.path, it takes the request
+# (which names nothing but the update channel), finds the newest release on
+# that channel on GitHub, checks its signature against the key compiled
+# into the installed massimo and the binary's SHA-256 against the signed
+# manifest, test-runs the new binary, replaces /usr/local/bin/massimo
+# (keeping the old one as massimo.prev), restarts massimo.service and rolls
+# back unless /healthz then reports the new version. It runs as root
+# because massimo.service cannot write /usr/local/bin; it reads nothing
+# the massimo user can write except the request file, and in particular
+# not /etc/massimo/env.
+
+[Unit]
+Description=Massimo update helper
+Documentation=https://go.metaworx.ch/massimo
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/massimo update -request /var/lib/massimo/update-request -status /var/lib/massimo-update/status.json -restart massimo.service -health http://127.0.0.1:8099/healthz
+# No .env file is read: the working directory is / and this one does not exist.
+Environment=MASSIMO_ENV_FILE=/nonexistent/.env
+WorkingDirectory=/
+# The status file, readable by the server.
+StateDirectory=massimo-update
+StateDirectoryMode=0755
+# The download and the Pi 1 are slow; the health check waits two minutes.
+TimeoutStartSec=15min
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/usr/local/bin /var/lib/massimo
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

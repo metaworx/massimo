@@ -9,6 +9,9 @@ the same steps.
   its settings from `/etc/massimo/env`, listens on port 8099 on every
   interface (API and web UI), logs to `/var/log/massimo/serve.log` and the
   journal, and restarts on failure.
+- `systemd/massimo-update.path` and `systemd/massimo-update.service`: the
+  update helper, which installs a new release when the web UI or the API
+  asks for one (see Updating).
 - `logrotate/massimo`: weekly rotation of that log.
 
 Each Cube accepts exactly one TCP client. Only one `massimo serve` can be
@@ -16,9 +19,12 @@ connected to a Cube at a time, so stop any other server (and close the
 original MAX! software) before starting this one; afterwards, clients
 connect to the server's proxy instead of the Cube.
 
-## Build
+## Download or build
 
-Pick the binary for the board (all need a 32-bit or 64-bit Linux to match):
+Every release on <https://github.com/metaworx/massimo/releases> has the
+binaries below, `SHA256SUMS` and a signed manifest; `sha256sum -c
+SHA256SUMS --ignore-missing` checks a download. To build instead, pick the
+target for the board (all need a 32-bit or 64-bit Linux to match):
 
 | Board                                  | OS             | Target              |
 |----------------------------------------|----------------|---------------------|
@@ -26,6 +32,8 @@ Pick the binary for the board (all need a 32-bit or 64-bit Linux to match):
 | Raspberry Pi 2, 3, 4, Zero 2 W         | 32-bit         | `make linux-armv7`  |
 | Raspberry Pi 3, 4, 5, Zero 2 W         | 64-bit         | `make linux-arm64`  |
 | PC, NAS                                | 64-bit         | `make linux`        |
+| Mac (Intel / Apple silicon)            |                | `make darwin`       |
+| Windows PC                             | 64-bit         | `make windows`      |
 
 `uname -m` on the box says which: `armv6l` needs the armv6 build (the armv7
 one dies there with "illegal instruction"), `armv7l` the armv7 build,
@@ -151,10 +159,65 @@ and the web UI is at `http://<box>:8099/`.
 
 ## Updating
 
+Releases are made from tags (`make tag`), built, signed and published by
+`.github/workflows/release.yml`. Each release belongs to an **update
+channel**, the branch the tag was made on; a binary follows the channel of
+the branch it was built from (`massimo version` does not show it, `massimo
+update -check` does), or `MASSIMO_UPDATE_CHANNEL`. A release is installed
+only when it is newer than the running version, so switching the channel
+never goes back in version; `-version <tag>` installs a given release,
+older ones too.
+
+By hand, as root:
+
 ```bash
-sudo install -m 0755 massimo-linux-armv6 /usr/local/bin/massimo
-sudo systemctl restart massimo
+sudo massimo update -check
+sudo massimo update -restart massimo.service -health http://127.0.0.1:8099/healthz
 ```
+
+It downloads the release's manifest and checks its signature against the
+public key compiled into the running massimo, downloads the binary for
+this machine (`massimo-linux-armv6` on a Pi 1) and checks its SHA-256
+against the manifest, runs `<new binary> version` to make sure it starts
+here, keeps the old binary as `/usr/local/bin/massimo.prev` and renames
+the new one into place. With `-restart` it restarts the unit, with
+`-health` it waits until `/healthz` reports the new version and otherwise
+puts the old binary back (the failed one stays as `massimo.failed`).
+
+Back to the previous binary (once more goes forward again):
+
+```bash
+sudo massimo update -rollback -restart massimo.service
+```
+
+### From the web UI
+
+The service runs as `massimo` and cannot write `/usr/local/bin`, so the
+web UI only asks: `POST /api/v1/update` writes
+`/var/lib/massimo/update-request`, and the path unit starts the helper as
+root, which does exactly the update above. The request carries nothing but
+the channel name, the helper reads nothing else the `massimo` user can
+write (in particular not `/etc/massimo/env`), and the release must verify
+against the compiled-in key, so a compromised server can at most install
+the newest signed release. Starting updates from the API needs
+`MASSIMO_API_TOKEN` to be set.
+
+```bash
+sudo install -m 0644 massimo-update.path massimo-update.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now massimo-update.path
+```
+
+`massimo.service` passes `-update-request /var/lib/massimo/update-request`
+to `serve`, which enables the button under Settings → Software. The
+helper's log is in `journalctl -u massimo-update`, its last result in
+`/var/lib/massimo-update/status.json` and in the UI.
+
+The release key: the workflow signs with `MASSIMO_RELEASE_KEY`, a secret of
+the repository's `signing` environment that only `v*` tags can use; its
+public half is `internal/update/release-key.pem`. A new key needs a
+release built with the new public key before releases signed with it are
+accepted.
 
 ## Resource use
 

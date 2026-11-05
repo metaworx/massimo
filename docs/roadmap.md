@@ -48,13 +48,16 @@ each new write path and the feedback that follows.
 7. Internationalisation of the UI with a translation table, then the
    languages of the original software: German, English, French,
    Italian, Dutch, Polish.
-8. **Release engineering**: GitHub CI that runs vet and tests on every
-   push and builds the binaries for Linux (amd64, arm64, armv7),
-   Windows and macOS on a tag, publishing them as a GitHub release; a
-   `massimo update` command that checks GitHub releases and replaces
-   its own binary (signed checksums, `-check` only mode); `serve` and
-   the future `edge` mode installable as a Windows service and a
-   systemd unit (`massimo service install`).
+8. **Release engineering**: done: CI (gofmt, vet, tests, cross build) on
+   every push and pull request; on a `v*` tag, binaries for Linux (amd64,
+   arm64, armv7, armv6), macOS (amd64, arm64) and Windows, `SHA256SUMS`
+   and an Ed25519-signed manifest published as a GitHub release, with the
+   tag's branch as its update channel; `massimo update` (`-check`,
+   `-rollback`, health check with automatic rollback), and the web UI's
+   update button through a root helper unit (packaging/README.md). Open:
+   `serve` and the future `edge` mode installable as a Windows service and
+   a systemd unit (`massimo service install`), which Windows updates need
+   too (rename the running .exe, restart through the service manager).
 9. **Timestamps per value**: keep the time each value was last received
    from the Cube, per device and field, in the snapshot, the API
    (`state` fields with their `*_at` times or a `received` map) and the

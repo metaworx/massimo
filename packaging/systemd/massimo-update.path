@@ -1,0 +1,15 @@
+# Starts massimo-update.service when the server (running unprivileged as
+# massimo) asks for an update by creating /var/lib/massimo/update-request,
+# as POST /api/v1/update does. Install and enable it next to
+# massimo.service, see packaging/README.md.
+
+[Unit]
+Description=Update requests from the Massimo server
+Documentation=https://go.metaworx.ch/massimo
+
+[Path]
+PathExists=/var/lib/massimo/update-request
+Unit=massimo-update.service
+
+[Install]
+WantedBy=paths.target

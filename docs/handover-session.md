@@ -15,6 +15,16 @@ against the Cube's observed slot capacity), release engineering on the
 roadmap, the ufw ports in docs/proxy.md. The review's second tier is
 still open.
 
+Release engineering (roadmap 8): the repository is public; CI and the
+release workflow are in .github/workflows; a tag publishes signed
+releases (the key is the `signing` environment's `MASSIMO_RELEASE_KEY`,
+only usable by `v*` tags; the public half is
+internal/update/release-key.pem); `make tag` writes the branch into the
+tag as the update channel and pushes branch and tag together; `massimo
+update` and the web UI's Settings → Software install releases through
+the root helper units in packaging/systemd (packaging/README.md,
+"Updating").
+
 ## State
 
 - `massimo serve` keeps both Cubes connected, serves the JSON API

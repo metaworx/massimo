@@ -16,7 +16,9 @@ Group=massimo
 # Settings and secrets (MASSIMO_CUBE_<SN>_ADDRESS, _KEY, _IV, _PROXY,
 # MASSIMO_API_TOKEN) are read by massimo itself from this file, mode 0600,
 # owned by massimo. Add "-proxy off" for a first run without the LAN proxy.
-ExecStart=/usr/local/bin/massimo -env /etc/massimo/env serve -listen :8099 -log /var/log/massimo/serve.log
+# -update-request lets the web UI ask massimo-update.service (root) to
+# install a newer release; without that unit installed, drop it.
+ExecStart=/usr/local/bin/massimo -env /etc/massimo/env serve -listen :8099 -log /var/log/massimo/serve.log -update-request /var/lib/massimo/update-request
 Restart=on-failure
 RestartSec=10s
 WorkingDirectory=/var/lib/massimo
