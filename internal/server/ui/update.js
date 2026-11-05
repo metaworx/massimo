@@ -9,7 +9,20 @@
 
 "use strict";
 
-const updState = { info: null, timer: null, until: 0 };
+const updState = { info: null, timer: null, until: 0, grace: 0 };
+
+// updateBusy reports whether the helper is working on an update.
+function updateBusy(h) {
+  return !!h && ["checking", "installing", "restarting"].includes(h.state);
+}
+
+// setUpdateBusy greys out both buttons of the Software section while an
+// update runs: a check or a second request in the middle of an install
+// would only confuse, and the server goes away for the restart anyway.
+function setUpdateBusy(busy) {
+  $("update-btn").disabled = busy;
+  $("update-check").disabled = busy;
+}
 
 // helperText is the helper's last state; unknown states are shown as
 // the helper reports them.
@@ -44,6 +57,12 @@ function renderUpdate(u) {
   const btn = $("update-btn");
   btn.classList.toggle("hidden", !u.can_update);
   btn.textContent = t("update.to", { version: u.latest });
+  // The helper may be at work already: after a reload while it restarts
+  // the server, or for an update started from another browser.
+  if (updateBusy(u.helper) && !updState.timer) {
+    setUpdateBusy(true);
+    followUpdate();
+  }
 }
 
 async function loadUpdate(refresh) {
@@ -65,12 +84,13 @@ function followUpdate() {
   updState.until = Date.now() + 5 * 60 * 1000;
   updState.timer = setInterval(async () => {
     const u = await loadUpdate(false);
-    const h = u && u.helper;
-    const busy = !u || (h && ["checking", "installing", "restarting"].includes(h.state));
+    // Right after a request the helper may not have picked it up yet, so
+    // its last state still says done; the grace period covers that gap.
+    const busy = !u || updateBusy(u.helper) || Date.now() < updState.grace;
     if (!busy || Date.now() > updState.until) {
       clearInterval(updState.timer);
       updState.timer = null;
-      $("update-btn").disabled = false;
+      setUpdateBusy(false);
     }
   }, 3000);
 }
@@ -79,14 +99,14 @@ async function startUpdate() {
   const u = updState.info;
   if (!u || !u.latest) return;
   if (!confirm(t("update.confirm", { version: u.latest }))) return;
-  const btn = $("update-btn");
-  btn.disabled = true;
+  setUpdateBusy(true);
   try {
     await api("POST", "/api/v1/update", {});
     $("update-helper").textContent = t("update.requested", { version: u.latest });
+    updState.grace = Date.now() + 30 * 1000;
     followUpdate();
   } catch (e) {
-    btn.disabled = false;
+    setUpdateBusy(false);
     $("update-helper").textContent = t("update.notStarted", { error: e.message });
   }
 }
