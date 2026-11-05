@@ -3,7 +3,7 @@
 
 // The Massimo web UI, core: API access with the token, the DOM and
 // formatting helpers the other files share (textEl, button,
-// submitButton, badgeEl, iconEl, fmtTemp; fmtNum is in i18n.js),
+// submitButton, badgeEl, iconEl, fmtTemp, ageEl; fmtNum is in i18n.js),
 // settings, the header with the Cube clock, loading of cubes and rooms,
 // polling and the event stream with its tickets. The tiles and their
 // actions are in tiles.js.
@@ -178,6 +178,78 @@ function iconEl(symbol, cls) {
 function fmtTemp(v, unit) {
   if (v === undefined || v === null) return "–";
   return fmtNum(v, 1) + (unit === undefined ? " °C" : unit);
+}
+
+// --- ages of values ---------------------------------------------------
+
+// observedSince is when the server first heard from the selected Cube,
+// in ms (NaN when unknown).
+function observedSince() {
+  const c = state.cubes.find((x) => x.serial === state.serial);
+  return c && c.observed_since ? Date.parse(c.observed_since) : NaN;
+}
+
+// SINCE_MS: a value received this soon after observedSince came with the
+// Cube's first device list, so it was already there and may be older.
+const SINCE_MS = 5000;
+
+// fmtUnit is n minutes, hours or days in the language's short form
+// ("5 min", "3 Std.").
+function fmtUnit(n, unit) {
+  try {
+    return new Intl.NumberFormat(i18n.lang, { style: "unit", unit, unitDisplay: "short" }).format(n);
+  } catch (e) {
+    return n + " " + unit.charAt(0);
+  }
+}
+
+// fmtAge is how long ago an instant (ms) was, briefly: "now", "12 min",
+// "5 h", from two days on in days. A value that was already there when
+// the server connected (since) gets "≥": it may be older.
+function fmtAge(ms, since) {
+  const sec = Math.max(0, (Date.now() - ms) / 1000);
+  if (sec < 60 && !since) return t("age.now");
+  let text;
+  if (sec < 3600) text = fmtUnit(Math.floor(sec / 60), "minute");
+  else if (sec < 48 * 3600) text = fmtUnit(Math.floor(sec / 3600), "hour");
+  else text = fmtUnit(Math.floor(sec / 86400), "day");
+  return since ? "≥ " + text : text;
+}
+
+// fmtShortTime is an instant (ms) as day, month and time.
+function fmtShortTime(ms) {
+  const opts = { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false };
+  return new Intl.DateTimeFormat(i18n.lang, opts).format(new Date(ms));
+}
+
+// ageEl shows how old a value is that the server received at iso (an API
+// time): the age, the exact time as its tooltip and, in expert mode,
+// after it; greyed when stale. refreshAges keeps it current. null when
+// there is no time.
+function ageEl(iso, stale) {
+  const ms = Date.parse(iso || "");
+  if (isNaN(ms)) return null;
+  const el = textEl("span", "", "age" + (stale ? " stale" : ""));
+  el.dataset.at = String(ms);
+  const since = ms - observedSince();
+  if (since >= 0 && since < SINCE_MS) el.dataset.since = "1";
+  el.appendChild(textEl("span", "", "age-text"));
+  el.appendChild(textEl("span", "", "age-exact expert-only"));
+  fillAge(el);
+  return el;
+}
+
+function fillAge(el) {
+  const ms = Number(el.dataset.at);
+  const since = el.dataset.since === "1";
+  el.firstChild.textContent = fmtAge(ms, since);
+  el.lastChild.textContent = fmtShortTime(ms);
+  el.title = t(since ? "age.titleSince" : "age.title", { time: fmtInstant(new Date(ms)) });
+}
+
+// refreshAges updates every age on the page; it runs once a minute.
+function refreshAges() {
+  for (const el of document.querySelectorAll(".age[data-at]")) fillAge(el);
 }
 
 function isThermostat(d) {
@@ -676,6 +748,7 @@ function init() {
     store("massimo.serial", state.serial);
     connectEvents();
   });
+  setInterval(refreshAges, 60000);
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -42,11 +42,32 @@ function roomModes(room) {
   return modes;
 }
 
+// roomActualDevice is the device whose measured temperature stands for
+// the room: the wall thermostat, else the first radiator thermostat that
+// reported one; null when none did.
+function roomActualDevice(room) {
+  const has = (d) => d.state && d.state.actual_temp !== undefined;
+  return room.devices.find((d) => d.type === "wall_thermostat" && has(d)) || room.devices.find((d) => isThermostat(d) && has(d)) || null;
+}
+
 function roomActual(room) {
-  const wall = room.devices.find((d) => d.type === "wall_thermostat" && d.state && d.state.actual_temp !== undefined);
-  if (wall) return wall.state.actual_temp;
-  const rad = room.devices.find((d) => isThermostat(d) && d.state && d.state.actual_temp !== undefined);
-  return rad ? rad.state.actual_temp : undefined;
+  const d = roomActualDevice(room);
+  return d ? d.state.actual_temp : undefined;
+}
+
+// staleText is the warning for a device the API calls stale ("Not seen
+// for 30 hours", from two days on in days), "" for any other.
+function staleText(d) {
+  if (!d.stale) return "";
+  const ms = Date.parse(d.last_seen || "");
+  const h = isNaN(ms) ? 24 : Math.max(0, Math.floor((Date.now() - ms) / 3600000));
+  return h < 48 ? tn("stale.hours", h) : tn("stale.days", Math.floor(h / 24));
+}
+
+// received is when the server received the current value of a device's
+// state field, as the API's time, or undefined.
+function received(d, field) {
+  return d.received ? d.received[field] : undefined;
 }
 
 function roomUI(room) {
@@ -92,8 +113,14 @@ function renderRoom(room) {
   const actual = roomActual(room);
   el.querySelector(".temp-is").textContent = fmtTemp(actual, "°");
   el.querySelector(".temp-is").title = t(actual === undefined ? "room.noMeasured" : "room.measured");
+  const src = roomActualDevice(room);
+  el.querySelector(".temp-val").classList.toggle("stale", !!(src && src.stale));
+  const age = src && ageEl(received(src, "actual_temp"), src.stale);
+  if (age) el.querySelector(".temp-age").appendChild(age);
 
+  renderWindowOpen(el, room);
   renderNotReady(el, room);
+  renderStale(el, room);
   renderSetpoint(el, room);
   renderMenu(el, room);
   renderVacation(el, room);
@@ -123,6 +150,39 @@ function renderNotReady(el, room) {
   }
   notReady.appendChild(document.createTextNode("."));
   notReady.classList.remove("hidden");
+}
+
+// renderWindowOpen shows "Open" in the tile's head while a window
+// contact of the room reports an open window, with the age of the latest
+// opening and the open contacts in its tooltip.
+function renderWindowOpen(el, room) {
+  const open = room.devices.filter((d) => d.state && d.state.window_open === true);
+  if (!open.length) return;
+  const badge = el.querySelector(".window-open");
+  badge.textContent = t("room.open");
+  const times = open.map((d) => received(d, "window_open")).filter((x) => x);
+  times.sort((a, b) => Date.parse(a) - Date.parse(b));
+  const age = ageEl(times[times.length - 1]);
+  if (age) badge.appendChild(age);
+  badge.title = t("room.openTitle", { list: open.map(deviceName).join(", ") });
+  badge.classList.remove("hidden");
+}
+
+// renderStale warns on the tile when a device of the room is stale, by
+// how long each has not been seen.
+function renderStale(el, room) {
+  const stale = room.devices.filter((d) => d.stale);
+  if (!room.stale && !stale.length) return;
+  const note = el.querySelector(".stale-note");
+  note.textContent = t("room.stale");
+  const groups = new Map();
+  for (const d of stale) {
+    const k = staleText(d);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(deviceName(d));
+  }
+  for (const [text, names] of groups) note.appendChild(document.createTextNode(" " + text + ": " + names.join(", ") + "."));
+  note.classList.remove("hidden");
 }
 
 function renderSetpoint(el, room) {
@@ -355,6 +415,7 @@ function renderDeleteConfirm(el, room) {
 
 // deviceBadges lists the badges of a device: the warnings, outlined,
 // then its mode or window state as a filled badge, always the last one.
+// Each is [text, kind, the time of the value for its age].
 function deviceBadges(d) {
   const s = d.state || {};
   const out = [];
@@ -362,12 +423,14 @@ function deviceBadges(d) {
     out.push([t("badge.notReported"), "warn"]);
     return out;
   }
-  if (s.battery_low) out.push([t("badge.batteryLow"), "bad"]);
+  if (d.stale) out.push([staleText(d), "warn stale-badge"]);
+  if (s.battery_low) out.push([t("badge.batteryLow"), "bad", received(d, "battery_low")]);
   if (s.error) out.push([t("badge.transmitError"), "bad"]);
   if (s.link_error) out.push([t("badge.linkError"), "warn"]);
   if (s.panel_locked) out.push([t("badge.locked"), "warn"]);
   if (s.window_open !== undefined) {
-    out.push(s.window_open ? [t("badge.open"), "fill-bad"] : [t("badge.closed"), "fill-ok"]);
+    const at = received(d, "window_open");
+    out.push(s.window_open ? [t("badge.open"), "fill-bad", at] : [t("badge.closed"), "fill-ok", at]);
   } else if (s.mode && isThermostat(d)) {
     const mode = s.mode === "vacation" ? "holiday" : s.mode === "boost" ? "manual" : s.mode;
     const cls = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" }[mode] || "mode";
@@ -376,16 +439,22 @@ function deviceBadges(d) {
   return out;
 }
 
-// valueCell builds one cell of the values grid: label, number, unit and
-// an optional icon after it. The number sits right-aligned in a
-// fixed-width span so the decimal points of a column line up; an empty
-// label makes a spacer. Temperatures (icon given) are bold.
-function valueCell(label, value, unit, icon) {
+// valueCell builds one cell of the values grid: label, number, unit, an
+// optional icon and the value's age after it. The number sits
+// right-aligned in a fixed-width span so the decimal points of a column
+// line up; an empty label makes a spacer. Temperatures (icon given) are
+// bold.
+function valueCell(label, value, unit, icon, age) {
   const cell = textEl("span", "", "cell");
   cell.appendChild(textEl("span", label, "k"));
   cell.appendChild(textEl("span", value, "num" + (icon ? " temp" : "")));
   cell.appendChild(textEl("span", value === "" ? "" : unit, "u"));
   if (icon && value !== "") cell.appendChild(iconEl(icon, "di"));
+  if (age && value !== "") {
+    if (!icon) cell.appendChild(textEl("span", "")); // the icon's column
+    cell.appendChild(age);
+    cell.classList.add("aged");
+  }
   return cell;
 }
 
@@ -394,21 +463,21 @@ function valueCell(label, value, unit, icon) {
 function deviceValues(grid, d, offset) {
   const s = d.state || {};
   const left = [];
-  if (s.valve_pct !== undefined) left.push([t("val.valve"), String(s.valve_pct), "%"]);
+  if (s.valve_pct !== undefined) left.push([t("val.valve"), String(s.valve_pct), "%", undefined, ageEl(received(d, "valve_pct"), d.stale)]);
   if (isThermostat(d)) {
     const off = offset === undefined ? "" : (offset > 0 ? "+" : "") + fmtNum(offset, 1);
     left.push([t("val.offset"), off, "°C"]);
   }
   const right = [];
   right.push([t("val.set"), fmtTemp(s.setpoint, ""), "°C", "icon-set"]);
-  right.push([t("val.actual"), fmtTemp(s.actual_temp, ""), "°C", "icon-is"]);
+  right.push([t("val.actual"), fmtTemp(s.actual_temp, ""), "°C", "icon-is", ageEl(received(d, "actual_temp"), d.stale)]);
   clear(grid);
   const rows = Math.max(left.length, right.length);
   for (let i = 0; i < rows; i++) {
     const l = left[i] || ["", "", ""];
     const r = right[i] || ["", "", ""];
-    grid.appendChild(valueCell(l[0], l[1], l[2]));
-    grid.appendChild(valueCell(r[0], r[1], r[2], r[3]));
+    grid.appendChild(valueCell(l[0], l[1], l[2], l[3], l[4]));
+    grid.appendChild(valueCell(r[0], r[1], r[2], r[3], r[4]));
   }
   if (s.until) {
     // The vacation end spans the grid, under the temperatures.
@@ -418,6 +487,7 @@ function deviceValues(grid, d, offset) {
     grid.appendChild(cell);
   }
   grid.classList.toggle("hidden", rows === 0);
+  grid.classList.toggle("stale", !!d.stale);
 }
 
 function renderDevice(d) {
@@ -427,7 +497,19 @@ function renderDevice(d) {
   el.querySelector(".device-type").textContent = typeName(d.type);
   el.querySelector(".device-rf").textContent = d.rf_address;
   const badges = el.querySelector(".device-badges");
-  for (const [label, kind] of deviceBadges(d)) badges.appendChild(badgeEl(label, kind));
+  for (const [label, kind, at] of deviceBadges(d)) {
+    const b = badgeEl(label, kind);
+    const age = ageEl(at, d.stale);
+    if (age) b.appendChild(age);
+    badges.appendChild(b);
+  }
+  const seen = Date.parse(d.last_seen || "");
+  if (!isNaN(seen)) {
+    const line = t("age.lastSeen", { time: fmtShortTime(seen) });
+    el.querySelector(".device-sub").appendChild(textEl("span", line, "device-seen expert-only"));
+    const sb = badges.querySelector(".stale-badge");
+    if (sb) sb.title = line;
+  }
   const grid = el.querySelector(".device-vals");
   if (isThermostat(d) && d.reported) {
     deviceValues(grid, d, undefined);
@@ -487,6 +569,7 @@ function updateDevice(d) {
     if (i >= 0) {
       r.devices[i] = d;
       r.ready = r.devices.every((x) => x.reported);
+      r.stale = r.devices.some((x) => x.stale);
       rerenderRoom(r);
       return;
     }
