@@ -360,8 +360,25 @@ then linked with every partner of the new room and the new group set,
 each after a wakeup of the room concerned, then the metadata is
 written. `room_id` must name an existing room; 0 is refused, a device
 outside every room would be a device that blocks no room but cannot
-be addressed by one either. A device that is paired but not
-assigned to a room answers `409`; pair it with the original software.
+be addressed by one either.
+
+A device that is paired but in no room yet (`"unlisted": true`, such
+as one just paired, see Pairing) needs `room_id`; `name` alone answers
+`409`. It is added to the room as the original software adds a new
+device: after a wakeup of the room (`z:1e,G,<room>`), one 0x20 add link
+partner radiogram per room member it links with in each direction (to
+a radiator thermostat with the room flag and its room, to every other
+device directly, and from the new device to each partner; two shutter
+contacts are not linked with each other), then 0x22 set group, then the
+metadata with the device listed under its name in the room, then a
+re-read of its C line. A device whose C line names another room (paired
+long ago and never listed) is first unlinked from that room with 0x21
+remove link partner and 0x23 remove group, as in a move. The room's
+temperatures, valve settings and week programme are not copied to the
+new device, unlike in the original software, which sends 0x40 auto,
+0x11, 0x12 and 0x10 afterwards: use `PUT …/rooms/{id}/config` and
+`PUT …/rooms/{id}/program` for that. The answer is
+`{"ok": true, "budget": {…}}`.
 
 ### PUT /api/v1/cubes/{sn}/devices/{rf}/config
 
@@ -442,6 +459,56 @@ to the device after a wakeup of its room and takes effect immediately
 and the second button (Boost or the moon/sun key, Mode/Menu and
 Boost/OK on a wall thermostat) together.
 
+### Pairing: POST, GET, DELETE /api/v1/cubes/{sn}/pairing
+
+`POST` with `{"seconds": 60}` (optional; 1 to 600, default 60) puts
+the Cube into inclusion mode with `n:<seconds>`; a device whose pairing
+button is pressed then joins. The Cube may end the mode earlier on its
+own. The answer is the pairing state:
+
+```json
+{
+  "active": true,
+  "started": "2026-11-05T16:02:10+01:00",
+  "until": "2026-11-05T16:03:10+01:00",
+  "paired": []
+}
+```
+
+`409` while pairing already runs, `503` while the Cube is not
+connected, `400` for a bad `seconds`. `GET` returns the same state at
+any time; after the end `active` is false, `ended` says when, and
+`paired` keeps the devices of the last pairing until the next one
+starts:
+
+```json
+{
+  "active": false,
+  "started": "2026-11-05T16:02:10+01:00",
+  "until": "2026-11-05T16:03:10+01:00",
+  "ended": "2026-11-05T16:02:41+01:00",
+  "paired": [{"type": "radiator_thermostat", "rf_address": "0a0b0c", "serial": "TEQ0000001"}]
+}
+```
+
+`DELETE` ends pairing with `x:` (also when the server counts it as
+over already, so that a Cube still in the mode stops) and returns the
+state. Pairing ends when the Cube says so (an empty `N` line), on
+`DELETE`, or ten seconds after `until`, whichever is first.
+
+The event stream reports `pairing_started`, then a `paired` event per
+device that joins, with `"device": "<rf>"` and `"paired": {"type": …,
+"rf_address": …, "serial": …}`, and `pairing_ended`. A joined device
+is in the device list right after (`GET …/devices`, with
+`"unlisted": true` and no name; the server fetches its configuration
+with `c:`) but in no room and not under `rooms`. Put it into a room
+with `PUT …/devices/{rf}` and `{"name": "…", "room_id": N}` (above).
+A client pairing a device therefore: `POST …/pairing`, waits for the
+`paired` event (or polls `GET …/pairing`), asks the user for a room
+and a name, `PUT …/devices/{rf}`, and `DELETE …/pairing` if more time
+is left and no further device is to come. Pairing through the LAN proxy,
+as the original software does it, uses the same mode (proxy.md).
+
 ### GET /api/v1/cubes/{sn}/backup?format=yaml|json
 
 A backup file as `massimo backup` writes it: rooms, devices with
@@ -471,8 +538,10 @@ data: {"kind":"disconnected","error":"read tcp …: i/o timeout","time":"…"}
 
 Kinds: `connected`, `disconnected` (the server reconnects by itself),
 `hello` (new budget or clock from the Cube), `metadata` (rooms or names
-changed), `config` (a device configuration arrived), `state`. A comment
-line is sent every 30 seconds to keep the connection alive.
+changed), `config` (a device configuration arrived), `state`,
+`pairing_started`, `paired` (with `paired`, the device that joined) and
+`pairing_ended` (see Pairing). A comment line is sent every 30 seconds
+to keep the connection alive.
 
 With a token configured the stream needs `?ticket=<ticket>` (below) or
 the bearer header; `?token=<token>` still works, deprecated.
@@ -541,6 +610,6 @@ the one connection the Cube allows. See [proxy.md](proxy.md).
 
 ## Not in version 1
 
-Pairing and removing devices, creating rooms, user accounts and
-ownership. Pairing and removing need the original software for now;
-`massimo restore` from an edited backup covers everything else in bulk.
+Removing devices, creating rooms, user accounts and ownership.
+Removing needs the original software for now; `massimo restore` from an
+edited backup covers everything else in bulk.

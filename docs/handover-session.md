@@ -129,6 +129,11 @@ Italian, Dutch and Polish, and docs/ui.md.
 2. The owner's review of the UI feedback round (PR 3) and its
    follow-ups (branch claude/ui-followups), and the open UI points
    above.
-3. Pairing new devices (roadmap item 4).
+3. Pairing new devices (roadmap item 4): the server side is in (API
+   `POST/GET/DELETE …/pairing`, `paired` events, `PUT …/devices/{rf}`
+   with `room_id` for a device in no room, pairing through the proxy);
+   next the test at the Cube (the assumptions are listed as unverified
+   in docs/portal-protocol.md, pairing section) and the UI panel from
+   docs/api-v1.md.
 4. Firmware dump when the adapter is in (docs/firmware-extraction.md).
 5. Users and a database (roadmap item 6).

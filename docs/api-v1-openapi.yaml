@@ -99,10 +99,16 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
-  /api/v1/cubes/{sn}/devices/{rf}:
     put:
-      summary: Rename a device and/or move it to another room
-      description: A move unlinks the device from its old room's partners and relinks it with the new room's, as the original software does, then writes the metadata. room_id 0 is refused.
+      summary: Rename a device and/or move it to another room, or add a paired device to one
+      description: >-
+        A move unlinks the device from its old room's partners and relinks
+        it with the new room's, as the original software does, then writes
+        the metadata. room_id 0 is refused. A device in no room yet
+        (unlisted, for example just paired) needs room_id and is linked
+        with the room's members (0x20 both ways, after a wakeup), given
+        the room's group (0x22) and listed under name; without room_id it
+        answers 409.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       requestBody:
         required: true
@@ -364,6 +370,66 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/pairing:
+    post:
+      summary: Start pairing (inclusion mode)
+      description: |
+        Sends n:<seconds> to the Cube. Devices that join are reported as
+        "paired" events on the stream and in the state, and appear in the
+        device list as unlisted; PUT /devices/{rf} with room_id puts one
+        into a room. The Cube may end the mode earlier on its own.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seconds: {type: integer, minimum: 1, maximum: 600, default: 60}
+      responses:
+        "200":
+          description: Pairing runs
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PairingState"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: Pairing is already running
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "502": {$ref: "#/components/responses/CubeError"}
+        "503": {$ref: "#/components/responses/NotReady"}
+    get:
+      summary: Pairing state and the devices that joined
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: The state
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PairingState"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      summary: Stop pairing
+      description: Sends x:, also when the server counts the mode as over already.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: Pairing stopped
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PairingState"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/log:
     get:
       summary: The last events of the Cube, oldest first
@@ -385,7 +451,8 @@ paths:
       description: |
         On connect, one `state` event per device with its current data,
         then an event per change the Cube reports. Kinds: connected,
-        disconnected, hello, metadata, config, state. A comment line
+        disconnected, hello, metadata, config, state, pairing_started,
+        paired (with the device that joined in "paired"), pairing_ended. A comment line
         every 30 seconds keeps the stream alive. Browsers open it
         without headers: pass a ticket from POST …/events/ticket.
       security:
@@ -817,6 +884,24 @@ components:
         boost_valve_pct: {type: integer}
         display_actual: {type: boolean, description: The display shows the measured temperature instead of the setpoint}
         week_program: {$ref: "#/components/schemas/WeekProgram"}
+    NewDevice:
+      type: object
+      description: A device that joined during pairing, from the Cube's N line
+      properties:
+        type: {$ref: "#/components/schemas/DeviceType"}
+        rf_address: {type: string}
+        serial: {type: string}
+    PairingState:
+      type: object
+      properties:
+        active: {type: boolean}
+        started: {type: string, format: date-time}
+        until: {type: string, format: date-time, description: When pairing ends at the latest}
+        ended: {type: string, format: date-time, description: When the last pairing ended; absent while active or before the first}
+        paired:
+          type: array
+          description: Devices that joined during the current or last pairing
+          items: {$ref: "#/components/schemas/NewDevice"}
     DeviceDetail:
       allOf:
         - {$ref: "#/components/schemas/Device"}

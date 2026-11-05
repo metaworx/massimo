@@ -75,6 +75,20 @@ type Proxy struct {
 type session struct {
 	conn net.Conn
 	wmu  sync.Mutex
+
+	pmu       sync.Mutex
+	stopWatch func() // ends this client's watch of a running pairing
+}
+
+// watchPairing replaces the client's pairing watch.
+func (s *session) watchPairing(stop func()) {
+	s.pmu.Lock()
+	old := s.stopWatch
+	s.stopWatch = stop
+	s.pmu.Unlock()
+	if old != nil {
+		old()
+	}
 }
 
 // New creates a proxy for one Cube.
@@ -171,6 +185,7 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 	remote := conn.RemoteAddr().String()
 	defer func() {
 		conn.Close()
+		s.watchPairing(nil)
 		p.mu.Lock()
 		delete(p.conns, s)
 		p.mu.Unlock()
@@ -214,6 +229,10 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 			conn.SetReadDeadline(time.Now().Add(time.Second))
 			r.ReadRaw()
 			return
+		}
+		if m.Type == 'n' || m.Type == 'x' {
+			p.pairing(ctx, s, m, remote)
+			continue
 		}
 		if reply, ok := p.local(m); ok {
 			if reply.Type != 0 {
@@ -324,11 +343,62 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		p.log.Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
 	}
+	if m.Type == 'c' {
+		// A device the server did not know yet, such as one just paired.
+		for _, r := range res.Replies {
+			if r.Type == 'C' {
+				p.opts.Client.ApplyLocal(r)
+			}
+		}
+	}
 	// The client sent one line and expects one answer.
 	if len(res.Replies) > 1 {
 		return res.Replies[len(res.Replies)-1:]
 	}
 	return res.Replies
+}
+
+// pairing handles n: and x: from a client. Inclusion mode runs through
+// the server (cubeio.Writer.StartPairing), so that every N line reaches
+// the client however late the Cube sends it, and the server's own
+// device list learns the new devices; a client that sends n: while
+// pairing already runs joins it. x: ends pairing for everyone. Neither
+// line has a reply of its own; the Cube's N lines, including the empty
+// one at the end, are relayed as they come.
+func (p *Proxy) pairing(ctx context.Context, s *session, m cube.Message, remote string) {
+	w := cubeio.Writer{Client: p.opts.Client, Queue: p.opts.Queue}
+	wctx, cancel := context.WithTimeout(ctx, p.opts.ReplyTimeout)
+	defer cancel()
+	if m.Type == 'x' {
+		if err := w.StopPairing(wctx); err != nil {
+			p.log.Warn("proxy: stopping pairing failed", "remote", remote, "error", err)
+		}
+		return
+	}
+	timeout := 60 * time.Second
+	if secs, err := strconv.ParseUint(strings.TrimSpace(m.Data), 16, 16); err == nil && secs > 0 {
+		timeout = time.Duration(secs) * time.Second
+	}
+	timeout = min(timeout, cubeio.MaxPairingTime)
+	lines, stop, err := w.StartPairing(wctx, timeout)
+	if errors.Is(err, cubelan.ErrInclusionActive) {
+		lines, stop = p.opts.Client.WatchInclusion()
+		err = nil
+		p.log.Info("proxy: client joins the running pairing", "remote", remote)
+	}
+	if err != nil {
+		p.log.Warn("proxy: pairing not started", "remote", remote, "error", err)
+		return
+	}
+	p.log.Info("proxy: pairing for a client", "remote", remote, "seconds", int(timeout.Seconds()))
+	s.watchPairing(stop)
+	go func() {
+		for l := range lines {
+			if s.write(l) != nil {
+				return
+			}
+		}
+	}()
 }
 
 // withoutHidden removes the hidden devices from a client's t: (delete

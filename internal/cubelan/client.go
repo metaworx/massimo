@@ -50,6 +50,8 @@ type Client struct {
 	reconnecting atomic.Bool
 	// online is set while a connection is up and its greeting complete.
 	online atomic.Bool
+	// inclusion is the pairing state, see inclusion.go.
+	inclusion inclusion
 }
 
 type pendingReply struct {
@@ -212,6 +214,12 @@ func (c *Client) readDeadline() time.Duration {
 // handle routes an incoming message: replies go to the waiting Send,
 // everything else updates the snapshot.
 func (c *Client) handle(m cube.Message) {
+	if m.Type == 'N' {
+		// Inclusion mode reports devices whenever they join, long after
+		// n: was written; n: and x: therefore wait for no reply.
+		c.handleNewDevice(m)
+		return
+	}
 	c.mu.Lock()
 	p := c.pending
 	if p != nil && m.Type == p.want {
@@ -283,8 +291,6 @@ func replyType(cmd byte) byte {
 		return 'D'
 	case 'c':
 		return 'C'
-	case 'n', 'x':
-		return 'N'
 	case 'u', 'i', 'v', 't', 'z', 'a', 'w', 'm':
 		return 'A'
 	}

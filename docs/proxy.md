@@ -57,12 +57,12 @@ Several clients may be connected at the same time.
 | Client line | Handling |
 |---|---|
 | `l:` | answered from the server's copy, the Cube is not asked |
-| `c:<rf>` | answered from the server's copy; passed through when unknown |
+| `c:<rf>` | answered from the server's copy; passed through when unknown, and the answer added to the copy |
 | `q:` | closes the connection |
 | `s:`, `r:` | passed through the queue; the Cube's `S:` is relayed |
 | `m:` | passed through, `A:` relayed, the server's copy of the metadata updated |
 | `z:`, `t:`, `v:`, `f:`, `u:`, `i:`, `a:`, `w:`, `e:`, `d:` | passed through, the reply relayed |
-| `n:`, `x:` | passed through; a reply is relayed if the Cube sends one in time |
+| `n:`, `x:` | pairing through the server, see below |
 
 Passed-through lines go to the Cube exactly as sent, one queue entry
 per line, in order with the server's own commands. The queue adds no
@@ -89,6 +89,24 @@ that device and logged: the others in it are deleted, and when none is
 left the proxy answers the client itself without sending anything, so
 a client cannot delete a hidden device (and make the Cube send it a
 factory reset). `serve -show-hidden` switches all of this off.
+
+## Pairing
+
+`n:<seconds>` from a client starts pairing on the server, the same mode
+as `POST /api/v1/cubes/{sn}/pairing` (docs/api-v1.md): the server sends
+`n:` to the Cube through its queue, and every `N` line the Cube sends
+while the mode lasts is relayed to that client however late it comes,
+including the empty `N` line at the end. A client that sends `n:` while
+pairing already runs, from the API or another client, joins it and gets
+the lines from then on. `x:` ends pairing for everyone; the Cube's
+answer to it, if any, is relayed. The server fetches the C line of
+every device that joins, so its device list and the API have the new
+device (in no room) at once, and the `c:` the original software sends
+next is answered as well. The rest of the original software's sequence,
+the wakeup, the links, the group, the presets and the metadata write
+that puts the device into a room, is passed through as usual. Without a
+time, or with more than ten minutes, the proxy asks for 60 seconds or
+ten minutes.
 
 ## Firewall
 
@@ -131,8 +149,5 @@ address by hand.
 
 ## Not supported yet
 
-Pairing through the proxy: `n:` is passed through, but the `N:` line
-the Cube sends when a device pairs may arrive after the queue stopped
-waiting, and the server's device list is not refreshed. Pair with a
-direct connection for now. The proxy has no authentication, like the
-Cube; bind it to a trusted LAN.
+The proxy has no authentication, like the Cube; bind it to a trusted
+LAN.

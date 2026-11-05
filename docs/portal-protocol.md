@@ -302,6 +302,15 @@ which held a radiator thermostat (0147b7) and two shutter contacts
    more to the new device.
 8. `m:` with the device added to the room and device list.
 
+Massimo pairs the same way (`POST /api/v1/cubes/{sn}/pairing`, or `n:`
+through the proxy) and relies on the following, which comes from other
+implementations and is *unverified* on hardware: `n:` and `x:` get no
+immediate reply; the Cube sends one `N` line (type, address, ten
+characters of serial, 0xff) per device as it joins and an empty `N`
+line when the mode ends, by its time or by `x:`; the metadata does not
+change by pairing; commands such as `c:` work while the mode lasts.
+Massimo also ends the mode itself ten seconds after the requested time.
+
 Moving a device to another room (same software, wall thermostat from
 room 4 to room 5): wakeup of the old room, 0x23 remove group (`… 23 …
 15667d 00 04`), 0x21 remove link partner for every device of the old

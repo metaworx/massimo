@@ -41,20 +41,24 @@ func newSnapshot() *Snapshot {
 // Event describes a change the client noticed.
 type Event struct {
 	Kind   EventKind
-	Device cube.RFAddress // for device events
-	Err    error          // for EventDisconnected
+	Device cube.RFAddress  // for device events
+	Err    error           // for EventDisconnected
+	New    *cube.NewDevice // for EventPaired
 }
 
 // EventKind enumerates Event types.
 type EventKind int
 
 const (
-	EventConnected    EventKind = iota // greeting received, snapshot complete
-	EventDisconnected                  // connection lost; the client reconnects on its own
-	EventHello                         // new H line (duty cycle, free slots, clock)
-	EventMetadata                      // rooms or devices changed
-	EventConfig                        // a device configuration arrived
-	EventState                         // a device's live state changed
+	EventConnected      EventKind = iota // greeting received, snapshot complete
+	EventDisconnected                    // connection lost; the client reconnects on its own
+	EventHello                           // new H line (duty cycle, free slots, clock)
+	EventMetadata                        // rooms or devices changed
+	EventConfig                          // a device configuration arrived
+	EventState                           // a device's live state changed
+	EventPairingStarted                  // inclusion mode started
+	EventPaired                          // a device joined during inclusion mode
+	EventPairingEnded                    // inclusion mode ended
 )
 
 func (k EventKind) String() string {
@@ -71,6 +75,12 @@ func (k EventKind) String() string {
 		return "config"
 	case EventState:
 		return "state"
+	case EventPairingStarted:
+		return "pairing_started"
+	case EventPaired:
+		return "paired"
+	case EventPairingEnded:
+		return "pairing_ended"
 	}
 	return "unknown"
 }
