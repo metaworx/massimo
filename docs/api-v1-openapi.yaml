@@ -403,6 +403,97 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/restore/plan:
+    post:
+      summary: What restoring a backup would send
+      description: |
+        The dry run of massimo restore: the backup in the body (JSON or
+        YAML, which may be edited by hand) is compared with the Cube and
+        the steps a restore would send are answered, with the notes
+        (devices to pair again), the radio commands and about what they
+        cost in duty cycle (1.25 % each), the Cube's budget, and a hash
+        of the plan that POST …/restore takes. Nothing is written. The
+        clock group reads the Cube's NTP servers first; hidden devices
+        are neither compared nor written.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/restorePortal"}
+        - {$ref: "#/components/parameters/restoreState"}
+        - {$ref: "#/components/parameters/restoreSkip"}
+      requestBody: {$ref: "#/components/requestBodies/Backup"}
+      responses:
+        "200":
+          description: The plan
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RestorePlan"}
+        "400":
+          description: The backup cannot be read, is from another Cube or names none, or an option is bad
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/restore:
+    post:
+      summary: Restore a backup
+      description: |
+        The same body and options as POST …/restore/plan, plus the hash
+        that answered. The plan is computed again and, when the hash is
+        the same, its steps are sent one after the other through the
+        queue at low priority; each step is a restore_step event, the end
+        a restore_done event, and GET …/restore shows the state. The
+        restore stops at the first step the Cube refused or that failed.
+        Guard rails: a restore already running on the Cube, a changed
+        plan, and radio commands while the duty cycle is above 80 %
+        answer 409.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {name: plan, in: query, required: true, description: The hash from POST …/restore/plan, schema: {type: string}}
+        - {$ref: "#/components/parameters/restorePortal"}
+        - {$ref: "#/components/parameters/restoreState"}
+        - {$ref: "#/components/parameters/restoreSkip"}
+      requestBody: {$ref: "#/components/requestBodies/Backup"}
+      responses:
+        "202":
+          description: The restore runs; follow it on the event stream or with GET
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  steps: {type: integer, description: Steps to send}
+        "400":
+          description: No plan hash, or what the plan request refuses with 400
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: A restore is running, the plan has changed since it was made (both hashes in the message), or the duty cycle is above 80 % and the plan has radio commands (the percentage in the message)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    get:
+      summary: The last restore of the Cube
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: The last restore since the server started, or {"state":"none"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RestoreState"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/pairing:
     post:
       summary: Start pairing (inclusion mode)
@@ -486,7 +577,9 @@ paths:
         then an event per change the Cube reports. Kinds: connected,
         disconnected, hello, metadata, config, state, pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
-        cube_found (with a Cube that is not configured in "cube"). A state
+        cube_found (with a Cube that is not configured in "cube"),
+        restore_step and restore_done (with the progress of a restore in
+        "restore", see POST …/restore). A state
         event after a device's first one has "changes": per changed value
         of state, {"from": …, "to": …} (null for a value the device did not
         have), and "reported" when the Cube gained or lost its state. A comment line
@@ -616,7 +709,34 @@ components:
       required: true
       description: Room number as the Cube assigns it
       schema: {type: integer, minimum: 1, maximum: 255}
+    restorePortal:
+      name: portal
+      in: query
+      description: Also restore the portal URL and whether the Cube polls it; off unless given (?portal or ?portal=true)
+      allowEmptyValue: true
+      schema: {type: boolean, default: false}
+    restoreState:
+      name: state
+      in: query
+      description: Also re-apply each thermostat's mode and setpoint from the backup's state; off unless given
+      allowEmptyValue: true
+      schema: {type: boolean, default: false}
+    restoreSkip:
+      name: skip
+      in: query
+      description: "Groups to leave alone, comma separated: names, settings, programs, clock"
+      schema: {type: string, example: "names,clock"}
   requestBodies:
+    Backup:
+      required: true
+      description: A backup file as GET …/backup or massimo backup writes it, which may be edited by hand; at most 1 MB. A body that does not start with a brace is read as YAML whatever the Content-Type.
+      content:
+        application/json:
+          schema: {type: object, description: "See internal/backup for the structure"}
+        application/yaml:
+          schema: {type: string}
+        text/yaml:
+          schema: {type: string}
     Config:
       required: true
       content:
@@ -688,7 +808,79 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    NotConnected:
+      description: The Cube is not connected
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    TooLarge:
+      description: The body is over the limit (1 MB for a backup)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    RestoreStep:
+      type: object
+      description: One command of a restore plan
+      properties:
+        what: {type: string, description: The step as massimo restore prints it}
+        radio: {type: boolean, description: Sends radio commands, which cost budget; false for a Cube command (names, NTP, time zone)}
+        device: {type: string, description: The device the command addresses, when it has one}
+        room: {type: integer, description: The room woken up before the command, when there is one}
+        result: {$ref: "#/components/schemas/RestoreStepResult"}
+    RestoreStepResult:
+      type: object
+      description: The outcome of a step once it ran (GET …/restore only)
+      properties:
+        ok: {type: boolean}
+        discarded: {type: boolean, description: The Cube refused the radiogram; present when true}
+        error: {type: string}
+        budget: {$ref: "#/components/schemas/Budget"}
+        time: {type: string, format: date-time}
+    RestorePlan:
+      type: object
+      properties:
+        plan: {type: string, description: SHA-256 over the step list (texts and command lines); POST …/restore takes it}
+        steps:
+          type: array
+          description: The commands in the order they would be sent; empty when the Cube matches the backup
+          items: {$ref: "#/components/schemas/RestoreStep"}
+        notes:
+          type: array
+          description: Differences a restore cannot write, such as devices that have to be paired again
+          items: {type: string}
+        radio_commands: {type: integer, description: Radiograms of all steps}
+        duty_cost_pct: {type: number, description: About what the radio commands will cost of the hourly radio budget, 1.25 % each}
+        budget: {$ref: "#/components/schemas/Budget"}
+    RestoreState:
+      type: object
+      description: The last restore of a Cube; only state for none
+      properties:
+        id: {type: string}
+        state: {type: string, enum: [none, running, done, failed]}
+        plan: {type: string, description: The hash of the plan sent}
+        started: {type: string, format: date-time}
+        finished: {type: string, format: date-time, description: Present once the restore ended}
+        steps:
+          type: array
+          description: The plan's steps, each with its result once it ran; a failed restore stops at the failed step
+          items: {$ref: "#/components/schemas/RestoreStep"}
+        sent: {type: integer, description: Steps the Cube accepted}
+        radio_commands: {type: integer}
+        error: {type: string, description: Which step failed and why, for a failed restore}
+    RestoreProgress:
+      type: object
+      description: The restore field of restore_step and restore_done events
+      properties:
+        id: {type: string}
+        step: {type: integer, description: Counts from 1 in the order of the plan's steps; restore_step only}
+        steps: {type: integer, description: Steps in the plan}
+        what: {type: string, description: restore_step only}
+        ok: {type: boolean}
+        discarded: {type: boolean, description: Present when true}
+        error: {type: string}
+        state: {type: string, enum: [done, failed], description: restore_done only}
+        sent: {type: integer, description: Steps the Cube accepted; restore_done only}
     UpdateInfo:
       type: object
       properties:

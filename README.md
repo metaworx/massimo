@@ -150,7 +150,10 @@ command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `{"mode":"manual","temp":21.5}`, `{"mode":"auto"}` or
 `{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,
 `PUT …/devices/{rf}/lock` with `{"locked":false}` for the key lock,
-`/backup?format=yaml`, and `/events` as server-sent events; see
+`/backup?format=yaml`, `POST …/restore/plan` and `POST …/restore` to
+restore a backup the way `massimo restore` does (plan first, then
+send; `GET …/restore` for the progress), and `/events` as server-sent
+events; see
 [docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
 [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml). Set
 `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
