@@ -386,14 +386,43 @@ paths:
         On connect, one `state` event per device with its current data,
         then an event per change the Cube reports. Kinds: connected,
         disconnected, hello, metadata, config, state. A comment line
-        every 30 seconds keeps the stream alive.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+        every 30 seconds keeps the stream alive. Browsers open it
+        without headers: pass a ticket from POST …/events/ticket.
+      security:
+        - bearer: []
+        - ticket: []
+        - token: []
+        - {}
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {name: ticket, in: query, description: Single-use ticket from POST …/events/ticket, schema: {type: string}}
+        - {name: token, in: query, deprecated: true, description: "The API token itself; deprecated, it ends up in URLs and logs. Answered with the header Deprecation: @1793836800 (RFC 9745)", schema: {type: string}}
       responses:
         "200":
           description: Event stream
           content:
             text/event-stream:
               schema: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/events/ticket:
+    post:
+      summary: A single-use ticket that opens the event stream
+      description: |
+        Valid for one connection to this Cube's event stream within a
+        minute, so that the token never goes into a URL.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: The ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket: {type: string}
+                  expires_at: {type: string, format: date-time}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
@@ -454,6 +483,16 @@ components:
         Required when the server runs with MASSIMO_API_TOKEN or -token.
         Ten failed checks from one address within a minute lock it out
         for five minutes (429).
+    ticket:
+      type: apiKey
+      in: query
+      name: ticket
+      description: The event stream only; a single-use ticket from POST …/events/ticket.
+    token:
+      type: apiKey
+      in: query
+      name: token
+      description: The event stream only, deprecated; the API token itself.
   parameters:
     sn:
       name: sn

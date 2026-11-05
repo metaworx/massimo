@@ -17,12 +17,14 @@
 //	PUT  /api/v1/cubes/{sn}/rooms/{id}/setpoint      same body, addressed to the whole room
 //	GET  /api/v1/cubes/{sn}/backup?format=yaml|json  a backup file
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
+//	POST /api/v1/cubes/{sn}/events/ticket            a single-use ticket that opens the event stream
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
 //
-// With a token configured, every /api request needs "Authorization: Bearer <token>"
-// (the event stream also accepts ?token=<token>). Repeated failed token checks lock
-// the client's address out for a while (auth.go). A web UI for all of this is served at / (see ui.go).
+// With a token configured, every /api request needs "Authorization: Bearer <token>";
+// the event stream also opens with ?ticket=<ticket> from POST …/events/ticket and,
+// deprecated, ?token=<token>. Repeated failed token checks lock the client's address
+// out for a while (auth.go). A web UI for all of this is served at / (see ui.go).
 //
 // With proxy listeners configured, the server also answers as a Cube on
 // the LAN (TCP 62910 and UDP discovery), see internal/proxy.
@@ -111,6 +113,7 @@ type Server struct {
 	mux   *http.ServeMux
 
 	limiter *authLimiter
+	tickets *ticketStore
 	updates updateCheck
 }
 
@@ -182,7 +185,7 @@ func New(opts Options) *Server {
 		opts.PollInterval = time.Minute
 	}
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{},
-		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil)}
+		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil)}
 	for _, c := range opts.Cubes {
 		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
@@ -434,6 +437,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
+	api("POST /api/v1/cubes/{sn}/events/ticket", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", s.getLog)
 	api("GET /api/v1/update", s.getUpdate)
 	api("POST /api/v1/update", s.startUpdate)

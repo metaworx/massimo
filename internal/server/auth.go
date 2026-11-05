@@ -3,10 +3,13 @@
 
 package server
 
-// Authentication helpers: the per-address limit on failed token checks.
+// Authentication helpers: the per-address limit on failed token checks
+// and the short-lived tickets that open the event stream.
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"net"
 	"net/http"
 	"strconv"
@@ -15,16 +18,21 @@ import (
 	"time"
 )
 
-// Defaults of the failed-token limit.
+// Defaults of the failed-token limit and the stream tickets.
 const (
 	// DefaultAuthFailures failed token checks from one address within
 	// DefaultAuthWindow lock that address out for DefaultAuthLockout.
 	DefaultAuthFailures = 10
 	DefaultAuthWindow   = time.Minute
 	DefaultAuthLockout  = 5 * time.Minute
-	// maxTracked bounds the addresses the limiter keeps;
+	// TicketLifetime is how long a stream ticket can be redeemed.
+	TicketLifetime = time.Minute
+	// maxTracked bounds the addresses the limiter and the tickets keep;
 	// beyond it, expired entries are dropped first, then the oldest.
 	maxTracked = 4096
+	// tokenQueryDeprecated is the Deprecation header (RFC 9745) of a
+	// stream opened with ?token=: deprecated since 2026-11-05.
+	tokenQueryDeprecated = "@1793836800"
 )
 
 // tokenMatches compares a presented token with the configured one in
@@ -146,10 +154,77 @@ func (l *authLimiter) pruneLocked(now time.Time) {
 	}
 }
 
+// ticketStore holds the stream tickets: random, single-use, bound to one
+// Cube, valid for TicketLifetime.
+type ticketStore struct {
+	now func() time.Time
+
+	mu      sync.Mutex
+	tickets map[string]ticket
+}
+
+type ticket struct {
+	cube    string // lower-case key of the Cube
+	expires time.Time
+}
+
+func newTicketStore(now func() time.Time) *ticketStore {
+	if now == nil {
+		now = time.Now
+	}
+	return &ticketStore{now: now, tickets: map[string]ticket{}}
+}
+
+// issue creates a ticket for the event stream of the Cube with the
+// given key.
+func (s *ticketStore) issue(cubeKey string) (string, time.Time, error) {
+	var b [24]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", time.Time{}, err
+	}
+	id := hex.EncodeToString(b[:])
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	for k, t := range s.tickets {
+		if !t.expires.After(now) {
+			delete(s.tickets, k)
+		}
+	}
+	if len(s.tickets) >= maxTracked {
+		return "", time.Time{}, errTooManyTickets
+	}
+	exp := now.Add(TicketLifetime)
+	s.tickets[id] = ticket{cube: cubeKey, expires: exp}
+	return id, exp, nil
+}
+
+// redeem uses up a ticket and reports whether it was valid for the Cube.
+func (s *ticketStore) redeem(id, cubeKey string) bool {
+	if id == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tickets[id]
+	if !ok {
+		return false
+	}
+	delete(s.tickets, id)
+	return t.expires.After(s.now()) && t.cube == cubeKey
+}
+
+type ticketError string
+
+func (e ticketError) Error() string { return string(e) }
+
+const errTooManyTickets = ticketError("too many stream tickets outstanding")
+
 // authorize checks a request to an /api route against the token. It
 // writes the error response and returns false when the request may not
-// proceed. The event stream also takes ?token=<token>, because browsers
-// open it without headers.
+// proceed. The event stream also opens with ?ticket=<ticket> from
+// issueTicket and, deprecated, ?token=<token>, because browsers open it
+// without headers.
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 	if s.opts.Token == "" {
 		return true
@@ -165,8 +240,13 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events") {
-		if tokenMatches(s.opts.Token, r.URL.Query().Get("token")) {
+		q := r.URL.Query()
+		if s.tickets.redeem(q.Get("ticket"), strings.ToLower(r.PathValue("sn"))) {
+			return true
+		}
+		if tokenMatches(s.opts.Token, q.Get("token")) {
 			s.limiter.succeed(ip)
+			w.Header().Set("Deprecation", tokenQueryDeprecated)
 			return true
 		}
 	}
@@ -175,4 +255,19 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 	}
 	writeError(w, http.StatusUnauthorized, "missing or wrong token")
 	return false
+}
+
+// issueTicket handles POST /cubes/{sn}/events/ticket: a single-use
+// ticket that opens that Cube's event stream within TicketLifetime, so
+// that the token never has to go into a URL.
+func (s *Server) issueTicket(w http.ResponseWriter, r *http.Request) error {
+	if _, err := s.cube(r); err != nil {
+		return err
+	}
+	id, exp, err := s.tickets.issue(strings.ToLower(r.PathValue("sn")))
+	if err != nil {
+		return fail(http.StatusServiceUnavailable, "%v", err)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ticket": id, "expires_at": exp})
+	return nil
 }
