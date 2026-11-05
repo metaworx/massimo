@@ -7,7 +7,8 @@
 // Routes (all JSON unless noted):
 //
 //	GET  /healthz
-//	GET  /api/v1/cubes                               every Cube with connection and budget
+//	GET  /api/v1/cubes                               every Cube with connection and budget, and the ones found but not configured
+//	POST /api/v1/cubes/discover                      look for Cubes on the LAN now
 //	GET  /api/v1/cubes/{sn}                          hello, budget, rooms, configuration
 //	GET  /api/v1/cubes/{sn}/rooms                    rooms with their devices and states
 //	GET  /api/v1/cubes/{sn}/devices                  all devices
@@ -99,6 +100,21 @@ type Options struct {
 	ShowHidden bool
 	// Update configures the update endpoints (update_api.go).
 	Update UpdateOptions
+	// DiscoverInterval is how often the server looks for Cubes on the LAN
+	// (discovery.go), with a first run at the start; 0 runs it only on
+	// request, and while a Cube configured by serial has no address.
+	DiscoverInterval time.Duration
+	// DiscoveryWait is how long a run waits for answers (default
+	// DefaultDiscoveryWait). DiscoveryAddr, the local address of the
+	// discovery socket (default ":23272"), and DiscoveryTargets, where
+	// requests go as host:port (default the broadcast addresses), exist
+	// for tests.
+	DiscoveryWait    time.Duration
+	DiscoveryAddr    string
+	DiscoveryTargets []string
+	// CubePort is the TCP port of a Cube whose address comes from
+	// discovery (default 62910), for tests.
+	CubePort int
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -125,6 +141,14 @@ type Server struct {
 	limiter *authLimiter
 	tickets *ticketStore
 	updates updateCheck
+
+	// Discovery, see discovery.go.
+	responder *proxy.Responder // the proxies' discovery socket, when serving
+	discMu    sync.Mutex
+	discRun   *discoveryRun   // the run going on, if any
+	ctx       context.Context // Run's, for work that outlives a request
+	foundMu   sync.Mutex
+	found     map[string]*foundCube // by serial, upper case
 }
 
 type runtime struct {
@@ -163,7 +187,9 @@ type event struct {
 	State  interface{} `json:"state,omitempty"`
 	// Paired is the device that joined, for a "paired" event.
 	Paired *cube.NewDevice `json:"paired,omitempty"`
-	Time   time.Time       `json:"time"`
+	// Cube is the Cube discovery found, for a "cube_found" event.
+	Cube *foundCube `json:"cube,omitempty"`
+	Time time.Time  `json:"time"`
 }
 
 // logSize is how many events a Cube's log keeps for GET …/log.
@@ -198,7 +224,8 @@ func New(opts Options) *Server {
 		opts.PollInterval = time.Minute
 	}
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{},
-		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil)}
+		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
+		found: map[string]*foundCube{}}
 	for _, c := range opts.Cubes {
 		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
 			follow: newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
@@ -217,6 +244,9 @@ func New(opts Options) *Server {
 
 // Run connects every Cube and blocks until ctx ends.
 func (s *Server) Run(ctx context.Context) error {
+	s.mu.Lock()
+	s.ctx = ctx
+	s.mu.Unlock()
 	var wg sync.WaitGroup
 	for _, key := range s.order {
 		rt := s.cubes[key]
@@ -258,14 +288,19 @@ func (s *Server) Run(ctx context.Context) error {
 		}()
 	}
 	if responder != nil {
-		pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", cubelan.DiscoveryPort))
+		pc, err := net.ListenPacket("udp4", s.discoveryAddr())
 		if err != nil {
 			s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
 		} else {
+			s.mu.Lock()
+			s.responder = responder
+			s.mu.Unlock()
 			wg.Add(1)
 			go func() { defer wg.Done(); responder.Serve(ctx, pc) }()
 		}
 	}
+	wg.Add(1)
+	go func() { defer wg.Done(); s.discoveryLoop(ctx) }()
 	wg.Wait()
 	return ctx.Err()
 }
@@ -449,6 +484,7 @@ func (s *Server) routes() {
 		})
 	}
 	api("GET /api/v1/cubes", s.listCubes)
+	api("POST /api/v1/cubes/discover", s.postDiscover)
 	api("GET /api/v1/cubes/{sn}", s.getCube)
 	api("GET /api/v1/cubes/{sn}/rooms", s.getRooms)
 	api("GET /api/v1/cubes/{sn}/devices", s.getDevices)
@@ -511,9 +547,16 @@ func (s *Server) cube(r *http.Request) (*runtime, error) {
 // Views.
 
 type cubeView struct {
-	Serial    string         `json:"serial"`
-	Name      string         `json:"name,omitempty"`
-	Address   string         `json:"address"`
+	Serial  string `json:"serial"`
+	Name    string `json:"name,omitempty"`
+	Address string `json:"address"`
+	// Configured is true for the Cubes the server serves; GET /cubes
+	// also lists Cubes discovery found that are not (foundCube).
+	Configured bool `json:"configured"`
+	// MAC and LastSeen come from discovery: the Cube's MAC address and
+	// when it last answered.
+	MAC       string         `json:"mac,omitempty"`
+	LastSeen  *time.Time     `json:"last_seen,omitempty"`
 	Connected bool           `json:"connected"`
 	Firmware  string         `json:"firmware,omitempty"`
 	RFAddress string         `json:"rf_address,omitempty"`
@@ -545,7 +588,10 @@ type deviceDetail struct {
 func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
-	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.cfg.Addr, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
+	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.client.Address(), Configured: true, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
+	if f, ok := s.foundInfo(rt.serial); ok {
+		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
+	}
 	if h := snap.Hello(); h != nil {
 		v.Connected = rt.client.Connected()
 		v.Firmware, v.RFAddress, v.Updated, v.ObservedSince = h.FirmwareVersion, h.RFAddress.String(), snap.Updated(), snap.Since()
@@ -581,18 +627,16 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// listCubes handles GET /cubes: the configured Cubes, then the ones
+// discovery found that are not configured.
 func (s *Server) listCubes(w http.ResponseWriter, r *http.Request) error {
-	var out []cubeView
-	seen := map[*runtime]bool{}
-	s.mu.RLock()
-	for _, key := range s.order {
-		rt := s.cubes[key]
-		if !seen[rt] {
-			seen[rt] = true
-			out = append(out, s.summary(rt))
-		}
+	out := []any{}
+	for _, rt := range s.runtimes() {
+		out = append(out, s.summary(rt))
 	}
-	s.mu.RUnlock()
+	for _, f := range s.unconfigured() {
+		out = append(out, f)
+	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
 }
