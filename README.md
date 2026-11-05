@@ -10,19 +10,241 @@ Status: early development (Phase 0). Licensed under the
 "MAX!" and "eQ-3" are trademarks of eQ-3 AG. This project is not affiliated
 with or endorsed by eQ-3.
 
+## Installing
+
+Massimo is one binary per platform with the web UI inside; there is
+nothing else to install. Every
+[release](https://github.com/metaworx/massimo/releases) carries the
+binaries below, `SHA256SUMS` and the signed manifest that `massimo
+update` verifies. Every release so far is a pre-release on the update
+channel `alpha` (see [Versions](#versions)), which `releases/latest`
+skips, so take the newest release from the page and put its tag in
+place of `<tag>` below.
+
+| Asset | For |
+|---|---|
+| `massimo-linux-amd64` | PC or NAS with a 64-bit Linux |
+| `massimo-linux-arm64` | Raspberry Pi 3, 4, 5 and Zero 2 W with a 64-bit OS (`uname -m` says `aarch64`) |
+| `massimo-linux-armv7` | Raspberry Pi 2, 3, 4 and Zero 2 W with a 32-bit OS (`armv7l`) |
+| `massimo-linux-armv6` | Raspberry Pi 1 (A, B, B+), Zero and Zero W (`armv6l`; the armv7 build dies there with "illegal instruction") |
+| `massimo-windows-amd64.exe` | Windows PC, 64-bit |
+| `massimo-darwin-arm64` | Mac with Apple silicon |
+| `massimo-darwin-amd64` | Mac with an Intel processor |
+
+To build instead, with Go installed: `make` runs the tests and builds
+`./massimo` for this machine; `make cross` builds every release binary
+into `dist/`, one at a time with `make linux`, `make linux-arm64`,
+`make linux-armv7`, `make linux-armv6`, `make darwin` (both Mac
+architectures) and `make windows`; `make release` adds `SHA256SUMS` and
+the release manifest; `make vet`, `make test` and `make clean` do what
+they say. A build from `main` follows the channel `main`, which has no
+releases, unless `MASSIMO_UPDATE_CHANNEL=alpha` is set, see
+[packaging/README.md](packaging/README.md#updating).
+
+`serve` reads its settings from the environment or from a `.env` in the
+directory it is started from (see [Cube variables](#cube-variables)).
+For a first run two lines are enough, the Cube's address (`massimo
+discover` lists the Cubes on the LAN with serial and address) and the
+token the API and the web UI then ask for:
+
+```
+MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
+MASSIMO_API_TOKEN=choose-a-long-random-string
+```
+
+Each Cube accepts a single TCP client, so close the original MAX!
+software and stop any other server before `serve` connects; from then
+on they connect to the server's proxy instead of the Cube, see
+[Server](#server). The proxy needs TCP port 62910 and discovery UDP
+port 23272 open to the LAN, and the API its port (8099 below) when it
+listens on a LAN address; each subsection says what that means for the
+firewall. WSL 2 in its default network mode has no LAN broadcast and
+takes no inbound LAN connections, so a `serve` there can neither find
+Cubes nor answer as one, and `massimo discover` finds nothing (mirrored
+networking mode on Windows 11 lifts that); the service belongs on a
+Linux box or a Raspberry Pi, a Windows PC or a Mac on the Cube's LAN.
+
+### Linux
+
+A Raspberry Pi is enough, a Pi 1 included
+([resource use](packaging/README.md#resource-use));
+[Preparing a Raspberry Pi 1](packaging/README.md#preparing-a-raspberry-pi-1)
+sets one up without a screen.
+
+**Try it.** On the box, with the asset for it from the table (here the
+arm64 one):
+
+```bash
+curl -fLO https://github.com/metaworx/massimo/releases/download/<tag>/massimo-linux-arm64
+curl -fLO https://github.com/metaworx/massimo/releases/download/<tag>/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+chmod +x massimo-linux-arm64
+./massimo-linux-arm64 serve -listen 127.0.0.1:8099
+```
+
+with the `.env` from above in the same directory, then open
+http://127.0.0.1:8099/ and enter the token; `-listen :8099` serves the
+page to the LAN as well, `-proxy off` leaves the proxy out for a first
+run. A firewall on the box must allow incoming 62910/tcp and 23272/udp,
+and 8099/tcp for the page on the LAN (with ufw: `sudo ufw allow
+62910/tcp && sudo ufw allow 23272/udp && sudo ufw allow 8099/tcp`).
+
+**As a service.** On a Linux with systemd, as root (`-dry-run` only
+shows what would be done):
+
+```bash
+sudo ./massimo-linux-arm64 install -dry-run -settings .env
+sudo ./massimo-linux-arm64 install -settings .env
+```
+
+installs the binary as `/usr/local/bin/massimo`, creates the system
+user `massimo`, copies the `.env` to `/etc/massimo/env` (without
+`-settings` a commented template to fill in, and the service is then not
+started), writes `massimo.service`, the update helper
+`massimo-update.path` and `.service` and the log rotation, enables them
+and starts the service, which listens on `:8099` on every interface. It
+warns when `MASSIMO_API_TOKEN` is missing. `-listen :80` moves the API
+and web UI to another address (kept by later installs),
+`-no-update-helper` leaves the helper out, `-no-start` only enables.
+With several Cubes each needs its own `MASSIMO_CUBE_<SERIAL>_PROXY`
+address on the box, see
+[Install by hand](packaging/README.md#install-by-hand). Afterwards the
+settings are in `/etc/massimo/env` (readable by `massimo` only), the
+state in `/var/lib/massimo`, the log in `/var/log/massimo/serve.log`
+(rotated weekly) and in the journal:
+
+```bash
+sudo systemctl start massimo
+sudo systemctl stop massimo
+sudo systemctl status massimo
+journalctl -u massimo -f                  # or: tail -f /var/log/massimo/serve.log
+sudo massimo update -restart massimo.service -health http://127.0.0.1:8099/healthz
+sudo massimo install -remove              # -purge: the settings, state, logs and user too
+```
+
+`update` installs the newest signed release of the channel and puts the
+old binary back when the restarted server does not report the new
+version (`-rollback` goes back by hand); the button under Settings →
+Software in the web UI asks the helper to do the same, which needs
+`MASSIMO_API_TOKEN`. Running `install` again from a newer binary
+replaces the binary and the units and keeps the settings. Details:
+[Install with `massimo install`](packaging/README.md#install-with-massimo-install),
+[Moving to another network](packaging/README.md#moving-to-another-network),
+[Updating](packaging/README.md#updating).
+
+### Windows
+
+**Try it.** In PowerShell, in a folder of your choice (`curl.exe` comes
+with Windows 10 and 11):
+
+```powershell
+curl.exe -fLO https://github.com/metaworx/massimo/releases/download/<tag>/massimo-windows-amd64.exe
+curl.exe -fLO https://github.com/metaworx/massimo/releases/download/<tag>/SHA256SUMS
+(Get-FileHash massimo-windows-amd64.exe -Algorithm SHA256).Hash.ToLower()
+Select-String massimo-windows-amd64.exe SHA256SUMS
+.\massimo-windows-amd64.exe serve -listen 127.0.0.1:8099
+```
+
+The two hashes must match. With the `.env` from above in the same
+folder, open http://127.0.0.1:8099/. The binary is not code-signed: a
+download with `curl.exe` starts without a word, one through a browser
+may make SmartScreen warn. For the proxy and discovery, Windows Defender
+Firewall must let the program receive on TCP 62910 and UDP 23272 on the
+private network (the installed service gets a rule for that, a `serve`
+started by hand does not), and the original MAX! software must not be
+running.
+
+**As a service.** In PowerShell opened with "Run as administrator", in
+that folder:
+
+```powershell
+.\massimo-windows-amd64.exe install -dry-run -settings .env
+.\massimo-windows-amd64.exe install -settings .env
+```
+
+installs the binary as `C:\Program Files\Massimo\massimo.exe`, the
+settings as `C:\ProgramData\Massimo\env` (without `-settings` a template
+to fill in) with the logs `serve.log` and `service.log` next to them, in
+a folder only SYSTEM and the Administrators can read, the service
+`massimo` ("Massimo" in the Services console: automatic start,
+LocalSystem, restarted after 10 s on failure, listening on `:8099`;
+`-listen` changes that and later installs keep it) and the firewall
+rule "Massimo" for the program on private and domain networks. On a
+network Windows classes as public the rule does not apply and other
+devices get no answer: `Get-NetConnectionProfile` shows the profile,
+`Set-NetConnectionProfile` makes a home network private.
+
+```powershell
+sc.exe start massimo
+sc.exe stop massimo
+sc.exe query massimo
+Get-Content C:\ProgramData\Massimo\serve.log -Tail 20
+& "C:\Program Files\Massimo\massimo.exe" update -restart massimo -health http://127.0.0.1:8099/healthz
+.\massimo-windows-amd64.exe install -remove          # -purge: the settings and logs too
+```
+
+`update` renames the running `massimo.exe` aside, puts the new one in
+its place and restarts the service, with the rollback as on Linux; the
+web UI cannot start updates on Windows yet. Details:
+[Windows](packaging/README.md#windows), and the test on a real PC in
+[docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md).
+
+### macOS
+
+**Try it.** In Terminal, with `massimo-darwin-arm64` on Apple silicon
+or `massimo-darwin-amd64` on an Intel Mac:
+
+```sh
+curl -fLO https://github.com/metaworx/massimo/releases/download/<tag>/massimo-darwin-arm64
+curl -fLO https://github.com/metaworx/massimo/releases/download/<tag>/SHA256SUMS
+shasum -a 256 massimo-darwin-arm64 && grep massimo-darwin-arm64 SHA256SUMS
+chmod +x massimo-darwin-arm64
+./massimo-darwin-arm64 serve -listen 127.0.0.1:8099
+```
+
+The two hashes must match. With the `.env` from above in the same
+folder, open http://127.0.0.1:8099/. The binaries are ad-hoc signed,
+not notarized: a download with `curl` runs as it is, one through a
+browser carries the quarantine attribute and Gatekeeper refuses it until
+`xattr -d com.apple.quarantine massimo-darwin-arm64`. With the
+application firewall on, the binary must be allowed to accept incoming
+connections for the proxy and discovery (install does that for the
+service).
+
+**As a service.** As root, in that folder:
+
+```sh
+sudo ./massimo-darwin-arm64 install -dry-run -settings .env
+sudo ./massimo-darwin-arm64 install -settings .env
+```
+
+installs the Linux layout: the binary `/usr/local/bin/massimo`, the
+hidden user `_massimo`, the settings `/etc/massimo/env` (without
+`-settings` a template to fill in), the state `/var/lib/massimo`, the
+log `/var/log/massimo/serve.log` (launchd appends to it; it is not
+rotated), and in `/Library/LaunchDaemons` the daemon
+`ch.metaworx.massimo` (started at boot without a login, restarted 10 s
+after a failure, listening on `:8099`; `-listen` changes that and later
+installs keep it) and the update helper `ch.metaworx.massimo-update`.
+With the application firewall on, install allows the binary. Control it
+with `launchctl`, all with `sudo`:
+
+```sh
+launchctl print system/ch.metaworx.massimo                                   # state, PID, last exit
+launchctl kickstart -k system/ch.metaworx.massimo                            # restart
+launchctl bootout system/ch.metaworx.massimo                                 # stop until the next boot
+launchctl bootstrap system /Library/LaunchDaemons/ch.metaworx.massimo.plist  # start again
+tail -f /var/log/massimo/serve.log
+massimo update -restart ch.metaworx.massimo -health http://127.0.0.1:8099/healthz
+massimo install -remove                                                      # -purge: the settings, state, logs and user too
+```
+
+The button under Settings → Software in the web UI works as on Linux,
+through the helper (its log is `/var/log/massimo-update.log`). Details:
+[macOS](packaging/README.md#macos).
+
 ## Command line
 
-Release binaries for every platform are on the
-[releases page](https://github.com/metaworx/massimo/releases). To build:
-`make` runs the tests and builds `./massimo` for this machine; `make cross`
-builds every release binary into `dist/`, one at a time with `make linux`,
-`make linux-arm64`, `make linux-armv7` (Raspberry Pi 2/3/4, 32-bit OS),
-`make linux-armv6` (Pi 1 or Pi Zero), `make darwin` (both Mac
-architectures) and `make windows`; `make release` adds `SHA256SUMS` and the
-release manifest; `make vet`, `make test` and `make clean` do what they
-say. `massimo install` sets `massimo serve` up as a systemd service on
-Linux, a Windows service or LaunchDaemons on macOS, see
-[packaging/README.md](packaging/README.md).
 `massimo help` lists the commands; the ones useful today:
 
 ```bash
@@ -209,7 +431,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/design.md](docs/design.md): the design proposal, target environments, phases and their status
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware, [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
-- [docs/testing-windows.md](docs/testing-windows.md): the test plan for the Windows service on a real PC
+- [docs/testing-windows.md](docs/testing-windows.md): the test plan for the Windows service on a real PC, [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
 - [docs/handover-session.md](docs/handover-session.md): where the last session stopped, open feedback, next steps
 - [docs/review-2026-11-05.md](docs/review-2026-11-05.md): code review with findings, extraction proposals and the coding standard
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`, the web UI smoke test with Playwright, and its setup
