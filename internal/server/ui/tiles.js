@@ -150,11 +150,15 @@ function renderSetpoint(el, room) {
     sendRoomSetpoint(room, { mode: "auto" }, "auto");
   });
   manuBtn.addEventListener("click", () => {
-    // The room's setpoint, or the stepper's starting value when the room
-    // has not reported one yet; a pending stepper value is dropped.
+    // Manual keeps the room's current setpoint; a pending stepper value
+    // is dropped. Without a known setpoint nothing is guessed: the user
+    // picks a temperature with the stepper, which sends manual itself.
     leaveEditing(room);
-    const temp = current !== null ? current : DEFAULT_TEMP;
-    sendRoomSetpoint(room, { mode: "manual", temp }, "manual " + temp.toFixed(1) + " °C");
+    if (current === null) {
+      showResult(room, "no setpoint known yet; choose one with the stepper", false);
+      return;
+    }
+    sendRoomSetpoint(room, { mode: "manual", temp: current }, "manual " + current.toFixed(1) + " °C");
   });
   const vac = el.querySelector(".mode-vacation");
   if (mode === "vacation") {

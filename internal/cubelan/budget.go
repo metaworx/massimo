@@ -21,6 +21,9 @@ type Budget struct {
 	DutyCyclePct    int       `json:"duty_cycle_pct"`
 	FreeMemorySlots int       `json:"free_memory_slots"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	// MaxSlots is the highest free-slot count this Cube ever reported,
+	// at least MemorySlots; the Cube's capacity as far as it is known.
+	MaxSlots int `json:"max_memory_slots,omitempty"`
 }
 
 // MemorySlots is the number of memory slots a Cube has (firmware 1.1.3
@@ -31,10 +34,11 @@ const MemorySlots = 50
 // Pending returns how many radiograms the Cube still holds unanswered,
 // derived from the free memory slots.
 func (b Budget) Pending() int {
-	if b.FreeMemorySlots <= 0 || b.FreeMemorySlots >= MemorySlots {
+	capacity := max(b.MaxSlots, MemorySlots)
+	if b.FreeMemorySlots <= 0 || b.FreeMemorySlots >= capacity {
 		return 0
 	}
-	return MemorySlots - b.FreeMemorySlots
+	return capacity - b.FreeMemorySlots
 }
 
 type budgetTracker struct {
@@ -44,7 +48,7 @@ type budgetTracker struct {
 
 func (t *budgetTracker) update(duty, slots int, now time.Time) {
 	t.mu.Lock()
-	t.b = Budget{DutyCyclePct: duty, FreeMemorySlots: slots, UpdatedAt: now}
+	t.b = Budget{DutyCyclePct: duty, FreeMemorySlots: slots, UpdatedAt: now, MaxSlots: max(t.b.MaxSlots, slots, MemorySlots)}
 	t.mu.Unlock()
 }
 

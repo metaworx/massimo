@@ -100,7 +100,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot, ig backup.Ignored) statusReport 
 	if h != nil {
 		rep.Serial, rep.Firmware = h.Serial, h.FirmwareVersion
 		rep.DutyCyclePct, rep.FreeMemorySlots = h.DutyCycle, h.FreeMemorySlots
-		rep.Pending = cubelan.Budget{FreeMemorySlots: h.FreeMemorySlots}.Pending()
+		rep.Pending = cubelan.Budget{FreeMemorySlots: h.FreeMemorySlots, MaxSlots: h.FreeMemorySlots}.Pending()
 		rep.CubeTime = strings.TrimSpace(h.CubeDate + " " + h.CubeTime)
 	}
 	md := snap.Metadata()
