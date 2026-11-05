@@ -66,8 +66,27 @@ after each move. Duty cycle 4 % before.
   which it did not do before the test; most likely a link to a room 1
   device was not removed because a radiogram was lost in the power
   cycles. Fix if it stays: move the contact to room 1 and back once more.
+- **7c, the move repeated (18:14 to 18:37): passed, and it cleared the
+  link error.** `serve` v0.3.0-alpha.1 by then. To room 1: 4 radiograms
+  pending, duty cycle 13 %. The first window cycle delivered 2 of them,
+  cleared `link_error` and set the contact's `error` flag, because a
+  radiogram had gone unanswered. With the window open, room 1's
+  thermostat went to 5 °C and room 2's did not react. A second window
+  cycle delivered the other 2 (0 pending). Back to room 2: 5 radiograms
+  (the move's 4 and the queue's error reset), duty cycle 20 %. The first
+  window cycle delivered only the error reset and cleared `error`; the
+  second (window open for 2 minutes) delivered the remaining 4. Room 2's
+  thermostat went to 5 °C a minute after opening and back to 18 °C after
+  closing, and room 1's stayed at 19 °C. End state: 0 pending, 50 free
+  slots, no `error` or `link_error` on any device, every room ready.
+  The configuration diff against the first backup is empty apart from
+  the contact's name, which was changed in the web UI during the test.
 
-A Cube restart drops radiograms it still waits to deliver. A move whose
+A contact fetches its radiograms only right after it transmits, and not
+always all of them at once, so a move can take several window cycles.
+Checking the pending count fresh from the Cube (here by restarting
+`serve`) after each cycle shows when it is done. A Cube restart drops
+radiograms it still waits to deliver. A move whose
 radiograms are lost leaves the Cube's metadata right but the device's
 links half done, and nothing reports that except the device's
 link-error flag.
@@ -109,8 +128,6 @@ link-error flag.
 - DHCP reservations in the mobile router's network: the Cube at .118
   and the Pi. Without one the Pi's DHCP address changed from .48 to .41
   after the outage; it stayed reachable on its fixed .200.
-- Room 2's window contact 183962: the link error from step 7b, see
-  above.
 - During the update helper's restart of `serve` the proxy was gone for a
   few seconds, and `massimo status` on another machine fell back to the
   Cube itself, taking its only client slot until it gave up. Commands
