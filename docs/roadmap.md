@@ -67,7 +67,11 @@ each new write path and the feedback that follows.
    radiator thermostats, which report their measured temperature only
    occasionally, so an old IS value should not pass as current; also
    for valve position, window state and battery. Add a last-contact time
-   per device and a "not seen for N hours" warning.
+   per device and a "not seen for N hours" warning. Server side done
+   2026-11-05: `received` per value, `last_seen` and `stale` (thermostats
+   unchanged for 24 hours) on devices and rooms, `observed_since` on the
+   Cube (docs/api-v1.md); the UI part, ages next to the values and greyed
+   stale ones, is open.
 10. Later: Loxone, a radio-stick driver without a Cube.
 
 Open UI feedback from 2026-11-04 is listed in handover-session.md.

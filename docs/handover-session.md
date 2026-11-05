@@ -32,7 +32,11 @@ in a minute, and single-use stream tickets (`POST …/events/ticket`,
 `?ticket=`); `?token=` on the stream is deprecated and still accepted.
 The web UI still opens the stream with `?token=` and should move to a
 ticket per connection (docs/api-v1.md, Authentication), after which
-`?token=` can go. Still open in the review: logic 3 (documented), 6 and
+`?token=` can go. Roadmap item 9 has its server side: every device with
+state carries `received` (per value, when the server saw it appear),
+`last_seen` and `stale`; rooms carry `stale`, the Cube `observed_since`
+(docs/api-v1.md says what the times can and cannot mean). The UI can
+show ages and grey stale values next. Still open in the review: logic 3 (documented), 6 and
 7 and duplication 6 (UI), the Playwright smoke test.
 
 Release engineering (roadmap 8): the repository is public; CI and the
