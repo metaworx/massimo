@@ -40,6 +40,12 @@ Chromium) against the fake Cube at 1100 and 390 px, in English and
 German: no console errors, no horizontal scroll, the new controls
 reachable and operable by keyboard. Not yet seen on real hardware.
 
+Follow-ups the same day (branch claude/ui-followups): Forget token
+fixed, "mixed" for rooms whose thermostats differ in mode, a note on
+the paused auto-reload in the settings, shared UI helpers in app.js,
+`make ui-test`, help texts checked against the eQ-3 manuals, French,
+Italian, Dutch and Polish, and docs/ui.md.
+
 ## State
 
 - `massimo serve` keeps both Cubes connected, serves the JSON API
@@ -68,9 +74,8 @@ reachable and operable by keyboard. Not yet seen on real hardware.
 - UI: plain HTML/CSS/JS in internal/server/ui/, go:embed, no framework,
   no inline handlers, textContent for API text, CSS variables for light
   and dark, phone first (390 px), verified with Playwright against the
-  fake Cube (`internal/cubelan/fakecube` with the fixture greeting; a
-  greeting with device states lives only in the old session's scratch
-  space, make a new one by editing the fixture's L line).
+  fake Cube; `make ui-test` (tools/ui-test) runs the smoke test, and
+  its greeting.txt is the fixture with device states.
 - Bigger features were done as parallel forks in git worktrees and
   merged; the same works locally with worktrees or branches.
 
@@ -78,32 +83,27 @@ reachable and operable by keyboard. Not yet seen on real hardware.
 
 - Owner's earlier remark: opening device list or configuration is per
   tile; a global switch could come later.
-- The help texts follow what the original MAX! manual says each
-  setting does, from memory of it, not from the document; check them
-  against the manual, above all valve offset and the open-window
-  duration, and adjust the English and German entries in i18n.js.
-- Translations: French, Italian, Dutch and Polish have empty tables in
-  i18n.js (roadmap item 7). German uses "ß"; a de-CH variant would only
-  need the few words that have one. Error texts from the server reach
-  the UI in English.
+- Help texts were checked against eQ-3's thermostat manuals; the
+  manuals do not describe maximum valve and valve offset (the offset
+  text follows FHEM's MAX module). The Dutch manual gives descaling at
+  Saturday 11:00, the English one and our devices 12:00; the texts say
+  12:00.
+- Translations: all six languages are in i18n.js; FR/IT/NL/PL are
+  translations with the manuals' terms, not yet read by a native
+  speaker. A de-CH variant would only need the words with "ß". Error
+  texts from the server reach the UI in English.
 - The Copy tab copies what is stored for the room, not unsent edits of
   the other tabs, and says so; if the owner expects the edits, it can
   take c.prog.days and c.edit instead.
-- Found in passing, not fixed: the "Forget token" handler in app.js
-  calls `panel.classList` on an undefined `panel`, so the click throws
-  after the token is cleared (refresh and reconnect do not run).
-- Playwright set-up on the Mint box without node or ensurepip:
-  `python3 -m venv --without-pip venv`, get-pip.py from
-  bootstrap.pypa.io run with the venv's python, then `pip install
-  playwright` and `python -m playwright install chromium`. The page's
-  CSP forbids eval, so `page.wait_for_function` with a string fails;
-  poll from Python instead.
+- Playwright set-up on the Mint box (no node, no ensurepip): see
+  tools/ui-test/README.md.
 
 ## Next steps in order
 
 1. The write test (docs/handover-write-test.md) on the JEQ Cube.
-2. The owner's review of the UI feedback round (branch
-   claude/ui-feedback-9b6fa2), and the open UI points above.
+2. The owner's review of the UI feedback round (PR 3) and its
+   follow-ups (branch claude/ui-followups), and the open UI points
+   above.
 3. Pairing new devices (roadmap item 4).
 4. Firmware dump when the adapter is in (docs/firmware-extraction.md).
 5. Users and a database (roadmap item 6).
