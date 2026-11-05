@@ -186,15 +186,52 @@ sc.exe start massimo
 sc.exe stop massimo
 sc.exe query massimo
 Get-Content C:\ProgramData\Massimo\serve.log -Tail 20
-& "C:\Program Files\Massimo\massimo.exe" update -restart massimo -health http://127.0.0.1:8099/healthz
 .\massimo-windows-amd64.exe install -remove          # -purge: the settings and logs too
 ```
 
-`update` renames the running `massimo.exe` aside, puts the new one in
-its place and restarts the service, with the rollback as on Linux; the
-web UI cannot start updates on Windows yet. Details:
-[Windows](packaging/README.md#windows), and the test on a real PC in
-[docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md).
+Details: [Windows](packaging/README.md#windows), and the test on a real
+PC in [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md).
+
+**Update.** An installed service is updated with the installed binary,
+again in PowerShell opened with "Run as administrator":
+
+```powershell
+& "C:\Program Files\Massimo\massimo.exe" update -check
+& "C:\Program Files\Massimo\massimo.exe" update -restart massimo -health http://127.0.0.1:8099/healthz
+```
+
+`-check` only says whether a newer signed release is out on the update
+channel. Without it, `update` asks before replacing anything (`-yes`
+skips the question), downloads the release's Windows binary and
+verifies it against the signed manifest, test-runs it, renames the
+running `C:\Program Files\Massimo\massimo.exe` to `massimo.exe.prev`,
+puts the new one in its place, and stops and starts the service
+`massimo` through the service manager. With `-health` it then waits up
+to two minutes (`-health-timeout`) until `/healthz` reports the new
+version, and otherwise puts `massimo.exe.prev` back and keeps the
+failed binary as `massimo.exe.failed`; a binary that cannot run as a
+service is given up by the service manager after 30 s, so that case
+ends after about 35 s. With another `-listen` address give it in
+`-health`; `-version <tag>` installs a given release, older ones too.
+
+```powershell
+& "C:\Program Files\Massimo\massimo.exe" update -rollback -restart massimo
+Get-Content C:\ProgramData\Massimo\service.log -Tail 10
+sc.exe query massimo
+```
+
+`-rollback` swaps `massimo.exe` and `massimo.exe.prev` back and
+restarts the service (once more goes forward again). The result is in
+the command's own output, in `C:\ProgramData\Massimo\service.log`
+("stop requested", "stopped", "started as a service", "running", and
+any error that ended `serve`), and, for the service manager's view, in
+`Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 10`.
+Running `install` again from a newer downloaded binary also replaces
+the binary and keeps the settings. The Update button under Settings →
+Software does not work on Windows yet; it will once
+[docs/update-windows.md](docs/update-windows.md), the design for it, is
+implemented. Details: [Windows](packaging/README.md#windows) and
+[Updating](packaging/README.md#updating) in packaging/README.md.
 
 ### macOS
 
@@ -444,6 +481,7 @@ UDP answers on the PC's firewall. See [docs/proxy.md](docs/proxy.md).
 - [docs/server.md](docs/server.md): the server mode: encryption at rest, the public server, sync, and what the store prepares for them
 - [docs/handover-write-test.md](docs/handover-write-test.md): the test plan for the configuration writes on real hardware, [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
 - [docs/testing-windows.md](docs/testing-windows.md): the test plan for the Windows service on a real PC, [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
+- [docs/update-windows.md](docs/update-windows.md): the design for updates from the web UI on Windows: the options, the recommendation, the changes per file, the CI and real-PC tests
 - [docs/handover-session.md](docs/handover-session.md): where the last session stopped, open feedback, next steps
 - [docs/review-2026-11-05.md](docs/review-2026-11-05.md): code review with findings, extraction proposals and the coding standard
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`, the web UI smoke test with Playwright, and its setup
