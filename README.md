@@ -137,8 +137,13 @@ button, the Cube clock in the browser's or the Cube's time zone, and
 a settings page with an Expert switch for the technical details, Rooms,
 Log and Settings as icon buttons at the right of the header, a per-room
 configuration area (name, temperatures, boost and descaling, device
-names and offsets, moves, the week programme with a day editor, copy to
-other rooms) and a log view of the Cube's events. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
+names and offsets, moves, the week programme with a day editor that
+edits the days sharing a programme together, copy of rooms' settings
+to other rooms), a help button next to every setting, and a log view of
+the Cube's events. The page speaks English and German (from the
+browser, or chosen in the settings); the translation table in
+`internal/server/ui/i18n.js` has room for French, Italian, Dutch and
+Polish. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it, and the UI, which needs the same token as the
 API, with it. `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
