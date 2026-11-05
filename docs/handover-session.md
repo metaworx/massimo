@@ -125,7 +125,11 @@ Italian, Dutch and Polish, and docs/ui.md.
 
 ## Next steps in order
 
-1. The write test (docs/handover-write-test.md) on the JEQ Cube.
+1. The write test (docs/handover-write-test.md) on the JEQ Cube:
+   steps 1 to 6 passed (docs/write-test-2026-11-05.md); its findings 1
+   and 2 are addressed (re-reads and a budget reconnect after writes,
+   accepted commands in the log); step 7, moving a device, is still to
+   run.
 2. The owner's review of the UI feedback round (PR 3) and its
    follow-ups (branch claude/ui-followups), and the open UI points
    above.
