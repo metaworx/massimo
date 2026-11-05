@@ -183,7 +183,8 @@ battery, or remove the device from the Cube:
 
 ### GET /api/v1/cubes
 
-Every configured Cube:
+Every configured Cube, then every Cube discovery found on the LAN that
+is not configured:
 
 ```json
 [
@@ -191,6 +192,9 @@ Every configured Cube:
     "serial": "JEQ0192422",
     "name": "Ground floor",
     "address": "192.168.1.9",
+    "configured": true,
+    "mac": "00:1a:22:0a:0b:0c",
+    "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
     "firmware": "1.1.3",
     "rf_address": "022839",
@@ -201,9 +205,28 @@ Every configured Cube:
     "devices": 16,
     "queued": 0,
     "cube_time": "2026-11-04 15:28"
+  },
+  {
+    "serial": "KEQ0000000",
+    "configured": false,
+    "address": "192.168.1.23",
+    "mac": "00:1a:22:01:02:03",
+    "rf_address": "0a0b0c",
+    "firmware": "1.1.3",
+    "found_at": "2026-11-04T14:30:01+01:00",
+    "last_seen": "2026-11-04T15:00:02+01:00"
   }
 ]
 ```
+
+`configured` tells the two apart. A configured Cube has the fields
+below; `mac` and `last_seen` (when it last answered discovery) only
+once discovery has seen it. A found Cube has only the fields shown:
+`address` is the IP it answered from, `found_at` when the server first
+saw it, `last_seen` its latest answer; `mac` comes from the host's ARP
+cache and may be missing. To use it, configure it (its address, or its
+serial with `-sn` or a `_NAME`, see the README) and restart serve. The
+answers of serve's own proxies (docs/proxy.md) are not listed.
 
 `budget` is what the Cube last reported: the share of the hourly radio
 budget already used, and the free memory slots (each unacknowledged
@@ -230,6 +253,42 @@ reads the device's configuration again after 15 s, 30 s, 1, 2 and 2
 minutes, until it changed, and the stream sends a `config` event when
 it does. Until then `GET …/devices/{rf}` and the room configuration show
 the old values.
+
+### POST /api/v1/cubes/discover
+
+Looks for Cubes on the LAN now (UDP discovery, about three seconds) and
+answers with every Cube that answered, configured or not, as the
+objects of the found Cubes above:
+
+```json
+{
+  "ran_at": "2026-11-04T15:00:00+01:00",
+  "found": [
+    {"serial": "JEQ0192422", "configured": true, "address": "192.168.1.9", "mac": "00:1a:22:0a:0b:0c",
+     "rf_address": "022839", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"},
+    {"serial": "KEQ0000000", "configured": false, "address": "192.168.1.23", "mac": "00:1a:22:01:02:03",
+     "rf_address": "0a0b0c", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"}
+  ]
+}
+```
+
+No body. A call while a run is going waits for it and gets its result,
+the same `ran_at`. `503` when the server cannot have the discovery
+port (UDP 23272, the only one the Cubes answer to), for example because
+another program holds it. `serve` also runs discovery at the start and
+every 30 minutes (`-discover-interval`, `0` for on request only), and
+every minute while a Cube configured by serial has no address yet. The
+first time a Cube that is not configured answers, every Cube's event
+stream sends `cube_found`, once per serial and server run:
+
+```
+event: cube_found
+data: {"kind":"cube_found","cube":{"serial":"KEQ0000000","configured":false,"address":"192.168.1.23",…},"time":"…"}
+```
+
+A configured Cube that answers from another address than configured is
+logged; one configured by serial only, without an address, is connected
+at the address it answers from and reconnected when that changes.
 
 ### GET /api/v1/cubes/{sn}
 
@@ -558,8 +617,9 @@ data: {"kind":"disconnected","error":"read tcp …: i/o timeout","time":"…"}
 Kinds: `connected`, `disconnected` (the server reconnects by itself),
 `hello` (new budget or clock from the Cube), `metadata` (rooms or names
 changed), `config` (a device configuration arrived), `state`,
-`pairing_started`, `paired` (with `paired`, the device that joined) and
-`pairing_ended` (see Pairing). A comment line is sent every 30 seconds
+`pairing_started`, `paired` (with `paired`, the device that joined),
+`pairing_ended` (see Pairing) and `cube_found` (with `cube`, a Cube that
+is not configured, see POST /cubes/discover). A comment line is sent every 30 seconds
 to keep the connection alive.
 
 With a token configured the stream needs `?ticket=<ticket>` (below) or

@@ -159,5 +159,12 @@ device list arrives just after it, not at that exact time.
    next the test at the Cube (the assumptions are listed as unverified
    in docs/portal-protocol.md, pairing section) and the UI panel from
    docs/api-v1.md.
-4. Firmware dump when the adapter is in (docs/firmware-extraction.md).
-5. Users and a database (roadmap item 6).
+4. Finding Cubes: serve runs discovery at the start, every 30 minutes
+   and on `POST /api/v1/cubes/discover`, lists Cubes that are not
+   configured in `GET /api/v1/cubes` (`"configured": false`) and serves
+   Cubes configured by serial only at the address they answer from; the
+   Cube list's refresh in the UI builds on it. To check on the Pi: a
+   second Cube on the LAN shows up after a refresh, serve's own proxy
+   answers do not.
+5. Firmware dump when the adapter is in (docs/firmware-extraction.md).
+6. Users and a database (roadmap item 6).

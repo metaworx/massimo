@@ -57,7 +57,9 @@ contacts only on a window change, and the Cube discards room commands
 while a room has such a member, so the room is marked not ready (`-json`
 for machines). `watch` prints state changes as they happen; `fakecube`
 serves recorded data on port 62910 so everything can be tried without
-hardware.
+hardware, and with `-discovery 127.0.0.1:23273` it also answers UDP
+discovery as a further Cube (`-discovery-serial`), which `serve
+-discover-target 127.0.0.1:23273` finds.
 
 ```bash
 massimo discover
@@ -109,6 +111,18 @@ variables and, without an address, discovers the Cube on the LAN; with
 `-addr` instead, the serial the Cube reports selects them. `-addr` always
 wins over the variables. `serve -sn <serial>` serves that one Cube
 instead of every configured one.
+
+`serve` serves every Cube with an `_ADDRESS`, and also, by serial, every
+Cube with a `_NAME` or a `_PROXY` but no `_ADDRESS`, or the one given
+with `-sn` or `MASSIMO_CUBE_SN` when nothing else is configured: such a
+Cube is connected at the address it answers UDP discovery from, and
+reconnected when that changes. A key alone does not make `serve` take a
+Cube. `serve` runs discovery at the start and every 30 minutes
+(`-discover-interval`, `0` for only on request through the API,
+`-discover-target <host>` to ask given addresses instead of
+broadcasting), lists Cubes it finds that are not configured in the API
+(`GET /api/v1/cubes` with `"configured": false`), and logs a configured
+Cube that answers from another address than configured.
 
 Room 255 is the room for hidden devices: a device that is paired but
 never reports blocks every command to the room the Cube counts it in,

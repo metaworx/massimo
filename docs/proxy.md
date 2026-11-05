@@ -147,6 +147,13 @@ the server's host, for example by `massimo discover`, the server runs
 without discovery and logs a warning; clients are then given the
 address by hand.
 
+The same socket serves the server's own discovery of Cubes (the API's
+`POST /api/v1/cubes/discover`, at the start and every 30 minutes): the
+Cubes answer to port 23272 only, so the request goes out from it and
+their answers come back to it. The proxy answers that request too; an
+answer from one of the host's own addresses with one of the server's
+serials is its own and left out.
+
 ## Not supported yet
 
 The proxy has no authentication, like the Cube; bind it to a trusted

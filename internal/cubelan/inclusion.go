@@ -61,7 +61,7 @@ func (c *Client) StartInclusion(timeout time.Duration) error {
 	inc.timer = time.AfterFunc(timeout+inclusionGrace, func() { c.EndInclusion() })
 	inc.mu.Unlock()
 	c.emit(Event{Kind: EventPairingStarted})
-	c.log.Info("cube pairing started", "addr", c.opts.Addr, "seconds", int(timeout.Seconds()))
+	c.log.Info("cube pairing started", "addr", c.Address(), "seconds", int(timeout.Seconds()))
 	return nil
 }
 
@@ -87,7 +87,7 @@ func (c *Client) EndInclusion() bool {
 	paired := len(inc.state.Paired)
 	inc.mu.Unlock()
 	c.emit(Event{Kind: EventPairingEnded})
-	c.log.Info("cube pairing ended", "addr", c.opts.Addr, "paired", paired)
+	c.log.Info("cube pairing ended", "addr", c.Address(), "paired", paired)
 	return true
 }
 
@@ -152,6 +152,6 @@ func (c *Client) handleNewDevice(m cube.Message) {
 	inc.mu.Lock()
 	inc.state.Paired = append(inc.state.Paired, *nd)
 	inc.mu.Unlock()
-	c.log.Info("device paired", "addr", c.opts.Addr, "device", nd.RFAddress, "type", nd.Type, "serial", nd.Serial)
+	c.log.Info("device paired", "addr", c.Address(), "device", nd.RFAddress, "type", nd.Type, "serial", nd.Serial)
 	c.emit(Event{Kind: EventPaired, Device: nd.RFAddress, New: nd})
 }

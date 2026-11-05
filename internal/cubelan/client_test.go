@@ -236,3 +236,22 @@ func TestConnectedFollowsTheConnection(t *testing.T) {
 		t.Fatal("still connected after the cube went away")
 	}
 }
+
+func TestClientWaitsForItsAddress(t *testing.T) {
+	srv, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{})
+	go c.Run(ctx)
+	time.Sleep(100 * time.Millisecond)
+	if srv.Connections() != 0 || c.Address() != "" {
+		t.Fatalf("connected without an address: %d %q", srv.Connections(), c.Address())
+	}
+	if !c.SetAddress(addr) || c.SetAddress(addr) {
+		t.Fatal("SetAddress did not report the change once")
+	}
+	waitEvent(t, c, EventConnected)
+	if got := New(Options{Addr: "10.0.0.1"}).Address(); got != "10.0.0.1:62910" {
+		t.Fatalf("default port: %q", got)
+	}
+}

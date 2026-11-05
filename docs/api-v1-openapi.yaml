@@ -32,16 +32,48 @@ paths:
   /api/v1/cubes:
     get:
       summary: List the Cubes
+      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false).
       responses:
         "200":
-          description: Every configured Cube
+          description: The Cubes
           content:
             application/json:
               schema:
                 type: array
-                items: {$ref: "#/components/schemas/Cube"}
+                items:
+                  oneOf:
+                    - {$ref: "#/components/schemas/Cube"}
+                    - {$ref: "#/components/schemas/FoundCube"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/cubes/discover:
+    post:
+      summary: Look for Cubes on the LAN now
+      description: |
+        UDP discovery, about three seconds. A call while a run is going
+        waits for it and gets its result. serve also runs it at the start
+        and every -discover-interval (30 minutes). A Cube that is not
+        configured is announced once as a cube_found event on every
+        Cube's stream.
+      responses:
+        "200":
+          description: Every Cube that answered, configured or not
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ran_at: {type: string, format: date-time}
+                  found:
+                    type: array
+                    items: {$ref: "#/components/schemas/FoundCube"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The discovery port (UDP 23272) is not available
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/cubes/{sn}:
     get:
       summary: One Cube with its configuration and rooms
@@ -452,7 +484,8 @@ paths:
         On connect, one `state` event per device with its current data,
         then an event per change the Cube reports. Kinds: connected,
         disconnected, hello, metadata, config, state, pairing_started,
-        paired (with the device that joined in "paired"), pairing_ended. A comment line
+        paired (with the device that joined in "paired"), pairing_ended,
+        cube_found (with a Cube that is not configured in "cube"). A comment line
         every 30 seconds keeps the stream alive. Browsers open it
         without headers: pass a ticket from POST …/events/ticket.
       security:
@@ -690,12 +723,27 @@ components:
         duty_cycle_pct: {type: integer, description: Share of the hourly radio budget already used}
         free_memory_slots: {type: integer, description: Free slots for unacknowledged radiograms (about 50)}
         updated_at: {type: string, format: date-time}
+    FoundCube:
+      type: object
+      description: A Cube that answered discovery
+      properties:
+        serial: {type: string}
+        configured: {type: boolean}
+        address: {type: string, description: The IP it answered from}
+        mac: {type: string, description: From the host's ARP cache; absent when unknown}
+        rf_address: {type: string}
+        firmware: {type: string, example: "1.1.3"}
+        found_at: {type: string, format: date-time, description: When the server first saw it}
+        last_seen: {type: string, format: date-time, description: Its latest answer}
     Cube:
       type: object
       properties:
         serial: {type: string}
         name: {type: string, description: User-friendly name from MASSIMO_CUBE_<SN>_NAME, when set}
         address: {type: string}
+        configured: {type: boolean, description: Always true here; found Cubes are FoundCube}
+        mac: {type: string, description: From discovery, once it saw the Cube}
+        last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
         firmware: {type: string, example: "1.1.3"}
         rf_address: {type: string}
