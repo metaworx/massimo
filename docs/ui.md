@@ -21,10 +21,12 @@ single-use ticket, so the token never appears in a URL.
   and opens to their address and firmware and the lines to put into the
   server's env file (`/etc/massimo/env` for a server installed with
   `massimo install`, otherwise `.env`). The server serves a Cube once
-  its `MASSIMO_CUBE_<SERIAL>_ADDRESS` is there and the server has been
-  restarted; key and IV are only needed for the portal commands
+  its `MASSIMO_CUBE_<SERIAL>_ADDRESS`, or only a `_NAME`, is there and
+  the server has been restarted; with a name alone it takes the address
+  from discovery and follows it. With several Cubes each also needs a
+  `_PROXY` address. Key and IV are only needed for the portal commands
   (README.md, "Cube variables"). A Cube the server finds by itself
-  appears without reloading the page.
+  appears without reloading the page, and in the log.
 - **The Cube's clock** and the time of the last update.
 - **↻** asks the server for the current state now.
 - The three page buttons switch between **Rooms**, **Log** and **Settings**.
