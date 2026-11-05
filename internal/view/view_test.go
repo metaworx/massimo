@@ -114,7 +114,7 @@ func TestGhostRoomIsHidden(t *testing.T) {
 	if v := h.VisibleRooms(md); len(v) != 1 || v[0].ID != 1 {
 		t.Fatalf("visible %v", v)
 	}
-	if h := NewHidden(nil, md, true); len(h) != 0 {
+	if h := NewHidden([]cube.RFAddress{0x000001}, md, true); len(h) != 0 {
 		t.Fatalf("show: hidden %v", h)
 	}
 }

@@ -21,12 +21,14 @@ import (
 // plus the devices of cube.GhostRoom. See docs/portal-protocol.md.
 type Hidden map[cube.RFAddress]bool
 
-// NewHidden builds the hidden set: the listed devices plus, unless show
-// is set, every device the metadata places in cube.GhostRoom. With show
-// set the list is kept; callers that show everything pass a nil list.
+// NewHidden builds the hidden set: the listed devices plus every device
+// the metadata places in cube.GhostRoom. With show set nothing is hidden.
 func NewHidden(list []cube.RFAddress, md *cube.Metadata, show bool) Hidden {
+	if show {
+		return nil
+	}
 	set := Set(list)
-	if show || md == nil {
+	if md == nil {
 		return set
 	}
 	for _, d := range md.Devices {

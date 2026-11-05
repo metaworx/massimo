@@ -90,3 +90,29 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 		t.Fatalf("backup %d lists the ignored device", resp.StatusCode)
 	}
 }
+
+// With ShowGhosts the listed devices are shown too.
+func TestShowGhostsShowsListedDevices(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr, Ignore: []cube.RFAddress{0x1514b6}}}, ShowGhosts: true, Queue: engine.Options{Gap: time.Millisecond}})
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", nil) == 200 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("listed device hidden despite ShowGhosts")
+}
