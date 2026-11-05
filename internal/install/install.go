@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +64,9 @@ type Options struct {
 	// Run runs a command (useradd, chown, systemctl); nil runs it, or
 	// with Root set, does nothing.
 	Run func(name string, args ...string) error
+	// LocalAddrs lists this machine's addresses for the proxy check;
+	// nil asks the network interfaces.
+	LocalAddrs func() ([]net.IP, error)
 }
 
 type installer struct {
@@ -135,6 +139,9 @@ func Install(o Options) error {
 	startable, err := in.settings()
 	if err != nil {
 		return err
+	}
+	if startable {
+		in.checkSettings()
 	}
 	if err := in.units(); err != nil {
 		return err
@@ -263,6 +270,96 @@ func (in *installer) settings() (bool, error) {
 		}
 	}
 	return startable, in.run("chown", User+":"+User, env)
+}
+
+// checkSettings warns about settings the service will trip over. A proxy
+// address must be one of this machine's (port 62910 is bound once per
+// address), or serve fails to bind and restarts every ten seconds; the
+// install adds no addresses, that is the network's owner's choice.
+func (in *installer) checkSettings() {
+	env := in.path(EnvPath)
+	if _, err := os.Stat(env); err != nil {
+		env = in.Settings // a dry run: the file that would be copied
+	}
+	if env == "" {
+		return
+	}
+	vars, err := readEnv(env)
+	if err != nil {
+		fmt.Fprintf(in.Out, "warning: cannot check %s: %v\n", EnvPath, err)
+		return
+	}
+	if vars["MASSIMO_API_TOKEN"] == "" {
+		fmt.Fprintln(in.Out, "warning: no MASSIMO_API_TOKEN: the API is open to the LAN and the web UI cannot start updates")
+	}
+	lookup := in.LocalAddrs
+	if lookup == nil {
+		lookup = localAddrs
+	}
+	local, err := lookup()
+	if err != nil {
+		return
+	}
+	for k, v := range vars {
+		if !strings.HasPrefix(k, "MASSIMO_CUBE_") || !strings.HasSuffix(k, "_PROXY") {
+			continue
+		}
+		host := v
+		if h, _, err := net.SplitHostPort(v); err == nil {
+			host = h
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || ip.IsUnspecified() {
+			continue // every interface, or a name
+		}
+		found := false
+		for _, l := range local {
+			found = found || l.Equal(ip)
+		}
+		if !found {
+			fmt.Fprintf(in.Out, "warning: %s=%s is not an address of this machine; serve cannot listen there (add it, see packaging/README.md)\n", k, v)
+		}
+	}
+}
+
+func localAddrs() ([]net.IP, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	var ips []net.IP
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok {
+			ips = append(ips, n.IP)
+		}
+	}
+	return ips, nil
+}
+
+// readEnv reads KEY=VALUE lines as massimo's .env loader does, enough to
+// check them: comments and blank lines skipped, quotes removed.
+func readEnv(path string) (map[string]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	vars := map[string]string{}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "export "))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+			v = v[1 : len(v)-1]
+		}
+		vars[strings.TrimSpace(k)] = v
+	}
+	return vars, nil
 }
 
 // unitFiles lists what goes where: embedded name → installed path.

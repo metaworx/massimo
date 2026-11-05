@@ -82,7 +82,10 @@ the URL from the releases page.) It installs the binary as
 `/etc/massimo/env` (a commented template, or a copy of `-settings <.env>`),
 writes `massimo.service`, the update helper `massimo-update.path` and
 `.service` and the log rotation, enables them, and starts the service
-unless the settings are still the template. Fill in `/etc/massimo/env` as
+unless the settings are still the template. It warns when a Cube's
+`_PROXY` address is not one of the box's addresses (serve could not listen
+there and would restart every ten seconds; install adds no addresses) and
+when `MASSIMO_API_TOKEN` is missing. Fill in `/etc/massimo/env` as
 described below, then `sudo systemctl start massimo`.
 
 Running `install` again, from a newer binary, replaces the binary and the

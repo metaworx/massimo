@@ -5,6 +5,7 @@ package install
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,5 +179,36 @@ func TestRemove(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, EnvDir)); err == nil || !rec.has("userdel massimo") {
 		t.Fatalf("purge: %v %q", err, rec.cmds)
+	}
+}
+
+func TestSettingsWarnings(t *testing.T) {
+	root, bin := setup(t)
+	settings := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(settings, []byte(`MASSIMO_CUBE_JEQ0000001_ADDRESS=192.168.1.118
+MASSIMO_CUBE_JEQ0000001_PROXY=192.168.1.50
+MASSIMO_CUBE_JEQ0000001_PROXY_SERIAL=JEQ0000009
+export MASSIMO_CUBE_KEQ0000001_PROXY="192.168.1.49:62910"
+# MASSIMO_CUBE_KEQ0000002_PROXY=192.168.1.51
+MASSIMO_CUBE_KEQ0000003_PROXY=:62910
+`), 0o600)
+	var out bytes.Buffer
+	local := func() ([]net.IP, error) {
+		return []net.IP{net.ParseIP("192.168.1.48"), net.ParseIP("192.168.1.50")}, nil
+	}
+	if err := Install(Options{Root: root, Binary: bin, Settings: settings, Out: &out, Run: (&recorder{}).run, LocalAddrs: local}); err != nil {
+		t.Fatal(err)
+	}
+	o := out.String()
+	if !strings.Contains(o, "no MASSIMO_API_TOKEN") {
+		t.Errorf("no token warning:\n%s", o)
+	}
+	if !strings.Contains(o, "MASSIMO_CUBE_KEQ0000001_PROXY=192.168.1.49:62910 is not an address") {
+		t.Errorf("no warning for .49:\n%s", o)
+	}
+	for _, quiet := range []string{"192.168.1.50 is not", "KEQ0000002", "KEQ0000003", "PROXY_SERIAL"} {
+		if strings.Contains(o, quiet) {
+			t.Errorf("unexpected warning about %s:\n%s", quiet, o)
+		}
 	}
 }
