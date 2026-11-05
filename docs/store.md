@@ -7,7 +7,9 @@ box, the stages of the work and the decisions the owner takes before
 any code is written. It follows section 4 of the proposal of
 2026-11-05 and roadmap item 6; docs/design.md sections 2, 6 and 7 are
 the frame. Nothing here is implemented; the owner's decisions are
-listed at the end.
+listed at the end. docs/store-later.md looks further ahead, at
+encryption at rest and at sync with a public server, and says what
+version 1 should prepare for them.
 
 ## 1. Why a store
 
@@ -821,9 +823,15 @@ mode.
    `MASSIMO_API_TOKEN` should bootstrap an `owner` (recommended, it is
    what the token means today) or an `integration` key with the file's
    owner created separately.
-7. Identifiers: rowids now, UUIDs with the export feature
-   (recommended), or UUIDv7 columns on `cubes`, `users` and `backups`
-   from version 1 as design.md section 7 describes.
+7. Identifiers: rowids now, UUIDs with the export feature, or UUIDv7
+   columns on `cubes`, `users` and `backups` from version 1 as
+   design.md section 7 describes. docs/store-later.md, written after
+   this document for the owner's questions on encryption at rest and
+   on sync with a public server, recommends UUIDv7 from version 1 on
+   every row that will be replicated or exported, plus `version`,
+   `deleted_at` and `origin` columns, a node identity and an
+   `auth_version` on `users`; its section 3 says why and what each
+   costs.
 8. Browser sessions in the `Authorization` header stored in
    `localStorage`, as the token is today (recommended, no cookies and
    no CSRF), or a cookie session with CSRF tokens.
