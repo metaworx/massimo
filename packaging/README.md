@@ -132,6 +132,23 @@ massimo status -addr <proxy address>
 
 and the web UI is at `http://<box>:8099/`.
 
+## Moving to another network
+
+- Cubes ship with DHCP on (factory fallback 192.168.0.222/16), so a Cube
+  gets an address from the new router. Reserve it there, because
+  `MASSIMO_CUBE_<SN>_ADDRESS` is fixed; then update that variable and
+  `sudo systemctl restart massimo`.
+- The fixed proxy addresses added with `nmcli` stay on the interface when
+  the box moves. On the new network they must be free and outside the
+  router's DHCP range: remove them with `-ipv4.addresses` and add new ones
+  as above. The address from DHCP itself follows the new router.
+- A Cube that was moved may still answer ping but not TCP 62910 or UDP
+  23272 until it is power-cycled.
+- A Cube that already has a client (for example this server) accepts no
+  second one and drops the connection attempt silently, so a test
+  connection from elsewhere times out instead of being refused. Test
+  through the proxy instead: `massimo status -addr <proxy address>`.
+
 ## Updating
 
 ```bash
