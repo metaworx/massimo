@@ -44,9 +44,17 @@ func Stage(target string) (*os.File, error) {
 func Smoke(ctx context.Context, path, tag string) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	// An empty directory to run in, whose .env does not exist: massimo
+	// loads its .env before every command and fails on any other error,
+	// such as "not a directory" for a path below /dev/null.
+	dir, err := os.MkdirTemp("", "massimo-smoke-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
 	cmd := exec.CommandContext(ctx, path, "version")
-	cmd.Dir = "/"
-	cmd.Env = []string{"MASSIMO_ENV_FILE=" + filepath.Join(os.DevNull, "none")}
+	cmd.Dir = dir
+	cmd.Env = []string{"MASSIMO_ENV_FILE=" + filepath.Join(dir, ".env")}
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {
