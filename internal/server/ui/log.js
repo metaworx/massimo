@@ -46,8 +46,62 @@ function logStateText(s) {
   return parts.join(", ");
 }
 
+// logChangesText says what a state event changed, one phrase per value,
+// from the API's changes ({field: {from, to}}, null for a value the
+// device did not have): "window opened", "set 18.0 → 21.0", "reports
+// again". A field this page does not know shows as it came.
+function logChangesText(changes) {
+  const num = (v, digits) => (v === null || v === undefined ? "–" : fmtNum(v, digits));
+  const flag = (to, on, off) => t(to ? on : off);
+  const parts = [];
+  for (const [k, c] of Object.entries(changes)) {
+    const to = c ? c.to : null;
+    const from = c ? c.from : null;
+    switch (k) {
+      case "reported":
+        parts.push(flag(to, "log.ch.reportsAgain", "log.ch.lostState"));
+        break;
+      case "window_open":
+        parts.push(flag(to, "log.ch.windowOpened", "log.ch.windowClosed"));
+        break;
+      case "mode":
+        parts.push(t("log.ch.mode", { mode: to ? modeName(to) : "–" }));
+        break;
+      case "setpoint":
+        parts.push(t("log.ch.set", { from: num(from, 1), to: num(to, 1) }));
+        break;
+      case "actual_temp":
+        parts.push(t("log.ch.actual", { from: num(from, 1), to: num(to, 1) }));
+        break;
+      case "valve_pct":
+        parts.push(t("log.ch.valve", { from: num(from, 0), to: num(to, 0) }));
+        break;
+      case "until":
+        parts.push(to ? t("log.until", { until: to }) : t("log.ch.untilCleared"));
+        break;
+      case "battery_low":
+        parts.push(flag(to, "log.batteryLow", "log.ch.batteryOk"));
+        break;
+      case "error":
+        parts.push(flag(to, "log.error", "log.ch.errorCleared"));
+        break;
+      case "link_error":
+        parts.push(flag(to, "log.linkError", "log.ch.linkErrorCleared"));
+        break;
+      case "panel_locked":
+        parts.push(flag(to, "log.locked", "log.ch.unlocked"));
+        break;
+      default:
+        parts.push(k + ": " + JSON.stringify(from) + " → " + JSON.stringify(to));
+    }
+  }
+  return parts.join(", ");
+}
+
 // logLine turns an event object into a line of the view; the text of a
-// state event is made when the line is drawn, in the current language.
+// state event is made when the line is drawn, in the current language:
+// what changed when the event says so, else the whole state (a device's
+// first event since the server started).
 function logLine(ev) {
   const time = ev.time ? new Date(ev.time) : new Date();
   return {
@@ -55,12 +109,14 @@ function logLine(ev) {
     kind: ev.kind || "",
     device: ev.device || "",
     state: ev.kind === "state" ? ev.state : null,
+    changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" ? ev.cube : null,
     text: ev.error || "",
   };
 }
 
 function logText(line) {
+  if (line.changes) return logChangesText(line.changes);
   if (line.state) return logStateText(line.state);
   if (line.cube) return t("discover.log", { serial: line.cube.serial, address: line.cube.address || "–" });
   return line.text;
