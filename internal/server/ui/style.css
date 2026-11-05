@@ -146,6 +146,7 @@ body:not(.expert) .expert-only { display: none !important; }
 body.expert #clock-plain { display: none; }
 #updated { font-variant-numeric: tabular-nums; font-size: 0.9rem; }
 #version { white-space: nowrap; }
+#server-started .age-exact { display: none; }
 
 /* slide toggle: a checkbox styled as a switch, keyboard accessible */
 .switch {

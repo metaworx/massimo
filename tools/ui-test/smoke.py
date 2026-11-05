@@ -13,7 +13,7 @@ room with the open window contact shows "Open" on its tile, and the
 badge goes when a state event closes the contact; the measured
 temperature shows its age, and a device made stale (30 hours, through a
 state event) greys its values and warns on the tile and in the device
-list, also in expert mode. The Cube choice's search entry runs a
+list, also in expert mode, which shows when the server started. The Cube choice's search entry runs a
 discovery, which the fake Cube answers as a Cube that is not configured,
 shows "searching" until the answer is in, then lists the found Cube as
 not selectable with the env lines to add, and the log has its
@@ -102,6 +102,8 @@ def ages(page, label, lang):
     page.evaluate("() => { state.settings.expert = true; applySettings(); }")
     check(tile.locator(".device-vals .age-exact").first.is_visible(), f"{label}: exact times in expert mode")
     check(tile.locator(".device-seen").first.is_visible(), f"{label}: last seen in expert mode")
+    started = page.locator("#server-started")
+    check(started.is_visible() and started.inner_text().strip() not in ("", "–"), f"{label}: server start time in expert mode")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll in expert mode")
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
     tile.locator(".room-name-btn").click()

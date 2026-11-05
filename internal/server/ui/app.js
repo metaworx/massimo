@@ -643,6 +643,23 @@ function splitVersion(v) {
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
 // otherwise it offers a button.
+// renderStarted shows in expert mode when the server process started,
+// and how long ago (an older server sends no time).
+function renderStarted(iso) {
+  const dd = $("server-started");
+  if (dd.dataset.iso === (iso || "")) return;
+  dd.dataset.iso = iso || "";
+  clear(dd);
+  const ms = Date.parse(iso || "");
+  if (isNaN(ms)) {
+    dd.textContent = "–";
+    return;
+  }
+  dd.appendChild(document.createTextNode(fmtInstant(new Date(ms))));
+  const age = ageEl(iso, false, true);
+  if (age) dd.appendChild(age);
+}
+
 async function checkVersion() {
   let h;
   try {
@@ -651,6 +668,7 @@ async function checkVersion() {
     return;
   }
   const v = h && h.version ? h.version : "";
+  renderStarted(h && h.started_at);
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);

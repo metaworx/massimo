@@ -34,7 +34,7 @@ single-use ticket, so the token never appears in a URL.
   reloads by itself only when nothing is open: no setting being edited, no
   panel and not the settings page.
 - In expert mode the header also shows the Cube's details and its radio
-  budget. The duty cycle and the free memory slots limit how many radio
+  budget, and when the server was started, with how long ago. The duty cycle and the free memory slots limit how many radio
   commands the Cube can send.
 
 ## Rooms
