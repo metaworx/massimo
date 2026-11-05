@@ -522,7 +522,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	b := rt.client.Budget()
 	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.cfg.Addr, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	if h := snap.Hello(); h != nil {
-		v.Connected = !snap.Updated().IsZero()
+		v.Connected = rt.client.Connected()
 		v.Firmware, v.RFAddress, v.Updated, v.ObservedSince = h.FirmwareVersion, h.RFAddress.String(), snap.Updated(), snap.Since()
 		v.CubeTime = strings.TrimSpace(h.CubeDate + " " + h.CubeTime)
 		if c := snap.Config(h.RFAddress); c != nil {

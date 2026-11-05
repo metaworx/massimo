@@ -629,7 +629,7 @@ components:
         serial: {type: string}
         name: {type: string, description: User-friendly name from MASSIMO_CUBE_<SN>_NAME, when set}
         address: {type: string}
-        connected: {type: boolean}
+        connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
         firmware: {type: string, example: "1.1.3"}
         rf_address: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}

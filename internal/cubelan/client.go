@@ -48,6 +48,8 @@ type Client struct {
 	greeted chan struct{}
 	// reconnecting marks a connection closed on purpose by Reconnect.
 	reconnecting atomic.Bool
+	// online is set while a connection is up and its greeting complete.
+	online atomic.Bool
 }
 
 type pendingReply struct {
@@ -85,6 +87,10 @@ func (c *Client) Snapshot() *Snapshot { return c.snap }
 // Events delivers connection and state events. The channel is buffered;
 // if nobody reads it, old events are dropped rather than blocking the reader.
 func (c *Client) Events() <-chan Event { return c.evs }
+
+// Connected reports whether the client is connected now and has
+// received the connection's complete greeting.
+func (c *Client) Connected() bool { return c.online.Load() }
 
 // Ready is closed after the first complete greeting.
 func (c *Client) Ready() <-chan struct{} { return c.ready }
@@ -131,6 +137,7 @@ func (c *Client) session(ctx context.Context) (bool, error) {
 	c.conn = conn
 	c.mu.Unlock()
 	defer func() {
+		c.online.Store(false)
 		c.mu.Lock()
 		c.conn = nil
 		if c.pending != nil {
@@ -157,6 +164,7 @@ func (c *Client) session(ctx context.Context) (bool, error) {
 			c.handle(m)
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
+				c.online.Store(true)
 				c.once.Do(func() { close(c.ready) })
 				c.mu.Lock()
 				close(c.greeted)
