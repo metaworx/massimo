@@ -9,11 +9,14 @@ package fakecube
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
@@ -24,12 +27,44 @@ type Server struct {
 	NTP      []string
 	Duty     int  // duty cycle reported in S replies (0..100)
 	Discard  bool // make S replies report the command as discarded
+	// Pair, when set, is a device that joins during inclusion mode.
+	Pair *Pairing
 
 	ln       net.Listener
 	mu       sync.Mutex
 	received []cube.Message
 	conns    int
 	open     map[net.Conn]bool
+	joined   bool // the Pair device has joined
+}
+
+// paired returns the Pair device once it has joined.
+func (s *Server) paired() *Pairing {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.joined {
+		return s.Pair
+	}
+	return nil
+}
+
+// Pairing describes the device that joins after n:. Delay after the n:
+// the fake sends its N line and from then on answers c: for it with
+// Config; the inclusion ends with an empty N line when the n: timeout is
+// over or on x:. This is how the real Cube is expected to behave; the
+// empty N line in particular still has to be confirmed on hardware.
+type Pairing struct {
+	Device cube.NewDevice
+	Config cube.Message // the device's C line
+	Delay  time.Duration
+}
+
+// NewDeviceLine is the N line for d: type, address, serial, 0xff.
+func NewDeviceLine(d cube.NewDevice) cube.Message {
+	rf := d.RFAddress.Bytes()
+	b := append([]byte{byte(d.Type)}, rf[:]...)
+	b = append(append(b, fmt.Sprintf("%-10.10s", d.Serial)...), 0xff)
+	return cube.Message{Type: 'N', Data: base64.StdEncoding.EncodeToString(b)}
 }
 
 // LoadGreeting reads protocol lines from a capture file.
@@ -104,11 +139,24 @@ func (s *Server) serve(conn net.Conn) {
 		delete(s.open, conn)
 		s.mu.Unlock()
 	}()
+	var wmu sync.Mutex
+	write := func(line string) error {
+		wmu.Lock()
+		defer wmu.Unlock()
+		_, err := conn.Write([]byte(line))
+		return err
+	}
 	for _, m := range s.Greeting {
-		if _, err := conn.Write([]byte(m.Wire())); err != nil {
+		if err := write(m.Wire()); err != nil {
 			return
 		}
 	}
+	var inclusion *time.Timer // ends the running inclusion
+	defer func() {
+		if inclusion != nil {
+			inclusion.Stop()
+		}
+	}()
 	var last cube.Message
 	for _, m := range s.Greeting {
 		if m.Type == 'L' {
@@ -136,6 +184,9 @@ func (s *Server) serve(conn net.Conn) {
 			reply = last.Wire()
 		case 'c':
 			reply = "A:\r\n"
+			if p := s.paired(); p != nil && strings.EqualFold(strings.TrimSpace(m.Data), p.Device.RFAddress.String()) {
+				reply = p.Config.Wire()
+			}
 			for _, g := range s.Greeting {
 				if g.Type == 'C' && strings.HasPrefix(strings.ToLower(g.Data), strings.ToLower(strings.TrimSpace(m.Data))+",") {
 					reply = g.Wire()
@@ -154,13 +205,65 @@ func (s *Server) serve(conn net.Conn) {
 			reply = "F:" + strings.Join(s.NTP, ",") + "\r\n"
 		case 'e', 'd':
 			reply = fmt.Sprintf("%c:%s\r\n", m.Type-32, m.Data)
-		case 'n', 'x':
+		case 'n':
+			// No immediate reply: N lines come when devices join.
+			secs, _ := strconv.ParseUint(m.Data, 16, 16)
+			if secs == 0 {
+				secs = 60
+			}
+			if inclusion != nil {
+				inclusion.Stop()
+			}
+			if p := s.Pair; p != nil {
+				time.AfterFunc(p.Delay, func() {
+					s.mu.Lock()
+					s.joined = true
+					s.mu.Unlock()
+					write(NewDeviceLine(p.Device).Wire())
+				})
+			}
+			inclusion = time.AfterFunc(time.Duration(secs)*time.Second, func() { write("N:\r\n") })
+			continue
+		case 'x':
+			if inclusion != nil {
+				inclusion.Stop()
+				inclusion = nil
+			}
 			reply = "N:\r\n"
 		default:
 			reply = "A:\r\n"
 		}
-		if _, err := conn.Write([]byte(reply)); err != nil {
+		if err := write(reply); err != nil {
 			return
 		}
 	}
+}
+
+// PairingFrom builds a Pairing for a new device that is a copy of the
+// device template in greeting with another address and serial, in no
+// room, joining delay after n:.
+func PairingFrom(greeting []cube.Message, template, rf cube.RFAddress, serial string, delay time.Duration) (*Pairing, error) {
+	for _, g := range greeting {
+		if g.Type != 'C' || !strings.HasPrefix(strings.ToLower(g.Data), template.String()+",") {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(g.Data[7:])
+		if err != nil {
+			return nil, err
+		}
+		b := rf.Bytes()
+		copy(raw[1:4], b[:])
+		raw[5] = 0 // no room
+		copy(raw[8:18], fmt.Sprintf("%-10.10s", serial))
+		c, err := cube.ParseConfig(rf.String() + "," + base64.StdEncoding.EncodeToString(raw))
+		if err != nil {
+			return nil, err
+		}
+		return &Pairing{
+			Device: cube.NewDevice{Type: c.Type, RFAddress: rf, Serial: c.Serial},
+			Config: cube.Message{Type: 'C', Data: rf.String() + "," + base64.StdEncoding.EncodeToString(raw)},
+			Delay:  delay,
+		}, nil
+	}
+	return nil, fmt.Errorf("fakecube: no C line for %s in the greeting", template)
 }
