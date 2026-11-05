@@ -493,7 +493,9 @@ function deviceValues(grid, d, offset) {
 function renderDevice(d) {
   const el = $("device-template").content.firstElementChild.cloneNode(true);
   el.dataset.rf = d.rf_address;
-  el.querySelector(".device-name").textContent = d.name || t("device.unnamed");
+  // Type and radio address are for expert mode (.device-sub); a device
+  // without a name keeps its address, the only way to tell it apart.
+  el.querySelector(".device-name").textContent = d.name || t("device.unnamed") + " · " + d.rf_address;
   el.querySelector(".device-type").textContent = typeName(d.type);
   el.querySelector(".device-rf").textContent = d.rf_address;
   const badges = el.querySelector(".device-badges");

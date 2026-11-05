@@ -70,7 +70,8 @@ Every room has a tile:
   a room that has no devices.
 - The room name or the **i** button opens the device list: every device with its
   values (valve, set and measured temperature, offset) and badges for
-  battery, transmission errors, lock, window and mode. Valve, measured
+  battery, transmission errors, lock, window and mode. Expert mode adds
+  each device's type and radio address. Valve, measured
   temperature, window and a low battery show how old they are; in
   expert mode also the exact time, and when the device was last heard
   from. A device that has not been heard from for more than 24 hours
