@@ -345,7 +345,8 @@ variants, one `name=text` per line with `\r\n` escapes and the
 placeholders `{i}`, `{s}`, `{shex}`, `{r}`, `{serial}`, `{rf}`, `{fw}`.
 
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address,
-firmware) via the UDP broadcast the original software uses; it needs UDP
+firmware, and whether the Cube takes its address by DHCP or has a
+static one) via the UDP broadcast the original software uses; it needs UDP
 port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`
 recovers a Cube's portal IV from one `e:` exchange.
 

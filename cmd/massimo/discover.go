@@ -62,6 +62,9 @@ func runDiscover(args []string) error {
 			fw += " (bootloader)"
 		}
 		var netinfo []string
+		if c.DHCP != nil {
+			netinfo = append(netinfo, map[bool]string{true: "dhcp", false: "static"}[*c.DHCP])
+		}
 		if c.Gateway != nil {
 			netinfo = append(netinfo, "gw "+c.Gateway.String())
 		}
