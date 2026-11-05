@@ -133,5 +133,7 @@ server keeps its log.
   release is out. On a box with the update helper installed
   (packaging/README.md, "Updating"), **Update** installs it and restarts
   the server. If the new version does not come up, the old one is put back.
+  While the helper works, **Check for updates** and **Update** are greyed
+  out, also after a reload of the page, until it reports that it is done.
 
 The settings are kept in the browser, per browser.

@@ -1,7 +1,12 @@
-# secrets and local experiment output
+# secrets and local experiment output; .env.* covers copies and the
+# files picked with -env, which hold the same keys, IVs and token
 .env
+.env.*
+!.env.example
 *.exe
 portal-capture.jsonl
+# serve -log and legacy -out (device names, state changes, portal credentials)
+*.log
 /massimo
 /dist/
 # backups taken with "massimo backup" (contain device serials and names)

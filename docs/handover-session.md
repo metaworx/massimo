@@ -211,7 +211,11 @@ says what to run.
    live, a stream reconnect while `serve` restarts, the blue accent (the
    owner's last screenshot was a pre-#17 build), the log texts from
    #21 with real device changes.
-5. Windows service on a real PC: docs/testing-windows.md.
+5. Windows service on a real PC: done on jaguar on 2026-11-05, all nine
+   steps passed (v0.4.0-alpha.1, then install and remove again on
+   v0.5.0-alpha.1 with the lone `MASSIMO_CUBE_ADDRESS`); the report with
+   its follow-ups is docs/windows-test-2026-11-05.md, the plan
+   docs/testing-windows.md.
 6. macOS: a reboot (RunAtLoad with nobody logged in), the application
    firewall rule across an update with a new cdhash, Intel Macs, a real
    Cube or the proxy on a Mac.
