@@ -216,3 +216,23 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 		break
 	}
 }
+
+func TestConnectedFollowsTheConnection(t *testing.T) {
+	srv, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	if c.Connected() {
+		t.Fatal("connected before Run")
+	}
+	go c.Run(ctx)
+	waitEvent(t, c, EventConnected)
+	if !c.Connected() || c.Snapshot().Metadata() == nil {
+		t.Fatal("not connected after the greeting")
+	}
+	srv.Close()
+	waitEvent(t, c, EventDisconnected)
+	if c.Connected() {
+		t.Fatal("still connected after the cube went away")
+	}
+}

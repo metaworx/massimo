@@ -6,6 +6,7 @@ package view
 import (
 	"encoding/base64"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
@@ -128,5 +129,39 @@ func TestPending(t *testing.T) {
 	b.UpdatedAt = b.UpdatedAt.AddDate(2026, 0, 0)
 	if n := Pending(snap, b); n != 3 {
 		t.Fatalf("pending %d", n)
+	}
+}
+
+func TestAgesAndStale(t *testing.T) {
+	t0 := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
+	lines, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := cubelan.SnapshotFromLines(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range append(lines, reportedLine) {
+		snap.Apply(m, t0)
+	}
+	defer func() { now = time.Now }()
+	now = func() time.Time { return t0.Add(time.Hour) }
+	d := DeviceOf(snap, silentDevice)
+	if d.LastSeen == nil || !d.LastSeen.Equal(t0) || d.Stale || !d.Received["setpoint"].Equal(t0) || !d.Received["valve_pct"].Equal(t0) {
+		t.Fatalf("device %+v", d)
+	}
+	// Devices without state have no times.
+	if d := DeviceOf(snap, 0x14d08e); d.LastSeen != nil || d.Received != nil || d.Stale {
+		t.Fatalf("unreported device %+v", d)
+	}
+	now = func() time.Time { return t0.Add(StaleAfter + time.Minute) }
+	if d := DeviceOf(snap, silentDevice); !d.Stale {
+		t.Fatal("not stale after StaleAfter")
+	}
+	for _, r := range Rooms(snap, nil) {
+		if r.Stale != (r.ID == 6) {
+			t.Errorf("room %d stale %v", r.ID, r.Stale)
+		}
 	}
 }
