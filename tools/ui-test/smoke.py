@@ -18,7 +18,8 @@ discovery, which the fake Cube answers as a Cube that is not configured,
 shows "searching" until the answer is in, then lists the found Cube as
 not selectable with the env lines to add, and the log has its
 cube_found; a cube_found event adds another one live, and a refused
-search (stubbed 503) shows the server's message. Any console error, page error or horizontal scroll fails the
+search (stubbed 503) shows the server's message. A state event with
+changes shows in the log as what changed. Any console error, page error or horizontal scroll fails the
 test.
 """
 import sys
@@ -33,6 +34,7 @@ OPEN = {"en": "Open", "de": "Offen"}
 USED = "0" * 48
 FOUND2 = {"serial": "LEQ0654321", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",
           "firmware": "1.1.3", "found_at": "2026-11-05T18:40:00+01:00", "last_seen": "2026-11-05T18:40:00+01:00"}
+CHANGES = {"en": "window opened, set 18.0 → 5.0", "de": "Fenster geöffnet, Soll 18,0 → 5,0"}
 SEARCHING = {"en": "Searching…", "de": "Suche läuft…"}
 FOUND_N = {"en": "{n} Cube{s} found, not configured", "de": "{n} Cube{s} gefunden, nicht eingerichtet"}
 STALE = {"en": "Not seen for 30 hours", "de": "Seit 30 Stunden keine Meldung"}
@@ -160,6 +162,23 @@ def discover(page, label, lang):
     page.unroute("**/api/v1/cubes/discover")
 
 
+def log_changes(page, label, lang):
+    """A state event with changes (as the server sends after the first
+    one of a device) shows what changed, not the whole state. The log is
+    opened first: opening it loads the server's log."""
+    page.locator("#view-log").click()
+    page.wait_for_timeout(500)
+    page.evaluate("""() => {
+      const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
+      state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
+        kind: "state", device: d.rf_address, state: d, time: new Date().toISOString(),
+        changes: { window_open: { from: false, to: true }, setpoint: { from: 18, to: 5 } } }) }));
+    }""")
+    line = page.locator(".log-line.kind-state").last
+    check(CHANGES[lang] in line.inner_text(), f"{label}: the log says what changed")
+    page.locator("#view-tiles").click()
+
+
 def run(page, label, lang):
     page.goto(url)
     page.wait_for_selector(".room", timeout=10000)
@@ -235,6 +254,7 @@ with sync_playwright() as pw:
                 stream(page, label, streams, refused)
                 ages(page, label, lang)
                 discover(page, label, lang)
+                log_changes(page, label, lang)
             except Exception as e:  # a timeout or a missing element
                 check(False, f"{label}: {e}")
             ctx.close()

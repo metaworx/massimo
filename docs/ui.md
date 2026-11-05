@@ -108,7 +108,10 @@ devices' acknowledgement, the header says how many are pending.
 ## Log
 
 Shows the Cube's recent events and new ones as they arrive: device states,
-configuration and name changes, connections to the Cube and errors. The filter matches any part of a
+configuration and name changes, connections to the Cube and errors. A
+device's state line says what changed ("window opened", "set 18.0 →
+21.0", "mode: manual", "reports again"), whoever changed it, also at the
+device; its first line since the server started shows the whole state. The filter matches any part of a
 line (time, kind, device, text). **Clear** empties the view only; the
 server keeps its log.
 
