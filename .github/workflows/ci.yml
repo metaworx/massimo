@@ -156,3 +156,83 @@ jobs:
           Start-Sleep -Seconds 5
           if (!$p.HasExited) { Stop-Process -Id $p.Id; "still running after 5 s" } else { "exited with $($p.ExitCode)" }
           Get-Content by-hand.err -ErrorAction SilentlyContinue
+
+  macos:
+    name: macOS LaunchDaemon
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Unit tests
+        run: go test ./internal/update/... ./internal/install/... ./cmd/...
+
+      # The whole path as on a Mac: install against the fake Cube, the
+      # update from the web UI's request through the root helper, a
+      # rollback, and a removal that leaves nothing behind.
+      - name: Install, run, update and remove the LaunchDaemons
+        run: |
+          set -euo pipefail
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo ./cmd/massimo
+          ./massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
+          # The fake Cube reports the fixture's serial.
+          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\n' > ci.env
+          health=http://127.0.0.1:18099/healthz
+          up() { for i in $(seq 30); do curl -fsS "$health" && return; sleep 2; done; return 1; }
+
+          sudo ./massimo install -settings ci.env -listen 127.0.0.1:18099
+          sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | head -3
+          up
+          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          test "$(stat -f %Su:%Lp /etc/massimo/env)" = _massimo:600
+          if cat /etc/massimo/env 2>/dev/null; then echo "::error::settings readable"; exit 1; fi
+          dscl . -read /Users/_massimo IsHidden UserShell
+
+          # Installing again keeps the address and restarts the service.
+          sudo ./massimo install
+          up
+
+          # As the web UI does it: the server writes the request, launchd
+          # starts the helper, which installs the newest alpha or rolls
+          # back.
+          curl -fsS -X POST -H 'Authorization: Bearer ci' http://127.0.0.1:18099/api/v1/update
+          for i in $(seq 90); do
+            st="$(cat /var/lib/massimo-update/status.json 2>/dev/null || true)"
+            echo "$st" | grep -Eq '"state": "(done|rolled-back|failed)"' && break
+            sleep 2
+          done
+          echo "$st"
+          up
+          now="$(curl -fsS "$health")"
+          if echo "$st" | grep -q '"state": "done"'; then
+            echo "$now" | grep -vq 'v0.0.0-ci.1'
+            # Back by hand, with the binary that knows launchd.
+            sudo ./massimo update -rollback -binary /usr/local/bin/massimo -restart ch.metaworx.massimo
+            sleep 3; up
+            curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          else
+            echo "$st" | grep -q '"state": "rolled-back"'
+            echo "$now" | grep -q 'v0.0.0-ci.1'
+            test -f /usr/local/bin/massimo.failed
+          fi
+
+          sudo ./massimo install -remove -purge
+          if sudo launchctl print system/ch.metaworx.massimo >/dev/null 2>&1; then echo "::error::still loaded"; exit 1; fi
+          for p in /usr/local/bin/massimo /etc/massimo /var/lib/massimo /var/log/massimo \
+                   /Library/LaunchDaemons/ch.metaworx.massimo.plist /Library/LaunchDaemons/ch.metaworx.massimo-update.plist; do
+            if [ -e "$p" ]; then echo "::error::$p left"; exit 1; fi
+          done
+          if dscl . -read /Users/_massimo >/dev/null 2>&1; then echo "::error::user left"; exit 1; fi
+
+      - name: Logs
+        if: always()
+        run: |
+          cat fakecube.log || true
+          for f in /var/log/massimo/serve.log /var/log/massimo-update.log; do
+            echo "--- $f"; sudo cat "$f" 2>/dev/null || true
+          done
+          sudo launchctl print system/ch.metaworx.massimo 2>/dev/null || true
