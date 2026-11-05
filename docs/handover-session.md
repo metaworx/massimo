@@ -41,6 +41,24 @@ update` and the web UI's Settings → Software install releases through
 the root helper units in packaging/systemd (packaging/README.md,
 "Updating").
 
+Done later on 2026-11-05 (branch claude/ui-feedback-9b6fa2, four ui
+commits): the owner's UI feedback. The week programme editor selects the
+days with the same programme, has the "Only {day}" switch, a copy
+section and Reset day / Reset all; the Copy tab has a Rooms and a
+Settings section with switches; a help button next to every setting
+explains it; all texts go through the translation table in
+internal/server/ui/i18n.js, English and German, with a Language setting
+(Settings → Software included). Verified with Playwright (Python,
+Chromium) against the fake Cube at 1100 and 390 px, in English and
+German: no console errors, no horizontal scroll, the new controls
+reachable and operable by keyboard. Not yet seen on real hardware.
+
+Follow-ups the same day (branch claude/ui-followups): Forget token
+fixed, "mixed" for rooms whose thermostats differ in mode, a note on
+the paused auto-reload in the settings, shared UI helpers in app.js,
+`make ui-test`, help texts checked against the eQ-3 manuals, French,
+Italian, Dutch and Polish, and docs/ui.md.
+
 ## State
 
 - `massimo serve` keeps both Cubes connected, serves the JSON API
@@ -69,46 +87,36 @@ the root helper units in packaging/systemd (packaging/README.md,
 - UI: plain HTML/CSS/JS in internal/server/ui/, go:embed, no framework,
   no inline handlers, textContent for API text, CSS variables for light
   and dark, phone first (390 px), verified with Playwright against the
-  fake Cube (`internal/cubelan/fakecube` with the fixture greeting; a
-  greeting with device states lives only in the old session's scratch
-  space, make a new one by editing the fixture's L line).
+  fake Cube; `make ui-test` (tools/ui-test) runs the smoke test, and
+  its greeting.txt is the fixture with device states.
 - Bigger features were done as parallel forks in git worktrees and
   merged; the same works locally with worktrees or branches.
 
-## Open UI feedback (not yet implemented), in the owner's words
+## Open UI points
 
-Week programme editor:
-- Selecting a day in the top row also selects every other day with the
-  same programme.
-- Remove "All days" there; make "Only {day}" a switch: on, edits apply
-  to the current day only; off, edits apply to all selected days with
-  the same programme at once. The first change that sets the current
-  day apart deselects the others, which are then no longer updated.
-- "Copy {day} to …" becomes a small section with all days again, each
-  toggled by clicking, an "All days" button, the days of the current
-  selection greyed out, and a Copy button that applies the current day
-  to them; the group then becomes one active group when the switch is
-  off.
-- "Reset day" and "Reset all" buttons left of Cancel/Send, which move
-  to the right.
-
-Copy tab:
-- Two sections: Rooms (a list with a switch per room, "All rooms",
-  "None") and Settings (Temperatures, Week programme, Radiator
-  settings, each a switch).
-
-Everywhere:
-- Help icons next to settings that explain what each setting does.
-- Internationalisation: all UI texts through a translation table, English
-  as the base; translations for the languages the original software
-  had (DE, EN, FR, IT, NL, PL) go on the roadmap.
 - Owner's earlier remark: opening device list or configuration is per
   tile; a global switch could come later.
+- Help texts were checked against eQ-3's thermostat manuals; the
+  manuals do not describe maximum valve and valve offset (the offset
+  text follows FHEM's MAX module). The Dutch manual gives descaling at
+  Saturday 11:00, the English one and our devices 12:00; the texts say
+  12:00.
+- Translations: all six languages are in i18n.js; FR/IT/NL/PL are
+  translations with the manuals' terms, not yet read by a native
+  speaker. A de-CH variant would only need the words with "ß". Error
+  texts from the server reach the UI in English.
+- The Copy tab copies what is stored for the room, not unsent edits of
+  the other tabs, and says so; if the owner expects the edits, it can
+  take c.prog.days and c.edit instead.
+- Playwright set-up on the Mint box (no node, no ensurepip): see
+  tools/ui-test/README.md.
 
 ## Next steps in order
 
 1. The write test (docs/handover-write-test.md) on the JEQ Cube.
-2. The UI feedback above, week programme first.
+2. The owner's review of the UI feedback round (PR 3) and its
+   follow-ups (branch claude/ui-followups), and the open UI points
+   above.
 3. Pairing new devices (roadmap item 4).
 4. Firmware dump when the adapter is in (docs/firmware-extraction.md).
 5. Users and a database (roadmap item 6).

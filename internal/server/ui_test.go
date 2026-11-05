@@ -27,7 +27,7 @@ func TestUIServed(t *testing.T) {
 	if code, ct, body := get("/"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="/ui/app.js">`) {
 		t.Fatalf("GET /: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js"} {
+	for _, p := range []string{"/ui/i18n.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js"} {
 		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}

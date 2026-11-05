@@ -32,27 +32,36 @@ function logDeviceName(rf) {
 function logStateText(s) {
   if (!s) return "";
   const parts = [];
-  if (s.reported === false) parts.push("not reported");
+  if (s.reported === false) parts.push(t("log.notReported"));
   const st = s.state || {};
-  if (st.mode) parts.push(st.mode);
-  if (st.setpoint !== undefined) parts.push("set " + st.setpoint.toFixed(1));
-  if (st.actual_temp !== undefined) parts.push("actual " + st.actual_temp.toFixed(1));
-  if (st.valve_pct !== undefined) parts.push("valve " + st.valve_pct + " %");
-  if (st.window_open !== undefined) parts.push(st.window_open ? "window open" : "window closed");
-  if (st.until) parts.push("until " + st.until);
-  for (const [k, label] of [["battery_low", "battery low"], ["error", "error"], ["link_error", "link error"], ["panel_locked", "locked"]]) {
-    if (st[k]) parts.push(label);
+  if (st.mode) parts.push(modeName(st.mode));
+  if (st.setpoint !== undefined) parts.push(t("log.set", { v: fmtNum(st.setpoint, 1) }));
+  if (st.actual_temp !== undefined) parts.push(t("log.actual", { v: fmtNum(st.actual_temp, 1) }));
+  if (st.valve_pct !== undefined) parts.push(t("log.valve", { v: st.valve_pct }));
+  if (st.window_open !== undefined) parts.push(t(st.window_open ? "log.windowOpen" : "log.windowClosed"));
+  if (st.until) parts.push(t("log.until", { until: st.until }));
+  for (const [k, key] of [["battery_low", "log.batteryLow"], ["error", "log.error"], ["link_error", "log.linkError"], ["panel_locked", "log.locked"]]) {
+    if (st[k]) parts.push(t(key));
   }
   return parts.join(", ");
 }
 
-// logLine turns an event object into a line of the view.
+// logLine turns an event object into a line of the view; the text of a
+// state event is made when the line is drawn, in the current language.
 function logLine(ev) {
   const time = ev.time ? new Date(ev.time) : new Date();
-  let text = "";
-  if (ev.kind === "state") text = logStateText(ev.state);
-  else if (ev.error) text = ev.error;
-  return { time, kind: ev.kind || "", device: ev.device || "", text };
+  return { time, kind: ev.kind || "", device: ev.device || "", state: ev.kind === "state" ? ev.state : null, text: ev.error || "" };
+}
+
+function logText(line) {
+  return line.state ? logStateText(line.state) : line.text;
+}
+
+// logKind is the event kind as shown; the class keeps the API's name.
+function logKind(kind) {
+  const key = "log.kind." + kind;
+  const s = t(key);
+  return s === key ? kind : s;
 }
 
 function fmtLogTime(d) {
@@ -63,7 +72,7 @@ function fmtLogTime(d) {
 function logLineMatches(line) {
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
-  const hay = [fmtLogTime(line.time), line.kind, line.device, logDeviceName(line.device), line.text].join(" ").toLowerCase();
+  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, logDeviceName(line.device), logText(line)].join(" ").toLowerCase();
   return hay.includes(f);
 }
 
@@ -71,12 +80,12 @@ function renderLogLine(line) {
   const row = document.createElement("div");
   row.className = "log-line kind-" + line.kind;
   row.appendChild(textEl("span", fmtLogTime(line.time), "log-time mono"));
-  row.appendChild(textEl("span", line.kind, "log-kind"));
+  row.appendChild(textEl("span", logKind(line.kind), "log-kind"));
   if (line.device) {
     row.appendChild(textEl("span", logDeviceName(line.device), "log-device"));
     row.appendChild(textEl("span", line.device, "mono expert-only"));
   }
-  row.appendChild(textEl("span", line.text, "log-text"));
+  row.appendChild(textEl("span", logText(line), "log-text"));
   return row;
 }
 
@@ -110,7 +119,7 @@ async function loadLog() {
     const evs = (await api("GET", base() + "/log?limit=200")) || [];
     logState.lines = evs.map(logLine);
   } catch (e) {
-    logState.lines = [{ time: new Date(), kind: "error", device: "", text: "cannot load the log: " + e.message }];
+    logState.lines = [{ time: new Date(), kind: "error", device: "", state: null, text: t("log.cannotLoad", { error: e.message }) }];
   }
   logState.stick = true;
   renderLog();
