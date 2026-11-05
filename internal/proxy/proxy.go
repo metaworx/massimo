@@ -300,6 +300,14 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		}
 	}
 	lines := []cube.Message{m}
+	if m.Type == 't' && !p.opts.ShowHidden {
+		kept, ok := p.withoutHidden(m, remote)
+		if !ok {
+			// The Cube acknowledges t: with an empty A line.
+			return []cube.Message{{Type: 'A'}}
+		}
+		lines = []cube.Message{kept}
+	}
 	if m.Type == 'm' && !p.opts.ShowHidden {
 		if merged, ok := p.withHidden(m); ok {
 			lines = merged
@@ -321,6 +329,38 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		return res.Replies[len(res.Replies)-1:]
 	}
 	return res.Replies
+}
+
+// withoutHidden removes the hidden devices from a client's t: (delete
+// devices) command and logs the refusal: a client that never saw them
+// must not delete them, which would also make the Cube send them a
+// factory reset. It returns false when nothing is left to send; a t:
+// that cannot be decoded is refused as a whole, since it might name a
+// hidden device.
+func (p *Proxy) withoutHidden(m cube.Message, remote string) (cube.Message, bool) {
+	force, addrs, err := cube.ParseDeleteDevices(m.Data)
+	if err != nil {
+		p.log.Warn("proxy: delete command not understood, refused", "remote", remote, "command", m.String(), "error", err)
+		return cube.Message{}, false
+	}
+	hidden := p.hidden(p.opts.Client.Snapshot().Metadata())
+	var kept []cube.RFAddress
+	var refused []string
+	for _, rf := range addrs {
+		if hidden[rf] {
+			refused = append(refused, rf.String())
+		} else {
+			kept = append(kept, rf)
+		}
+	}
+	if len(refused) == 0 {
+		return m, true
+	}
+	p.log.Warn("proxy: refused to delete hidden devices", "remote", remote, "devices", strings.Join(refused, ","), "passed_on", len(kept))
+	if len(kept) == 0 {
+		return cube.Message{}, false
+	}
+	return cube.CmdDeleteDevices(force, kept...), true
 }
 
 // withHidden puts the hidden devices, and their rooms, back into a

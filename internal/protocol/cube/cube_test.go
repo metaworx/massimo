@@ -626,3 +626,15 @@ func TestWallDisplayMode(t *testing.T) {
 		t.Fatalf("display command %s", got)
 	}
 }
+
+func TestParseDeleteDevices(t *testing.T) {
+	force, addrs, err := ParseDeleteDevices(CmdDeleteDevices(true, 0x0f1d54, 0x1514b6).Data)
+	if err != nil || !force || len(addrs) != 2 || addrs[0] != 0x0f1d54 || addrs[1] != 0x1514b6 {
+		t.Fatalf("%v %v %v", force, addrs, err)
+	}
+	for _, bad := range []string{"", "01,1", "zz,1,Dx1U", "02,1,Dx1U", "01,0,!!"} {
+		if _, _, err := ParseDeleteDevices(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

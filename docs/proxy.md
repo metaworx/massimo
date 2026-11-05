@@ -84,7 +84,11 @@ it with `massimo -show-hidden restore`, which moves the devices and sets the
 Cube's room byte for them. A metadata write from a client is forwarded
 with the hidden devices and their room put back, so a client that never
 saw them cannot remove them from the Cube; the server logs when it does
-that. `serve -show-hidden` switches all of this off.
+that. A delete command (`t:`) naming a hidden device is refused for
+that device and logged: the others in it are deleted, and when none is
+left the proxy answers the client itself without sending anything, so
+a client cannot delete a hidden device (and make the Cube send it a
+factory reset). `serve -show-hidden` switches all of this off.
 
 ## Firewall
 
