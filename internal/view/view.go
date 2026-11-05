@@ -10,6 +10,7 @@
 package view
 
 import (
+	"encoding/json"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -315,4 +316,57 @@ func Pending(snap *cubelan.Snapshot, b cubelan.Budget) int {
 		}
 	}
 	return b.Pending()
+}
+
+// Change is one value of a device's state before and after a report; a
+// value the device did not have is null.
+type Change struct {
+	From any `json:"from"`
+	To   any `json:"to"`
+}
+
+// Changes lists what differs between two states of a device, by the
+// names of State's fields, plus "reported" when the Cube gained or lost
+// the device's state. It is nil when nothing differs; old is nil for a
+// device the Cube held no state for.
+func Changes(old, cur *State) map[string]Change {
+	a, b := stateFields(old), stateFields(cur)
+	var out map[string]Change
+	add := func(k string, from, to any) {
+		if out == nil {
+			out = map[string]Change{}
+		}
+		out[k] = Change{From: from, To: to}
+	}
+	if (old == nil) != (cur == nil) {
+		add("reported", old != nil, cur != nil)
+	}
+	for k, v := range b {
+		if w, ok := a[k]; !ok || !sameValue(v, w) {
+			add(k, a[k], v)
+		}
+	}
+	for k, v := range a {
+		if _, ok := b[k]; !ok {
+			add(k, v, nil)
+		}
+	}
+	return out
+}
+
+// stateFields is a state as its JSON object, nil for none.
+func stateFields(s *State) map[string]any {
+	if s == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(s)
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+	return m
+}
+
+func sameValue(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
 }

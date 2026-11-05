@@ -37,6 +37,7 @@ type Server struct {
 	open     map[net.Conn]bool
 	joined   bool                    // the Pair device has joined
 	configs  map[string]cube.Message // C lines set with SetConfig, by address
+	list     *cube.Message           // the L line set with SetDeviceList
 }
 
 // paired returns the Pair device once it has joined.
@@ -78,6 +79,24 @@ func (s *Server) SetConfig(line cube.Message) {
 		s.configs = map[string]cube.Message{}
 	}
 	s.configs[rf] = line
+}
+
+// SetDeviceList makes l: answer with line from now on, as the real Cube
+// does once devices reported new states.
+func (s *Server) SetDeviceList(line cube.Message) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.list = &line
+}
+
+// deviceList returns the L line set with SetDeviceList.
+func (s *Server) deviceList() (cube.Message, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.list == nil {
+		return cube.Message{}, false
+	}
+	return *s.list, true
 }
 
 // config returns the C line set for rf with SetConfig.
@@ -203,6 +222,9 @@ func (s *Server) serve(conn net.Conn) {
 			return
 		case 'l':
 			reply = last.Wire()
+			if l, ok := s.deviceList(); ok {
+				reply = l.Wire()
+			}
 		case 'c':
 			reply = "A:\r\n"
 			if p := s.paired(); p != nil && strings.EqualFold(strings.TrimSpace(m.Data), p.Device.RFAddress.String()) {
