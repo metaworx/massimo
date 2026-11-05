@@ -21,6 +21,7 @@ type Snapshot struct {
 	states   map[cube.RFAddress]cube.DeviceState
 	times    map[cube.RFAddress]*StateTimes
 	since    time.Time        // first message from the Cube
+	listed   bool             // an L line has been applied
 	order    []cube.RFAddress // devices in the order the Cube first reported them
 	mparts   []cube.MetadataPart
 	updated  time.Time
@@ -176,13 +177,20 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		if err != nil {
 			return nil, err
 		}
+		// The first device list's values were there when the server
+		// first heard from the Cube: they get exactly that time, the
+		// Cube's observed_since, not the moment the line arrived.
+		at := now
+		if !s.listed {
+			at, s.listed = s.since, true
+		}
 		var evs []Event
 		listed := map[cube.RFAddress]bool{}
 		for _, st := range states {
 			listed[st.RFAddress] = true
 			s.noteLocked(st.RFAddress)
 			old, had := s.states[st.RFAddress]
-			s.noteTimesLocked(old, had, st, now)
+			s.noteTimesLocked(old, had, st, at)
 			if !had || !sameState(old, st) {
 				evs = append(evs, Event{Kind: EventState, Device: st.RFAddress})
 			}
