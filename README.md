@@ -143,7 +143,11 @@ names and offsets, moves, the week programme with a day editor, copy to
 other rooms) and a log view of the Cube's events. It is meant for the LAN. The listener defaults to localhost; put a reverse proxy with TLS in
 front before exposing it, and the UI, which needs the same token as the
 API, with it. `-log <file>` (or `MASSIMO_LOG`) appends the log,
-including every device state change, to a file as well.
+including every device state change, to a file as well. Every six hours
+(`-refresh`, `0` to switch it off) `serve` reconnects to each Cube, in
+turn with the queued commands, and re-reads everything the Cube holds,
+so a write the Cube acknowledged but did not apply cannot leave the
+server's copy wrong for long.
 
 The Cube serves only one LAN client at a time, so `serve` is itself a
 Cube for everyone else: it listens on port 62910 on every interface

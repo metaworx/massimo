@@ -66,9 +66,13 @@ type Options struct {
 	Cubes        []CubeConfig
 	Token        string        // API token; empty disables authentication
 	PollInterval time.Duration // L polling; 0 keeps the driver default of one minute
-	Logger       *slog.Logger
-	Version      string
-	Queue        engine.Options
+	// RefreshInterval is how often each Cube's snapshot is refreshed in
+	// full by reconnecting, so that a write the Cube acknowledged but did
+	// not apply does not leave it wrong until the next restart; 0 never.
+	RefreshInterval time.Duration
+	Logger          *slog.Logger
+	Version         string
+	Queue           engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	Proxy []ProxyListener
@@ -195,6 +199,10 @@ func (s *Server) Run(ctx context.Context) error {
 		go func() { defer wg.Done(); rt.client.Run(ctx) }()
 		go func() { defer wg.Done(); rt.queue.Run(ctx) }()
 		go func() { defer wg.Done(); s.pump(ctx, rt) }()
+		if s.opts.RefreshInterval > 0 {
+			wg.Add(1)
+			go func() { defer wg.Done(); s.refresh(ctx, rt) }()
+		}
 	}
 	var responder *proxy.Responder
 	for _, pl := range s.opts.Proxy {
@@ -233,6 +241,27 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	wg.Wait()
 	return ctx.Err()
+}
+
+// refresh reconnects to the Cube every RefreshInterval, through the
+// queue at low priority so that no command is cut off and user commands
+// go first. The new greeting replaces the snapshot.
+func (s *Server) refresh(ctx context.Context, rt *runtime) {
+	t := time.NewTicker(s.opts.RefreshInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		res := rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityLow, Reconnect: true}).Wait(ctx)
+		if res.Err != nil && ctx.Err() == nil {
+			s.log.Warn("periodic refresh failed", "cube", rt.serial, "error", res.Err)
+			continue
+		}
+		s.log.Info("snapshot refreshed", "cube", rt.serial)
+	}
 }
 
 // writer sends commands to the runtime's Cube and keeps its snapshot in

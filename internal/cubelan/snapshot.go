@@ -23,6 +23,10 @@ type Snapshot struct {
 	order    []cube.RFAddress // devices in the order the Cube first reported them
 	mparts   []cube.MetadataPart
 	updated  time.Time
+	// greeting is set while a new connection's greeting is being read;
+	// fresh collects the devices it sent a C line for.
+	greeting bool
+	fresh    map[cube.RFAddress]bool
 }
 
 func newSnapshot() *Snapshot {
@@ -70,6 +74,42 @@ func (k EventKind) String() string {
 	return "unknown"
 }
 
+// beginGreeting starts a new connection's greeting. When it is complete
+// (its L line), devices the greeting did not mention any more are
+// dropped: configurations without a C line and states without an entry
+// in the L line, so a device deleted meanwhile does not linger.
+func (s *Snapshot) beginGreeting() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.greeting, s.fresh = true, map[cube.RFAddress]bool{}
+	s.mparts = s.mparts[:0]
+}
+
+// endGreetingLocked drops what the greeting did not repeat; listed are
+// the devices of its L line.
+func (s *Snapshot) endGreetingLocked(listed map[cube.RFAddress]bool) {
+	s.greeting = false
+	for rf := range s.configs {
+		if !s.fresh[rf] {
+			delete(s.configs, rf)
+		}
+	}
+	for rf := range s.states {
+		if !listed[rf] {
+			delete(s.states, rf)
+			delete(s.seen, rf)
+		}
+	}
+	kept := s.order[:0]
+	for _, rf := range s.order {
+		if _, ok := s.configs[rf]; ok || listed[rf] {
+			kept = append(kept, rf)
+		}
+	}
+	s.order = kept
+	s.fresh = nil
+}
+
 // apply folds one incoming message into the snapshot and returns the
 // events it caused. Messages that are replies to commands (S, A, F, E, D,
 // N) are not handled here.
@@ -110,6 +150,9 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 			return nil, err
 		}
 		s.configs[c.RFAddress] = c
+		if s.greeting {
+			s.fresh[c.RFAddress] = true
+		}
 		if c.Type != cube.DeviceCube {
 			s.noteLocked(c.RFAddress)
 		}
@@ -120,13 +163,18 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 			return nil, err
 		}
 		var evs []Event
+		listed := map[cube.RFAddress]bool{}
 		for _, st := range states {
+			listed[st.RFAddress] = true
 			s.noteLocked(st.RFAddress)
 			s.seen[st.RFAddress] = now
 			if old, ok := s.states[st.RFAddress]; !ok || !sameState(old, st) {
 				evs = append(evs, Event{Kind: EventState, Device: st.RFAddress})
 			}
 			s.states[st.RFAddress] = st
+		}
+		if s.greeting {
+			s.endGreetingLocked(listed)
 		}
 		return evs, nil
 	}

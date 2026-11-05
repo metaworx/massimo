@@ -31,6 +31,7 @@ func runServe(args []string) error {
 	listen := fs.String("listen", listenDefault, "address to listen on (default MASSIMO_LISTEN, else 127.0.0.1:8099)")
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones")
 	poll := fs.Duration("poll", time.Minute, "how often to poll the device list")
+	refresh := fs.Duration("refresh", 6*time.Hour, "how often to reconnect to each Cube to re-read everything it holds (0 = never)")
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
 	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr (default MASSIMO_LOG)")
 	var proxies []string
@@ -138,7 +139,7 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
-	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, Logger: logger, Version: versionString(), Proxy: listeners, ShowHidden: showAll || showHidden,
+	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, Logger: logger, Version: versionString(), Proxy: listeners, ShowHidden: showAll || showHidden,
 		Update: server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {

@@ -57,6 +57,17 @@ type Command struct {
 	// no wakeup or error-reset prelude, no retry, and a discarded reply
 	// is reported in Replies rather than as ErrDiscarded.
 	Passthrough bool
+	// Reconnect, with no Lines, drops the connection to the Cube and
+	// waits for a fresh greeting, which re-reads everything the Cube
+	// holds; run in queue order, it never cuts off another command. The
+	// gateway must support it (see Reconnector).
+	Reconnect bool
+}
+
+// Reconnector is a Gateway that can drop its connection and wait for a
+// fresh greeting. *cubelan.Client satisfies it.
+type Reconnector interface {
+	Reconnect(ctx context.Context) error
 }
 
 // Result is the outcome of a Command.
@@ -270,6 +281,17 @@ func isRadio(m cube.Message) bool { return m.Type == 's' || m.Type == 'r' }
 // original software uses.
 func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 	var res Result
+	if cmd.Reconnect {
+		rc, ok := q.gw.(Reconnector)
+		if !ok {
+			return Result{Err: errors.New("engine: the gateway cannot reconnect"), Budget: q.gw.Budget()}
+		}
+		// Bounded, so that a Cube that does not come back cannot hold up
+		// the queue; the commands after it then fail until it does.
+		rctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		return Result{Err: rc.Reconnect(rctx), Budget: q.gw.Budget()}
+	}
 	needsRadio := false
 	for _, l := range cmd.Lines {
 		if isRadio(l) {

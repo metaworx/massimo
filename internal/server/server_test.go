@@ -207,3 +207,26 @@ func TestServerToken(t *testing.T) {
 		t.Fatal("healthz needs a token")
 	}
 }
+
+func TestPeriodicRefreshReconnects(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, RefreshInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}})
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	t.Cleanup(func() { cancel(); fc.Close() })
+	deadline := time.Now().Add(5 * time.Second)
+	for fc.Connections() < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if fc.Connections() < 3 {
+		t.Fatalf("connections %d", fc.Connections())
+	}
+}
