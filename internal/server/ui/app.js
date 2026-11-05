@@ -14,7 +14,7 @@ const state = {
   token: null,
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
@@ -52,6 +52,7 @@ function loadSettings() {
   s.expert = readStored("massimo.expert") === "1";
   const clock = readStored("massimo.clock");
   if (clock === "cube" || clock === "browser") s.clock = clock;
+  s.lang = readStored("massimo.lang") || "auto";
 }
 
 // --- API --------------------------------------------------------------
@@ -66,9 +67,9 @@ async function api(method, path, body) {
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (resp.status === 401) {
-    const t = await askToken();
-    if (t) return api(method, path, body);
-    throw new Error("missing or wrong token");
+    const token = await askToken();
+    if (token) return api(method, path, body);
+    throw new Error(t("api.badToken"));
   }
   let data = null;
   const text = await resp.text();
@@ -144,7 +145,7 @@ function showMessage(text, ok) {
 }
 
 function fmtTemp(v) {
-  return v === undefined || v === null ? "" : v.toFixed(1) + " °C";
+  return v === undefined || v === null ? "" : fmtNum(v, 1) + " °C";
 }
 
 function isThermostat(d) {
@@ -166,6 +167,65 @@ function tomorrowMorning() {
   const d = new Date(Date.now() + 24 * 3600 * 1000);
   d.setHours(6, 0, 0, 0);
   return localDateTimeValue(d);
+}
+
+// --- help -------------------------------------------------------------
+
+const helpOpen = new Set(); // keys of the explanations shown
+let helpSeq = 0;
+
+// helpParts returns a labelled button that toggles the explanation of a
+// setting (help.<key> in the translation table), and the explanation,
+// hidden until asked for. An open explanation stays open when its tile
+// is drawn again.
+function helpParts(key, label) {
+  const text = textEl("p", t("help." + key), "help-text");
+  text.id = "help-" + key + "-" + ++helpSeq;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "help-btn";
+  btn.setAttribute("aria-controls", text.id);
+  btn.setAttribute("aria-label", t("help.button", { label }));
+  btn.title = t("help.title");
+  btn.appendChild(helpIcon());
+  const show = (on) => {
+    text.classList.toggle("hidden", !on);
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-expanded", on ? "true" : "false");
+  };
+  show(helpOpen.has(key));
+  btn.addEventListener("click", () => {
+    const on = !helpOpen.has(key);
+    if (on) helpOpen.add(key);
+    else helpOpen.delete(key);
+    show(on);
+  });
+  return { btn, text };
+}
+
+function helpIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "hi");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "#icon-help");
+  svg.appendChild(use);
+  return svg;
+}
+
+// initHelpSlots puts a help button into every element of the page with
+// a data-help key (data-help-label: the key of the setting's label), and
+// its explanation at the end of the slot's parent; again after a change
+// of language.
+function initHelpSlots() {
+  for (const slot of document.querySelectorAll("[data-help]")) {
+    const h = helpParts(slot.dataset.help, t(slot.dataset.helpLabel || ""));
+    if (slot.helpText) slot.helpText.remove();
+    slot.helpText = h.text;
+    clear(slot);
+    slot.appendChild(h.btn);
+    slot.parentElement.appendChild(h.text);
+  }
 }
 
 // --- cube clock -------------------------------------------------------
@@ -221,7 +281,7 @@ function clockText(cube) {
   const utc = fmtInstant(inst, "UTC") + " UTC";
   if (state.settings.clock === "cube") {
     const off = cubeOffset(tz, ...raw.split(/[- :]/).map(Number));
-    const name = (off === tz.summer.offset_seconds ? tz.summer.name : tz.winter.name) || "cube time";
+    const name = (off === tz.summer.offset_seconds ? tz.summer.name : tz.winter.name) || t("header.cubeTime");
     return { text: raw + " " + name, title: utc };
   }
   return { text: fmtInstant(inst), title: utc };
@@ -231,7 +291,7 @@ function clockText(cube) {
 
 function renderHeader(cube) {
   const conn = $("connection");
-  conn.textContent = cube.connected ? "connected" : "disconnected";
+  conn.textContent = t(cube.connected ? "header.connected" : "header.disconnected");
   conn.className = "pill " + (cube.connected ? "ok" : "bad");
   const b = cube.budget || {};
   $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
@@ -249,9 +309,7 @@ function renderHeader(cube) {
   const p = $("pending");
   const n = cube.pending_radiograms || 0;
   if (n > 0) {
-    p.textContent = state.settings.expert
-      ? n + " radiogram" + (n === 1 ? "" : "s") + " not yet acknowledged, states may still change"
-      : n + " pending, states may still change";
+    p.textContent = state.settings.expert ? tn("header.pendingExpert", n) : t("header.pending", { n });
     p.classList.remove("hidden");
   } else {
     p.classList.add("hidden");
@@ -268,8 +326,8 @@ function renderUpdated() {
     return;
   }
   const pad = (n) => String(n).padStart(2, "0");
-  const t = state.lastPoll;
-  el.textContent = "updated " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds());
+  const last = state.lastPoll;
+  el.textContent = t("header.updated", { time: pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds()) });
 }
 
 function renderCubeSelect() {
@@ -278,7 +336,8 @@ function renderCubeSelect() {
   for (const c of state.cubes) {
     const o = document.createElement("option");
     o.value = c.serial;
-    o.textContent = (c.name ? c.name + " (" + c.serial + ")" : c.serial) + (c.connected ? "" : " (disconnected)");
+    const name = c.name ? c.name + " (" + c.serial + ")" : c.serial;
+    o.textContent = c.connected ? name : t("header.cubeDisconnected", { name });
     sel.appendChild(o);
   }
   sel.value = state.serial;
@@ -337,7 +396,7 @@ async function refresh() {
     await loadRooms();
     $("message").classList.add("hidden");
   } catch (e) {
-    showMessage("Cannot load: " + e.message, false);
+    showMessage(t("msg.cannotLoad", { error: e.message }), false);
   }
 }
 
@@ -486,6 +545,12 @@ function initSettings() {
     store("massimo.clock", state.settings.clock);
     applySettings();
   });
+  $("lang-select").addEventListener("change", (ev) => {
+    state.settings.lang = ev.target.value;
+    store("massimo.lang", state.settings.lang === "auto" ? null : state.settings.lang);
+    setLanguage(state.settings.lang);
+    applyLanguage();
+  });
   $("forget-token").addEventListener("click", () => {
     state.token = null;
     store("massimo.token", null);
@@ -496,10 +561,45 @@ function initSettings() {
 
 // --- wiring -----------------------------------------------------------
 
+// renderLangSelect fills the language choice: from the browser, then
+// every language with a translation table, by its own name.
+function renderLangSelect() {
+  const sel = $("lang-select");
+  clear(sel);
+  const auto = document.createElement("option");
+  auto.value = "auto";
+  auto.textContent = t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")";
+  sel.appendChild(auto);
+  for (const l of languages()) {
+    const o = document.createElement("option");
+    o.value = l;
+    o.textContent = LANGUAGE_NAMES[l] || l;
+    sel.appendChild(o);
+  }
+  sel.value = i18n.setting;
+}
+
+// applyLanguage redraws every text after a change of language.
+function applyLanguage() {
+  applyI18n(document);
+  initHelpSlots();
+  renderLangSelect();
+  renderCubeSelect();
+  const cube = state.cubes.find((c) => c.serial === state.serial);
+  if (cube) renderHeader(cube);
+  renderRooms();
+  renderLog();
+  if (updState.info) renderUpdate(updState.info);
+}
+
 function init() {
   state.token = readStored("massimo.token");
   state.serial = readStored("massimo.serial");
   loadSettings();
+  setLanguage(state.settings.lang);
+  applyI18n(document);
+  renderLangSelect();
+  initHelpSlots();
   initSettings();
   applySettings();
   checkVersion();

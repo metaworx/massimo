@@ -28,6 +28,18 @@ update` and the web UI's Settings → Software install releases through
 the root helper units in packaging/systemd (packaging/README.md,
 "Updating").
 
+Done later on 2026-11-05 (branch claude/ui-feedback-9b6fa2, four ui
+commits): the owner's UI feedback. The week programme editor selects the
+days with the same programme, has the "Only {day}" switch, a copy
+section and Reset day / Reset all; the Copy tab has a Rooms and a
+Settings section with switches; a help button next to every setting
+explains it; all texts go through the translation table in
+internal/server/ui/i18n.js, English and German, with a Language setting
+(Settings → Software included). Verified with Playwright (Python,
+Chromium) against the fake Cube at 1100 and 390 px, in English and
+German: no console errors, no horizontal scroll, the new controls
+reachable and operable by keyboard. Not yet seen on real hardware.
+
 ## State
 
 - `massimo serve` keeps both Cubes connected, serves the JSON API
@@ -62,40 +74,36 @@ the root helper units in packaging/systemd (packaging/README.md,
 - Bigger features were done as parallel forks in git worktrees and
   merged; the same works locally with worktrees or branches.
 
-## Open UI feedback (not yet implemented), in the owner's words
+## Open UI points
 
-Week programme editor:
-- Selecting a day in the top row also selects every other day with the
-  same programme.
-- Remove "All days" there; make "Only {day}" a switch: on, edits apply
-  to the current day only; off, edits apply to all selected days with
-  the same programme at once. The first change that sets the current
-  day apart deselects the others, which are then no longer updated.
-- "Copy {day} to …" becomes a small section with all days again, each
-  toggled by clicking, an "All days" button, the days of the current
-  selection greyed out, and a Copy button that applies the current day
-  to them; the group then becomes one active group when the switch is
-  off.
-- "Reset day" and "Reset all" buttons left of Cancel/Send, which move
-  to the right.
-
-Copy tab:
-- Two sections: Rooms (a list with a switch per room, "All rooms",
-  "None") and Settings (Temperatures, Week programme, Radiator
-  settings, each a switch).
-
-Everywhere:
-- Help icons next to settings that explain what each setting does.
-- Internationalisation: all UI texts through a translation table, English
-  as the base; translations for the languages the original software
-  had (DE, EN, FR, IT, NL, PL) go on the roadmap.
 - Owner's earlier remark: opening device list or configuration is per
   tile; a global switch could come later.
+- The help texts follow what the original MAX! manual says each
+  setting does, from memory of it, not from the document; check them
+  against the manual, above all valve offset and the open-window
+  duration, and adjust the English and German entries in i18n.js.
+- Translations: French, Italian, Dutch and Polish have empty tables in
+  i18n.js (roadmap item 7). German uses "ß"; a de-CH variant would only
+  need the few words that have one. Error texts from the server reach
+  the UI in English.
+- The Copy tab copies what is stored for the room, not unsent edits of
+  the other tabs, and says so; if the owner expects the edits, it can
+  take c.prog.days and c.edit instead.
+- Found in passing, not fixed: the "Forget token" handler in app.js
+  calls `panel.classList` on an undefined `panel`, so the click throws
+  after the token is cleared (refresh and reconnect do not run).
+- Playwright set-up on the Mint box without node or ensurepip:
+  `python3 -m venv --without-pip venv`, get-pip.py from
+  bootstrap.pypa.io run with the venv's python, then `pip install
+  playwright` and `python -m playwright install chromium`. The page's
+  CSP forbids eval, so `page.wait_for_function` with a string fails;
+  poll from Python instead.
 
 ## Next steps in order
 
 1. The write test (docs/handover-write-test.md) on the JEQ Cube.
-2. The UI feedback above, week programme first.
+2. The owner's review of the UI feedback round (branch
+   claude/ui-feedback-9b6fa2), and the open UI points above.
 3. Pairing new devices (roadmap item 4).
 4. Firmware dump when the adapter is in (docs/firmware-extraction.md).
 5. Users and a database (roadmap item 6).

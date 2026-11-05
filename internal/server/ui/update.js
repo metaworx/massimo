@@ -11,46 +11,39 @@
 
 const updState = { info: null, timer: null, until: 0 };
 
-const helperStates = {
-  checking: "checking for a release",
-  installing: "installing",
-  restarting: "restarting the server",
-  done: "installed",
-  "up-to-date": "nothing to install",
-  failed: "failed",
-  "rolled-back": "failed and rolled back",
-};
-
+// helperText is the helper's last state; unknown states are shown as
+// the helper reports them.
 function helperText(h) {
-  let t = helperStates[h.state] || h.state;
-  if (h.to && h.state !== "up-to-date") t += " " + h.to;
-  if (h.message) t += ": " + h.message;
+  const key = "update.state." + h.state;
+  let s = t(key);
+  if (s === key) s = h.state;
+  if (h.to && h.state !== "up-to-date") s += " " + h.to;
+  if (h.message) s += ": " + h.message;
   const when = h.time ? new Date(h.time) : null;
-  if (when && !isNaN(when)) t += " (" + when.toLocaleString() + ")";
-  return t;
+  if (when && !isNaN(when)) s += " (" + when.toLocaleString(i18n.lang) + ")";
+  return s;
 }
 
 function renderUpdate(u) {
-  let t = "Running " + (u.current || "an unknown version");
-  if (u.channel) t += " from channel " + u.channel;
-  t += ". ";
-  if (u.check_error) t += "The release check failed: " + u.check_error + ". ";
-  else if (!u.channel) t += "No update channel set. ";
-  else if (!u.latest) t += "No release on this channel yet. ";
-  else if (u.available) t += u.latest + " is out. ";
-  else t += "Up to date. ";
-  if (u.available && u.blocked) t += "Updating from here is not possible: " + u.blocked + ".";
-  $("update-text").textContent = t;
+  const version = u.current || t("update.unknownVersion");
+  const parts = [u.channel ? t("update.runningChannel", { version, channel: u.channel }) : t("update.running", { version })];
+  if (u.check_error) parts.push(t("update.checkFailed", { error: u.check_error }));
+  else if (!u.channel) parts.push(t("update.noChannel"));
+  else if (!u.latest) parts.push(t("update.noRelease"));
+  else if (u.available) parts.push(t("update.available", { version: u.latest }));
+  else parts.push(t("update.upToDate"));
+  if (u.available && u.blocked) parts.push(t("update.blocked", { reason: u.blocked }));
+  $("update-text").textContent = parts.join(" ");
   const link = $("update-link");
   link.classList.toggle("hidden", !u.release_url);
   if (u.release_url) {
     link.href = u.release_url;
-    link.textContent = "Release notes for " + u.latest;
+    link.textContent = t("update.notes", { version: u.latest });
   }
-  $("update-helper").textContent = u.helper ? "Last update: " + helperText(u.helper) : "";
+  $("update-helper").textContent = u.helper ? t("update.last", { state: helperText(u.helper) }) : "";
   const btn = $("update-btn");
   btn.classList.toggle("hidden", !u.can_update);
-  btn.textContent = "Update to " + u.latest;
+  btn.textContent = t("update.to", { version: u.latest });
 }
 
 async function loadUpdate(refresh) {
@@ -60,7 +53,7 @@ async function loadUpdate(refresh) {
     renderUpdate(u);
     return u;
   } catch (e) {
-    $("update-text").textContent = "Cannot ask the server about updates: " + e.message;
+    $("update-text").textContent = t("update.cannotAsk", { error: e.message });
     return null;
   }
 }
@@ -85,16 +78,16 @@ function followUpdate() {
 async function startUpdate() {
   const u = updState.info;
   if (!u || !u.latest) return;
-  if (!confirm("Install " + u.latest + " and restart the server? It is offline for a short while; if the new version does not come up, the old one is put back.")) return;
+  if (!confirm(t("update.confirm", { version: u.latest }))) return;
   const btn = $("update-btn");
   btn.disabled = true;
   try {
     await api("POST", "/api/v1/update", {});
-    $("update-helper").textContent = "Update to " + u.latest + " requested …";
+    $("update-helper").textContent = t("update.requested", { version: u.latest });
     followUpdate();
   } catch (e) {
     btn.disabled = false;
-    $("update-helper").textContent = "Update not started: " + e.message;
+    $("update-helper").textContent = t("update.notStarted", { error: e.message });
   }
 }
 

@@ -56,13 +56,24 @@ the room, with the result per device), Devices (boost duration and
 valve opening, descaling day and hour, valve limits for the room, then
 per device its name, temperature offset, the display mode of a wall
 thermostat, and a move to another room behind an inline confirm), Week
-programme (day buttons, Shift+click selects several, "All days"; the
-day's switch points as rows "until … at … °C" with add and remove, the
-last fixed at 24:00, a bar of the day above them; "Copy Mo to …"
-applies the edited day to the selected days; Send writes the changed
-days to the room), and Copy (this room's temperatures and device
-settings, optionally its week programme, to selected other rooms, one
-after another with a result per room). Icon buttons carry labels for
+programme (day buttons: a click edits that day and selects every day
+with the same programme; the "Only {day}" switch, off by default,
+sends an edit to all selected days, on to the edited day alone, which
+then leaves the group; the day's switch points as rows "until … at …
+°C" with add and remove, the last fixed at 24:00, a bar of the day
+above them; a "Copy {day} to …" section with every day as a toggle,
+the days already sharing the programme greyed out, "All days" and
+Copy, after which the copied days join the group while the switch is
+off; Reset day and Reset all left of Cancel and Send; Send writes the
+days that differ from the loaded programme), and Copy (a Rooms section
+with a switch per room, "All rooms" and "None", and a Settings section
+with Temperatures, Week programme and Radiator settings as switches;
+what is stored for this room goes to each selected room, one after
+another, through `PUT …/rooms/{id}/config` with the chosen fields and
+`PUT …/rooms/{id}/program`, with a result per room). A help button
+next to each setting shows a short explanation of it. All texts come
+from one translation table (`ui/i18n.js`), English and German so far;
+the language follows the browser or the Language setting. Icon buttons carry labels for
 screen readers, the mode buttons are a group with their pressed
 state, the page icons a navigation with the current page marked,
 every control has a visible focus ring, and Escape closes an open menu
