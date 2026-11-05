@@ -19,11 +19,20 @@ shows "searching" until the answer is in, then lists the found Cube as
 not selectable with the env lines to add, and the log has its
 cube_found; a cube_found event adds another one live, and a refused
 search (stubbed 503) shows the server's message. A state event with
-changes shows in the log as what changed. Any console error, page error or horizontal scroll fails the
+changes shows in the log as what changed. In Settings → Appearance a
+scheme changes the computed --bg, the dark mode sets data-theme, the
+editor applies a colour live and keeps a saved scheme in the browser,
+Export downloads the scheme document (a blob: link under the page's
+Content-Security-Policy), Import reads it back with a missing token
+filled from the default and an unknown one dropped, and a file that
+is not a scheme shows a message. Any console error, page error or horizontal scroll fails the
 test.
 """
+import json
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
@@ -38,6 +47,9 @@ CHANGES = {"en": "window opened, set 18.0 → 5.0", "de": "Fenster geöffnet, So
 SEARCHING = {"en": "Searching…", "de": "Suche läuft…"}
 FOUND_N = {"en": "{n} Cube{s} found, not configured", "de": "{n} Cube{s} gefunden, nicht eingerichtet"}
 STALE = {"en": "Not seen for 30 hours", "de": "Seit 30 Stunden keine Meldung"}
+CONTRAST_SCHEME = {"en": "High contrast", "de": "Hoher Kontrast"}
+SAVED = {"en": "Saved as “Test scheme”.", "de": "Als „Test scheme“ gespeichert."}
+NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
 def check(cond, what):
@@ -179,6 +191,81 @@ def log_changes(page, label, lang):
     page.locator("#view-tiles").click()
 
 
+def appearance(page, label, lang, tmp):
+    """Settings → Appearance: a scheme changes the page's colours, the
+    mode sets data-theme, the editor applies live and keeps a saved
+    scheme, Export downloads the scheme document and Import reads it
+    back, both under the page's Content-Security-Policy."""
+    width = page.viewport_size["width"]
+    page.locator("#view-settings").click()
+    bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()")
+    stored = lambda: page.evaluate("JSON.parse(localStorage.getItem('massimo.schemes'))")
+    default_bg = bg()
+    sel = page.locator("#scheme-select")
+    check(sel.locator("option").count() >= 3, f"{label}: built-in schemes in the choice")
+    sel.select_option("contrast")
+    check(bg() == "#ffffff" and bg() != default_bg, f"{label}: a scheme changes the computed --bg")
+    check(sel.locator("option:checked").inner_text() == CONTRAST_SCHEME[lang], f"{label}: scheme named in {lang}")
+    check(page.evaluate("localStorage.getItem('massimo.scheme')") == "contrast", f"{label}: scheme stored")
+    mode = page.locator("#theme-select")
+    mode.select_option("dark")
+    check(page.evaluate("document.documentElement.dataset.theme") == "dark", f"{label}: mode dark sets data-theme")
+    check(bg() == "#000000", f"{label}: the dark set in dark mode")
+    check(page.evaluate("localStorage.getItem('massimo.theme')") == "dark", f"{label}: mode stored")
+    mode.select_option("system")
+    check(not page.evaluate("document.documentElement.hasAttribute('data-theme')"), f"{label}: mode system removes data-theme")
+    page.locator("#scheme-customise").click()
+    editor = page.locator("#scheme-editor")
+    check(editor.is_visible() and editor.locator("input[type=color]").count() == 38, f"{label}: editor with a colour input per token and set")
+    check(editor.locator(".contrast.ok").count() == 14, f"{label}: contrast badges, all ok for a built-in scheme")
+    check(editor.locator("#scheme-delete").is_disabled(), f"{label}: no Delete for a built-in scheme")
+    page.locator("#scheme-light-bg").fill("#112233")
+    check(bg() == "#112233", f"{label}: the editor applies live")
+    check(editor.locator(".contrast.bad").count() == 1, f"{label}: a bad contrast is graded")
+    check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll with the editor")
+    page.locator("#scheme-name").fill("Test scheme")
+    editor.locator("button.primary").click()
+    check(sel.input_value() == "custom:Test scheme", f"{label}: Save as chooses the saved scheme")
+    check(page.locator("#scheme-msg").inner_text() == SAVED[lang], f"{label}: saved message in {lang}")
+    kept = stored()
+    check(len(kept) == 1 and kept[0]["name"] == "Test scheme" and kept[0]["light"]["bg"] == "#112233"
+          and len(kept[0]["light"]) == 19 and len(kept[0]["dark"]) == 19, f"{label}: the scheme is in the browser")
+    check(not editor.locator("#scheme-delete").is_disabled(), f"{label}: Delete for the user's scheme")
+    with page.expect_download() as dl:
+        page.locator("#scheme-export").click()
+    doc = json.loads(Path(dl.value.path()).read_text())
+    check(dl.value.suggested_filename == "massimo-scheme-test-scheme.json", f"{label}: export file name")
+    check(doc.get("format") == "massimo-scheme/1" and doc.get("name") == "Test scheme" and doc["light"]["bg"] == "#112233"
+          and len(doc["light"]) == 19 and len(doc["dark"]) == 19 and doc["dark"]["bg"] == "#000000", f"{label}: export is the scheme document")
+    editor.locator("#scheme-delete").click()
+    check(sel.input_value() == "massimo" and bg() == default_bg and editor.is_hidden(), f"{label}: Delete goes back to the default")
+    check(page.evaluate("localStorage.getItem('massimo.schemes')") is None, f"{label}: nothing stored after Delete")
+    doc["name"] = "Round trip"
+    del doc["dark"]["bg"]
+    doc["light"]["nope"] = "#123456"
+    good = tmp / f"scheme-{width}-{lang}.json"
+    good.write_text(json.dumps(doc))
+    page.locator("#scheme-file").set_input_files(str(good))
+    check(wait_until(page, "state.settings.scheme === 'custom:Round trip'", 5), f"{label}: Import chooses the imported scheme")
+    check(bg() == "#112233", f"{label}: Import round-trips the colours")
+    check(stored()[0]["dark"]["bg"] == "#151514", f"{label}: a missing token takes the default")
+    check("nope" not in stored()[0]["light"], f"{label}: an unknown token is ignored")
+    bad = tmp / f"bad-{width}-{lang}.json"
+    bad.write_text('{"hello": 1}')
+    page.locator("#scheme-file").set_input_files(str(bad))
+    msg = page.locator("#scheme-msg")
+    check(wait_until(page, "document.getElementById('scheme-msg').classList.contains('bad')", 5)
+          and msg.inner_text() == NOT_A_SCHEME[lang], f"{label}: a bad file shows a message in {lang}")
+    check(page.evaluate("state.settings.scheme") == "custom:Round trip", f"{label}: a bad file changes nothing")
+    page.locator("#scheme-customise").click()
+    check(editor.is_visible() and page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll with the editor open on the imported scheme")
+    editor.locator(".actions-right button").click()
+    check(editor.is_hidden(), f"{label}: Close hides the editor")
+    sel.select_option("massimo")
+    check(bg() == default_bg, f"{label}: back to the default scheme")
+    page.locator("#view-tiles").click()
+
+
 def run(page, label, lang):
     page.goto(url)
     page.wait_for_selector(".room", timeout=10000)
@@ -249,7 +336,8 @@ def used_ticket_first(refused):
     return handle
 
 
-with sync_playwright() as pw:
+with sync_playwright() as pw, tempfile.TemporaryDirectory() as tmpdir:
+    tmp = Path(tmpdir)
     browser = pw.chromium.launch()
     for locale, lang in (("en-US", "en"), ("de-DE", "de")):
         for width in (1100, 390):
@@ -280,6 +368,7 @@ with sync_playwright() as pw:
                 ages(page, label, lang)
                 discover(page, label, lang)
                 log_changes(page, label, lang)
+                appearance(page, label, lang, tmp)
             except Exception as e:  # a timeout or a missing element
                 check(False, f"{label}: {e}")
             ctx.close()

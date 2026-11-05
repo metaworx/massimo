@@ -128,6 +128,23 @@ server keeps its log.
   Polish are machine-translated and not yet reviewed by a native
   speaker; a note under the choice says so, in the language and in
   English.
+- **Appearance**: **Mode** is light, dark, or as the system, which
+  follows the device's setting and changes with it. **Colour scheme**
+  picks the colours: the built-in Massimo (the default), High contrast
+  and Graphite (a grey accent in place of the blue), and your own. Every
+  scheme has a light and a dark set; the mode picks which is shown.
+  **Customise…** opens an editor with a colour input per token for both
+  sets, applied to the page as you change them, and a number next to
+  each background that is the contrast of the text on it (from 4.5 it
+  reads well, under 3 badly). **Save as** keeps the edited scheme in
+  this browser under the name given, **Reset** goes back to the scheme
+  the editor started from, **Delete** removes one of your own. **Export**
+  downloads the chosen scheme (or the one being edited) as a JSON file,
+  `{"format": "massimo-scheme/1", "name": …, "light": {…}, "dark": {…}}`
+  with the token names of style.css without `--`; **Import…** reads such
+  a file and keeps it under its name. A token the file lacks takes the
+  default's value, unknown ones are ignored, and a file that is not a
+  scheme says so under the buttons.
 - **Forget token**: removes the stored API token.
 - **Software**: the running version, the update channel and whether a newer
   release is out. On a box with the update helper installed
