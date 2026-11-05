@@ -245,6 +245,14 @@ Back to the previous binary (once more goes forward again):
 sudo massimo update -rollback -restart massimo.service
 ```
 
+The release list comes from GitHub's API, which allows 60 requests an
+hour per address without a token. Behind an address many share (a CI
+runner, a large NAT) the check can then fail with `403 Forbidden`;
+`MASSIMO_GITHUB_TOKEN`, a GitHub token without any rights, lifts the
+limit (in the settings for the server's check, in the environment for
+`massimo update`). It is sent to the API only, and changes nothing about
+what is installed: that is still decided by the signature.
+
 ### From the web UI
 
 The service runs as `massimo` and cannot write `/usr/local/bin`, so the

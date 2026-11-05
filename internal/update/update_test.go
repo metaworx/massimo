@@ -93,11 +93,13 @@ type fakeGitHub struct {
 	srv      *httptest.Server
 	releases []map[string]any
 	files    map[string][]byte
+	auth     map[string]string // path → Authorization header seen
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
-	f := &fakeGitHub{files: map[string][]byte{}}
+	f := &fakeGitHub{files: map[string][]byte{}, auth: map[string]string{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.auth[r.URL.Path] = r.Header.Get("Authorization")
 		if r.URL.Path == "/repos/"+Repo+"/releases" {
 			json.NewEncoder(w).Encode(f.releases)
 			return
@@ -334,5 +336,29 @@ func TestWindowsNamesAndRenamingSwap(t *testing.T) {
 	// A failing second rename puts the target back.
 	if err := swapRenaming(filepath.Join(dir, "missing"), target, aside); err == nil || read(target) != "new" {
 		t.Fatalf("%v, target %q", err, read(target))
+	}
+}
+
+func TestTokenGoesToTheAPIOnly(t *testing.T) {
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	gh.add(t, priv, "v0.1.0-alpha.9", "alpha", map[string][]byte{"massimo-linux-armv6": []byte("v9")}, nil)
+	list := "/repos/" + Repo + "/releases"
+
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	if _, err := c.Latest(context.Background(), "alpha"); err != nil || gh.auth[list] != "" {
+		t.Fatalf("without a token: %v %q", err, gh.auth[list])
+	}
+	c.Token = "t0k"
+	if _, err := c.Latest(context.Background(), "alpha"); err != nil || gh.auth[list] != "Bearer t0k" {
+		t.Fatalf("with a token: %v %q", err, gh.auth[list])
+	}
+
+	// A release file on another host gets no token.
+	var got string
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = r.Header.Get("Authorization") }))
+	defer other.Close()
+	if _, err := c.get(context.Background(), other.URL+"/file", 10, ""); err != nil || got != "" {
+		t.Fatalf("other host: %v %q", err, got)
 	}
 }
