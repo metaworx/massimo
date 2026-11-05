@@ -20,6 +20,8 @@ func runFakeCube(args []string) error {
 	listen := fs.String("listen", "127.0.0.1:62910", "address to listen on")
 	file := fs.String("greeting", "", "file with the protocol lines to send on connect (a capture, or a backup's lines)")
 	duty := fs.Int("duty", 0, "duty cycle percentage to report in S replies")
+	discovery := fs.String("discovery", "", "also answer UDP discovery on this address, such as 127.0.0.1:23273, as a Cube that is not configured (serve finds it with -discover-target <that address>)")
+	discoverySerial := fs.String("discovery-serial", "KEQ0000000", "serial of the Cube that answers -discovery")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo fakecube -greeting <file> [-listen 127.0.0.1:62910]\n\nBehave like a Cube's LAN interface, using recorded data.\n\n")
 		fs.PrintDefaults()
@@ -41,6 +43,14 @@ func runFakeCube(args []string) error {
 	}
 	defer srv.Close()
 	fmt.Fprintf(os.Stderr, "fake cube listening on %s (%d lines)\n", addr, len(greeting))
+	if *discovery != "" {
+		d, err := fakecube.StartDiscovery(*discovery, *discoverySerial, 0x0a0b0c)
+		if err != nil {
+			return fmt.Errorf("fakecube: -discovery: %w", err)
+		}
+		defer d.Close()
+		fmt.Fprintf(os.Stderr, "answering discovery on %s as %s\n", d.Addr(), *discoverySerial)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	<-ctx.Done()

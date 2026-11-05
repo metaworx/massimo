@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +33,15 @@ func runServe(args []string) error {
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones")
 	poll := fs.Duration("poll", time.Minute, "how often to poll the device list")
 	refresh := fs.Duration("refresh", 6*time.Hour, "how often to reconnect to each Cube to re-read everything it holds (0 = never)")
+	discoverEvery := fs.Duration("discover-interval", 30*time.Minute, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API)")
+	var discoverTargets []string
+	fs.Func("discover-target", "send discovery requests to this host[:port] instead of broadcasting (repeatable; for another subnet, or a fake Cube's -discovery)", func(v string) error {
+		if _, _, err := net.SplitHostPort(v); err != nil {
+			v = net.JoinHostPort(v, "23272")
+		}
+		discoverTargets = append(discoverTargets, v)
+		return nil
+	})
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
 	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr (default MASSIMO_LOG)")
 	var proxies []string
@@ -67,7 +77,7 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
-	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, Logger: logger, Version: versionString(), Proxy: listeners, ShowHidden: showAll || showHidden,
+	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: listeners, ShowHidden: showAll || showHidden,
 		Update: server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -129,14 +139,36 @@ func serveTargets(addr string, proxies []string, proxySerial string) ([]server.C
 			}
 			cubes = append(cubes, server.CubeConfig{Serial: sn, Addr: addrs[sn]})
 		}
+		// Cubes configured by serial only, with serve's own variables
+		// (_NAME, _PROXY) but no _ADDRESS: their address comes from
+		// discovery and follows the Cube when it changes.
+		have := map[string]bool{}
+		for _, c := range cubes {
+			have[strings.ToUpper(c.Serial)] = true
+		}
+		for _, name := range []string{env.Name, env.Proxy} {
+			more, _ := env.Serials(name)
+			for _, sn := range more {
+				if have[sn] || snExplicit && !strings.EqualFold(sn, selectedSN) {
+					continue
+				}
+				have[sn] = true
+				cubes = append(cubes, server.CubeConfig{Serial: sn})
+			}
+		}
+		sort.Slice(cubes, func(i, j int) bool { return cubes[i].Serial < cubes[j].Serial })
 		if len(cubes) == 0 {
 			if a := os.Getenv(env.Address); a != "" {
 				cubes = append(cubes, server.CubeConfig{Serial: selectedSN, Addr: a})
+			} else if selectedSN != "" {
+				// -sn or MASSIMO_CUBE_SN without an address: found by
+				// discovery.
+				cubes = append(cubes, server.CubeConfig{Serial: strings.ToUpper(selectedSN)})
 			}
 		}
 	}
 	if len(cubes) == 0 {
-		return nil, nil, fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS or use -addr)")
+		return nil, nil, fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS, use -addr, or give the serial with -sn to find the Cube on the LAN)")
 	}
 	// A plain variable applies to a single Cube only where two Cubes must
 	// not share the value: the proxy address, its serial and the name.

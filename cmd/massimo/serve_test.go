@@ -112,3 +112,30 @@ func TestServeSeveralCubesNeedNamedListeners(t *testing.T) {
 		t.Fatalf("cubes %+v listeners %+v %v", cubes, l, err)
 	}
 }
+
+// Cubes with serve's own variables but no address are served by serial,
+// their address left to discovery; so is a Cube selected with -sn alone.
+func TestServeCubesConfiguredBySerial(t *testing.T) {
+	clearCubeEnv(t)
+	t.Cleanup(func() { selectedSN, snExplicit = "", false })
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
+	t.Setenv("MASSIMO_CUBE_KEQ0000002_NAME", "Attic")
+	t.Setenv("MASSIMO_CUBE_KEQ0000003_PROXY", "10.0.0.13")
+	t.Setenv("MASSIMO_CUBE_KEQ0000004_KEY", "k0123") // a key alone does not make serve take the Cube
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", "10.0.0.11")
+	t.Setenv("MASSIMO_CUBE_KEQ0000002_PROXY", "10.0.0.12")
+	cubes, _, err := serveTargets("", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cubes) != 3 || cubes[0].Addr != "10.0.0.1" || cubes[1].Serial != "KEQ0000002" || cubes[1].Addr != "" || cubes[1].Name != "Attic" || cubes[2].Serial != "KEQ0000003" || cubes[2].Addr != "" {
+		t.Fatalf("cubes %+v", cubes)
+	}
+
+	clearCubeEnv(t)
+	selectedSN, snExplicit = "keq0000009", true
+	cubes, _, err = serveTargets("", nil, "")
+	if err != nil || len(cubes) != 1 || cubes[0].Serial != "KEQ0000009" || cubes[0].Addr != "" {
+		t.Fatalf("-sn alone: %+v %v", cubes, err)
+	}
+}
