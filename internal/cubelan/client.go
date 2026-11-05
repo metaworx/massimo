@@ -52,6 +52,10 @@ type Client struct {
 	online atomic.Bool
 	// inclusion is the pairing state, see inclusion.go.
 	inclusion inclusion
+
+	addrMu sync.Mutex
+	addr   string        // host:port; "" until known, see SetAddress
+	hasAdr chan struct{} // closed once addr is set
 }
 
 type pendingReply struct {
@@ -77,10 +81,47 @@ func New(opts Options) *Client {
 		d := &net.Dialer{Timeout: 10 * time.Second}
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
-	if _, _, err := net.SplitHostPort(opts.Addr); err != nil {
-		opts.Addr = net.JoinHostPort(opts.Addr, "62910")
+	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
+		hasAdr: make(chan struct{})}
+	if opts.Addr != "" {
+		c.SetAddress(opts.Addr)
 	}
-	return &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{})}
+	return c
+}
+
+// withPort adds the Cube's port to an address that has none.
+func withPort(addr string) string {
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return net.JoinHostPort(addr, "62910")
+	}
+	return addr
+}
+
+// Address is the Cube's address, host:port, or "" while it is unknown.
+func (c *Client) Address() string {
+	c.addrMu.Lock()
+	defer c.addrMu.Unlock()
+	return c.addr
+}
+
+// SetAddress sets the Cube's address, for a Cube found by discovery,
+// and reports whether it changed. A client created without an address
+// waits for it before it connects; a change takes effect with the next
+// connection, so a caller that wants it now reconnects (through the
+// queue, engine.Command.Reconnect).
+func (c *Client) SetAddress(addr string) bool {
+	addr = withPort(addr)
+	c.addrMu.Lock()
+	defer c.addrMu.Unlock()
+	if addr == c.addr {
+		return false
+	}
+	first := c.addr == ""
+	c.addr = addr
+	if first {
+		close(c.hasAdr)
+	}
+	return true
 }
 
 // Snapshot returns the client's view of the Cube.
@@ -101,6 +142,11 @@ func (c *Client) Ready() <-chan struct{} { return c.ready }
 // It reconnects with exponential backoff after failures; the backoff
 // starts over after a connection that got its greeting.
 func (c *Client) Run(ctx context.Context) error {
+	select {
+	case <-c.hasAdr:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	backoff := time.Second
 	for {
 		greeted, err := c.session(ctx)
@@ -111,11 +157,11 @@ func (c *Client) Run(ctx context.Context) error {
 			backoff = time.Second
 		}
 		if c.reconnecting.Swap(false) {
-			c.log.Info("cube reconnecting to refresh the snapshot", "addr", c.opts.Addr)
+			c.log.Info("cube reconnecting", "addr", c.Address())
 			continue
 		}
 		c.emit(Event{Kind: EventDisconnected, Err: err})
-		c.log.Warn("cube connection lost", "addr", c.opts.Addr, "error", err, "retry_in", backoff)
+		c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -130,7 +176,7 @@ func (c *Client) Run(ctx context.Context) error {
 // session runs one connection until it fails and reports whether the
 // greeting arrived.
 func (c *Client) session(ctx context.Context) (bool, error) {
-	conn, err := c.opts.Dialer(ctx, c.opts.Addr)
+	conn, err := c.opts.Dialer(ctx, c.Address())
 	if err != nil {
 		return false, err
 	}
@@ -176,7 +222,7 @@ func (c *Client) session(ctx context.Context) (bool, error) {
 				c.mu.Unlock()
 				c.once.Do(func() { close(c.ready) })
 				c.emit(Event{Kind: EventConnected})
-				c.log.Info("cube connected", "addr", c.opts.Addr)
+				c.log.Info("cube connected", "addr", c.Address())
 			}
 		}
 	}()
