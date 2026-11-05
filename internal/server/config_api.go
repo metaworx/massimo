@@ -317,6 +317,7 @@ func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
+	rt.afterWrite(c.RFAddress) // the C line names the room once the device acknowledged
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil
 }
