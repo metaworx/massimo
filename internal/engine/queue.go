@@ -304,9 +304,12 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		}
 	}
 	if cmd.Wakeup && !cmd.Passthrough {
-		if _, err := q.gw.Send(ctx, cube.CmdWakeup(q.opts.WakeupSeconds, cube.WakeupRoom, fmt.Sprintf("%02x", cmd.RoomID))); err != nil {
+		wake := cube.CmdWakeup(q.opts.WakeupSeconds, cube.WakeupRoom, fmt.Sprintf("%02x", cmd.RoomID))
+		reply, err := q.gw.Send(ctx, wake)
+		if err != nil {
 			return Result{Err: fmt.Errorf("wakeup: %w", err), Budget: q.gw.Budget()}
 		}
+		q.opts.Logger.Info("room woken up", "room", cmd.RoomID, "command", wake.String(), "reply", reply.String())
 		q.sleep(ctx, q.opts.Gap)
 	}
 	if needsRadio && !cmd.Passthrough && cmd.Target != 0 && q.deviceInError(cmd.Target) {
@@ -336,6 +339,8 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		if cmd.Passthrough {
 			res.Replies = append(res.Replies, sendResultLine(r))
 			res.Discarded = res.Discarded || r.Discarded
+			q.opts.Logger.Info("proxy client's command sent", "command", l.String(), "discarded", r.Discarded,
+				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			continue
 		}
 		if r.Discarded && cmd.Target != 0 {
@@ -354,6 +359,10 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 			}
 		}
 		res.Replies = append(res.Replies, sendResultLine(r))
+		if !r.Discarded {
+			q.opts.Logger.Info("command accepted by the cube", "target", cmd.Target, "command", l.String(),
+				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
+		}
 		if r.Discarded {
 			q.opts.Logger.Warn("command discarded by the cube", "target", cmd.Target, "command", l.String(), "duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			res.Discarded = true

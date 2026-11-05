@@ -4,8 +4,12 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -202,5 +206,41 @@ func TestQueueDrainsOnCancel(t *testing.T) {
 	cancel()
 	if r := second.Wait(context.Background()); r.Err != context.Canceled {
 		t.Fatalf("second: %v", r.Err)
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for the queue's goroutine.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func TestQueueLogsAcceptedCommands(t *testing.T) {
+	var log syncBuffer
+	_, q, _ := setup(t, Options{Logger: slog.New(slog.NewTextHandler(&log, nil))})
+	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x14ce3d, RoomID: 3, Room: true}, 21, cube.ModeManual, cube.Until{})
+	if r := q.Enqueue(Command{Target: 0x14ce3d, RoomID: 3, Wakeup: true, Lines: []cube.Message{m}}).Wait(context.Background()); r.Err != nil {
+		t.Fatal(r.Err)
+	}
+	out := log.String()
+	for _, want := range []string{
+		`msg="room woken up" room=3 command=z:1e,G,03 reply=A:`,
+		`msg="command accepted by the cube" target=14ce3d command="` + m.String() + `" duty_pct=0 free_slots=49`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log lacks %q:\n%s", want, out)
+		}
 	}
 }
