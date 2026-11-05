@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
@@ -152,7 +153,7 @@ func TestPlanAndRestore(t *testing.T) {
 
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
 	go q.Run(ctx)
-	res, err := p.Run(ctx, q, nil)
+	res, err := p.Run(ctx, cubeio.Writer{Client: c, Queue: q}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

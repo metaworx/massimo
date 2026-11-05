@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -148,10 +149,10 @@ func runRestore(args []string) error {
 		return err
 	}
 	useDeviceSerial(c.Snapshot().Hello().Serial)
-	if opts.Ignore, err = ignoredDevices(); err != nil {
+	if opts.Hidden, err = hiddenDevices(); err != nil {
 		return err
 	}
-	opts.ShowGhosts = noIgnore
+	opts.ShowHidden = showHidden
 	cur := backup.Current{Snapshot: c.Snapshot()}
 	if !opts.SkipClock {
 		if cur.NTP, err = fetchNTP(ctx, c); err != nil {
@@ -194,7 +195,7 @@ func runRestore(args []string) error {
 	}
 	q := engine.NewQueue(c, engine.Options{Gap: *gap, Logger: slog.New(slog.NewTextHandler(os.Stderr, nil))})
 	go q.Run(ctx)
-	results, err := p.Run(ctx, q, func(i int, s backup.Step, r engine.Result) {
+	results, err := p.Run(ctx, cubeio.Writer{Client: c, Queue: q}, func(i int, s backup.Step, r engine.Result) {
 		status := fmt.Sprintf("ok (duty cycle %d%%, %d free slots)", r.Budget.DutyCyclePct, r.Budget.FreeMemorySlots)
 		if r.Err != nil {
 			status = "failed: " + r.Err.Error()

@@ -10,9 +10,11 @@ import (
 	"slices"
 	"strings"
 
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Step is one command of a restore plan with a description for humans.
@@ -48,13 +50,13 @@ type PlanOptions struct {
 	// backup's state section (manual, auto or vacation). Off by default:
 	// state is normally live, not configuration.
 	State bool
-	// Ignore lists devices the plan must never touch: they are neither
-	// compared nor reported, and the metadata written by the plan keeps
-	// them, and the rooms they are in, exactly as the Cube has them.
-	Ignore []cube.RFAddress
-	// ShowGhosts includes the devices of cube.GhostRoom, which are
-	// hidden by default like the Ignore list.
-	ShowGhosts bool
+	// Hidden lists devices the plan must never touch, in addition to
+	// those of cube.HiddenRoom: they are neither compared nor reported,
+	// and the metadata written by the plan keeps them, and the rooms they
+	// are in, exactly as the Cube has them.
+	Hidden []cube.RFAddress
+	// ShowHidden includes the hidden devices.
+	ShowHidden bool
 }
 
 // Current is the live state the plan compares the backup with.
@@ -93,7 +95,7 @@ func NewPlan(f *File, cur Current, opts PlanOptions) (*Plan, error) {
 			known[rf] = cube.DeviceMeta{Type: c.Type, RFAddress: rf, Serial: c.Serial, RoomID: c.RoomID}
 		}
 	}
-	ig := Hidden(opts.Ignore, snap.Metadata(), opts.ShowGhosts)
+	ig := view.NewHidden(opts.Hidden, snap.Metadata(), opts.ShowHidden)
 	var present, missing []Device
 	for _, d := range f.Devices {
 		if ig[d.RFAddress] {
@@ -410,7 +412,7 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 		return nil
 	}
 	room := c.RoomID
-	if !opts.SkipSettings && want.RoomID != room && linkable(want.Type) {
+	if !opts.SkipSettings && want.RoomID != room && cubeio.Linkable(want.Type) {
 		p.planMove(f, snap, want, name, room)
 		room = want.RoomID
 	}
@@ -465,7 +467,7 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 		// does not store (window-open minutes, decalcification, valve
 		// limits) are taken from a radiator thermostat in the same room,
 		// else from the software's defaults.
-		ref := RoomRadiator(snap, room, want.RFAddress)
+		ref := cubeio.RoomRadiator(snap, room, want.RFAddress)
 		if !opts.SkipSettings {
 			if w.ComfortTemp != h.ComfortTemp || w.EcoTemp != h.EcoTemp || w.MaxSetpoint != h.MaxSetpoint || w.MinSetpoint != h.MinSetpoint ||
 				w.TempOffset != h.TempOffset || w.WindowOpenTemp != h.WindowOpenTemp {
@@ -520,35 +522,6 @@ func (p *Plan) planDevice(f *File, snap *cubelan.Snapshot, cur cube.DeviceMeta, 
 	return nil
 }
 
-// linkable reports whether a device type takes part in room links.
-func linkable(t cube.DeviceType) bool {
-	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat || t == cube.DeviceShutterContact
-}
-
-// isThermostat reports whether t is a radiator or wall thermostat.
-func isThermostat(t cube.DeviceType) bool {
-	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat
-}
-
-// linkPair reports whether the original software links two room members:
-// every pair except two shutter contacts (observed: a contact moved
-// into a room with a thermostat and a contact was linked with the
-// thermostat only).
-func linkPair(a, b cube.DeviceType) bool {
-	return linkable(a) && linkable(b) && (isThermostat(a) || isThermostat(b))
-}
-
-// linkTarget addresses a link radiogram to a room member the way the
-// original software does: radiator thermostats with the room flag and
-// their room, every other device directly. The device being moved is
-// always addressed directly, as its group is being changed.
-func linkTarget(rf cube.RFAddress, typ cube.DeviceType, room uint8) cube.Target {
-	if typ.IsRadiatorThermostat() {
-		return cube.Target{RFAddress: rf, RoomID: room, Room: true}
-	}
-	return cube.Target{RFAddress: rf}
-}
-
 // planMove re-wires a device into another room as the original software
 // does: unlink it from every device of the old room in both directions
 // and remove its group, then link it with every device of the new room
@@ -570,58 +543,9 @@ func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name strin
 			members = append(members, cube.DeviceMeta{Type: d.Type, RFAddress: d.RFAddress, RoomID: d.RoomID})
 		}
 	}
-	out, in := MoveCommands(snap, rf, typ, oldRoom, want.RoomID, members)
+	out, in := cubeio.MoveCommands(snap, rf, typ, oldRoom, want.RoomID, members)
 	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, len(out.Lines)/2), out)
 	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, len(in.Lines)/2), in)
-}
-
-// MoveCommands builds the two commands that move a device to another
-// room the way the original software does: unlink it from every partner
-// of the old room (as the Cube lists it now) in both directions and
-// remove its group, then link it with every partner among newMembers in
-// both directions and set the new group, each half after a wakeup of
-// the room concerned. The metadata write that records the new room is
-// not included.
-func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta) (out, in engine.Command) {
-	var outLines []cube.Message
-	if md := snap.Metadata(); md != nil {
-		for _, d := range md.Devices {
-			if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) {
-				continue
-			}
-			outLines = append(outLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
-			outLines = append(outLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, false, d.RFAddress, d.Type))
-		}
-	}
-	outLines = append(outLines, cube.CmdSetGroup(rf, oldRoom, true))
-	out = engine.Command{Key: "move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: oldRoom != 0, Lines: outLines}
-
-	var inLines []cube.Message
-	for _, d := range newMembers {
-		if d.RFAddress == rf || !linkPair(d.Type, typ) {
-			continue
-		}
-		inLines = append(inLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, newRoom), true, rf, typ))
-		inLines = append(inLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, true, d.RFAddress, d.Type))
-	}
-	inLines = append(inLines, cube.CmdSetGroup(rf, newRoom, false))
-	in = engine.Command{Key: "move-in:" + rf.String(), Target: rf, RoomID: newRoom, Wakeup: true, Lines: inLines}
-	return out, in
-}
-
-// RoomRadiator returns the configuration of a radiator thermostat in the
-// room (other than rf), or the original software's defaults: the values
-// a wall thermostat does not store are taken from it when writing one.
-func RoomRadiator(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) cube.ThermostatConfig {
-	for _, other := range snap.Devices() {
-		if other == rf {
-			continue
-		}
-		if c := snap.Config(other); c != nil && c.Thermostat != nil && c.RoomID == room {
-			return *c.Thermostat
-		}
-	}
-	return cube.ThermostatConfig{WindowOpenMins: 15, DecalcDay: cube.Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0}
 }
 
 type dayChange struct {
@@ -645,12 +569,13 @@ func programDiff(t cube.Target, want, have cube.WeekProgram) ([]dayChange, error
 }
 
 // Run sends the plan's steps through the queue one after the other and
-// returns one result per step. It stops at the first failure; done, if
-// not nil, is called after each step.
-func (p *Plan) Run(ctx context.Context, q *engine.Queue, done func(i int, s Step, r engine.Result)) ([]engine.Result, error) {
+// returns one result per step; metadata writes are mirrored into the
+// snapshot. It stops at the first failure; done, if not nil, is called
+// after each step.
+func (p *Plan) Run(ctx context.Context, w cubeio.Writer, done func(i int, s Step, r engine.Result)) ([]engine.Result, error) {
 	var out []engine.Result
 	for i, s := range p.Steps {
-		r := q.Enqueue(s.Command).Wait(ctx)
+		r := w.Do(ctx, s.Command)
 		out = append(out, r)
 		if done != nil {
 			done(i, s, r)

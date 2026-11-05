@@ -10,25 +10,17 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sort"
 	"strings"
 
-	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan"
-	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
-// statusDevice is one line of `massimo status -json`.
+// statusDevice is one line of `massimo status -json`: the device as the
+// API shows it, with the name of its room.
 type statusDevice struct {
-	RFAddress string          `json:"rf_address"`
-	Type      cube.DeviceType `json:"type"`
-	Name      string          `json:"name,omitempty"`
-	Serial    string          `json:"serial,omitempty"`
-	RoomID    uint8           `json:"room_id"`
-	Room      string          `json:"room,omitempty"`
-	Unlisted  bool            `json:"unlisted,omitempty"`
-	Reported  bool            `json:"reported"`
-	State     *backup.State   `json:"state,omitempty"`
+	view.Device
+	Room string `json:"room,omitempty"`
 }
 
 type statusRoom struct {
@@ -82,7 +74,7 @@ func runStatus(args []string) error {
 	if err != nil {
 		return err
 	}
-	rep := statusFromSnapshot(c.Snapshot(), hidden)
+	rep := statusFromSnapshot(c.Snapshot(), c.Budget(), hidden)
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -92,85 +84,36 @@ func runStatus(args []string) error {
 	return nil
 }
 
-// statusFromSnapshot builds the report; ignored devices and the rooms
-// that hold only them are left out.
-func statusFromSnapshot(snap *cubelan.Snapshot, ig backup.Ignored) statusReport {
-	var rep statusReport
-	h := snap.Hello()
-	if h != nil {
+// statusFromSnapshot builds the report; hidden devices and the rooms
+// that hold only them are left out. Devices that are in no visible room
+// are listed as unlisted.
+func statusFromSnapshot(snap *cubelan.Snapshot, b cubelan.Budget, hidden view.Hidden) statusReport {
+	rep := statusReport{Rooms: []statusRoom{}, Unlisted: []statusDevice{}}
+	if h := snap.Hello(); h != nil {
 		rep.Serial, rep.Firmware = h.Serial, h.FirmwareVersion
 		rep.DutyCyclePct, rep.FreeMemorySlots = h.DutyCycle, h.FreeMemorySlots
-		rep.Pending = cubelan.Budget{FreeMemorySlots: h.FreeMemorySlots, MaxSlots: h.FreeMemorySlots}.Pending()
 		rep.CubeTime = strings.TrimSpace(h.CubeDate + " " + h.CubeTime)
 	}
-	md := snap.Metadata()
+	rep.Pending = view.Pending(snap, b)
 	roomName := map[uint8]string{}
-	byRoom := map[uint8][]statusDevice{}
-	if md != nil {
+	if md := snap.Metadata(); md != nil {
 		for _, r := range md.Rooms {
 			roomName[r.ID] = r.Name
 		}
 	}
-	hidden := ig.HiddenRooms(md)
-	for _, rf := range snap.Devices() {
-		if h != nil && rf == h.RFAddress || ig[rf] {
-			continue
+	inRoom := map[string]bool{}
+	for _, r := range view.Rooms(snap, hidden) {
+		sr := statusRoom{ID: r.ID, Name: r.Name, Ready: r.Ready, Devices: []statusDevice{}}
+		for _, d := range r.Devices {
+			sr.Devices = append(sr.Devices, statusDevice{Device: d, Room: r.Name})
+			inRoom[d.RFAddress] = true
 		}
-		d := statusDevice{RFAddress: rf.String(), Unlisted: true}
-		if md != nil {
-			for _, m := range md.Devices {
-				if m.RFAddress == rf {
-					d.Name, d.RoomID, d.Serial, d.Type, d.Unlisted = m.Name, m.RoomID, m.Serial, m.Type, false
-				}
-			}
-		}
-		if c := snap.Config(rf); c != nil {
-			d.Type = c.Type
-			if d.Serial == "" {
-				d.Serial, d.RoomID = c.Serial, c.RoomID
-			}
-		}
-		d.Room = roomName[d.RoomID]
-		if st, ok := snap.State(rf); ok && st.Valid {
-			d.Reported = true
-			d.State = backup.StateOf(st)
-		}
-		if d.Unlisted {
-			rep.Unlisted = append(rep.Unlisted, d)
-		} else {
-			byRoom[d.RoomID] = append(byRoom[d.RoomID], d)
-		}
+		rep.Rooms = append(rep.Rooms, sr)
 	}
-	if md != nil {
-		for _, r := range md.Rooms {
-			if hidden[r.ID] {
-				continue
-			}
-			sr := statusRoom{ID: r.ID, Name: r.Name, Ready: true, Devices: byRoom[r.ID]}
-			if sr.Devices == nil {
-				sr.Devices = []statusDevice{}
-			}
-			for _, d := range sr.Devices {
-				sr.Ready = sr.Ready && d.Reported
-			}
-			rep.Rooms = append(rep.Rooms, sr)
-			delete(byRoom, r.ID)
+	for _, d := range view.Devices(snap, hidden) {
+		if !inRoom[d.RFAddress] {
+			rep.Unlisted = append(rep.Unlisted, statusDevice{Device: d, Room: roomName[d.RoomID]})
 		}
-	}
-	// Devices listed with a room the metadata does not have.
-	var orphans []uint8
-	for id := range byRoom {
-		orphans = append(orphans, id)
-	}
-	sort.Slice(orphans, func(i, j int) bool { return orphans[i] < orphans[j] })
-	for _, id := range orphans {
-		rep.Unlisted = append(rep.Unlisted, byRoom[id]...)
-	}
-	if rep.Rooms == nil {
-		rep.Rooms = []statusRoom{}
-	}
-	if rep.Unlisted == nil {
-		rep.Unlisted = []statusDevice{}
 	}
 	return rep
 }

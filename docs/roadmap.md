@@ -44,7 +44,8 @@ each new write path and the feedback that follows.
    firmware-extraction.md), then the DataFlash, then the portal reply
    format and the update encryption from the code.
 6. **Users and a database**: owner arbitration per Cube, settings such
-   as the ignore list editable in the UI, SQLite.
+   as the hidden devices editable in the UI, SQLite; internal/env is the
+   one place the configuration is read today, to be replaced by it.
 7. **Translations** of the UI: done for the languages of the original
    software (English, German, French, Italian, Dutch, Polish) in
    `internal/server/ui/i18n.js`; open: a review of FR/IT/NL/PL by

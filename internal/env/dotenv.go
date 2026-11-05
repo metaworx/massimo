@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-package main
+package env
 
 import (
 	"bufio"
@@ -10,16 +10,35 @@ import (
 	"strings"
 )
 
-// envSource records where each variable came from: "file" when loadDotEnv
-// set it, "environment" when it was already set (the environment wins).
-var envSource = map[string]string{}
+// sources records where each variable came from: "file" when LoadFile
+// set it, "environment, overrides <file>" when it was already set (the
+// environment wins).
+var sources = map[string]string{}
 
-// loadDotEnv reads KEY=VALUE lines from path and sets them in the process
+// Source says where a variable's value came from: "file", "environment,
+// overrides <file>", or "environment" for one the file did not mention.
+func Source(name string) string {
+	if s := sources[name]; s != "" {
+		return s
+	}
+	return "environment"
+}
+
+// File returns the env file to read: MASSIMO_ENV_FILE, else ".env" in
+// the current directory.
+func File() string {
+	if f := os.Getenv(FileVar); f != "" {
+		return f
+	}
+	return ".env"
+}
+
+// LoadFile reads KEY=VALUE lines from path and sets them in the process
 // environment unless the variable is already set. It exists so that secrets
 // such as the Cube key never have to be typed on a command line, where they
 // would end up in the shell history. Blank lines and # comments are
 // ignored; an optional "export " prefix and surrounding quotes are stripped.
-func loadDotEnv(path string) error {
+func LoadFile(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -45,9 +64,9 @@ func loadDotEnv(path string) error {
 		}
 		if os.Getenv(k) == "" {
 			os.Setenv(k, v)
-			envSource[k] = "file"
+			sources[k] = "file"
 		} else {
-			envSource[k] = "environment, overrides " + path
+			sources[k] = "environment, overrides " + path
 		}
 	}
 	return sc.Err()

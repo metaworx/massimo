@@ -238,10 +238,10 @@ func TestProxyDiscovery(t *testing.T) {
 	}
 }
 
-func TestProxyHidesIgnoredDevices(t *testing.T) {
+func TestProxyHidesHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
 	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
-	p.opts.Ignore = []cube.RFAddress{hidden}
+	p.opts.Hidden = []cube.RFAddress{hidden}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 
 	// Parked in a room with a high id, the room disappears as well.
 	cur := *c.Snapshot().Metadata()
-	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 255, Name: "ghosts"})
+	cur.Rooms = append(append([]cube.RoomMeta(nil), cur.Rooms...), cube.RoomMeta{ID: 255, Name: "parked"})
 	cur.Devices = append([]cube.DeviceMeta(nil), cur.Devices...)
 	for i := range cur.Devices {
 		if cur.Devices[i].RFAddress == hidden {
@@ -379,5 +379,56 @@ func TestProxyHidesIgnoredDevices(t *testing.T) {
 	}
 	if !room255 || !dev || got.Rooms[0].Name != "Again" {
 		t.Fatalf("metadata after write: %+v", got)
+	}
+}
+
+func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
+	fc, p, _, ctx := setup(t)
+	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
+	other := cube.RFAddress(0x14d08e)
+	p.opts.Hidden = []cube.RFAddress{hidden}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.ServeTCP(ctx, ln)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	r := cube.NewReader(conn)
+	for readLine(t, r).Type != 'L' {
+	}
+	// Only the hidden device: answered locally, nothing reaches the Cube.
+	conn.Write([]byte(cube.CmdDeleteDevices(true, hidden).Wire()))
+	if a := readLine(t, r); a.Type != 'A' {
+		t.Fatalf("t: answered %s", a)
+	}
+	if n := countType(fc, 't'); n != 0 {
+		t.Fatalf("%d t: reached the cube", n)
+	}
+	// A visible and a hidden device: only the visible one is deleted.
+	conn.Write([]byte(cube.CmdDeleteDevices(true, other, hidden).Wire()))
+	if a := readLine(t, r); a.Type != 'A' {
+		t.Fatalf("t: answered %s", a)
+	}
+	var got []cube.Message
+	for _, m := range fc.Received() {
+		if m.Type == 't' {
+			got = append(got, m)
+		}
+	}
+	if len(got) != 1 || got[0].String() != cube.CmdDeleteDevices(true, other).String() {
+		t.Fatalf("cube received %v", got)
+	}
+	// With the hidden devices shown, the command goes through unchanged.
+	p.opts.ShowHidden = true
+	conn.Write([]byte(cube.CmdDeleteDevices(false, hidden).Wire()))
+	if a := readLine(t, r); a.Type != 'A' {
+		t.Fatalf("t: answered %s", a)
+	}
+	if n := countType(fc, 't'); n != 2 {
+		t.Fatalf("%d t: reached the cube, want 2", n)
 	}
 }

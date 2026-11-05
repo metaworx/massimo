@@ -5,6 +5,7 @@ package cubelan
 
 import (
 	"context"
+	"encoding/base64"
 	"net"
 	"sync"
 	"testing"
@@ -154,5 +155,64 @@ func TestClientReconnects(t *testing.T) {
 	waitEvent(t, c, EventConnected)
 	if srv2.Connections() != 1 {
 		t.Fatalf("want 1 connection on the new server, got %d", srv2.Connections())
+	}
+}
+
+func TestReconnectRefreshesTheSnapshot(t *testing.T) {
+	srv, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	select {
+	case <-c.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("client never became ready")
+	}
+	// A device the Cube no longer has (deleted by another client, say)
+	// lingers in the snapshot until the next greeting.
+	gone, ok := c.Snapshot().ConfigLine(0x1514b6)
+	if !ok {
+		t.Fatal("no C line for 1514b6")
+	}
+	raw, err := base64.StdEncoding.DecodeString(gone.Data[7:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[1], raw[2], raw[3] = 0x0a, 0x0b, 0x0c
+	c.ApplyLocal(cube.Message{Type: 'C', Data: "0a0b0c," + base64.StdEncoding.EncodeToString(raw)})
+	if c.Snapshot().Config(0x0a0b0c) == nil {
+		t.Fatal("extra device not applied")
+	}
+	rctx, rcancel := context.WithTimeout(ctx, 5*time.Second)
+	defer rcancel()
+	if err := c.Reconnect(rctx); err != nil {
+		t.Fatal(err)
+	}
+	if srv.Connections() != 2 {
+		t.Fatalf("connections %d", srv.Connections())
+	}
+	if c.Snapshot().Config(0x0a0b0c) != nil {
+		t.Fatal("device the greeting no longer lists kept")
+	}
+	for _, rf := range c.Snapshot().Devices() {
+		if rf == 0x0a0b0c {
+			t.Fatal("device still listed")
+		}
+	}
+	if c.Snapshot().Config(0x1514b6) == nil {
+		t.Fatal("real device dropped")
+	}
+	// No disconnected event for a reconnect on purpose.
+	for {
+		select {
+		case e := <-c.Events():
+			if e.Kind == EventDisconnected {
+				t.Fatal("disconnected event")
+			}
+			continue
+		default:
+		}
+		break
 	}
 }

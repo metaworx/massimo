@@ -15,6 +15,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -43,6 +44,10 @@ type Client struct {
 	pending *pendingReply
 	writeMu sync.Mutex
 	budget  budgetTracker
+	// greeted is closed, and replaced, whenever a greeting is complete.
+	greeted chan struct{}
+	// reconnecting marks a connection closed on purpose by Reconnect.
+	reconnecting atomic.Bool
 }
 
 type pendingReply struct {
@@ -71,7 +76,7 @@ func New(opts Options) *Client {
 	if _, _, err := net.SplitHostPort(opts.Addr); err != nil {
 		opts.Addr = net.JoinHostPort(opts.Addr, "62910")
 	}
-	return &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{})}
+	return &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{})}
 }
 
 // Snapshot returns the client's view of the Cube.
@@ -85,13 +90,21 @@ func (c *Client) Events() <-chan Event { return c.evs }
 func (c *Client) Ready() <-chan struct{} { return c.ready }
 
 // Run connects and keeps the connection alive until ctx is cancelled.
-// It reconnects with exponential backoff after failures.
+// It reconnects with exponential backoff after failures; the backoff
+// starts over after a connection that got its greeting.
 func (c *Client) Run(ctx context.Context) error {
 	backoff := time.Second
 	for {
-		err := c.session(ctx)
+		greeted, err := c.session(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if greeted {
+			backoff = time.Second
+		}
+		if c.reconnecting.Swap(false) {
+			c.log.Info("cube reconnecting to refresh the snapshot", "addr", c.opts.Addr)
+			continue
 		}
 		c.emit(Event{Kind: EventDisconnected, Err: err})
 		c.log.Warn("cube connection lost", "addr", c.opts.Addr, "error", err, "retry_in", backoff)
@@ -106,11 +119,12 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-// session runs one connection until it fails.
-func (c *Client) session(ctx context.Context) error {
+// session runs one connection until it fails and reports whether the
+// greeting arrived.
+func (c *Client) session(ctx context.Context) (bool, error) {
 	conn, err := c.opts.Dialer(ctx, c.opts.Addr)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer conn.Close()
 	c.mu.Lock()
@@ -126,9 +140,11 @@ func (c *Client) session(ctx context.Context) error {
 		c.mu.Unlock()
 	}()
 
-	// The greeting ends with the L message.
+	// The greeting ends with the L message; it replaces what the
+	// snapshot knew from earlier connections.
+	c.snap.beginGreeting()
 	r := cube.NewReader(conn)
-	greeted := false
+	var greeted atomic.Bool
 	readErr := make(chan error, 1)
 	go func() {
 		for {
@@ -139,8 +155,15 @@ func (c *Client) session(ctx context.Context) error {
 				return
 			}
 			c.handle(m)
-			if m.Type == 'L' && !greeted {
-				greeted = true
+			if m.Type == 'L' && !greeted.Load() {
+				greeted.Store(true)
+				// Swap the greeted channel before anyone can see the
+				// client as ready, so that a Reconnect right after Ready
+				// waits for the next greeting, not this one.
+				c.mu.Lock()
+				close(c.greeted)
+				c.greeted = make(chan struct{})
+				c.mu.Unlock()
 				c.once.Do(func() { close(c.ready) })
 				c.emit(Event{Kind: EventConnected})
 				c.log.Info("cube connected", "addr", c.opts.Addr)
@@ -158,9 +181,9 @@ func (c *Client) session(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			c.write(cube.CmdQuit)
-			return ctx.Err()
+			return greeted.Load(), ctx.Err()
 		case err := <-readErr:
-			return err
+			return greeted.Load(), err
 		case <-poll:
 			if _, err := c.Send(ctx, cube.CmdList); err != nil && !errors.Is(err, ErrBusy) {
 				c.log.Warn("poll failed", "error", err)
@@ -305,6 +328,30 @@ func (c *Client) clearPending(p *pendingReply) {
 		c.pending = nil
 	}
 	c.mu.Unlock()
+}
+
+// Reconnect closes the connection and waits until the client has
+// connected again and received a complete greeting, which replaces the
+// snapshot with what the Cube holds now: a full refresh, in case a write
+// the Cube acknowledged did not take effect. A command waiting for its
+// reply fails with ErrNotConnected, so callers run it through the
+// command queue (engine.Command.Reconnect).
+func (c *Client) Reconnect(ctx context.Context) error {
+	c.mu.Lock()
+	conn, greeted := c.conn, c.greeted
+	c.mu.Unlock()
+	if conn == nil {
+		return ErrNotConnected
+	}
+	c.reconnecting.Store(true)
+	c.write(cube.CmdQuit)
+	conn.Close()
+	select {
+	case <-greeted:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // ApplyLocal folds a message into the snapshot as if the Cube had sent

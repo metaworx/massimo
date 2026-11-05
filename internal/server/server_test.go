@@ -15,6 +15,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -84,12 +85,12 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	if getJSON(t, ts, "", "/api/v1/cubes/keq0537249", &c) != 200 || c.Rooms != 6 || c.Devices != 6 || c.Firmware != "1.1.3" || len(c.RoomList) != 6 {
 		t.Fatalf("cube %+v", c)
 	}
-	var devs []deviceState
+	var devs []view.Device
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
 	if len(devs) != 6 || devs[0].Name == "" {
 		t.Fatalf("devices %+v", devs)
 	}
-	var rooms []roomView
+	var rooms []view.Room
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
 	if len(rooms) != 6 {
 		t.Fatalf("rooms %+v", rooms)
@@ -204,5 +205,28 @@ func TestServerToken(t *testing.T) {
 	}
 	if getJSON(t, ts, "", "/healthz", nil) != 200 {
 		t.Fatal("healthz needs a token")
+	}
+}
+
+func TestPeriodicRefreshReconnects(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, RefreshInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}})
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	t.Cleanup(func() { cancel(); fc.Close() })
+	deadline := time.Now().Add(5 * time.Second)
+	for fc.Connections() < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if fc.Connections() < 3 {
+		t.Fatalf("connections %d", fc.Connections())
 	}
 }

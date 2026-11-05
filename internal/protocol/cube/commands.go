@@ -5,6 +5,7 @@ package cube
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -82,6 +83,30 @@ func CmdDeleteDevices(force bool, addrs ...RFAddress) Message {
 		f = 1
 	}
 	return Message{Type: 't', Data: fmt.Sprintf("%02x,%d,%s", len(addrs), f, b64.EncodeToString(raw))}
+}
+
+// ParseDeleteDevices decodes the data of a t: command, as a client of
+// the LAN proxy sends it: the force flag and the devices to delete.
+func ParseDeleteDevices(data string) (force bool, addrs []RFAddress, err error) {
+	f := strings.SplitN(data, ",", 3)
+	if len(f) != 3 {
+		return false, nil, fmt.Errorf("t: want count,force,addresses, got %q", data)
+	}
+	n, err := strconv.ParseUint(f[0], 16, 8)
+	if err != nil {
+		return false, nil, fmt.Errorf("t: bad count %q", f[0])
+	}
+	raw, err := b64.DecodeString(f[2])
+	if err != nil {
+		return false, nil, fmt.Errorf("t: bad addresses: %w", err)
+	}
+	if len(raw) != 3*int(n) {
+		return false, nil, fmt.Errorf("t: count %d but %d address bytes", n, len(raw))
+	}
+	for i := 0; i < len(raw); i += 3 {
+		addrs = append(addrs, RFAddressFromBytes(raw[i:i+3]))
+	}
+	return f[1] == "1", addrs, nil
 }
 
 // cubeEpoch is the reference point of the v command's clock value.

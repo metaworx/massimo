@@ -20,9 +20,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // maxNameBytes is the longest room or device name accepted; the
@@ -62,11 +63,8 @@ func (s *Server) visibleRoom(rt *runtime, r *http.Request) (cube.RoomMeta, *cube
 	if md == nil {
 		return cube.RoomMeta{}, nil, fail(http.StatusServiceUnavailable, "cube not connected yet")
 	}
-	hidden := rt.hidden().HiddenRooms(md)
-	for _, room := range md.Rooms {
-		if room.ID == id && !hidden[room.ID] {
-			return room, md, nil
-		}
+	if room, ok := rt.hidden().Room(md, id); ok {
+		return room, md, nil
 	}
 	return cube.RoomMeta{}, nil, fail(http.StatusNotFound, "no room %d", id)
 }
@@ -130,10 +128,14 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 		status = http.StatusConflict
 	}
 	if errors.Is(res.Err, engine.ErrDiscarded) && roomCmd != 0 {
-		if silent := neverReported(rt.client.Snapshot(), roomCmd, rt.hidden()); len(silent) > 0 {
+		if silent := view.Silent(rt.client.Snapshot(), roomCmd, rt.hidden()); len(silent) > 0 {
+			var names []string
+			for _, rf := range silent {
+				names = append(names, rf.String())
+			}
 			he := fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
-				res.Err, roomCmd, strings.Join(silent, ", ")).(*httpError)
-			he.noState = silent
+				res.Err, roomCmd, strings.Join(names, ", ")).(*httpError)
+			he.noState = names
 			return he
 		}
 	}
@@ -143,27 +145,14 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 // writeMetadata sends the metadata to the Cube and mirrors it into the
 // snapshot, which the Cube does not echo.
 func (s *Server) writeMetadata(ctx context.Context, rt *runtime, md *cube.Metadata) error {
-	lines, err := cube.WriteMetadataCommands(md)
+	res, err := rt.writer().WriteMetadata(ctx, md)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
-	res := rt.queue.Enqueue(engine.Command{Key: "metadata", Priority: engine.PriorityHigh, Lines: lines}).Wait(ctx)
 	if res.Err != nil {
 		return fail(http.StatusBadGateway, "%v", res.Err)
 	}
-	rt.client.ApplyMetadataWrite(lines)
 	return nil
-}
-
-// refreshConfig asks the Cube for a device's C line after a
-// configuration write and applies the answer to the snapshot. Failures
-// are ignored: the write itself succeeded, the copy catches up on the
-// next connection.
-func (s *Server) refreshConfig(ctx context.Context, rt *runtime, rf cube.RFAddress) {
-	res := rt.queue.Enqueue(engine.Command{Lines: []cube.Message{{Type: 'c', Data: rf.String()}}}).Wait(ctx)
-	if res.Err == nil && len(res.Replies) == 1 && res.Replies[0].Type == 'C' {
-		rt.client.ApplyLocal(res.Replies[0])
-	}
 }
 
 func checkName(name string) error {
@@ -261,14 +250,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			return fail(http.StatusBadRequest, "room_id must be 1..255")
 		}
 		newRoom = uint8(*req.RoomID)
-		hidden := rt.hidden().HiddenRooms(md)
-		found := false
-		for _, room := range md.Rooms {
-			if room.ID == newRoom && !hidden[room.ID] {
-				found = true
-			}
-		}
-		if !found {
+		if _, ok := rt.hidden().Room(md, newRoom); !ok {
 			return fail(http.StatusNotFound, "no room %d", newRoom)
 		}
 		if newRoom != cur.RoomID {
@@ -278,7 +260,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 					members = append(members, d)
 				}
 			}
-			out, in := backup.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members)
+			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members)
 			for _, cmd := range []engine.Command{out, in} {
 				res := rt.queue.Enqueue(cmd).Wait(ctx)
 				if err := s.commandError(rt, res, 0); err != nil {
@@ -297,7 +279,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if newRoom != cur.RoomID {
-		s.refreshConfig(ctx, rt, rf)
+		rt.writer().Reread(ctx, rf)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil
@@ -433,7 +415,7 @@ func configLines(rt *runtime, rf cube.RFAddress, c *cube.DeviceConfig, q configR
 		return nil, fail(http.StatusBadRequest, "device %s is a %s and has no settings to write", rf, c.Type)
 	}
 	t := cube.Target{RFAddress: rf}
-	m := q.merged(c, backup.RoomRadiator(rt.client.Snapshot(), c.RoomID, rf))
+	m := q.merged(c, cubeio.RoomRadiator(rt.client.Snapshot(), c.RoomID, rf))
 	var lines []cube.Message
 	if q.temperatures() {
 		l, err := cube.CmdSetTemperatures(t, cube.TemperatureSettings{Comfort: m.ComfortTemp, Eco: m.EcoTemp, Max: m.MaxSetpoint, Min: m.MinSetpoint,
@@ -486,11 +468,10 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "config:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}).Wait(ctx)
+	res := rt.writer().Do(ctx, engine.Command{Key: "config:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
-	s.refreshConfig(ctx, rt, rf)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
@@ -586,7 +567,7 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	for _, rf := range order {
 		if results[rf].OK {
 			okCount++
-			s.refreshConfig(ctx, rt, rf)
+			rt.writer().Reread(ctx, rf)
 		}
 		out = append(out, *results[rf])
 	}
@@ -665,7 +646,7 @@ func (s *Server) getRoomConfig(w http.ResponseWriter, r *http.Request) error {
 				d.DisplayActual = st.DisplayActual
 			}
 			if v.Source == "" {
-				ref := backup.RoomRadiator(snap, room.ID, rf)
+				ref := cubeio.RoomRadiator(snap, room.ID, rf)
 				v.Source = rf.String()
 				v.ComfortTemp, v.EcoTemp, v.MaxSetpoint, v.MinSetpoint = wc.ComfortTemp, wc.EcoTemp, wc.MaxSetpoint, wc.MinSetpoint
 				v.WindowOpenTemp, v.WindowOpenMins = wc.WindowOpenTemp, ref.WindowOpenMins
@@ -736,11 +717,10 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "program:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}).Wait(ctx)
+	res := rt.writer().Do(ctx, engine.Command{Key: "program:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
-	s.refreshConfig(ctx, rt, rf)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
@@ -775,12 +755,9 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: fmt.Sprintf("program:room:%d", room.ID), RoomID: room.ID, Wakeup: true, Lines: lines}).Wait(ctx)
+	res := rt.writer().Do(ctx, engine.Command{Key: fmt.Sprintf("program:room:%d", room.ID), RoomID: room.ID, Wakeup: true, Lines: lines}, append(radiators, walls...)...)
 	if err := s.commandError(rt, res, room.ID); err != nil {
 		return err
-	}
-	for _, rf := range append(radiators, walls...) {
-		s.refreshConfig(ctx, rt, rf)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
@@ -811,7 +788,7 @@ func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	}
 	days, err := json.Marshal(prog)
 	if err != nil {
-		return err
+		return fail(http.StatusInternalServerError, "week programme of %s: %v", all[0], err)
 	}
 	var out map[string]any
 	json.Unmarshal(days, &out)

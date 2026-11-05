@@ -24,6 +24,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Version is the format version written into new files.
@@ -76,105 +77,18 @@ type Device struct {
 	// State is what the device reported last (the L line): mode,
 	// setpoint, measured temperature, valve, flags. Informational, except
 	// that a restore with the State option re-applies mode and setpoint.
-	State *State `json:"state,omitempty"`
-}
-
-// State is a device's live state at backup time.
-type State struct {
-	Mode       cube.Mode   `json:"mode"`
-	Setpoint   *float64    `json:"setpoint,omitempty"`
-	Until      *cube.Until `json:"until,omitempty"` // end of vacation mode
-	ActualTemp *float64    `json:"actual_temp,omitempty"`
-	ValvePct   *int        `json:"valve_pct,omitempty"`
-	WindowOpen *bool       `json:"window_open,omitempty"`
-	BatteryLow bool        `json:"battery_low"`
-	Error      bool        `json:"error"`
-	LinkError  bool        `json:"link_error"`
-	// PanelLocked is the device's key lock ("LoC" on the display).
-	PanelLocked bool `json:"panel_locked,omitempty"`
-}
-
-// StateOf is the live state of a device as backups, the API and status
-// show it, or nil while the Cube holds no state for the device.
-func StateOf(st cube.DeviceState) *State { return stateOf(st) }
-
-func stateOf(st cube.DeviceState) *State {
-	if !st.Valid {
-		return nil
-	}
-	return &State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
-}
-
-// Ignored is a set of devices to leave out of a backup and of a restore
-// plan: devices that are paired but never report (they would block room
-// commands if they were moved) are parked in a room of their own on the
-// Cube and hidden from every view. See docs/portal-protocol.md.
-type Ignored map[cube.RFAddress]bool
-
-// Hidden builds the set of hidden devices: the listed ones plus, unless
-// showGhosts is set, every device the metadata places in cube.GhostRoom.
-func Hidden(addrs []cube.RFAddress, md *cube.Metadata, showGhosts bool) Ignored {
-	set := IgnoreSet(addrs)
-	if showGhosts || md == nil {
-		return set
-	}
-	for _, d := range md.Devices {
-		if d.RoomID == cube.GhostRoom {
-			if set == nil {
-				set = Ignored{}
-			}
-			set[d.RFAddress] = true
-		}
-	}
-	return set
-}
-
-// IgnoreSet builds the set from a list of addresses.
-func IgnoreSet(addrs []cube.RFAddress) Ignored {
-	if len(addrs) == 0 {
-		return nil
-	}
-	set := Ignored{}
-	for _, rf := range addrs {
-		set[rf] = true
-	}
-	return set
-}
-
-// HiddenRooms lists the rooms of md that hold only ignored devices (and
-// at least one): they are hidden together with their devices.
-func (ig Ignored) HiddenRooms(md *cube.Metadata) map[uint8]bool {
-	hidden := map[uint8]bool{}
-	if md == nil || len(ig) == 0 {
-		return hidden
-	}
-	count := map[uint8]int{}
-	for _, d := range md.Devices {
-		if ig[d.RFAddress] {
-			count[d.RoomID]++
-		} else {
-			count[d.RoomID] = -1 << 20
-		}
-	}
-	for id, n := range count {
-		if n > 0 && id != 0 {
-			hidden[id] = true
-		}
-	}
-	return hidden
+	State *view.State `json:"state,omitempty"`
 }
 
 // Take builds a backup from the client's current snapshot. ntp may be nil
 // when the servers were not requested; tool names the software version.
-// Ignored devices and the rooms that hold only them are left out of the
+// Hidden devices and the rooms that hold only them are left out of the
 // rooms and devices sections; the raw lines keep everything.
-func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, hidden Ignored) (*File, error) {
+func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, hidden view.Hidden) (*File, error) {
 	h := snap.Hello()
 	if h == nil {
 		return nil, fmt.Errorf("backup: no greeting from the cube yet")
 	}
-	ig := hidden
 	f := &File{
 		Version: Version,
 		TakenAt: now.Truncate(time.Second),
@@ -189,14 +103,7 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, hidd
 		f.CubeConfig = &cc
 	}
 	md := snap.Metadata()
-	hiddenRooms := ig.HiddenRooms(md)
-	if md != nil {
-		for _, r := range md.Rooms {
-			if !hiddenRooms[r.ID] {
-				f.Rooms = append(f.Rooms, r)
-			}
-		}
-	}
+	f.Rooms = append(f.Rooms, hidden.VisibleRooms(md)...)
 	// Devices in the order of the Cube's own list, then any the Cube only
 	// sent a configuration for.
 	meta := map[cube.RFAddress]cube.DeviceMeta{}
@@ -213,7 +120,7 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, hidd
 		}
 	}
 	for _, rf := range order {
-		if rf == h.RFAddress || ig[rf] {
+		if rf == h.RFAddress || hidden[rf] {
 			continue
 		}
 		c := snap.Config(rf)
@@ -243,7 +150,7 @@ func Take(snap *cubelan.Snapshot, ntp []string, tool string, now time.Time, hidd
 			}
 		}
 		if st, ok := snap.State(rf); ok {
-			d.State = stateOf(st)
+			d.State = view.StateOf(st)
 			if st.Valid && d.Wall != nil {
 				d.Wall.DisplayActual = st.DisplayActual
 			}

@@ -42,10 +42,12 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // CubeConfig names one Cube to serve.
@@ -53,9 +55,10 @@ type CubeConfig struct {
 	Serial string // for the URL and the logs; "" takes the one the Cube reports
 	Addr   string // host[:port]
 	Name   string // a user-friendly name shown next to the serial, optional
-	// Ignore hides devices (and the rooms that hold only them) from every
-	// view and keeps every write away from them; see backup.Ignored.
-	Ignore []cube.RFAddress
+	// Hidden hides devices (and the rooms that hold only them) from every
+	// view and keeps every write away from them, in addition to those of
+	// cube.HiddenRoom; see view.Hidden. From MASSIMO_CUBE_<SN>_IGNORE.
+	Hidden []cube.RFAddress
 }
 
 // Options configure a Server.
@@ -63,15 +66,19 @@ type Options struct {
 	Cubes        []CubeConfig
 	Token        string        // API token; empty disables authentication
 	PollInterval time.Duration // L polling; 0 keeps the driver default of one minute
-	Logger       *slog.Logger
-	Version      string
-	Queue        engine.Options
+	// RefreshInterval is how often each Cube's snapshot is refreshed in
+	// full by reconnecting, so that a write the Cube acknowledged but did
+	// not apply does not leave it wrong until the next restart; 0 never.
+	RefreshInterval time.Duration
+	Logger          *slog.Logger
+	Version         string
+	Queue           engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	Proxy []ProxyListener
-	// ShowGhosts shows the devices of cube.GhostRoom and the ignore
-	// lists' devices everywhere instead of hiding them.
-	ShowGhosts bool
+	// ShowHidden shows the hidden devices (those of cube.HiddenRoom and
+	// of the Hidden lists) everywhere instead of hiding them.
+	ShowHidden bool
 	// Update configures the update endpoints (update_api.go).
 	Update UpdateOptions
 }
@@ -105,8 +112,7 @@ type runtime struct {
 	client     *cubelan.Client
 	queue      *engine.Queue
 	serial     string
-	ignore     backup.Ignored // from the configuration; hidden() adds the ghost room
-	showGhosts bool
+	showHidden bool
 
 	subs   map[chan event]struct{}
 	subsMu sync.Mutex
@@ -170,7 +176,7 @@ func New(opts Options) *Server {
 	}
 	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{}}
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), ignore: backup.IgnoreSet(c.Ignore), showGhosts: opts.ShowGhosts, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
+		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
 		rt.queue = engine.NewQueue(rt.client, opts.Queue)
 		key := strings.ToLower(c.Serial)
@@ -193,6 +199,10 @@ func (s *Server) Run(ctx context.Context) error {
 		go func() { defer wg.Done(); rt.client.Run(ctx) }()
 		go func() { defer wg.Done(); rt.queue.Run(ctx) }()
 		go func() { defer wg.Done(); s.pump(ctx, rt) }()
+		if s.opts.RefreshInterval > 0 {
+			wg.Add(1)
+			go func() { defer wg.Done(); s.refresh(ctx, rt) }()
+		}
 	}
 	var responder *proxy.Responder
 	for _, pl := range s.opts.Proxy {
@@ -201,7 +211,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
 			continue
 		}
-		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, Ignore: rt.cfg.Ignore, ShowGhosts: rt.showGhosts,
+		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, Hidden: rt.cfg.Hidden, ShowHidden: rt.showHidden,
 			MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
 		if pl.Discovery {
 			if responder == nil {
@@ -233,10 +243,35 @@ func (s *Server) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
+// refresh reconnects to the Cube every RefreshInterval, through the
+// queue at low priority so that no command is cut off and user commands
+// go first. The new greeting replaces the snapshot.
+func (s *Server) refresh(ctx context.Context, rt *runtime) {
+	t := time.NewTicker(s.opts.RefreshInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		res := rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityLow, Reconnect: true}).Wait(ctx)
+		if res.Err != nil && ctx.Err() == nil {
+			s.log.Warn("periodic refresh failed", "cube", rt.serial, "error", res.Err)
+			continue
+		}
+		s.log.Info("snapshot refreshed", "cube", rt.serial)
+	}
+}
+
+// writer sends commands to the runtime's Cube and keeps its snapshot in
+// step.
+func (rt *runtime) writer() cubeio.Writer { return cubeio.Writer{Client: rt.client, Queue: rt.queue} }
+
 // hidden is the set of devices left out of every view: the configured
-// ignore list plus the devices the Cube places in the ghost room.
-func (rt *runtime) hidden() backup.Ignored {
-	return backup.Hidden(rt.cfg.Ignore, rt.client.Snapshot().Metadata(), rt.showGhosts)
+// hidden list plus the devices the Cube places in room 255.
+func (rt *runtime) hidden() view.Hidden {
+	return view.NewHidden(rt.cfg.Hidden, rt.client.Snapshot().Metadata(), rt.showHidden)
 }
 
 // proxyRuntime picks the Cube a proxy listener serves.
@@ -277,8 +312,8 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
-				if st, ok := rt.client.Snapshot().State(e.Device); ok {
-					dv := deviceView(rt.client.Snapshot(), e.Device, st)
+				if _, ok := rt.client.Snapshot().State(e.Device); ok {
+					dv := view.DeviceOf(rt.client.Snapshot(), e.Device)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						s.log.Info("device state", stateAttrs(rt.serial, dv)...)
@@ -311,7 +346,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 
 // stateAttrs builds the log attributes of a device state change: the
 // device, then whatever the device reported.
-func stateAttrs(serial string, d deviceState) []any {
+func stateAttrs(serial string, d view.Device) []any {
 	attrs := []any{"cube", serial, "device", d.RFAddress, "name", d.Name}
 	if d.State == nil {
 		return append(attrs, "reported", false)
@@ -379,6 +414,9 @@ func (s *Server) routes() {
 					writeError(w, he.status, he.msg)
 					return
 				}
+				// Every handler error should come through fail; one that
+				// does not is a bug, logged so that it gets noticed.
+				s.log.Error("api: error not mapped to a status", "method", r.Method, "path", r.URL.Path, "error", err)
 				writeError(w, http.StatusInternalServerError, err.Error())
 			}
 		})
@@ -464,34 +502,12 @@ type cubeView struct {
 	Devices  int              `json:"devices"`
 	Queued   int              `json:"queued"`
 	Config   *cube.CubeConfig `json:"config,omitempty"`
-	RoomList []roomView       `json:"room_list,omitempty"`
+	RoomList []view.Room      `json:"room_list,omitempty"`
 	CubeTime string           `json:"cube_time,omitempty"`
 }
 
-type roomView struct {
-	ID   uint8  `json:"id"`
-	Name string `json:"name"`
-	// Ready is true when every device of the room has reported since
-	// the Cube's last restart; the Cube discards room commands otherwise.
-	Ready   bool          `json:"ready"`
-	Devices []deviceState `json:"devices"`
-}
-
-type deviceState struct {
-	RFAddress string          `json:"rf_address"`
-	Type      cube.DeviceType `json:"type"`
-	Name      string          `json:"name"`
-	RoomID    uint8           `json:"room_id"`
-	Serial    string          `json:"serial,omitempty"`
-	Unlisted  bool            `json:"unlisted,omitempty"`
-	// Reported is true when the Cube holds state for the device, that
-	// is, the device has transmitted since the Cube's last restart.
-	Reported bool          `json:"reported"`
-	State    *backup.State `json:"state,omitempty"`
-}
-
 type deviceDetail struct {
-	deviceState
+	view.Device
 	Firmware   uint8                  `json:"firmware,omitempty"`
 	Thermostat *cube.ThermostatConfig `json:"thermostat,omitempty"`
 	Wall       *cube.WallConfig       `json:"wall_thermostat,omitempty"`
@@ -500,7 +516,7 @@ type deviceDetail struct {
 func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
-	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.cfg.Addr, Budget: b, Pending: b.Pending(), Queued: rt.queue.Len()}
+	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.cfg.Addr, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	if h := snap.Hello(); h != nil {
 		v.Connected = !snap.Updated().IsZero()
 		v.Firmware, v.RFAddress, v.Updated = h.FirmwareVersion, h.RFAddress.String(), snap.Updated()
@@ -509,55 +525,8 @@ func (s *Server) summary(rt *runtime) cubeView {
 			v.Config = c.Cube
 		}
 	}
-	if md := snap.Metadata(); md != nil {
-		ig := rt.hidden()
-		hidden := ig.HiddenRooms(md)
-		v.Rooms = len(md.Rooms) - len(hidden)
-		for _, d := range md.Devices {
-			if !ig[d.RFAddress] {
-				v.Devices++
-			}
-		}
-	}
+	v.Rooms, v.Devices = view.Counts(snap, rt.hidden())
 	return v
-}
-
-func deviceView(snap *cubelan.Snapshot, rf cube.RFAddress, st cube.DeviceState) deviceState {
-	d := deviceState{RFAddress: rf.String(), Type: st.Type}
-	if md := snap.Metadata(); md != nil {
-		found := false
-		for _, m := range md.Devices {
-			if m.RFAddress == rf {
-				d.Name, d.RoomID, d.Serial, d.Type, found = m.Name, m.RoomID, m.Serial, m.Type, true
-			}
-		}
-		d.Unlisted = !found
-	}
-	if c := snap.Config(rf); c != nil {
-		d.Type = c.Type
-		if d.Serial == "" {
-			d.Serial, d.RoomID = c.Serial, c.RoomID
-		}
-	}
-	d.Reported = st.Valid
-	d.State = backup.StateOf(st)
-	return d
-}
-
-func (s *Server) devices(rt *runtime) []deviceState {
-	snap := rt.client.Snapshot()
-	var out []deviceState
-	h := snap.Hello()
-	ig := rt.hidden()
-	for _, rf := range snap.Devices() {
-		if h != nil && rf == h.RFAddress || ig[rf] {
-			continue
-		}
-		st, _ := snap.State(rf)
-		st.RFAddress = rf
-		out = append(out, deviceView(snap, rf, st))
-	}
-	return out
 }
 
 // Handlers.
@@ -610,30 +579,12 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Server) rooms(rt *runtime) []roomView {
-	snap := rt.client.Snapshot()
-	md := snap.Metadata()
-	if md == nil {
-		return nil
-	}
-	devs := s.devices(rt)
-	ig := rt.hidden()
-	hidden := ig.HiddenRooms(md)
-	var out []roomView
-	for _, r := range md.Rooms {
-		if hidden[r.ID] {
-			continue
-		}
-		rv := roomView{ID: r.ID, Name: r.Name, Ready: true, Devices: []deviceState{}}
-		for _, d := range devs {
-			if d.RoomID == r.ID && !d.Unlisted {
-				rv.Devices = append(rv.Devices, d)
-				rv.Ready = rv.Ready && d.Reported
-			}
-		}
-		out = append(out, rv)
-	}
-	return out
+// rooms is the room list of a Cube as the API shows it.
+func (s *Server) rooms(rt *runtime) []view.Room { return view.Rooms(rt.client.Snapshot(), rt.hidden()) }
+
+// devices is the device list of a Cube as the API shows it.
+func (s *Server) devices(rt *runtime) []view.Device {
+	return view.Devices(rt.client.Snapshot(), rt.hidden())
 }
 
 func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
@@ -669,8 +620,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	if !ok && c == nil || rt.hidden()[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
-	st.RFAddress = rf
-	d := deviceDetail{deviceState: deviceView(snap, rf, st)}
+	d := deviceDetail{Device: view.DeviceOf(snap, rf)}
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {
@@ -766,14 +716,7 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 	if md == nil {
 		return fail(http.StatusServiceUnavailable, "cube not connected yet")
 	}
-	hidden := rt.hidden().HiddenRooms(md)
-	found := false
-	for _, room := range md.Rooms {
-		if int(room.ID) == id && !hidden[room.ID] {
-			found = true
-		}
-	}
-	if !found {
+	if _, ok := rt.hidden().Room(md, uint8(id)); !ok {
 		return fail(http.StatusNotFound, "no room %d", id)
 	}
 	for _, d := range md.Devices {
@@ -788,17 +731,11 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 			cp.Rooms = append(cp.Rooms, room)
 		}
 	}
-	lines, err := cube.WriteMetadataCommands(&cp)
-	if err != nil {
-		return err
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "metadata", Priority: engine.PriorityHigh, Lines: lines}).Wait(ctx)
-	if res.Err != nil {
-		return fail(http.StatusBadGateway, "%v", res.Err)
+	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
+		return err
 	}
-	rt.client.ApplyMetadataWrite(lines)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "rooms": len(cp.Rooms)})
 	return nil
 }
@@ -816,14 +753,11 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 	if md == nil {
 		return fail(http.StatusServiceUnavailable, "cube not connected yet")
 	}
-	ig := rt.hidden()
-	hidden := ig.HiddenRooms(md)
-	for _, room := range md.Rooms {
-		if int(room.ID) == id && !hidden[room.ID] {
-			return s.setpoint(w, r, rt, cube.Target{RFAddress: room.RFAddress, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
-		}
+	room, ok := rt.hidden().Room(md, uint8(id))
+	if !ok {
+		return fail(http.StatusNotFound, "no room %d", id)
 	}
-	return fail(http.StatusNotFound, "no room %d", id)
+	return s.setpoint(w, r, rt, cube.Target{RFAddress: room.RFAddress, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
 }
 
 func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t cube.Target, target cube.RFAddress, key string) error {
@@ -851,40 +785,15 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	res := rt.queue.Enqueue(engine.Command{Key: "setpoint:" + key, Priority: engine.PriorityHigh, Target: target, Lines: []cube.Message{m}}).Wait(ctx)
-	if res.Err != nil {
-		status := http.StatusBadGateway
-		if errors.Is(res.Err, engine.ErrSuperseded) {
-			status = http.StatusConflict
-		}
-		if errors.Is(res.Err, engine.ErrDiscarded) && t.Room {
-			if silent := neverReported(rt.client.Snapshot(), t.RoomID, rt.hidden()); len(silent) > 0 {
-				he := fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
-					res.Err, t.RoomID, strings.Join(silent, ", ")).(*httpError)
-				he.noState = silent
-				return he
-			}
-		}
-		return fail(status, "%v", res.Err)
+	var roomCmd uint8
+	if t.Room {
+		roomCmd = t.RoomID
+	}
+	if err := s.commandError(rt, res, roomCmd); err != nil {
+		return err
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
-}
-
-// neverReported lists the devices the Cube places in a room that have
-// never sent a state. Observed on hardware: the Cube discards room
-// commands while such a member exists.
-func neverReported(snap *cubelan.Snapshot, room uint8, ignore backup.Ignored) []string {
-	var out []string
-	for _, rf := range snap.Devices() {
-		c := snap.Config(rf)
-		if c == nil || c.Type == cube.DeviceCube || c.RoomID != room || ignore[rf] {
-			continue
-		}
-		if st, ok := snap.State(rf); !ok || !st.Valid {
-			out = append(out, rf.String())
-		}
-	}
-	return out
 }
 
 func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) error {
@@ -903,7 +812,7 @@ func (s *Server) getBackup(w http.ResponseWriter, r *http.Request) error {
 	yaml := r.URL.Query().Get("format") == "yaml"
 	data, err := f.Marshal(yaml)
 	if err != nil {
-		return err
+		return fail(http.StatusInternalServerError, "backup: %v", err)
 	}
 	if yaml {
 		w.Header().Set("Content-Type", "application/yaml")

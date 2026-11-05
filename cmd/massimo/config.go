@@ -9,6 +9,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 // runConfig prints the MASSIMO_* settings in effect. Keys and IVs are
@@ -24,10 +26,7 @@ func runConfig(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	envFile := os.Getenv("MASSIMO_ENV_FILE")
-	if envFile == "" {
-		envFile = ".env"
-	}
+	envFile := env.File()
 	state := "not found"
 	if _, err := os.Stat(envFile); err == nil {
 		state = "loaded"
@@ -38,16 +37,16 @@ func runConfig(args []string) error {
 	case snExplicit:
 		src = "-sn"
 	case selectedSN != "":
-		src = snEnv
+		src = env.SN
 	}
 	fmt.Printf("selected cube: %s (from %s)\n", orNone(selectedSN), src)
-	fmt.Printf("key in effect: %s\n", redact(cubeEnv(keyEnv)))
-	fmt.Printf("iv in effect:  %s\n", redact(cubeEnv(ivEnv)))
-	fmt.Printf("address:       %s\n", orNone(cubeEnv(addrEnv)))
-	fmt.Printf("ignored:       %s\n", orNone(cubeEnv(ignoreEnv)))
-	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(proxyEnv)))
-	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(proxySerialEnv)))
-	fmt.Printf("name:          %s\n", orNone(cubeEnv(nameEnv)))
+	fmt.Printf("key in effect: %s\n", redact(cubeEnv(env.Key)))
+	fmt.Printf("iv in effect:  %s\n", redact(cubeEnv(env.IV)))
+	fmt.Printf("address:       %s\n", orNone(cubeEnv(env.Address)))
+	fmt.Printf("hidden:        %s\n", orNone(cubeEnv(env.Ignore)))
+	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(env.Proxy)))
+	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(env.ProxySerial)))
+	fmt.Printf("name:          %s\n", orNone(cubeEnv(env.Name)))
 
 	var names []string
 	for _, kv := range os.Environ() {
@@ -62,24 +61,20 @@ func runConfig(args []string) error {
 		if strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "_IV") || strings.HasSuffix(k, "_TOKEN") {
 			v = redact(v)
 		}
-		src := envSource[k]
-		if src == "" {
-			src = "environment"
-		}
+		src := env.Source(k)
 		note := ""
-		if !knownVariable(k) {
+		if !env.Known(k) {
 			note = "   <- unknown name, typo?"
 		}
 		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
-	if sns := perCubeKeys(); len(sns) > 0 {
-		sort.Strings(sns)
+	if sns, _ := env.Serials(env.Key); len(sns) > 0 {
 		fmt.Printf("\ncubes with a key: %s\n", strings.Join(sns, ", "))
 		for _, sn := range sns {
 			missing := []string{}
-			for _, v := range []string{ivEnv, addrEnv} {
-				if os.Getenv(perCubeVar(v, sn)) == "" {
-					missing = append(missing, strings.TrimPrefix(v, envPrefix))
+			for _, v := range []string{env.IV, env.Address} {
+				if os.Getenv(env.PerCube(v, sn)) == "" {
+					missing = append(missing, strings.TrimPrefix(v, env.Prefix))
 				}
 			}
 			if len(missing) > 0 {
@@ -88,24 +83,6 @@ func runConfig(args []string) error {
 		}
 	}
 	return nil
-}
-
-// knownVariable reports whether a MASSIMO_* name is one the program reads.
-func knownVariable(k string) bool {
-	switch k {
-	case keyEnv, ivEnv, addrEnv, snEnv, ignoreEnv, proxyEnv, proxySerialEnv, nameEnv, "MASSIMO_ENV_FILE", "MASSIMO_API_TOKEN", "MASSIMO_LOG":
-		return true
-	}
-	mid, ok := strings.CutPrefix(k, envPrefix)
-	if !ok {
-		return false
-	}
-	for _, suffix := range []string{"_KEY", "_IV", "_ADDRESS", "_IGNORE", "_PROXY", "_PROXY_SERIAL", "_NAME"} {
-		if sn, ok := strings.CutSuffix(mid, suffix); ok && sn != "" && !strings.Contains(sn, "_") {
-			return true
-		}
-	}
-	return false
 }
 
 func orNone(s string) string {
