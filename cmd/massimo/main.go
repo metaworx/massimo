@@ -65,6 +65,8 @@ func main() {
 		err = runServe(rest)
 	case "legacy":
 		err = runLegacy(rest)
+	case "update":
+		err = runUpdate(rest)
 	case "version", "--version", "-v", "-V":
 		fmt.Println(versionString())
 	case "help", "-h", "--help":
@@ -108,6 +110,7 @@ commands:
   config          show the settings in effect, with keys and IVs redacted
   serve           keep the Cubes connected, serve the JSON API and act as a Cube on the LAN
   legacy          run the original MAX! software with filtered output
+  update          install the newest signed release from GitHub (-check only looks)
   version         print the version (also --version)
 `)
 }

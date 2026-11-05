@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+
+package update
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// PrevPath is where the binary before the last update is kept.
+func PrevPath(target string) string { return target + ".prev" }
+
+// FailedPath is where a binary that failed its health check is kept.
+func FailedPath(target string) string { return target + ".failed" }
+
+func stagedPath(target string) string {
+	return filepath.Join(filepath.Dir(target), "."+filepath.Base(target)+".new")
+}
+
+// Stage creates the file a new binary is downloaded into, next to target
+// so that the final rename stays on one file system. A leftover from an
+// interrupted update is removed first.
+func Stage(target string) (*os.File, error) {
+	p := stagedPath(target)
+	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	return os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+}
+
+// Smoke runs the staged binary's version command and checks that it
+// starts on this machine (a binary for the wrong ARM version dies with
+// "illegal instruction") and is the version expected. It runs with an
+// empty environment and no .env file.
+func Smoke(ctx context.Context, path, tag string) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "version")
+	cmd.Dir = "/"
+	cmd.Env = []string{"MASSIMO_ENV_FILE=" + filepath.Join(os.DevNull, "none")}
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("the new binary does not run here: %v: %s", err, strings.TrimSpace(out.String()))
+	}
+	if f := strings.Fields(out.String()); len(f) < 2 || f[1] != tag {
+		return fmt.Errorf("the new binary says %q, want %s", strings.TrimSpace(out.String()), tag)
+	}
+	return nil
+}
+
+// Swap installs the staged file as target and keeps the current target
+// as PrevPath. target is replaced by a rename, so it is always either the
+// old or the new binary, also for a process starting it meanwhile.
+func Swap(target string) error {
+	staged := stagedPath(target)
+	if err := keepAs(target, PrevPath(target)); err != nil {
+		return err
+	}
+	if err := os.Chmod(staged, 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(staged, target); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(target))
+}
+
+// Rollback puts PrevPath back as target. The current target is kept as
+// keep: PrevPath again for a manual rollback (so that a second one goes
+// forward again), or FailedPath after a failed health check.
+func Rollback(target, keep string) error {
+	prev := PrevPath(target)
+	if _, err := os.Stat(prev); err != nil {
+		return fmt.Errorf("nothing to roll back to: %w", err)
+	}
+	swap := target + ".swap"
+	if err := keepAs(target, swap); err != nil {
+		return err
+	}
+	if err := os.Rename(prev, target); err != nil {
+		return err
+	}
+	if err := os.Rename(swap, keep); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(target))
+}
+
+// Discard removes a staged download.
+func Discard(target string) { os.Remove(stagedPath(target)) }
+
+// keepAs makes dst a copy of src without touching src: a hard link where
+// the file system allows it, a copy otherwise, then renamed into place.
+func keepAs(src, dst string) error {
+	tmp := dst + ".tmp"
+	os.Remove(tmp)
+	if err := os.Link(src, tmp); err != nil {
+		if err := copyFile(src, tmp); err != nil {
+			return err
+		}
+	}
+	return os.Rename(tmp, dst)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	fi, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fi.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	d.Sync() // not supported everywhere; the renames are done either way
+	return nil
+}
