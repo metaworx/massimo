@@ -21,7 +21,8 @@
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
 //
 // With a token configured, every /api request needs "Authorization: Bearer <token>"
-// (the event stream also accepts ?token=<token>). A web UI for all of this is served at / (see ui.go).
+// (the event stream also accepts ?token=<token>). Repeated failed token checks lock
+// the client's address out for a while (auth.go). A web UI for all of this is served at / (see ui.go).
 //
 // With proxy listeners configured, the server also answers as a Cube on
 // the LAN (TCP 62910 and UDP discovery), see internal/proxy.
@@ -29,7 +30,6 @@ package server
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,8 +63,14 @@ type CubeConfig struct {
 
 // Options configure a Server.
 type Options struct {
-	Cubes        []CubeConfig
-	Token        string        // API token; empty disables authentication
+	Cubes []CubeConfig
+	Token string // API token; empty disables authentication
+	// AuthFailures failed token checks from one address within
+	// AuthWindow lock it out for AuthLockout (answered 429); zero values
+	// take DefaultAuthFailures, DefaultAuthWindow and DefaultAuthLockout.
+	AuthFailures int
+	AuthWindow   time.Duration
+	AuthLockout  time.Duration
 	PollInterval time.Duration // L polling; 0 keeps the driver default of one minute
 	// RefreshInterval is how often each Cube's snapshot is refreshed in
 	// full by reconnecting, so that a write the Cube acknowledged but did
@@ -104,6 +110,7 @@ type Server struct {
 	order []string
 	mux   *http.ServeMux
 
+	limiter *authLimiter
 	updates updateCheck
 }
 
@@ -174,7 +181,8 @@ func New(opts Options) *Server {
 	if opts.PollInterval == 0 {
 		opts.PollInterval = time.Minute
 	}
-	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{}}
+	s := &Server{opts: opts, log: opts.Logger, cubes: map[string]*runtime{},
+		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil)}
 	for _, c := range opts.Cubes {
 		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{}}
 		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
@@ -395,14 +403,8 @@ func (s *Server) routes() {
 	})
 	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			// The token comes as a bearer header; the event stream alone
-			// also takes ?token=, because browsers open it without headers.
-			if s.opts.Token != "" && !tokenMatches(s.opts.Token, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
-				isEvents := r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events")
-				if !isEvents || !tokenMatches(s.opts.Token, r.URL.Query().Get("token")) {
-					writeError(w, http.StatusUnauthorized, "missing or wrong token")
-					return
-				}
+			if !s.authorize(w, r) {
+				return
 			}
 			if err := h(w, r); err != nil {
 				var he *httpError
@@ -460,12 +462,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	enc.Encode(v)
-}
-
-// tokenMatches compares a presented token with the configured one in
-// constant time, so that response timing reveals nothing about it.
-func tokenMatches(want, got string) bool {
-	return got != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

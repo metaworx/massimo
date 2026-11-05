@@ -32,6 +32,14 @@ func countType(fc *fakecube.Server, typ byte) int {
 
 func start(t *testing.T, token string) (*fakecube.Server, *httptest.Server, *Server) {
 	t.Helper()
+	return startWith(t, Options{Token: token})
+}
+
+// startWith starts a server over the fake Cube with opts; the Cube and
+// the queue's gap are set here.
+func startWith(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, *Server) {
+	t.Helper()
+	token := opts.Token
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +49,9 @@ func start(t *testing.T, token string) (*fakecube.Server, *httptest.Server, *Ser
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Token: token, Queue: engine.Options{Gap: time.Millisecond}})
+	opts.Cubes = []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}
+	opts.Queue = engine.Options{Gap: time.Millisecond}
+	s := New(opts)
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())

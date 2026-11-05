@@ -112,6 +112,13 @@ carry `Authorization: Bearer <token>`; otherwise the response is `401`.
 `/healthz` is always open. Without a token the API is unauthenticated,
 which is only acceptable on the default localhost listener.
 
+Ten failed token checks from one address within a minute lock that
+address out for five minutes: every `/api` request from it is then
+answered `429` with a `Retry-After` header, the right token included.
+The address is the TCP peer's; `X-Forwarded-For` is not trusted, since
+anyone can set it, so behind a reverse proxy the limit applies to the
+proxy as a whole, and the proxy should limit by client itself.
+
 ## Identifiers
 
 - `{sn}` is a Cube's serial number, as printed on it (`KEQ0537249`);
@@ -122,7 +129,8 @@ which is only acceptable on the default localhost listener.
 ## Errors
 
 Errors are `{"error": "<message>"}` with a matching status: `400` bad
-input, `401` missing or wrong token, `404` unknown Cube, device or room,
+input, `401` missing or wrong token, `429` locked out after repeated
+wrong tokens, `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before
 it was sent, `502` the Cube discarded the command or the connection
 failed, `503` the Cube has not sent its greeting yet.
