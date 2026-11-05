@@ -47,12 +47,14 @@ func (s *Server) startPairing(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	if err := rt.writer().StartPairing(ctx, timeout); err != nil {
+	_, stop, err := rt.writer().StartPairing(ctx, timeout)
+	if err != nil {
 		if errors.Is(err, cubelan.ErrInclusionActive) {
 			return fail(http.StatusConflict, "pairing is already running")
 		}
 		return fail(http.StatusBadGateway, "%v", err)
 	}
+	stop() // the API reports through the state and the events
 	writeJSON(w, http.StatusOK, rt.client.Inclusion())
 	return nil
 }

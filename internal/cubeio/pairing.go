@@ -19,27 +19,55 @@ const MaxPairingTime = 10 * time.Minute
 // StartPairing puts the Cube into inclusion mode for timeout: it marks
 // the mode in the client (cubelan.Client.StartInclusion), which then
 // delivers the N lines, and writes n:<seconds> through the queue. It
-// fails with cubelan.ErrInclusionActive while pairing is already
-// running.
-func (w Writer) StartPairing(ctx context.Context, timeout time.Duration) error {
+// returns the watch of the N lines (cubelan.Client.WatchInclusion),
+// registered before n: is written so that no line is missed, and the
+// function that ends the watch. It fails with
+// cubelan.ErrInclusionActive while pairing is already running.
+func (w Writer) StartPairing(ctx context.Context, timeout time.Duration) (<-chan cube.Message, func(), error) {
 	if timeout < time.Second || timeout > MaxPairingTime {
-		return fmt.Errorf("pairing time must be 1 s to %s", MaxPairingTime)
+		return nil, nil, fmt.Errorf("pairing time must be 1 s to %s", MaxPairingTime)
 	}
 	if err := w.Client.StartInclusion(timeout); err != nil {
-		return err
+		return nil, nil, err
 	}
+	lines, stop := w.Client.WatchInclusion()
 	res := w.Do(ctx, engine.Command{Key: "pairing", Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdInclusion(timeout)}})
 	if res.Err != nil {
+		stop()
 		w.Client.EndInclusion()
-		return res.Err
+		return nil, nil, res.Err
 	}
-	return nil
+	return lines, stop, nil
 }
 
-// StopPairing ends inclusion mode with x:. The client counts the mode as
-// ended at once; an N line the Cube may still send is ignored.
+// stopWait is how long StopPairing waits for the Cube's own end of
+// inclusion mode (an empty N line) before ending it in the client.
+const stopWait = 2 * time.Second
+
+// StopPairing ends inclusion mode with x:. It waits up to two seconds
+// for the Cube's empty N line, so that watchers get it, then counts the
+// mode as ended in any case.
 func (w Writer) StopPairing(ctx context.Context) error {
+	lines, stop := w.Client.WatchInclusion()
+	defer stop()
 	res := w.Do(ctx, engine.Command{Key: "pairing", Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdCancelInclusion}})
+	if res.Err == nil {
+		wait := time.NewTimer(stopWait)
+		defer wait.Stop()
+	drain:
+		for {
+			select {
+			case _, ok := <-lines:
+				if !ok {
+					break drain
+				}
+			case <-wait.C:
+				break drain
+			case <-ctx.Done():
+				break drain
+			}
+		}
+	}
 	w.Client.EndInclusion()
 	return res.Err
 }

@@ -432,3 +432,77 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 		t.Fatalf("%d t: reached the cube, want 2", n)
 	}
 }
+
+func TestProxyPairing(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const newDevice cube.RFAddress = 0x0a0b0c
+	pair, err := fakecube.PairingFrom(greeting, 0x1514b6, newDevice, "TEQ0000001", 100*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting, Pair: pair}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); fc.Close() })
+	c := cubelan.New(cubelan.Options{Addr: addr})
+	go c.Run(ctx)
+	<-c.Ready()
+	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
+	go q.Run(ctx)
+	p := New(Options{Client: c, Queue: q, ReplyTimeout: 5 * time.Second})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.ServeTCP(ctx, ln)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	r := cube.NewReader(conn)
+	for readLine(t, r).Type != 'L' {
+	}
+
+	// n: from the client starts pairing through the server; the N line
+	// that comes later is relayed to the client.
+	conn.Write([]byte("n:001e\r\n"))
+	m := readLine(t, r)
+	if want := fakecube.NewDeviceLine(pair.Device); m.String() != want.String() {
+		t.Fatalf("relayed %s, want %s", m, want)
+	}
+	if st := c.Inclusion(); !st.Active || len(st.Paired) != 1 || st.Paired[0].RFAddress != newDevice {
+		t.Fatalf("server's pairing state %+v", st)
+	}
+	// The client fetches the new device's configuration, as the
+	// original software does; the server's copy learns it too.
+	conn.Write([]byte("c:0a0b0c\r\n"))
+	if m := readLine(t, r); m.Type != 'C' || !strings.HasPrefix(m.Data, "0a0b0c,") {
+		t.Fatalf("c: answered %s", m)
+	}
+	if cfg := c.Snapshot().Config(newDevice); cfg == nil || cfg.Serial != "TEQ0000001" {
+		t.Fatalf("server's copy %+v", cfg)
+	}
+	// x: ends it; the Cube's empty N line is relayed.
+	conn.Write([]byte("x:\r\n"))
+	if m := readLine(t, r); m.Type != 'N' || m.Data != "" {
+		t.Fatalf("end of pairing relayed as %s", m)
+	}
+	if c.Inclusion().Active {
+		t.Fatal("pairing still active")
+	}
+	var got []string
+	for _, m := range fc.Received() {
+		got = append(got, m.String())
+	}
+	if strings.Join(got, " ") != "n:001e c:0a0b0c x:" {
+		t.Fatalf("cube received %v", got)
+	}
+}
