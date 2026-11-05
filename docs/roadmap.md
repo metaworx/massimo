@@ -48,6 +48,13 @@ each new write path and the feedback that follows.
 7. Internationalisation of the UI with a translation table, then the
    languages of the original software: German, English, French,
    Italian, Dutch, Polish.
-8. Later: Loxone, a radio-stick driver without a Cube.
+8. **Release engineering**: GitHub CI that runs vet and tests on every
+   push and builds the binaries for Linux (amd64, arm64, armv7),
+   Windows and macOS on a tag, publishing them as a GitHub release; a
+   `massimo update` command that checks GitHub releases and replaces
+   its own binary (signed checksums, `-check` only mode); `serve` and
+   the future `edge` mode installable as a Windows service and a
+   systemd unit (`massimo service install`).
+9. Later: Loxone, a radio-stick driver without a Cube.
 
 Open UI feedback from 2026-11-04 is listed in handover-session.md.

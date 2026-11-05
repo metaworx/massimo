@@ -154,6 +154,7 @@ func (p *Proxy) pushLoop(ctx context.Context, ch <-chan struct{}) {
 	}
 }
 
+// write sends one line to the client, serialised per connection.
 func (s *session) write(m cube.Message) error {
 	s.wmu.Lock()
 	defer s.wmu.Unlock()
@@ -162,6 +163,8 @@ func (s *session) write(m cube.Message) error {
 	return err
 }
 
+// serve handles one client connection: greeting, then one command per
+// line until q: or the connection ends.
 func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 	s := &session{conn: conn}
 	remote := conn.RemoteAddr().String()
@@ -241,6 +244,8 @@ func (p *Proxy) greeting() []cube.Message {
 	return lines
 }
 
+// hello builds the H line for a new client from the Cube's greeting with
+// a fresh connection id, the current budget and the local clock.
 func (p *Proxy) hello(h *cube.Hello) cube.Message {
 	f := append([]string(nil), h.Fields...)
 	for len(f) < 9 {

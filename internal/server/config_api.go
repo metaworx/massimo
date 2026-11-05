@@ -29,6 +29,8 @@ import (
 // original software stops at 32 characters.
 const maxNameBytes = 32
 
+// configRoutes registers the configuration endpoints (names, moves,
+// device and room configuration, week programmes) on the API wrapper.
 func (s *Server) configRoutes(api func(pattern string, h func(http.ResponseWriter, *http.Request) error)) {
 	api("PUT /api/v1/cubes/{sn}/rooms/{id}", s.renameRoom)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}", s.updateDevice)
@@ -325,11 +327,15 @@ type configRequest struct {
 	DisplayActual  *bool    `json:"display_actual"`
 }
 
+// temperatures reports whether the request carries any field that goes
+// into the 0x11 temperature radiogram.
 func (q configRequest) temperatures() bool {
 	return q.ComfortTemp != nil || q.EcoTemp != nil || q.MaxSetpoint != nil || q.MinSetpoint != nil ||
 		q.TempOffset != nil || q.WindowOpenTemp != nil || q.WindowOpenMins != nil
 }
 
+// valve reports whether the request carries any field that goes into
+// the 0x12 valve and boost radiogram.
 func (q configRequest) valve() bool {
 	return q.BoostMinutes != nil || q.BoostValvePct != nil || q.DecalcDay != nil || q.DecalcHour != nil ||
 		q.MaxValvePct != nil || q.ValveOffsetPct != nil
