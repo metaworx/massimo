@@ -111,9 +111,10 @@ shows the same instant as UTC. The selected Cube and the settings are
 kept in the browser. Results of every action appear in the tile,
 including the devices to nudge when the Cube discarded a room command.
 The page follows the event stream. With a token configured, the page
-asks for it once and keeps it in the browser; the event stream alone
-takes the token as `?token=` because browsers open it without
-headers, every other route needs the header. The page and its files
+asks for it once and keeps it in the browser; every route needs the
+header except the event stream, which browsers open without headers
+and which takes a ticket (see Authentication; the page still uses the
+deprecated `?token=`). The page and its files
 are public, the API behind them is not.
 
 ## Authentication
@@ -122,6 +123,26 @@ With `MASSIMO_API_TOKEN` (or `-token`) set, every `/api` request must
 carry `Authorization: Bearer <token>`; otherwise the response is `401`.
 `/healthz` is always open. Without a token the API is unauthenticated,
 which is only acceptable on the default localhost listener.
+
+Ten failed token checks from one address within a minute lock that
+address out for five minutes: every `/api` request from it is then
+answered `429` with a `Retry-After` header, the right token included.
+The address is the TCP peer's; `X-Forwarded-For` is not trusted, since
+anyone can set it, so behind a reverse proxy the limit applies to the
+proxy as a whole, and the proxy should limit by client itself.
+
+The event stream is opened by browsers without headers, so it takes a
+ticket instead: `POST /api/v1/cubes/{sn}/events/ticket` with the token
+returns one, and `GET /api/v1/cubes/{sn}/events?ticket=<ticket>` opens
+the stream with it. A ticket is good for one connection to that Cube's
+stream within a minute; a client gets a new one for every connection,
+also after the stream broke off (an `EventSource` stops retrying after
+a `401`, so it reports the error and the client opens a new one).
+`?token=<token>` on the stream is still accepted but deprecated since
+2026-11-05, and the response says so with the header
+`Deprecation: @1793836800` (RFC 9745): it puts the token into URLs,
+browser history and proxy logs, and it will be removed in a later
+release. A wrong ticket counts as a failed token check.
 
 ## Identifiers
 
@@ -133,7 +154,8 @@ which is only acceptable on the default localhost listener.
 ## Errors
 
 Errors are `{"error": "<message>"}` with a matching status: `400` bad
-input, `401` missing or wrong token, `404` unknown Cube, device or room,
+input, `401` missing or wrong token, `429` locked out after repeated
+wrong tokens, `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before
 it was sent, `502` the Cube discarded the command or the connection
 failed, `503` the Cube has not sent its greeting yet.
@@ -421,6 +443,20 @@ Kinds: `connected`, `disconnected` (the server reconnects by itself),
 `hello` (new budget or clock from the Cube), `metadata` (rooms or names
 changed), `config` (a device configuration arrived), `state`. A comment
 line is sent every 30 seconds to keep the connection alive.
+
+With a token configured the stream needs `?ticket=<ticket>` (below) or
+the bearer header; `?token=<token>` still works, deprecated.
+
+### POST /api/v1/cubes/{sn}/events/ticket
+
+A single-use ticket for that Cube's event stream, valid for a minute:
+
+```json
+{"ticket": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822c", "expires_at": "2026-11-05T15:31:12+01:00"}
+```
+
+Without a token configured the stream is open and the ticket not
+needed, but the route answers all the same.
 
 ### GET /api/v1/update?refresh=1
 
