@@ -27,9 +27,13 @@ loader, the address resolution); "hidden" as the one term
 devices; `serve -refresh` reconnects to each Cube every six hours; the
 README's Cube variables as a table; a summary at the top of
 docs/portal-protocol.md. Each item in the review says where it went.
-Still open there: security 2 and 3 (token rate limit, stream ticket),
-logic 3 (documented), 6 and 7 and duplication 6 (UI), the Playwright
-smoke test.
+Security 2 and 3 followed: a per-address lockout after ten wrong tokens
+in a minute, and single-use stream tickets (`POST …/events/ticket`,
+`?ticket=`); `?token=` on the stream is deprecated and still accepted.
+The web UI still opens the stream with `?token=` and should move to a
+ticket per connection (docs/api-v1.md, Authentication), after which
+`?token=` can go. Still open in the review: logic 3 (documented), 6 and
+7 and duplication 6 (UI), the Playwright smoke test.
 
 Release engineering (roadmap 8): the repository is public; CI and the
 release workflow are in .github/workflows; a tag publishes signed
