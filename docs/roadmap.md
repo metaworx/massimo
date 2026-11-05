@@ -40,6 +40,10 @@ each new write path and the feedback that follows.
    settings panel).
 4. **Pairing** new devices through the server and the UI (`n:`/`x:`,
    the sequence in portal-protocol.md), including through the proxy.
+   Server side done 2026-11-05 against the fake Cube (API `…/pairing`,
+   adding a paired device to a room with `PUT …/devices/{rf}`, pairing
+   through the proxy); open: the test on hardware, the UI's pairing
+   panel, copying the room's settings to the new device.
 5. **Firmware dump** of Cube 1 once the FT232H is in (docs/
    firmware-extraction.md), then the DataFlash, then the portal reply
    format and the update encryption from the code.
