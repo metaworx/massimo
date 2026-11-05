@@ -1,8 +1,9 @@
 name: CI
 
 # Every push to any branch and every pull request: formatting, vet, the
-# tests, and a cross build of every release binary, so that a tag finds
-# nothing new to fail on. Tags are tested again by release.yml.
+# tests, a cross build of every release binary (so that a tag finds
+# nothing new to fail on), govulncheck, and the Windows service on a
+# Windows runner. Tags are tested again by release.yml.
 on:
   push:
     branches: [ '**' ]
@@ -10,6 +11,14 @@ on:
 
 permissions:
   contents: read
+
+# The toolchain for tests, scans and release builds: a supported release
+# line, newest patch (check-latest), so that binaries carry the standard
+# library's security fixes; go.mod states only the oldest Go the code
+# builds with. Moved to the next line when this one leaves support.
+env:
+  GO_VERSION: '1.26'
+  GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
   test:
@@ -22,7 +31,8 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
 
       - name: gofmt
         run: |
@@ -34,10 +44,115 @@ jobs:
           fi
 
       - name: go vet
-        run: go vet ./...
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./...
+          GOOS=darwin go vet ./...
 
       - name: go test
         run: go test ./...
 
       - name: Cross build
         run: make cross
+
+  # Fails on a vulnerability the code can reach (govulncheck exits 3),
+  # for the platforms with code of their own.
+  govulncheck:
+    name: govulncheck (${{ matrix.goos }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [ linux, windows ]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      # Built for the runner; GOOS then selects the code it scans.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
+          GOOS=${{ matrix.goos }} "$(go env GOPATH)/bin/govulncheck" ./...
+
+  # The Windows service for real: install from a settings file, the
+  # service answering on /healthz against a fake Cube, an update through
+  # the service manager (to the newest alpha release, or rolled back when
+  # that one cannot run as a service), and removal.
+  windows:
+    name: Windows service
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Unit tests
+        run: go test ./internal/update/... ./internal/install/... ./cmd/...
+
+      - name: Install, run, update and remove the service
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
+          ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
+          # The fake Cube reports the fixture's serial.
+          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\n' > ci.env
+          health=http://127.0.0.1:18099/healthz
+          bin="C:/Program Files/Massimo/massimo.exe"
+
+          ./massimo.exe install -settings ci.env -listen 127.0.0.1:18099
+          sc.exe query massimo
+          for i in $(seq 30); do curl -fsS "$health" && break; sleep 2; done
+          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+
+          # Installing again keeps the address and restarts the service.
+          ./massimo.exe install
+          for i in $(seq 30); do curl -fsS "$health" && break; sleep 2; done
+
+          status=0
+          "$bin" update -yes -restart massimo -health "$health" -health-timeout 90s || status=$?
+          for i in $(seq 30); do curl -fsS "$health" && break; sleep 2; done
+          now="$(curl -fsS "$health")"
+          echo "update exit $status, server: $now"
+          if [ "$status" = 0 ]; then
+            echo "$now" | grep -vq 'v0.0.0-ci.1'
+          else
+            echo "$now" | grep -q 'v0.0.0-ci.1'   # rolled back
+            test -f "C:/Program Files/Massimo/massimo.exe.failed"
+          fi
+
+          ./massimo.exe install -remove -purge
+          if sc.exe query massimo; then echo "::error::service still there"; exit 1; fi
+          test ! -e "C:/Program Files/Massimo"
+          test ! -e "C:/ProgramData/Massimo"
+
+      - name: Logs
+        if: always()
+        shell: bash
+        run: |
+          cat fakecube.log || true
+          for f in service.log serve.log; do
+            echo "--- $f"; cat "C:/ProgramData/Massimo/$f" 2>/dev/null || true
+          done
+
+      # What the service manager saw, and the service's command line run by
+      # hand for a few seconds, to tell a failing serve from a failing
+      # answer to the manager.
+      - name: Diagnose the service
+        if: failure()
+        shell: pwsh
+        run: |
+          sc.exe queryex massimo
+          sc.exe qc massimo
+          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 15 -ErrorAction SilentlyContinue | Format-List TimeCreated, Id, Message
+          $p = Start-Process -FilePath 'C:\Program Files\Massimo\massimo.exe' -ArgumentList '-env','C:\ProgramData\Massimo\env','serve','-listen','127.0.0.1:18098','-log','C:\ProgramData\Massimo\by-hand.log' -RedirectStandardError by-hand.err -PassThru -NoNewWindow
+          Start-Sleep -Seconds 5
+          if (!$p.HasExited) { Stop-Process -Id $p.Id; "still running after 5 s" } else { "exited with $($p.ExitCode)" }
+          Get-Content by-hand.err -ErrorAction SilentlyContinue

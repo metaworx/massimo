@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -54,12 +55,17 @@ func TestInstallFresh(t *testing.T) {
 	if read(t, filepath.Join(root, BinPath)) != "binary v1" {
 		t.Fatal("binary")
 	}
-	if fi, _ := os.Stat(filepath.Join(root, BinPath)); fi.Mode().Perm() != 0o755 {
-		t.Fatalf("binary mode %v", fi.Mode())
-	}
 	env := filepath.Join(root, EnvPath)
-	if fi, err := os.Stat(env); err != nil || fi.Mode().Perm() != 0o600 || !strings.Contains(read(t, env), "MASSIMO_CUBE_<SN>_ADDRESS") {
-		t.Fatalf("env: %v %v", fi, err)
+	if !strings.Contains(read(t, env), "MASSIMO_CUBE_<SN>_ADDRESS") {
+		t.Fatal("env template")
+	}
+	if runtime.GOOS != "windows" { // no Unix modes there
+		if fi, _ := os.Stat(filepath.Join(root, BinPath)); fi.Mode().Perm() != 0o755 {
+			t.Fatalf("binary mode %v", fi.Mode())
+		}
+		if fi, _ := os.Stat(env); fi.Mode().Perm() != 0o600 {
+			t.Fatalf("env mode %v", fi.Mode())
+		}
 	}
 	unit := read(t, filepath.Join(root, UnitDir, "massimo.service"))
 	if !strings.Contains(unit, updateFlag) {

@@ -52,16 +52,11 @@ func TakeRequest(path string) (channel string, ok bool, err error) {
 		os.Remove(path)
 		return "", false, fmt.Errorf("request %s: %w", path, err)
 	}
-	defer f.Close()
-	os.Remove(path) // taken; a request arriving from now on starts another run
-	fi, err := f.Stat()
-	if err != nil {
-		return "", false, err
-	}
-	if !fi.Mode().IsRegular() {
-		return "", false, fmt.Errorf("request %s is not a regular file", path)
-	}
-	b, err := io.ReadAll(io.LimitReader(f, 257))
+	// Taken: removed once read (after closing, which Windows needs), so a
+	// request arriving from then on starts another run.
+	b, err := readRegular(f, path)
+	f.Close()
+	os.Remove(path)
 	if err != nil {
 		return "", false, err
 	}
@@ -73,6 +68,17 @@ func TakeRequest(path string) (channel string, ok bool, err error) {
 		return "", false, fmt.Errorf("request %s names an invalid channel", path)
 	}
 	return channel, true, nil
+}
+
+func readRegular(f *os.File, path string) ([]byte, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("request %s is not a regular file", path)
+	}
+	return io.ReadAll(io.LimitReader(f, 257))
 }
 
 // Status is what the helper reports about its last run.

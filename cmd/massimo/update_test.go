@@ -20,10 +20,10 @@ func TestSmokeRunsRealBinary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("updates are refused on Windows")
-	}
 	bin := filepath.Join(t.TempDir(), "massimo")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	out, err := exec.Command("go", "build", "-ldflags", "-X main.version=v9.8.7", "-o", bin, ".").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)

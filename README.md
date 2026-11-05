@@ -12,10 +12,16 @@ with or endorsed by eQ-3.
 
 ## Command line
 
-Build with `make` (or `make windows` for a Windows binary in `dist/`;
-`make linux-armv7` for a Raspberry Pi 2/3/4 and `make linux-armv6` for a
-Pi 1 or Pi Zero, both with a 32-bit OS). [packaging/README.md](packaging/README.md)
-says how to run `massimo serve` as a systemd service.
+Release binaries for every platform are on the
+[releases page](https://github.com/metaworx/massimo/releases). To build:
+`make` runs the tests and builds `./massimo` for this machine; `make cross`
+builds every release binary into `dist/`, one at a time with `make linux`,
+`make linux-arm64`, `make linux-armv7` (Raspberry Pi 2/3/4, 32-bit OS),
+`make linux-armv6` (Pi 1 or Pi Zero), `make darwin` (both Mac
+architectures) and `make windows`; `make release` adds `SHA256SUMS` and the
+release manifest; `make vet`, `make test` and `make clean` do what they
+say. `massimo install` sets `massimo serve` up as a systemd service on
+Linux or as a Windows service, see [packaging/README.md](packaging/README.md).
 `massimo help` lists the commands; the ones useful today:
 
 ```bash

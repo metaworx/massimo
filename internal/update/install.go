@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -22,8 +23,14 @@ func PrevPath(target string) string { return target + ".prev" }
 // FailedPath is where a binary that failed its health check is kept.
 func FailedPath(target string) string { return target + ".failed" }
 
+// stagedPath is where the download goes, next to target: .massimo.new,
+// or .massimo.new.exe for massimo.exe, which Windows runs by extension.
 func stagedPath(target string) string {
-	return filepath.Join(filepath.Dir(target), "."+filepath.Base(target)+".new")
+	base := filepath.Base(target)
+	if ext := filepath.Ext(base); strings.EqualFold(ext, ".exe") {
+		return filepath.Join(filepath.Dir(target), "."+strings.TrimSuffix(base, ext)+".new"+ext)
+	}
+	return filepath.Join(filepath.Dir(target), "."+base+".new")
 }
 
 // Stage creates the file a new binary is downloaded into, next to target
@@ -71,10 +78,13 @@ func Smoke(ctx context.Context, path, tag string) error {
 // old or the new binary, also for a process starting it meanwhile.
 func Swap(target string) error {
 	staged := stagedPath(target)
-	if err := keepAs(target, PrevPath(target)); err != nil {
+	if err := os.Chmod(staged, 0o755); err != nil {
 		return err
 	}
-	if err := os.Chmod(staged, 0o755); err != nil {
+	if runtime.GOOS == "windows" {
+		return swapRenaming(staged, target, PrevPath(target))
+	}
+	if err := keepAs(target, PrevPath(target)); err != nil {
 		return err
 	}
 	if err := os.Rename(staged, target); err != nil {
@@ -92,6 +102,12 @@ func Rollback(target, keep string) error {
 		return fmt.Errorf("nothing to roll back to: %w", err)
 	}
 	swap := target + ".swap"
+	if runtime.GOOS == "windows" {
+		if err := swapRenaming(prev, target, swap); err != nil {
+			return err
+		}
+		return os.Rename(swap, keep)
+	}
 	if err := keepAs(target, swap); err != nil {
 		return err
 	}
@@ -102,6 +118,26 @@ func Rollback(target, keep string) error {
 		return err
 	}
 	return syncDir(filepath.Dir(target))
+}
+
+// swapRenaming puts src in target's place and moves target to aside, for
+// Windows, which lets a running .exe be renamed but not replaced. Unlike
+// the rename over target elsewhere, there is a moment without target; a
+// failure in it puts target back.
+func swapRenaming(src, target, aside string) error {
+	if err := os.Remove(aside); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(target, aside); err != nil {
+		return err
+	}
+	if err := os.Rename(src, target); err != nil {
+		if rerr := os.Rename(aside, target); rerr != nil {
+			return fmt.Errorf("%v; and putting %s back failed: %v", err, target, rerr)
+		}
+		return err
+	}
+	return nil
 }
 
 // Discard removes a staged download.

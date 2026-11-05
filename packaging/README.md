@@ -3,7 +3,8 @@
 `massimo serve` is meant to run all the time on a small always-on Linux box
 next to the Cubes, such as a Raspberry Pi. `massimo install` sets it up as
 a systemd service with the files of this directory, which are compiled into
-the binary; "Install by hand" below lists the same steps.
+the binary; "Install by hand" below lists the same steps. On Windows it
+installs a Windows service instead (see "Windows").
 
 - `systemd/massimo.service`: the unit. Runs as the user `massimo`, reads
   its settings from `/etc/massimo/env`, listens on port 8099 on every
@@ -268,6 +269,44 @@ the repository's `signing` environment that only `v*` tags can use; its
 public half is `internal/update/release-key.pem`. A new key needs a
 release built with the new public key before releases signed with it are
 accepted.
+
+## Windows
+
+From a command prompt opened with "Run as administrator", in the folder
+holding `massimo-windows-amd64.exe` from a release and your settings (a
+`.env` as described in the main README):
+
+```bat
+massimo-windows-amd64.exe install -dry-run -settings .env
+massimo-windows-amd64.exe install -settings .env
+```
+
+It installs the binary as `C:\Program Files\Massimo\massimo.exe`, the
+settings as `C:\ProgramData\Massimo\env` (without `-settings`, a template
+to fill in) with the log `serve.log` next to them, in a folder only
+SYSTEM and the Administrators can read, since the settings hold the Cube
+keys. It creates the service `massimo` (Massimo in the Services console):
+automatic start, running as LocalSystem, restarted after 10 s on failure,
+running `massimo -env C:\ProgramData\Massimo\env serve -listen :8099 -log
+…`; and a firewall rule for the program on private and domain networks
+(not public ones), which covers the API, the Cube proxy and discovery.
+`-listen <addr>` changes the address, and installing again keeps it.
+`sc start massimo`, `sc stop massimo` and `sc query massimo` control it;
+`install -remove` deletes the service, the rule and the program folder,
+`-purge` the settings and the log too.
+
+Updates from an administrator prompt:
+
+```bat
+"C:\Program Files\Massimo\massimo.exe" update -restart massimo -health http://127.0.0.1:8099/healthz
+```
+
+Windows lets a running `.exe` be renamed but not replaced, so the update
+renames `massimo.exe` to `massimo.exe.prev` and puts the new one in its
+place, then restarts the service through the service manager; `-rollback`
+works as on Linux. The web UI cannot start updates on Windows yet: that
+needs a helper like the systemd path unit, and the server's update
+endpoint still refuses on Windows.
 
 ## Resource use
 
