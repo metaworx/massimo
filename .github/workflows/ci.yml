@@ -137,4 +137,21 @@ jobs:
         shell: bash
         run: |
           cat fakecube.log || true
-          cat "C:/ProgramData/Massimo/serve.log" 2>/dev/null || true
+          for f in service.log serve.log; do
+            echo "--- $f"; cat "C:/ProgramData/Massimo/$f" 2>/dev/null || true
+          done
+
+      # What the service manager saw, and the service's command line run by
+      # hand for a few seconds, to tell a failing serve from a failing
+      # answer to the manager.
+      - name: Diagnose the service
+        if: failure()
+        shell: pwsh
+        run: |
+          sc.exe queryex massimo
+          sc.exe qc massimo
+          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 15 -ErrorAction SilentlyContinue | Format-List TimeCreated, Id, Message
+          $p = Start-Process -FilePath 'C:\Program Files\Massimo\massimo.exe' -ArgumentList '-env','C:\ProgramData\Massimo\env','serve','-listen','127.0.0.1:18098','-log','C:\ProgramData\Massimo\by-hand.log' -RedirectStandardError by-hand.err -PassThru -NoNewWindow
+          Start-Sleep -Seconds 5
+          if (!$p.HasExited) { Stop-Process -Id $p.Id; "still running after 5 s" } else { "exited with $($p.ExitCode)" }
+          Get-Content by-hand.err -ErrorAction SilentlyContinue

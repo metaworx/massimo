@@ -6,7 +6,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"time"
 
 	"golang.org/x/sys/windows/svc"
 
@@ -21,18 +23,36 @@ import (
 // reports stopped and ends the process, which closes the Cube
 // connections and the listeners. When serve fails by itself the process
 // ends without reporting, and the manager's recovery actions restart it.
+// What happens between the manager and the process is noted in
+// service.log next to the settings, since a service has no console.
 func init() {
 	isService, err := svc.IsWindowsService()
-	if err != nil || !isService {
+	if err != nil {
+		serviceLog("cannot tell whether this runs as a service: %v", err)
+		return
+	}
+	if !isService {
 		return
 	}
 	go func() {
-		err := svc.Run(install.ServiceName, serviceHandler{})
-		if err != nil {
+		serviceLog("started as a service: %q", os.Args)
+		if err := svc.Run(install.ServiceName, serviceHandler{}); err != nil {
+			serviceLog("answering the service manager failed: %v", err)
 			os.Exit(1)
 		}
+		serviceLog("stopped")
 		os.Exit(0)
 	}()
+}
+
+func serviceLog(format string, args ...any) {
+	p := install.WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData"))
+	f, err := os.OpenFile(p.DataDir+`\service.log`, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, args...))
 }
 
 type serviceHandler struct{}
@@ -40,11 +60,13 @@ type serviceHandler struct{}
 func (serviceHandler) Execute(_ []string, r <-chan svc.ChangeRequest, s chan<- svc.Status) (bool, uint32) {
 	s <- svc.Status{State: svc.StartPending}
 	s <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
+	serviceLog("running")
 	for c := range r {
 		switch c.Cmd {
 		case svc.Interrogate:
 			s <- c.CurrentStatus
 		case svc.Stop, svc.Shutdown:
+			serviceLog("stop requested")
 			s <- svc.Status{State: svc.StopPending}
 			return false, 0
 		}
