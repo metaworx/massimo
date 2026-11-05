@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 func TestIgnoredDevicesAreHiddenButKept(t *testing.T) {
 	_, c, _ := connect(t)
 	// 1514b6 is the only device of room 6 in the fixture.
-	f, err := Take(c.Snapshot(), nil, "test", time.Now(), IgnoreSet([]cube.RFAddress{0x1514b6}))
+	f, err := Take(c.Snapshot(), nil, "test", time.Now(), view.Set([]cube.RFAddress{0x1514b6}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Environment variables. Each of them has a per-Cube variant with the
@@ -183,12 +183,12 @@ func ignoredDevices() ([]cube.RFAddress, error) {
 // hiddenSet is the set of devices to leave out for the selected Cube:
 // the ignore list plus the devices of the ghost room (cube.GhostRoom),
 // or nothing with -show-ghosts.
-func hiddenSet(snap *cubelan.Snapshot) (backup.Ignored, error) {
+func hiddenSet(snap *cubelan.Snapshot) (view.Hidden, error) {
 	list, err := ignoredDevices()
 	if err != nil {
 		return nil, err
 	}
-	return backup.Hidden(list, snap.Metadata(), noIgnore), nil
+	return view.NewHidden(list, snap.Metadata(), noIgnore), nil
 }
 
 // parseIgnoreList reads a comma or space separated list of radio

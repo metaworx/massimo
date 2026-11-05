@@ -13,6 +13,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Step is one command of a restore plan with a description for humans.
@@ -93,7 +94,7 @@ func NewPlan(f *File, cur Current, opts PlanOptions) (*Plan, error) {
 			known[rf] = cube.DeviceMeta{Type: c.Type, RFAddress: rf, Serial: c.Serial, RoomID: c.RoomID}
 		}
 	}
-	ig := Hidden(opts.Ignore, snap.Metadata(), opts.ShowGhosts)
+	ig := view.NewHidden(opts.Ignore, snap.Metadata(), opts.ShowGhosts)
 	var present, missing []Device
 	for _, d := range f.Devices {
 		if ig[d.RFAddress] {

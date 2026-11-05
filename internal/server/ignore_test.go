@@ -14,6 +14,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // In the fixture 1514b6 is the only device of room 6.
@@ -43,7 +44,7 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 	if !c.Connected || c.Rooms != 5 || c.Devices != 5 || len(c.RoomList) != 5 {
 		t.Fatalf("cube %+v", c)
 	}
-	var devs []deviceState
+	var devs []view.Device
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
 	for _, d := range devs {
 		if d.RFAddress == "1514b6" {
@@ -53,7 +54,7 @@ func TestIgnoredDevicesInvisible(t *testing.T) {
 	if len(devs) != 5 {
 		t.Fatalf("devices %d", len(devs))
 	}
-	var rooms []roomView
+	var rooms []view.Room
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
 	for _, r := range rooms {
 		if r.ID == 6 {

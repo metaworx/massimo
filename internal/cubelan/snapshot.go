@@ -307,3 +307,16 @@ func (s *Snapshot) LinesExcluding(skip map[cube.RFAddress]bool, skipRooms map[ui
 	}
 	return out
 }
+
+// SnapshotFromLines builds a snapshot from recorded protocol lines (a
+// greeting or a backup's raw lines), for tests and offline tools.
+func SnapshotFromLines(lines []cube.Message) (*Snapshot, error) {
+	s := newSnapshot()
+	now := time.Now()
+	for _, m := range lines {
+		if _, err := s.apply(m, now); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}

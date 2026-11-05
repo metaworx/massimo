@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Options configure a Proxy.
@@ -386,8 +386,8 @@ func (p *Proxy) withIgnored(m cube.Message) ([]cube.Message, bool) {
 func (p *Proxy) applyMetadata(lines []cube.Message) { p.opts.Client.ApplyMetadataWrite(lines) }
 
 // hidden is the set of devices left out for clients.
-func (p *Proxy) hidden(md *cube.Metadata) backup.Ignored {
-	return backup.Hidden(p.opts.Ignore, md, p.opts.ShowGhosts)
+func (p *Proxy) hidden(md *cube.Metadata) view.Hidden {
+	return view.NewHidden(p.opts.Ignore, md, p.opts.ShowGhosts)
 }
 
 // hiddenRooms lists the rooms left out of the greeting: the ghost room,
@@ -398,7 +398,7 @@ func (p *Proxy) hiddenRooms(md *cube.Metadata) map[uint8]bool {
 	if p.opts.ShowGhosts {
 		return nil
 	}
-	hidden := p.hidden(md).HiddenRooms(md)
+	hidden := p.hidden(md).Rooms(md)
 	if !hidden[cube.GhostRoom] {
 		return nil
 	}

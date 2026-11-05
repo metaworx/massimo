@@ -15,6 +15,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -84,12 +85,12 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	if getJSON(t, ts, "", "/api/v1/cubes/keq0537249", &c) != 200 || c.Rooms != 6 || c.Devices != 6 || c.Firmware != "1.1.3" || len(c.RoomList) != 6 {
 		t.Fatalf("cube %+v", c)
 	}
-	var devs []deviceState
+	var devs []view.Device
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
 	if len(devs) != 6 || devs[0].Name == "" {
 		t.Fatalf("devices %+v", devs)
 	}
-	var rooms []roomView
+	var rooms []view.Room
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
 	if len(rooms) != 6 {
 		t.Fatalf("rooms %+v", rooms)

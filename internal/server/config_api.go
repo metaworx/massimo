@@ -23,6 +23,7 @@ import (
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // maxNameBytes is the longest room or device name accepted; the
@@ -62,11 +63,8 @@ func (s *Server) visibleRoom(rt *runtime, r *http.Request) (cube.RoomMeta, *cube
 	if md == nil {
 		return cube.RoomMeta{}, nil, fail(http.StatusServiceUnavailable, "cube not connected yet")
 	}
-	hidden := rt.hidden().HiddenRooms(md)
-	for _, room := range md.Rooms {
-		if room.ID == id && !hidden[room.ID] {
-			return room, md, nil
-		}
+	if room, ok := rt.hidden().Room(md, id); ok {
+		return room, md, nil
 	}
 	return cube.RoomMeta{}, nil, fail(http.StatusNotFound, "no room %d", id)
 }
@@ -130,10 +128,14 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 		status = http.StatusConflict
 	}
 	if errors.Is(res.Err, engine.ErrDiscarded) && roomCmd != 0 {
-		if silent := neverReported(rt.client.Snapshot(), roomCmd, rt.hidden()); len(silent) > 0 {
+		if silent := view.Silent(rt.client.Snapshot(), roomCmd, rt.hidden()); len(silent) > 0 {
+			var names []string
+			for _, rf := range silent {
+				names = append(names, rf.String())
+			}
 			he := fail(status, "%v: the cube holds no state for room %d members %s (not reported since the cube's last restart); the cube refuses room commands until they report or are removed",
-				res.Err, roomCmd, strings.Join(silent, ", ")).(*httpError)
-			he.noState = silent
+				res.Err, roomCmd, strings.Join(names, ", ")).(*httpError)
+			he.noState = names
 			return he
 		}
 	}
@@ -261,14 +263,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			return fail(http.StatusBadRequest, "room_id must be 1..255")
 		}
 		newRoom = uint8(*req.RoomID)
-		hidden := rt.hidden().HiddenRooms(md)
-		found := false
-		for _, room := range md.Rooms {
-			if room.ID == newRoom && !hidden[room.ID] {
-				found = true
-			}
-		}
-		if !found {
+		if _, ok := rt.hidden().Room(md, newRoom); !ok {
 			return fail(http.StatusNotFound, "no room %d", newRoom)
 		}
 		if newRoom != cur.RoomID {
