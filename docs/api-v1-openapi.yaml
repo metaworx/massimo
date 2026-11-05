@@ -634,6 +634,7 @@ components:
         rf_address: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}
         updated: {type: string, format: date-time}
+        observed_since: {type: string, format: date-time, description: When the server first heard from the Cube; a device value received at that time was already there and may be older}
         rooms: {type: integer}
         devices: {type: integer}
         queued: {type: integer, description: Commands waiting in the queue}
@@ -670,6 +671,7 @@ components:
         id: {type: integer}
         name: {type: string}
         ready: {type: boolean, description: Every device of the room has reported since the Cube restarted, so the Cube accepts room commands}
+        stale: {type: boolean, description: A device of the room is stale; present when true}
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
@@ -704,6 +706,17 @@ components:
         unlisted: {type: boolean, description: Paired but not assigned to a room}
         reported: {type: boolean, description: The Cube holds state for the device (it transmitted since the Cube restarted)}
         state: {$ref: "#/components/schemas/State"}
+        received:
+          type: object
+          description: >-
+            Per value of state (same names), when the server saw its current
+            value appear in the Cube's device list. The Cube keeps no times;
+            a repeated value keeps its time, and a value already there when
+            the server connected carries the Cube's observed_since. Present
+            with state.
+          additionalProperties: {type: string, format: date-time}
+        last_seen: {type: string, format: date-time, description: When the device's entry in the Cube's device list last changed; present with state}
+        stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for 24 hours: out of range, flat battery, or just quiet. Present when true"}
     ConfigWrite:
       type: object
       description: Every field optional; merged into the device's current configuration

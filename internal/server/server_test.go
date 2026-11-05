@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -238,5 +239,46 @@ func TestPeriodicRefreshReconnects(t *testing.T) {
 	}
 	if fc.Connections() < 3 {
 		t.Fatalf("connections %d", fc.Connections())
+	}
+}
+
+func TestDeviceValueTimes(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 1514b6 reports in the greeting: manual, 21 °C, valve 30 %.
+	l := &greeting[len(greeting)-1]
+	raw, _ := base64.StdEncoding.DecodeString(l.Data)
+	copy(raw, []byte{0x0b, 0x15, 0x14, 0xb6, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	l.Data = base64.StdEncoding.EncodeToString(raw)
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().Add(-time.Second)
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	var c cubeView
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !c.Connected; time.Sleep(20 * time.Millisecond) {
+		getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c)
+	}
+	if !c.Connected || c.ObservedSince.Before(before) {
+		t.Fatalf("cube %+v", c)
+	}
+	var d map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", &d)
+	rec, _ := d["received"].(map[string]any)
+	if d["last_seen"] == nil || rec["setpoint"] == nil || rec["valve_pct"] == nil || d["stale"] != nil {
+		t.Fatalf("device %v", d)
+	}
+	var u map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/14d08e", &u)
+	if _, ok := u["last_seen"]; ok || u["rf_address"] != "14d08e" {
+		t.Fatalf("unreported device has times: %v", u)
 	}
 }

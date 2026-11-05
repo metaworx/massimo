@@ -198,6 +198,8 @@ use, that is commands the Cube has sent and no device has acknowledged
 yet; a setpoint shows in the states at once, but the mode follows only
 with the device's report, so a non-zero value says the states may
 still change. `queued` is the number of commands waiting in the server.
+`observed_since` is when the server first heard from the Cube (see the
+ages of device values below).
 
 ### GET /api/v1/cubes/{sn}
 
@@ -241,6 +243,34 @@ reported one, `valve_pct` for radiator thermostats, `until` for vacation
 mode; shutter contacts carry `window_open`. `error` is the Cube's
 transmit error flag, `link_error` a failed link with a partner device,
 `panel_locked` (present when true) the key lock on the device.
+
+How old the values are: a device with state also has `received`, the
+time per value of `state` (same names) at which the server saw its
+current value appear, `last_seen`, when the device's entry in the
+Cube's device list last changed in any way, and, for radiator and wall
+thermostats, `stale: true` once that is more than 24 hours ago; a room
+with a stale device is `stale` too. For example:
+
+```json
+"received": {"mode": "2026-11-05T08:12:40+01:00", "setpoint": "2026-11-05T08:12:40+01:00",
+             "actual_temp": "2026-11-05T06:01:10+01:00", "valve_pct": "2026-11-05T09:40:02+01:00", …},
+"last_seen": "2026-11-05T09:40:02+01:00"
+```
+
+The Cube keeps no times and repeats every value in each device list,
+so these are the times the server saw a value change, which is as close
+as a client gets to when the device sent it. A device that reports the
+same value again does not move its time, and the Cube itself changes
+a setpoint in the list right after a set-temperature command, before
+the devices confirm it. Values that were already there when the server
+first connected carry that time, the Cube's `observed_since`, and may
+be older; a reconnect keeps the times of values that did not change.
+Radiator thermostats report the measured temperature only now and then
+(after the valve moved), which is what `received.actual_temp` is for.
+`stale` is a hint: a thermostat out of range or with a flat battery
+goes quiet, but so may one whose valve stays shut outside the heating
+season. Shutter contacts and eco buttons transmit only on events and
+are never stale.
 
 ### GET /api/v1/cubes/{sn}/devices
 

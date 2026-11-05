@@ -184,5 +184,8 @@ func statusLine(d statusDevice) string {
 	if st.PanelLocked {
 		line += " LOCKED"
 	}
+	if d.Stale && d.LastSeen != nil {
+		line += fmt.Sprintf(" STALE (unchanged since %s)", d.LastSeen.Local().Format("2006-01-02 15:04"))
+	}
 	return line
 }

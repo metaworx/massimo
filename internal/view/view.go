@@ -10,6 +10,8 @@
 package view
 
 import (
+	"time"
+
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
@@ -142,7 +144,32 @@ type Device struct {
 	// is, the device has transmitted since the Cube's last restart.
 	Reported bool   `json:"reported"`
 	State    *State `json:"state,omitempty"`
+	// Received is, per value of State, when the server saw its current
+	// value appear (see cubelan.StateTimes): the age of each value. A
+	// time equal to the Cube's observed_since means the value was there
+	// already and may be older.
+	Received map[string]time.Time `json:"received,omitempty"`
+	// LastSeen is when the device's entry in the Cube's device list last
+	// changed, the closest the Cube lets a client get to the device's
+	// last transmission; a device that reports unchanged values does not
+	// move it.
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	// Stale marks a thermostat whose entry has not changed for
+	// StaleAfter: it may be out of range or out of battery, and its
+	// values may be old. Shutter contacts and eco buttons transmit only
+	// on events and are never stale.
+	Stale bool `json:"stale,omitempty"`
 }
+
+// StaleAfter is how long a thermostat's entry may stay unchanged before
+// the device counts as stale. Radiator thermostats report the measured
+// temperature only occasionally, but their valve or temperature changes
+// several times a day while heating; outside the heating season they
+// may well be quiet for longer, so stale is a hint, not a fault.
+const StaleAfter = 24 * time.Hour
+
+// now is the clock of the stale rule, replaced in tests.
+var now = time.Now
 
 // DeviceOf builds the view of one device from the metadata, its
 // configuration and its live state. The metadata names the device and
@@ -168,6 +195,15 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress) Device {
 	}
 	d.Reported = st.Valid
 	d.State = StateOf(st)
+	if t, ok := snap.Times(rf); ok && st.Valid {
+		changed := t.Changed
+		d.LastSeen = &changed
+		if len(t.Fields) > 0 {
+			d.Received = t.Fields
+		}
+		thermostat := d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat
+		d.Stale = thermostat && now().Sub(changed) > StaleAfter
+	}
 	return d
 }
 
@@ -191,7 +227,9 @@ type Room struct {
 	Name string `json:"name"`
 	// Ready is true when every member of the room has reported since the
 	// Cube's last restart; the Cube discards room commands otherwise.
-	Ready   bool     `json:"ready"`
+	Ready bool `json:"ready"`
+	// Stale is set when a device of the room is stale (Device.Stale).
+	Stale   bool     `json:"stale,omitempty"`
 	Devices []Device `json:"devices"`
 }
 
@@ -209,6 +247,7 @@ func Rooms(snap *cubelan.Snapshot, h Hidden) []Room {
 		for _, d := range devs {
 			if d.RoomID == r.ID && !d.Unlisted {
 				room.Devices = append(room.Devices, d)
+				room.Stale = room.Stale || d.Stale
 			}
 		}
 		out = append(out, room)
