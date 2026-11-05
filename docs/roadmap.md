@@ -79,8 +79,9 @@ each new write path and the feedback that follows.
    per device and a "not seen for N hours" warning. Server side done
    2026-11-05: `received` per value, `last_seen` and `stale` (thermostats
    unchanged for 24 hours) on devices and rooms, `observed_since` on the
-   Cube (docs/api-v1.md); the UI part, ages next to the values and greyed
-   stale ones, is open.
+   Cube (docs/api-v1.md); the UI part as well: ages next to the measured
+   temperature, valve, window and battery, greyed values and a warning
+   for stale devices (docs/ui.md).
 10. Later: Loxone, a radio-stick driver without a Cube.
 
 Open UI feedback from 2026-11-04 is listed in handover-session.md.

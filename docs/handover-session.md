@@ -30,14 +30,14 @@ docs/portal-protocol.md. Each item in the review says where it went.
 Security 2 and 3 followed: a per-address lockout after ten wrong tokens
 in a minute, and single-use stream tickets (`POST …/events/ticket`,
 `?ticket=`); `?token=` on the stream is deprecated and still accepted.
-The web UI still opens the stream with `?token=` and should move to a
-ticket per connection (docs/api-v1.md, Authentication), after which
-`?token=` can go. Roadmap item 9 has its server side: every device with
-state carries `received` (per value, when the server saw it appear),
-`last_seen` and `stale`; rooms carry `stale`, the Cube `observed_since`
-(docs/api-v1.md says what the times can and cannot mean). The UI can
-show ages and grey stale values next. Still open in the review: logic 3 (documented), 6 and
-7 and duplication 6 (UI), the Playwright smoke test.
+The web UI opens the stream with a ticket per connection since branch
+claude/ui-value-ages, so `?token=` can go in a later release. Roadmap
+item 9: every device with state carries `received` (per value, when
+the server saw it appear), `last_seen` and `stale`; rooms carry
+`stale`, the Cube `observed_since` (docs/api-v1.md says what the times
+can and cannot mean); the UI shows them (below). Still open in the
+review: logic 3 (documented); logic 6 and 7, duplication 6 and the
+Playwright smoke test were done in the UI follow-ups.
 
 Release engineering (roadmap 8): the repository is public; CI and the
 release workflow are in .github/workflows; a tag publishes signed
@@ -70,6 +70,16 @@ fixed, "mixed" for rooms whose thermostats differ in mode, a note on
 the paused auto-reload in the settings, shared UI helpers in app.js,
 `make ui-test`, help texts checked against the eQ-3 manuals, French,
 Italian, Dutch and Polish, and docs/ui.md.
+
+Then (branch claude/ui-value-ages): the ages of the values on the
+tiles and in the device list, greyed values and "Not seen for N hours"
+for stale devices, "Open" in the tile's head of a room with an open
+window (the owner's wish after the write test), and the event stream
+with a ticket per connection, reopened with a fresh one after an
+error. `make ui-test` runs the server with a token and covers all of
+it. Not yet seen on real hardware; a value received within 5 s of
+`observed_since` counts as already there ("≥"), since the first
+device list arrives just after it, not at that exact time.
 
 ## State
 
@@ -130,9 +140,9 @@ Italian, Dutch and Polish, and docs/ui.md.
    and 2 are addressed (re-reads and a budget reconnect after writes,
    accepted commands in the log); step 7, moving a device, is still to
    run.
-2. The owner's review of the UI feedback round (PR 3) and its
-   follow-ups (branch claude/ui-followups), and the open UI points
-   above.
+2. The owner's review of the UI rounds (PR 3, PR 5 and the ages,
+   Open and ticket branch claude/ui-value-ages) on the boxes, and the
+   open UI points above.
 3. Pairing new devices (roadmap item 4): the server side is in (API
    `POST/GET/DELETE …/pairing`, `paired` events, `PUT …/devices/{rf}`
    with `room_id` for a device in no room, pairing through the proxy);
