@@ -18,7 +18,7 @@ const state = {
   token: null,
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser", lang: "auto" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
@@ -57,6 +57,8 @@ function loadSettings() {
   const clock = readStored("massimo.clock");
   if (clock === "cube" || clock === "browser") s.clock = clock;
   s.lang = readStored("massimo.lang") || "auto";
+  s.theme = validMode(readStored("massimo.theme")); // theme.js
+  s.scheme = validScheme(readStored("massimo.scheme"));
 }
 
 // --- API --------------------------------------------------------------
@@ -465,6 +467,7 @@ function applySettings() {
   $("expert-toggle").checked = s.expert;
   $("poll-input").value = s.poll;
   $("clock-select").value = s.clock;
+  applyAppearance();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   startPolling();
@@ -828,6 +831,7 @@ function initSettings() {
     showView("tiles");
     refresh().then(connectEvents);
   });
+  initAppearance();
 }
 
 // --- wiring -----------------------------------------------------------
@@ -860,6 +864,7 @@ function applyLanguage() {
   applyI18n(document);
   initHelpSlots();
   renderLangSelect();
+  applyAppearance();
   renderCubeSelect();
   renderFound();
   const cube = state.cubes.find((c) => c.serial === state.serial);
