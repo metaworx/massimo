@@ -704,3 +704,11 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .log-line.kind-connected .log-kind { color: var(--ok); }
 .log-device { font-weight: 600; }
 .log-text { color: var(--muted); }
+
+/* copy tab */
+.copy-section { display: flex; flex-direction: column; gap: 6px; }
+.copy-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.copy-head h4 { margin: 8px auto 6px 0; }
+.copy-head button { padding: 4px 10px; font-size: 0.85rem; }
+.copy-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(13em, 1fr)); gap: 8px 16px; }
+.copy-list .switch { color: var(--fg); }

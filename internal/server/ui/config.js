@@ -809,82 +809,108 @@ async function sendProgram(room, c) {
 
 // --- copy tab ---------------------------------------------------------
 
+// renderCopyTab copies this room's stored settings to other rooms: the
+// Rooms section, a switch per room with "All rooms" and "None", and the
+// Settings section, a switch per group of settings.
 function renderCopyTab(room, c) {
-  if (!c.copy) c.copy = { rooms: new Set(), program: false };
+  if (!c.copy) c.copy = { rooms: new Set(), temps: true, program: false, radiator: true };
+  const k = c.copy;
   const form = configForm(() => sendCopy(room, c));
-  form.appendChild(textEl("p", "Apply this room's temperatures and device settings to other rooms.", "muted small"));
-  const box = document.createElement("div");
-  box.className = "checks";
+  form.appendChild(textEl("p", "Copy what is stored for this room (not unsent changes) to other rooms.", "muted small"));
   const others = state.rooms.filter((r) => r.id !== room.id && roomThermostat(r));
-  const all = document.createElement("label");
-  const allCb = document.createElement("input");
-  allCb.type = "checkbox";
-  allCb.checked = others.length > 0 && others.every((r) => c.copy.rooms.has(r.id));
-  allCb.addEventListener("change", () => {
-    c.copy.rooms = new Set(allCb.checked ? others.map((r) => r.id) : []);
+
+  const rooms = document.createElement("div");
+  rooms.className = "copy-section";
+  rooms.setAttribute("role", "group");
+  rooms.setAttribute("aria-label", "rooms to copy to");
+  const head = document.createElement("div");
+  head.className = "copy-head";
+  head.appendChild(textEl("h4", "Rooms"));
+  const allBtn = button("All rooms", "", () => {
+    k.rooms = new Set(others.map((r) => r.id));
     rerenderRoom(room);
   });
-  all.appendChild(allCb);
-  all.appendChild(document.createTextNode(" All rooms"));
-  box.appendChild(all);
-  for (const r of others) {
-    const label = document.createElement("label");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = c.copy.rooms.has(r.id);
-    cb.addEventListener("change", () => {
-      if (cb.checked) c.copy.rooms.add(r.id);
-      else c.copy.rooms.delete(r.id);
-      allCb.checked = others.every((x) => c.copy.rooms.has(x.id));
-    });
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(" " + r.name));
-    box.appendChild(label);
-  }
-  form.appendChild(box);
-  const prog = document.createElement("label");
-  prog.className = "checks";
-  const progCb = document.createElement("input");
-  progCb.type = "checkbox";
-  progCb.checked = c.copy.program;
-  progCb.addEventListener("change", () => {
-    c.copy.program = progCb.checked;
+  allBtn.disabled = others.length === 0 || others.every((r) => k.rooms.has(r.id));
+  head.appendChild(allBtn);
+  const noneBtn = button("None", "", () => {
+    k.rooms = new Set();
+    rerenderRoom(room);
   });
-  prog.appendChild(progCb);
-  prog.appendChild(document.createTextNode(" Also copy the week programme (7 radiograms per room)"));
-  form.appendChild(prog);
-  form.appendChild(formActions(() => closeConfig(room)));
+  noneBtn.disabled = k.rooms.size === 0;
+  head.appendChild(noneBtn);
+  rooms.appendChild(head);
+  const list = document.createElement("div");
+  list.className = "copy-list";
+  if (others.length === 0) list.appendChild(textEl("p", "No other room with a thermostat.", "muted"));
+  for (const r of others) {
+    list.appendChild(switchEl(r.name, k.rooms.has(r.id), (on) => {
+      if (on) k.rooms.add(r.id);
+      else k.rooms.delete(r.id);
+      rerenderRoom(room);
+    }));
+  }
+  rooms.appendChild(list);
+  form.appendChild(rooms);
+
+  const settings = document.createElement("div");
+  settings.className = "copy-section";
+  settings.setAttribute("role", "group");
+  settings.setAttribute("aria-label", "settings to copy");
+  settings.appendChild(textEl("h4", "Settings"));
+  const slist = document.createElement("div");
+  slist.className = "copy-list";
+  slist.appendChild(switchEl("Temperatures", k.temps, (on) => {
+    k.temps = on;
+  }));
+  const prog = switchEl("Week programme (7 radiograms per room)", k.program && !!c.prog, (on) => {
+    k.program = on;
+  });
+  if (!c.prog) prog.querySelector("input").disabled = true;
+  slist.appendChild(prog);
+  slist.appendChild(switchEl("Radiator settings (boost, descaling, valve)", k.radiator, (on) => {
+    k.radiator = on;
+  }));
+  settings.appendChild(slist);
+  form.appendChild(settings);
+  form.appendChild(formActions(() => closeConfig(room), "Copy"));
   return form;
 }
 
-// sendCopy writes this room's common configuration, and optionally its
-// programme, to every selected room, one after another.
+// sendCopy writes this room's stored settings to every selected room,
+// one room after another: temperatures and radiator settings in one
+// config write, the week programme as a second write.
 async function sendCopy(room, c) {
-  const ids = [...c.copy.rooms];
+  const k = c.copy;
+  const ids = [...k.rooms];
   if (ids.length === 0) return setConfigResult(room, c, "No room selected.", false);
+  const program = k.program && c.prog;
+  if (!k.temps && !k.radiator && !program) return setConfigResult(room, c, "No setting selected.", false);
   if (!c.cfg || !c.cfg.source) return setConfigResult(room, c, "This room has no thermostat to copy from.", false);
+  const fields = (k.temps ? TEMP_FIELDS : []).concat(k.radiator ? VALVE_FIELDS : []);
   const body = {};
-  for (const f of TEMP_FIELDS.concat(VALVE_FIELDS)) body[f] = c.cfg[f];
-  const program = {};
-  if (c.copy.program) for (const day of DAYS) program[day] = c.prog.days[day].map((pt) => ({ temp: pt.temp, until: pt.until }));
+  for (const f of fields) if (c.cfg[f] !== undefined && c.cfg[f] !== null) body[f] = c.cfg[f];
+  const days = program ? copyDays(c.prog.orig) : null;
   const lines = [];
   let allOk = true;
   for (const id of ids) {
     const target = state.rooms.find((r) => r.id === id);
     const name = target ? target.name : String(id);
     setConfigResult(room, c, lines.concat([name + ": sending …"]).join("\n"), allOk);
+    const parts = [];
     try {
-      const res = await api("PUT", base() + "/rooms/" + id + "/config", body);
-      let text = name + ": settings " + (res && res.ok ? "ok" : "not on every device");
-      if (!(res && res.ok)) allOk = false;
-      if (c.copy.program) {
-        const pr = await api("PUT", base() + "/rooms/" + id + "/program", program);
-        text += ", programme " + (pr && pr.discarded ? "discarded" : "ok");
+      if (Object.keys(body).length) {
+        const res = await api("PUT", base() + "/rooms/" + id + "/config", body);
+        parts.push("settings " + (res && res.ok ? "ok" : "not on every device"));
+        if (!(res && res.ok)) allOk = false;
+      }
+      if (days) {
+        const pr = await api("PUT", base() + "/rooms/" + id + "/program", days);
+        parts.push("programme " + (pr && pr.discarded ? "discarded" : "ok"));
         if (pr && pr.discarded) allOk = false;
       }
-      lines.push(text);
+      lines.push(name + ": " + parts.join(", "));
     } catch (e) {
-      lines.push(name + ": " + e.message);
+      lines.push(name + ": " + parts.concat([e.message]).join(", "));
       allOk = false;
     }
   }
