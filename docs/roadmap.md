@@ -7,9 +7,11 @@ their status. This file is the near-term order within that frame;
 docs/handover-session.md says where the last session stopped and what
 the next one does first.
 
-Status as of 2026-11-05 evening (v0.5.0-alpha.1). The items keep their
-numbers from the owner's list of 2026-11-04; done items stay for the
-record, the open part of each is marked.
+Status as of 2026-11-05 night (v0.5.0-alpha.1 plus the pull requests
+#22 to #29 of the first session on jaguar, docs/handover-session.md).
+The items keep their numbers from the owner's list of 2026-11-04; done
+items stay for the record, the open part of each is marked. The plan
+behind items 12 to 15 and the storage work is docs/proposal-2026-11-05.md.
 
 1. **Room and device configuration in the API and the UI.** Done:
    temperatures, device settings, names, moves, holiday mode, copy to
@@ -41,7 +43,12 @@ record, the open part of each is marked.
    it. Next big piece. A design document comes first: which settings
    move from `.env`, the permission model (design.md, section 6), what
    stays configurable by file for the Pi, migration of an existing
-   `.env`; then the owner's decisions, then code.
+   `.env`; then the owner's decisions, then code. The design document
+   is written: docs/store.md (pull request #27), SQLite through
+   `modernc.org/sqlite` behind `internal/store`, the schema, the roles,
+   the migration of an installed box and the stages (a) to (e), with
+   eleven decisions for the owner in its section 10. Code after the
+   decisions.
 7. **Translations** of the UI: done for the six languages of the
    original software in `internal/server/ui/i18n.js`; open: a native
    speaker's review of FR, IT, NL and PL, and the server's error
@@ -52,10 +59,13 @@ record, the open part of each is marked.
    with health check and rollback; `massimo install` as a systemd
    service, a Windows service or macOS LaunchDaemons, with the update
    helper for the web UI's button on Linux and macOS;
-   `make release-alpha`. Open: the web UI starting updates on Windows;
-   the Windows service on a real PC (docs/testing-windows.md); macOS
-   notarization, `.pkg` or Homebrew, log rotation through SIGHUP; the
-   future `edge` mode.
+   `make release-alpha`; the Windows service tested on a real PC
+   (docs/windows-test-2026-11-05.md, all steps passed); an Installing
+   section per operating system in the README (#26). Open: the web UI
+   starting updates on Windows; the follow-ups of the Windows report
+   (quiet install steps, `service.log` duplicating `serve.log`,
+   `massimo.exe.failed` never cleaned up); macOS notarization, `.pkg`
+   or Homebrew, log rotation through SIGHUP; the future `edge` mode.
 9. **Timestamps per value**: done, server and UI (`received`,
    `last_seen`, `stale`, `observed_since`; ages, greyed values, "Not
    seen for N hours"). Open: the stale threshold once real data shows
@@ -70,7 +80,27 @@ record, the open part of each is marked.
     in the log. Open: an on-demand budget refresh in the API and the
     UI; a follow-up for writes from proxy clients; no direct fallback
     to the Cube in the command line when a proxy is configured.
-12. Later: Loxone (design.md, section 4), a radio-stick driver without
+12. **Colour schemes**: done in the UI (#29): light, dark or system
+    mode, three built-in schemes (Massimo, High contrast, Graphite), a
+    custom scheme with a contrast check, export and import as
+    `massimo-scheme/1`, kept in the browser. Open: the owner's choice
+    of the built-in set; the per-user copy in the store (item 6, stage
+    c); a phrase in the README's UI paragraph.
+13. **Backup and restore in the web UI**: the server side is done
+    (#28): a plan from an uploaded backup with its cost, the send
+    checked against the plan's hash, progress on the stream, the guard
+    rails (one restore at a time, 80 % duty cycle, 1 MB, the Cube's own
+    serial). Open: the Settings panel (download, upload, plan, confirm,
+    progress; a session brief is ready), then the backup history once
+    the store exists (item 6, stage e).
+14. **The UI when the server is gone**: a prominent notice that the
+    connection to the server is lost (as opposed to the Cube being
+    disconnected), edits blocked, polling until it is back. Open; a
+    session brief is ready.
+15. **Software section**: both buttons greyed out while an update runs,
+    also after a reload (#25). Open: starting updates from the web UI on
+    Windows (item 8).
+16. Later: Loxone (design.md, section 4), a radio-stick driver without
     a Cube (phase 3), the edge agent and the public server (phase 4).
 
 The small code follow-ups and the hardware checks still owed are
