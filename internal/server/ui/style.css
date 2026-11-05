@@ -459,6 +459,8 @@ button.subtle { color: var(--muted); }
 .mode-row .tool-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tool-btn .ni { width: 18px; height: 18px; flex: none; }
 .mode-vacation { color: var(--warn); font-size: 0.9rem; white-space: nowrap; }
+.mode-mixed { color: var(--warn); font-size: 0.9rem; white-space: nowrap; cursor: help; }
+.mode-row .mode-group button.partial { border-color: var(--accent); border-style: dashed; }
 .suitcase { font-size: 1rem; }
 .house-modes {
   display: flex;

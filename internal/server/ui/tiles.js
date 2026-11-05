@@ -29,6 +29,19 @@ function roomState(room) {
   return th && th.state ? th.state : null;
 }
 
+// roomModes lists the modes of the room's thermostats, boost counted as
+// manual: one entry when they agree, several when a device was set on
+// its own (by another client or at the device).
+function roomModes(room) {
+  const modes = [];
+  for (const d of room.devices) {
+    if (!isThermostat(d) || !d.state || !d.state.mode) continue;
+    const m = d.state.mode === "boost" ? "manual" : d.state.mode;
+    if (!modes.includes(m)) modes.push(m);
+  }
+  return modes;
+}
+
 function roomActual(room) {
   const wall = room.devices.find((d) => d.type === "wall_thermostat" && d.state && d.state.actual_temp !== undefined);
   if (wall) return wall.state.actual_temp;
@@ -135,14 +148,31 @@ function renderSetpoint(el, room) {
   el.querySelector(".pending-save").addEventListener("click", () => flushSetpoint(room));
   el.querySelector(".pending-cancel").addEventListener("click", () => cancelSetpoint(room));
 
-  const mode = s ? s.mode : null;
+  const modes = roomModes(room);
+  const mixed = modes.length > 1;
+  const mode = mixed ? null : s ? s.mode : null;
   const autoBtn = el.querySelector(".mode-auto");
   const manuBtn = el.querySelector(".mode-manual");
   const holidayBtn = el.querySelector(".mode-holiday");
-  const pressed = [[autoBtn, mode === "auto"], [manuBtn, mode === "manual" || mode === "boost"], [holidayBtn, mode === "vacation"]];
-  for (const [btn, on] of pressed) {
+  // With mixed modes no button is pressed; those in use are marked as
+  // partly pressed, and a note names the devices and their modes.
+  const pressed = [[autoBtn, "auto"], [manuBtn, "manual"], [holidayBtn, "vacation"]];
+  for (const [btn, m] of pressed) {
+    const on = mixed ? false : mode === m || (m === "manual" && mode === "boost");
+    const part = mixed && modes.includes(m);
     btn.classList.toggle("active", on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.classList.toggle("partial", part);
+    btn.setAttribute("aria-pressed", part ? "mixed" : on ? "true" : "false");
+  }
+  const mixedNote = el.querySelector(".mode-mixed");
+  if (mixed) {
+    const list = room.devices
+      .filter((d) => isThermostat(d) && d.state && d.state.mode)
+      .map((d) => (d.name || d.rf_address) + ": " + modeName(d.state.mode))
+      .join(", ");
+    mixedNote.textContent = t("room.mixed");
+    mixedNote.title = t("room.mixedTitle", { list });
+    mixedNote.classList.remove("hidden");
   }
   holidayBtn.addEventListener("click", () => openVacation(room, el));
   autoBtn.addEventListener("click", () => {
