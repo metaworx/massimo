@@ -102,7 +102,8 @@ jobs:
           set -euo pipefail
           go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
           ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
-          printf 'MASSIMO_CUBE_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\n' > ci.env
+          # The fake Cube reports the fixture's serial.
+          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\n' > ci.env
           health=http://127.0.0.1:18099/healthz
           bin="C:/Program Files/Massimo/massimo.exe"
 

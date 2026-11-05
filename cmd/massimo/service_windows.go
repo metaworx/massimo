@@ -34,6 +34,11 @@ func init() {
 	if !isService {
 		return
 	}
+	// A service has no console: what main reports on stderr, such as the
+	// error that ends serve, goes to service.log as well.
+	if f, err := os.OpenFile(serviceLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+		os.Stderr = f
+	}
 	go func() {
 		serviceLog("started as a service: %q", os.Args)
 		if err := svc.Run(install.ServiceName, serviceHandler{}); err != nil {
@@ -45,9 +50,12 @@ func init() {
 	}()
 }
 
+func serviceLogPath() string {
+	return install.WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData")).DataDir + `\service.log`
+}
+
 func serviceLog(format string, args ...any) {
-	p := install.WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData"))
-	f, err := os.OpenFile(p.DataDir+`\service.log`, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(serviceLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}
