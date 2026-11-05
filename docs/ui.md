@@ -88,7 +88,10 @@ server keeps its log.
 - **Cube clock shown in**: the browser's time zone or the Cube's.
 - **Language**: from the browser, or English, German, French, Italian,
   Dutch or Polish. A text without a translation is shown in English. The
-  server's error messages are in English.
+  server's error messages are in English. French, Italian, Dutch and
+  Polish are machine-translated and not yet reviewed by a native
+  speaker; a note under the choice says so, in the language and in
+  English.
 - **Forget token**: removes the stored API token.
 - **Software**: the running version, the update channel and whether a newer
   release is out. On a box with the update helper installed

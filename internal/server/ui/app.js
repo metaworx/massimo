@@ -599,6 +599,11 @@ function renderLangSelect() {
     sel.appendChild(o);
   }
   sel.value = i18n.setting;
+  const note = $("lang-note");
+  const texts = machineNote();
+  clear(note);
+  note.classList.toggle("hidden", !texts);
+  if (texts) for (const s of texts) note.appendChild(textEl("span", s));
 }
 
 // applyLanguage redraws every text after a change of language.

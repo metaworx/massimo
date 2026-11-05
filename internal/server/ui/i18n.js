@@ -734,6 +734,7 @@ const I18N = {
 
   // The other languages of the original software, not yet translated.
   fr: {
+    "i18n.machineNote": "Traduction automatique : les textes de Massimo dans cette langue n'ont pas encore été relus par un locuteur natif.",
     "lang.auto": "Selon le navigateur",
 
     "action.cancel": "Annuler",
@@ -1095,6 +1096,7 @@ const I18N = {
     "copy.programDiscarded": "programme rejeté",
   },
   it: {
+    "i18n.machineNote": "Traduzione automatica: i testi di Massimo in questa lingua non sono ancora stati revisionati da un madrelingua.",
     "lang.auto": "Dal browser",
 
     "action.cancel": "Annulla",
@@ -1456,6 +1458,7 @@ const I18N = {
     "copy.programDiscarded": "programma scartato",
   },
   nl: {
+    "i18n.machineNote": "Machinevertaling: de teksten van Massimo in deze taal zijn nog niet door een moedertaalspreker nagekeken.",
     "lang.auto": "Zoals de browser",
 
     "action.cancel": "Annuleren",
@@ -1816,6 +1819,7 @@ const I18N = {
     "copy.programDiscarded": "programma verworpen",
   },
   pl: {
+    "i18n.machineNote": "Tłumaczenie maszynowe: teksty Massimo w tym języku nie zostały jeszcze sprawdzone przez rodzimego użytkownika języka.",
     "lang.auto": "Jak w przeglądarce",
 
     "action.cancel": "Anuluj",
@@ -2181,6 +2185,16 @@ const I18N = {
 
 // LANGUAGES lists the languages the settings offer, by their own name;
 // a language appears once its table has texts.
+// A language whose table has "i18n.machineNote" was machine-translated
+// and not yet reviewed by a native speaker; the settings say so, in that
+// language and in English. The key is deliberately absent from en and de.
+const MACHINE_NOTE_EN = "Machine-translated: Massimo's texts in this language have not yet been reviewed by a native speaker.";
+
+function machineNote() {
+  const note = (I18N[i18n.lang] || {})["i18n.machineNote"];
+  return note ? [note, MACHINE_NOTE_EN] : null;
+}
+
 const LANGUAGE_NAMES = { en: "English", de: "Deutsch", fr: "Français", it: "Italiano", nl: "Nederlands", pl: "Polski" };
 
 const i18n = { lang: "en", setting: "auto" };
