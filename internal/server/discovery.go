@@ -263,15 +263,7 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 // broadcast sends an event to the stream of every Cube.
 func (s *Server) broadcast(ev event) {
 	for _, rt := range s.runtimes() {
-		rt.remember(ev)
-		rt.subsMu.Lock()
-		for ch := range rt.subs {
-			select {
-			case ch <- ev:
-			default:
-			}
-		}
-		rt.subsMu.Unlock()
+		rt.emit(ev)
 	}
 }
 

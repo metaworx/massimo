@@ -160,8 +160,10 @@ Errors are `{"error": "<message>"}` with a matching status: `400` bad
 input, `401` missing or wrong token, `429` locked out after repeated
 wrong tokens, `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before
-it was sent, `502` the Cube discarded the command or the connection
-failed, `503` the Cube has not sent its greeting yet.
+it was sent (or, for a restore, a guard rail: see POST /restore), `413`
+a body over the limit (a backup of more than 1 MB), `502` the Cube
+discarded the command or the connection failed, `503` the Cube has not
+sent its greeting yet.
 
 A room command is discarded by the Cube while it holds no state for a
 device in that room: one that never reported, or one that has not
@@ -597,6 +599,138 @@ configuration and state, Cube settings, NTP servers, plus the raw
 protocol lines. YAML comes as an attachment named
 `massimo-backup-<serial>-<time>.yaml`.
 
+### POST /api/v1/cubes/{sn}/restore/plan
+
+What restoring a backup would send, the dry run of `massimo restore`.
+The body is the backup file, which may be edited by hand: JSON with
+`Content-Type: application/json`, YAML with `application/yaml` or
+`text/yaml`; a body that does not start with `{` is read as YAML
+whatever the header says. At most 1 MB. The options are query
+parameters, the flags of the command: `portal` also restores the
+portal URL and whether the Cube polls it, `state` also re-applies each
+thermostat's mode and setpoint from the backup, both off unless given
+(`?portal`, `?portal=true`); `skip=names,settings,programs,clock`
+leaves those groups alone. Nothing is written.
+
+```json
+{
+  "plan": "558237da9e11cf498b34896fa99b7a4ebe3d05ff163a197e37a76f19b79fd804",
+  "steps": [
+    {"what": "write room and device names (room 6: \"Bedroom\"→\"Guest room\")", "radio": false},
+    {"what": "1514b6 \"Radiator Bedroom\": temperatures comfort 21.5 eco 17.0 max 30.5 min 4.5 offset +0.0 window 12.0/15min",
+     "radio": true, "device": "1514b6", "room": 6}
+  ],
+  "notes": ["device 123456 \"New\" (radiator_thermostat, MEQ0000000) is not paired with this cube; pair it and restore again"],
+  "radio_commands": 1,
+  "duty_cost_pct": 1.25,
+  "budget": {"duty_cycle_pct": 4, "free_memory_slots": 50, "updated_at": "…"}
+}
+```
+
+`steps` are the commands in the order they would be sent, each with
+`what` as the command prints it, `radio` when it sends radio commands
+(which cost budget; a step without is a Cube command such as names,
+NTP servers or time zone rules), and the device it addresses and the
+room woken up before it where the command has them. `notes` are the
+differences a restore cannot write: devices in the backup that are not
+paired (pairing cannot be restored over the LAN), devices on the Cube
+that are not in the backup (left alone), a configuration the Cube has
+not sent yet. `radio_commands` counts the radiograms of all steps and
+`duty_cost_pct` is about what they will cost of the hourly radio
+budget, 1.25 % each as measured on hardware (a move of a device to
+another room is several); `budget` is what the Cube last reported, so
+a client can show the cost against it. `plan` is a SHA-256 over the
+step list (the texts and the command lines); `POST …/restore` takes it
+and refuses to send when the plan it computes then differs, so what is
+sent is what was shown. An empty `steps` means the Cube matches the
+backup.
+
+The clock group reads the Cube's NTP servers first (an `f:` through
+the queue, ahead of queued work); when that fails, `notes` says so and
+the servers are not compared. Hidden devices (room 255 and
+`MASSIMO_CUBE_<SN>_IGNORE`) are neither compared nor written, and the
+names step keeps them, and the rooms they are in, as the Cube has
+them, unless the server runs with `-show-hidden`.
+
+`400` for a backup the server cannot read, one from another Cube or
+without a serial (`cube.serial` must be this Cube's), a bad option or
+an unknown `skip` group; `413` for a body over 1 MB; `503` while the
+Cube is not connected.
+
+### POST /api/v1/cubes/{sn}/restore?plan=<hash>
+
+Send the plan: the same body and options as for the plan, plus the
+hash it answered. The server computes the plan again and, when the
+hash is the same, answers `202` at once and sends the steps one after
+the other through the Cube's queue at low priority, so that setpoints
+and other user commands go first:
+
+```json
+{"id": "f0eb2372c18a88c5", "steps": 2}
+```
+
+Each step is reported on the event stream as `restore_step` and the
+end as `restore_done` (below), and `GET …/restore` shows the state at
+any time. As the command, the restore stops at the first step the
+Cube refused or that failed; the steps after it are not sent and the
+state is `failed`. After radio writes the server follows up the
+devices' configurations as after `PUT …/devices/{rf}/config`.
+
+Refused with `409` while a restore is running on this Cube, when the
+plan has changed since it was made (another client wrote to the Cube,
+or the backup or the options differ from the plan request; the message
+has both hashes, plan again), and when the plan has radio commands
+while the Cube's duty cycle is above 80 %, the message saying the
+percentage (the write test on hardware ran up to there; a restore
+without radio commands, names and clock only, is sent whatever the
+duty cycle); `400` without `plan` and for everything the plan request
+refuses with `400`; `413` and `503` as for the plan. The Cube changes
+a device's configuration only once the device acknowledged the write
+(one to four minutes), so a plan made right after a restore still
+lists the radio steps until the follow-up re-read saw the change.
+
+### GET /api/v1/cubes/{sn}/restore
+
+The last restore of the Cube since the server started:
+
+```json
+{
+  "id": "f0eb2372c18a88c5",
+  "state": "running",
+  "plan": "558237da9e11cf498b34896fa99b7a4ebe3d05ff163a197e37a76f19b79fd804",
+  "started": "2026-11-05T21:19:32+01:00",
+  "steps": [
+    {"what": "write room and device names (…)", "radio": false,
+     "result": {"ok": true, "budget": {…}, "time": "2026-11-05T21:19:32+01:00"}},
+    {"what": "1514b6 \"Radiator Bedroom\": temperatures …", "radio": true, "device": "1514b6", "room": 6}
+  ],
+  "sent": 1,
+  "radio_commands": 1
+}
+```
+
+`state` is `running`, `done` or `failed`; `{"state": "none"}` before
+the first restore. `steps` are the plan's, each with `result` once it
+ran: `ok`, `discarded` when the Cube refused the radiogram, `error`,
+the `budget` the Cube reported after it and the `time`. `sent` counts
+the steps the Cube accepted; `finished` and, for a failed restore,
+`error` (which step and why) come with the end.
+
+The event stream reports each step and the end:
+
+```
+event: restore_step
+data: {"kind":"restore_step","device":"1514b6","restore":{"id":"f0eb2372c18a88c5","step":2,"steps":2,"what":"1514b6 \"Radiator Bedroom\": temperatures …","ok":true},"time":"…"}
+
+event: restore_done
+data: {"kind":"restore_done","restore":{"id":"f0eb2372c18a88c5","steps":2,"ok":true,"state":"done","sent":2},"time":"…"}
+```
+
+`restore.step` counts from 1 in the order of `steps`; a failed step
+has `ok` false, `discarded` when the Cube refused it, and `error`, also
+as the event's `error`. `restore_done` carries `state` (`done` or
+`failed`), `sent` and, when failed, `error`. Both are in `GET …/log`.
+
 ### GET /api/v1/cubes/{sn}/log?limit=200
 
 The last events of the Cube, oldest first, the same objects the event
@@ -621,8 +755,10 @@ Kinds: `connected`, `disconnected` (the server reconnects by itself),
 `hello` (new budget or clock from the Cube), `metadata` (rooms or names
 changed), `config` (a device configuration arrived), `state`,
 `pairing_started`, `paired` (with `paired`, the device that joined),
-`pairing_ended` (see Pairing) and `cube_found` (with `cube`, a Cube that
-is not configured, see POST /cubes/discover). A comment line is sent every 30 seconds
+`pairing_ended` (see Pairing), `cube_found` (with `cube`, a Cube that
+is not configured, see POST /cubes/discover), `restore_step` and
+`restore_done` (with `restore`, the progress of a restore, see
+POST /restore). A comment line is sent every 30 seconds
 to keep the connection alive.
 
 A `state` event that follows an earlier one for the same device also
@@ -720,5 +856,5 @@ the one connection the Cube allows. See [proxy.md](proxy.md).
 ## Not in version 1
 
 Removing devices, creating rooms, user accounts and ownership.
-Removing needs the original software for now; `massimo restore` from an
-edited backup covers everything else in bulk.
+Removing needs the original software for now; `massimo restore` or
+`POST …/restore` from an edited backup covers everything else in bulk.

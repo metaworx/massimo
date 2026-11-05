@@ -17,6 +17,9 @@
 //	                                                 {"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}
 //	PUT  /api/v1/cubes/{sn}/rooms/{id}/setpoint      same body, addressed to the whole room
 //	GET  /api/v1/cubes/{sn}/backup?format=yaml|json  a backup file
+//	POST /api/v1/cubes/{sn}/restore/plan             what restoring the backup in the body would send
+//	POST /api/v1/cubes/{sn}/restore?plan=<hash>      send it; progress as restore_step events
+//	GET  /api/v1/cubes/{sn}/restore                  how the last restore went
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
 //	POST /api/v1/cubes/{sn}/events/ticket            a single-use ticket that opens the event stream
 //	POST /api/v1/cubes/{sn}/pairing                  start pairing (inclusion mode), {"seconds":60}
@@ -170,6 +173,11 @@ type runtime struct {
 	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
 	logMu  sync.Mutex
 	events []event // the last logSize events, for GET …/log
+
+	// restore is the Cube's last restore, running or over, see
+	// restore_api.go.
+	restoreMu sync.Mutex
+	restore   *restoreRun
 }
 
 // subscribePush returns a channel that gets a signal whenever the Cube
@@ -198,7 +206,10 @@ type event struct {
 	Paired *cube.NewDevice `json:"paired,omitempty"`
 	// Cube is the Cube discovery found, for a "cube_found" event.
 	Cube *foundCube `json:"cube,omitempty"`
-	Time time.Time  `json:"time"`
+	// Restore is the progress of a restore, for the "restore_step" and
+	// "restore_done" events.
+	Restore *restoreProgress `json:"restore,omitempty"`
+	Time    time.Time        `json:"time"`
 }
 
 // logSize is how many events a Cube's log keeps for GET …/log.
@@ -212,6 +223,20 @@ func (rt *runtime) remember(ev event) {
 	if len(rt.events) > logSize {
 		rt.events = rt.events[len(rt.events)-logSize:]
 	}
+}
+
+// emit sends an event to the Cube's stream subscribers and remembers it
+// for the log.
+func (rt *runtime) emit(ev event) {
+	rt.remember(ev)
+	rt.subsMu.Lock()
+	for ch := range rt.subs {
+		select {
+		case ch <- ev:
+		default: // slow subscriber: drop
+		}
+	}
+	rt.subsMu.Unlock()
 }
 
 // recent returns the last n events, oldest first.
@@ -521,6 +546,9 @@ func (s *Server) routes() {
 	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", s.deleteRoom)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
+	api("POST /api/v1/cubes/{sn}/restore/plan", s.planRestore)
+	api("POST /api/v1/cubes/{sn}/restore", s.startRestore)
+	api("GET /api/v1/cubes/{sn}/restore", s.getRestore)
 	api("GET /api/v1/cubes/{sn}/events", s.events)
 	api("POST /api/v1/cubes/{sn}/events/ticket", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", s.getLog)
