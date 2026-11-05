@@ -74,9 +74,11 @@ jobs:
             echo "prerelease=${prerelease}"
           } >> "$GITHUB_OUTPUT"
 
+      # The same toolchain as ci.yml: a supported line, newest patch.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
+          check-latest: true
 
       - name: go vet
         run: go vet ./...
