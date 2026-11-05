@@ -36,6 +36,7 @@
         <label for="cube-select" class="muted" data-i18n="header.cube">Cube</label>
         <select id="cube-select"></select>
         <span id="connection" class="pill"></span>
+        <span id="cube-search" class="muted small hidden" role="status"></span>
       </div>
       <span id="clock-plain" class="muted" title=""></span>
       <span id="updated" class="muted" title="time of the last successful poll" data-i18n-attr="title:header.updatedTitle"></span>
@@ -50,6 +51,10 @@
     </div>
   </div>
   <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
+  <details id="cube-found" class="cube-found hidden">
+    <summary></summary>
+    <div class="cube-found-body"></div>
+  </details>
   <dl id="budget" class="budget expert-only">
     <div><dt data-i18n="budget.server">Server</dt><dd id="version">–</dd></div>
     <div><dt data-i18n="budget.built">Built with</dt><dd id="version-rest">–</dd></div>

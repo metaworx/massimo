@@ -10,7 +10,8 @@
 "use strict";
 
 const state = {
-  cubes: [],
+  cubes: [], // the configured Cubes, which the server serves
+  found: [], // Cubes that answered discovery but are not configured
   serial: null,
   rooms: [],
   unlisted: [],
@@ -225,14 +226,15 @@ function fmtShortTime(ms) {
 // ageEl shows how old a value is that the server received at iso (an API
 // time): the age, the exact time as its tooltip and, in expert mode,
 // after it; greyed when stale. refreshAges keeps it current. null when
-// there is no time.
-function ageEl(iso, stale) {
+// there is no time. plain leaves out the "already there" mark, for
+// times that are not device values.
+function ageEl(iso, stale, plain) {
   const ms = Date.parse(iso || "");
   if (isNaN(ms)) return null;
   const el = textEl("span", "", "age" + (stale ? " stale" : ""));
   el.dataset.at = String(ms);
   const since = ms - observedSince();
-  if (since >= 0 && since < SINCE_MS) el.dataset.since = "1";
+  if (!plain && since >= 0 && since < SINCE_MS) el.dataset.since = "1";
   el.appendChild(textEl("span", "", "age-text"));
   el.appendChild(textEl("span", "", "age-exact expert-only"));
   fillAge(el);
@@ -424,6 +426,9 @@ function renderUpdated() {
   el.textContent = t("header.updated", { time: pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds()) });
 }
 
+// renderCubeSelect fills the Cube choice: the configured Cubes, then
+// those found on the LAN but not configured (shown, not selectable),
+// then the entry that searches the LAN for new ones.
 function renderCubeSelect() {
   const sel = $("cube-select");
   clear(sel);
@@ -434,8 +439,24 @@ function renderCubeSelect() {
     o.textContent = c.connected ? name : t("header.cubeDisconnected", { name });
     sel.appendChild(o);
   }
-  sel.value = state.serial;
-  sel.disabled = state.cubes.length < 2;
+  if (state.found.length) {
+    const group = document.createElement("optgroup");
+    group.label = t("discover.group");
+    for (const c of state.found) {
+      const o = document.createElement("option");
+      o.value = "found:" + c.serial;
+      o.disabled = true;
+      o.textContent = c.serial + (c.address ? " · " + c.address : "");
+      group.appendChild(o);
+    }
+    sel.appendChild(group);
+  }
+  const search = document.createElement("option");
+  search.value = DISCOVER;
+  search.textContent = t(discovery.running ? "discover.searching" : "discover.search");
+  search.disabled = discovery.running;
+  sel.appendChild(search);
+  sel.value = state.serial || "";
 }
 
 function applySettings() {
@@ -452,7 +473,10 @@ function applySettings() {
 // --- loading ----------------------------------------------------------
 
 async function loadCubes() {
-  state.cubes = (await api("GET", "/api/v1/cubes")) || [];
+  const all = (await api("GET", "/api/v1/cubes")) || [];
+  state.cubes = all.filter(isConfigured);
+  state.found = all.filter((c) => !isConfigured(c));
+  renderFound();
   state.lastPoll = new Date();
   if (!state.serial || !state.cubes.some((c) => c.serial === state.serial)) {
     state.serial = state.cubes.length ? state.cubes[0].serial : null;
@@ -492,6 +516,95 @@ async function refresh() {
   } catch (e) {
     showMessage(t("msg.cannotLoad", { error: e.message }), false);
   }
+}
+
+// --- Cube discovery ---------------------------------------------------
+
+// DISCOVER is the value of the Cube choice's entry that searches the LAN.
+const DISCOVER = "__discover";
+const discovery = { running: false, timer: null };
+
+// isConfigured tells the Cubes the server serves from those it only
+// found on the LAN; a server without discovery sends no flag.
+function isConfigured(c) {
+  return c.configured !== false;
+}
+
+// showSearch shows the state of a search next to the Cube choice, for
+// ms milliseconds when given.
+function showSearch(text, ms, bad) {
+  const el = $("cube-search");
+  if (discovery.timer) clearTimeout(discovery.timer);
+  discovery.timer = null;
+  el.textContent = text;
+  el.classList.toggle("bad", !!bad);
+  el.classList.toggle("hidden", !text);
+  if (ms) discovery.timer = setTimeout(() => showSearch(""), ms);
+}
+
+// discoverCubes asks the server to search the LAN for Cubes (about two
+// seconds), then reloads the list and says what it found.
+async function discoverCubes() {
+  if (discovery.running) return;
+  discovery.running = true;
+  showSearch(t("discover.searching"));
+  renderCubeSelect();
+  try {
+    const res = (await api("POST", "/api/v1/cubes/discover")) || {};
+    await loadCubes();
+    const n = (res.found || []).filter((c) => !isConfigured(c)).length;
+    showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
+    if (n) $("cube-found").open = true;
+  } catch (e) {
+    showSearch(t("discover.failed", { error: e.message }), 15000, true);
+  } finally {
+    discovery.running = false;
+    renderCubeSelect();
+  }
+}
+
+// addFound takes a Cube from a cube_found event into the list.
+function addFound(c) {
+  if (!c || !c.serial || state.cubes.some((x) => x.serial === c.serial)) return;
+  const i = state.found.findIndex((x) => x.serial === c.serial);
+  if (i >= 0) state.found[i] = c;
+  else state.found.push(c);
+  renderCubeSelect();
+  renderFound();
+}
+
+// renderFound lists, under the header, the Cubes found on the LAN that
+// the server does not serve, and how to add them: the lines for the
+// server's env file, ready to copy.
+function renderFound() {
+  const box = $("cube-found");
+  const n = state.found.length;
+  box.classList.toggle("hidden", !n);
+  if (!n) return;
+  box.querySelector("summary").textContent = tn("discover.found", n);
+  const body = box.querySelector(".cube-found-body");
+  clear(body);
+  const list = document.createElement("ul");
+  for (const c of state.found) {
+    const li = document.createElement("li");
+    li.appendChild(textEl("span", c.serial, "mono"));
+    const facts = [c.address, c.firmware ? t("budget.firmware") + " " + c.firmware : ""].filter((x) => x);
+    if (facts.length) li.appendChild(textEl("span", " · " + facts.join(" · ")));
+    const extra = [c.rf_address, c.mac].filter((x) => x);
+    if (extra.length) li.appendChild(textEl("span", " · " + extra.join(" · "), "mono expert-only"));
+    const age = ageEl(c.last_seen, false, true);
+    if (age) li.appendChild(age);
+    list.appendChild(li);
+  }
+  body.appendChild(list);
+  body.appendChild(textEl("p", t("discover.hint")));
+  const lines = [];
+  for (const c of state.found) {
+    const p = "MASSIMO_CUBE_" + c.serial + "_";
+    lines.push(p + "ADDRESS=" + (c.address || ""), p + "KEY=", p + "IV=");
+  }
+  body.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
+  body.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
 }
 
 function selectCube(serial) {
@@ -638,6 +751,13 @@ async function connectEvents() {
   es.addEventListener("connected", logged(() => refresh()));
   es.addEventListener("disconnected", logged(() => loadCubes()));
   es.addEventListener("config", logged(() => {}));
+  es.addEventListener("cube_found", (ev) => {
+    const data = JSON.parse(ev.data);
+    const c = data && data.serial ? data : data && data.cube;
+    if (!c) return;
+    appendLogEvent({ kind: "cube_found", time: c.found_at, error: t("discover.log", { serial: c.serial, address: c.address || "–" }) });
+    addFound(c);
+  });
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -723,6 +843,7 @@ function applyLanguage() {
   initHelpSlots();
   renderLangSelect();
   renderCubeSelect();
+  renderFound();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   renderRooms();
@@ -741,7 +862,11 @@ function init() {
   initSettings();
   applySettings();
   checkVersion();
-  $("cube-select").addEventListener("change", (ev) => selectCube(ev.target.value));
+  $("cube-select").addEventListener("change", (ev) => {
+    if (ev.target.value !== DISCOVER) return selectCube(ev.target.value);
+    ev.target.value = state.serial || "";
+    discoverCubes();
+  });
   initTiles();
   initLog();
   refresh().then(() => {

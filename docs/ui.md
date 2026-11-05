@@ -13,7 +13,18 @@ single-use ticket, so the token never appears in a URL.
 ## Header
 
 - **Cube**: chooses the Cube when the server has several. Next to it you see
-  whether the server is connected to that Cube.
+  whether the server is connected to that Cube. The last entry, **Search
+  for new Cubes…**, asks the server to look for Cubes on the LAN (about
+  two seconds; the server also looks every 30 minutes by itself). Cubes
+  it finds but does not serve are listed in the choice under "Found, not
+  configured" and cannot be chosen; a line under the header counts them
+  and opens to their address and firmware and the lines to put into the
+  server's env file (`/etc/massimo/env` for a server installed with
+  `massimo install`, otherwise `.env`). The server serves a Cube once
+  its `MASSIMO_CUBE_<SERIAL>_ADDRESS` is there and the server has been
+  restarted; key and IV are only needed for the portal commands
+  (README.md, "Cube variables"). A Cube the server finds by itself
+  appears without reloading the page.
 - **The Cube's clock** and the time of the last update.
 - **↻** asks the server for the current state now.
 - The three page buttons switch between **Rooms**, **Log** and **Settings**.
