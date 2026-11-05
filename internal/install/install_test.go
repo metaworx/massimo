@@ -212,3 +212,61 @@ MASSIMO_CUBE_KEQ0000003_PROXY=:62910
 		}
 	}
 }
+
+func TestListenDropIns(t *testing.T) {
+	for _, c := range []struct {
+		addr, listen, health string
+		cap                  bool
+	}{
+		{":80", "MASSIMO_LISTEN=:80", "http://127.0.0.1:80/healthz", true},
+		{"0.0.0.0:8080", "MASSIMO_LISTEN=0.0.0.0:8080", "http://127.0.0.1:8080/healthz", false},
+		{"192.168.1.200:80", "MASSIMO_LISTEN=192.168.1.200:80", "http://192.168.1.200:80/healthz", true},
+		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "http://[::1]:443/healthz", true},
+	} {
+		serve, health, err := listenDropIns(c.addr)
+		if err != nil || !strings.Contains(serve, c.listen) || !strings.Contains(health, c.health) || strings.Contains(serve, "CAP_NET_BIND_SERVICE") != c.cap {
+			t.Errorf("%s: %v\n%s\n%s", c.addr, err, serve, health)
+		}
+	}
+	for _, bad := range []string{"80", ":http", ":0", ":70000", "host"} {
+		if _, _, err := listenDropIns(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func TestInstallListenKeptAcrossInstalls(t *testing.T) {
+	root, bin := setup(t)
+	run := (&recorder{}).run
+	if err := Install(Options{Root: root, Binary: bin, Listen: ":80", Out: &bytes.Buffer{}, Run: run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, ListenDropIn)), "MASSIMO_LISTEN=:80") ||
+		!strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "127.0.0.1:80/healthz") {
+		t.Fatal("drop-ins")
+	}
+	unit := read(t, filepath.Join(root, UnitDir, "massimo.service"))
+	if !strings.Contains(unit, "-listen ${MASSIMO_LISTEN}") || !strings.Contains(unit, "Environment=MASSIMO_LISTEN=:8099") {
+		t.Fatal("massimo.service does not take the address from MASSIMO_LISTEN")
+	}
+	if !strings.Contains(read(t, filepath.Join(root, UnitDir, "massimo-update.service")), "-health ${MASSIMO_HEALTH}") {
+		t.Fatal("massimo-update.service does not take the URL from MASSIMO_HEALTH")
+	}
+	// A later install without -listen keeps them.
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, ListenDropIn)), "MASSIMO_LISTEN=:80") || !strings.Contains(out.String(), "kept") {
+		t.Fatalf("drop-in not kept:\n%s", out.String())
+	}
+	if err := Install(Options{Root: root, Binary: bin, Listen: "80", Out: &bytes.Buffer{}, Run: run}); err == nil {
+		t.Fatal("bad -listen accepted")
+	}
+	if err := Remove(Options{Root: root, Out: &bytes.Buffer{}, Run: run}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.Dir(ListenDropIn))); err == nil {
+		t.Fatal("drop-in directory left behind")
+	}
+}

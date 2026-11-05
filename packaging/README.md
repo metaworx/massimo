@@ -7,8 +7,8 @@ the binary; "Install by hand" below lists the same steps.
 
 - `systemd/massimo.service`: the unit. Runs as the user `massimo`, reads
   its settings from `/etc/massimo/env`, listens on port 8099 on every
-  interface (API and web UI), logs to `/var/log/massimo/serve.log` and the
-  journal, and restarts on failure.
+  interface (API and web UI; `install -listen` changes it), logs to
+  `/var/log/massimo/serve.log` and the journal, and restarts on failure.
 - `systemd/massimo-update.path` and `systemd/massimo-update.service`: the
   update helper, which installs a new release when the web UI or the API
   asks for one (see Updating).
@@ -93,7 +93,19 @@ units and restarts the service; existing settings are kept, and a unit
 that differs from the new one (edited with `systemctl edit --full`) is kept
 as `<unit>.bak`. Local changes belong in a drop-in (`systemctl edit
 massimo`), which install never touches. `-no-update-helper` leaves the
-helper out, `-no-start` only enables. `massimo install -remove` stops and
+helper out, `-no-start` only enables.
+
+`-listen <addr>` moves the API and web UI off `:8099`, for example to
+port 80 (`sudo massimo install -listen :80`, or `192.168.1.200:80` for one
+address only). It writes two drop-ins that later installs keep:
+`massimo.service.d/listen.conf` sets `MASSIMO_LISTEN` and, below port
+1024, grants the service `CAP_NET_BIND_SERVICE`, since the user `massimo`
+cannot bind such a port otherwise; `massimo-update.service.d/listen.conf`
+sets `MASSIMO_HEALTH`, where the update helper checks the restarted
+server. Deleting both files (and `systemctl daemon-reload`, `systemctl
+restart massimo`) goes back to `:8099`.
+
+`massimo install -remove` stops and
 removes the service, its units and the binary; `-purge` also removes the
 settings, the state, the logs and the user.
 

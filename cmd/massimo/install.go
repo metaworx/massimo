@@ -18,12 +18,13 @@ func runInstall(args []string) error {
 	settings := fs.String("settings", "", "copy this settings file (a .env) to "+install.EnvPath+" when there is none yet")
 	noHelper := fs.Bool("no-update-helper", false, "leave out the update helper units (the web UI then cannot start updates)")
 	noStart := fs.Bool("no-start", false, "enable the service without starting it")
+	listen := fs.String("listen", "", "serve the API and web UI on this address, such as :80 (default :8099; kept by later installs)")
 	dryRun := fs.Bool("dry-run", false, "only show what would be done")
 	remove := fs.Bool("remove", false, "stop and remove the service, its units and the binary")
 	purge := fs.Bool("purge", false, "with -remove: also remove the settings, the state, the logs and the user")
 	root := fs.String("root", "", "install below this directory instead of / and run no commands (for images and tests)")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-no-update-helper] [-no-start] [-dry-run]
+		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-no-update-helper] [-no-start] [-dry-run]
        massimo install -remove [-purge]
 
 Install this binary as %s and massimo serve as a service: on Linux with
@@ -47,7 +48,7 @@ units; a unit edited by hand is kept as .bak. Needs root.
 	default:
 		return fmt.Errorf("install does not support %s", runtime.GOOS)
 	}
-	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun}
+	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen}
 	if *remove {
 		return install.Remove(o, *purge)
 	}

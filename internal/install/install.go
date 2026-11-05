@@ -57,6 +57,9 @@ type Options struct {
 	NoUpdateHelper bool
 	// NoStart enables the service without (re)starting it.
 	NoStart bool
+	// Listen, when set, is the API and web UI address (host:port), kept
+	// in drop-ins that later installs leave alone; "" keeps what is there.
+	Listen string
 	// DryRun only says what would be done.
 	DryRun bool
 	// Out receives one line per step; nil is os.Stdout.
@@ -129,6 +132,11 @@ func Install(o Options) error {
 	if err := Check(o); err != nil {
 		return err
 	}
+	if o.Listen != "" {
+		if _, _, err := listenDropIns(o.Listen); err != nil {
+			return err
+		}
+	}
 	in := newInstaller(o)
 	if err := in.binary(); err != nil {
 		return err
@@ -144,6 +152,9 @@ func Install(o Options) error {
 		in.checkSettings()
 	}
 	if err := in.units(); err != nil {
+		return err
+	}
+	if err := in.listen(); err != nil {
 		return err
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
@@ -426,8 +437,13 @@ func Remove(o Options, purge bool) error {
 	// Stopping fails for units that are not there; that is fine.
 	in.run("systemctl", "disable", "--now", "massimo-update.path", "massimo.service")
 	for _, p := range []string{UnitDir + "/massimo.service", UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service",
-		LogrotateDir + "/massimo", BinPath, BinPath + ".prev", BinPath + ".failed"} {
+		LogrotateDir + "/massimo", BinPath, BinPath + ".prev", BinPath + ".failed", ListenDropIn, HealthDropIn} {
 		in.remove(p, false)
+	}
+	for _, d := range []string{ListenDropIn, HealthDropIn} {
+		if !in.DryRun {
+			os.Remove(in.path(filepath.Dir(d))) // only when empty
+		}
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
 		return err

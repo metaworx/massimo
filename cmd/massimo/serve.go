@@ -24,7 +24,11 @@ import (
 // runServe starts the HTTP API over every configured Cube.
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	listen := fs.String("listen", "127.0.0.1:8099", "address to listen on")
+	listenDefault := os.Getenv("MASSIMO_LISTEN")
+	if listenDefault == "" {
+		listenDefault = "127.0.0.1:8099"
+	}
+	listen := fs.String("listen", listenDefault, "address to listen on (default MASSIMO_LISTEN, else 127.0.0.1:8099)")
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones")
 	poll := fs.Duration("poll", time.Minute, "how often to poll the device list")
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
