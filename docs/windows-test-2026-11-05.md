@@ -17,10 +17,16 @@ changed. No real Cube was contacted; all Cube traffic went to
   as `gsudo pwsh -NoProfile -NonInteractive -File <script>` with a gsudo
   credentials cache that Martin enabled for the session process.
 - Defender: real-time protection on, signatures 1.463.134.0. **No
-  detections** and no Defender/Operational events for any massimo binary.
-- SmartScreen: **never appeared**. curl.exe writes no Mark-of-the-Web
-  stream, so there was nothing for SmartScreen to check. A browser download
-  would get the mark; that path is untested.
+  detections** for any massimo binary. The test itself left no
+  Defender/Operational event; Martin's browser download afterwards left one
+  (event 2050, Information: "has uploaded a file for further analysis",
+  the automatic sample submission of an unknown binary). See observation 8.
+- SmartScreen: **silent during the test**, because curl.exe writes no
+  Mark-of-the-Web stream and there was nothing to check. **It warns on a
+  browser download launched by double-click**: Martin downloaded
+  v0.5.0-alpha.1 with a browser afterwards and got "Windows protected your
+  PC", Unknown publisher. The same file runs from a console without a
+  dialog. See observation 8.
 - Network profile: the only active connection is Wi-Fi "Altocumulus",
   categorised **Public** at the start. See step 4.
 - Pre-existing and untouched: a `massimo portal` process from Martin's WSL
@@ -262,9 +268,28 @@ None of these is a failure.
    Public again.
 7. **`-remove` deletes the firewall rule**, not `-purge`. The README is
    right; step 9 of docs/testing-windows.md says otherwise.
-8. **SmartScreen untested for browser downloads.** curl.exe adds no
-   Mark-of-the-Web, so SmartScreen never ran. A download through Edge or
-   Chrome would carry the mark and may warn about the unsigned binary.
+8. **SmartScreen warns when a browser download is double-clicked.** The
+   test's curl downloads carried no Mark-of-the-Web, so SmartScreen never
+   ran during the nine steps. After the test Martin downloaded
+   v0.5.0-alpha.1 from the releases page with a browser (the file got the
+   mark: `ZoneId=3`, referrer `github.com/metaworx/massimo/releases`; hash
+   matches SHA256SUMS) and launched it from Explorer. Result: the blue
+   "Windows protected your PC" dialog, "Microsoft Defender SmartScreen
+   prevented an unrecognised app from starting", Application
+   massimo-windows-amd64.exe, Publisher: Unknown publisher, with "Run
+   anyway" and "Don't run" offered. Fifteen seconds after the download
+   Defender also uploaded the file for analysis (event 2050), with no
+   detection. The same marked file run from a non-elevated PowerShell
+   (`.\massimo-windows-amd64.exe version`) printed the version in half a
+   second with no dialog, and the mark stays on the file. So the documented
+   flow is unaffected: `install` is run from an elevated prompt, the
+   installed copy is written fresh (`os.ReadFile` plus `writeAtomic`, no
+   mark), the Service Control Manager does not consult SmartScreen, and
+   `update` fetches with Go's HTTP client, which adds no mark. Only a
+   double-click on the download, which for a command-line binary does
+   nothing useful anyway, meets the warning. The README's Windows section
+   could say so in one line; the real fix is an Authenticode signature,
+   which also needs reputation to build before the warning goes away.
 9. **Reconnect backoff caps at 64 s.** After a Cube outage the service can
    take up to a minute to notice the Cube is back. Fine for heating, just
    worth knowing when reading logs.
@@ -278,4 +303,6 @@ None of these is a failure.
 - The Wi-Fi profile "Altocumulus 2" was set to Private on Martin's request
   during step 4; after the reboot the active profile was "Altocumulus"
   (Public). Martin set that one to Private afterwards.
+- Martin's browser download of v0.5.0-alpha.1 is still in his Downloads
+  folder, Mark-of-the-Web included; it was only run with `version`.
 - The repository clone is in `C:\Users\mdr\projects\massimo` on jaguar.
