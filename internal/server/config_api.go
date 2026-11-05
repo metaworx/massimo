@@ -206,7 +206,9 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 // updateDevice handles PUT /devices/{rf} with {"name": "…"} and/or
 // {"room_id": N}. A room change is done as the original software does
 // it: unlink from the old room's partners, relink with the new room's,
-// set the group, then the metadata.
+// set the group, then the metadata. A device that is in no room yet,
+// such as one just paired, needs a room_id and is added to the room the
+// way the original software adds a new device (cubeio.Writer.AddDevice).
 func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -239,7 +241,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if idx < 0 {
-		return fail(http.StatusConflict, "device %s is not assigned to a room (pair it with the original software first)", rf)
+		return s.addDevice(w, r, rt, md, c, req.Name, req.RoomID)
 	}
 	cur := md.Devices[idx]
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
@@ -280,6 +282,39 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 	if newRoom != cur.RoomID {
 		rt.writer().Reread(ctx, rf)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
+	return nil
+}
+
+// addDevice puts a device that is not in the metadata, one just paired
+// or paired long ago and never listed, into a room.
+func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int) error {
+	if roomID == nil {
+		return fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
+	}
+	if *roomID < 1 || *roomID > 255 {
+		return fail(http.StatusBadRequest, "room_id must be 1..255")
+	}
+	room := uint8(*roomID)
+	if _, ok := rt.hidden().Room(md, room); !ok {
+		return fail(http.StatusNotFound, "no room %d", room)
+	}
+	if c.Type == cube.DeviceCube {
+		return fail(http.StatusBadRequest, "the cube itself is not in a room")
+	}
+	n := ""
+	if name != nil {
+		n = strings.TrimSpace(*name)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	res, err := rt.writer().AddDevice(ctx, md, c, n, room)
+	if err != nil {
+		return fail(http.StatusBadRequest, "%v", err)
+	}
+	if err := s.commandError(rt, res, 0); err != nil {
+		return err
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil

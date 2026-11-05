@@ -18,6 +18,9 @@
 //	GET  /api/v1/cubes/{sn}/backup?format=yaml|json  a backup file
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
 //	POST /api/v1/cubes/{sn}/events/ticket            a single-use ticket that opens the event stream
+//	POST /api/v1/cubes/{sn}/pairing                  start pairing (inclusion mode), {"seconds":60}
+//	GET  /api/v1/cubes/{sn}/pairing                  pairing state and the devices that joined
+//	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
 //
@@ -150,7 +153,9 @@ type event struct {
 	Device string      `json:"device,omitempty"`
 	Error  string      `json:"error,omitempty"`
 	State  interface{} `json:"state,omitempty"`
-	Time   time.Time   `json:"time"`
+	// Paired is the device that joined, for a "paired" event.
+	Paired *cube.NewDevice `json:"paired,omitempty"`
+	Time   time.Time       `json:"time"`
 }
 
 // logSize is how many events a Cube's log keeps for GET …/log.
@@ -334,6 +339,12 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Err != nil {
 				ev.Error = e.Err.Error()
 			}
+			if e.Kind == cubelan.EventPaired {
+				// The metadata does not change by pairing; the device's C
+				// line puts it into the device list, as unlisted.
+				ev.Paired = e.New
+				go rt.writer().Reread(ctx, e.Device)
+			}
 			rt.remember(ev)
 			rt.subsMu.Lock()
 			for ch := range rt.subs {
@@ -439,6 +450,9 @@ func (s *Server) routes() {
 	api("GET /api/v1/cubes/{sn}/events", s.events)
 	api("POST /api/v1/cubes/{sn}/events/ticket", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", s.getLog)
+	api("POST /api/v1/cubes/{sn}/pairing", s.startPairing)
+	api("GET /api/v1/cubes/{sn}/pairing", s.getPairing)
+	api("DELETE /api/v1/cubes/{sn}/pairing", s.stopPairing)
 	api("GET /api/v1/update", s.getUpdate)
 	api("POST /api/v1/update", s.startUpdate)
 	s.configRoutes(api)
