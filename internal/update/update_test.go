@@ -311,3 +311,28 @@ func TestSwapRollbackSmoke(t *testing.T) {
 		t.Fatal("rollback without .prev")
 	}
 }
+
+func TestWindowsNamesAndRenamingSwap(t *testing.T) {
+	if got := stagedPath(`dir/massimo.exe`); got != filepath.Join("dir", ".massimo.new.exe") {
+		t.Fatalf("staged %s", got)
+	}
+	if got := stagedPath(`dir/massimo`); got != filepath.Join("dir", ".massimo.new") {
+		t.Fatalf("staged %s", got)
+	}
+	dir := t.TempDir()
+	target, src, aside := filepath.Join(dir, "massimo.exe"), filepath.Join(dir, "new"), filepath.Join(dir, "massimo.exe.prev")
+	os.WriteFile(target, []byte("old"), 0o755)
+	os.WriteFile(src, []byte("new"), 0o755)
+	os.WriteFile(aside, []byte("older"), 0o755)
+	if err := swapRenaming(src, target, aside); err != nil {
+		t.Fatal(err)
+	}
+	read := func(p string) string { b, _ := os.ReadFile(p); return string(b) }
+	if read(target) != "new" || read(aside) != "old" {
+		t.Fatalf("target %q aside %q", read(target), read(aside))
+	}
+	// A failing second rename puts the target back.
+	if err := swapRenaming(filepath.Join(dir, "missing"), target, aside); err == nil || read(target) != "new" {
+		t.Fatalf("%v, target %q", err, read(target))
+	}
+}

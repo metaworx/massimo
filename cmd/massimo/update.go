@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -41,7 +42,7 @@ func runUpdate(args []string) (err error) {
 	want := fs.String("version", "", "install this release tag instead of the newest, even an older one")
 	rollback := fs.Bool("rollback", false, "go back to the binary before the last update (again: forward)")
 	binary := fs.String("binary", "", "the binary to replace (default: this one)")
-	restart := fs.String("restart", "", "restart this systemd unit afterwards, such as massimo.service")
+	restart := fs.String("restart", "", "restart this service afterwards: a systemd unit such as massimo.service, or on Windows the service massimo")
 	health := fs.String("health", "", "after the restart, wait until this URL (the server's /healthz) reports the new version, else roll back")
 	healthWait := fs.Duration("health-timeout", 2*time.Minute, "how long to wait for -health")
 	request := fs.String("request", "", "helper mode: run only when this request file exists, take the channel from it and remove it")
@@ -49,7 +50,7 @@ func runUpdate(args []string) (err error) {
 	yes := fs.Bool("yes", false, "do not ask before installing")
 	force := fs.Bool("force", false, "also replace a development or modified build")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Linux and macOS; replacing the binary in\n/usr/local/bin needs root, see packaging/README.md for the update helper\nthat lets the web UI start an update.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update on Linux.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -90,20 +91,14 @@ func runUpdate(args []string) (err error) {
 	cur, curOK := update.ParseVersion(version)
 
 	if *rollback {
-		if err := refuseOS(); err != nil {
-			return err
-		}
 		if err := update.Rollback(target, update.PrevPath(target)); err != nil {
 			return err
 		}
 		fmt.Printf("rolled back %s; the replaced binary is now %s\n", target, update.PrevPath(target))
-		return restartUnit(*restart)
+		return restartService(*restart)
 	}
 
 	if !*check {
-		if err := refuseOS(); err != nil {
-			return err
-		}
 		if (!curOK || cur.Dirty) && !*force && *want == "" {
 			return fmt.Errorf("this is a development or modified build (%s); use -force to replace it anyway", versionOr(version))
 		}
@@ -181,7 +176,7 @@ func runUpdate(args []string) (err error) {
 	}
 
 	status(update.Status{State: "restarting", From: version, To: rel.Tag, Channel: *ch})
-	err = restartUnit(*restart)
+	err = restartService(*restart)
 	if err == nil && *health != "" {
 		err = waitHealthy(ctx, *health, rel.Tag, *healthWait)
 	}
@@ -189,7 +184,7 @@ func runUpdate(args []string) (err error) {
 		fmt.Fprintln(os.Stderr, "update:", err, "- rolling back")
 		if rerr := update.Rollback(target, update.FailedPath(target)); rerr != nil {
 			err = fmt.Errorf("%v; the rollback failed too: %v", err, rerr)
-		} else if rerr := restartUnit(*restart); rerr != nil {
+		} else if rerr := restartService(*restart); rerr != nil {
 			err = fmt.Errorf("%v; rolled back, but the restart failed: %v", err, rerr)
 		}
 		status(update.Status{State: "rolled-back", From: version, To: rel.Tag, Channel: *ch, Message: err.Error()})
@@ -197,19 +192,6 @@ func runUpdate(args []string) (err error) {
 	}
 	status(update.Status{State: "done", From: version, To: rel.Tag, Channel: *ch})
 	fmt.Println("running", rel.Tag)
-	return nil
-}
-
-// refuseOS explains why Windows cannot update itself yet.
-func refuseOS() error {
-	if runtime.GOOS == "windows" {
-		// Windows keeps a running .exe locked against writes but lets it
-		// be renamed: an updater there renames massimo.exe away, writes
-		// the new one, and restarts the service through the service
-		// manager, which needs `massimo install` for Windows (roadmap) and an
-		// administrator or a service running as LocalSystem.
-		return errors.New("massimo update does not replace binaries on Windows yet; download the release by hand (massimo update -check shows it)")
-	}
 	return nil
 }
 
@@ -227,13 +209,17 @@ func confirm(q string) bool {
 	return a == "y" || a == "yes"
 }
 
-func restartUnit(unit string) error {
-	if unit == "" {
+// restartService restarts the systemd unit, or on Windows the service.
+func restartService(name string) error {
+	if name == "" {
 		return nil
 	}
-	out, err := exec.Command("systemctl", "restart", unit).CombinedOutput()
+	if runtime.GOOS == "windows" {
+		return install.RestartService(name)
+	}
+	out, err := exec.Command("systemctl", "restart", name).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("systemctl restart %s: %v: %s", unit, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("systemctl restart %s: %v: %s", name, err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
