@@ -199,7 +199,13 @@ jobs:
           # As the web UI does it: the server writes the request, launchd
           # starts the helper, which installs the newest alpha or rolls
           # back.
-          curl -fsS -X POST -H 'Authorization: Bearer ci' http://127.0.0.1:18099/api/v1/update
+          code="$(curl -sS -o post.json -w '%{http_code}' -X POST -H 'Authorization: Bearer ci' http://127.0.0.1:18099/api/v1/update)"
+          cat post.json
+          if [ "$code" != 202 ]; then
+            echo "::error::POST /api/v1/update answered $code"
+            curl -sS -H 'Authorization: Bearer ci' http://127.0.0.1:18099/api/v1/update
+            exit 1
+          fi
           for i in $(seq 90); do
             st="$(cat /var/lib/massimo-update/status.json 2>/dev/null || true)"
             echo "$st" | grep -Eq '"state": "(done|rolled-back|failed)"' && break
