@@ -419,13 +419,13 @@ asks GitHub at most every ten minutes; `refresh` asks now.
 ```json
 {
   "current": "v0.1.0-alpha.9",
-  "channel": "phase-0",
+  "channel": "alpha",
   "latest": "v0.1.0-alpha.10",
   "release_url": "https://github.com/metaworx/massimo/releases/tag/v0.1.0-alpha.10",
   "available": true,
   "checked_at": "2026-11-05T13:40:00+01:00",
   "can_update": true,
-  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "phase-0", "time": "…"}
+  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"}
 }
 ```
 

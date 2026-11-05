@@ -12,7 +12,7 @@ name: Release
 # publishing, and publishes exactly what it signed.
 #
 # The update channel of a release is the branch the tag was made on, as
-# `make tag` writes it into the tag message ("channel: phase-0"); for a
+# `make tag` writes it into the tag message ("channel: alpha"); for a
 # tag without that line, the one branch on GitHub holding its commit.
 on:
   push:

@@ -198,7 +198,10 @@ channel**, the branch the tag was made on; a binary follows the channel of
 the branch it was built from (`massimo version` does not show it, `massimo
 update -check` does), or `MASSIMO_UPDATE_CHANNEL`. A release is installed
 only when it is newer than the running version, so switching the channel
-never goes back in version; `-version <tag>` installs a given release,
+never goes back in version. The alpha releases come from the branch
+`alpha` (v0.1.0-alpha.10 and .11 were made on its old name `phase-0`; a
+binary of those follows `phase-0` until `MASSIMO_UPDATE_CHANNEL=alpha` is
+set); `-version <tag>` installs a given release,
 older ones too.
 
 By hand, as root:

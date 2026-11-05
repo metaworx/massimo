@@ -33,7 +33,7 @@ func (f *fakeFinder) Latest(ctx context.Context, channel string) (*update.Releas
 
 func updateServer(t *testing.T, token, request string, f *fakeFinder) (*httptest.Server, string) {
 	status := filepath.Join(t.TempDir(), "status.json")
-	s := New(Options{Token: token, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "phase-0", Request: request, Status: status, Finder: f}})
+	s := New(Options{Token: token, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Request: request, Status: status, Finder: f}})
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts, status
@@ -67,7 +67,7 @@ func TestUpdateEndpoints(t *testing.T) {
 		t.Fatalf("GET without token: %d", code)
 	}
 	code, out := call(t, ts, "GET", "secret")
-	if code != 200 || out["latest"] != "v0.1.0-alpha.10" || out["available"] != true || out["can_update"] != true || out["channel"] != "phase-0" {
+	if code != 200 || out["latest"] != "v0.1.0-alpha.10" || out["available"] != true || out["can_update"] != true || out["channel"] != "alpha" {
 		t.Fatalf("GET: %d %v", code, out)
 	}
 	call(t, ts, "GET", "secret")
@@ -79,7 +79,7 @@ func TestUpdateEndpoints(t *testing.T) {
 	if code != 202 || out["requested"] != "v0.1.0-alpha.10" {
 		t.Fatalf("POST: %d %v", code, out)
 	}
-	if b, err := os.ReadFile(req); err != nil || strings.TrimSpace(string(b)) != "phase-0" {
+	if b, err := os.ReadFile(req); err != nil || strings.TrimSpace(string(b)) != "alpha" {
 		t.Fatalf("request file: %q %v", b, err)
 	}
 

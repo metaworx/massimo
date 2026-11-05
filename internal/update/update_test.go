@@ -150,18 +150,18 @@ func TestLatestPicksNewestSignedOnChannel(t *testing.T) {
 	_, other := testKey(t)
 	gh := newFakeGitHub(t)
 	bin := map[string][]byte{"massimo-linux-armv6": []byte("v9")}
-	gh.add(t, priv, "v0.1.0-alpha.9", "phase-0", bin, nil)
+	gh.add(t, priv, "v0.1.0-alpha.9", "alpha", bin, nil)
 	gh.add(t, priv, "v0.1.0-alpha.11", "main", bin, nil)
-	gh.add(t, priv, "v0.1.0-alpha.10", "phase-0", bin, nil)
-	gh.add(t, other, "v0.1.0-alpha.12", "phase-0", bin, nil) // wrong key
-	gh.add(t, priv, "v0.1.0-alpha.13", "phase-0", bin, func(b []byte) []byte {
-		return bytes.Replace(b, []byte("phase-0"), []byte("phase-1"), 1) // changed after signing
+	gh.add(t, priv, "v0.1.0-alpha.10", "alpha", bin, nil)
+	gh.add(t, other, "v0.1.0-alpha.12", "alpha", bin, nil) // wrong key
+	gh.add(t, priv, "v0.1.0-alpha.13", "alpha", bin, func(b []byte) []byte {
+		return bytes.Replace(b, []byte("alpha"), []byte("beta"), 1) // changed after signing
 	})
 	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
 
-	r, err := c.Latest(context.Background(), "phase-0")
+	r, err := c.Latest(context.Background(), "alpha")
 	if err != nil || r == nil || r.Tag != "v0.1.0-alpha.10" {
-		t.Fatalf("phase-0: %+v %v", r, err)
+		t.Fatalf("alpha: %+v %v", r, err)
 	}
 	if r, err := c.Latest(context.Background(), "main"); err != nil || r == nil || r.Tag != "v0.1.0-alpha.11" {
 		t.Fatalf("main: %+v %v", r, err)
@@ -177,9 +177,9 @@ func TestLatestPicksNewestSignedOnChannel(t *testing.T) {
 func TestManifestOfAnotherRelease(t *testing.T) {
 	pub, priv := testKey(t)
 	gh := newFakeGitHub(t)
-	gh.add(t, priv, "v0.1.0-alpha.5", "phase-0", map[string][]byte{"massimo-linux-amd64": []byte("old")}, nil)
+	gh.add(t, priv, "v0.1.0-alpha.5", "alpha", map[string][]byte{"massimo-linux-amd64": []byte("old")}, nil)
 	// A newer release carrying the old one's (correctly signed) manifest.
-	gh.add(t, priv, "v0.1.0-alpha.6", "phase-0", map[string][]byte{"massimo-linux-amd64": []byte("new")}, nil)
+	gh.add(t, priv, "v0.1.0-alpha.6", "alpha", map[string][]byte{"massimo-linux-amd64": []byte("new")}, nil)
 	gh.files["/dl/v0.1.0-alpha.6/"+ManifestName] = gh.files["/dl/v0.1.0-alpha.5/"+ManifestName]
 	gh.files["/dl/v0.1.0-alpha.6/"+SignatureName] = gh.files["/dl/v0.1.0-alpha.5/"+SignatureName]
 	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
@@ -216,10 +216,10 @@ func TestRequest(t *testing.T) {
 	if _, ok, err := TakeRequest(p); ok || err != nil {
 		t.Fatalf("no file: %v %v", ok, err)
 	}
-	if err := WriteRequest(p, "phase-0"); err != nil {
+	if err := WriteRequest(p, "alpha"); err != nil {
 		t.Fatal(err)
 	}
-	if c, ok, err := TakeRequest(p); c != "phase-0" || !ok || err != nil {
+	if c, ok, err := TakeRequest(p); c != "alpha" || !ok || err != nil {
 		t.Fatalf("%q %v %v", c, ok, err)
 	}
 	if _, err := os.Stat(p); !os.IsNotExist(err) {

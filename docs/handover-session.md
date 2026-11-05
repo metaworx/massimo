@@ -1,8 +1,9 @@
 # Handover from the session of 2026-11-04
 
-For the next session, local or cloud. Branch `phase-0`, head 78855c5
-and later; tags up to `v0.1.0-alpha.N` (run `make tag` after each
-feature). Read README.md, then docs/roadmap.md, then this file.
+For the next session, local or cloud. Branch `alpha` (called `phase-0`
+until 2026-11-05; it is the update channel of the alpha releases), head
+78855c5 and later; tags up to `v0.1.0-alpha.N` (run `make tag` on
+`alpha` after each feature). Read README.md, then docs/roadmap.md, then this file.
 
 Done on 2026-11-05 after the UI rounds: docs/design.md and
 docs/background.md (the proposal, the evaluation, the sources), the
