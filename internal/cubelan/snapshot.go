@@ -19,7 +19,8 @@ type Snapshot struct {
 	metadata *cube.Metadata
 	configs  map[cube.RFAddress]*cube.DeviceConfig
 	states   map[cube.RFAddress]cube.DeviceState
-	seen     map[cube.RFAddress]time.Time
+	times    map[cube.RFAddress]*StateTimes
+	since    time.Time        // first message from the Cube
 	order    []cube.RFAddress // devices in the order the Cube first reported them
 	mparts   []cube.MetadataPart
 	updated  time.Time
@@ -33,7 +34,7 @@ func newSnapshot() *Snapshot {
 	return &Snapshot{
 		configs: map[cube.RFAddress]*cube.DeviceConfig{},
 		states:  map[cube.RFAddress]cube.DeviceState{},
-		seen:    map[cube.RFAddress]time.Time{},
+		times:   map[cube.RFAddress]*StateTimes{},
 	}
 }
 
@@ -97,7 +98,7 @@ func (s *Snapshot) endGreetingLocked(listed map[cube.RFAddress]bool) {
 	for rf := range s.states {
 		if !listed[rf] {
 			delete(s.states, rf)
-			delete(s.seen, rf)
+			delete(s.times, rf)
 		}
 	}
 	kept := s.order[:0]
@@ -117,6 +118,9 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.updated = now
+	if s.since.IsZero() {
+		s.since = now
+	}
 	switch m.Type {
 	case 'H':
 		h, err := cube.ParseHello(m.Data)
@@ -167,8 +171,9 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		for _, st := range states {
 			listed[st.RFAddress] = true
 			s.noteLocked(st.RFAddress)
-			s.seen[st.RFAddress] = now
-			if old, ok := s.states[st.RFAddress]; !ok || !sameState(old, st) {
+			old, had := s.states[st.RFAddress]
+			s.noteTimesLocked(old, had, st, now)
+			if !had || !sameState(old, st) {
 				evs = append(evs, Event{Kind: EventState, Device: st.RFAddress})
 			}
 			s.states[st.RFAddress] = st
@@ -362,9 +367,16 @@ func SnapshotFromLines(lines []cube.Message) (*Snapshot, error) {
 	s := newSnapshot()
 	now := time.Now()
 	for _, m := range lines {
-		if _, err := s.apply(m, now); err != nil {
+		if err := s.Apply(m, now); err != nil {
 			return nil, err
 		}
 	}
 	return s, nil
+}
+
+// Apply folds a recorded line into the snapshot as if the Cube had sent
+// it at the given time, for tests and offline tools.
+func (s *Snapshot) Apply(m cube.Message, at time.Time) error {
+	_, err := s.apply(m, at)
+	return err
 }
