@@ -10,9 +10,9 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
-- Store stage (b), users, login, tokens, the audit and commands
-  (`docs/store.md` section 9): migration 0002 adds `commands`,
-  `users.auth_version` and `audit.command_id`.
+- Store stage (b) in `internal/store` (`docs/store.md` section 9):
+  migration 0002 (`commands`, `users.auth_version`, `audit.command_id`),
+  users with argon2id passwords, roles, tokens and the bootstrap.
 
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
