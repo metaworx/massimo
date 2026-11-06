@@ -25,10 +25,10 @@ A ruleset on `main` requires those seven checks,
 auto-merge and delete-on-merge are on,
 so `gh pr merge --auto` waits for them and the branch goes with the merge;
 the owner's own pushes bypass the ruleset.
-The `gh` token has no `workflow` scope,
-so `gh pr merge` refuses a pull request that changes `.github/workflows/`;
-one (#55) was merged as a local signed `merge:` commit pushed to `main`;
-`gh auth refresh -h github.com -s workflow` once, by the owner, lifts that.
+The `gh` token on jaguar has the `workflow` scope since the evening of 2026-11-06;
+without it,
+`gh pr merge` refuses a pull request that changes `.github/workflows/`,
+and one (#55) was merged as a local signed `merge:` commit pushed to `main`.
 
 ## Where things run
 
@@ -89,9 +89,8 @@ tools/ui-test/README.md); a UI change brings its test there,
 and CI keeps a failed test's trace,
 screenshot and video as the artifact `ui-test-results`.
 The branches `claude/tls*` and `backup/claude/tls*` (ten) and
-`claude/ci-update-race` are merged and to delete;
-the worktree `.claude/worktrees/xenodochial-pasteur-c0e0c8` (store stage (b),
-detached) can go.
+`claude/ci-update-race` are merged and to delete.
+The two worktrees under `.claude/worktrees/` belong to the sessions in flight.
 
 ## Decisions waiting for the owner
 
@@ -109,7 +108,6 @@ detached) can go.
   deploying from Actions,
   the tap repository `metaworx/homebrew-massimo` with its deploy key in the secrets,
   and the Pi moved to the package once a release carries it.
-- The `workflow` scope for `gh` (above).
 
 ## Hardware checks still owed
 
@@ -203,14 +201,19 @@ the hardware days") and packaging/README.md ("Learnings").
   analyses and NOTE are on that branch.
   Windows signing, rpm, MSI, pkg, a container and LoxBerry wait (its D5, D8).
 
-The store stage (b) session and the TLS session are done and deleted;
-the session that fixed CI's Windows update race (#62) too.
+- **Store stage (c)**, the preferences (docs/store.md section 9),
+  runs in the session that built stage (b), on the branch `claude/store-c`
+  in the worktree `xenodochial-pasteur-c0e0c8`: AP StorePrefs v1.0,
+  migration 0003 with the capability preferences,
+  preferences per user and key, `/api/v1/me/preferences`.
+
+The TLS session and the session that fixed CI's Windows update race (#62)
+are done and deleted.
 
 ## Next steps in order
 
 1. The owner's items above: the secrets and the key on the Mint box,
-   the M7 reservations, the Mac's sudoers file, the Mint key on the Pi,
-   the `gh` scope.
+   the M7 reservations, the Mac's sudoers file, the Mint key on the Pi.
 2. The update to v0.8.0-alpha.1 on the Pi and the Windows service (Settings → Software),
    watched as hardware check 1 says; then the TLS day, then pairing.
 3. Pull request #63 (packaging) to `main`, the owner's steps of its NOTE,
