@@ -16,6 +16,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The colour-scheme editor takes typed or pasted hex values next to each
+  colour, and its contrast badges stand before the colours, which now
+  line up (docs/ui.md, "Appearance").
+
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
