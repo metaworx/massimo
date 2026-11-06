@@ -225,6 +225,11 @@ func printTLS(w io.Writer) {
 	if err != nil {
 		hsts = "invalid: " + os.Getenv(hstsVar)
 	}
+	if mode == "acme" {
+		fmt.Fprintf(w, "tls:           acme (hsts %s)\n", hsts)
+		printACME(w)
+		return
+	}
 	if mode == "self-signed" {
 		certPath, keyPath = certs.SelfSignedPaths(dataDir())
 		fmt.Fprintf(w, "tls:           self-signed (%s; hsts %s)\n", filepath.Dir(certPath), hsts)
@@ -239,6 +244,22 @@ func printTLS(w io.Writer) {
 		return
 	}
 	printCertificate(w, mode, certPath, keyPath)
+}
+
+// printACME prints, for config and tls show, the certificate autocert
+// cached for each name of MASSIMO_TLS_NAMES, or that there is none yet.
+func printACME(w io.Writer) {
+	dir, _ := certs.ACMEPaths(dataDir(), "")
+	names := certs.ParseNames(os.Getenv(tlsNamesVar))
+	fmt.Fprintf(w, "source:        acme (%s; names %s; directory %s; http %s)\n", dir, orNone(strings.Join(names, ", ")), orNone(os.Getenv(acmeDirectoryVar)), orNone(os.Getenv(tlsHTTPVar)))
+	for _, n := range names {
+		st, err := certs.LoadACMECache(dataDir(), n)
+		if err != nil {
+			fmt.Fprintf(w, "               %s: no certificate yet (serve orders one at its start)\n", n)
+			continue
+		}
+		fmt.Fprintf(w, "               %s: expires %s; fingerprint %s\n", n, st.NotAfter.Format("2006-01-02"), st.Fingerprint)
+	}
 }
 
 // printCertificate prints a certificate's names, expiry and fingerprint

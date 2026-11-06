@@ -2,7 +2,8 @@
 # Copyright (C) 2026 The Massimo Authors
 """The certificate under the header: a self-signed certificate reported
 by /healthz (stubbed) shows its fingerprint under the header and the
-certificate in the expert details, and nothing shows without one.
+certificate in the expert details, one that ends within two weeks a
+warning in the page's language, and nothing shows without one.
 /healthz is stubbed with the page's own version, so the page does not
 reload."""
 import json
@@ -39,4 +40,22 @@ def test_self_signed_notice(page):
         "self-signed notice with the fingerprint"
     cert = page.evaluate("document.getElementById('tls-cert').textContent")
     assert cert.startswith("self-signed · massimo.example.net, 192.0.2.10 · "), f"certificate in the expert details ({cert})"
+    unstub_health(page)
+
+
+EXPIRES = {"en": "expires in 5 days", "de": "läuft in 5 Tagen ab"}
+
+
+def test_expiry_warning(page, case):
+    """A certificate that ends within two weeks is a warning in the
+    page's language, without a fingerprint."""
+    import time
+
+    soon = {"source": "acme", "names": ["massimo.example.net"], "fingerprint": "SHA256:AB:CD:EF:02", "self_signed": False,
+            "not_after": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 5 * 86400 + 3600)),
+            "warning": "the certificate expires in 5 days"}
+    stub_health(page, soon)
+    assert wait_until(page, "!document.getElementById('tls-notice').classList.contains('hidden') && "
+                      "document.getElementById('tls-fingerprint').textContent === ''", 5), "expiry warning shown"
+    assert EXPIRES[case.lang] in page.locator("#tls-notice-text").inner_text(), f"expiry warning in {case.lang}"
     unstub_health(page)

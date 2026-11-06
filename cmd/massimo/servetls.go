@@ -27,6 +27,12 @@ const (
 	tlsKeyVar   = "MASSIMO_TLS_KEY"
 	tlsNamesVar = "MASSIMO_TLS_NAMES"
 	hstsVar     = "MASSIMO_HSTS"
+	// -tls acme: the account's contact address, the directory (Let's
+	// Encrypt's unless set; its staging one for experiments) and the
+	// plain helper listener for HTTP-01 and the redirect.
+	acmeEmailVar     = "MASSIMO_ACME_EMAIL"
+	acmeDirectoryVar = "MASSIMO_ACME_DIRECTORY"
+	tlsHTTPVar       = "MASSIMO_TLS_HTTP"
 	// certWatch is how often a source checks its certificate: a renewal
 	// 30 days before the end needs no finer clock.
 	certWatch = time.Hour
@@ -52,12 +58,18 @@ type tlsOptions struct {
 	mode, certPath, keyPath string
 	names                   string // -tls-names
 	listen                  string // -listen, for the self-signed names
-	dataDir                 string // where the self-signed pair lives
+	dataDir                 string // where the self-signed pair and the ACME cache live
+	email, directory        string // -acme-email, -acme-directory
+	httpAddr                string // -tls-http
 }
 
 // tlsSource is the certificate source -tls names, nil for off.
 func tlsSource(o tlsOptions, log *slog.Logger) (certs.Source, error) {
-	switch m := tlsMode(o.mode, o.certPath, o.keyPath); m {
+	m := tlsMode(o.mode, o.certPath, o.keyPath)
+	if o.httpAddr != "" && m != "acme" {
+		return nil, errors.New("serve: -tls-http goes with -tls acme")
+	}
+	switch m {
 	case "off":
 		return nil, nil
 	case "files":
@@ -76,9 +88,13 @@ func tlsSource(o tlsOptions, log *slog.Logger) (certs.Source, error) {
 		}
 		return src, nil
 	case "acme":
-		return nil, fmt.Errorf("serve: -tls %s is not in this version yet; use -tls self-signed or -tls files", m)
+		src, err := certs.OpenACME(o.dataDir, certs.ParseNames(o.names), o.email, o.directory, log)
+		if err != nil {
+			return nil, fmt.Errorf("serve: %w", err)
+		}
+		return src, nil
 	default:
-		return nil, fmt.Errorf("serve: -tls %q: want off, files or self-signed", m)
+		return nil, fmt.Errorf("serve: -tls %q: want off, files, self-signed or acme", m)
 	}
 }
 

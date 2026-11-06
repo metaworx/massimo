@@ -62,6 +62,10 @@ type Options struct {
 	TLS             string
 	TLSCert, TLSKey string
 	TLSNames        string
+	// ACMEEmail and TLSHTTP go with "acme": the account's contact
+	// address, and the plain helper address (:80) for HTTP-01.
+	ACMEEmail string
+	TLSHTTP   string
 	// DryRun only says what would be done.
 	DryRun bool
 	// Out receives one line per step; nil is os.Stdout.
@@ -149,7 +153,7 @@ func Install(o Options) error {
 		return err
 	}
 	if o.Listen != "" {
-		if _, _, err := listenDropIns(o.Listen, false); err != nil {
+		if _, _, err := listenDropIns(o.Listen, false, ""); err != nil {
 			return err
 		}
 	}
@@ -176,7 +180,7 @@ func Install(o Options) error {
 	if err := in.units(); err != nil {
 		return err
 	}
-	if err := in.listen(in.tlsEffective(in.path(EnvPath))); err != nil {
+	if err := in.listen(in.tlsEffective(in.path(EnvPath)), in.tlsHTTPEffective(in.path(EnvPath))); err != nil {
 		return err
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {

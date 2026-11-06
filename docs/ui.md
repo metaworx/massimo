@@ -53,6 +53,8 @@ so the session never appears in a URL.
   the browser warned once, and a line under the header shows the
   certificate's fingerprint: compare it with the server's log,
   or with `massimo tls show` on the box.
+- A certificate that ends within two weeks, or one the server could not
+  get from Let's Encrypt yet, is a warning in the same line.
   The duty cycle and the free memory slots limit how many radio commands the
   Cube can send.
 

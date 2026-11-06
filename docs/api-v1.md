@@ -281,10 +281,13 @@ a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
 `tls`, with TLS, describes the certificate served:
 `{"source": "files", "names": ["massimo.example.net"], "not_after": "2027-02-01T00:00:00Z", "fingerprint": "SHA256:…", "self_signed": false}`;
-`source` is `files` (the owner's files, re-read when they change)
-or `self-signed` (the certificate the server made, `self_signed` true),
+`source` is `files` (the owner's files, re-read when they change),
+`self-signed` (the certificate the server made, `self_signed` true)
+or `acme` (Let's Encrypt),
 the fingerprint is the SHA-256 of the certificate as browsers show it,
-and `warning` is set while something needs the owner.
+and `warning` is set while something needs the owner:
+a certificate within two weeks of its end,
+or an order from Let's Encrypt that has not succeeded yet.
 
 ### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
 

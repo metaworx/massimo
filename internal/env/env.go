@@ -124,6 +124,7 @@ func Known(k string) bool {
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST",
 		// massimo serve's TLS (internal/certs) and its HSTS days.
 		"MASSIMO_TLS", "MASSIMO_TLS_CERT", "MASSIMO_TLS_KEY", "MASSIMO_TLS_NAMES", "MASSIMO_HSTS",
+		"MASSIMO_ACME_EMAIL", "MASSIMO_ACME_DIRECTORY", "MASSIMO_TLS_HTTP",
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.
 		"MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN":

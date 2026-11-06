@@ -26,7 +26,8 @@ func tlsCommand(args []string, w io.Writer) error {
 	usage := func() {
 		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] tls show | self-signed [-names <name,...>]
 
-  show         the certificate serve presents: its source (MASSIMO_TLS), names, expiry and fingerprint
+  show         the certificate serve presents: its source (MASSIMO_TLS), names, expiry and fingerprint;
+               for acme, the certificate cached for each name of MASSIMO_TLS_NAMES
   self-signed  make a new self-signed certificate for the box's names in <data>/tls/; a running
                serve -tls self-signed takes it up at the next connection, browsers ask once more
 
@@ -56,8 +57,10 @@ for the service run it as its user, for example
 			}
 			fmt.Fprintf(w, "source:        self-signed (%s)\n", filepath.Dir(certPath))
 			printCertificate(w, mode, certPath, keyPath)
+		case "acme":
+			printACME(w)
 		default:
-			fmt.Fprintf(w, "source:        %s, not in this version yet\n", mode)
+			fmt.Fprintf(w, "source:        %s is not a TLS mode serve knows\n", mode)
 		}
 	case "self-signed":
 		fs := flag.NewFlagSet("tls self-signed", flag.ContinueOnError)

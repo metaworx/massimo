@@ -97,6 +97,18 @@ func (f *Files) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return f.cert, nil
 }
 
+// Check warns under WarnBefore of the end, in the status and the log,
+// for a pair someone else renews.
+func (f *Files) Check(now time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reloadLocked()
+	f.status.Warning = expiryWarning(f.status.NotAfter, now)
+	if f.status.Warning != "" {
+		f.log.Warn("tls: "+f.status.Warning, "cert", f.certPath, "expires", f.status.NotAfter)
+	}
+}
+
 // Reload re-reads the files now, for a pair just written.
 func (f *Files) Reload() {
 	f.mu.Lock()
@@ -130,6 +142,7 @@ func (f *Files) reloadLocked() {
 		return
 	}
 	f.warned = false
+	st.Warning = f.status.Warning
 	f.cert, f.status = cert, st
 	f.log.Info("tls: certificate reloaded", "names", st.Names, "expires", st.NotAfter, "fingerprint", st.Fingerprint)
 }
