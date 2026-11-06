@@ -163,7 +163,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running")
 	}
 	s.log.Info("restore started", "cube", rt.serial, "id", run.ID, "steps", len(p.Steps), "radio_commands", v.RadioCommands, "duty_pct", v.Budget.DutyCyclePct)
-	go s.runRestore(s.runContext(), rt, run, p)
+	go s.runRestore(s.runContext(), rt, run, p, commandOf(r.Context()))
 	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "steps": len(p.Steps)})
 	return nil
 }
@@ -236,7 +236,7 @@ func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *run
 func (s *Server) readNTP(ctx context.Context, rt *runtime) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, ntpReadTimeout)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdGetNTP}}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdGetNTP}}).Wait(ctx)
 	if res.Err != nil {
 		return nil, res.Err
 	}
@@ -433,10 +433,12 @@ func (rt *runtime) restoreStatus() (restoreRun, bool) {
 // each as a restore_step event, then restore_done; it stops at the
 // first failure, as the command does. Devices whose configuration was
 // written are followed up like after any configuration write.
-func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p *backup.Plan) {
+func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p *backup.Plan, command string) {
 	var configured []cube.RFAddress
 	radio := false
-	_, err := p.Run(ctx, rt.writer(), func(i int, st backup.Step, r engine.Result) {
+	w := rt.writer()
+	w.ID = command // every step is a step of the request's command
+	_, err := p.Run(ctx, w, func(i int, st backup.Step, r engine.Result) {
 		res := &stepResult{OK: r.Err == nil, Discarded: r.Discarded, Budget: r.Budget, Time: time.Now()}
 		if r.Err != nil {
 			res.Error = r.Err.Error()
@@ -477,6 +479,7 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	done := restoreProgress{ID: run.ID, Steps: len(run.Steps), OK: err == nil, Error: run.Error, State: run.State, Sent: run.Sent}
 	rt.restoreMu.Unlock()
 	rt.emit(event{Kind: "restore_done", Error: done.Error, Time: finished, Restore: &done})
+	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error})
 	if err != nil {
 		s.log.Warn("restore failed", "cube", rt.serial, "id", run.ID, "sent", done.Sent, "steps", done.Steps, "error", err)
 		return

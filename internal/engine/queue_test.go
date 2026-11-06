@@ -244,3 +244,73 @@ func TestQueueLogsAcceptedCommands(t *testing.T) {
 		}
 	}
 }
+
+// recorder is an Observer that keeps every call.
+type recorder struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (r *recorder) note(what string, c Command, res *Result) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s := what + ":" + c.ID
+	if res != nil && res.Err != nil {
+		s += ":" + res.Err.Error()
+	}
+	r.calls = append(r.calls, s)
+}
+
+func (r *recorder) Enqueued(c Command)             { r.note("enqueued", c, nil) }
+func (r *recorder) Started(c Command)              { r.note("started", c, nil) }
+func (r *recorder) Finished(c Command, res Result) { r.note("finished", c, &res) }
+
+func (r *recorder) list() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...)
+}
+
+// The observer sees every command with an ID join the queue, start and
+// finish, a superseded and a drained one included, and none without.
+func TestQueueObserver(t *testing.T) {
+	rec := &recorder{}
+	_, q, cancel := setup(t, Options{Gap: 50 * time.Millisecond, Observer: rec})
+	line := cube.Message{Type: 's', Data: "AARAAAAAFRS2Bms="}
+	// The first command holds the queue for a gap while the next two,
+	// with one key, are enqueued: the first of them is superseded.
+	first := q.Enqueue(Command{ID: "a", Lines: []cube.Message{line}})
+	q.Enqueue(Command{ID: "b", Key: "k", Lines: []cube.Message{line}})
+	third := q.Enqueue(Command{ID: "c", Key: "k", Lines: []cube.Message{line}})
+	q.Enqueue(Command{Lines: []cube.Message{line}}) // no ID: not observed
+	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+	if res := first.Wait(ctx); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	if res := third.Wait(ctx); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	// A command still waiting when the queue stops is drained.
+	q.Enqueue(Command{ID: "d", Lines: []cube.Message{line}})
+	cancel()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(rec.list()) < 10 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	got := rec.list()
+	want := []string{"enqueued:a", "enqueued:b", "finished:b:" + ErrSuperseded.Error(), "enqueued:c", "started:a", "finished:a", "started:c", "finished:c", "enqueued:d"}
+	for i, w := range want {
+		if i >= len(got) || got[i] != w {
+			t.Fatalf("calls %v, want %v", got, want)
+		}
+	}
+	if last := got[len(got)-1]; !strings.HasPrefix(last, "finished:d:") || len(got) != len(want)+1 {
+		t.Fatalf("calls %v: the drained command", got)
+	}
+	for _, c := range got {
+		if strings.HasSuffix(c, ":") {
+			t.Fatalf("a command without an ID was observed: %v", got)
+		}
+	}
+}

@@ -1,5 +1,25 @@
-<!-- Settings, this page in the browser: the note on reloads and Forget token, app.js. -->
+<!-- Settings, this page in the browser: the note on reloads, who is signed in, the own password and Log out, app.js and login.js. -->
 <p class="muted small settings-note" data-i18n="settings.reloadNote">While this page is open, a new server version does not reload the page by itself; the reload button appears in the header instead.</p>
+<p id="me-line" class="small hidden"></p>
+<details id="me-password" class="hidden">
+  <summary data-i18n="me.changePassword">Change password</summary>
+  <form id="me-password-form">
+    <div class="field wide">
+      <label for="me-current" data-i18n="users.currentPassword">Current password</label>
+      <input type="password" id="me-current" class="field-control" autocomplete="current-password">
+    </div>
+    <div class="field wide">
+      <label for="me-new" data-i18n="users.password">New password</label>
+      <input type="password" id="me-new" class="field-control" autocomplete="new-password">
+    </div>
+    <div class="field wide">
+      <label for="me-again" data-i18n="setup.again">Again</label>
+      <input type="password" id="me-again" class="field-control" autocomplete="new-password">
+    </div>
+    <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span></div>
+    <p id="me-password-msg" class="small cubes-msg hidden" role="status"></p>
+  </form>
+</details>
 <div class="actions">
-  <button type="button" id="forget-token" data-i18n="settings.forgetToken">Forget token</button>
+  <button type="button" id="logout-btn" data-i18n="settings.logout">Log out</button>
 </div>

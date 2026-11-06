@@ -17,32 +17,33 @@ type fakeClock struct{ t time.Time }
 func (c *fakeClock) now() time.Time { return c.t }
 
 func TestAuthLimiter(t *testing.T) {
+	ctx := context.Background()
 	clock := &fakeClock{t: time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)}
 	l := newAuthLimiter(3, time.Minute, 5*time.Minute, clock.now)
-	if l.fail("a") || l.fail("a") {
+	if l.fail(ctx, "a") || l.fail(ctx, "a") {
 		t.Fatal("locked too early")
 	}
 	// Failures in an earlier window do not count.
 	clock.t = clock.t.Add(2 * time.Minute)
-	if l.fail("a") || l.fail("a") {
+	if l.fail(ctx, "a") || l.fail(ctx, "a") {
 		t.Fatal("old failures counted")
 	}
-	if !l.fail("a") {
+	if !l.fail(ctx, "a") {
 		t.Fatal("third failure in the window did not lock")
 	}
-	if d := l.lockedFor("a"); d != 5*time.Minute {
+	if d := l.lockedFor(ctx, "a"); d != 5*time.Minute {
 		t.Fatalf("locked for %v", d)
 	}
-	if l.lockedFor("b") != 0 {
+	if l.lockedFor(ctx, "b") != 0 {
 		t.Fatal("other address locked")
 	}
-	l.succeed("a") // a success during the lockout does not lift it
+	l.succeed(ctx, "a") // a success during the lockout does not lift it
 	clock.t = clock.t.Add(5*time.Minute + time.Second)
-	if l.lockedFor("a") != 0 {
+	if l.lockedFor(ctx, "a") != 0 {
 		t.Fatal("still locked after the lockout")
 	}
-	l.fail("b")
-	l.succeed("b")
+	l.fail(ctx, "b")
+	l.succeed(ctx, "b")
 	if _, ok := l.addrs["b"]; ok {
 		t.Fatal("success did not forget the failures")
 	}
@@ -51,26 +52,26 @@ func TestAuthLimiter(t *testing.T) {
 func TestTicketStore(t *testing.T) {
 	clock := &fakeClock{t: time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)}
 	s := newTicketStore(clock.now)
-	id, exp, err := s.issue("keq0537249")
+	id, exp, err := s.issue("keq0537249", nil)
 	if err != nil || len(id) != 48 || !exp.Equal(clock.t.Add(TicketLifetime)) {
 		t.Fatalf("issue %q %v %v", id, exp, err)
 	}
-	if s.redeem(id, "jeq0192422") {
+	if _, ok := s.redeem(id, "jeq0192422"); ok {
 		t.Fatal("ticket valid for another cube")
 	}
-	id, _, _ = s.issue("keq0537249")
-	if !s.redeem(id, "keq0537249") {
+	id, _, _ = s.issue("keq0537249", nil)
+	if _, ok := s.redeem(id, "keq0537249"); !ok {
 		t.Fatal("fresh ticket refused")
 	}
-	if s.redeem(id, "keq0537249") {
+	if _, ok := s.redeem(id, "keq0537249"); ok {
 		t.Fatal("ticket used twice")
 	}
-	id, _, _ = s.issue("keq0537249")
+	id, _, _ = s.issue("keq0537249", nil)
 	clock.t = clock.t.Add(TicketLifetime)
-	if s.redeem(id, "keq0537249") {
+	if _, ok := s.redeem(id, "keq0537249"); ok {
 		t.Fatal("expired ticket accepted")
 	}
-	if s.redeem("", "keq0537249") {
+	if _, ok := s.redeem("", "keq0537249"); ok {
 		t.Fatal("empty ticket accepted")
 	}
 }

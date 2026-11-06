@@ -92,7 +92,8 @@ func TestTombstonedCubeComesBack(t *testing.T) {
 // on is not copied again.
 func TestCopyBeforeLeftovers(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, Options{Logger: quiet()})
+	// The file starts at version 1, as a box updated from v0.7.0-alpha.1 has it.
+	s, err := Open(dir, Options{Logger: quiet(), migrations: testMigrations(t, nil), readerVersion: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

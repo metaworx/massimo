@@ -10,6 +10,40 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- Store stage (b) in `internal/store` (`docs/store.md` section 9):
+  migration 0002 (`commands`, `users.auth_version`, `audit.command_id`),
+  users with argon2id passwords, roles, tokens, the bootstrap, the audit,
+  the lockout counters and the commands with their steps.
+
+- `massimo serve` authenticates users: a bearer token names a user whose
+  role grants what a route needs (`403` without), `MASSIMO_API_TOKEN`
+  becomes the owner's key, the lockout survives a restart
+  (`docs/api-v1.md`, "Authentication").
+
+- `POST /api/v1/login`, `POST /api/v1/logout` and `GET /api/v1/me`: a
+  session for a name and a password, 30 days from its last use, and who
+  the caller is with the effective capabilities (`docs/api-v1.md`).
+
+- The users, tokens, roles and capabilities routes: create, change and
+  remove users and their API keys, reshape roles, disable a role or a
+  capability, the first owner from the local network (`docs/api-v1.md`).
+
+- The audit: every request that changes something, or tries to, is a row
+  with who, from where, what and how it went, read with
+  `GET /api/v1/audit` (`docs/api-v1.md`).
+
+- Commands: every write request is a row with its steps on the Cube's
+  queue, `Idempotency-Key` answers a retry without a second radio
+  command, `GET /api/v1/commands/{id}` shows one (`docs/api-v1.md`).
+
+- The web UI signs in with a name and a password or an API key, hides
+  what the role may not do, creates the first owner from the local
+  network, and manages users and roles in Settings (`docs/ui.md`).
+
+- `massimo user add|list|passwd|disable|enable|token|revoke`: the users
+  of the store from the box, beside a running `serve` (`README.md`,
+  "Cube variables").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

@@ -32,15 +32,15 @@ const maxNameBytes = 32
 
 // configRoutes registers the configuration endpoints (names, moves,
 // device and room configuration, week programmes) on the API wrapper.
-func (s *Server) configRoutes(api func(pattern string, h func(http.ResponseWriter, *http.Request) error)) {
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}", s.renameRoom)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}", s.updateDevice)
-	api("GET /api/v1/cubes/{sn}/rooms/{id}/config", s.getRoomConfig)
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}/config", s.setRoomConfig)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/config", s.setDeviceConfig)
-	api("GET /api/v1/cubes/{sn}/rooms/{id}/program", s.getRoomProgram)
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}/program", s.setRoomProgram)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/program", s.setDeviceProgram)
+func (s *Server) configRoutes(api func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error)) {
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}", "rename", s.renameRoom)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}", "rename", s.updateDevice)
+	api("GET /api/v1/cubes/{sn}/rooms/{id}/config", "read", s.getRoomConfig)
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}/config", "configure", s.setRoomConfig)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/config", "configure", s.setDeviceConfig)
+	api("GET /api/v1/cubes/{sn}/rooms/{id}/program", "read", s.getRoomProgram)
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}/program", "configure", s.setRoomProgram)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/program", "configure", s.setDeviceProgram)
 }
 
 // Lookups.
@@ -109,7 +109,7 @@ func roomThermostats(rt *runtime, room uint8) (radiators, walls []cube.RFAddress
 func (s *Server) run(w http.ResponseWriter, r *http.Request, rt *runtime, cmd engine.Command, roomCmd uint8) error {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(cmd).Wait(ctx)
+	res := rt.enqueue(ctx, cmd).Wait(ctx)
 	if err := s.commandError(rt, res, roomCmd); err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 // writeMetadata sends the metadata to the Cube and mirrors it into the
 // snapshot, which the Cube does not echo.
 func (s *Server) writeMetadata(ctx context.Context, rt *runtime, md *cube.Metadata) error {
-	res, err := rt.writer().WriteMetadata(ctx, md)
+	res, err := rt.writerOf(ctx).WriteMetadata(ctx, md)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
@@ -225,6 +225,18 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Name == nil && req.RoomID == nil) {
 		return fail(http.StatusBadRequest, "body must have \"name\" and/or \"room_id\"")
 	}
+	// The route admits rename and structure; the body says which one is
+	// needed: a name is rename, a move changes the house and is structure.
+	if req.Name != nil {
+		if err := s.require(r, "rename"); err != nil {
+			return err
+		}
+	}
+	if req.RoomID != nil {
+		if err := s.require(r, "structure"); err != nil {
+			return err
+		}
+	}
 	if req.Name != nil {
 		if err := checkName(*req.Name); err != nil {
 			return err
@@ -264,7 +276,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			}
 			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members)
 			for _, cmd := range []engine.Command{out, in} {
-				res := rt.queue.Enqueue(cmd).Wait(ctx)
+				res := rt.enqueue(ctx, cmd).Wait(ctx)
 				if err := s.commandError(rt, res, 0); err != nil {
 					return err
 				}
@@ -310,7 +322,7 @@ func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := rt.writer().AddDevice(ctx, md, c, n, room)
+	res, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
@@ -505,7 +517,7 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.writer().Do(ctx, engine.Command{Key: "config:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
+	res := rt.writerOf(ctx).Do(ctx, engine.Command{Key: "config:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
@@ -580,7 +592,7 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: fmt.Sprintf("config:room:%d", room.ID), Target: per[0], RoomID: room.ID, Wakeup: true, Lines: lines}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Key: fmt.Sprintf("config:room:%d", room.ID), Target: per[0], RoomID: room.ID, Wakeup: true, Lines: lines}).Wait(ctx)
 	// One result per device, from the reply to each of its lines.
 	results := map[cube.RFAddress]*deviceResult{}
 	var order []cube.RFAddress
@@ -760,7 +772,7 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.writer().Do(ctx, engine.Command{Key: "program:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
+	res := rt.writerOf(ctx).Do(ctx, engine.Command{Key: "program:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
@@ -799,7 +811,7 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.writer().Do(ctx, engine.Command{Key: fmt.Sprintf("program:room:%d", room.ID), RoomID: room.ID, Wakeup: true, Lines: lines}, append(radiators, walls...)...)
+	res := rt.writerOf(ctx).Do(ctx, engine.Command{Key: fmt.Sprintf("program:room:%d", room.ID), RoomID: room.ID, Wakeup: true, Lines: lines}, append(radiators, walls...)...)
 	if err := s.commandError(rt, res, room.ID); err != nil {
 		return err
 	}
