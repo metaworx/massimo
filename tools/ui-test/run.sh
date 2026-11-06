@@ -8,7 +8,9 @@
 # no MASSIMO_* variables but a test API token, so the page goes through
 # the token and the stream tickets, and the fake Cube's address and name,
 # which serve seeds into its store, massimo.db in that directory), then
-# runs smoke.py with Playwright.
+# runs smoke.py with Playwright; `run.sh screenshots` (make ui-screenshots)
+# runs screenshots.py instead, which takes the screenshot set into
+# docs/screenshots/.
 # Without Playwright it says so and exits 0, so `make ui-test` never
 # fails on a machine that cannot run it.
 #
@@ -23,6 +25,10 @@
 # UI_TEST_API_PORT (8119), UI_TEST_DISCOVERY_PORT (23919).
 set -eu
 
+case "${1:-smoke}" in
+	smoke | screenshots) script=${1:-smoke} ;;
+	*) echo "usage: run.sh [smoke|screenshots]" >&2; exit 2 ;;
+esac
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 py=${UI_TEST_PYTHON:-}
@@ -30,7 +36,7 @@ if [ -z "$py" ]; then
 	if [ -x "$here/.venv/bin/python" ]; then py="$here/.venv/bin/python"; else py=python3; fi
 fi
 if ! "$py" -c 'import playwright.sync_api' 2>/dev/null; then
-	echo "ui-test: skipped, Playwright for Python is not installed for $py (see tools/ui-test/README.md)"
+	echo "ui-test: $script skipped, Playwright for Python is not installed for $py (see tools/ui-test/README.md)"
 	exit 0
 fi
 
@@ -70,4 +76,4 @@ until curl -sf -H "Authorization: Bearer $token" "${url}api/v1/cubes" 2>/dev/nul
 	sleep 0.2
 done
 
-"$py" "$here/smoke.py" "$url" "$token"
+"$py" "$here/$script.py" "$url" "$token"
