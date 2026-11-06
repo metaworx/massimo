@@ -195,12 +195,69 @@ massimo status -addr <proxy address>
 
 and the web UI is at `http://<box>:8099/`.
 
+## The store
+
+`serve` keeps the Cubes, the Cubes discovery found, its settings and its
+node identity in `massimo.db` in the data directory, which every
+installer passes with `-data`:
+
+| Where | Data directory | Who |
+|---|---|---|
+| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, 0750) | user `massimo` |
+| macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` |
+| Windows service | `C:\ProgramData\Massimo` (SYSTEM and Administrators only) | LocalSystem |
+| Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |
+
+Next to `massimo.db` (mode 0600) live `massimo.db-wal` and
+`massimo.db-shm` while the server runs, and `node.key` (0600), the
+box's Ed25519 key; a copy of the database belongs with all of them, or
+is made with `massimo store backup <file>`, which is consistent while
+the server runs. `sudo -u massimo massimo -data /var/lib/massimo store
+info` shows the schema version, the node and the row counts; `massimo
+config` shows, per Cube, which values the store has and which line of
+`/etc/massimo/env` differs.
+
+**The first start after the update to a release with the store** needs
+nothing done. The server creates `massimo.db`, migrates it to schema
+version 1, and adds every Cube of `/etc/massimo/env` to it, one log line
+each (`store created`, `schema migrated`, `cube added from the settings
+file`); the Cubes connect and the proxies listen as before, from the
+same values. `/etc/massimo/env` keeps its lines. From then on the store
+wins for a Cube it knows: its `_ADDRESS`, `_NAME`, `_PROXY`,
+`_PROXY_SERIAL` and `_IGNORE` lines only add a Cube the store does not
+know yet, and a line that differs from the store is logged at every
+start. Keys, IVs, the token, the listen address, the log and the update
+variables stay in the file. Until the web UI edits Cubes, a known
+Cube's values change only in the store; to have the file's lines taken
+over again, stop the service, move `massimo.db` away (the found Cubes
+and the node identity go with it) and start it.
+
+A Windows service installed before this release runs without `-data`
+until `install` is run again with the new binary; such a service uses
+`C:\ProgramData\Massimo` anyway, since its working directory is
+`System32`. The systemd unit's working directory has always been
+`/var/lib/massimo`, so an old unit with a new binary puts the file in
+the same place.
+
+**Rollback** (`massimo update -rollback`, or the helper after a failed
+health check) is safe: the previous binary knows no store, reads
+`/etc/massimo/env` as it always did and leaves `massimo.db` alone.
+Changes made in the store meanwhile are not in the file, so the old
+binary serves the file's values. Updating again opens the database as
+it was left and logs the lines of the file that differ. A later binary
+refuses a file only when a migration changed a meaning (none so far);
+it then names the copy `massimo.db.before-<version>` it made before.
+
+`install -remove` keeps the data directory, `-purge` removes it with
+the store.
+
 ## Moving to another network
 
 - Cubes ship with DHCP on (factory fallback 192.168.0.222/16), so a Cube
-  gets an address from the new router. Reserve it there, because
-  `MASSIMO_CUBE_<SN>_ADDRESS` is fixed; then update that variable and
-  `sudo systemctl restart massimo`.
+  gets an address from the new router. Reserve it there, because a
+  configured address is fixed. A Cube configured by serial only follows
+  its discovery answers by itself; for one with an address, change it
+  in the store (see "The store") and `sudo systemctl restart massimo`.
 - The fixed proxy addresses added with `nmcli` stay on the interface when
   the box moves. On the new network they must be free and outside the
   router's DHCP range: remove them with `-ipv4.addresses` and add new ones

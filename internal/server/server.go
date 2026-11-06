@@ -49,6 +49,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
@@ -57,6 +58,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -67,8 +69,20 @@ type CubeConfig struct {
 	Name   string // a user-friendly name shown next to the serial, optional
 	// Hidden hides devices (and the rooms that hold only them) from every
 	// view and keeps every write away from them, in addition to those of
-	// cube.HiddenRoom; see view.Hidden. From MASSIMO_CUBE_<SN>_IGNORE.
+	// cube.HiddenRoom; see view.Hidden. From the store's cubes.hidden,
+	// seeded from MASSIMO_CUBE_<SN>_IGNORE.
 	Hidden []cube.RFAddress
+	// FollowDiscovery moves the connection to the address the Cube
+	// answers discovery from, also when Addr is set; a Cube without Addr
+	// always follows discovery.
+	FollowDiscovery bool
+	// Source is where the configuration came from, as the store's
+	// cubes.source ("env", "ui", "flag"); "" without a store.
+	Source string
+	// SeedFromFile adds the Cube to the store, as seeded from the
+	// settings file, once it reports its serial: the plain
+	// MASSIMO_CUBE_ADDRESS without a serial.
+	SeedFromFile bool
 }
 
 // Options configure a Server.
@@ -119,6 +133,19 @@ type Options struct {
 	// CubePort is the TCP port of a Cube whose address comes from
 	// discovery (default 62910), for tests.
 	CubePort int
+	// Store is the persistent store (internal/store): the found Cubes are
+	// kept there, and /healthz names its node. nil keeps everything in
+	// memory, as before the store.
+	Store *store.Store
+	// FileCubes is what the settings file says about each Cube, by
+	// serial in upper case: a line that differs from the store is shown
+	// on the Cube in GET /api/v1/cubes (store.Differences).
+	FileCubes map[string]store.FileCube
+	// SettingsFile names the settings file, for the log.
+	SettingsFile string
+	// StaleAfter is the stale threshold of the device views (0:
+	// view.StaleAfter); SetStaleAfter changes it while the server runs.
+	StaleAfter time.Duration
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -154,6 +181,16 @@ type Server struct {
 	ctx       context.Context // Run's, for work that outlives a request
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
+
+	// staleAfter is the stale threshold in effect, in nanoseconds.
+	staleAfter atomic.Int64
+
+	// fileCubes is Options.FileCubes, by serial in upper case; "" is the
+	// plain MASSIMO_CUBE_ADDRESS Cube until it reports its serial.
+	fileMu    sync.Mutex
+	fileCubes map[string]store.FileCube
+	// diffs are the file's differing lines per serial (noteRow).
+	diffs map[string][]fileDifference
 }
 
 type runtime struct {
@@ -260,6 +297,8 @@ func New(opts Options) *Server {
 	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}}
+	s.SetStaleAfter(opts.StaleAfter)
+	s.loadFound()
 	for _, c := range opts.Cubes {
 		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
 			follow: newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
@@ -400,6 +439,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.mu.Lock()
 					s.cubes[strings.ToLower(h.Serial)] = rt
 					s.mu.Unlock()
+					s.seedLearned(ctx, rt)
 				}
 			}
 			if e.Device != 0 && rt.hidden()[e.Device] {
@@ -409,7 +449,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
-					dv := view.DeviceOf(rt.client.Snapshot(), e.Device)
+					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -505,13 +545,29 @@ func stateAttrs(serial string, d view.Device) []any {
 	return attrs
 }
 
+// SetStaleAfter sets the stale threshold of the device views; 0 or less
+// goes back to view.StaleAfter.
+func (s *Server) SetStaleAfter(d time.Duration) {
+	if d <= 0 {
+		d = view.StaleAfter
+	}
+	s.staleAfter.Store(int64(d))
+}
+
+// StaleAfter returns the stale threshold in effect.
+func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
+
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.mux }
 
 func (s *Server) routes() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started})
+		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started}
+		if s.opts.Store != nil {
+			h["node_id"] = s.opts.Store.NodeID()
+		}
+		writeJSON(w, http.StatusOK, h)
 	})
 	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
@@ -608,6 +664,13 @@ type cubeView struct {
 	// Configured is true for the Cubes the server serves; GET /cubes
 	// also lists Cubes discovery found that are not (foundCube).
 	Configured bool `json:"configured"`
+	// Source is where the Cube's configuration comes from: "env" (the
+	// settings file, seeded into the store), "ui" (the API), "flag"
+	// (-addr, for this run); absent without a store.
+	Source string `json:"source,omitempty"`
+	// FileDiffers lists the settings file's lines for this Cube whose
+	// values differ from the store's, which wins.
+	FileDiffers []fileDifference `json:"file_differs,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC       string         `json:"mac,omitempty"`
@@ -643,7 +706,8 @@ type deviceDetail struct {
 func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
-	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.client.Address(), Configured: true, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
+	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.client.Address(), Configured: true, Source: rt.cfg.Source, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
+	v.FileDiffers = s.fileDiffers(rt.serial)
 	if f, ok := s.foundInfo(rt.serial); ok {
 		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
 	}
@@ -708,11 +772,13 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 }
 
 // rooms is the room list of a Cube as the API shows it.
-func (s *Server) rooms(rt *runtime) []view.Room { return view.Rooms(rt.client.Snapshot(), rt.hidden()) }
+func (s *Server) rooms(rt *runtime) []view.Room {
+	return view.Rooms(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
+}
 
 // devices is the device list of a Cube as the API shows it.
 func (s *Server) devices(rt *runtime) []view.Device {
-	return view.Devices(rt.client.Snapshot(), rt.hidden())
+	return view.Devices(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
 }
 
 func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
@@ -748,7 +814,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	if !ok && c == nil || rt.hidden()[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
-	d := deviceDetail{Device: view.DeviceOf(snap, rf)}
+	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.StaleAfter())}
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {

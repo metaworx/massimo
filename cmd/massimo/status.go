@@ -102,7 +102,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot, b cubelan.Budget, hidden view.Hi
 		}
 	}
 	inRoom := map[string]bool{}
-	for _, r := range view.Rooms(snap, hidden) {
+	for _, r := range view.Rooms(snap, hidden, 0) {
 		sr := statusRoom{ID: r.ID, Name: r.Name, Ready: r.Ready, Devices: []statusDevice{}}
 		for _, d := range r.Devices {
 			sr.Devices = append(sr.Devices, statusDevice{Device: d, Room: r.Name})
@@ -110,7 +110,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot, b cubelan.Budget, hidden view.Hi
 		}
 		rep.Rooms = append(rep.Rooms, sr)
 	}
-	for _, d := range view.Devices(snap, hidden) {
+	for _, d := range view.Devices(snap, hidden, 0) {
 		if !inRoom[d.RFAddress] {
 			rep.Unlisted = append(rep.Unlisted, statusDevice{Device: d, Room: roomName[d.RoomID]})
 		}

@@ -17,11 +17,11 @@ func TestWindowsLayout(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 	args := ServiceArgs(p, "", false)
-	if strings.Join(args, " ") != `-env D:\Data\Massimo\env serve -listen :8099 -log D:\Data\Massimo\serve.log -update-request D:\Data\Massimo\update-request -update-status D:\Data\Massimo\update-status.json` {
+	if strings.Join(args, " ") != `-env D:\Data\Massimo\env -data D:\Data\Massimo serve -listen :8099 -log D:\Data\Massimo\serve.log -update-request D:\Data\Massimo\update-request -update-status D:\Data\Massimo\update-status.json` {
 		t.Fatalf("%q", args)
 	}
 	args = ServiceArgs(p, "127.0.0.1:18099", true)
-	if strings.Join(args, " ") != `-env D:\Data\Massimo\env serve -listen 127.0.0.1:18099 -log D:\Data\Massimo\serve.log` {
+	if strings.Join(args, " ") != `-env D:\Data\Massimo\env -data D:\Data\Massimo serve -listen 127.0.0.1:18099 -log D:\Data\Massimo\serve.log` {
 		t.Fatalf("without the helper: %q", args)
 	}
 	if u, err := HealthURL(":8099"); err != nil || u != "http://127.0.0.1:8099/healthz" {

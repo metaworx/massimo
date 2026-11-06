@@ -71,6 +71,11 @@ func TestInstallFresh(t *testing.T) {
 	if !strings.Contains(unit, updateFlag) {
 		t.Fatal("massimo.service lacks the update request flag")
 	}
+	// The store lands in the state directory, whatever the working
+	// directory.
+	if !strings.Contains(unit, " -data /var/lib/massimo serve ") || !strings.Contains(unit, "StateDirectory=massimo") {
+		t.Fatal("massimo.service does not pass -data /var/lib/massimo")
+	}
 	for _, f := range []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", LogrotateDir + "/massimo"} {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
 			t.Error(err)

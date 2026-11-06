@@ -25,3 +25,9 @@ massimo-backup-*
 
 # Python environment of the web UI smoke test
 /tools/ui-test/.venv/
+
+# serve's store (internal/store): the Cubes, settings and node key
+massimo.db
+massimo.db-*
+massimo.db.before-*
+node.key

@@ -45,7 +45,7 @@ func TestInstallDarwin(t *testing.T) {
 		t.Error("-log in the service plist")
 	}
 	serve := read(t, filepath.Join(root, PlistPath(Label)))
-	for _, want := range []string{"<string>-listen</string>\n\t\t<string>:8099</string>", "<string>-update-request</string>", "<string>_massimo</string>"} {
+	for _, want := range []string{"<string>-listen</string>\n\t\t<string>:8099</string>", "<string>-update-request</string>", "<string>_massimo</string>", "<string>-data</string>\n\t\t<string>/var/lib/massimo</string>"} {
 		if !strings.Contains(serve, want) {
 			t.Errorf("service plist lacks %q", want)
 		}

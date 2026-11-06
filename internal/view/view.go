@@ -167,6 +167,9 @@ type Device struct {
 // temperature only occasionally, but their valve or temperature changes
 // several times a day while heating; outside the heating season they
 // may well be quiet for longer, so stale is a hint, not a fault.
+// It is the default; the functions below take the threshold as a
+// parameter (serve passes the store's stale_after), where 0 or less
+// means this default.
 const StaleAfter = 24 * time.Hour
 
 // now is the clock of the stale rule, replaced in tests.
@@ -175,8 +178,11 @@ var now = time.Now
 // DeviceOf builds the view of one device from the metadata, its
 // configuration and its live state. The metadata names the device and
 // its room; the configuration, when present, has the last word on the
-// type.
-func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress) Device {
+// type. staleAfter is the stale threshold (0: StaleAfter).
+func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, staleAfter time.Duration) Device {
+	if staleAfter <= 0 {
+		staleAfter = StaleAfter
+	}
 	st, _ := snap.State(rf)
 	d := Device{RFAddress: rf.String(), Type: st.Type}
 	if md := snap.Metadata(); md != nil {
@@ -203,21 +209,21 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress) Device {
 			d.Received = t.Fields
 		}
 		thermostat := d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat
-		d.Stale = thermostat && now().Sub(changed) > StaleAfter
+		d.Stale = thermostat && now().Sub(changed) > staleAfter
 	}
 	return d
 }
 
 // Devices lists every visible device, in the order the Cube reported
-// them, without the Cube itself.
-func Devices(snap *cubelan.Snapshot, h Hidden) []Device {
+// them, without the Cube itself; staleAfter as for DeviceOf.
+func Devices(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration) []Device {
 	var out []Device
 	hello := snap.Hello()
 	for _, rf := range snap.Devices() {
 		if hello != nil && rf == hello.RFAddress || h[rf] {
 			continue
 		}
-		out = append(out, DeviceOf(snap, rf))
+		out = append(out, DeviceOf(snap, rf, staleAfter))
 	}
 	return out
 }
@@ -235,13 +241,14 @@ type Room struct {
 }
 
 // Rooms lists the visible rooms in the Cube's order, each with the
-// visible devices the metadata places in it.
-func Rooms(snap *cubelan.Snapshot, h Hidden) []Room {
+// visible devices the metadata places in it; staleAfter as for
+// DeviceOf.
+func Rooms(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration) []Room {
 	md := snap.Metadata()
 	if md == nil {
 		return nil
 	}
-	devs := Devices(snap, h)
+	devs := Devices(snap, h, staleAfter)
 	var out []Room
 	for _, r := range h.VisibleRooms(md) {
 		room := Room{ID: r.ID, Name: r.Name, Ready: len(Silent(snap, r.ID, h)) == 0, Devices: []Device{}}

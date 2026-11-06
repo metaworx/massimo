@@ -34,6 +34,7 @@ func init() {
 	if !isService {
 		return
 	}
+	runningAsService = true
 	// A service has no console: what main reports on stderr, such as the
 	// error that ends serve, goes to service.log as well.
 	if f, err := os.OpenFile(serviceLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
@@ -48,6 +49,19 @@ func init() {
 		serviceLog("stopped")
 		os.Exit(0)
 	}()
+}
+
+// runningAsService is set when the service manager started the process.
+var runningAsService bool
+
+// serviceDataDir is %ProgramData%\Massimo for a service started without
+// -data: its working directory is System32, so the current directory
+// will not do (docs/store.md section 3).
+func serviceDataDir() string {
+	if !runningAsService {
+		return ""
+	}
+	return install.WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData")).DataDir
 }
 
 func serviceLogPath() string {

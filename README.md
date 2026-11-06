@@ -31,7 +31,7 @@ place of `<tag>` below.
 | `massimo-darwin-arm64` | Mac with Apple silicon |
 | `massimo-darwin-amd64` | Mac with an Intel processor |
 
-To build instead, with Go installed: `make` runs the tests and builds
+To build instead, with Go 1.26 or later installed: `make` runs the tests and builds
 `./massimo` for this machine; `make cross` builds every release binary
 into `dist/`, one at a time with `make linux`, `make linux-arm64`,
 `make linux-armv7`, `make linux-armv6`, `make darwin` (both Mac
@@ -360,6 +360,33 @@ directory (`KEY=VALUE` lines, `-env <file>` or `MASSIMO_ENV_FILE` for
 another file; the environment wins over the file). Keep the file out of
 git; `massimo config` shows what is in effect, secrets redacted.
 
+`serve` keeps the Cubes in its own store instead, `massimo.db` in the
+data directory (`-data <dir>` before the command name, or
+`MASSIMO_DATA`; else the current directory, so a terminal run puts it
+next to `.env`; the installed services pass the state directory, see
+[packaging/README.md](packaging/README.md#the-store)). At every start
+`serve` adds to the store each Cube of the file it does not know yet,
+logged as `cube added from the settings file`; that is how the first
+start after the update takes the file over, and how a Cube added to
+the file by hand later is still picked up. From then on the store wins
+for that Cube: `_ADDRESS`, `_NAME`, `_PROXY`, `_PROXY_SERIAL` and
+`_IGNORE` are read from the store, and a line of the file that differs
+is logged at the start (`settings file differs from the store, the
+store wins`, with both values) and shown on the Cube in `GET
+/api/v1/cubes` (`file_differs`). `massimo config` prints, per Cube,
+which value is the store's and which line of the file differs. The
+keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`, the
+update variables and `MASSIMO_CUBE_SN` stay in the file only, and every
+command other than `serve` keeps reading all of its lines as before.
+`-addr` and `-sn` still pick a Cube for one run and write nothing for it; `serve -addr` runs without the store altogether (no `massimo.db` is opened or created, found Cubes are not kept).
+`massimo store backup <file>` writes a consistent copy of the store,
+also while `serve` runs (copying `massimo.db` alone can miss the last
+writes, which are in `massimo.db-wal` until a checkpoint), `store
+migrate` creates or migrates it without starting `serve`, and `store
+info` prints its schema version, node and row counts; for the service
+run them as its user, for example `sudo -u massimo massimo -data
+/var/lib/massimo store info`.
+
 Every variable has a per-Cube form with the serial in it,
 `MASSIMO_CUBE_<SERIAL>_KEY` for `MASSIMO_CUBE_KEY`, which wins for that
 Cube; the plain form applies to any Cube unless the table says
@@ -373,8 +400,9 @@ otherwise.
 | `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. The plain form only with a single Cube. |
 | `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). The plain form only with a single Cube. |
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
-| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial, until names live in a database. The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. The plain form only with a single Cube. |
 | `MASSIMO_CUBE_SN` | The Cube to use when no `-sn` is given. |
+| `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory. |
 
 `-sn <serial>` selects a Cube: every command then reads that Cube's
 variables and, without an address, discovers the Cube on the LAN; with
@@ -382,17 +410,24 @@ variables and, without an address, discovers the Cube on the LAN; with
 wins over the variables. `serve -sn <serial>` serves that one Cube
 instead of every configured one.
 
-`serve` serves every Cube with an `_ADDRESS`, and also, by serial, every
-Cube with a `_NAME` or a `_PROXY` but no `_ADDRESS`, or the one given
-with `-sn` or `MASSIMO_CUBE_SN` when nothing else is configured: such a
-Cube is connected at the address it answers UDP discovery from, and
-reconnected when that changes. A key alone does not make `serve` take a
-Cube. `serve` runs discovery at the start and every 30 minutes
-(`-discover-interval`, `0` for only on request through the API,
-`-discover-target <host>` to ask given addresses instead of
-broadcasting), lists Cubes it finds that are not configured in the API
-(`GET /api/v1/cubes` with `"configured": false`), and logs a configured
-Cube that answers from another address than configured.
+`serve` serves every Cube its store has as configured. From the file
+it takes over every Cube with an `_ADDRESS`, and also, by serial, every
+Cube with a `_NAME` or a `_PROXY` but no `_ADDRESS`; the one given
+with `-sn` or `MASSIMO_CUBE_SN` is served for the run when nothing else
+is configured. A Cube without an address is connected at the address
+it answers UDP discovery from, and reconnected when that changes. A key
+alone does not make `serve` take a Cube. A lone `MASSIMO_CUBE_ADDRESS`
+without a serial is served from the file until the Cube reports its
+serial, and then added to the store. `serve` runs discovery at the
+start and every 30 minutes (`-discover-interval`, `0` for only on
+request through the API, `-discover-target <host>` to ask given
+addresses instead of broadcasting), lists Cubes it finds that are not
+configured in the API (`GET /api/v1/cubes` with `"configured": false`),
+keeps them in the store so that they are still listed after a restart,
+and logs a configured Cube that answers from another address than
+configured. `-poll`, `-refresh` and `-discover-interval` win for one
+run over the store's settings `poll_interval`, `refresh_interval` and
+`discover_interval`.
 
 Room 255 is the room for hidden devices: a device that is paired but
 never reports blocks every command to the room the Cube counts it in,
@@ -402,7 +437,7 @@ docs/portal-protocol.md). Every massimo command, the API and the proxy
 then hide that room and its devices without any configuration, so
 `status` on another computer and the original software do not see them
 either, and `restore` keeps them exactly as the Cube has them. The
-devices in `MASSIMO_CUBE_<SERIAL>_IGNORE` are hidden in the same way.
+devices in `MASSIMO_CUBE_<SERIAL>_IGNORE` (for `serve`, the Cube's hidden list in the store) are hidden in the same way.
 `-show-hidden` before the command name (`serve -show-hidden` for the
 server; `-show-ghosts` and `-no-ignore` are older names) shows and
 touches them for one run, for example to move a device out again.
