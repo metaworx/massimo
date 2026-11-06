@@ -134,15 +134,84 @@ The page and its files are public, the API behind them is not.
 
 ## Authentication
 
-With `MASSIMO_API_TOKEN` (or `-token`) set, every `/api` request must
-carry `Authorization: Bearer <token>`; otherwise the response is `401`.
+The server authenticates in one of three ways, by what it has:
+
+- **Users**, a store with at least one user: every `/api` request carries
+  `Authorization: Bearer <token>`, a session from `POST /api/v1/login` or
+  an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
+  The token names a user, the user's role grants capabilities,
+  and every route needs one of them (the table below);
+  a request without it is `403` with the message `capability "pair" required`.
+  A disabled user, a guest past its end date or a disabled role is `403` too,
+  with the reason.
+- **Open**, a store without users, the state before the first owner:
+  every request may do everything,
+  which is only acceptable on the default localhost listener.
+  `POST /api/v1/users` from an address on the local network creates the first
+  owner (see that route), and `massimo user add` does the same on the box.
+- **Token**, no store (`serve -addr`):
+  `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
+  without it the API is open.
+
 `/healthz` is always open.
-Without a token the API is unauthenticated,
-which is only acceptable on the default localhost listener.
+The errors say which: `401` is a missing, wrong, revoked or expired token,
+`403` a token whose user may not do this.
+
+`MASSIMO_API_TOKEN` and the store:
+at the first start with the variable set and no user,
+the server creates the user `owner` with the role `owner`,
+no password and the token as its API key (label `MASSIMO_API_TOKEN`),
+so every client that sends the token keeps working with full rights.
+At every later start, a token in the file that the store does not know is
+added to an enabled owner's keys,
+and a key with that label whose secret is not the file's any more is revoked.
+The file stays the way to recover an owner who lost the password:
+put a token into it, restart, log in with it, set a password.
+
+The capabilities, what each allows and the routes it guards;
+the OpenAPI file carries each operation's as `x-capability`:
+
+| Capability | Allows | Routes |
+|---|---|---|
+| `read` | see everything of the Cubes and one's own user | every `GET` of a Cube, its rooms, devices, configuration, programmes, log, pairing, restore and backup state, the event stream and its ticket, `GET /api/v1/update`, `GET /api/v1/me` |
+| `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
+| `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
+| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
+| `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
+| `structure` | move devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/rooms/{id}` |
+| `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
+| `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
+| `backup` | download a backup | `GET …/backup` |
+| `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
+| `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
+| `users` | every user: create, role, disable, password, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
+| `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
+| `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
+| `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
+| `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
+| `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
+| `update` | start a software update | `POST /api/v1/update` |
+| `audit` | read the audit | `GET /api/v1/audit` |
+
+The default roles and their sets are those of docs/store.md section 6:
+`owner` has every capability and cannot be changed,
+`manager` is `operator` plus guests, pairing, names, structure and restore,
+`operator` runs the heating, locks, configures, discovers and takes backups,
+`guest` is `operator` without the lock, backups and discovery,
+`viewer` reads, `integration` reads, sets and locks.
+A role's set can be changed, a role renamed, created and disabled,
+and a capability disabled for every role but `owner`,
+through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
+A user's own user and the routes of `/api/v1/users/{name}` with the user's
+own name are open to it for its display name and its password.
 
 Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
 answered `429` with a `Retry-After` header, the right token included.
+A wrong ticket counts as a failed check,
+and a failed login counts against the address and against the user name,
+so that password guessing from many addresses locks the name.
+With a store the counters survive a restart.
 The address is the TCP peer's; `X-Forwarded-For` is not trusted,
 since anyone can set it,
 so behind a reverse proxy the limit applies to the proxy as a whole,
@@ -152,7 +221,8 @@ The event stream is opened by browsers without headers,
 so it takes a ticket instead:
 `POST /api/v1/cubes/{sn}/events/ticket` with the token returns one,
 and `GET /api/v1/cubes/{sn}/events?ticket=<ticket>` opens the stream with it.
-A ticket is good for one connection to that Cube's stream within a minute;
+A ticket is good for one connection to that Cube's stream within a minute
+and carries the user that asked for it;
 a client gets a new one for every connection,
 also after the stream broke off (an `EventSource` stops retrying after a `401`,
 so it reports the error and the client opens a new one).
@@ -160,7 +230,6 @@ so it reports the error and the client opens a new one).
 and the response says so with the header `Deprecation: @1793836800` (RFC 9745):
 it puts the token into URLs, browser history and proxy logs,
 and it will be removed in a later release.
-A wrong ticket counts as a failed token check.
 
 ## Identifiers
 
@@ -172,7 +241,8 @@ A wrong ticket counts as a failed token check.
 ## Errors
 
 Errors are `{"error": "<message>"}` with a matching status: `400` bad input,
-`401` missing or wrong token, `429` locked out after repeated wrong tokens,
+`401` missing or wrong token, `403` a user who may not do this,
+`429` locked out after repeated wrong tokens,
 `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before it was sent (or,
 for a restore, a guard rail: see POST /restore),

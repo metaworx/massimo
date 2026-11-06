@@ -34,6 +34,7 @@ paths:
   /api/v1/cubes:
     get:
       summary: List the Cubes
+      x-capability: read
       description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false).
       responses:
         "200":
@@ -47,9 +48,11 @@ paths:
                     - {$ref: "#/components/schemas/Cube"}
                     - {$ref: "#/components/schemas/FoundCube"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
     post:
       summary: Serve a Cube from now on
+      x-capability: cubes
       description: |
         Adds a Cube to the store and starts serving it at once: one
         discovery found (its row becomes configured), or one given by
@@ -77,6 +80,7 @@ paths:
               schema: {$ref: "#/components/schemas/Cube"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           description: The Cube is served already
           content:
@@ -91,6 +95,7 @@ paths:
   /api/v1/cubes/discover:
     post:
       summary: Look for Cubes on the LAN now
+      x-capability: discover
       description: |
         UDP discovery, about three seconds. A call while a run is going
         waits for it and gets its result. serve also runs it at the start
@@ -110,6 +115,7 @@ paths:
                     type: array
                     items: {$ref: "#/components/schemas/FoundCube"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The discovery port (UDP 23272) is not available
@@ -119,6 +125,7 @@ paths:
   /api/v1/cubes/{sn}:
     get:
       summary: One Cube with its configuration and rooms
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -127,10 +134,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/CubeDetail"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Change a Cube's configuration
+      x-capability: cubes
       description: |
         Any of the fields; absent ones stay, unknown ones are refused.
         Written to the store (source becomes ui) and applied at once: a
@@ -152,6 +161,7 @@ paths:
               schema: {$ref: "#/components/schemas/Cube"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
           description: The Cube is served for this run only (-addr or -sn) or has not reported its serial yet
@@ -166,6 +176,7 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
     delete:
       summary: Stop serving a Cube
+      x-capability: cubes
       description: |
         The server stops the Cube's connection and proxy. Its row stays
         in the store with configured = 0, with its history; discovery
@@ -183,6 +194,7 @@ paths:
                   ok: {type: boolean}
                   serial: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
           description: The Cube is served for this run only (-addr or -sn)
@@ -198,6 +210,7 @@ paths:
   /api/v1/cubes/{sn}/rooms:
     get:
       summary: Rooms with their devices and states
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -208,11 +221,13 @@ paths:
                 type: array
                 items: {$ref: "#/components/schemas/Room"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/devices:
     get:
       summary: Every device the Cube knows
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -223,11 +238,13 @@ paths:
                 type: array
                 items: {$ref: "#/components/schemas/Device"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/devices/{rf}:
     get:
       summary: One device with its configuration
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       responses:
         "200":
@@ -237,10 +254,12 @@ paths:
               schema: {$ref: "#/components/schemas/DeviceDetail"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Rename a device and/or move it to another room, or add a paired device to one
+      x-capability: rename
       description: >-
         A move unlinks the device from its old room's partners and relinks
         it with the new room's, as the original software does, then writes
@@ -271,6 +290,7 @@ paths:
                   budget: {$ref: "#/components/schemas/Budget"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -282,6 +302,7 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/setpoint:
     put:
       summary: Set mode and setpoint of one thermostat
+      x-capability: setpoint
       description: |
         A device in a room is addressed as its room, since the Cube
         discards a direct command to a room member; every thermostat of
@@ -294,6 +315,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -301,6 +323,7 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/lock:
     put:
       summary: Lock or unlock the buttons of one thermostat
+      x-capability: lock
       description: |
         The key lock ("LoC" on the display, `panel_locked` in the state).
         Radiogram 0x80, sent directly to the device after a wakeup of its
@@ -319,6 +342,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -326,6 +350,7 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}:
     put:
       summary: Rename a room
+      x-capability: rename
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       requestBody:
         required: true
@@ -347,11 +372,13 @@ paths:
                   ok: {type: boolean}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/CubeError"}
     delete:
       summary: Remove an empty room
+      x-capability: structure
       description: Writes the Cube's metadata without the room. A room that still has devices, hidden ones included, is refused with 409.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
@@ -365,6 +392,7 @@ paths:
                   ok: {type: boolean}
                   rooms: {type: integer, description: Rooms left}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -376,12 +404,14 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}/setpoint:
     put:
       summary: Set mode and setpoint of a whole room
+      x-capability: setpoint
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       requestBody: {$ref: "#/components/requestBodies/Setpoint"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -390,6 +420,7 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}/config:
     get:
       summary: The room's settings, as the UI edits them
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
         "200":
@@ -398,10 +429,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/RoomConfig"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Write settings to every thermostat of the room
+      x-capability: configure
       description: Temperatures to radiator and wall thermostats, boost to both, descaling and valve limits to radiator thermostats, after one wakeup of the room. temp_offset and display_actual are per device.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       requestBody: {$ref: "#/components/requestBodies/Config"}
@@ -420,6 +453,7 @@ paths:
                   budget: {$ref: "#/components/schemas/Budget"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -427,6 +461,7 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}/program:
     get:
       summary: The week programme of the room's first thermostat
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
         "200":
@@ -440,10 +475,12 @@ paths:
                     properties:
                       source: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Write the week programme of the whole room
+      x-capability: configure
       description: Any subset of days; one group radiogram 0x10 per day, which every thermostat of the room takes.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       requestBody:
@@ -455,6 +492,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -462,6 +500,7 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/config:
     put:
       summary: Write a thermostat's settings
+      x-capability: configure
       description: Every field optional, merged into the current configuration; 0x11 for temperatures, 0x12 for boost, descaling and valve limits, 0x82 for display_actual (wall thermostats), after a wakeup of the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       requestBody: {$ref: "#/components/requestBodies/Config"}
@@ -469,6 +508,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -476,6 +516,7 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/program:
     put:
       summary: Write the week programme of one thermostat
+      x-capability: configure
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       requestBody:
         required: true
@@ -486,6 +527,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -493,6 +535,7 @@ paths:
   /api/v1/cubes/{sn}/backup:
     get:
       summary: A backup file of the Cube
+      x-capability: backup
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - name: format
@@ -507,12 +550,14 @@ paths:
             application/yaml:
               schema: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
   /api/v1/cubes/{sn}/restore/plan:
     post:
       summary: What restoring a backup would send
+      x-capability: restore
       description: |
         The dry run of massimo restore: the backup in the body (JSON or
         YAML, which may be edited by hand) is compared with the Cube and
@@ -540,6 +585,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "413": {$ref: "#/components/responses/TooLarge"}
@@ -547,6 +593,7 @@ paths:
   /api/v1/cubes/{sn}/restore:
     post:
       summary: Restore a backup
+      x-capability: restore
       description: |
         The same body and options as POST …/restore/plan, plus the hash
         that answered. The plan is computed again and, when the hash is
@@ -580,6 +627,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -591,6 +639,7 @@ paths:
         "503": {$ref: "#/components/responses/NotConnected"}
     get:
       summary: The last restore of the Cube
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -599,11 +648,13 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/RestoreState"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/pairing:
     post:
       summary: Start pairing (inclusion mode)
+      x-capability: pair
       description: |
         Sends n:<seconds> to the Cube. Devices that join are reported as
         "paired" events on the stream and in the state, and appear in the
@@ -626,6 +677,7 @@ paths:
               schema: {$ref: "#/components/schemas/PairingState"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -637,6 +689,7 @@ paths:
         "503": {$ref: "#/components/responses/NotReady"}
     get:
       summary: Pairing state and the devices that joined
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -645,10 +698,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/PairingState"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     delete:
       summary: Stop pairing
+      x-capability: pair
       description: Sends x:, also when the server counts the mode as over already.
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
@@ -658,12 +713,14 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/PairingState"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/log:
     get:
       summary: The last events of the Cube, oldest first
+      x-capability: read
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {name: limit, in: query, schema: {type: integer, default: 200, maximum: 500}}
@@ -674,11 +731,13 @@ paths:
             application/json:
               schema: {type: array, items: {type: object}}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/events:
     get:
       summary: Server-sent events for connection and state changes
+      x-capability: read
       description: |
         On connect, one `state` event per device with its current data,
         then an event per change the Cube reports. Kinds: connected,
@@ -708,11 +767,13 @@ paths:
             text/event-stream:
               schema: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/events/ticket:
     post:
       summary: A single-use ticket that opens the event stream
+      x-capability: read
       description: |
         Valid for one connection to this Cube's event stream within a
         minute, so that the token never goes into a URL.
@@ -728,11 +789,13 @@ paths:
                   ticket: {type: string}
                   expires_at: {type: string, format: date-time}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/settings:
     get:
       summary: The server's settings
+      x-capability: settings
       description: |
         Every setting with the store's value (or the default), the
         default, whether the store holds one, the value this run uses
@@ -751,6 +814,7 @@ paths:
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
@@ -759,6 +823,7 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
     put:
       summary: Change settings
+      x-capability: settings
       description: |
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h), refresh_interval (10m to
@@ -784,6 +849,7 @@ paths:
                 additionalProperties: {$ref: "#/components/schemas/Setting"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
@@ -793,6 +859,7 @@ paths:
   /api/v1/update:
     get:
       summary: The newest signed release on the update channel
+      x-capability: read
       parameters:
         - {name: refresh, in: query, description: Ask GitHub now instead of reusing a check of the last ten minutes, schema: {type: string}}
       responses:
@@ -802,9 +869,11 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/UpdateInfo"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
     post:
       summary: Ask the update helper to install the newest release
+      x-capability: update
       description: |
         Needs a configured API token even where the other routes are open.
         The helper (massimo-update.service, root) verifies the release
@@ -822,6 +891,7 @@ paths:
                   requested: {type: string, description: The release tag that is newest now}
                   channel: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
           description: No API token configured, no update helper, or Windows
@@ -844,9 +914,12 @@ components:
       type: http
       scheme: bearer
       description: >-
-        Required when the server runs with MASSIMO_API_TOKEN or -token.
-        Ten failed checks from one address within a minute lock it out
-        for five minutes (429).
+        A session or an API key of a user of the store, which names the
+        user whose role grants the capabilities (x-capability on each
+        operation, docs/api-v1.md "Authentication"); without a store,
+        the one token of MASSIMO_API_TOKEN or -token. Required once a
+        user exists, or a token is set. Ten failed checks from one
+        address within a minute lock it out for five minutes (429).
     ticket:
       type: apiKey
       in: query
@@ -937,6 +1010,14 @@ components:
           schema: {$ref: "#/components/schemas/Error"}
     Unauthorized:
       description: Missing or wrong token
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Forbidden:
+      description: >-
+        The token's user may not do this: the capability the route needs
+        is not in the user's role, or the user or the role is disabled.
+        The message says which.
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}

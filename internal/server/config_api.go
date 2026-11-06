@@ -32,15 +32,15 @@ const maxNameBytes = 32
 
 // configRoutes registers the configuration endpoints (names, moves,
 // device and room configuration, week programmes) on the API wrapper.
-func (s *Server) configRoutes(api func(pattern string, h func(http.ResponseWriter, *http.Request) error)) {
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}", s.renameRoom)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}", s.updateDevice)
-	api("GET /api/v1/cubes/{sn}/rooms/{id}/config", s.getRoomConfig)
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}/config", s.setRoomConfig)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/config", s.setDeviceConfig)
-	api("GET /api/v1/cubes/{sn}/rooms/{id}/program", s.getRoomProgram)
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}/program", s.setRoomProgram)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/program", s.setDeviceProgram)
+func (s *Server) configRoutes(api func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error)) {
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}", "rename", s.renameRoom)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}", "rename", s.updateDevice)
+	api("GET /api/v1/cubes/{sn}/rooms/{id}/config", "read", s.getRoomConfig)
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}/config", "configure", s.setRoomConfig)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/config", "configure", s.setDeviceConfig)
+	api("GET /api/v1/cubes/{sn}/rooms/{id}/program", "read", s.getRoomProgram)
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}/program", "configure", s.setRoomProgram)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/program", "configure", s.setDeviceProgram)
 }
 
 // Lookups.
@@ -224,6 +224,18 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Name == nil && req.RoomID == nil) {
 		return fail(http.StatusBadRequest, "body must have \"name\" and/or \"room_id\"")
+	}
+	// The route admits rename and structure; the body says which one is
+	// needed: a name is rename, a move changes the house and is structure.
+	if req.Name != nil {
+		if err := s.require(r, "rename"); err != nil {
+			return err
+		}
+	}
+	if req.RoomID != nil {
+		if err := s.require(r, "structure"); err != nil {
+			return err
+		}
 	}
 	if req.Name != nil {
 		if err := checkName(*req.Name); err != nil {

@@ -15,6 +15,11 @@ the next minor, a fix counts the suffix up.
   users with argon2id passwords, roles, tokens, the bootstrap, the audit,
   the lockout counters and the commands with their steps.
 
+- `massimo serve` authenticates users: a bearer token names a user whose
+  role grants what a route needs (`403` without), `MASSIMO_API_TOKEN`
+  becomes the owner's key, the lockout survives a restart
+  (`docs/api-v1.md`, "Authentication").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

@@ -182,9 +182,10 @@ type Server struct {
 	order   []string
 	mux     *http.ServeMux
 
-	limiter *authLimiter
-	tickets *ticketStore
-	updates updateCheck
+	limiter     failureLimiter
+	authLockout time.Duration // the lockout in effect, for the log
+	tickets     *ticketStore
+	updates     updateCheck
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -319,10 +320,19 @@ func New(opts Options) *Server {
 		opts.PollInterval = time.Minute
 	}
 	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
-		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
+		limiter: newLimiter(opts, opts.Logger), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
+	if s.authLockout <= 0 {
+		s.authLockout = DefaultAuthLockout
+	}
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
+	if opts.Store != nil {
+		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
+		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
+			s.log.Error("store: bootstrap failed", "error", err)
+		}
+	}
 	for _, c := range opts.Cubes {
 		if err := s.register(s.newRuntime(c, c.Addr)); err != nil {
 			s.log.Error("cube not served", "serial", c.Serial, "addr", c.Addr, "error", err)
@@ -552,11 +562,19 @@ func (s *Server) routes() {
 		}
 		writeJSON(w, http.StatusOK, h)
 	})
-	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
+	// api registers a route with the capability it needs (auth.go): the
+	// wrapper authenticates, checks the capability, and maps the handler's
+	// error to a status.
+	api := func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error) {
+		if !validCapability(capability) {
+			panic(fmt.Sprintf("route %s: unknown capability %q", pattern, capability))
+		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if !s.authorize(w, r) {
+			p, ok := s.authorize(w, r, capability)
+			if !ok {
 				return
 			}
+			r = withPrincipal(r, p)
 			if err := h(w, r); err != nil {
 				var he *httpError
 				if errors.As(err, &he) {
@@ -574,33 +592,33 @@ func (s *Server) routes() {
 			}
 		})
 	}
-	api("GET /api/v1/cubes", s.listCubes)
-	api("POST /api/v1/cubes", s.postCube)
-	api("PUT /api/v1/cubes/{sn}", s.putCube)
-	api("DELETE /api/v1/cubes/{sn}", s.deleteCube)
-	api("GET /api/v1/settings", s.getSettings)
-	api("PUT /api/v1/settings", s.putSettings)
-	api("POST /api/v1/cubes/discover", s.postDiscover)
-	api("GET /api/v1/cubes/{sn}", s.getCube)
-	api("GET /api/v1/cubes/{sn}/rooms", s.getRooms)
-	api("GET /api/v1/cubes/{sn}/devices", s.getDevices)
-	api("GET /api/v1/cubes/{sn}/devices/{rf}", s.getDevice)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/setpoint", s.setDeviceSetpoint)
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint", s.setRoomSetpoint)
-	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", s.deleteRoom)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
-	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
-	api("POST /api/v1/cubes/{sn}/restore/plan", s.planRestore)
-	api("POST /api/v1/cubes/{sn}/restore", s.startRestore)
-	api("GET /api/v1/cubes/{sn}/restore", s.getRestore)
-	api("GET /api/v1/cubes/{sn}/events", s.events)
-	api("POST /api/v1/cubes/{sn}/events/ticket", s.issueTicket)
-	api("GET /api/v1/cubes/{sn}/log", s.getLog)
-	api("POST /api/v1/cubes/{sn}/pairing", s.startPairing)
-	api("GET /api/v1/cubes/{sn}/pairing", s.getPairing)
-	api("DELETE /api/v1/cubes/{sn}/pairing", s.stopPairing)
-	api("GET /api/v1/update", s.getUpdate)
-	api("POST /api/v1/update", s.startUpdate)
+	api("GET /api/v1/cubes", "read", s.listCubes)
+	api("POST /api/v1/cubes", "cubes", s.postCube)
+	api("PUT /api/v1/cubes/{sn}", "cubes", s.putCube)
+	api("DELETE /api/v1/cubes/{sn}", "cubes", s.deleteCube)
+	api("GET /api/v1/settings", "settings", s.getSettings)
+	api("PUT /api/v1/settings", "settings", s.putSettings)
+	api("POST /api/v1/cubes/discover", "discover", s.postDiscover)
+	api("GET /api/v1/cubes/{sn}", "read", s.getCube)
+	api("GET /api/v1/cubes/{sn}/rooms", "read", s.getRooms)
+	api("GET /api/v1/cubes/{sn}/devices", "read", s.getDevices)
+	api("GET /api/v1/cubes/{sn}/devices/{rf}", "read", s.getDevice)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/setpoint", "setpoint", s.setDeviceSetpoint)
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint", "setpoint", s.setRoomSetpoint)
+	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", "structure", s.deleteRoom)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", "lock", s.setDeviceLock)
+	api("GET /api/v1/cubes/{sn}/backup", "backup", s.getBackup)
+	api("POST /api/v1/cubes/{sn}/restore/plan", "restore", s.planRestore)
+	api("POST /api/v1/cubes/{sn}/restore", "restore", s.startRestore)
+	api("GET /api/v1/cubes/{sn}/restore", "read", s.getRestore)
+	api("GET /api/v1/cubes/{sn}/events", "read", s.events)
+	api("POST /api/v1/cubes/{sn}/events/ticket", "read", s.issueTicket)
+	api("GET /api/v1/cubes/{sn}/log", "read", s.getLog)
+	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
+	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
+	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
+	api("GET /api/v1/update", "read", s.getUpdate)
+	api("POST /api/v1/update", "update", s.startUpdate)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
