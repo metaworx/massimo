@@ -376,6 +376,7 @@
   "pairing.putting": "{device}: umieszczanie w {room} …",
   "pairing.done": "{device} jest w {room}.",
   "pairing.copied": "Ustawienia pomieszczenia zostały przejęte, program tygodniowy dla {days} z 7 dni.",
+  "pairing.modeNotSet": "Cube nie przyjął przełączenia na AUTO; urządzenie zachowuje swój tryb.",
   "pairing.noRooms": "Cube nie ma pomieszczenia, w którym można umieścić urządzenie.",
   "help.cubes": "Urządzenia Cube obsługiwane przez ten serwer, przechowywane w jego bazie. Zmiana działa od razu: nowy adres łączy ponownie, nowy adres proxy uruchamia ten proxy ponownie, a ukryte urządzenia znikają z kafelków, API i oryginalnego oprogramowania. Wiersze pliku ustawień dodają tylko Cube, którego serwer jeszcze nie zna; jeśli któryś różni się od tego, co ustawiono tutaj, Cube to pokazuje i proponuje wartość z pliku.",
   "log.kind.cube_found": "znaleziony",
@@ -666,5 +667,5 @@
   "help.users": "Każdy, kto się loguje, ma jedną rolę, która mówi, co może. Gość ma datę końca; użytkownik bez hasła loguje się tylko kluczami. Hasło ustawione tutaj kończy sesje użytkownika.",
   "help.roles": "Rola to zbiór uprawnień, z których każde strzeże części tego, co robią strona i API. Sześć ról domyślnych można przemianować i przebudować, poza właścicielem; można tworzyć kolejne. Wyłączona rola nie wpuszcza swoich użytkowników.",
   "help.capabilities": "Uprawnienie wyłączone tutaj jest odmawiane każdej roli poza właścicielem, cokolwiek mówią role: na przykład parowanie, dopóki nikt nie powinien parować, albo aktualizacje na urządzeniu aktualizowanym ręcznie.",
-  "help.pairCopy": "Nadaje urządzeniu temperatury, ustawienia zaworu i program tygodniowy pozostałych termostatów pomieszczenia, tak jak robi to oryginalne oprogramowanie. Kosztuje to budżet radiowy: około jednej dziesiątej budżetu godziny na temperatury i ustawienia zaworu oraz 8 % na każdy różniący się dzień programu, czyli do dwóch trzecich dla nowego termostatu. Po wyłączeniu urządzenie zachowuje własne ustawienia."
+  "help.pairCopy": "Nadaje urządzeniu ustawienia pierwszego innego termostatu pomieszczenia, tak jak robi to oryginalne oprogramowanie: temperatury trafiają do wszystkich termostatów pomieszczenia, ustawienia zaworu i program tygodniowy do urządzenia. Kosztuje to budżet radiowy: około jednej dziesiątej budżetu godziny na temperatury i ustawienia zaworu oraz 8 % na każdy różniący się dzień programu, czyli do dwóch trzecich dla nowego termostatu. Po wyłączeniu urządzenie zachowuje własne ustawienia."
 }

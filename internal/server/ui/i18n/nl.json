@@ -368,6 +368,7 @@
   "pairing.putting": "{device}: wordt in {room} opgenomen …",
   "pairing.done": "{device} is in {room}.",
   "pairing.copied": "De instellingen van de ruimte zijn overgenomen, het weekprogramma voor {days} van 7 dagen.",
+  "pairing.modeNotSet": "De Cube heeft de omschakeling naar AUTO niet aangenomen; het apparaat behoudt zijn modus.",
   "pairing.noRooms": "De Cube heeft geen ruimte om het apparaat in op te nemen.",
   "help.cubes": "De Cubes die deze server bedient, bewaard in zijn opslag. Een wijziging geldt meteen: een nieuw adres maakt opnieuw verbinding, een nieuw proxyadres start die proxy opnieuw, en verborgen apparaten verdwijnen uit de tegels, de API en de originele software. De regels van het instellingenbestand voegen alleen een Cube toe die de server nog niet kent; wijkt er een af van wat hier is ingesteld, dan meldt de Cube dat en biedt hij de waarde uit het bestand aan.",
   "log.kind.cube_found": "gevonden",
@@ -652,5 +653,5 @@
   "help.users": "Wie zich aanmeldt heeft één rol, die zegt wat hij mag. Een gast heeft een einddatum; een gebruiker zonder wachtwoord meldt zich alleen met sleutels aan. Een hier gezet wachtwoord beëindigt de sessies van de gebruiker.",
   "help.roles": "Een rol is een verzameling bevoegdheden, die elk een deel bewaken van wat de pagina en de API doen. De zes standaardrollen kunnen worden hernoemd en aangepast, behalve de eigenaar; meer kunnen worden aangemaakt. Een uitgeschakelde rol houdt zijn gebruikers buiten.",
   "help.capabilities": "Een hier uitgezette bevoegdheid wordt elke rol behalve de eigenaar geweigerd, wat de rollen ook zeggen: bijvoorbeeld koppelen zolang niemand mag koppelen, of updates op een machine die met de hand wordt bijgewerkt.",
-  "help.pairCopy": "Geeft het apparaat de temperaturen, de klepinstellingen en het weekprogramma van de andere thermostaten van de ruimte, zoals de originele software doet. Dat kost radiobudget: ongeveer een tiende van dat van een uur voor de temperaturen en de klepinstellingen, en 8 % voor elke afwijkende dag van het programma, dus tot twee derde voor een nieuwe thermostaat. Uitgeschakeld behoudt het apparaat zijn eigen instellingen."
+  "help.pairCopy": "Geeft het apparaat de instellingen van de eerste andere thermostaat van de ruimte, zoals de originele software doet: de temperaturen gaan naar alle thermostaten van de ruimte, de klepinstellingen en het weekprogramma naar het apparaat. Dat kost radiobudget: ongeveer een tiende van dat van een uur voor de temperaturen en de klepinstellingen, en 8 % voor elke afwijkende dag van het programma, dus tot twee derde voor een nieuwe thermostaat. Uitgeschakeld behoudt het apparaat zijn eigen instellingen."
 }

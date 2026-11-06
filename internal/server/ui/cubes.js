@@ -213,11 +213,23 @@ function applyPairing(serial, st) {
   redrawPairing(serial);
 }
 
+// loadPairing asks for a Cube's pairing state. Three failures in a row
+// while it runs end the countdown, which would ask on forever, and say
+// why.
 async function loadPairing(serial) {
+  const p = pairingOf(serial);
   try {
-    applyPairing(serial, await api("GET", cubePath(serial) + "/pairing"));
+    const st = await api("GET", cubePath(serial) + "/pairing");
+    p.failures = 0;
+    applyPairing(serial, st);
   } catch (e) {
-    // the panel keeps what it showed
+    p.failures = (p.failures || 0) + 1;
+    if (p.active && p.failures >= 3) {
+      p.active = false;
+      stopPairingTick(serial);
+      p.msg = { text: t("pairing.failed", { error: e.message }), ok: false };
+      redrawPairing(serial);
+    }
   }
 }
 
@@ -260,6 +272,10 @@ function startPairingTick(serial) {
   if (p.tick) return;
   let n = 0;
   p.tick = setInterval(() => {
+    if (!document.querySelector('.cube-panel[data-serial="' + serial + '"]')) {
+      stopPairingTick(serial); // the Cube is no longer served
+      return;
+    }
     n++;
     renderCountdown(serial);
     const watched = serial === state.serial && state.eventsOpen && Date.now() < p.until;
@@ -375,7 +391,8 @@ function pairedRow(serial, d) {
 // pairDeviceForm is the form that puts a device that is in no room into
 // one (tpl-pair-device, capability structure): its name (with rename),
 // the room, and for a thermostat the switch that copies the room's
-// settings, on by default; PUT …/devices/{rf}. e keeps what is typed
+// settings (with configure, which the copy needs as well), on by
+// default; PUT …/devices/{rf}. e keeps what is typed
 // across redraws, the result, and done once the device is in the room;
 // onDone runs then, onFail after a refusal, and onCancel, when given,
 // is the form's Cancel.
@@ -428,7 +445,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
     const nm = (e.name || "").trim();
     const label = nm || dev.name || dev.rf_address;
     const body = { room_id: e.room };
-    if (isThermostat(dev)) body.copy = e.copy !== false;
+    if (isThermostat(dev)) body.copy = hasCap("configure") && e.copy !== false;
     if (nm && hasCap("rename")) {
       if (byteLength(nm) > NAME_BYTES) {
         e.result = { text: t("cfg.devNameTooLong", { name: nm, n: NAME_BYTES }), ok: false };
@@ -443,26 +460,32 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
     e.result = { text: t("pairing.putting", { device: label, room: roomName }), ok: true };
     submit.disabled = true;
     showResult(result, e.result.text, true);
+    let res;
     try {
-      const res = await api("PUT", cubePath(serial) + "/devices/" + dev.rf_address, body);
-      let text = t("pairing.done", { device: label, room: roomName });
-      if (res && res.copied) text += " " + t("pairing.copied", { days: res.copied.days });
-      if (res && res.budget) text = t("result.budget", { text, duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots });
-      e.result = { text, ok: true };
-      e.done = true;
-      if (serial === state.serial) await loadRooms();
-      else loadCubeRooms(serial);
-      if (onDone) onDone();
+      res = await api("PUT", cubePath(serial) + "/devices/" + dev.rf_address, body);
     } catch (err) {
+      // A copy that stopped leaves the device in its room: the reload
+      // shows where it is, and onFail says the error where it is seen.
       e.busy = false;
       e.result = { text: errorText(label, err), ok: false };
       showResult(result, e.result.text, false);
       submit.disabled = false;
-      if (serial === state.serial) loadRooms().catch(() => {});
+      if (serial === state.serial) await loadRooms().catch(() => {});
       if (onFail) onFail();
-    } finally {
-      e.busy = false;
+      return;
     }
+    let text = t("pairing.done", { device: label, room: roomName });
+    if (res && res.copied) {
+      text += " " + t("pairing.copied", { days: res.copied.days });
+      if (res.copied.mode_not_set) text += " " + t("pairing.modeNotSet");
+    }
+    if (res && res.budget) text = t("result.budget", { text, duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots });
+    e.result = { text, ok: true };
+    e.done = true;
+    e.busy = false;
+    if (serial === state.serial) await loadRooms().catch(() => {});
+    else loadCubeRooms(serial);
+    if (onDone) onDone();
   });
   return form;
 }

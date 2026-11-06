@@ -369,6 +369,7 @@
   "pairing.putting": "{device}: inserimento in {room} …",
   "pairing.done": "{device} è in {room}.",
   "pairing.copied": "Le impostazioni del locale sono state riprese, il programma settimanale per {days} giorni su 7.",
+  "pairing.modeNotSet": "Il Cube non ha accettato il passaggio ad AUTO; il dispositivo mantiene la sua modalità.",
   "pairing.noRooms": "Il Cube non ha alcun locale in cui inserire il dispositivo.",
   "help.cubes": "I Cube che questo server gestisce, conservati nel suo archivio. Una modifica vale subito: un nuovo indirizzo riconnette, un nuovo indirizzo del proxy riavvia quel proxy, e i dispositivi nascosti spariscono dalle tessere, dall'API e dal software originale. Le righe del file delle impostazioni aggiungono solo un Cube che il server non conosce ancora; se una differisce da ciò che è impostato qui, il Cube lo segnala e propone il valore del file.",
   "log.kind.cube_found": "trovato",
@@ -653,5 +654,5 @@
   "help.users": "Chi accede ha un ruolo, che dice cosa può fare. Un ospite ha una data di fine; un utente senza password accede solo con chiavi. Una password impostata qui termina le sessioni dell'utente.",
   "help.roles": "Un ruolo è un insieme di capacità, ognuna a guardia di una parte di ciò che fanno la pagina e l'API. I sei ruoli predefiniti si possono rinominare e rimodellare, tranne il proprietario; se ne possono creare altri. Un ruolo disattivato tiene fuori i suoi utenti.",
   "help.capabilities": "Una capacità spenta qui è negata a ogni ruolo tranne il proprietario, qualunque cosa dicano i ruoli: per esempio l'associazione finché nessuno deve associare, o gli aggiornamenti su una macchina aggiornata a mano.",
-  "help.pairCopy": "Dà al dispositivo le temperature, le impostazioni della valvola e il programma settimanale degli altri termostati del locale, come fa il software originale. Costa budget radio: circa un decimo di quello di un’ora per le temperature e le impostazioni della valvola, e l’8 % per ogni giorno del programma che differisce, quindi fino a due terzi per un nuovo termostato. Disattivato, il dispositivo mantiene le proprie impostazioni."
+  "help.pairCopy": "Dà al dispositivo le impostazioni del primo altro termostato del locale, come fa il software originale: le temperature vanno a tutti i termostati del locale, le impostazioni della valvola e il programma settimanale al dispositivo. Costa budget radio: circa un decimo di quello di un’ora per le temperature e le impostazioni della valvola, e l’8 % per ogni giorno del programma che differisce, quindi fino a due terzi per un nuovo termostato. Disattivato, il dispositivo mantiene le proprie impostazioni."
 }

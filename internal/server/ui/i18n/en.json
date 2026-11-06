@@ -367,6 +367,7 @@
   "pairing.putting": "{device}: putting it into {room} …",
   "pairing.done": "{device} is in {room}.",
   "pairing.copied": "The room's settings were copied, the week programme for {days} of 7 days.",
+  "pairing.modeNotSet": "The Cube did not take the switch to AUTO; the device keeps its mode.",
   "pairing.noRooms": "The Cube has no room to put the device into.",
   "help.cubes": "The Cubes this server serves, kept in its store. A change applies at once: a new address reconnects, a new proxy address restarts that proxy, and hidden devices leave the tiles, the API and the original software. The settings file's lines only add a Cube the server does not know yet; where one differs from what is set here, the Cube says so and offers the file's value.",
   "log.kind.cube_found": "found",
@@ -651,5 +652,5 @@
   "help.users": "Everyone who signs in has one role, which says what they may do. A guest has an end date; a user without a password signs in with keys only. A password set here ends the user's sessions.",
   "help.roles": "A role is a set of capabilities, each guarding part of what the page and the API do. The six default roles can be renamed and reshaped, except the owner; more can be created. A disabled role keeps its users out.",
   "help.capabilities": "A capability switched off here is denied to every role but the owner, whatever the roles say: for example pairing while nobody should pair, or updates on a box updated by hand.",
-  "help.pairCopy": "Gives the device the temperatures, valve settings and week programme of the room's other thermostats, as the original software does. It costs radio budget: about a tenth of an hour's for the temperatures and the valve settings, and 8 % for each day of the programme that differs, so up to two thirds for a new thermostat. Switched off, the device keeps its own settings."
+  "help.pairCopy": "Gives the device the settings of the room's first other thermostat, as the original software does: the temperatures go to every thermostat of the room, the valve settings and the week programme to the device. It costs radio budget: about a tenth of an hour's for the temperatures and the valve settings, and 8 % for each day of the programme that differs, so up to two thirds for a new thermostat. Switched off, the device keeps its own settings."
 }

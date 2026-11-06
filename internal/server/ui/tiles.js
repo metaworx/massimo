@@ -146,6 +146,13 @@ function renderUnlisted(d) {
         delete unlistedUI[d.rf_address];
         showUnlistedResult(ui.edit.result.text, true);
       },
+      onFail: () => {
+        // A copy that stopped put the device into its room all the same.
+        if (!state.unlisted.some((x) => x.rf_address === d.rf_address)) {
+          delete unlistedUI[d.rf_address];
+          showUnlistedResult(ui.edit.result.text, false);
+        }
+      },
       onCancel: () => {
         ui.form = false;
         redraw();
@@ -154,8 +161,12 @@ function renderUnlisted(d) {
   }
   if (ui.confirm) {
     const box = confirmBox(t("device.removeConfirm", { device: deviceName(d) }), { yes: t("device.remove"), no: t("action.keep") }, async () => {
-      ui.confirm = false;
+      if (ui.removing) return;
+      ui.removing = true; // one DELETE: the question stays until it is answered
+      for (const b of box.querySelectorAll("button")) b.disabled = true;
       const res = await removeFromCube(d);
+      ui.confirm = false;
+      ui.removing = false;
       showUnlistedResult(res.text, res.ok);
       redraw();
     }, () => {

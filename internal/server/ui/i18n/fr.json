@@ -369,6 +369,7 @@
   "pairing.putting": "{device} : placement dans {room} …",
   "pairing.done": "{device} est dans {room}.",
   "pairing.copied": "Les réglages de la pièce ont été repris, le programme hebdomadaire pour {days} jours sur 7.",
+  "pairing.modeNotSet": "Le Cube n’a pas accepté le passage en AUTO ; l’appareil garde son mode.",
   "pairing.noRooms": "Le Cube n’a aucune pièce où placer l’appareil.",
   "help.cubes": "Les Cubes que ce serveur prend en charge, gardés dans sa base. Une modification s'applique tout de suite : une nouvelle adresse reconnecte, une nouvelle adresse de proxy redémarre ce proxy, et les appareils masqués disparaissent des tuiles, de l'API et du logiciel d'origine. Les lignes du fichier de réglages n'ajoutent qu'un Cube que le serveur ne connaît pas encore ; si l'une diffère de ce qui est réglé ici, le Cube le signale et propose la valeur du fichier.",
   "log.kind.cube_found": "trouvé",
@@ -653,5 +654,5 @@
   "help.users": "Chaque personne connectée a un rôle, qui dit ce qu'elle peut faire. Un invité a une date de fin ; un utilisateur sans mot de passe se connecte avec des clés seulement. Un mot de passe défini ici met fin aux sessions de l'utilisateur.",
   "help.roles": "Un rôle est un ensemble de capacités, chacune gardant une partie de ce que font la page et l'API. Les six rôles par défaut peuvent être renommés et remaniés, sauf le propriétaire ; d'autres peuvent être créés. Un rôle désactivé tient ses utilisateurs dehors.",
   "help.capabilities": "Une capacité désactivée ici est refusée à tous les rôles sauf au propriétaire, quoi que disent les rôles : par exemple l'appairage tant que personne ne doit appairer, ou les mises à jour sur une machine mise à jour à la main.",
-  "help.pairCopy": "Donne à l’appareil les températures, les réglages de vanne et le programme hebdomadaire des autres thermostats de la pièce, comme le fait le logiciel d'origine. Cela coûte du budget radio : environ un dixième de celui d’une heure pour les températures et les réglages de vanne, et 8 % pour chaque jour du programme qui diffère, soit jusqu’aux deux tiers pour un nouveau thermostat. Désactivé, l’appareil garde ses propres réglages."
+  "help.pairCopy": "Donne à l’appareil les réglages du premier autre thermostat de la pièce, comme le fait le logiciel d'origine : les températures vont à tous les thermostats de la pièce, les réglages de vanne et le programme hebdomadaire à l’appareil. Cela coûte du budget radio : environ un dixième de celui d’une heure pour les températures et les réglages de vanne, et 8 % pour chaque jour du programme qui diffère, soit jusqu’aux deux tiers pour un nouveau thermostat. Désactivé, l’appareil garde ses propres réglages."
 }

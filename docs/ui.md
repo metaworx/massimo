@@ -111,7 +111,8 @@ Every room has a tile:
     name, room, temperature offset,
     and for a wall thermostat whether its display shows the measured temperature.
     A device moved to another room gets that room's settings,
-    as when it is put into a room (Settings → Cubes, **Pair a device**).
+    as when it is put into a room (Settings → Cubes, **Pair a device**),
+    where the role has the capability `configure`.
     **Remove from the Cube** asks in the row,
     then deletes the device from the Cube:
     the Cube resets it to its factory settings,
@@ -219,12 +220,14 @@ without the switches.
   A countdown with **Stop** runs while the Cube pairs,
   and each device that joins is listed with its type and serial and a form:
   **Name**, **Room** (one of the Cube's rooms),
-  and for a thermostat **Copy the room's settings**, on by default.
+  and for a thermostat **Copy the room's settings**, on by default,
+  shown where the role has `configure`, which the copy needs.
   **Put into a room** links the device with the room's other devices and lists it there;
   with the copy it also gets the temperatures,
   valve settings and week programme of the room's other thermostats,
   as the original software does, which costs up to two thirds of an hour's
-  radio budget for a new thermostat (the **?** says how).
+  radio budget for a new thermostat (the **?** says how);
+  the room's other thermostats get its temperatures too.
   The line under the form says how it went, and the end of pairing is said too.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;

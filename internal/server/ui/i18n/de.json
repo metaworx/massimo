@@ -367,6 +367,7 @@
   "pairing.putting": "{device}: wird in {room} aufgenommen …",
   "pairing.done": "{device} ist in {room}.",
   "pairing.copied": "Die Einstellungen des Raums wurden übernommen, das Wochenprogramm für {days} von 7 Tagen.",
+  "pairing.modeNotSet": "Der Cube hat die Umschaltung auf AUTO nicht angenommen; das Gerät behält seinen Modus.",
   "pairing.noRooms": "Der Cube hat keinen Raum, in den das Gerät käme.",
   "help.cubes": "Die Cubes, die dieser Server bedient, in seinem Speicher. Eine Änderung gilt sofort: eine neue Adresse verbindet neu, eine neue Proxy-Adresse startet diesen Proxy neu, und ausgeblendete Geräte verschwinden aus den Kacheln, der API und der Original-Software. Die Zeilen der Einstellungsdatei fügen nur einen Cube hinzu, den der Server noch nicht kennt; weicht eine von dem ab, was hier eingestellt ist, sagt es der Cube und bietet den Wert aus der Datei an.",
   "log.kind.cube_found": "gefunden",
@@ -651,5 +652,5 @@
   "help.users": "Wer sich anmeldet, hat eine Rolle, die sagt, was er darf. Ein Gast hat ein Ende; ein Benutzer ohne Passwort meldet sich nur mit Schlüsseln an. Ein hier gesetztes Passwort beendet die Sitzungen des Benutzers.",
   "help.roles": "Eine Rolle ist eine Menge von Fähigkeiten, von denen jede einen Teil dessen bewacht, was Seite und API tun. Die sechs Standardrollen lassen sich umbenennen und umbauen, außer dem Eigentümer; weitere lassen sich anlegen. Eine gesperrte Rolle hält ihre Benutzer draußen.",
   "help.capabilities": "Eine hier abgeschaltete Fähigkeit wird jeder Rolle außer dem Eigentümer verweigert, was auch die Rollen sagen: zum Beispiel das Anlernen, solange niemand anlernen soll, oder Updates auf einer Box, die von Hand aktualisiert wird.",
-  "help.pairCopy": "Gibt dem Gerät die Temperaturen, die Ventileinstellungen und das Wochenprogramm der anderen Thermostate des Raums, wie es die Original-Software tut. Das kostet Funkbudget: etwa ein Zehntel einer Stunde für die Temperaturen und die Ventileinstellungen und 8 % für jeden abweichenden Tag des Programms, für ein neues Thermostat also bis zu zwei Drittel. Ausgeschaltet behält das Gerät seine eigenen Einstellungen."
+  "help.pairCopy": "Gibt dem Gerät die Einstellungen des ersten anderen Thermostats des Raums, wie es die Original-Software tut: die Temperaturen gehen an alle Thermostate des Raums, die Ventileinstellungen und das Wochenprogramm an das Gerät. Das kostet Funkbudget: etwa ein Zehntel einer Stunde für die Temperaturen und die Ventileinstellungen und 8 % für jeden abweichenden Tag des Programms, für ein neues Thermostat also bis zu zwei Drittel. Ausgeschaltet behält das Gerät seine eigenen Einstellungen."
 }

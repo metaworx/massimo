@@ -446,6 +446,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
       return;
     }
     meta.room_id = e.room_id;
+    if (!hasCap("configure")) meta.copy = false; // the copy of the room's settings needs configure
   }
   const cfg = {};
   const loaded = ((c.cfg && c.cfg.devices) || []).find((x) => x.rf_address === d.rf_address) || {};
