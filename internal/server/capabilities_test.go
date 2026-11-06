@@ -22,10 +22,10 @@ import (
 // roleSets are the default roles' capabilities as docs/store.md section
 // 6 seeds them; owner has every one.
 var roleSets = map[string][]string{
-	store.RoleManager:     {"read", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "guests"},
-	store.RoleOperator:    {"read", "setpoint", "lock", "configure", "discover", "backup"},
+	store.RoleManager:     {"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "guests"},
+	store.RoleOperator:    {"read", "preferences", "setpoint", "lock", "configure", "discover", "backup"},
 	store.RoleGuest:       {"read", "setpoint", "configure"},
-	store.RoleViewer:      {"read"},
+	store.RoleViewer:      {"read", "preferences"},
 	store.RoleIntegration: {"read", "setpoint", "lock"},
 }
 

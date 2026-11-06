@@ -627,7 +627,7 @@ func (s *Server) routes() {
 			if !ok {
 				return
 			}
-			if au != nil && action != "login" && action != "logout" && s.beginCommand(w, r, au) {
+			if au != nil && !noCommand[action] && s.beginCommand(w, r, au) {
 				return
 			}
 			r = withPrincipal(r, p)
@@ -654,6 +654,10 @@ func (s *Server) routes() {
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
 	api("GET /api/v1/commands/{id}", "read", s.getCommand)
+	api("GET /api/v1/me/preferences", "any", s.getPreferences)
+	api("GET /api/v1/me/preferences/{key}", "any", s.getPreference)
+	api("PUT /api/v1/me/preferences/{key}", "preferences", s.putPreference)
+	api("DELETE /api/v1/me/preferences/{key}", "preferences", s.deletePreference)
 	api("GET /api/v1/users", "users", s.listUsers)
 	api("POST /api/v1/users", "users", s.postUser)
 	api("GET /api/v1/users/{name}", "users", s.getUser)

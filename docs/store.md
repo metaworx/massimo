@@ -6,8 +6,8 @@ users and roles, the commands, the migration of an installed box,
 the stages of the work and the decisions the owner takes before any code is written.
 It follows section 4 of the proposal of 2026-11-05 and roadmap item 6;
 docs/design.md sections 2, 6 and 7 are the frame.
-Stage (a) shipped in v0.7.0-alpha.1,
-and stage (b) is implemented but its web UI (section 9);
+Stages (a) and (b) shipped in v0.7.0-alpha.1 and v0.8.0-alpha.1,
+and stage (c) is implemented (section 9);
 the owner's decisions are listed at the end. docs/server.md looks further ahead,
 at encryption at rest, the public server and sync,
 and says what version 1 prepares for them.
@@ -609,7 +609,8 @@ The capabilities, what each allows, and the routes it guards:
 
 | Capability | Allows | Routes |
 |---|---|---|
-| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, the update state | `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/update`, `GET /api/v1/me`, one's own preferences |
+| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, the update state | `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/update`, `GET /api/v1/me`, one's own preferences (`GET /api/v1/me/preferences`, any signed-in user) |
+| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
 | `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
@@ -635,6 +636,7 @@ The default roles, as seeded.
 | Capability | `manager` | `operator` | `guest` | `viewer` | `integration` |
 |---|---|---|---|---|---|
 | `read` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `preferences` | ✓ | ✓ | | ✓ | |
 | `setpoint` | ✓ | ✓ | ✓ | | ✓ |
 | `lock` | ✓ | ✓ | | | ✓ |
 | `configure` | ✓ | ✓ | ✓ | | |
@@ -649,11 +651,16 @@ The default roles, as seeded.
 
 So `manager` is `operator` plus guests, pairing, names, structure and restore;
 `operator` runs the heating, locks, configures, discovers and takes backups;
-`guest` is `operator` without the lock, backups and discovery; `viewer` reads;
+`guest` is `operator` without the lock, backups, discovery and preferences;
+`viewer` reads;
 `integration` is what a home automation needs and nothing it does not.
 Moves and deletions (`structure`) go with the names to `manager`,
 because a move changes the house as a name does; if `operator` should keep them,
 that is one row of the seed.
+`preferences` keeps one's settings and colour schemes on the server (stage (c));
+a guest has it not, so a guest's settings stay on its devices,
+where the defaults apply anyway (decided 2026-11-06),
+and `integration` has no page to keep settings for.
 
 Guests are users with the role `guest`,
 created by a holder of `guests` with an invitation (a one-time code or link;
@@ -935,17 +942,29 @@ work (AP StoreUsers v1.0).
 
 ### (c) Preferences
 
-- Files: `internal/store/preferences.go`, `internal/server/me_api.go`;
-  app.js and theme.js from the colour-scheme work (proposal section 2)
-  read the server copy when logged in and fall back to the browser's.
-- API: `GET`/`PUT`/`DELETE /api/v1/me/preferences/{key}`, the value a
-  JSON document (`scheme` is `massimo-scheme/1`; `ui` is poll, expert,
-  clock, language).
-- UI: nothing visible; the settings follow the user across browsers;
-  the browser copy is the cache and the fallback without a login.
-- Tests: store round trip;
-  the server refuses another user's key for a non-owner;
-  the smoke test sets a scheme, reloads in a fresh context, logs in, sees it.
+Implemented on 2026-11-06 (AP StorePrefs v1.0).
+
+- Files: `internal/store/preferences.go`,
+  `migrations/0003_preferences_capability.sql`, `internal/server/me_api.go`;
+  app.js,
+  login.js and theme.js read the server copy when signed in and fall back to the
+  browser's.
+- The capability `preferences` (section 6): a role with it keeps its settings
+  on the server; manager, operator and viewer have it,
+  guest and integration not, so a guest's settings stay on its devices.
+- API: `GET /api/v1/me/preferences`,
+  `GET`/`PUT`/`DELETE /api/v1/me/preferences/{key}`, the value a JSON document:
+  `ui` is poll, expert, clock, language, the mode and the chosen scheme;
+  `schemes` the user's own, a list of `massimo-scheme/1` documents.
+  A write is an audit row and no command.
+- UI: the settings follow the user across browsers;
+  under each a switch "only on this device" keeps its value in the browser,
+  which then wins; the browser's keys stay the cache,
+  and the only copy without a sign-in or the capability.
+- Tests: the store's round trip; the routes per user, a guest refused the write,
+  no user and no store; the pytest suite sets the poll and a scheme,
+  opens a fresh context with the same token and sees them,
+  keeps the mode for one device, and signs a guest in, which has no switches.
 
 ### (d) The log in the store
 
@@ -1009,6 +1028,9 @@ guests without an invitation flow until the UI needs one,
 `golang.org/x/term` for the password prompt,
 and one `commands` table with `commands.keep_days` rather than a history
 table (NOTE StoreUsers v1.0: commands history).
+Stage (c) followed (AP StorePrefs v1.0): the keys `ui` and `schemes`,
+a switch per setting for this device only,
+and the capability `preferences`, which a guest has not.
 
 1. Taken: SQLite through `modernc.org/sqlite`.
    For it: SQL with indexes and queries for the log,

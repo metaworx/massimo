@@ -63,7 +63,7 @@ const (
 // order. A route is registered with one of them; the roles' sets are
 // rows of the store.
 var capabilities = []string{
-	"read", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
 	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit",
 }
 

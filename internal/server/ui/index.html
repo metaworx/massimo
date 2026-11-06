@@ -104,6 +104,7 @@
         <label for="poll-input" data-i18n="settings.poll">Poll every</label>
         <span data-help="poll" data-help-label="settings.poll"></span>
         <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
+        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
       </div>
       <div class="field">
         <label class="switch">
@@ -112,6 +113,7 @@
           <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
         </label>
         <span data-help="expert" data-help-label="settings.expertShort"></span>
+        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
       </div>
       <div class="field wide">
         <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
@@ -120,11 +122,13 @@
           <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
           <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
         </select>
+        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
       </div>
       <div class="field wide">
         <label for="lang-select" data-i18n="settings.language">Language</label>
         <span data-help="language" data-help-label="settings.language"></span>
         <select id="lang-select" class="field-control"></select>
+        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
         <p id="lang-note" class="muted small lang-note hidden"></p>
       </div>
       <!-- partials: settings -->

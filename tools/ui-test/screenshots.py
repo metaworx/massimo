@@ -133,6 +133,11 @@ class Answers:
             return route.fulfill(status=200, content_type="application/json", body=json.dumps(UPDATE))
         if path.endswith("/events/ticket"):
             return route.continue_()
+        if path.startswith("/api/v1/me/preferences"):
+            # Each shot keeps the settings of its own context: the server
+            # keeps none for it, so that one shot's mode is not the next's.
+            body = "{}" if req.method == "GET" else '{"ok": true}'
+            return route.fulfill(status=200, content_type="application/json", body=body)
         resp = route.fetch()
         body = TIME_RE.sub('"' + SERVER_TIME + '"', resp.text())
         if path.startswith("/api/v1/cubes") and "/rooms" not in path:

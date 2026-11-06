@@ -10,6 +10,14 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- Store stage (c), the settings per user (`docs/store.md` section 9):
+  kept per user and key for a role with the capability `preferences`
+  (migration 0003), through `/api/v1/me/preferences` (`docs/api-v1.md`).
+
+- The web UI's settings and colour schemes follow the signed-in user to
+  every browser, each with a switch to keep it on this device only
+  (`docs/ui.md`, "Settings").
+
 - `massimo serve -tls files -tls-cert … -tls-key …`: TLS from certificate
   files, re-read when they change, with HSTS for a year (`-hsts <days>`);
   `massimo install -tls-cert … -tls-key …` installs them (README.md).

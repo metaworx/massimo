@@ -10,7 +10,8 @@ ids 1100-en, 390-en, 1100-de and 390-de). Each run gets a browser context
 of its own from pytest-playwright, with the token in localStorage before
 the page loads, and `page` is the page loaded with its room tiles and
 its event stream open. The four cases share the one server, so a test
-that changes the server's store puts it back.
+that changes the server's store puts it back; the settings the page
+keeps on the server for the token's user are removed before every page.
 
 A test marked used_ticket gets a used ticket for its first stream
 (`watch.refused`), which the server refuses with a 401; its page is
@@ -28,6 +29,8 @@ failed test (pytest.ini) under the directory run.sh names with
 --output, tools/ui-test/results/.
 """
 import os
+import ssl
+import urllib.request
 
 import pytest
 
@@ -77,10 +80,28 @@ def watch():
     return Watch()
 
 
+def clear_preferences():
+    """The token's user keeps the page's settings on the server, and the
+    four cases share the server: its preferences are removed before
+    every page, so that a test starts from the defaults as a fresh
+    browser does."""
+    if not TOKEN:
+        return
+    tls = ssl.create_default_context()
+    tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
+    for key in ("ui", "schemes"):
+        req = urllib.request.Request(URL.rstrip("/") + "/api/v1/me/preferences/" + key, method="DELETE",
+                                     headers={"Authorization": "Bearer " + TOKEN})
+        with urllib.request.urlopen(req, timeout=5, context=tls) as resp:
+            resp.read()
+
+
 @pytest.fixture
 def page(context, case, watch, request):
     """The page loaded, with the token, the room tiles shown and, unless
-    the test is marked used_ticket, the event stream open."""
+    the test is marked used_ticket, the event stream open; the token's
+    user without preferences on the server (clear_preferences)."""
+    clear_preferences()
     if TOKEN:
         context.add_init_script(f"localStorage.setItem('massimo.token', {TOKEN!r})")
     page = context.new_page()

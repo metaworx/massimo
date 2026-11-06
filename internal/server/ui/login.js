@@ -12,7 +12,7 @@
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
 // "Authentication"); each hides, as a class needs-<capability> in the
 // markup, what it alone allows.
-const CAPABILITIES = ["read", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
   "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice
@@ -78,6 +78,7 @@ function applyCaps() {
   const body = document.body;
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
+  body.classList.toggle("no-sync", !canSync());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderMe();
 }
@@ -183,9 +184,11 @@ async function signIn(user, password) {
 
 // afterLogin reads who is in, and starts the stream and the data again.
 function afterLogin() {
-  loadMe().then(() => {
-    refresh().then(connectEvents);
-  });
+  loadMe()
+    .then(loadPreferences)
+    .then(() => {
+      refresh().then(connectEvents);
+    });
 }
 
 // logout ends the session (an API key is only forgotten) and asks who
@@ -205,6 +208,96 @@ async function logout() {
   showView("tiles");
   await loadMe();
   refresh().then(connectEvents);
+}
+
+// --- the user's settings on the server ---------------------------------
+
+// canSync reports whether the settings follow the signed-in user: a user
+// with the capability preferences. A guest, an open server and the API
+// token keep them in the browser only.
+function canSync() {
+  const me = state.me;
+  return !!(me && me.mode === "users" && me.user && hasCap("preferences"));
+}
+
+const prefsSync = { timer: null, keys: new Set() };
+
+// PREFS_DELAY is how long a change waits for the next before it goes to
+// the server, so that a poll interval typed digit by digit is one write.
+const PREFS_DELAY = 1000;
+
+// schedulePreferences sends a preference (ui or schemes) to the server
+// shortly, when the settings follow the user.
+function schedulePreferences(key) {
+  if (!canSync()) return;
+  prefsSync.keys.add(key);
+  if (prefsSync.timer) clearTimeout(prefsSync.timer);
+  prefsSync.timer = setTimeout(pushPreferences, PREFS_DELAY);
+}
+
+// pushPreferences sends the preferences scheduled: ui is the user's
+// values as the browser keeps them, without this device's.
+async function pushPreferences() {
+  prefsSync.timer = null;
+  const keys = [...prefsSync.keys];
+  prefsSync.keys.clear();
+  for (const key of keys) {
+    const body = key === "ui" ? storedSettings() : schemesDocument(); // app.js, theme.js
+    try {
+      await api("PUT", "api/v1/me/preferences/" + key, body);
+    } catch (e) {
+      showMessage(t("prefs.saveFailed", { error: e.message }), false);
+    }
+  }
+}
+
+// flushPreferences sends what is scheduled at once, as the page is left
+// or hidden: a change made in the last second before a tab is closed
+// would otherwise stay in this browser, and the next sign-in would take
+// the server's older value over it. keepalive lets the request outlive
+// the page.
+function flushPreferences() {
+  if (!prefsSync.timer) return;
+  clearTimeout(prefsSync.timer);
+  prefsSync.timer = null;
+  const keys = [...prefsSync.keys];
+  prefsSync.keys.clear();
+  for (const key of keys) {
+    const body = key === "ui" ? storedSettings() : schemesDocument();
+    const headers = { "Content-Type": "application/json" };
+    if (state.token) headers.Authorization = "Bearer " + state.token;
+    fetch("api/v1/me/preferences/" + key, { method: "PUT", headers, body: JSON.stringify(body), keepalive: true }).catch(() => {});
+  }
+}
+
+// loadPreferences takes the signed-in user's settings from the server:
+// the schemes first, merged with the browser's own, so that a chosen
+// scheme of the user's resolves, then ui, applied where this device does
+// not keep its own. What the server lacks it learns from the browser, so
+// that the first sign-in keeps the settings the browser had.
+async function loadPreferences() {
+  if (!canSync()) return;
+  let prefs;
+  try {
+    prefs = (await api("GET", "api/v1/me/preferences")) || {};
+  } catch (e) {
+    return;
+  }
+  if (prefs.schemes) {
+    if (mergeSchemes(prefs.schemes)) schedulePreferences("schemes");
+  } else if (themeState.custom.length) {
+    schedulePreferences("schemes");
+  }
+  const ui = prefs.ui;
+  if (ui && typeof ui === "object") {
+    for (const k of SETTING_KEYS) {
+      const v = validSetting(k, ui[k]);
+      if (v !== undefined) storeUserSetting(k, v);
+    }
+  } else {
+    schedulePreferences("ui");
+  }
+  await applyStoredSettings();
 }
 
 // --- the own password -------------------------------------------------
@@ -250,6 +343,10 @@ async function createOwner(ev) {
 }
 
 function initLogin() {
+  window.addEventListener("pagehide", flushPreferences);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPreferences();
+  });
   $("logout-btn").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   $("me-password-form").addEventListener("submit", changeOwnPassword);

@@ -440,6 +440,9 @@ while there are no users the API is open on the default localhost listener,
 and the first owner is created with `massimo user add` or by the web UI from
 the local network.
 See docs/api-v1.md, "Authentication".
+The web UI's settings and colour schemes follow a signed-in user with the
+capability `preferences` to every browser (`/api/v1/me/preferences`),
+each with a switch to keep it on one device; a guest's stay in its browser.
 A web UI, plain HTML and JavaScript embedded in the binary,
 is served at http://127.0.0.1:8099/ :
 one tile per room with the measured and the set temperature with a thermometer

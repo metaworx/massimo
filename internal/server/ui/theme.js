@@ -206,6 +206,32 @@ function loadCustomSchemes() {
 
 function storeCustomSchemes() {
   store("massimo.schemes", themeState.custom.length ? JSON.stringify(themeState.custom) : null);
+  schedulePreferences("schemes"); // login.js: the user's schemes follow the user
+}
+
+// schemesDocument is the user's schemes as the server keeps them, the
+// preference schemes: a list of massimo-scheme/1 documents.
+function schemesDocument() {
+  return { format: "massimo-schemes/1", schemes: themeState.custom.map((c) => ({ format: SCHEME_FORMAT, name: c.name, light: c.light, dark: c.dark })) };
+}
+
+// mergeSchemes takes the user's schemes from the server and keeps the
+// browser's own that the server lacks; it reports whether it kept any,
+// which the server is then to learn.
+function mergeSchemes(doc) {
+  const local = themeState.custom.slice();
+  const list = doc && Array.isArray(doc.schemes) ? doc.schemes : [];
+  store("massimo.schemes", JSON.stringify(list.map((s) => ({ name: s && s.name, light: s && s.light, dark: s && s.dark }))));
+  loadCustomSchemes();
+  let kept = false;
+  for (const c of local) {
+    if (!themeState.custom.some((x) => x.name === c.name)) {
+      themeState.custom.push(c);
+      kept = true;
+    }
+  }
+  store("massimo.schemes", themeState.custom.length ? JSON.stringify(themeState.custom) : null);
+  return kept;
 }
 
 // putCustomScheme stores a scheme under its name, replacing one with
@@ -266,17 +292,16 @@ function reapplyTheme() {
   applyTheme(state.settings.theme, state.settings.scheme);
 }
 
-// chooseMode and chooseScheme are the settings' choices, kept in the
-// browser; the default is kept as no entry.
+// chooseMode and chooseScheme are the settings' choices, kept as the
+// other settings are (app.js setSetting): for this device, or as the
+// user's, in the browser and for a signed-in user on the server.
 function chooseMode(mode) {
-  state.settings.theme = validMode(mode);
-  store("massimo.theme", state.settings.theme === "system" ? null : state.settings.theme);
+  setSetting("theme", validMode(mode)); // app.js: this device's, or the user's
   applyAppearance();
 }
 
 function chooseScheme(id) {
-  state.settings.scheme = validScheme(id);
-  store("massimo.scheme", state.settings.scheme === DEFAULT_SCHEME ? null : state.settings.scheme);
+  setSetting("scheme", validScheme(id));
   applyAppearance();
 }
 
@@ -574,4 +599,4 @@ async function importSchemeFile(file) {
 // The stored choice, applied before the page is drawn; init() in app.js
 // applies it again from the settings.
 loadCustomSchemes();
-applyTheme(readStored("massimo.theme"), readStored("massimo.scheme"));
+applyTheme(readSetting("theme"), readSetting("scheme"));

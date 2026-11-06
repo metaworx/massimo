@@ -74,7 +74,13 @@ var actions = map[string]string{
 	"DELETE /api/v1/roles/{key}":                   "role.remove",
 	"PUT /api/v1/roles/{key}/disabled":             "role.disable",
 	"PUT /api/v1/capabilities/{key}":               "capability.disable",
+	"PUT /api/v1/me/preferences/{key}":             "preference.set",
+	"DELETE /api/v1/me/preferences/{key}":          "preference.delete",
 }
+
+// noCommand are the actions that are audited but are no command: they
+// send nothing to a Cube and a retry of them is harmless (commands.go).
+var noCommand = map[string]bool{"login": true, "logout": true, "preference.set": true, "preference.delete": true}
 
 // secretFields are the body fields an audit row never keeps.
 var secretFields = []string{"password", "current_password", "token"}
@@ -173,6 +179,8 @@ func pathTarget(r *http.Request, pattern string) string {
 		return "room:" + r.PathValue("id")
 	case r.PathValue("name") != "":
 		return "user:" + store.NormalName(r.PathValue("name"))
+	case r.PathValue("key") != "" && strings.Contains(pattern, "/preferences/"):
+		return "preference:" + r.PathValue("key")
 	case r.PathValue("key") != "" && strings.Contains(pattern, "/capabilities/"):
 		return "capability:" + r.PathValue("key")
 	case r.PathValue("key") != "":

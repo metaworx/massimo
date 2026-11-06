@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-var allCaps = []string{"read", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"}
+var allCaps = []string{"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"}
 
 // Roles are listed with their sets, created, renamed, given another
 // set, disabled and removed under the rules of docs/store.md section 6.
@@ -21,7 +21,7 @@ func TestRoles(t *testing.T) {
 	if err != nil || len(roles) != 6 || roles[0].Key != RoleOwner || roles[5].Key != RoleIntegration || !roles[1].Builtin {
 		t.Fatalf("roles %+v %v", roles, err)
 	}
-	if strings.Join(roles[2].Capabilities, ",") != "backup,configure,discover,lock,read,setpoint" {
+	if strings.Join(roles[2].Capabilities, ",") != "backup,configure,discover,lock,preferences,read,setpoint" {
 		t.Fatalf("operator %v", roles[2].Capabilities)
 	}
 	night, err := s.AddRole(ctx, Role{Key: "Night", Name: "Night shift", Capabilities: []string{"setpoint", "read", "setpoint", " "}}, 0)
@@ -88,7 +88,7 @@ func TestEffective(t *testing.T) {
 	if err != nil || off || len(caps) != len(allCaps) {
 		t.Fatalf("owner %v %v %v", caps, off, err)
 	}
-	if caps, _, _ := s.Effective(ctx, RoleViewer, allCaps); strings.Join(caps, ",") != "read" {
+	if caps, _, _ := s.Effective(ctx, RoleViewer, allCaps); strings.Join(caps, ",") != "preferences,read" {
 		t.Fatalf("viewer %v", caps)
 	}
 	if err := s.SetCapabilityDisabled(ctx, "pair", true, 0); err != nil {
@@ -98,14 +98,14 @@ func TestEffective(t *testing.T) {
 	if d, _ := s.DisabledCapabilities(ctx); strings.Join(d, ",") != "pair" {
 		t.Fatalf("disabled %v", d)
 	}
-	if caps, _, _ := s.Effective(ctx, RoleManager, allCaps); strings.Contains(strings.Join(caps, ","), "pair") || len(caps) != 10 {
+	if caps, _, _ := s.Effective(ctx, RoleManager, allCaps); strings.Contains(strings.Join(caps, ","), "pair") || len(caps) != 11 {
 		t.Fatalf("manager without pair %v", caps)
 	}
 	if caps, _, _ := s.Effective(ctx, RoleOwner, allCaps); len(caps) != len(allCaps) {
 		t.Fatal("a disabled capability touched owner")
 	}
 	s.SetCapabilityDisabled(ctx, "pair", false, 0)
-	if caps, _, _ := s.Effective(ctx, RoleManager, allCaps); len(caps) != 11 {
+	if caps, _, _ := s.Effective(ctx, RoleManager, allCaps); len(caps) != 12 {
 		t.Fatalf("manager %v", caps)
 	}
 	s.SetRoleDisabled(ctx, RoleManager, true, 0)

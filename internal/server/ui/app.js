@@ -51,16 +51,150 @@ function store(key, value) {
   }
 }
 
+// --- the scopes of the settings ----------------------------------------
+
+// SETTING_KEYS are the page's settings. Each is the user's value, kept in
+// the browser under massimo.<key> as before, which a signed-in user with
+// the capability preferences also keeps on the server, so that it follows
+// the user to every browser (login.js, loadPreferences); a setting can be
+// kept for this device only instead, in massimo.device, which then wins.
+const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme"];
+
+// SETTING_LABELS name each setting's row, for its "only on this device"
+// switch.
+const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme" };
+
+// SETTING_STORE writes a value as massimo.<key> has always held it; the
+// default is kept as no entry, but for the poll and the expert switch.
+const SETTING_STORE = {
+  poll: (v) => String(v),
+  expert: (v) => (v ? "1" : "0"),
+  clock: (v) => v,
+  lang: (v) => (v === "auto" ? null : v),
+  theme: (v) => (v === "system" ? null : v),
+  scheme: (v) => (v === "massimo" ? null : v),
+};
+
+// validSetting is a value of a setting when it is one, else undefined.
+function validSetting(key, v) {
+  switch (key) {
+    case "poll": {
+      const n = parseInt(v, 10);
+      return n >= 2 && n <= 3600 ? n : undefined;
+    }
+    case "expert":
+      return typeof v === "boolean" ? v : undefined;
+    case "clock":
+      return v === "cube" || v === "browser" ? v : undefined;
+    case "lang":
+      return v === "auto" || languages().includes(v) ? v : undefined;
+    case "theme":
+      return v === "system" || v === "light" || v === "dark" ? v : undefined;
+    case "scheme":
+      return typeof v === "string" && v !== "" ? v : undefined;
+  }
+  return undefined;
+}
+
+// storedSettings are the user's values as the browser keeps them, the
+// defaults where it keeps none.
+function storedSettings() {
+  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" };
+  const poll = validSetting("poll", readStored("massimo.poll"));
+  if (poll !== undefined) s.poll = poll;
+  s.expert = readStored("massimo.expert") === "1";
+  for (const k of ["clock", "lang", "theme", "scheme"]) {
+    const v = validSetting(k, readStored("massimo." + k));
+    if (v !== undefined) s[k] = v;
+  }
+  return s;
+}
+
+// deviceOverrides are the settings kept for this device only.
+function deviceOverrides() {
+  try {
+    const d = JSON.parse(readStored("massimo.device") || "{}");
+    return d && typeof d === "object" && !Array.isArray(d) ? d : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function storeDeviceOverrides(d) {
+  store("massimo.device", Object.keys(d).length ? JSON.stringify(d) : null);
+}
+
+function deviceOnly(key) {
+  return Object.prototype.hasOwnProperty.call(deviceOverrides(), key);
+}
+
+// readSetting is the value in effect of a setting: this device's, else
+// the user's.
+function readSetting(key) {
+  const d = deviceOverrides();
+  if (Object.prototype.hasOwnProperty.call(d, key)) {
+    const v = validSetting(key, d[key]);
+    if (v !== undefined) return v;
+  }
+  return storedSettings()[key];
+}
+
 function loadSettings() {
   const s = state.settings;
-  const poll = parseInt(readStored("massimo.poll"), 10);
-  if (poll >= 2) s.poll = poll;
-  s.expert = readStored("massimo.expert") === "1";
-  const clock = readStored("massimo.clock");
-  if (clock === "cube" || clock === "browser") s.clock = clock;
-  s.lang = readStored("massimo.lang") || "auto";
-  s.theme = validMode(readStored("massimo.theme")); // theme.js
-  s.scheme = validScheme(readStored("massimo.scheme"));
+  for (const k of SETTING_KEYS) s[k] = readSetting(k);
+  s.theme = validMode(s.theme); // theme.js
+  s.scheme = validScheme(s.scheme);
+}
+
+// storeUserSetting keeps the user's value of a setting in the browser.
+function storeUserSetting(key, v) {
+  store("massimo." + key, SETTING_STORE[key](v));
+}
+
+// setSetting changes a setting: on this device only where it is kept for
+// this device, else the user's value, which goes to the server as well
+// (login.js schedulePreferences).
+function setSetting(key, v) {
+  state.settings[key] = v;
+  const d = deviceOverrides();
+  if (Object.prototype.hasOwnProperty.call(d, key)) {
+    d[key] = v;
+    storeDeviceOverrides(d);
+    return;
+  }
+  storeUserSetting(key, v);
+  schedulePreferences("ui");
+}
+
+// setDeviceOnly keeps a setting for this device only, with the value in
+// effect, or stops: the user's value applies again.
+function setDeviceOnly(key, on) {
+  const d = deviceOverrides();
+  if (on) d[key] = state.settings[key];
+  else delete d[key];
+  storeDeviceOverrides(d);
+  if (on) return;
+  applyStoredSettings();
+}
+
+// applyStoredSettings applies the settings again after the user's values
+// or the overrides changed; a change of language redraws the page.
+function applyStoredSettings() {
+  const lang = state.settings.lang;
+  loadSettings();
+  applySettings();
+  if (state.settings.lang !== lang) return changeLanguage(state.settings.lang).then(applyLanguage);
+  return Promise.resolve();
+}
+
+// renderDeviceSwitches shows which settings are kept for this device
+// only, each switch named for its row.
+function renderDeviceSwitches() {
+  for (const input of document.querySelectorAll("input[data-device-only]")) {
+    const key = input.dataset.deviceOnly;
+    input.checked = deviceOnly(key);
+    input.setAttribute("aria-label", t("settings.thisDeviceFor", { setting: t(SETTING_LABELS[key]) }));
+  }
 }
 
 // --- API --------------------------------------------------------------
@@ -380,6 +514,7 @@ function applySettings() {
   $("poll-input").value = s.poll;
   $("clock-select").value = s.clock;
   applyAppearance();
+  renderDeviceSwitches();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   startPolling();
@@ -734,15 +869,13 @@ async function connectEvents() {
 function initSettings() {
   // The settings page is opened with the cog in the header (showView).
   $("poll-input").addEventListener("change", (ev) => {
-    const v = Math.max(2, parseInt(ev.target.value, 10) || 10);
-    state.settings.poll = v;
+    const v = validSetting("poll", ev.target.value) || 10;
     ev.target.value = v;
-    store("massimo.poll", String(v));
+    setSetting("poll", v);
     startPolling();
   });
   const onExpert = (ev) => {
-    state.settings.expert = ev.target.checked;
-    store("massimo.expert", state.settings.expert ? "1" : "0");
+    setSetting("expert", ev.target.checked);
     applySettings();
   };
   $("expert-toggle").addEventListener("change", onExpert);
@@ -755,15 +888,16 @@ function initSettings() {
     });
   });
   $("clock-select").addEventListener("change", (ev) => {
-    state.settings.clock = ev.target.value;
-    store("massimo.clock", state.settings.clock);
+    setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();
   });
   $("lang-select").addEventListener("change", (ev) => {
-    state.settings.lang = ev.target.value;
-    store("massimo.lang", state.settings.lang === "auto" ? null : state.settings.lang);
+    setSetting("lang", validSetting("lang", ev.target.value) || "auto");
     changeLanguage(state.settings.lang).then(applyLanguage);
   });
+  for (const input of document.querySelectorAll("input[data-device-only]")) {
+    input.addEventListener("change", () => setDeviceOnly(input.dataset.deviceOnly, input.checked));
+  }
   initAppearance();
 }
 
@@ -814,6 +948,7 @@ function applyLanguage() {
   renderCubeSelect();
   renderFound();
   renderMe();
+  renderDeviceSwitches();
   renderUsers();
   renderRoles();
   renderCubes();
@@ -837,6 +972,7 @@ async function init() {
   applySettings();
   checkVersion();
   await loadMe(); // login.js: who is signed in, or the sign-in dialog
+  await loadPreferences(); // login.js: the user's settings from the server
   $("cube-select").addEventListener("change", (ev) => {
     if (ev.target.value !== DISCOVER) return selectCube(ev.target.value);
     ev.target.value = state.serial || "";

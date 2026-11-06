@@ -37,7 +37,7 @@ func TestLogin(t *testing.T) {
 	}
 	json.Unmarshal([]byte(text), &sess)
 	if len(sess.Token) != 64 || sess.ExpiresAt.Before(before.Add(SessionLifetime-time.Minute)) || sess.User.Name != "anna" || sess.User.DisplayName != "Anna" || sess.Role.Key != store.RoleOperator ||
-		strings.Join(sess.Capabilities, ",") != "backup,configure,discover,lock,read,setpoint" || sess.User.LastLoginAt == nil {
+		strings.Join(sess.Capabilities, ",") != "backup,configure,discover,lock,preferences,read,setpoint" || sess.User.LastLoginAt == nil {
 		t.Fatalf("session %+v", sess)
 	}
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", sess.Token, ""); code != 200 {
@@ -46,7 +46,7 @@ func TestLogin(t *testing.T) {
 	code, text = callAPI(t, ts, "GET", "/api/v1/me", sess.Token, "")
 	var me meView
 	json.Unmarshal([]byte(text), &me)
-	if code != 200 || me.Mode != "users" || me.User == nil || me.User.Name != "anna" || me.Token == nil || me.Token.Kind != store.TokenSession || me.Token.Label != "test browser" || me.Setup || len(me.Capabilities) != 6 {
+	if code != 200 || me.Mode != "users" || me.User == nil || me.User.Name != "anna" || me.Token == nil || me.Token.Kind != store.TokenSession || me.Token.Label != "test browser" || me.Setup || len(me.Capabilities) != 7 {
 		t.Fatalf("me: %d %+v", code, me)
 	}
 	tokens, _ := st.Tokens(ctx, anna.ID)
