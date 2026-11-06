@@ -1,0 +1,10 @@
+# Machine-specific overrides. Documented as untracked since v3; nothing
+# actually ignored it until v4.
+config.local.ini
+
+# Durable: action plans and analyses written for you to read.
+# Never overwritten, never auto-purged - do not delete to reclaim space.
+messages/
+
+# Scratch: safe to delete wholesale, at any time.
+temp/

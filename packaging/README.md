@@ -1,40 +1,44 @@
 # Running `massimo serve` as a service
 
-`massimo serve` is meant to run all the time on a small always-on Linux box
-next to the Cubes, such as a Raspberry Pi. `massimo install` sets it up as
-a systemd service with the files of this directory, which are compiled into
-the binary; "Install by hand" below lists the same steps. On Windows it
-installs a Windows service instead (see "Windows"), on a Mac
-LaunchDaemons (see "macOS").
+`massimo serve` is meant to run all the time on a small always-on Linux box next
+to the Cubes, such as a Raspberry Pi.
+`massimo install` sets it up as a systemd service with the files of this directory,
+which are compiled into the binary;
+"Install by hand" below lists the same steps.
+On Windows it installs a Windows service instead (see "Windows"),
+on a Mac LaunchDaemons (see "macOS").
 
-- `systemd/massimo.service`: the unit. Runs as the user `massimo`, reads
-  its settings from `/etc/massimo/env`, listens on port 8099 on every
-  interface (API and web UI; `install -listen` changes it), logs to
-  `/var/log/massimo/serve.log` and the journal, and restarts on failure.
-- `systemd/massimo-update.path` and `systemd/massimo-update.service`: the
-  update helper, which installs a new release when the web UI or the API
-  asks for one (see Updating).
-- `logrotate/massimo`: weekly rotation of that log.
-- `launchd/ch.metaworx.massimo.plist` and
-  `launchd/ch.metaworx.massimo-update.plist`: the service and the update
-  helper on macOS (see "macOS").
+- `systemd/massimo.service`:
+  the unit.
+  Runs as the user `massimo`, reads its settings from `/etc/massimo/env`,
+  listens on port 8099 on every interface (API and web UI;
+  `install -listen` changes it),
+  logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure.
+- `systemd/massimo-update.path` and `systemd/massimo-update.service`:
+  the update helper,
+  which installs a new release when the web UI or the API asks for one (see Updating).
+- `logrotate/massimo`:
+  weekly rotation of that log.
+- `launchd/ch.metaworx.massimo.plist` and `launchd/ch.metaworx.massimo-update.plist`:
+  the service and the update helper on macOS (see "macOS").
 
-The repository's `.gitattributes` keeps everything in this directory
-with LF line endings, also in a Windows checkout with `core.autocrlf`,
-so that the binary embeds the files byte for byte as reviewed. A binary
-file added here needs its own `-text` line there.
+The repository's `.gitattributes` keeps everything in this directory with LF line endings,
+also in a Windows checkout with `core.autocrlf`,
+so that the binary embeds the files byte for byte as reviewed.
+A binary file added here needs its own `-text` line there.
 
-Each Cube accepts exactly one TCP client. Only one `massimo serve` can be
-connected to a Cube at a time, so stop any other server (and close the
-original MAX! software) before starting this one; afterwards, clients
-connect to the server's proxy instead of the Cube.
+Each Cube accepts exactly one TCP client.
+Only one `massimo serve` can be connected to a Cube at a time,
+so stop any other server (and close the original MAX! software) before starting this one;
+afterwards, clients connect to the server's proxy instead of the Cube.
 
 ## Download or build
 
-Every release on <https://github.com/metaworx/massimo/releases> has the
-binaries below, `SHA256SUMS` and a signed manifest; `sha256sum -c
-SHA256SUMS --ignore-missing` checks a download. To build instead, pick the
-target for the board (all need a 32-bit or 64-bit Linux to match):
+Every release on <https://github.com/metaworx/massimo/releases> has the binaries below,
+`SHA256SUMS` and a signed manifest;
+`sha256sum -c SHA256SUMS --ignore-missing` checks a download.
+To build instead, pick the target for the board (all need a 32-bit or 64-bit
+Linux to match):
 
 | Board                                  | OS             | Target              |
 |----------------------------------------|----------------|---------------------|
@@ -51,11 +55,12 @@ one dies there with "illegal instruction"), `armv7l` the armv7 build,
 
 ## Preparing a Raspberry Pi 1
 
-The current Raspberry Pi OS Lite (32-bit) still runs on the Pi 1 and needs
-about 2.8 GB, so a 4 GB card is enough. Raspberry Pi Imager can preset the
-user, SSH key and hostname. When writing the image by hand, the boot
-partition's `user-data` (cloud-init) does the same on first boot, for
-example:
+The current Raspberry Pi OS Lite (32-bit) still runs on the Pi 1 and needs about 2.8 GB,
+so a 4 GB card is enough.
+Raspberry Pi Imager can preset the user, SSH key and hostname.
+When writing the image by hand,
+the boot partition's `user-data` (cloud-init) does the same on first boot,
+for example:
 
 ```yaml
 #cloud-config
@@ -71,13 +76,14 @@ enable_ssh: true
 ssh_pwauth: false
 ```
 
-The Pi 1 has no network over USB (its micro-USB port only powers it), so
-it needs Ethernet. The first boot takes about ten minutes.
+The Pi 1 has no network over USB (its micro-USB port only powers it),
+so it needs Ethernet.
+The first boot takes about ten minutes.
 
 ## Install with `massimo install`
 
-On the box, with the binary for it (from a release, or built and copied
-over), as root:
+On the box, with the binary for it (from a release, or built and copied over),
+as root:
 
 ```bash
 curl -fLO https://github.com/metaworx/massimo/releases/latest/download/massimo-linux-armv6
@@ -86,38 +92,43 @@ sudo ./massimo-linux-armv6 install -dry-run
 sudo ./massimo-linux-armv6 install
 ```
 
-(`releases/latest` skips pre-releases; while there are only alphas, take
-the URL from the releases page.) It installs the binary as
-`/usr/local/bin/massimo`, creates the system user `massimo` and
-`/etc/massimo/env` (a commented template, or a copy of `-settings <.env>`),
-writes `massimo.service`, the update helper `massimo-update.path` and
-`.service` and the log rotation, enables them, and starts the service
-unless the settings are still the template. It warns when a Cube's
-`_PROXY` address is not one of the box's addresses (serve could not listen
-there and would restart every ten seconds; install adds no addresses) and
-when `MASSIMO_API_TOKEN` is missing. Fill in `/etc/massimo/env` as
-described below, then `sudo systemctl start massimo`.
+(`releases/latest` skips pre-releases; while there are only alphas,
+take the URL from the releases page.)
+It installs the binary as `/usr/local/bin/massimo`,
+creates the system user `massimo` and `/etc/massimo/env` (a commented template,
+or a copy of `-settings <.env>`), writes `massimo.service`,
+the update helper `massimo-update.path` and `.service` and the log rotation,
+enables them, and starts the service unless the settings are still the template.
+It warns when a Cube's `_PROXY` address is not one of the box's addresses (serve
+could not listen there and would restart every ten seconds;
+install adds no addresses) and when `MASSIMO_API_TOKEN` is missing.
+Fill in `/etc/massimo/env` as described below,
+then `sudo systemctl start massimo`.
 
-Running `install` again, from a newer binary, replaces the binary and the
-units and restarts the service; existing settings are kept, and a unit
-that differs from the new one (edited with `systemctl edit --full`) is kept
-as `<unit>.bak`. Local changes belong in a drop-in (`systemctl edit
-massimo`), which install never touches. `-no-update-helper` leaves the
-helper out, `-no-start` only enables.
+Running `install` again, from a newer binary,
+replaces the binary and the units and restarts the service;
+existing settings are kept,
+and a unit that differs from the new one (edited with `systemctl edit --full`)
+is kept as `<unit>.bak`.
+Local changes belong in a drop-in (`systemctl edit massimo`),
+which install never touches.
+`-no-update-helper` leaves the helper out, `-no-start` only enables.
 
-`-listen <addr>` moves the API and web UI off `:8099`, for example to
-port 80 (`sudo massimo install -listen :80`, or `192.168.1.200:80` for one
-address only). It writes two drop-ins that later installs keep:
-`massimo.service.d/listen.conf` sets `MASSIMO_LISTEN` and, below port
-1024, grants the service `CAP_NET_BIND_SERVICE`, since the user `massimo`
-cannot bind such a port otherwise; `massimo-update.service.d/listen.conf`
-sets `MASSIMO_HEALTH`, where the update helper checks the restarted
-server. Deleting both files (and `systemctl daemon-reload`, `systemctl
-restart massimo`) goes back to `:8099`.
+`-listen <addr>` moves the API and web UI off `:8099`,
+for example to port 80 (`sudo massimo install -listen :80`,
+or `192.168.1.200:80` for one address only).
+It writes two drop-ins that later installs keep:
+`massimo.service.d/listen.conf` sets `MASSIMO_LISTEN` and, below port 1024,
+grants the service `CAP_NET_BIND_SERVICE`,
+since the user `massimo` cannot bind such a port otherwise;
+`massimo-update.service.d/listen.conf` sets `MASSIMO_HEALTH`,
+where the update helper checks the restarted server.
+Deleting both files (and `systemctl daemon-reload`,
+`systemctl restart massimo`) goes back to `:8099`.
 
-`massimo install -remove` stops and
-removes the service, its units and the binary; `-purge` also removes the
-settings, the state, the logs and the user.
+`massimo install -remove` stops and removes the service,
+its units and the binary; `-purge` also removes the settings, the state,
+the logs and the user.
 
 ## Install by hand
 
@@ -150,12 +161,14 @@ sudoedit /etc/massimo/env
 What to set there:
 
 - `MASSIMO_CUBE_<SN>_ADDRESS`, `_KEY`, `_IV` for every Cube.
-- `MASSIMO_CUBE_<SN>_PROXY`: the address this box answers on for that
-  Cube, one of the box's own IP addresses. Each Cube needs its own
-  address, because port 62910 can be bound once per address. Keeping the
-  box's own address free and adding one extra address per Cube is the
-  tidiest setup; addresses outside the router's DHCP range, on Raspberry
-  Pi OS (NetworkManager):
+- `MASSIMO_CUBE_<SN>_PROXY`:
+  the address this box answers on for that Cube,
+  one of the box's own IP addresses.
+  Each Cube needs its own address,
+  because port 62910 can be bound once per address.
+  Keeping the box's own address free and adding one extra address per Cube is
+  the tidiest setup; addresses outside the router's DHCP range,
+  on Raspberry Pi OS (NetworkManager):
 
   ```bash
   sudo nmcli con mod "Wired connection 1" +ipv4.addresses 192.168.1.49/24 +ipv4.addresses 192.168.1.50/24
@@ -208,83 +221,87 @@ installer passes with `-data`:
 | Windows service | `C:\ProgramData\Massimo` (SYSTEM and Administrators only) | LocalSystem |
 | Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |
 
-Next to `massimo.db` (mode 0600) live `massimo.db-wal` and
-`massimo.db-shm` while the server runs, and `node.key` (0600), the
-box's Ed25519 key; a copy of the database belongs with all of them, or
-is made with `massimo store backup <file>`, which is consistent while
-the server runs. `sudo -u massimo massimo -data /var/lib/massimo store
-info` shows the schema version, the node and the row counts; `massimo
-config` shows, per Cube, which values the store has and which line of
-`/etc/massimo/env` differs.
+Next to `massimo.db` (mode 0600) live `massimo.db-wal` and `massimo.db-shm`
+while the server runs, and `node.key` (0600), the box's Ed25519 key;
+a copy of the database belongs with all of them,
+or is made with `massimo store backup <file>`,
+which is consistent while the server runs.
+`sudo -u massimo massimo -data /var/lib/massimo store info` shows the schema version,
+the node and the row counts; `massimo config` shows, per Cube,
+which values the store has and which line of `/etc/massimo/env` differs.
 
-**The first start after the update to a release with the store** needs
-nothing done. The server creates `massimo.db`, migrates it to schema
-version 1, and adds every Cube of `/etc/massimo/env` to it, one log line
-each (`store created`, `schema migrated`, `cube added from the settings
-file`); the Cubes connect and the proxies listen as before, from the
-same values. `/etc/massimo/env` keeps its lines. From then on the store
-wins for a Cube it knows: its `_ADDRESS`, `_NAME`, `_PROXY`,
-`_PROXY_SERIAL` and `_IGNORE` lines only add a Cube the store does not
-know yet, and a line that differs from the store is logged at every
-start. Keys, IVs, the token, the listen address, the log and the update
-variables stay in the file. A known Cube is changed in the web UI
-under Settings → Cubes (or with `PUT /api/v1/cubes/<SN>`), which applies
-at once, without a restart; where a line of the file differs, the
-Cube's panel says so and offers "Take the file's value".
+**The first start after the update to a release with the store** needs nothing done.
+The server creates `massimo.db`, migrates it to schema version 1,
+and adds every Cube of `/etc/massimo/env` to it,
+one log line each (`store created`, `schema migrated`,
+`cube added from the settings file`);
+the Cubes connect and the proxies listen as before, from the same values.
+`/etc/massimo/env` keeps its lines.
+From then on the store wins for a Cube it knows: its `_ADDRESS`, `_NAME`,
+`_PROXY`,
+`_PROXY_SERIAL` and `_IGNORE` lines only add a Cube the store does not know yet,
+and a line that differs from the store is logged at every start.
+Keys, IVs, the token, the listen address,
+the log and the update variables stay in the file.
+A known Cube is changed in the web UI under Settings → Cubes (or with
+`PUT /api/v1/cubes/<SN>`), which applies at once, without a restart;
+where a line of the file differs,
+the Cube's panel says so and offers "Take the file's value".
 
-A Windows service installed before this release runs without `-data`
-until `install` is run again with the new binary; such a service uses
-`C:\ProgramData\Massimo` anyway, since its working directory is
-`System32`. The systemd unit's working directory has always been
-`/var/lib/massimo`, so an old unit with a new binary puts the file in
-the same place.
+A Windows service installed before this release runs without `-data` until
+`install` is run again with the new binary;
+such a service uses `C:\ProgramData\Massimo` anyway,
+since its working directory is `System32`.
+The systemd unit's working directory has always been `/var/lib/massimo`,
+so an old unit with a new binary puts the file in the same place.
 
 **Rollback** (`massimo update -rollback`, or the helper after a failed
 health check) is safe: the previous binary knows no store, reads
 `/etc/massimo/env` as it always did and leaves `massimo.db` alone.
-Changes made in the store meanwhile are not in the file, so the old
-binary serves the file's values. Updating again opens the database as
-it was left and logs the lines of the file that differ. A later binary
-refuses a file only when a migration changed a meaning (none so far);
+Changes made in the store meanwhile are not in the file,
+so the old binary serves the file's values.
+Updating again opens the database as it was left and logs the lines of the file
+that differ.
+A later binary refuses a file only when a migration changed a meaning (none so far);
 it then names the copy `massimo.db.before-<version>` it made before.
 
-`install -remove` keeps the data directory, `-purge` removes it with
-the store.
+`install -remove` keeps the data directory, `-purge` removes it with the store.
 
 ## Moving to another network
 
-- Cubes ship with DHCP on (factory fallback 192.168.0.222/16), so a Cube
-  gets an address from the new router. Reserve it there, because a
-  configured address is fixed. A Cube configured by serial only follows
-  its discovery answers by itself; for one with an address, change it
-  under Settings → Cubes in the web UI, or empty it there so that the
-  Cube follows its discovery answers.
-- The fixed proxy addresses added with `nmcli` stay on the interface when
-  the box moves. On the new network they must be free and outside the
-  router's DHCP range: remove them with `-ipv4.addresses` and add new ones
-  as above. The address from DHCP itself follows the new router.
+- Cubes ship with DHCP on (factory fallback 192.168.0.222/16),
+  so a Cube gets an address from the new router.
+  Reserve it there, because a configured address is fixed.
+  A Cube configured by serial only follows its discovery answers by itself;
+  for one with an address, change it under Settings → Cubes in the web UI,
+  or empty it there so that the Cube follows its discovery answers.
+- The fixed proxy addresses added with `nmcli` stay on the interface when the box moves.
+  On the new network they must be free and outside the router's DHCP range:
+  remove them with `-ipv4.addresses` and add new ones as above.
+  The address from DHCP itself follows the new router.
 - A Cube that was moved may still answer ping but not TCP 62910 or UDP
   23272 until it is power-cycled.
-- A Cube that already has a client (for example this server) accepts no
-  second one and drops the connection attempt silently, so a test
-  connection from elsewhere times out instead of being refused. Test
-  through the proxy instead: `massimo status -addr <proxy address>`.
+- A Cube that already has a client (for example this server) accepts no second
+  one and drops the connection attempt silently,
+  so a test connection from elsewhere times out instead of being refused.
+  Test through the proxy instead: `massimo status -addr <proxy address>`.
 
 ## Updating
 
-Development happens on `main`; `make release-alpha` promotes it to the
-release branch `alpha` and tags it, and `.github/workflows/release.yml`
-builds, signs and publishes the release. Each release belongs to an
-**update channel**, its release branch: `alpha` for the
-`v0.1.0-alpha.N` releases, later `beta` and a stable one the same way. A
-release binary follows its channel; a binary built from another branch
-follows that branch, which has no releases, unless
-`MASSIMO_UPDATE_CHANNEL=alpha` is set (`massimo update -check` shows the
-channel). A release is installed only when it is newer than the running
-version, so switching the channel never goes back in version;
-`-version <tag>` installs a given release, older ones too.
-v0.1.0-alpha.10 and .11 were made before the branch was renamed and
-follow `phase-0`; on those, set `MASSIMO_UPDATE_CHANNEL=alpha`.
+Development happens on `main`;
+`make release-alpha` promotes it to the release branch `alpha` and tags it,
+and `.github/workflows/release.yml` builds, signs and publishes the release.
+Each release belongs to an **update channel**, its release branch:
+`alpha` for the `v0.1.0-alpha.N` releases,
+later `beta` and a stable one the same way.
+A release binary follows its channel;
+a binary built from another branch follows that branch, which has no releases,
+unless `MASSIMO_UPDATE_CHANNEL=alpha` is set (`massimo update -check` shows the channel).
+A release is installed only when it is newer than the running version,
+so switching the channel never goes back in version;
+`-version <tag>` installs a given release,
+older ones too. v0.1.0-alpha.10 and .11 were made before the branch was renamed
+and follow `phase-0`; on those, set `MASSIMO_UPDATE_CHANNEL=alpha`.
 
 By hand, as root:
 
@@ -293,15 +310,16 @@ sudo massimo update -check
 sudo massimo update -restart massimo.service -health http://127.0.0.1:8099/healthz
 ```
 
-It downloads the release's manifest and checks its signature against the
-public key compiled into the running massimo, downloads the binary for
-this machine (`massimo-linux-armv6` on a Pi 1) and checks its SHA-256
-against the manifest, runs `<new binary> version` to make sure it starts
-here, keeps the old binary as `/usr/local/bin/massimo.prev` and renames
-the new one into place. With `-restart` it restarts the unit, with
-`-health` it waits until `/healthz` reports the new version and otherwise
-puts the old binary back (the failed one stays as `massimo.failed` until
-the next update succeeds).
+It downloads the release's manifest and checks its signature against the public
+key compiled into the running massimo,
+downloads the binary for this machine (`massimo-linux-armv6` on a Pi 1)
+and checks its SHA-256 against the manifest,
+runs `<new binary> version` to make sure it starts here,
+keeps the old binary as `/usr/local/bin/massimo.prev` and renames the new one into place.
+With `-restart` it restarts the unit,
+with `-health` it waits until `/healthz` reports the new version and otherwise
+puts the old binary back (the failed one stays as `massimo.failed` until the
+next update succeeds).
 
 Back to the previous binary (once more goes forward again):
 
@@ -309,25 +327,29 @@ Back to the previous binary (once more goes forward again):
 sudo massimo update -rollback -restart massimo.service
 ```
 
-The release list comes from GitHub's API, which allows 60 requests an
-hour per address without a token. Behind an address many share (a CI
-runner, a large NAT) the check can then fail with `403 Forbidden`;
-`MASSIMO_GITHUB_TOKEN`, a GitHub token without any rights, lifts the
-limit (in the settings for the server's check, in the environment for
-`massimo update`). It is sent to the API only, and changes nothing about
-what is installed: that is still decided by the signature.
+The release list comes from GitHub's API,
+which allows 60 requests an hour per address without a token.
+Behind an address many share (a CI runner,
+a large NAT) the check can then fail with `403 Forbidden`;
+`MASSIMO_GITHUB_TOKEN`, a GitHub token without any rights,
+lifts the limit (in the settings for the server's check,
+in the environment for `massimo update`).
+It is sent to the API only, and changes nothing about what is installed:
+that is still decided by the signature.
 
 ### From the web UI
 
-The service runs as `massimo` and cannot write `/usr/local/bin`, so the
-web UI only asks: `POST /api/v1/update` writes
-`/var/lib/massimo/update-request`, and the path unit starts the helper as
-root, which does exactly the update above. The request carries nothing but
-the channel name, the helper reads nothing else the `massimo` user can
-write (in particular not `/etc/massimo/env`), and the release must verify
-against the compiled-in key, so a compromised server can at most install
-the newest signed release. Starting updates from the API needs
-`MASSIMO_API_TOKEN` to be set.
+The service runs as `massimo` and cannot write `/usr/local/bin`,
+so the web UI only asks:
+`POST /api/v1/update` writes `/var/lib/massimo/update-request`,
+and the path unit starts the helper as root,
+which does exactly the update above.
+The request carries nothing but the channel name,
+the helper reads nothing else the `massimo` user can write (in particular
+not `/etc/massimo/env`),
+and the release must verify against the compiled-in key,
+so a compromised server can at most install the newest signed release.
+Starting updates from the API needs `MASSIMO_API_TOKEN` to be set.
 
 ```bash
 sudo install -m 0644 massimo-update.path massimo-update.service /etc/systemd/system/
@@ -335,19 +357,19 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now massimo-update.path
 ```
 
-`massimo.service` passes `-update-request /var/lib/massimo/update-request`
-to `serve`, which enables the button under Settings → Software. The
-helper's log is in `journalctl -u massimo-update`, its last result in
-`/var/lib/massimo-update/status.json` and in the UI. On macOS the same
-request starts the LaunchDaemon `ch.metaworx.massimo-update` instead
-(see "macOS"); on Windows the server starts the helper itself (see
-"Windows").
+`massimo.service` passes `-update-request /var/lib/massimo/update-request` to `serve`,
+which enables the button under Settings → Software.
+The helper's log is in `journalctl -u massimo-update`,
+its last result in `/var/lib/massimo-update/status.json` and in the UI.
+On macOS the same request starts the LaunchDaemon `ch.metaworx.massimo-update`
+instead (see "macOS");
+on Windows the server starts the helper itself (see "Windows").
 
-The release key: the workflow signs with `MASSIMO_RELEASE_KEY`, a secret of
-the repository's `signing` environment that only `v*` tags can use; its
-public half is `internal/update/release-key.pem`. A new key needs a
-release built with the new public key before releases signed with it are
-accepted.
+The release key: the workflow signs with `MASSIMO_RELEASE_KEY`,
+a secret of the repository's `signing` environment that only `v*` tags can use;
+its public half is `internal/update/release-key.pem`.
+A new key needs a release built with the new public key before releases signed
+with it are accepted.
 
 ## Windows
 
@@ -360,15 +382,16 @@ massimo-windows-amd64.exe install -dry-run -settings .env
 massimo-windows-amd64.exe install -settings .env
 ```
 
-It installs the binary as `C:\Program Files\Massimo\massimo.exe`, the
-settings as `C:\ProgramData\Massimo\env` (without `-settings`, a template
-to fill in) with the log `serve.log` next to them, in a folder only
-SYSTEM and the Administrators can read, since the settings hold the Cube
-keys. It creates the service `massimo` (Massimo in the Services console):
+It installs the binary as `C:\Program Files\Massimo\massimo.exe`,
+the settings as `C:\ProgramData\Massimo\env` (without `-settings`,
+a template to fill in) with the log `serve.log` next to them,
+in a folder only SYSTEM and the Administrators can read,
+since the settings hold the Cube keys.
+It creates the service `massimo` (Massimo in the Services console):
 automatic start, running as LocalSystem, restarted after 10 s on failure,
-running `massimo -env C:\ProgramData\Massimo\env serve -listen :8099 -log
-…`; and a firewall rule for the program on private and domain networks
-(not public ones), which covers the API, the Cube proxy and discovery.
+running `massimo -env C:\ProgramData\Massimo\env serve -listen :8099 -log …`;
+and a firewall rule for the program on private and domain networks (not public ones),
+which covers the API, the Cube proxy and discovery.
 `-listen <addr>` changes the address, and installing again keeps it.
 `sc start massimo`, `sc stop massimo` and `sc query massimo` control it;
 `install -remove` deletes the service, the rule and the program folder,
@@ -380,42 +403,40 @@ Updates from an administrator prompt:
 "C:\Program Files\Massimo\massimo.exe" update -restart massimo -health http://127.0.0.1:8099/healthz
 ```
 
-Windows lets a running `.exe` be renamed but not replaced, so the update
-renames `massimo.exe` to `massimo.exe.prev` and puts the new one in its
-place, then restarts the service through the service manager; `-rollback`
-works as on Linux. With `-health`, a release that cannot run as a
-service is given up after about 35 s (the service manager's 30 s for a
-process to answer it, error 1053); one that runs but never reports the
-new version on `/healthz` after `-health-timeout`, two minutes.
+Windows lets a running `.exe` be renamed but not replaced,
+so the update renames `massimo.exe` to `massimo.exe.prev` and puts the new one
+in its place, then restarts the service through the service manager;
+`-rollback` works as on Linux.
+With `-health`, a release that cannot run as a service is given up after about
+35 s (the service manager's 30 s for a process to answer it, error 1053);
+one that runs but never reports the new version on `/healthz` after `-health-timeout`,
+two minutes.
 
-The web UI starts updates too (Settings → Software, or `POST
-/api/v1/update` with the API token). Nothing on Windows watches a
-file, and the service already runs as LocalSystem, so the server starts
-the helper itself: it writes the channel into
-`C:\ProgramData\Massimo\update-request` and runs the installed
-`massimo.exe update -request … -status
-C:\ProgramData\Massimo\update-status.json -restart massimo -health
-http://127.0.0.1:8099/healthz` as a detached process, which outlives the
-service it stops and does exactly the update above (the `-health` URL
-follows the service's `-listen`). The helper gets the server's
-environment without the settings (no Cube keys, no API token; only
-`MASSIMO_GITHUB_TOKEN`), and writes its output to
-`C:\ProgramData\Massimo\update.log`, which is not rotated; its last
-result is in `update-status.json` and in the UI, the server's `update
-requested` and `update helper started pid=…` lines in `serve.log`, and
-the stop and start in `service.log` and the System event log. The
-three files are in the data folder only SYSTEM and the Administrators
-can write, and `-purge` removes them with it. `install` passes
-`-update-request` and `-update-status` to `serve`; `install
--no-update-helper` leaves them out, which hides the button. Should the
-helper die between stopping and starting the service, the service stays
-stopped: `sc.exe start massimo` brings it back.
+The web UI starts updates too (Settings → Software,
+or `POST /api/v1/update` with the API token).
+Nothing on Windows watches a file, and the service already runs as LocalSystem,
+so the server starts the helper itself:
+it writes the channel into `C:\ProgramData\Massimo\update-request` and runs the
+installed
+`massimo.exe update -request … -status C:\ProgramData\Massimo\update-status.json -restart massimo -health http://127.0.0.1:8099/healthz` as a detached process, which outlives the service it stops and does exactly the update above (the `-health` URL follows the service's `-listen`).
+The helper gets the server's environment without the settings (no Cube keys,
+no API token; only `MASSIMO_GITHUB_TOKEN`),
+and writes its output to `C:\ProgramData\Massimo\update.log`,
+which is not rotated; its last result is in `update-status.json` and in the UI,
+the server's `update requested` and `update helper started pid=…` lines in `serve.log`,
+and the stop and start in `service.log` and the System event log.
+The three files are in the data folder only SYSTEM and the Administrators can write,
+and `-purge` removes them with it.
+`install` passes `-update-request` and `-update-status` to `serve`;
+`install -no-update-helper` leaves them out, which hides the button.
+Should the helper die between stopping and starting the service,
+the service stays stopped: `sc.exe start massimo` brings it back.
 
 ## macOS
 
-On a Mac (macOS on Apple silicon or Intel), with `massimo-darwin-arm64`
-or `massimo-darwin-amd64` from a release and your settings in the
-current folder:
+On a Mac (macOS on Apple silicon or Intel),
+with `massimo-darwin-arm64` or `massimo-darwin-amd64` from a release and your
+settings in the current folder:
 
 ```sh
 chmod +x massimo-darwin-arm64
@@ -424,11 +445,12 @@ sudo ./massimo-darwin-arm64 install -settings .env
 ```
 
 The release binaries are ad-hoc signed (which Apple silicon requires),
-not notarized. A download with `curl` runs as it is; one through a
-browser carries the quarantine attribute, and Gatekeeper refuses to start
-it until that is removed: `xattr -d com.apple.quarantine
-massimo-darwin-arm64`. The installed copy and the updates the helper
-downloads carry none.
+not notarized.
+A download with `curl` runs as it is;
+one through a browser carries the quarantine attribute,
+and Gatekeeper refuses to start it until that is removed:
+`xattr -d com.apple.quarantine massimo-darwin-arm64`.
+The installed copy and the updates the helper downloads carry none.
 
 The layout is the Linux one, since macOS keeps `/etc` and `/var` (as
 `/private/etc` and `/private/var`) for the system's own daemons and
@@ -437,34 +459,36 @@ and in the update helper are the same everywhere:
 
 - the binary `/usr/local/bin/massimo` (the folder is made when missing,
   as on a fresh Apple silicon Mac);
-- the hidden system user and group `_massimo` (made with `dscl`, the
-  first free ID from 400; it has no shell and no login), which runs the
-  server;
-- the settings `/etc/massimo/env` (without `-settings`, a template to fill
-  in), mode 0600, owned by `_massimo`;
+- the hidden system user and group `_massimo` (made with `dscl`,
+  the first free ID from 400; it has no shell and no login),
+  which runs the server;
+- the settings `/etc/massimo/env` (without `-settings`, a template to fill in),
+  mode 0600, owned by `_massimo`;
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
-- the log `/var/log/massimo/serve.log`: launchd appends the server's
-  output to it, so there is no `-log` and no `MASSIMO_LOG` (install warns
-  if the settings set one, as every line would come twice). macOS has no
-  `copytruncate` for a log a process keeps open, so it is not rotated;
+- the log `/var/log/massimo/serve.log`:
+  launchd appends the server's output to it,
+  so there is no `-log` and no `MASSIMO_LOG` (install warns if the settings set one,
+  as every line would come twice). macOS has no `copytruncate` for a log a
+  process keeps open, so it is not rotated;
   it grows by about what the Linux one does per week.
 - the LaunchDaemon `ch.metaworx.massimo` in `/Library/LaunchDaemons`:
-  started at boot without anyone logging in, restarted 10 s after it
-  fails, running `massimo -env /etc/massimo/env serve -listen :8099
-  -update-request /var/lib/massimo/update-request`;
-- the update helper `ch.metaworx.massimo-update` (root), which launchd
-  starts when the server writes `/var/lib/massimo/update-request`: the
-  counterpart of the systemd path unit, so the web UI can start updates
-  as on Linux (see "From the web UI"). Its log is
-  `/var/log/massimo-update.log`.
+  started at boot without anyone logging in, restarted 10 s after it fails,
+  running
+  `massimo -env /etc/massimo/env serve -listen :8099 -update-request /var/lib/massimo/update-request`;
+- the update helper `ch.metaworx.massimo-update` (root),
+  which launchd starts when the server writes `/var/lib/massimo/update-request`:
+  the counterpart of the systemd path unit,
+  so the web UI can start updates as on Linux (see "From the web UI").
+  Its log is `/var/log/massimo-update.log`.
 
-`-listen <addr>` changes the address, and installing again keeps it (it
-is read back from the installed property list); the helper's health
-check follows it. macOS lets a user other than root listen on a port
-below 1024 only on every address, so `-listen :80` works and
-`-listen 192.168.1.5:80` does not (install warns). With the application
-firewall on, install allows incoming connections for the binary;
+`-listen <addr>` changes the address,
+and installing again keeps it (it is read back from the installed property list);
+the helper's health check follows it. macOS lets a user other than root listen
+on a port below 1024 only on every address,
+so `-listen :80` works and `-listen 192.168.1.5:80` does not (install warns).
+With the application firewall on,
+install allows incoming connections for the binary;
 otherwise there is nothing to do.
 
 Control it with `launchctl` (all with `sudo`):
@@ -476,31 +500,33 @@ launchctl bootout system/ch.metaworx.massimo                           # stop un
 launchctl bootstrap system /Library/LaunchDaemons/ch.metaworx.massimo.plist   # start again
 ```
 
-Running `install` again replaces the binary and the property lists and
-restarts the server. `install -remove` unloads both LaunchDaemons and
-removes them and the binary; `-purge` also the settings, the state, the
-logs and the user. Updates by hand:
+Running `install` again replaces the binary and the property lists and restarts
+the server.
+`install -remove` unloads both LaunchDaemons and removes them and the binary;
+`-purge` also the settings, the state, the logs and the user.
+Updates by hand:
 
 ```sh
 sudo massimo update -restart ch.metaworx.massimo -health http://127.0.0.1:8099/healthz
 ```
 
-As on Linux the new binary is renamed into place (which macOS needs for
-a signed binary: one overwritten in place is killed), the old one kept as
-`massimo.prev`, and `-rollback` goes back.
+As on Linux the new binary is renamed into place (which macOS needs for a signed binary:
+one overwritten in place is killed), the old one kept as `massimo.prev`,
+and `-rollback` goes back.
 
 ## Resource use
 
-Measured on a Raspberry Pi 1 Model B (BCM2835, 700 MHz, 512 MB of which
-426 MB are left to Linux) with Raspberry Pi OS Lite 32-bit (trixie),
-serving two Cubes with about 30 devices, the API, the web UI and two proxy
-listeners:
+Measured on a Raspberry Pi 1 Model B (BCM2835, 700 MHz,
+512 MB of which 426 MB are left to Linux) with Raspberry Pi OS Lite 32-bit (trixie),
+serving two Cubes with about 30 devices, the API,
+the web UI and two proxy listeners:
 
-- `massimo` resident memory: 7 MB after start, 9 MB after five minutes
-  (`VmRSS` in `/proc/<pid>/status`; the Pi kernel has memory accounting
-  off, so `systemctl status` shows no memory line).
-- CPU: under 1 % on average, about 1 s of CPU time for the first five
-  minutes; both Cubes connected within a second of starting.
-- The whole system uses about 110 MB (`free -m`), leaving over 300 MB
-  available; the root filesystem needs 2.1 GB.
+- `massimo` resident memory: 7 MB after start,
+  9 MB after five minutes (`VmRSS` in `/proc/<pid>/status`;
+  the Pi kernel has memory accounting off,
+  so `systemctl status` shows no memory line).
+- CPU: under 1 % on average, about 1 s of CPU time for the first five minutes;
+  both Cubes connected within a second of starting.
+- The whole system uses about 110 MB (`free -m`), leaving over 300 MB available;
+  the root filesystem needs 2.1 GB.
 - The web UI's page loads in about 0.25 s over the 100 Mbit Ethernet.

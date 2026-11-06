@@ -1,40 +1,45 @@
 # Design: phases, target environments, architecture
 
-The design proposal the project started from, kept here as the frame
-for docs/roadmap.md. Written before phase 0; the "Status" section says
-what has happened since. Names: the product is Massimo; "the bridge"
-below means the same thing. The evaluation that preceded it, the
-licence reasoning and the two routes to a public server are in
-docs/background.md, with the sources.
+The design proposal the project started from,
+kept here as the frame for docs/roadmap.md.
+Written before phase 0; the "Status" section says what has happened since.
+Names: the product is Massimo; "the bridge" below means the same thing.
+The evaluation that preceded it,
+the licence reasoning and the two routes to a public server are in docs/background.md,
+with the sources.
 
-References used throughout: [Bouni/max-cube-protocol](https://github.com/Bouni/max-cube-protocol)
-(LAN protocol), [FHEM MAX modules](https://fhem.de/commandref.html#MAX)
-(radio protocol reference), [ERNW: Analyzing an IoT Device](https://insinuator.net/2016/04/discover-the-unknown-analyzing-an-iot-device/)
-(portal transport, firmware), [LoxBerry](https://www.loxwiki.eu/display/LOXBERRY)
-and [Loxone virtual inputs/outputs](https://www.loxone.com/enen/kb/virtual-inputs/)
-(integration targets), [dktzde/maxcube](https://github.com/dktzde/maxcube)
-(Cube reflashed as a radio stick).
+References used throughout:
+[Bouni/max-cube-protocol](https://github.com/Bouni/max-cube-protocol) (LAN protocol),
+[FHEM MAX modules](https://fhem.de/commandref.html#MAX) (radio protocol reference), [ERNW:
+Analyzing an IoT
+Device](https://insinuator.net/2016/04/discover-the-unknown-analyzing-an-iot-device/)
+(portal transport, firmware),
+[LoxBerry](https://www.loxwiki.eu/display/LOXBERRY) and [Loxone virtual
+inputs/outputs](https://www.loxone.com/enen/kb/virtual-inputs/) (integration targets),
+[dktzde/maxcube](https://github.com/dktzde/maxcube) (Cube reflashed as a radio stick).
 
 ## Status (2026-11-05)
 
-- Language: Go, as recommended below. Module `go.metaworx.ch/massimo`,
-  licence AGPL-3.0-or-later.
-- Phase 0 is done and went further than planned: the Cube protocol
-  package, the fake Cube (`sim` in the proposal), the LAN driver, the
-  duty-cycle queue, backup and restore, discovery, the fake portal and
-  the portal research, the REST API v1 with a web UI, the LAN proxy
-  (serve as a Cube for other clients), and the configuration API.
+- Language: Go, as recommended below.
+  Module `go.metaworx.ch/massimo`, licence AGPL-3.0-or-later.
+- Phase 0 is done and went further than planned: the Cube protocol package,
+  the fake Cube (`sim` in the proposal), the LAN driver, the duty-cycle queue,
+  backup and restore, discovery, the fake portal and the portal research,
+  the REST API v1 with a web UI,
+  the LAN proxy (serve as a Cube for other clients), and the configuration API.
   See docs/portal-protocol.md for the hardware findings.
-- Phase 1 is partly done: engine, queue, API, live events, web UI and
-  Cube backup exist; missing are Loxone, MQTT, SQLite, rules, and the
-  packages for LoxBerry, `.deb` and Windows services.
-- Phases 2 to 4 are untouched. The portal research track found that
-  the Cube ignores commands in the portal reply; the firmware dump
-  (docs/firmware-extraction.md) is the remaining route.
-- Deviations from the proposal: the web UI is plain JavaScript embedded
-  in the binary, not a TypeScript single-page app; the API is written
-  by hand with an OpenAPI description maintained next to it, not
-  generated. Both can change when the UI grows.
+- Phase 1 is partly done: engine, queue, API, live events,
+  web UI and Cube backup exist; missing are Loxone, MQTT, SQLite, rules,
+  and the packages for LoxBerry, `.deb` and Windows services.
+- Phases 2 to 4 are untouched.
+  The portal research track found that the Cube ignores commands in the portal reply;
+  the firmware dump (docs/firmware-extraction.md) is the remaining route.
+- Deviations from the proposal:
+  the web UI is plain JavaScript embedded in the binary,
+  not a TypeScript single-page app;
+  the API is written by hand with an OpenAPI description maintained next to it,
+  not generated.
+  Both can change when the UI grows.
 
 ## Target environments
 
@@ -45,9 +50,10 @@ and [Loxone virtual inputs/outputs](https://www.loxone.com/enen/kb/virtual-input
 | `server` | Public hosted service | Many tenants; reaches the Cubes only through `edge` agents |
 
 Gateways: the Cube over LAN (today), a radio stick (`cul`, phase 3),
-a simulator for tests and demos (the fake Cube today), and `remote`
-for the server mode. Clients: the web UI (installable on a phone),
-REST API, Loxone, MQTT, webhooks, later native app shells.
+a simulator for tests and demos (the fake Cube today),
+and `remote` for the server mode.
+Clients: the web UI (installable on a phone), REST API, Loxone, MQTT, webhooks,
+later native app shells.
 
 ## 1. Go vs Python
 
@@ -63,8 +69,9 @@ REST API, Loxone, MQTT, webhooks, later native app shells.
 | Contributors from the Loxone/HA community | Fewer | More |
 | Speed of a first prototype | Good | Better |
 
-Decision: Go for the core. Packaging for three platforms, the public
-server and timing on the radio-stick backend decided it.
+Decision: Go for the core.
+Packaging for three platforms,
+the public server and timing on the radio-stick backend decided it.
 
 ## 2. Architecture
 
@@ -95,8 +102,8 @@ Planned: `internal/domain` (driver-agnostic model), `internal/driver/cul`,
 
 ## 3. Cube-LAN and radio-stick drivers
 
-Both drivers implement one interface and declare their capabilities
-(can pair, has RSSI, stores week programs, reports the duty cycle).
+Both drivers implement one interface and declare their capabilities (can pair,
+has RSSI, stores week programs, reports the duty cycle).
 
 | Responsibility | Cube LAN | Radio stick |
 |---|---|---|
@@ -107,96 +114,108 @@ Both drivers implement one interface and declare their capabilities
 | Signal strength | Not available | Per packet, for diagnostics |
 | Configuration storage | Cube's memory, mirrored by the app | The app is the only copy |
 
-The 868 MHz band allows about 1 % transmit time, roughly 36 seconds per
-hour; the queue drops a command when a newer one for the same device
-supersedes it and uses priorities. Migration from Cube to stick: the
-stick driver can take over the Cube's radio address, so existing
-pairings may keep working; the data model is the same for both.
+The 868 MHz band allows about 1 % transmit time, roughly 36 seconds per hour;
+the queue drops a command when a newer one for the same device supersedes it
+and uses priorities.
+Migration from Cube to stick:
+the stick driver can take over the Cube's radio address,
+so existing pairings may keep working; the data model is the same for both.
 
 ## 4. Control ownership and Loxone
 
-Each room or room group has an owner: `thermostat` (the device's week
-program rules, the app only sets temporary overrides), `app` (the app's
-scheduler and rules) or `loxone` (the Miniserver decides; the app passes
-requests through). Arbitration, highest first: safety limits, manual
-override with expiry, the owner's setpoint, fallback schedule.
+Each room or room group has an owner:
+`thermostat` (the device's week program rules,
+the app only sets temporary overrides),
+`app` (the app's scheduler and rules) or `loxone` (the Miniserver decides;
+the app passes requests through).
+Arbitration, highest first: safety limits, manual override with expiry,
+the owner's setpoint, fallback schedule.
 
-Passthrough with Loxone as owner: a UI change becomes a request event
-to a Loxone virtual input; Loxone logic accepts or adapts it and writes
-the setpoint back through a virtual output to the REST API. A lease:
-Loxone sends a heartbeat; silence for N minutes falls control back to
-`thermostat` or `app` and raises an alert. Interfaces: UDP `key=value`
-lines or HTTP to the Miniserver, virtual output HTTP calls to the API
-with a scoped key, Loxone Config template export (XML), a LoxBerry
-plugin.
+Passthrough with Loxone as owner:
+a UI change becomes a request event to a Loxone virtual input;
+Loxone logic accepts or adapts it and writes the setpoint back through a virtual
+output to the REST API.
+A lease: Loxone sends a heartbeat;
+silence for N minutes falls control back to `thermostat` or `app` and raises an alert.
+Interfaces: UDP `key=value` lines or HTTP to the Miniserver,
+virtual output HTTP calls to the API with a scoped key,
+Loxone Config template export (XML), a LoxBerry plugin.
 
 ## 5. REST API, web UI, events and webhooks
 
-API versioned under `/api/v1`, OpenAPI description, resources for
-sites, gateways, rooms, devices, groups, schedules, rules, webhooks,
-users, shares, API keys, backups, diagnostics, and a live event
-stream. Writes are asynchronous with a command id and status (queued,
-sent, acknowledged, failed, dropped), an `Idempotency-Key` makes retries
-safe. The web UI uses only the public API. Rules: trigger (event or
-schedule), conditions, actions (HTTP with templated body, e-mail, MQTT,
-set temperature or mode); signed webhooks with retries and a delivery
-log; on the public server, targets in private networks are blocked.
+API versioned under `/api/v1`, OpenAPI description, resources for sites,
+gateways, rooms, devices, groups, schedules, rules, webhooks, users, shares,
+API keys, backups, diagnostics, and a live event stream.
+Writes are asynchronous with a command id and status (queued, sent,
+acknowledged, failed, dropped), an `Idempotency-Key` makes retries safe.
+The web UI uses only the public API.
+Rules: trigger (event or schedule), conditions,
+actions (HTTP with templated body, e-mail, MQTT, set temperature or mode);
+signed webhooks with retries and a delivery log; on the public server,
+targets in private networks are blocked.
 
 ## 6. Multiple Cubes, users, groups, sharing, public server
 
-Entities: Tenant (every row carries `tenant_id` from day one), User,
-Membership, Site, Gateway, Room, Device, Group, Share (time-limited
-grant), ApiKey, AuditLog. Roles: owner/admin, operator, guest (within
-limits during the share), viewer, integration. Holiday-guest share:
-grant from check-in to check-out with limits, invitation by e-mail,
-automatic actions at start and end.
+Entities: Tenant (every row carries `tenant_id` from day one), User, Membership,
+Site, Gateway, Room, Device, Group, Share (time-limited grant), ApiKey,
+AuditLog.
+Roles: owner/admin, operator, guest (within limits during the share), viewer,
+integration.
+Holiday-guest share: grant from check-in to check-out with limits,
+invitation by e-mail, automatic actions at start and end.
 
-Public server: the Cube's LAN protocol has no authentication, so port
-62910 is never exposed; the server reaches Cubes through edge agents
-(outbound TLS, device certificate or token), and the local site keeps
-working offline. Redirecting the Cube to the server with `u:` needs the
-portal protocol (research track). PostgreSQL with row-level security,
-hosting in Switzerland or the EU, OIDC, billing. Temperatures and
-window states are personal data (nDSG, GDPR); liability for frozen
-pipes needs terms of service; no "MAX!" or eQ-3 in the product name.
+Public server: the Cube's LAN protocol has no authentication,
+so port 62910 is never exposed;
+the server reaches Cubes through edge agents (outbound TLS,
+device certificate or token), and the local site keeps working offline.
+Redirecting the Cube to the server with `u:` needs the portal protocol (research track).
+PostgreSQL with row-level security, hosting in Switzerland or the EU, OIDC,
+billing.
+Temperatures and window states are personal data (nDSG, GDPR);
+liability for frozen pipes needs terms of service;
+no "MAX!" or eQ-3 in the product name.
 
 ## 7. Debugging, logging, export/import, backup
 
-Structured logs with per-component levels; a protocol trace per
-gateway in a ring buffer, decoded in the UI, downloadable and
-replayable in the simulator; a support bundle with secrets redacted;
-`/metrics` for Prometheus and `/healthz`. Versioned JSON/YAML export and
-import with a schema version, dry run, selective scope; device backup
-of the Cube's full configuration (exists today); scheduled database
-snapshots to local, SMB, WebDAV or S3, encrypted when they contain
-secrets. Security: argon2id, secrets encrypted at rest, TLS, CSRF
-protection, rate limiting, signed releases.
+Structured logs with per-component levels;
+a protocol trace per gateway in a ring buffer, decoded in the UI,
+downloadable and replayable in the simulator;
+a support bundle with secrets redacted;
+`/metrics` for Prometheus and `/healthz`.
+Versioned JSON/YAML export and import with a schema version, dry run,
+selective scope; device backup of the Cube's full configuration (exists today);
+scheduled database snapshots to local, SMB, WebDAV or S3,
+encrypted when they contain secrets.
+Security: argon2id, secrets encrypted at rest, TLS, CSRF protection,
+rate limiting, signed releases.
 
 ### Whole-database export and import
 
 Header with format, schema version, time, source instance and scope;
-JSON and YAML as two spellings of the same data validated against a
-JSON Schema; deterministic output for diffs and git. Stable IDs
-(UUIDv7) plus natural keys (Cube serial, radio address, e-mail).
+JSON and YAML as two spellings of the same data validated against a JSON Schema;
+deterministic output for diffs and git.
+Stable IDs (UUIDv7) plus natural keys (Cube serial, radio address, e-mail).
 Secrets encrypted with a passphrase by default (Argon2id plus AES-GCM).
-Import modes create-only, merge, replace, sync with prune; conflict
-rules per object type; a dry run that shows the plan; one transaction;
-an automatic backup before every import; migrations step by step. Every
-object type registers an export handler, a matcher and a merge rule,
+Import modes create-only, merge, replace, sync with prune;
+conflict rules per object type; a dry run that shows the plan; one transaction;
+an automatic backup before every import; migrations step by step.
+Every object type registers an export handler, a matcher and a merge rule,
 with a test that export → import → export is byte-identical.
 
 ## 8. Native apps
 
-The REST API is the same in every mode, so an app keeps a list of
-connections: on the LAN via mDNS (`_massimo._tcp`), through the public
-server as a relay, or through the user's own VPN. Pairing by QR code
-with URL, one-time token and certificate fingerprint; login with OAuth2
-PKCE. The same web app in a Capacitor shell for the stores (native
-push, widgets, biometrics, LAN discovery); an installable web app stays
-the free route with Web Push. Native push on iOS needs a relay server
-holding the Apple key. Store review needs a demo account (simulator
-driver). AGPL and the App Store conflict: publish the shell under
-Apache-2.0 or MPL-2.0, or with a contributor agreement.
+The REST API is the same in every mode, so an app keeps a list of connections:
+on the LAN via mDNS (`_massimo._tcp`), through the public server as a relay,
+or through the user's own VPN.
+Pairing by QR code with URL, one-time token and certificate fingerprint;
+login with OAuth2 PKCE.
+The same web app in a Capacitor shell for the stores (native push, widgets,
+biometrics, LAN discovery);
+an installable web app stays the free route with Web Push.
+Native push on iOS needs a relay server holding the Apple key.
+Store review needs a demo account (simulator driver).
+AGPL and the App Store conflict: publish the shell under Apache-2.0 or MPL-2.0,
+or with a contributor agreement.
 
 ## 9. Phases and rough effort (one developer)
 
