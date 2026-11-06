@@ -4,11 +4,85 @@ Open-source successor software for eQ-3 MAX! heating systems (MAX!
 Cube LAN gateway, radiator and wall thermostats, window contacts,
 eco switches) after the vendor's end of life.
 
-Status: early development (Phase 0).
-Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+Status: early development;
+Phase 0 of [docs/design.md](docs/design.md) is done, Phase 1 in progress;
+every release is a pre-release on the `alpha` channel (see [Versions](#versions)).
 
-"MAX!" and "eQ-3" are trademarks of eQ-3 AG.
-This project is not affiliated with or endorsed by eQ-3.
+## Contents
+
+- [Features](#features)
+- [Documentation](#documentation)
+- [Installing](#installing): [Linux](#linux), [Windows](#windows),
+  [macOS](#macos)
+- [Server](#server), with [Screenshots](#screenshots)
+- [Command line](#command-line), with the [Cube variables](#cube-variables)
+- [Original software](#original-software)
+- [Versions](#versions)
+- [Legal](#legal)
+
+## Features
+
+![The Rooms page](docs/screenshots/rooms-1100-light-en.png)
+
+- **The web UI**:
+  rooms as tiles with the measured and the set temperature, modes and setpoints,
+  the House panel, the week programme editor, the device list and the log;
+  light and dark, colour schemes of your own, six languages,
+  phone and desktop ([docs/ui.md](docs/ui.md)).
+- **A JSON API** with an OpenAPI description, live events and a bearer token
+  ([docs/api-v1.md](docs/api-v1.md)).
+- **Backup and restore** of a Cube's configuration as YAML or JSON,
+  from the command line and the API.
+- **The server as a Cube** for other clients, the original software included:
+  one Cube, many clients ([docs/proxy.md](docs/proxy.md)).
+- **Discovery and network configuration** of Cubes on the LAN.
+- **The radio duty cycle respected**:
+  a command queue per Cube, the Cube's budget in the log.
+- **A service** on Linux (systemd), Windows and macOS,
+  with signed updates from the web UI or `massimo update`.
+- **The original software** run with a protocol log (`massimo legacy`).
+
+Platforms: Linux on amd64 and ARM (a Raspberry Pi 1 is enough),
+Windows 64-bit, macOS on Apple silicon and Intel;
+the web UI in any current browser, on a phone or a desktop.
+
+## Documentation
+
+- [docs/api-v1.md](docs/api-v1.md),
+  [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml): the HTTP API
+- [docs/ui.md](docs/ui.md): using the web UI
+- [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
+- [docs/portal-protocol.md](docs/portal-protocol.md):
+  everything learned about the Cube, the portal and the radio commands
+- [docs/firmware-extraction.md](docs/firmware-extraction.md):
+  reading the Cube's firmware over JTAG, hardware facts and the procedure
+- [docs/background.md](docs/background.md): the evaluation before the project,
+  licence reasoning, routes to a public server, sources
+- [docs/design.md](docs/design.md): the design proposal, target environments,
+  phases and their status
+- [docs/roadmap.md](docs/roadmap.md): what comes next, in order
+- [docs/store.md](docs/store.md): the design of the server's persistent storage:
+  engine, schema, users and roles, migration of installed boxes
+- [docs/server.md](docs/server.md): the server mode: encryption at rest,
+  the public server, sync, and what the store prepares for them
+- [docs/handover-write-test.md](docs/handover-write-test.md):
+  the test plan for the configuration writes on real hardware,
+  [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
+- [docs/testing-windows.md](docs/testing-windows.md):
+  the test plan for the Windows service on a real PC,
+  [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
+- [docs/update-windows.md](docs/update-windows.md):
+  the design for updates from the web UI on Windows: the options,
+  the recommendation, the changes per file, the CI and real-PC tests
+- [docs/handover-session.md](docs/handover-session.md):
+  where the last session stopped, open feedback, next steps
+- [docs/review-2026-11-05.md](docs/review-2026-11-05.md):
+  code review with findings, extraction proposals and the coding standard
+- [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
+  the web UI smoke test with Playwright, and its setup
+- [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
+  the smoke test, Cypress and Playwright compared, screenshots,
+  the recommendation
 
 ## Installing
 
@@ -308,6 +382,101 @@ The button under Settings → Software in the web UI works as on Linux,
 through the helper (its log is `/var/log/massimo-update.log`).
 Details: [macOS](packaging/README.md#macos).
 
+## Server
+
+```bash
+massimo serve -listen 127.0.0.1:8099
+```
+
+keeps every Cube from the environment connected (one connection and one command
+queue per Cube) and serves a JSON API: `/api/v1/cubes`,
+`/api/v1/cubes/{serial}` (with rooms;
+`PUT` and `DELETE` change and remove the Cube, `POST /api/v1/cubes` adds one),
+`/api/v1/settings` (the stale threshold and the intervals), `/devices`,
+`/devices/{rf}`,
+`PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
+`{"mode":"manual","temp":21.5}`,
+`{"mode":"auto"}` or `{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,
+`PUT …/devices/{rf}/lock` with `{"locked":false}` for the key lock,
+`/backup?format=yaml`,
+`POST …/restore/plan` and `POST …/restore` to restore a backup the way
+`massimo restore` does (plan first, then send;
+`GET …/restore` for the progress), and `/events` as server-sent events;
+see [docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
+[docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml).
+Set `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
+A web UI, plain HTML and JavaScript embedded in the binary,
+is served at http://127.0.0.1:8099/ :
+one tile per room with the measured and the set temperature with a thermometer
+and a gauge icon, up/down chevrons that send two seconds after the last click,
+AUTO,
+MANU and HOLIDAY plus an info and a cog button for the device list and the configuration,
+a House tile whose ECO, AUTO,
+COMFORT and MANU open a one-screen panel with mode, duration and room selection,
+vacation per room inline, the device list with coloured mode badges,
+offsets and locks, live updates plus polling with a refresh button,
+the Cube clock in the browser's or the Cube's time zone,
+and a settings page with an Expert switch for the technical details, Rooms,
+Log and Settings as icon buttons at the right of the header,
+a per-room configuration area (name, temperatures, boost and descaling,
+device names and offsets, moves,
+the week programme with a day editor that edits the days sharing a programme together,
+copy of rooms' settings to other rooms), a help button next to every setting,
+and a log view of the Cube's events.
+The page speaks English, German, French, Italian,
+Dutch and Polish (from the browser, or chosen in the settings),
+from the translation table in `internal/server/ui/i18n.js`.
+[docs/ui.md](docs/ui.md) describes how to use it.
+It is meant for the LAN.
+The listener defaults to localhost;
+put a reverse proxy with TLS in front before exposing it, and the UI,
+which needs the same token as the API, with it.
+`-log <file>` (or `MASSIMO_LOG`) appends the log,
+including every device state change, to a file as well.
+Every six hours (`-refresh`,
+`0` to switch it off) `serve` reconnects to each Cube,
+in turn with the queued commands, and re-reads everything the Cube holds,
+so a write the Cube acknowledged but did not apply cannot leave the server's
+copy wrong for long.
+After a configuration write it reads the device's configuration again for about
+six minutes until the device has taken it,
+and after radio writes it reconnects once for the Cube's budget if radiograms
+were pending, at most every 15 minutes (only while `-refresh` is on).
+The log lists every wakeup and every radio command the Cube accepted,
+with its duty cycle and free slots.
+
+The Cube serves only one LAN client at a time,
+so `serve` is itself a Cube for everyone else:
+it listens on port 62910 on every interface (`-proxy <addr>[:<port>]`,
+repeatable, `-proxy off` to disable) and answers UDP discovery.
+Every other massimo command and the original software connect to the host
+running `serve` (`-addr <serve host>`) and work beside it:
+reads are answered from the server's copy,
+writes go through its queue to the Cube.
+The original software keeps only one discovery answer per serial,
+and the real Cube answers first,
+so give the server a different serial for discovery with `-proxy-serial`,
+for example the real one with the first letter changed,
+or block the Cube's UDP answers on the PC's firewall.
+See [docs/proxy.md](docs/proxy.md).
+
+### Screenshots
+
+The web UI against the fake Cube, light and dark,
+and a room's tile with its week programme:
+
+![The Rooms page, light](docs/screenshots/rooms-1100-light-en.png)
+
+![The Rooms page, dark](docs/screenshots/rooms-1100-dark-en.png)
+
+![A room's tile with its week programme](docs/screenshots/config-week-1100-light-en.png)
+
+The whole set is in [docs/screenshots/](docs/screenshots/),
+taken by `make ui-screenshots` (tools/ui-test/README.md),
+and as a slideshow:
+
+![The web UI, page by page](docs/screenshots/slideshow.gif)
+
 ## Command line
 
 `massimo help` lists the commands; the ones useful today:
@@ -504,138 +673,25 @@ the Cube's hidden list in the store) are hidden in the same way.
 `-show-ghosts` and `-no-ignore` are older names) shows and touches them for one run,
 for example to move a device out again.
 
-## Server
+## Original software
 
 ```bash
-massimo serve -listen 127.0.0.1:8099
+massimo legacy -out max-session.log
 ```
 
-keeps every Cube from the environment connected (one connection and one command
-queue per Cube) and serves a JSON API: `/api/v1/cubes`,
-`/api/v1/cubes/{serial}` (with rooms;
-`PUT` and `DELETE` change and remove the Cube, `POST /api/v1/cubes` adds one),
-`/api/v1/settings` (the stale threshold and the intervals), `/devices`,
-`/devices/{rf}`,
-`PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
-`{"mode":"manual","temp":21.5}`,
-`{"mode":"auto"}` or `{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,
-`PUT …/devices/{rf}/lock` with `{"locked":false}` for the key lock,
-`/backup?format=yaml`,
-`POST …/restore/plan` and `POST …/restore` to restore a backup the way
-`massimo restore` does (plan first, then send;
-`GET …/restore` for the progress), and `/events` as server-sent events;
-see [docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
-[docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml).
-Set `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
-A web UI, plain HTML and JavaScript embedded in the binary,
-is served at http://127.0.0.1:8099/ :
-one tile per room with the measured and the set temperature with a thermometer
-and a gauge icon, up/down chevrons that send two seconds after the last click,
-AUTO,
-MANU and HOLIDAY plus an info and a cog button for the device list and the configuration,
-a House tile whose ECO, AUTO,
-COMFORT and MANU open a one-screen panel with mode, duration and room selection,
-vacation per room inline, the device list with coloured mode badges,
-offsets and locks, live updates plus polling with a refresh button,
-the Cube clock in the browser's or the Cube's time zone,
-and a settings page with an Expert switch for the technical details, Rooms,
-Log and Settings as icon buttons at the right of the header,
-a per-room configuration area (name, temperatures, boost and descaling,
-device names and offsets, moves,
-the week programme with a day editor that edits the days sharing a programme together,
-copy of rooms' settings to other rooms), a help button next to every setting,
-and a log view of the Cube's events.
-The page speaks English, German, French, Italian,
-Dutch and Polish (from the browser, or chosen in the settings),
-from the translation table in `internal/server/ui/i18n.js`.
-[docs/ui.md](docs/ui.md) describes how to use it.
-It is meant for the LAN.
-The listener defaults to localhost;
-put a reverse proxy with TLS in front before exposing it, and the UI,
-which needs the same token as the API, with it.
-`-log <file>` (or `MASSIMO_LOG`) appends the log,
-including every device state change, to a file as well.
-Every six hours (`-refresh`,
-`0` to switch it off) `serve` reconnects to each Cube,
-in turn with the queued commands, and re-reads everything the Cube holds,
-so a write the Cube acknowledged but did not apply cannot leave the server's
-copy wrong for long.
-After a configuration write it reads the device's configuration again for about
-six minutes until the device has taken it,
-and after radio writes it reconnects once for the Cube's budget if radiograms
-were pending, at most every 15 minutes (only while `-refresh` is on).
-The log lists every wakeup and every radio command the Cube accepted,
-with its duty cycle and free slots.
-
-The Cube serves only one LAN client at a time,
-so `serve` is itself a Cube for everyone else:
-it listens on port 62910 on every interface (`-proxy <addr>[:<port>]`,
-repeatable, `-proxy off` to disable) and answers UDP discovery.
-Every other massimo command and the original software connect to the host
-running `serve` (`-addr <serve host>`) and work beside it:
-reads are answered from the server's copy,
-writes go through its queue to the Cube.
-The original software keeps only one discovery answer per serial,
-and the real Cube answers first,
-so give the server a different serial for discovery with `-proxy-serial`,
-for example the real one with the first letter changed,
-or block the Cube's UDP answers on the PC's firewall.
-See [docs/proxy.md](docs/proxy.md).
-
-### Screenshots
-
-The web UI against the fake Cube, light and dark,
-and a room's tile with its week programme:
-
-![The Rooms page, light](docs/screenshots/rooms-1100-light-en.png)
-
-![The Rooms page, dark](docs/screenshots/rooms-1100-dark-en.png)
-
-![A room's tile with its week programme](docs/screenshots/config-week-1100-light-en.png)
-
-The whole set is in [docs/screenshots/](docs/screenshots/),
-taken by `make ui-screenshots` (tools/ui-test/README.md),
-and as a slideshow:
-
-![The web UI, page by page](docs/screenshots/slideshow.gif)
-
-## Documentation
-
-- [docs/api-v1.md](docs/api-v1.md),
-  [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml): the HTTP API
-- [docs/ui.md](docs/ui.md): using the web UI
-- [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
-- [docs/portal-protocol.md](docs/portal-protocol.md):
-  everything learned about the Cube, the portal and the radio commands
-- [docs/firmware-extraction.md](docs/firmware-extraction.md):
-  reading the Cube's firmware over JTAG, hardware facts and the procedure
-- [docs/background.md](docs/background.md): the evaluation before the project,
-  licence reasoning, routes to a public server, sources
-- [docs/design.md](docs/design.md): the design proposal, target environments,
-  phases and their status
-- [docs/roadmap.md](docs/roadmap.md): what comes next, in order
-- [docs/store.md](docs/store.md): the design of the server's persistent storage:
-  engine, schema, users and roles, migration of installed boxes
-- [docs/server.md](docs/server.md): the server mode: encryption at rest,
-  the public server, sync, and what the store prepares for them
-- [docs/handover-write-test.md](docs/handover-write-test.md):
-  the test plan for the configuration writes on real hardware,
-  [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
-- [docs/testing-windows.md](docs/testing-windows.md):
-  the test plan for the Windows service on a real PC,
-  [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
-- [docs/update-windows.md](docs/update-windows.md):
-  the design for updates from the web UI on Windows: the options,
-  the recommendation, the changes per file, the CI and real-PC tests
-- [docs/handover-session.md](docs/handover-session.md):
-  where the last session stopped, open feedback, next steps
-- [docs/review-2026-11-05.md](docs/review-2026-11-05.md):
-  code review with findings, extraction proposals and the coding standard
-- [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
-  the web UI smoke test with Playwright, and its setup
-- [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
-  the smoke test, Cypress and Playwright compared, screenshots,
-  the recommendation
+starts the original MAX! software (Java 8, installation directory
+`C:\ProgramData\MAX` by default, `-dir` otherwise) and prints only the
+protocol-relevant lines: API and gateway calls, radiograms, send results,
+and the Cube search (the interfaces it binds to, the adapters it tries,
+how many gateways it found).
+The software never prints the LAN lines it writes, not even at debug level,
+so `legacy` reconstructs them from the logged gateway calls (`s:`, `t:`, `m:`,
+`z:`, `c:`, `l:`, `n:`, `x:`, `q:`) and prints each beneath its call,
+marked `lan (derived)`.
+`-out` saves the complete output, `-all` shows it, `-width` shortens long lines.
+With `serve` running, point the software at the serve host rather than the Cube:
+in its Cube list pick the entry with the serve host's address (started with
+`-proxy-serial`, it appears under that serial).
 
 ## Versions
 
@@ -657,22 +713,9 @@ update` or the web UI (see [packaging/README.md](packaging/README.md#updating)).
 `make` builds carry the version from `git describe`, `go run` builds
 report the commit only with `go run -buildvcs=true`.
 
-## Original software
+## Legal
 
-```bash
-massimo legacy -out max-session.log
-```
+Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
 
-starts the original MAX! software (Java 8, installation directory
-`C:\ProgramData\MAX` by default, `-dir` otherwise) and prints only the
-protocol-relevant lines: API and gateway calls, radiograms, send results,
-and the Cube search (the interfaces it binds to, the adapters it tries,
-how many gateways it found).
-The software never prints the LAN lines it writes, not even at debug level,
-so `legacy` reconstructs them from the logged gateway calls (`s:`, `t:`, `m:`,
-`z:`, `c:`, `l:`, `n:`, `x:`, `q:`) and prints each beneath its call,
-marked `lan (derived)`.
-`-out` saves the complete output, `-all` shows it, `-width` shortens long lines.
-With `serve` running, point the software at the serve host rather than the Cube:
-in its Cube list pick the entry with the serve host's address (started with
-`-proxy-serial`, it appears under that serial).
+"MAX!" and "eQ-3" are trademarks of eQ-3 AG.
+This project is not affiliated with or endorsed by eQ-3.
