@@ -205,12 +205,15 @@ It needs ImageMagick;
 It lives here, next to what takes the pictures,
 because the repository keeps its developer tools under `tools/`.
 
-CI's Screenshots job runs the suite (with `UI_TEST_REQUIRED=1`) and then takes
-the set and the slideshow on every push and pull request,
-and uploads them as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`);
+CI's Screenshots job runs the suite (with `UI_TEST_REQUIRED=1`) and then takes the set
+on every push to `main` and every pull request,
+in Microsoft's Playwright image,
+and uploads the PNGs as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`);
 when a step fails it also uploads `tools/ui-test/results/`,
 the failed tests' traces, screenshots and videos,
 as the artifact `ui-test-results`.
+It does not make the slideshow, which needs ImageMagick:
+`slideshow.sh` is run where the set is taken, and the GIF committed with it.
 
 ## Setup
 
