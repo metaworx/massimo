@@ -186,11 +186,21 @@ func runServe(args []string) error {
 			}
 		}()
 	}
-	go srv.Run(ctx)
+	runDone := make(chan struct{})
+	go func() { srv.Run(ctx); close(runDone) }()
 	if src != nil {
 		go certs.Watch(ctx, src, certWatch)
 	}
-	return serveHTTP(ctx, hs, ln)
+	err = serveHTTP(ctx, hs, ln)
+	if ctx.Err() != nil {
+		// The store is closed when this returns; the server's run writes
+		// the log's pending events first.
+		select {
+		case <-runDone:
+		case <-time.After(10 * time.Second):
+		}
+	}
+	return err
 }
 
 // defaultUpdateStatus is the helper's status file where install puts it:

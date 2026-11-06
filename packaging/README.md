@@ -415,6 +415,14 @@ which is consistent while the server runs.
 `sudo -u massimo massimo -data /var/lib/massimo store info` shows the schema version,
 the node and the row counts; `massimo config` shows, per Cube,
 which values the store has and which line of `/etc/massimo/env` differs.
+The Cubes' events, the log the web UI shows, are in `massimo.db` too,
+for the days `log.keep_days` says (30 by default, `GET`/`PUT /api/v1/settings`):
+a state event takes about 0.65 KB with its indexes (measured),
+so a house of thirty devices that sends 3000 events a day adds about 2 MB a day,
+60 MB over the 30 days.
+The file stops growing at that size, since the server reuses the pages the daily
+prune frees and never runs `VACUUM`;
+`massimo store backup` writes a compact copy.
 
 **The first start after the update to a release with the store** needs nothing done.
 The server creates `massimo.db`, migrates it to schema version 1,

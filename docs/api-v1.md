@@ -557,7 +557,7 @@ and the error of a failed answer.
 Nothing in a row is a secret.
 
 `before`
-(RFC 3339) pages: the rows before that time;
+(RFC 3339) pages: the rows before that time, a time only, unlike the log's;
 `limit` is 100 by default and at most 1000; `user` filters by login name.
 The rows are append-only; a later stage prunes them by age.
 
@@ -801,7 +801,10 @@ The server's settings in the store:
 `stale_after` is when a thermostat that has not changed counts as stale,
 and applies at once; the intervals apply at the next start.
 `commands.keep_days` is how many days finished commands are kept (see Commands),
-a number, 0 for ever, and applies at once.
+a number, 0 for ever, and applies at once;
+`log.keep_days` how many days the Cubes' events are kept (see `GET …/log`),
+30 by default, 0 for ever, at most 3650, and applies at once:
+a lower value removes the older events within moments.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
@@ -1311,12 +1314,42 @@ also as the event's `error`.
 `error`.
 Both are in `GET …/log`.
 
-### GET /api/v1/cubes/{sn}/log?limit=200
+### GET /api/v1/cubes/{sn}/log?before=&limit=&kind=&device=
 
-The last events of the Cube, oldest first,
+A page of the Cube's events, oldest first,
 the same objects the event stream sends (`kind`, `device`, `state`, `error`,
-`time`); the server keeps the last 500.
-For a log view that starts with history and continues with the stream.
+`changes`, `time`, …), for a log view that starts with history and continues
+with the stream:
+
+```json
+[
+  {"id": 4711, "kind": "connected", "time": "2026-11-06T20:00:00.120345+01:00"},
+  {"id": 4712, "kind": "state", "device": "0abcde", "state": {"rf_address": "0abcde", "name": "Radiator 1", …}, "time": "…"}
+]
+```
+
+The server keeps the log in its store, `massimo.db`,
+so it survives a restart and an update,
+for the days `log.keep_days` says (`GET`/`PUT /api/v1/settings`, 30 by default,
+0 for ever); an event is in it within a second of the stream sending it,
+and a read writes what is pending first.
+Each event carries `id`, its place in the log, which the stream's events do not.
+Without parameters the answer is the newest 200 events; `limit` takes 1 to 1000,
+`before` an event's `id` for the page before it (`?before=4711`),
+or an RFC 3339 time for the events before that time;
+`kind` keeps one kind (`state`, `config`, `connected`,
+…) and `device` one radio address.
+A client pages back with `before` set to the `id` of the oldest event it has,
+until a page is empty: the events of a burst share a millisecond,
+so a time does not page them without gaps or repeats.
+The stored copy of a `state` event leaves out `state.received`,
+the per-value times the tiles' ages read (`GET …/devices/{rf}` has them);
+the event's own `time` is the log's.
+A Cube served for this run only, without a row in the store (`serve -addr`,
+or `-sn` before discovery noted it), keeps its last 500 events in memory,
+without `id`, as before the store;
+`before` then takes a time, and an `id` answers an empty page.
+`400` for a bad `before`, `limit` or `device`.
 
 ### GET /api/v1/cubes/{sn}/events
 

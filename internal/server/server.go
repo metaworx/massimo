@@ -110,6 +110,9 @@ type CubeConfig struct {
 	// settings file, once it reports its serial: the plain
 	// MASSIMO_CUBE_ADDRESS without a serial.
 	SeedFromFile bool
+	// StoreID is the id of the Cube's row in the store, 0 without one:
+	// the log of a Cube with a row is kept in the store (log.go).
+	StoreID int64
 }
 
 // Options configure a Server.
@@ -248,6 +251,11 @@ type Server struct {
 type runtime struct {
 	cfgMu sync.RWMutex
 	cfg   CubeConfig // through config and setConfig: the API changes it
+	// storeID is the Cube's row in the store, from CubeConfig.StoreID or
+	// learned at its first connection; 0 keeps the log in the ring.
+	storeID atomic.Int64
+	// store is the server's store, for the log; nil without one.
+	store *store.Store
 	// runMu guards cancel and done, which stop the runtime's goroutines
 	// (runtimes.go).
 	runMu      sync.Mutex
@@ -305,13 +313,22 @@ type event struct {
 	// "restore_done" events.
 	Restore *restoreProgress `json:"restore,omitempty"`
 	Time    time.Time        `json:"time"`
+	// ID is the event's row in the store, for GET …/log's paging; the
+	// stream's events and the ring's have none.
+	ID int64 `json:"id,omitempty"`
 }
 
-// logSize is how many events a Cube's log keeps for GET …/log.
+// logSize is how many events the ring keeps for GET …/log, the log of a
+// Cube without a row in the store (log.go).
 const logSize = 500
 
-// remember appends an event to the runtime's log ring.
+// remember keeps an event for the log: in the store for a Cube with a
+// row there, else in the runtime's ring. It never waits for the store.
 func (rt *runtime) remember(ev event) {
+	if id := rt.storeID.Load(); id != 0 && rt.store != nil {
+		rt.store.AddEvent(storedEvent(id, ev))
+		return
+	}
 	rt.logMu.Lock()
 	defer rt.logMu.Unlock()
 	rt.events = append(rt.events, ev)
@@ -386,6 +403,12 @@ func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.ctx = ctx
 	s.mu.Unlock()
+	if st := s.opts.Store; st != nil {
+		// The log's writer (log.go), before the Cubes connect; it writes
+		// what is pending when ctx ends, and Run waits for it.
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); st.RunEvents(ctx) }()
+	}
 	for _, rt := range s.runtimes() {
 		s.startRuntime(rt)
 	}
@@ -472,6 +495,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.mu.Unlock()
 					s.seedLearned(ctx, rt)
 				}
+				s.learnStoreID(ctx, rt)
 			}
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
@@ -835,27 +859,6 @@ func (s *Server) summary(rt *runtime) cubeView {
 }
 
 // Handlers.
-
-// getLog returns the last events of a Cube (the same objects the event
-// stream sends), oldest first; ?limit=N caps the number (default 200).
-func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
-	rt, err := s.cube(r)
-	if err != nil {
-		return err
-	}
-	n := 200
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err = strconv.Atoi(v); err != nil || n < 1 {
-			return fail(http.StatusBadRequest, "bad limit %q", v)
-		}
-	}
-	evs := rt.recent(n)
-	if evs == nil {
-		evs = []event{}
-	}
-	writeJSON(w, http.StatusOK, evs)
-	return nil
-}
 
 // listCubes handles GET /cubes: the configured Cubes, then the ones
 // discovery found that are not configured.

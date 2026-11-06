@@ -49,6 +49,8 @@ var intSettings = []intSetting{
 	// Finished commands are kept this many days; 0 keeps them (NOTE
 	// StoreUsers v1.0: commands history).
 	{key: store.CommandsKeepDaysKey, def: 0, min: 0, max: 3650},
+	// The Cubes' events are kept this many days; 0 keeps them (log.go).
+	{key: store.LogKeepDaysKey, def: store.DefaultLogKeepDays, min: 0, max: 3650},
 }
 
 var durationSettings = []durationSetting{
@@ -226,6 +228,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		if err != nil {
 			return fail(http.StatusInternalServerError, "%v", err)
+		}
+		if wr.key == store.LogKeepDaysKey {
+			st.PruneEventsSoon() // the retention applies now
 		}
 		if wr.key == store.StaleAfterKey {
 			if wr.duration == nil {
