@@ -81,6 +81,9 @@ the next minor, a fix counts the suffix up.
   release's section on `main` and tags with that section; `DRY=1`
   shows what it would cut, tag and push (README.md, "Versions").
 
+- A GitHub release's notes are its tag's changelog section, then the
+  sentence on the channel and how to install and verify a download.
+
 ### Fixed
 
 - Writes from LAN proxy clients, such as the original software, get

@@ -745,7 +745,7 @@ A release is made on `main`, checked out, clean and equal to `origin/main`.
 section with `GUIDELINES/shared/tools/changelog.sh`,
 commits it on `main` as `chore(release): vX.Y.Z-alpha.N`, and tags that commit,
 signed, with the section as the tag's message,
-so the tag carries the release notes.
+so the tag carries the release notes, and the GitHub release shows them.
 It then pushes `main`, `alpha` and the tag together or not at all.
 It refuses when `alpha` has commits `main` lacks,
 when `main`'s head is released already,

@@ -13,12 +13,12 @@ name: Release
 #
 # The update channel of a release is the release branch it was promoted
 # to, which is the pre-release identifier of the tag's name (v0.7.0-alpha.1
-# is on channel alpha); for a tag without one, the "channel:" line
-# `make release-alpha` writes into the tag message, else the one branch on
-# GitHub holding its commit. The name comes first so that a tag message
-# rewritten with the changelog section (changelog.sh tag) keeps its
-# channel. Development happens on main; the release branches only ever
-# fast-forward to it.
+# is on channel alpha); for a tag without one, a "channel:" line in the
+# tag message, else the one branch on GitHub holding its commit. The name
+# comes first because the message is the release's CHANGELOG.md section
+# (`make release-alpha` tags with changelog.sh), which names no channel;
+# that section is also the GitHub release's notes. Development happens on
+# main; the release branches only ever fast-forward to it.
 on:
   push:
     tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
@@ -149,5 +149,16 @@ jobs:
         run: |
           flags=()
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
-          notes="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes "$notes" "${flags[@]}" dist/*
+          sentence="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
+          # The notes are the tag message's body, the release's CHANGELOG.md
+          # section as changelog.sh wrote it, then the sentence; an old tag's
+          # channel: line is not part of them, and a tag with no body gets
+          # the sentence alone.
+          git fetch --quiet --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          body="$(git for-each-ref --format='%(contents:body)' "refs/tags/${TAG}" | sed -e '/^channel:/d' -e '/./,$!d')"
+          if [ -n "$body" ]; then
+            printf '%s\n\n%s\n' "$body" "$sentence" > "$RUNNER_TEMP/notes.md"
+          else
+            printf '%s\n' "$sentence" > "$RUNNER_TEMP/notes.md"
+          fi
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/*

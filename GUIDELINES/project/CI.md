@@ -126,8 +126,9 @@ The update channel of a release is the pre-release identifier of the tag's name
 then a `channel:` line in the tag message (which `make release-alpha` no longer writes:
 the name of every tag it makes holds the channel),
 then the one branch holding the commit.
-The GitHub release's notes are a fixed line naming the channel,
-not the tag's message.
+The GitHub release's notes are the body of the tag's message,
+that section, then a sentence naming the channel and how to install and verify;
+a tag with no body (a `channel:` line does not count) gets the sentence alone.
 A tag whose commit `git describe` does not name is refused.
 Every release below 1.0.0 is a pre-release on GitHub.
 The boxes on the alpha channel (the Raspberry Pi) take a release through
