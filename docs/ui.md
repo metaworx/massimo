@@ -176,8 +176,17 @@ The filter matches any part of a line (time, kind, device, text).
   Every scheme has a light and a dark set; the mode picks which is shown.
   **Customise…** opens an editor with a colour input per token for both sets,
   applied to the page as you change them,
-  and a number next to each background that is the contrast of the text on it
+  and a number in front of each background's colour that is the contrast of the text on it
   (from 4.5 it reads well, under 3 badly).
+  Next to each colour input is its hex value, `#f6f6f4`, in a text field:
+  a value typed or pasted there, with or without the `#`,
+  also as `#abc` and in any case, applies at once
+  and is written as `#rrggbb` in lower case when you leave the field.
+  Anything that is not a colour is refused: the field is marked,
+  a message under the sets says why, the colour stays,
+  and Escape puts the field back.
+  The browser's own colour picker (the popup with R, G, B fields in Chromium)
+  cannot be changed by the page, so the hex field is the place to paste a value.
   **Save as** keeps the edited scheme in this browser under the name given,
   **Reset** goes back to the scheme the editor started from,
   **Delete** removes one of your own.

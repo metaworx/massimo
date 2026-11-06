@@ -120,6 +120,15 @@ function hexColour(v) {
   return null;
 }
 
+// typedColour reads a colour typed or pasted into a hex field: #rrggbb
+// or #rgb in any case, the # optional, spaces around ignored. It returns
+// #rrggbb in lower case, or null when the value is not one.
+function typedColour(v) {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return hexColour(s.startsWith("#") ? s : "#" + s);
+}
+
 // luminance is the relative luminance of a #rrggbb colour (WCAG 2).
 function luminance(hex) {
   const chan = (i) => {
@@ -415,9 +424,38 @@ function fillContrast(badge, set, bgToken) {
   badge.setAttribute("aria-label", label);
 }
 
+// hexMessage shows under the sets why a hex field was refused: the
+// field just refused, or else one still marked; none clears it.
+function hexMessage(field) {
+  const p = $("scheme-hex-msg");
+  if (!p) return;
+  const bad = field || $("scheme-editor").querySelector(".scheme-hex[aria-invalid=true]");
+  p.textContent = bad ? t("appearance.hexBad", { token: bad.dataset.token, value: bad.dataset.refused }) : "";
+  p.classList.toggle("hidden", !bad);
+}
+
+// markHex marks a hex field as refused (the text it holds) or as good.
+function markHex(field, refused) {
+  if (refused === null) {
+    field.removeAttribute("aria-invalid");
+    field.removeAttribute("aria-describedby");
+    delete field.dataset.refused;
+  } else {
+    field.setAttribute("aria-invalid", "true");
+    field.setAttribute("aria-describedby", "scheme-hex-msg");
+    field.dataset.refused = refused;
+  }
+  hexMessage(refused === null ? null : field);
+}
+
 // renderSchemeSet builds the inputs of one set (light or dark) of the
-// draft: a row per token with its colour, the value as text and, for
-// a background of CONTRAST_PAIRS, the contrast badge.
+// draft: a row per token with its name, the contrast badge for a
+// background of CONTRAST_PAIRS (an empty placeholder of the same width
+// on the other rows, so the colours and the hex fields line up), the
+// colour input and the hex field. The hex field takes a typed or pasted
+// value: a colour applies as it is typed and is written as #rrggbb once
+// the field is left; anything else is refused, the field marked
+// invalid, and the colour stays.
 function renderSchemeSet(mode) {
   const d = themeState.draft;
   const fs = document.createElement("fieldset");
@@ -437,22 +475,66 @@ function renderSchemeSet(mode) {
     input.title = "--" + k;
     const label = textEl("label", tokenLabel(k));
     label.htmlFor = input.id;
-    const hex = textEl("span", d[mode][k], "scheme-hex mono");
-    input.addEventListener("input", () => {
-      d[mode][k] = hexColour(input.value) || d[mode][k];
-      hex.textContent = d[mode][k];
+    const hex = document.createElement("input");
+    hex.type = "text";
+    hex.id = "scheme-" + mode + "-" + k + "-hex";
+    hex.className = "scheme-hex mono";
+    hex.value = d[mode][k];
+    hex.size = 7;
+    hex.spellcheck = false;
+    hex.autocomplete = "off";
+    hex.setAttribute("autocapitalize", "off");
+    hex.setAttribute("aria-label", t("appearance.hex", { token: tokenLabel(k) }));
+    hex.dataset.token = tokenLabel(k);
+    const take = (c) => {
+      d[mode][k] = c;
       refresh();
       reapplyTheme();
+    };
+    input.addEventListener("input", () => {
+      const c = hexColour(input.value);
+      if (!c) return;
+      hex.value = c;
+      markHex(hex, null);
+      take(c);
+    });
+    hex.addEventListener("input", () => {
+      const c = typedColour(hex.value);
+      if (!c) return; // perhaps not typed to the end yet; judged on change
+      input.value = c;
+      if (hex.hasAttribute("aria-invalid")) markHex(hex, null);
+      take(c);
+    });
+    hex.addEventListener("change", () => {
+      const c = typedColour(hex.value);
+      if (c) {
+        hex.value = c;
+        markHex(hex, null);
+      } else {
+        markHex(hex, hex.value.trim());
+      }
+    });
+    hex.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && hex.hasAttribute("aria-invalid")) {
+        ev.preventDefault();
+        hex.value = d[mode][k];
+        markHex(hex, null);
+      }
     });
     row.appendChild(label);
-    row.appendChild(input);
-    row.appendChild(hex);
     if (CONTRAST_PAIRS[k]) {
       const b = document.createElement("span");
       b.setAttribute("role", "img"); // so the label is read out
       badges[k] = b;
       row.appendChild(b);
+    } else {
+      const gap = document.createElement("span");
+      gap.className = "contrast none";
+      gap.setAttribute("aria-hidden", "true");
+      row.appendChild(gap);
     }
+    row.appendChild(input);
+    row.appendChild(hex);
     fs.appendChild(row);
   }
   refresh();
@@ -474,6 +556,10 @@ function renderSchemeEditor() {
   sets.appendChild(renderSchemeSet("light"));
   sets.appendChild(renderSchemeSet("dark"));
   ed.appendChild(sets);
+  const hexMsg = textEl("p", "", "small scheme-msg bad hidden");
+  hexMsg.id = "scheme-hex-msg";
+  hexMsg.setAttribute("role", "status");
+  ed.appendChild(hexMsg);
   ed.appendChild(textEl("p", t("appearance.contrastNote"), "muted small"));
   const nameRow = document.createElement("div");
   nameRow.className = "scheme-name";

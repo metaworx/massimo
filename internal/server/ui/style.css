@@ -298,13 +298,16 @@ body.expert #clock-plain { display: none; }
 .scheme-sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 20px; }
 .scheme-set { border: none; padding: 0; margin: 0; min-width: 0; }
 .scheme-set legend { font-weight: 600; padding: 0; margin-bottom: 4px; }
-.scheme-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
-.scheme-row label { flex: 1 1 auto; min-width: 0; font-size: 0.9rem; overflow-wrap: anywhere; }
-.scheme-row input[type="color"] { width: 44px; height: 30px; padding: 2px; flex: none; }
-.scheme-hex { font-size: 0.8rem; min-width: 4.6em; }
+/* a row: the name, the contrast badge (or an empty place of its width),
+   the colour and the hex field, in columns of fixed width so that the
+   colours and the hex fields line up down the set */
+.scheme-row { display: grid; grid-template-columns: minmax(0, 1fr) 3em 44px 5.4em; align-items: center; gap: 6px; padding: 2px 0; }
+.scheme-row label { min-width: 0; font-size: 0.9rem; overflow-wrap: break-word; hyphens: auto; }
+.scheme-row input[type="color"] { width: 44px; height: 30px; padding: 2px; }
+.scheme-row .scheme-hex { width: 100%; min-width: 0; box-sizing: border-box; font-size: 0.8rem; padding: 4px 6px; }
+.scheme-hex[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); color: var(--bad); }
 .contrast {
-  flex: none;
-  min-width: 3.2em;
+  box-sizing: border-box;
   text-align: center;
   font-size: 0.75rem;
   padding: 0 6px;
@@ -315,6 +318,7 @@ body.expert #clock-plain { display: none; }
 .contrast.ok { color: var(--ok); border-color: var(--ok); }
 .contrast.warn { color: var(--warn); border-color: var(--warn); }
 .contrast.bad { color: var(--bad); border-color: var(--bad); }
+.contrast.none { border-color: transparent; cursor: default; }
 .scheme-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 8px; }
 .scheme-name input[type="text"] { flex: 1 1 10em; min-width: 0; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }

@@ -25,6 +25,9 @@ their room's tile away and back, and a found Cube is added and removed.
 In Settings → Appearance a
 scheme changes the computed --bg, the dark mode sets data-theme, the
 editor applies a colour live and keeps a saved scheme in the browser,
+its hex fields take ff0000 without the #, widen #ABC to #aabbcc and
+refuse nope with the colour kept, its badge column comes first so the
+colour inputs line up,
 Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
@@ -52,6 +55,9 @@ FOUND_N = {"en": "{n} Cube{s} found, not configured", "de": "{n} Cube{s} gefunde
 STALE = {"en": "Not seen for 30 hours", "de": "Seit 30 Stunden keine Meldung"}
 CONTRAST_SCHEME = {"en": "High contrast", "de": "Hoher Kontrast"}
 SAVED = {"en": "Saved as “Test scheme”.", "de": "Als „Test scheme“ gespeichert."}
+HEX_LABEL = {"en": "Lines, hex", "de": "Linien, Hex"}
+HEX_BAD = {"en": "Lines: “nope” is not a colour. Write it as #rrggbb or #rgb, the # may be left out; Escape puts the colour back.",
+           "de": "Linien: „nope“ ist keine Farbe. Als #rrggbb oder #rgb schreiben, das # darf fehlen; Escape stellt die Farbe wieder her."}
 NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
@@ -256,6 +262,48 @@ def log_changes(page, label, lang):
     page.locator("#view-tiles").click()
 
 
+def scheme_hex(page, label, lang):
+    """The editor's hex fields: a value typed without the # applies, #ABC
+    is widened to #aabbcc, a value that is not a colour is refused and
+    the colour stays, Escape puts the field back, and the picker writes
+    the field. The badge, or its empty place, comes before the colour,
+    so the colour inputs and the hex fields of a set line up."""
+    line = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--line').trim()")
+    hex_field = page.locator("#scheme-light-line-hex")
+    picker = page.locator("#scheme-light-line")
+    msg = page.locator("#scheme-hex-msg")
+    check(hex_field.get_attribute("aria-label") == HEX_LABEL[lang], f"{label}: hex field labelled in {lang}")
+    hex_field.fill("ff0000")
+    check(line() == "#ff0000" and picker.input_value() == "#ff0000", f"{label}: ff0000 typed without # applies live")
+    hex_field.press("Tab")
+    check(hex_field.input_value() == "#ff0000", f"{label}: the hex field is normalised on change")
+    hex_field.fill("#ABC")
+    hex_field.press("Tab")
+    check(hex_field.input_value() == "#aabbcc" and line() == "#aabbcc", f"{label}: #ABC becomes #aabbcc")
+    hex_field.fill("nope")
+    hex_field.press("Tab")
+    check(hex_field.get_attribute("aria-invalid") == "true" and line() == "#aabbcc" and picker.input_value() == "#aabbcc",
+          f"{label}: nope is refused and the colour stays")
+    check(msg.is_visible() and msg.inner_text() == HEX_BAD[lang], f"{label}: refused hex explained in {lang}")
+    hex_field.focus()
+    hex_field.press("Escape")
+    check(hex_field.input_value() == "#aabbcc" and hex_field.get_attribute("aria-invalid") is None and msg.is_hidden(),
+          f"{label}: Escape puts the hex field back")
+    picker.fill("#123456")
+    check(hex_field.input_value() == "#123456" and line() == "#123456", f"{label}: the picker writes the hex field")
+    for i, mode in enumerate(("light", "dark")):
+        cols = page.evaluate("""(i) => [...document.querySelectorAll('#scheme-editor .scheme-set')[i].querySelectorAll('.scheme-row')]
+            .map((r) => {
+              const x = (sel) => Math.round(r.querySelector(sel).getBoundingClientRect().left * 10) / 10;
+              return {badge: x('.contrast'), colour: x('input[type=color]'), hex: x('.scheme-hex'),
+                      real: !r.querySelector('.contrast').classList.contains('none')};
+            })""", i)
+        check(len(cols) == 19 and any(c["real"] for c in cols) and any(not c["real"] for c in cols)
+              and len({c["colour"] for c in cols}) == 1 and len({c["hex"] for c in cols}) == 1
+              and len({c["badge"] for c in cols}) == 1 and all(c["badge"] < c["colour"] < c["hex"] for c in cols),
+              f"{label}: badge column first, colours and hex fields aligned in the {mode} set")
+
+
 def appearance(page, label, lang, tmp):
     """Settings → Appearance: a scheme changes the page's colours, the
     mode sets data-theme, the editor applies live and keeps a saved
@@ -284,6 +332,7 @@ def appearance(page, label, lang, tmp):
     check(editor.is_visible() and editor.locator("input[type=color]").count() == 38, f"{label}: editor with a colour input per token and set")
     check(editor.locator(".contrast.ok").count() == 14, f"{label}: contrast badges, all ok for a built-in scheme")
     check(editor.locator("#scheme-delete").is_disabled(), f"{label}: no Delete for a built-in scheme")
+    scheme_hex(page, label, lang)
     page.locator("#scheme-light-bg").fill("#112233")
     check(bg() == "#112233", f"{label}: the editor applies live")
     check(editor.locator(".contrast.bad").count() == 1, f"{label}: a bad contrast is graded")
