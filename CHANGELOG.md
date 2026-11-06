@@ -14,6 +14,9 @@ the next minor, a fix counts the suffix up.
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).
 
+- `make ui-screenshots` takes the web UI's screenshot set; CI's
+  Screenshots job runs the UI smoke test and uploads the set.
+
 ### Changed
 
 - The colour-scheme editor takes typed or pasted hex values next to each

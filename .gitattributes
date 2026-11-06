@@ -18,3 +18,7 @@ internal/update/release-key.pem text eol=lf
 
 # The Cube ends its lines with CRLF; the recorded greeting keeps them.
 internal/protocol/cube/testdata/cube-fw0113-greeting.txt -text
+
+# Images: the screenshot set under docs/screenshots/ and its slideshow.
+*.png                         binary
+*.gif                         binary

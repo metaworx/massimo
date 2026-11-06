@@ -582,6 +582,23 @@ for example the real one with the first letter changed,
 or block the Cube's UDP answers on the PC's firewall.
 See [docs/proxy.md](docs/proxy.md).
 
+### Screenshots
+
+The web UI against the fake Cube, light and dark,
+and a room's tile with its week programme:
+
+![The Rooms page, light](docs/screenshots/rooms-1100-light-en.png)
+
+![The Rooms page, dark](docs/screenshots/rooms-1100-dark-en.png)
+
+![A room's tile with its week programme](docs/screenshots/config-week-1100-light-en.png)
+
+The whole set is in [docs/screenshots/](docs/screenshots/),
+taken by `make ui-screenshots` (tools/ui-test/README.md),
+and as a slideshow:
+
+![The web UI, page by page](docs/screenshots/slideshow.gif)
+
 ## Documentation
 
 - [docs/api-v1.md](docs/api-v1.md),

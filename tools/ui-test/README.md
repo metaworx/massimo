@@ -1,4 +1,4 @@
-# Web UI smoke test
+# Web UI smoke test and screenshots
 
 `make ui-test` runs `run.sh`.
 The script:
@@ -68,6 +68,54 @@ The state events of the last two points are applied in the page (`updateDevice`)
 since the fake Cube does not change its states.
 
 When Playwright for Python is missing, `make ui-test` says so and exits 0.
+
+## Screenshots
+
+`make ui-screenshots` runs `run.sh screenshots`:
+the same start-up, then `screenshots.py` in place of the smoke test.
+It takes a fixed set of PNGs into `docs/screenshots/`,
+named `<page>-<width>-<theme>-<lang>.png` and listed in one place,
+`SETS` in the script:
+the Rooms page, a tile's device list, the configuration's tabs Temperatures,
+Devices, Week programme and Copy, the House panel, the log, the settings,
+the Appearance editor, the Cube choice with a found Cube and Settings → Cubes,
+at 1100 px in light and dark (`data-theme`), in English;
+the Rooms and the Settings page also at 390 px,
+and the Rooms page in German as well.
+A shot is framed by its subject, set beside each page in `PAGES`:
+the viewport (1100 × 800,
+at phone width 390 × 844) where the page is the subject (the Rooms page,
+the log, every phone shot), and the one element where one element is (a tile,
+the House panel, the Settings panel or one of its sections,
+the header with the found Cube), whole however tall, with 12 CSS px around it,
+so that the sizes differ from shot to shot.
+The PNGs it took before are removed first.
+
+The set is retaken at every change of the UI, as the smoke test is run,
+and committed with it.
+It comes out the same on every run, byte for byte on one machine:
+the page's clock is fixed and the server's times are replaced by fixed ones
+on the way to the page, the time zone is Europe/Zurich,
+the event stream is a stub that sends nothing,
+the first room's thermostat is made 30 hours old and stale,
+and the version, the Software section,
+the fake Cube's address and a found Cube are fixed answers.
+Another machine's fonts give other pixels.
+Nothing is compared: a shot that cannot be taken fails the run,
+a changed picture does not.
+
+`slideshow.sh` makes `docs/screenshots/slideshow.gif` from the main set (1100 px, light,
+English) in its order, which it takes from `screenshots.py --list`:
+every frame shrunk, never enlarged, to fit, centred,
+whole and opaque on an 880 × 640 canvas, 3 seconds each, looping.
+It needs ImageMagick;
+`slideshow.sh --help` says the rest.
+It lives here, next to what takes the pictures,
+because the repository keeps its developer tools under `tools/`.
+
+CI's Screenshots job runs the smoke test and then takes the set and the
+slideshow on every push and pull request,
+and uploads them as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`).
 
 ## Setup
 

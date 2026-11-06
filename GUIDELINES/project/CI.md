@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.0.0)
+# Massimo — CI Conventions (v1.1.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,13 +33,18 @@ There is no second pipeline.
 
 | Trigger | Jobs |
 |---------|------|
-| push to any branch, pull request | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Guidelines (section 4) |
+| push to any branch, pull request | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI smoke test, then the screenshot set and its slideshow, uploaded as the artifact `ui-screenshots`); Guidelines (section 4) |
 | tag `v*` | release.yml: build every target without cgo, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release |
 
-The web UI smoke test (`make ui-test`) does not run in CI:
-it needs Playwright and Chromium,
-and the UI changes are verified with it on the developer's machine before a
-pull request (the contract's test gate).
+The web UI smoke test (`make ui-test`) and the screenshot set
+(`make ui-screenshots`) run in the Screenshots job,
+on Chromium that Playwright installs on the runner.
+The UI changes are still verified with the smoke test on the developer's
+machine before a pull request (the contract's test gate),
+and the set committed under `docs/screenshots/` is the one taken there:
+the runner's fonts give other pixels,
+so the artifact is for looking at,
+and nothing compares it with the committed set.
 Hardware is never touched by CI;
 the Windows and macOS jobs run against the fake Cube.
 
@@ -54,6 +59,14 @@ Where CI differs, and why:
 - `govulncheck ./...` runs in CI only, per platform with code of its own,
   because a known vulnerability is a reason to fail a build but not a tool
   every developer installs.
+- The Screenshots job runs `make ui-test` and `make ui-screenshots` as a developer does,
+  with Playwright from `tools/ui-test/requirements.txt` in the runner's Python
+  instead of the venv (`UI_TEST_PYTHON`).
+  The smoke test runs in the same job, before the captures,
+  because Playwright and Chromium are installed there anyway;
+  it is not a job of its own, and not part of the test gate's job,
+  because installing Chromium with its system libraries takes longer than the
+  rest of that job.
 - The Windows and macOS jobs install the real service on the runner,
   which a developer cannot do on another operating system.
   They use the alpha channel's newest release for the update by hand and a
