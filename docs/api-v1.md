@@ -217,10 +217,13 @@ A wrong ticket counts as a failed check,
 and a failed login counts against the address and against the user name,
 so that password guessing from many addresses locks the name.
 With a store the counters survive a restart.
-The address is the TCP peer's; `X-Forwarded-For` is not trusted,
-since anyone can set it,
-so behind a reverse proxy the limit applies to the proxy as a whole,
-and the proxy should limit by client itself.
+The address is the TCP peer's, or,
+with `-trusted-proxies` naming the proxy's address,
+the client the proxy passes in `X-Forwarded-For`
+(the rightmost entry that is not a trusted proxy) or `X-Real-IP`;
+without it the headers are ignored, since anyone can set them,
+and behind a reverse proxy the limit then applies to the proxy as a whole
+(docs/reverse-proxy.md).
 
 The event stream is opened by browsers without headers,
 so it takes a ticket instead:

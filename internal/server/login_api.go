@@ -116,7 +116,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	st := s.opts.Store
 	name := store.NormalName(req.User)
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	auditTarget(r, "user:"+name)
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
 	if d := s.limiter.lockedFor(ctx, userKey); d > 0 {
@@ -191,7 +191,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	if err := s.opts.Store.RevokeToken(r.Context(), p.token.ID); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
-	s.log.Info("api: logout", "user", p.user.Name, "remote", clientIP(r))
+	s.log.Info("api: logout", "user", p.user.Name, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	return nil
 }
@@ -210,7 +210,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	me := meView{Mode: s.AuthMode(), Capabilities: append([]string(nil), capabilities...)}
 	if !p.named() {
-		me.Setup = p != nil && p.mode == modeOpen && localPeer(clientIP(r))
+		me.Setup = p != nil && p.mode == modeOpen && localPeer(s.clientIP(r))
 		return me, nil
 	}
 	st := s.opts.Store

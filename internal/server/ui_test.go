@@ -32,7 +32,7 @@ func TestUIServed(t *testing.T) {
 		return resp.StatusCode, resp.Header.Get("Content-Type"), string(body)
 	}
 	// The page and its files are public even with a token configured.
-	if code, ct, body := get("/"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="/ui/app.js">`) {
+	if code, ct, body := get("/"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="ui/app.js">`) {
 		t.Fatalf("GET /: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
 	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/roles.js", "/ui/theme.js"} {
@@ -222,6 +222,32 @@ func TestUIPageMarkers(t *testing.T) {
 		if _, err := uiPage(files); err == nil {
 			t.Errorf("uiPage(%q): no error", bad)
 		}
+	}
+}
+
+// TestUIRelativeURLs keeps every URL of the UI relative to the page, so
+// that a reverse proxy may serve it under a path prefix it strips
+// (docs/reverse-proxy.md): no file names /ui/, /api/ or /healthz with a
+// leading slash, and no href or src starts at the root.
+func TestUIRelativeURLs(t *testing.T) {
+	absolute := regexp.MustCompile(`"/(ui/|api/|healthz)|(href|src)="/`)
+	err := fs.WalkDir(uiFiles, "ui", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := uiFiles.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if absolute.MatchString(line) {
+				t.Errorf("%s:%d: an absolute URL: %s", path, i+1, strings.TrimSpace(line))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

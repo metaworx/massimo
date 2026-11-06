@@ -155,7 +155,7 @@ func TestServeTLS(t *testing.T) {
 }
 
 func TestServeTLSVariablesAreKnown(t *testing.T) {
-	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar, acmeEmailVar, acmeDirectoryVar, tlsHTTPVar, acmeDNSHookVar} {
+	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar, acmeEmailVar, acmeDirectoryVar, tlsHTTPVar, acmeDNSHookVar, trustedProxiesVar} {
 		if !env.Known(k) {
 			t.Errorf("%s unknown to massimo config", k)
 		}

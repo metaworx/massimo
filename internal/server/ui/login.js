@@ -61,7 +61,7 @@ function setToken(token) {
 // that refuses opens the sign-in dialog through api().
 async function loadMe() {
   try {
-    state.me = await api("GET", "/api/v1/me");
+    state.me = await api("GET", "api/v1/me");
   } catch (e) {
     state.me = null;
   }
@@ -170,7 +170,7 @@ function askLogin() {
 // signIn posts the login and returns the session; the answer's error is
 // thrown.
 async function signIn(user, password) {
-  const resp = await fetch("/api/v1/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user, password }) });
+  const resp = await fetch("api/v1/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user, password }) });
   let data = null;
   try {
     data = await resp.json();
@@ -194,7 +194,7 @@ async function logout() {
   const me = state.me;
   if (me && me.mode === "users" && me.token && me.token.kind === "session") {
     try {
-      await api("POST", "/api/v1/logout");
+      await api("POST", "api/v1/logout");
     } catch (e) {
       // the session may be gone already
     }
@@ -217,7 +217,7 @@ async function changeOwnPassword(ev) {
   if (password !== $("me-again").value) return showResult(msg, t("setup.mismatch"), false);
   if (!password) return showResult(msg, t("login.missing"), false);
   try {
-    await api("PUT", "/api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current });
+    await api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current });
     showResult(msg, t("me.passwordChanged"), true);
     $("me-current").value = "";
     $("me-new").value = "";
@@ -239,7 +239,7 @@ async function createOwner(ev) {
   if (!name || !password) return showResult(msg, t("login.missing"), false);
   if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
   try {
-    await api("POST", "/api/v1/users", { name, password, role: "owner" });
+    await api("POST", "api/v1/users", { name, password, role: "owner" });
     const session = await signIn(name, password);
     setToken(session.token);
     showResult(msg, t("setup.done", { name }), true);

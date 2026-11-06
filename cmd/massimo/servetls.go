@@ -36,6 +36,8 @@ const (
 	// -acme-dns-hook: the DNS-01 challenge through a hook instead of
 	// TLS-ALPN-01 and HTTP-01; no port, wildcards allowed.
 	acmeDNSHookVar = "MASSIMO_ACME_DNS_HOOK"
+	// -trusted-proxies: the reverse proxies whose headers name the client.
+	trustedProxiesVar = "MASSIMO_TRUSTED_PROXIES"
 	// certWatch is how often a source checks its certificate: a renewal
 	// 30 days before the end needs no finer clock.
 	certWatch = time.Hour

@@ -360,3 +360,49 @@ func TestHSTSAndHealthzTLS(t *testing.T) {
 		}
 	})
 }
+
+// TestLockoutBehindProxy counts failed token checks per client the proxy
+// names, not per proxy, and the stream asks nginx not to buffer.
+func TestLockoutBehindProxy(t *testing.T) {
+	proxies, _ := ParseTrustedProxies("127.0.0.1,::1")
+	_, ts, _ := startWith(t, Options{Token: "secret", TrustedProxies: proxies, AuthFailures: 3})
+	try := func(client, token string) int {
+		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes", nil)
+		req.Header.Set("X-Forwarded-For", client)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for i := 0; i < 3; i++ {
+		if try("192.0.2.10", "wrong") != 401 {
+			t.Fatal("not 401")
+		}
+	}
+	if try("192.0.2.10", "secret") != 429 {
+		t.Fatal("the client that failed is not locked out")
+	}
+	if try("192.0.2.11", "secret") != 200 {
+		t.Fatal("another client behind the same proxy locked out")
+	}
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("X-Accel-Buffering") != "no" {
+		t.Fatalf("stream: %d %q", resp.StatusCode, resp.Header.Get("X-Accel-Buffering"))
+	}
+}

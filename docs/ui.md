@@ -266,3 +266,7 @@ with its script added to the `<script>` tags of `index.html` and to the embed
 list in `ui.go`; a new text is a key in all six files,
 which `go test ./internal/server` checks against the markup and the scripts,
 as it checks every id the scripts look up.
+Every URL the page and the scripts use is relative to the page (`ui/style.css`,
+`api/v1/cubes`, `healthz`),
+so that a reverse proxy may serve the UI under a path prefix it strips
+(docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.
