@@ -467,6 +467,10 @@ the pytest structure moves to it test by test.
 
 ### Steps
 
+Steps 1 and 2 are done (2026-11-06): `tools/ui-test/` is a pytest suite,
+and CI's Screenshots job runs it with `UI_TEST_REQUIRED=1`
+and uploads the traces of a failure, in place of a job of its own.
+
 1. **First pull request, `test(ui-test)`**:
    `tools/ui-test/` as a pytest suite.
    `conftest.py` with the server fixture (what `run.sh` does now,
@@ -489,6 +493,9 @@ the pytest structure moves to it test by test.
    and `actions/upload-artifact` of the traces and screenshots on failure.
    GUIDELINES/project/CI.md sections 2 and 3 say why it runs and what it needs;
    the `.github/` change takes a CHANGELOG bullet.
+   Since 2026-11-06 the Screenshots job runs in Microsoft's Playwright image instead,
+   with no `actions/setup-python`, browser cache or `playwright install`
+   (GUIDELINES/project/CI.md section 3), and a job of its own would do the same.
 3. **Third**:
    the four machine-translated languages,
    a short pass at 390 px each (the page loads in its language,
