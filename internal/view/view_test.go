@@ -39,7 +39,7 @@ func snapshot(t *testing.T, extra ...cube.Message) *cubelan.Snapshot {
 
 func TestRoomsAndReady(t *testing.T) {
 	snap := snapshot(t)
-	rooms := Rooms(snap, nil)
+	rooms := Rooms(snap, nil, 0)
 	if len(rooms) != 6 {
 		t.Fatalf("rooms %d", len(rooms))
 	}
@@ -60,7 +60,7 @@ func TestRoomsAndReady(t *testing.T) {
 		t.Fatalf("hidden device counted as silent: %v", s)
 	}
 	snap = snapshot(t, reportedLine)
-	for _, r := range Rooms(snap, nil) {
+	for _, r := range Rooms(snap, nil, 0) {
 		if r.Ready != (r.ID == 6) {
 			t.Errorf("after the report: room %d ready %v", r.ID, r.Ready)
 		}
@@ -88,7 +88,7 @@ func TestHiddenRoomsAndDevices(t *testing.T) {
 	if rooms != allRooms-1 || devices != allDevices-1 {
 		t.Fatalf("counts %d/%d of %d/%d", rooms, devices, allRooms, allDevices)
 	}
-	for _, d := range Devices(snap, h) {
+	for _, d := range Devices(snap, h, 0) {
 		if d.RFAddress == silentDevice.String() {
 			t.Fatal("hidden device listed")
 		}
@@ -96,7 +96,7 @@ func TestHiddenRoomsAndDevices(t *testing.T) {
 			t.Fatal("the cube itself listed")
 		}
 	}
-	for _, r := range Rooms(snap, h) {
+	for _, r := range Rooms(snap, h, 0) {
 		if r.ID == 6 {
 			t.Fatal("hidden room listed")
 		}
@@ -147,19 +147,19 @@ func TestAgesAndStale(t *testing.T) {
 	}
 	defer func() { now = time.Now }()
 	now = func() time.Time { return t0.Add(time.Hour) }
-	d := DeviceOf(snap, silentDevice)
+	d := DeviceOf(snap, silentDevice, 0)
 	if d.LastSeen == nil || !d.LastSeen.Equal(t0) || d.Stale || !d.Received["setpoint"].Equal(t0) || !d.Received["valve_pct"].Equal(t0) {
 		t.Fatalf("device %+v", d)
 	}
 	// Devices without state have no times.
-	if d := DeviceOf(snap, 0x14d08e); d.LastSeen != nil || d.Received != nil || d.Stale {
+	if d := DeviceOf(snap, 0x14d08e, 0); d.LastSeen != nil || d.Received != nil || d.Stale {
 		t.Fatalf("unreported device %+v", d)
 	}
 	now = func() time.Time { return t0.Add(StaleAfter + time.Minute) }
-	if d := DeviceOf(snap, silentDevice); !d.Stale {
+	if d := DeviceOf(snap, silentDevice, 0); !d.Stale {
 		t.Fatal("not stale after StaleAfter")
 	}
-	for _, r := range Rooms(snap, nil) {
+	for _, r := range Rooms(snap, nil, 0) {
 		if r.Stale != (r.ID == 6) {
 			t.Errorf("room %d stale %v", r.ID, r.Stale)
 		}

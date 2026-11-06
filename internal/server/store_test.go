@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // testStore opens a store in a temporary directory, or in dir.
@@ -24,6 +26,19 @@ func testStore(t *testing.T, dir string) *store.Store {
 	}
 	t.Cleanup(func() { st.Close() })
 	return st
+}
+
+// The stale threshold is the server's, not the process's.
+func TestStaleAfterPerServer(t *testing.T) {
+	a := New(Options{StaleAfter: 36 * time.Hour})
+	b := New(Options{})
+	if a.StaleAfter() != 36*time.Hour || b.StaleAfter() != view.StaleAfter {
+		t.Fatalf("%v %v", a.StaleAfter(), b.StaleAfter())
+	}
+	b.SetStaleAfter(2 * time.Hour)
+	if a.StaleAfter() != 36*time.Hour {
+		t.Fatal("one server's threshold changed the other's")
+	}
 }
 
 // A Cube discovery found is a row of the store: after a restart of the

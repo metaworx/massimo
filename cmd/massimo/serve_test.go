@@ -270,6 +270,32 @@ func TestServeStoreWins(t *testing.T) {
 	}
 }
 
+// serve -addr runs without the store: no massimo.db, no node.key.
+func TestServeAddrOpensNoStore(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	st, err := openServeStore("10.0.0.9", quietLog())
+	if err != nil || st != nil {
+		t.Fatalf("-addr opened a store: %v %v", st, err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("-addr wrote into the data directory: %v", entries)
+	}
+	su, err := serveSetup(context.Background(), nil, "10.0.0.9", nil, "", quietLog())
+	if err != nil || len(su.cubes) != 1 || su.cubes[0].Source != store.SourceFlag {
+		t.Fatalf("-addr without a store: %+v %v", su, err)
+	}
+	st, err = openServeStore("", quietLog())
+	if err != nil || st == nil {
+		t.Fatalf("without -addr: %v %v", st, err)
+	}
+	st.Close()
+	if _, err := os.Stat(filepath.Join(dir, store.FileName)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // dataDir follows -data, then MASSIMO_DATA, then the current directory.
 func TestDataDir(t *testing.T) {
 	t.Setenv(env.DataVar, "")
