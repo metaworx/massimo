@@ -1,12 +1,12 @@
-# AP Tls v1.0: TLS for massimo serve
+# AP Tls v1.1: TLS for massimo serve
 
 ## TL;DR
 
-`massimo serve` gets TLS in four blocks,
+`massimo serve` gets TLS in five blocks,
 every certificate source ending in one `GetCertificate` on one `tls.Config`:
 certificate files re-read when they change,
 a self-signed certificate the server makes, a reverse proxy in front,
-and Let's Encrypt.
+and Let's Encrypt by TLS-ALPN-01, HTTP-01 and DNS-01.
 
 - `-tls off | files | self-signed | acme`, `-tls-cert`, `-tls-key`,
   `-tls-names`; `MASSIMO_TLS*` in the settings file, nothing in the store
@@ -19,12 +19,14 @@ and Let's Encrypt.
   `massimo tls show`, `/healthz`, the UI header
 - `-trusted-proxies` → one `clientIP` everywhere; relative URLs in the UI
 - acme → autocert, TLS-ALPN-01; `-tls-http :80` for HTTP-01 and the redirect
-- later: DNS-01 hook, UPnP, a local CA
+- DNS-01 → `-acme-dns-hook <script>` over `x/crypto/acme`, wildcards;
+  a sample hook for Infomaniak's API; certbot and lego into the files source
+- later: UPnP, a local CA
 
 Rests on
 [2026-11-06_11-46_ANALYSIS_Tls_serve_tls_support.md](2026-11-06_11-46_ANALYSIS_Tls_serve_tls_support.md);
 the owner's decisions D1 to D13 are in the Discussion.
-Run order 1, 2, then 3 once store stage (b) is on `main`, else 4 first.
+Run order 1, 2, 4, 5, then 3, once store stage (b) is on `main`.
 
 ### Blocks
 
@@ -36,6 +38,8 @@ Run order 1, 2, then 3 once store stage (b) is on `main`, else 4 first.
    relative URLs in the UI, `docs/reverse-proxy.md`
 4. TlsAcme: autocert with TLS-ALPN-01, `-acme-email`, the cache,
    the expiry watch and notice, `-tls-http :80` for HTTP-01
+5. TlsDns: `-acme-dns-hook` over `x/crypto/acme`, wildcards,
+   the Infomaniak sample hook, certbot and lego recipes
 
 ## Discussion
 
@@ -64,9 +68,15 @@ except D10:
 - **D5.**
   TLS-ALPN-01 first; HTTP-01 only with `-tls-http :80`.
 - **D6.**
-  DNS-01 through an external ACME client into the files source now;
-  an `-acme-dns-hook` over `x/crypto/acme` is a later plan;
-  lego is out (+1.5 MiB and 231 modules for its core, measured).
+  DNS-01 through an external ACME client into the files source,
+  and the `-acme-dns-hook` over `x/crypto/acme`,
+  which the owner moved from a later plan into this one as Block 5 on 2026-11-06,
+  to run before Block 3; lego stays out (+1.5 MiB and 231 modules for its core,
+  measured).
+  The owner's DNS is at Infomaniak, whose API has a certbot plugin
+  (`certbot-dns-infomaniak`) and a lego provider, wildcards included:
+  the document shows both into the files source,
+  and the hook block ships a sample hook against that API.
 - **D7.**
   `-trusted-proxies` with addresses and CIDRs, empty by default,
   one `clientIP` for the limiter, the log lines and the first-owner form.
@@ -105,8 +115,8 @@ handing certificate files to the server's file reloading of Block 1.
 Noted here as the way, not as a block.
 
 **Not in this plan:**
-TlsDns (the hook over `x/crypto/acme`), Upnp, a local CA,
-and a Pebble job in CI; each a plan of its own if it comes.
+Upnp, a local CA, and a Pebble job in CI;
+each a plan of its own if it comes.
 Settings → Server as a panel is the plan the UiStructure work left for it;
 Block 2 puts the certificate's details into the header's expert list instead.
 
@@ -124,9 +134,9 @@ Block 3 touches the same file, so it runs only once that work is on `main`,
 after a merge of `origin/main`;
 it starts from a `main` that also has #50,
 whose partials hold the UI's absolute paths.
-The run order is therefore 1, 2, then 3 if store (b) has landed,
-else 4 and then 3; a run of several blocks stops at a gate before Block 3
-while store (b) is not in.
+The run order is 1, 2, 4, 5 and then 3,
+Block 5 before Block 3 by the owner's instruction of 2026-11-06;
+a run of several blocks stops at a gate before Block 3 while store (b) is not in.
 Block 4's hardware day on the Raspberry Pi, with a real name and
 Let's Encrypt's staging directory, is the owner's.
 
@@ -150,12 +160,14 @@ What changes, by file:
 | `internal/certs/files.go`, `files_test.go` | 1 | new: the files source, stat per handshake, re-read on change, the old pair kept and one log line on a bad one |
 | `internal/certs/selfsigned.go`, `selfsigned_test.go` | 2 | new: the generator, the names, the renewal 30 days before expiry, over the files source |
 | `internal/certs/acme.go`, `acme_test.go` | 4 | new: autocert with the whitelist, the cache, `acme-tls/1`, the helper handler, the errors logged |
-| `cmd/massimo/serve.go`, `serve_test.go` | 1, 2, 3, 4 | `-tls`, `-tls-cert`, `-tls-key`, `-hsts`, `-tls-names`, `-trusted-proxies`, `-acme-email`, `-acme-directory`, `-tls-http`; the source by `-tls`; `ServeTLS`; the helper listener |
+| `internal/certs/dns01.go`, `dns01_test.go` | 5 | new: the DNS-01 flow over `x/crypto/acme` (order, TXT record through the hook, the wait, the certificate into files), the renewal by the watch |
+| `packaging/acme-dns-hooks/infomaniak.sh` | 5 | new: the sample hook against Infomaniak's API, `set` and `clear` |
+| `cmd/massimo/serve.go`, `serve_test.go` | 1, 2, 3, 4, 5 | `-tls`, `-tls-cert`, `-tls-key`, `-hsts`, `-tls-names`, `-trusted-proxies`, `-acme-email`, `-acme-directory`, `-tls-http`, `-acme-dns-hook`; the source by `-tls`; `ServeTLS`; the helper listener |
 | `cmd/massimo/tls.go`, `tls_test.go`, `main.go` | 2 | new: `massimo tls show \| self-signed [-names …]` |
 | `cmd/massimo/config.go` | 1, 2 | the TLS lines: mode, files, names, expiry, fingerprint |
 | `cmd/massimo/update.go`, `update_test.go` | 1 | `waitHealthy`'s client skips verification for a loopback `https://` host |
 | `internal/install/install.go`, `listen.go`, `darwin.go`, `windows.go`, `windows_args.go`, tests | 1, 2, 4 | `-tls`, `-tls-cert`, `-tls-key`, `-tls-names`, `-acme-email`, `-tls-http` on `install`; the files copied; the variables set in the settings file; the health URL's scheme from the file; the capability for `-tls-http` below 1024 |
-| `internal/env/env.go` | 1, 2, 3, 4 | the known names: `MASSIMO_TLS`, `_TLS_CERT`, `_TLS_KEY`, `_HSTS`, `_TLS_NAMES`, `_TRUSTED_PROXIES`, `_ACME_EMAIL`, `_ACME_DIRECTORY`, `_TLS_HTTP` |
+| `internal/env/env.go` | 1, 2, 3, 4, 5 | the known names: `MASSIMO_TLS`, `_TLS_CERT`, `_TLS_KEY`, `_HSTS`, `_TLS_NAMES`, `_TRUSTED_PROXIES`, `_ACME_EMAIL`, `_ACME_DIRECTORY`, `_TLS_HTTP`, `_ACME_DNS_HOOK` |
 | `internal/server/server.go`, `server_test.go` | 1, 3, 4 | `Options.TLS`, `HSTSDays`, `TrustedProxies`; the HSTS header on every response; `/healthz`'s `tls`; `X-Accel-Buffering: no` on the stream |
 | `internal/server/auth.go`, `auth_test.go` | 3 | `clientIP` with the trusted proxies, as a method of the server |
 | `internal/server/cubes_api.go`, `settings_api.go` | 3 | the log lines on `clientIP` instead of `r.RemoteAddr` |
@@ -164,14 +176,14 @@ What changes, by file:
 | `internal/server/ui/index.html`, `app.js`, `i18n/*.json` | 2, 4 | the header notice (self-signed with the fingerprint; expiring soon), the expert list's certificate row |
 | `tools/ui-test/smoke.py` | 2, 4 | the notice checked with a mocked `/healthz` |
 | `.github/workflows/ci.yml`, `GUIDELINES/project/CI.md` | 2 | the macOS job installs with `-tls self-signed` and curls `https://` with `-k`; Windows stays plain |
-| `packaging/systemd/massimo-update.service`, `packaging/README.md` | 1, 2, 4 | the health URL's scheme; `install -tls …`; the HSTS consequence |
-| `README.md` | 1, 2, 3, 4 | "Server": the TLS modes, HSTS, the proxy; "Command line": `serve`'s flags, `tls` |
+| `packaging/systemd/massimo-update.service`, `packaging/README.md` | 1, 2, 4, 5 | the health URL's scheme; `install -tls …`; the HSTS consequence; the hook and the external clients |
+| `README.md` | 1, 2, 3, 4, 5 | "Server": the TLS modes, HSTS, the proxy, DNS-01; "Command line": `serve`'s flags, `tls` |
 | `docs/api-v1.md`, `docs/api-v1-openapi.yaml` | 1, 3, 4 | `/healthz`'s `tls` object; the client's address behind a proxy; HSTS |
 | `docs/store.md` | 1, 3, 4 | section 4's table: the `MASSIMO_TLS*` and `MASSIMO_ACME_*` variables stay in the file; section 10 item 4: `-trusted-proxies` |
 | `docs/ui.md` | 2, 3 | the header notice; the page works under a path prefix |
 | `docs/reverse-proxy.md` | 3 | new: nginx and Caddy samples, the Synology clicks, `-trusted-proxies`, the stream, HSTS from the proxy |
-| `go.mod`, `go.sum` | 4 | `golang.org/x/crypto` (autocert) |
-| `CHANGELOG.md` | 1, 2, 3, 4 | a bullet per block under Unreleased |
+| `go.mod`, `go.sum` | 4 | `golang.org/x/crypto` (autocert; Block 5 uses its `acme` package) |
+| `CHANGELOG.md` | 1, 2, 3, 4, 5 | a bullet per block under Unreleased |
 
 **What stays:**
 plain HTTP by default (`-tls off`), `-listen`'s meaning and default,
@@ -540,6 +552,82 @@ challenge-less handshake failure rather than crashing;
 the real certificate from the staging directory on the Pi with a name is the owner's day,
 and its outcome goes into the completion gate's NOTE.
 
+### Block 5: TlsDns
+
+After Block 4, whose module, cache directory, watch and notice it shares;
+before Block 3.
+
+1. `internal/certs/dns01.go`:
+   `DNS01(dir string, names []string, email, directory, hook string, log)` over
+   `<data>/tls/acme/<first name>.pem` and `.key`,
+   so that the certificate is served through the files source of Block 1:
+   the account key `<data>/tls/acme/acme_account+key` as autocert names it,
+   shared with Block 4, made when missing;
+   when the files are missing or expire within 30 days,
+   the flow of `x/crypto/acme`:
+   `AuthorizeOrder` for every name (a wildcard `*.example.net` and `example.net`
+   in one order), for each authorization the `dns-01` challenge,
+   `DNS01ChallengeRecord`,
+   the hook run as `<hook> set _acme-challenge.<name> <txt>`,
+   a wait until the system resolver returns the record (`net.LookupTXT`,
+   every 10 s, 10 minutes at most), `Accept`, `WaitAuthorization`,
+   `clear` through the hook whatever the outcome, then a CSR with every name,
+   `CreateOrderCert`, the chain and the key written atomically,
+   and the files source told to reload;
+   a failure is logged and tried again by the watch an hour later,
+   the previous certificate kept.
+   The hook gets the environment of the server without the `MASSIMO_` variables,
+   as the Windows update helper does, and a 2-minute timeout;
+   its output goes to the log.
+2. `cmd/massimo/serve.go`:
+   `-acme-dns-hook <path>` (`MASSIMO_ACME_DNS_HOOK`) with `-tls acme` selects
+   DNS-01 instead of TLS-ALPN-01, without the helper listener;
+   `-tls-names` may hold wildcards here;
+   `install -tls acme -acme-dns-hook …` sets the variable;
+   the hook file must be executable by the service user, which `install` checks.
+3. `packaging/acme-dns-hooks/infomaniak.sh`:
+   the sample hook, POSIX shell with `curl`,
+   against Infomaniak's public API with the token in `INFOMANIAK_API_TOKEN` read
+   from a file the hook names (`/etc/massimo/infomaniak.token`, mode 0600):
+   `set` finds the zone of the name, adds the TXT record, prints its id;
+   `clear` removes the records of that name and value.
+   The calls are those `certbot-dns-infomaniak` makes;
+   the script is run against a fake API in a Go test and marked untested
+   against the real one until the owner's day.
+4. The watch renews 30 days before expiry through the same flow;
+   the warning under 14 days of Block 4 covers it.
+5. Tests: the flow against a fake ACME directory over `httptest`
+   (the `x/crypto/acme` package's own test server pattern:
+   a directory, a new account, an order with a `dns-01` challenge,
+   a finalize and a certificate), with a hook script that records its
+   calls in a file and a resolver seam that answers the TXT lookup;
+   the hook's `clear` on a failed authorization;
+   the certificate served after the flow without a restart;
+   `install` refusing a hook that is not executable;
+   the Infomaniak script against a fake API with the plugin's responses.
+   No test reaches Let's Encrypt or Infomaniak.
+6. The documents: README.md "Server" (DNS-01: a name, no open port,
+   the trusted certificate on the LAN);
+   `packaging/README.md` (the hook and the sample,
+   Infomaniak's token with the Domain scope,
+   the zone must be hosted at Infomaniak's name servers; the external route:
+   `certbot certonly --authenticator dns-infomaniak` with the credentials file
+   and a deploy hook copying into `-tls files`,
+   the renewal service needing the token, and `lego --dns infomaniak`);
+   `docs/store.md` section 4's table.
+7. The CHANGELOG bullet under Added:
+   `massimo serve -tls acme -acme-dns-hook <script>` gets and renews a Let's
+   Encrypt certificate by DNS-01 through a hook that sets the TXT record,
+   wildcards included, with no open port;
+   `packaging/acme-dns-hooks/infomaniak.sh` is the hook for Infomaniak's DNS.
+
+**Verification:**
+the test gate; the fake-directory test issues a certificate with a
+wildcard and the server serves it;
+the real certificate from Let's Encrypt's staging directory through the
+owner's Infomaniak token is the owner's day, with Block 4's, and its outcome
+goes into the completion gate's NOTE.
+
 ## Proposed commit message
 
 The plan's registration, a commit of its own before the first project write:
@@ -564,8 +652,13 @@ The blocks' commits, each written at its gate:
 2. `feat(serve): a self-signed certificate made at the first start`
 3. `feat(server): the client's address behind a trusted proxy`
 4. `feat(serve): Let's Encrypt through autocert`
+5. `feat(serve): Let's Encrypt by DNS-01 through a hook`
 
 ## Change History
 
+- v1.1 (2026-11-06): Block 5 TlsDns added on the owner's instruction,
+  the `-acme-dns-hook` flow over `x/crypto/acme` with an Infomaniak sample
+  hook and the certbot and lego recipes, to run before Block 3;
+  D6, the run order and the file table updated.
 - v1.0 (2026-11-06): the first revision, from the analysis's section 9 and
   the owner's decisions D1 to D13 of the same day.
