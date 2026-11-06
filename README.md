@@ -361,11 +361,15 @@ massimo netconfig -sn <serial> -broadcast -dhcp
 ```
 
 `netconfig` reads a Cube's network configuration over UDP 23272 (`-json`
-too) and writes it: a static address with DHCP off, or DHCP on. A write
-shows the current and the new values and asks first (`-yes` skips that),
-checks that the ip and the gateway lie in the netmask's subnet, keeps the
-Cube's encryption flag as read, and re-reads the result; `-dry-run`
-prints the frame and sends nothing. A wrong configuration strands the
+too): the addresses in use, and the stored static configuration, which
+with DHCP on is only the fallback. It writes a static address with DHCP
+off, or DHCP on. A write shows the current and the new values and asks
+first (`-yes` skips that), checks that the ip and the gateway lie in the
+netmask's subnet, keeps the Cube's encryption flag as read, and re-reads
+the result after the Cube's restart (a static address applies at once
+and is followed by a restart, as the original software does; DHCP makes
+the Cube restart by itself); `-dry-run` prints the frame and sends
+nothing. A wrong configuration strands the
 Cube on an address nothing can reach. The way back is `netconfig -sn
 <serial> -broadcast -dhcp`, a broadcast that only the Cube with that
 serial takes, and after that the factory fallback 192.168.0.222/16 (a
