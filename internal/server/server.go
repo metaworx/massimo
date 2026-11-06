@@ -403,11 +403,16 @@ func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.ctx = ctx
 	s.mu.Unlock()
+	// The log's writer (log.go), before the Cubes connect, on a context
+	// of its own: it ends once the server's goroutines have, so that what
+	// they emit as they stop is written, and Run waits for it.
+	writerDone, stopWriter := make(chan struct{}), func() {}
 	if st := s.opts.Store; st != nil {
-		// The log's writer (log.go), before the Cubes connect; it writes
-		// what is pending when ctx ends, and Run waits for it.
-		s.wg.Add(1)
-		go func() { defer s.wg.Done(); st.RunEvents(ctx) }()
+		wctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		stopWriter = cancel
+		go func() { defer close(writerDone); st.RunEvents(wctx) }()
+	} else {
+		close(writerDone)
 	}
 	for _, rt := range s.runtimes() {
 		s.startRuntime(rt)
@@ -429,6 +434,8 @@ func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.mu.Unlock()
 	s.wg.Wait()
+	stopWriter()
+	<-writerDone
 	return ctx.Err()
 }
 

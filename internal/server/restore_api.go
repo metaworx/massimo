@@ -163,7 +163,19 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running")
 	}
 	s.log.Info("restore started", "cube", rt.serial, "id", run.ID, "steps", len(p.Steps), "radio_commands", v.RadioCommands, "duty_pct", v.Budget.DutyCyclePct)
-	go s.runRestore(s.runContext(), rt, run, p, commandOf(r.Context()))
+	// Counted in s.wg while Run runs, so that Run waits for the restore's
+	// restore_done; before Run (the tests), on the background context.
+	ctx := s.track()
+	tracked := ctx != nil
+	if !tracked {
+		ctx = s.runContext()
+	}
+	go func() {
+		if tracked {
+			defer s.wg.Done()
+		}
+		s.runRestore(ctx, rt, run, p, commandOf(r.Context()))
+	}()
 	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "steps": len(p.Steps)})
 	return nil
 }

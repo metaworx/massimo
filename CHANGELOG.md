@@ -17,8 +17,8 @@ the next minor, a fix counts the suffix up.
 ### Changed
 
 - `GET …/log` pages back with `before` (an event's `id` or a time) and
-  filters by `kind` and `device`, from the store instead of the last 500
-  events in memory (`docs/api-v1.md`).
+  filters by `kind` and `device`, from the store; a `limit` above 1000
+  answers 400, and `state` events lack `received` (`docs/api-v1.md`).
 
 ## [0.9.0-alpha.1] - 2026-11-06
 

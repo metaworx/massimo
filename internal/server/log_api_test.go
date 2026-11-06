@@ -200,8 +200,53 @@ func TestLogSurvivesRestart(t *testing.T) {
 	}
 }
 
+// What a goroutine of the server emits as Run ends, as a restore's
+// restore_done does, is in the store once Run has returned: the writer
+// stops after the server's goroutines, not with them.
+func TestLogLastEvents(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fc.Close()
+	st := testStore(t, "")
+	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0537249", Configured: true, Address: addr, Source: store.SourceEnv})
+	cfg, _ := CubeFromRow(row)
+	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	waitConnected(t, ts, "KEQ0537249")
+	tctx := s.track()
+	if tctx == nil {
+		t.Fatal("Run tracks nothing")
+	}
+	go func() {
+		defer s.wg.Done()
+		<-tctx.Done()
+		time.Sleep(50 * time.Millisecond)
+		for _, rt := range s.runtimes() {
+			rt.emit(event{Kind: "restore_done", Time: time.Now()})
+		}
+	}()
+	cancel()
+	<-done
+	page, err := st.Events(context.Background(), store.EventQuery{CubeID: row.ID, Kind: "restore_done"})
+	if err != nil || len(page) != 1 {
+		t.Fatalf("the event emitted as Run ended: %d, %v", len(page), err)
+	}
+}
+
 // A Cube without a row keeps its log in the ring: no ids, the filters
-// applied in memory, an id bound empty.
+// applied in memory, an id bound empty, a device and a time as on the
+// store.
 func TestLogWithoutStore(t *testing.T) {
 	_, ts, _ := start(t, "")
 	var all []event
@@ -220,6 +265,26 @@ func TestLogWithoutStore(t *testing.T) {
 	}
 	if _, page := logOf(t, ts, "?before=5"); len(page) != 0 {
 		t.Fatalf("an id bound on the ring: %d", len(page))
+	}
+	rf := states[0].Device
+	_, mine := logOf(t, ts, "?limit=1000&device="+rf)
+	if len(mine) == 0 {
+		t.Fatalf("device=%s: nothing", rf)
+	}
+	for _, e := range mine {
+		if e.Device != rf {
+			t.Fatalf("device=%s: %+v", rf, e)
+		}
+	}
+	last := all[len(all)-1].Time
+	_, older := logOf(t, ts, "?limit=1000&before="+url.QueryEscape(last.Format(time.RFC3339Nano)))
+	for _, e := range older {
+		if !e.Time.Before(last) {
+			t.Fatalf("before=%v on the ring: %+v", last, e)
+		}
+	}
+	if len(older) == 0 && all[0].Time.Before(last) {
+		t.Fatalf("before=%v on the ring: nothing", last)
 	}
 	if code, _ := logOf(t, ts, "?limit=1001"); code != http.StatusBadRequest {
 		t.Fatalf("limit=1001: %d", code)
