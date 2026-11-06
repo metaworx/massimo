@@ -78,6 +78,10 @@ docs/review-2026-11-05.md has the coding standard they came from.
    the log of the update to v0.7.0-alpha.1 (`store created`,
    `cube added from the settings file`), `massimo store info`,
    and Settings → Cubes.
+   On jaguar's Windows service it went as designed on 2026-11-06:
+   the file created and migrated to version 1, the node key written,
+   the Cube seeded from the env file (`source: env`), the node id in the API,
+   `store info` and `config` reading the file beside the running service.
 2. Pairing (docs/api-v1.md, "Pairing"): the six steps of pull request #10,
    the assumptions marked unverified in docs/portal-protocol.md.
 3. Write test step 1 repeated,
