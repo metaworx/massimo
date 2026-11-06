@@ -93,7 +93,8 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     pairing.locator(".pair-open").click()
     pairing.locator("input[name=seconds]").fill("5")
     pairing.locator(".pairing-form button[type=submit]").click()
-    assert LEFT[case.lang] in pairing.locator(".pairing-countdown").inner_text(), "the countdown"
+    countdown = "(document.querySelector(\"%s .pairing-countdown\") || {}).textContent || ''" % PANEL
+    assert wait_until(page, "(%s).includes(%s)" % (countdown, json.dumps(LEFT[case.lang])), 5), "the countdown"
     row = pairing.locator(".pair-device[data-rf='%s']" % DEV)
     row.wait_for(timeout=10000)
     assert "TEQ0000001" in row.inner_text(), "the device's serial"
