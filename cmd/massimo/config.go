@@ -251,6 +251,19 @@ func printTLS(w io.Writer) {
 func printACME(w io.Writer) {
 	dir, _ := certs.ACMEPaths(dataDir(), "")
 	names := certs.ParseNames(os.Getenv(tlsNamesVar))
+	if hook := os.Getenv(acmeDNSHookVar); hook != "" {
+		fmt.Fprintf(w, "source:        acme by DNS-01 (%s; names %s; directory %s; hook %s)\n", dir, orNone(strings.Join(names, ", ")), orNone(os.Getenv(acmeDirectoryVar)), hook)
+		if len(names) == 0 {
+			return
+		}
+		certPath, keyPath := certs.DNS01Paths(dataDir(), names[0])
+		if _, err := os.Stat(certPath); err != nil {
+			fmt.Fprintf(w, "               no certificate yet (serve orders one at its start)\n")
+			return
+		}
+		printCertificate(w, "acme", certPath, keyPath)
+		return
+	}
 	fmt.Fprintf(w, "source:        acme (%s; names %s; directory %s; http %s)\n", dir, orNone(strings.Join(names, ", ")), orNone(os.Getenv(acmeDirectoryVar)), orNone(os.Getenv(tlsHTTPVar)))
 	for _, n := range names {
 		st, err := certs.LoadACMECache(dataDir(), n)

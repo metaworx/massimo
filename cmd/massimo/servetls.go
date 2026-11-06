@@ -33,6 +33,9 @@ const (
 	acmeEmailVar     = "MASSIMO_ACME_EMAIL"
 	acmeDirectoryVar = "MASSIMO_ACME_DIRECTORY"
 	tlsHTTPVar       = "MASSIMO_TLS_HTTP"
+	// -acme-dns-hook: the DNS-01 challenge through a hook instead of
+	// TLS-ALPN-01 and HTTP-01; no port, wildcards allowed.
+	acmeDNSHookVar = "MASSIMO_ACME_DNS_HOOK"
 	// certWatch is how often a source checks its certificate: a renewal
 	// 30 days before the end needs no finer clock.
 	certWatch = time.Hour
@@ -61,6 +64,7 @@ type tlsOptions struct {
 	dataDir                 string // where the self-signed pair and the ACME cache live
 	email, directory        string // -acme-email, -acme-directory
 	httpAddr                string // -tls-http
+	hook                    string // -acme-dns-hook
 }
 
 // tlsSource is the certificate source -tls names, nil for off.
@@ -68,6 +72,12 @@ func tlsSource(o tlsOptions, log *slog.Logger) (certs.Source, error) {
 	m := tlsMode(o.mode, o.certPath, o.keyPath)
 	if o.httpAddr != "" && m != "acme" {
 		return nil, errors.New("serve: -tls-http goes with -tls acme")
+	}
+	if o.hook != "" && m != "acme" {
+		return nil, errors.New("serve: -acme-dns-hook goes with -tls acme")
+	}
+	if o.hook != "" && o.httpAddr != "" {
+		return nil, errors.New("serve: -tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
 	}
 	switch m {
 	case "off":
@@ -88,6 +98,13 @@ func tlsSource(o tlsOptions, log *slog.Logger) (certs.Source, error) {
 		}
 		return src, nil
 	case "acme":
+		if o.hook != "" {
+			src, err := certs.OpenDNS01(o.dataDir, certs.ParseNames(o.names), o.email, o.directory, o.hook, log)
+			if err != nil {
+				return nil, fmt.Errorf("serve: %w", err)
+			}
+			return src, nil
+		}
 		src, err := certs.OpenACME(o.dataDir, certs.ParseNames(o.names), o.email, o.directory, log)
 		if err != nil {
 			return nil, fmt.Errorf("serve: %w", err)

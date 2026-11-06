@@ -74,7 +74,14 @@ func TestTLSSource(t *testing.T) {
 	if err != nil || acme.Status().Source != "acme" || !strings.Contains(acme.Status().Warning, "no certificate yet") {
 		t.Fatalf("acme: %v %+v", err, acme)
 	}
-	for _, c := range []tlsOptions{{mode: "files"}, {mode: "files", certPath: certPath}, {certPath: certPath}, {mode: "acme"}, {mode: "acme", names: "192.0.2.10"}, {mode: "yes"}, {mode: "files", certPath: certPath, keyPath: filepath.Join(t.TempDir(), "none.pem")}, {mode: "files", certPath: certPath, keyPath: keyPath, httpAddr: ":0"}} {
+	hook := filepath.Join(t.TempDir(), "hook.sh")
+	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	dns, err := tlsSource(tlsOptions{mode: "acme", names: "*.example.net,example.net", dataDir: t.TempDir(), directory: "http://127.0.0.1:1/directory", hook: hook}, quietLog())
+	if err != nil || dns.Status().Source != "acme" || !strings.Contains(dns.Status().Warning, "DNS-01") {
+		t.Fatalf("acme by DNS-01: %v %+v", err, dns)
+	}
+	for _, c := range []tlsOptions{{mode: "files"}, {mode: "files", certPath: certPath}, {certPath: certPath}, {mode: "acme"}, {mode: "acme", names: "192.0.2.10"}, {mode: "yes"}, {mode: "files", certPath: certPath, keyPath: filepath.Join(t.TempDir(), "none.pem")}, {mode: "files", certPath: certPath, keyPath: keyPath, httpAddr: ":0"},
+		{mode: "files", certPath: certPath, keyPath: keyPath, hook: hook}, {mode: "acme", names: "a.example.net", hook: hook, httpAddr: ":80"}, {mode: "acme", names: "*.example.net", dataDir: t.TempDir()}} {
 		if _, err := tlsSource(c, quietLog()); err == nil {
 			t.Errorf("%+v accepted", c)
 		}
@@ -148,7 +155,7 @@ func TestServeTLS(t *testing.T) {
 }
 
 func TestServeTLSVariablesAreKnown(t *testing.T) {
-	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar, acmeEmailVar, acmeDirectoryVar, tlsHTTPVar} {
+	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar, acmeEmailVar, acmeDirectoryVar, tlsHTTPVar, acmeDNSHookVar} {
 		if !env.Known(k) {
 			t.Errorf("%s unknown to massimo config", k)
 		}

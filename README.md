@@ -472,6 +472,13 @@ the account key and the certificates live in the data directory's `tls/acme/`.
 Let's Encrypt allows five failed orders an hour per name,
 so experiments use its staging directory
 (`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`).
+`-acme-dns-hook <script>` takes the DNS-01 challenge instead:
+the server asks the script to set and clear a TXT record under `_acme-challenge.<name>`,
+so no port has to be open, the name may point at the box's LAN address,
+and wildcards (`-tls-names '*.example.net,example.net'`) work;
+`packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone at Infomaniak,
+and any other provider's API fits in a dozen lines (see
+[packaging/README.md](packaging/README.md)).
 A certificate that ends within two weeks, or an order that has not succeeded,
 is a warning in the log, in `/healthz` and under the page's header.
 With TLS the server tells browsers to use `https://` for its host for a year

@@ -368,11 +368,30 @@ func TestInstallTLSFiles(t *testing.T) {
 		t.Fatal("capability lost")
 	}
 
-	// Refused: a missing file, -tls off with files, acme without names.
-	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed", TLSCert: cert, TLSKey: key}, {TLS: "acme"}, {TLS: "acme", TLSNames: "a.example.net", TLSHTTP: "80"}, {TLS: "yes"}} {
+	// -tls acme with a DNS-01 hook: the variable set, the hook checked.
+	hook := filepath.Join(src, "hook.sh")
+	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	if err := Install(Options{Root: root, Binary: bin, TLS: "acme", TLSNames: "*.example.net,example.net", ACMEDNSHook: hook, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if env = read(t, filepath.Join(root, EnvPath)); strings.Count(env, "MASSIMO_ACME_DNS_HOOK="+hook+"\n") != 1 || !strings.Contains(env, "MASSIMO_TLS_NAMES=*.example.net,example.net\n") {
+		t.Fatalf("settings after -acme-dns-hook:\n%s", env)
+	}
+	noExec := filepath.Join(src, "noexec.sh")
+	os.WriteFile(noExec, []byte("#!/bin/sh\n"), 0o644)
+
+	// Refused: a missing file, -tls off with files, acme without names, a
+	// hook that is not there, a hook with the port-80 helper.
+	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed", TLSCert: cert, TLSKey: key}, {TLS: "acme"}, {TLS: "acme", TLSNames: "a.example.net", TLSHTTP: "80"},
+		{TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: filepath.Join(src, "none.sh")}, {TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: hook, TLSHTTP: ":80"}, {TLS: "yes"}} {
 		o.Root, o.Binary, o.Out, o.Run = root, bin, &bytes.Buffer{}, rec.run
 		if err := Install(o); err == nil {
 			t.Errorf("%+v accepted", o)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		if err := Install(Options{Root: root, Binary: bin, TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: noExec, Out: &bytes.Buffer{}, Run: rec.run}); err == nil {
+			t.Error("a hook that is not executable accepted")
 		}
 	}
 

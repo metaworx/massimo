@@ -66,6 +66,12 @@ func TestTLSCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "tls:           acme") || !strings.Contains(out.String(), "no certificate yet") {
 		t.Fatalf("config acme: %q", out.String())
 	}
+	t.Setenv(acmeDNSHookVar, "/usr/local/bin/acme-dns-hook")
+	out.Reset()
+	if err := tlsCommand([]string{"show"}, &out); err != nil || !strings.Contains(out.String(), "acme by DNS-01") || !strings.Contains(out.String(), "no certificate yet") {
+		t.Fatalf("show acme by DNS-01: %v %q", err, out.String())
+	}
+	t.Setenv(acmeDNSHookVar, "")
 	t.Setenv(tlsVar, "self-signed")
 	t.Setenv(tlsNamesVar, "")
 	for _, bad := range [][]string{nil, {"what"}, {"self-signed", "-x"}} {

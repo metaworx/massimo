@@ -25,13 +25,14 @@ func runInstall(args []string) error {
 	tlsNames := fs.String("tls-names", "", "with -tls self-signed, names and addresses the certificate holds besides the box's own; with -tls acme, the DNS name the certificate is for; comma-separated")
 	acmeEmail := fs.String("acme-email", "", "with -tls acme, the account's contact address")
 	tlsHTTP := fs.String("tls-http", "", "with -tls acme, also listen on this plain address, such as :80, for the HTTP-01 challenge and the redirect to https://")
+	acmeDNSHook := fs.String("acme-dns-hook", "", "with -tls acme, get the certificate by the DNS-01 challenge through this executable (packaging/acme-dns-hooks/), readable and executable by the service user; no port, wildcards allowed")
 	dryRun := fs.Bool("dry-run", false, "only show what would be done")
 	remove := fs.Bool("remove", false, "stop and remove the service and the binary")
 	purge := fs.Bool("purge", false, "with -remove: also remove the settings and the logs (Linux and macOS: the state and the user too)")
 	root := fs.String("root", "", "Linux and macOS: install below this directory instead of / and run no commands (for images and tests)")
 	fs.Usage = func() {
 		win := install.WindowsPaths("", "")
-		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>] | -tls acme -tls-names <name> [-acme-email <addr>] [-tls-http :80]] [-no-update-helper] [-no-start] [-dry-run]
+		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>] | -tls acme -tls-names <name> [-acme-email <addr>] [-tls-http :80 | -acme-dns-hook <script>]] [-no-update-helper] [-no-start] [-dry-run]
        massimo install -remove [-purge]
 
 Install this binary and massimo serve as a service, or update both when
@@ -44,7 +45,9 @@ at its start, which browsers warn about once per device (compare the
 fingerprint of the log, or of massimo tls show); -tls acme has it get
 one from Let's Encrypt for a DNS name that resolves to this box, with
 the router forwarding port 443 to the service (-tls-http :80 adds the
-HTTP-01 challenge on port 80); -tls off switches TLS off again. Run the service once with -hsts 0 over TLS first, or browsers
+HTTP-01 challenge on port 80; -acme-dns-hook <script> takes the DNS-01
+challenge instead, with no port and wildcards); -tls off switches TLS
+off again. Run the service once with -hsts 0 over TLS first, or browsers
 refuse http:// for a year.
 
 - Linux with systemd: the binary as %s, the user massimo, %s,
@@ -72,7 +75,7 @@ See packaging/README.md.
 	if *purge && !*remove {
 		return errors.New("-purge goes with -remove")
 	}
-	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, TLSHTTP: *tlsHTTP}
+	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook}
 	switch runtime.GOOS {
 	case "linux":
 		if *remove {
