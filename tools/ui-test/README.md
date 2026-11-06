@@ -140,7 +140,13 @@ what a test stores in the browser goes with its context.
   Since the four cases share the server,
   the page fixture removes the token's user's preferences before every page.
 - `test_log.py`:
-  the log opens, and a state event with changes shows what changed.
+  the log opens, and a state event with changes shows what changed;
+  `state` chosen as the kind shows only state events,
+  the seven devices' at least, a device chosen shows only its events,
+  all again shows the lines of before, and the fake Cube's log is one page,
+  so Older says there is nothing older; with the server's answers stubbed,
+  Older puts a page above the lines, oldest first,
+  the view staying where it was, until a short page ends the paging.
 - `test_appearance.py`, Settings → Appearance:
   a scheme changes the computed `--bg`, the dark mode sets `data-theme`,
   the editor applies a colour live, grades the contrast
