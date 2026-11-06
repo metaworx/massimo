@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -48,7 +49,7 @@ func TestUIServed(t *testing.T) {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
 	}
-	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/other"} {
+	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/other"} {
 		if code, _, _ := get(p); code != 404 {
 			t.Fatalf("GET %s: %d, want 404", p, code)
 		}
@@ -110,6 +111,117 @@ func TestUIServed(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 401 {
 		t.Fatalf("events?token=wrong: %d, want 401", resp.StatusCode)
+	}
+}
+
+// assembledPage is the page as the server serves it at /.
+func assembledPage(t *testing.T) []byte {
+	t.Helper()
+	sub, err := fs.Sub(uiFiles, "ui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := uiPage(sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return page
+}
+
+// The page is assembled from index.html and the partials: every file of
+// ui/partials/ is listed in uiPartials exactly once and every listed one
+// exists, no marker is left, the page is served at / as assembled, and
+// every id the scripts look up ($("…")) and every template they clone
+// (fromTemplate("…"), fragmentFromTemplate("…")) is in it.
+func TestUIPage(t *testing.T) {
+	files, err := fs.Glob(uiFiles, "ui/partials/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]int{}
+	for _, p := range uiPartials {
+		for _, f := range p.files {
+			listed[f]++
+		}
+	}
+	for _, f := range files {
+		name := strings.TrimPrefix(f, "ui/partials/")
+		if listed[name] != 1 {
+			t.Errorf("ui/partials/%s is listed %d times in uiPartials, want 1", name, listed[name])
+		}
+		delete(listed, name)
+	}
+	for name := range listed {
+		t.Errorf("uiPartials lists %s, which is not in ui/partials/", name)
+	}
+	page := string(assembledPage(t))
+	if strings.Contains(page, "<!-- partials:") {
+		t.Errorf("the assembled page still has a marker")
+	}
+	if n := strings.Count(page, "<html"); n != 1 || !strings.HasPrefix(page, "<!doctype html>") || !strings.HasSuffix(page, "</html>\n") {
+		t.Errorf("the assembled page is not one document (%d <html>)", n)
+	}
+	ids := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\sid="([^"]+)"`).FindAllStringSubmatch(page, -1) {
+		if ids[m[1]] {
+			t.Errorf("the page has id %q twice", m[1])
+		}
+		ids[m[1]] = true
+	}
+	lookup := regexp.MustCompile(`(?:\$|fromTemplate|fragmentFromTemplate)\("([^"]+)"\)`)
+	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
+	n := 0
+	for _, f := range scripts {
+		b, err := uiFiles.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range lookup.FindAllStringSubmatch(string(b), -1) {
+			n++
+			if !ids[m[1]] {
+				t.Errorf("%s looks up %q, which is not an id of the page", f, m[1])
+			}
+		}
+	}
+	if n < 50 {
+		t.Fatalf("only %d lookups found in the scripts", n)
+	}
+
+	_, ts, _ := start(t, "")
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != page {
+		t.Errorf("GET / is not the assembled page (%d bytes, want %d)", len(body), len(page))
+	}
+}
+
+// uiPage replaces each marker with its partials, indented as the marker
+// is, and refuses a skeleton without a marker or with one twice.
+func TestUIPageMarkers(t *testing.T) {
+	part := "<p>\n  x\n</p>\n"
+	files := fstest.MapFS{"partials/" + uiPartials[0].files[0]: {Data: []byte(part)}}
+	for _, p := range uiPartials {
+		for _, f := range p.files {
+			if _, ok := files["partials/"+f]; !ok {
+				files["partials/"+f] = &fstest.MapFile{}
+			}
+		}
+	}
+	skeleton := "<body>\n  <!-- partials: settings -->\n<!-- partials: templates -->\n</body>\n"
+	files["index.html"] = &fstest.MapFile{Data: []byte(skeleton)}
+	got, err := uiPage(files)
+	if want := "<body>\n  <p>\n    x\n  </p>\n</body>\n"; err != nil || string(got) != want {
+		t.Fatalf("uiPage = %q, %v, want %q", got, err, want)
+	}
+	for _, bad := range []string{"<body>\n<!-- partials: templates -->\n", skeleton + "<!-- partials: settings -->\n", "<p><!-- partials: settings --><!-- partials: templates -->\n"} {
+		files["index.html"] = &fstest.MapFile{Data: []byte(bad)}
+		if _, err := uiPage(files); err == nil {
+			t.Errorf("uiPage(%q): no error", bad)
+		}
 	}
 }
 
@@ -191,20 +303,17 @@ func TestUITranslations(t *testing.T) {
 	// The keys the markup asks for: data-i18n, data-i18n-attr pairs, and
 	// the help slots (data-help is the key of help.<key>).
 	used := map[string]string{} // key: where
-	html, err := uiFiles.ReadFile("ui/index.html")
-	if err != nil {
-		t.Fatal(err)
-	}
+	html := assembledPage(t)
 	for _, m := range regexp.MustCompile(`data-(i18n|i18n-attr|help|help-label)="([^"]*)"`).FindAllStringSubmatch(string(html), -1) {
 		switch m[1] {
 		case "i18n", "help-label":
-			used[m[2]] = "index.html"
+			used[m[2]] = "the page"
 		case "help":
-			used["help."+m[2]] = "index.html"
+			used["help."+m[2]] = "the page"
 		case "i18n-attr":
 			for _, pair := range strings.Fields(m[2]) {
 				if i := strings.Index(pair, ":"); i > 0 {
-					used[pair[i+1:]] = "index.html"
+					used[pair[i+1:]] = "the page"
 				}
 			}
 		}
