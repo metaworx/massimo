@@ -633,10 +633,11 @@ type cubeView struct {
 	// The configuration PUT /api/v1/cubes/{sn} changes: whether the
 	// address follows discovery, the proxy listener's address and the
 	// serial of its discovery replies, and the hidden radio addresses.
-	FollowDiscovery bool     `json:"follow_discovery"`
-	ProxyAddress    string   `json:"proxy_address,omitempty"`
-	ProxySerial     string   `json:"proxy_serial,omitempty"`
-	Hidden          []string `json:"hidden"`
+	ConfiguredAddress string   `json:"configured_address"` // "" follows discovery; Address is where it connects now
+	FollowDiscovery   bool     `json:"follow_discovery"`
+	ProxyAddress      string   `json:"proxy_address,omitempty"`
+	ProxySerial       string   `json:"proxy_serial,omitempty"`
+	Hidden            []string `json:"hidden"`
 	// ProxyListening lists the addresses the Cube's proxy listens on now.
 	ProxyListening []string `json:"proxy_listening,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
@@ -675,7 +676,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
 	cfg := rt.config()
-	v := cubeView{Serial: rt.serial, Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
+	v := cubeView{Serial: rt.serial, Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.serial)
 	v.ProxyListening = s.proxyListening(rt)

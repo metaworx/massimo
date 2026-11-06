@@ -248,7 +248,8 @@ const envTemplate = `# Settings of massimo serve, read by the service with -env 
 # at its first start it adds every Cube of this file, and from then on
 # the store wins. _ADDRESS, _NAME, _PROXY, _PROXY_SERIAL and _IGNORE here
 # only add a Cube the store does not know yet; a line that differs from
-# the store is logged at the start. _KEY and _IV are read from here only.
+# the store is logged at the start. Change a known Cube in the web UI,
+# Settings → Cubes. _KEY and _IV are read from here only.
 #
 # Needed to start updates from the web UI, and recommended anyway:
 # MASSIMO_API_TOKEN=...

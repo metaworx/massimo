@@ -270,6 +270,17 @@ func TestServeStoreWins(t *testing.T) {
 	}
 }
 
+// Without any Cube configured serve starts anyway, with a warning: the
+// web UI can add one.
+func TestServeStartsWithoutCubes(t *testing.T) {
+	clearCubeEnv(t)
+	var logged bytes.Buffer
+	su, err := serveSetup(context.Background(), testStore(t, ""), "", nil, "", slog.New(slog.NewTextHandler(&logged, nil)))
+	if err != nil || len(su.cubes) != 0 || len(su.listeners) != 0 || !strings.Contains(logged.String(), "no cube configured yet") {
+		t.Fatalf("%+v %v %s", su, err, logged.String())
+	}
+}
+
 // dataDir follows -data, then MASSIMO_DATA, then the current directory.
 func TestDataDir(t *testing.T) {
 	t.Setenv(env.DataVar, "")

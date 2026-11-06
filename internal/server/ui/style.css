@@ -257,6 +257,33 @@ body.expert #clock-plain { display: none; }
 .settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
 .settings .update p { margin: 4px 0; overflow-wrap: anywhere; }
 
+/* Settings → Cubes (cubes.js) */
+.settings .cubes-settings { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
+.cubes-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.cubes-head .help-text { flex-basis: 100%; }
+.cube-panel { margin-bottom: 8px; padding: 8px 12px; }
+.cube-panel summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; overflow-wrap: anywhere; }
+.cube-panel[open] summary { margin-bottom: 10px; }
+.cube-panel-name { font-weight: 600; }
+.cube-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
+.cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.cube-form input[type="text"] { min-width: 0; max-width: 100%; }
+.cube-listening { margin: -6px 0 12px; overflow-wrap: anywhere; }
+.cube-hidden { align-items: flex-start; }
+.cube-hidden-title { flex-basis: 100%; }
+.cube-hidden-list { list-style: none; margin: 0; padding: 0; flex-basis: 100%; }
+.cube-hidden-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
+.cube-hide-add { flex-wrap: wrap; }
+.cube-hide-add input { width: 9em; }
+.cube-found-title { margin: 12px 0 4px; }
+.cube-found-list { list-style: none; margin: 0; padding: 0; }
+.cube-found-list li, .cube-found li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 2px 0; }
+.cube-found-list .add-cube, .cube-found .add-cube { margin-left: auto; }
+.cubes-msg { margin: 4px 0 0; overflow-wrap: anywhere; }
+.cubes-msg.ok { color: var(--ok); }
+.cubes-msg.bad { color: var(--bad); }
+
 /* appearance: mode and colour scheme (theme.js), the scheme editor */
 .settings .appearance { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
 .settings .appearance > .muted { display: block; margin-bottom: 8px; }

@@ -19,7 +19,10 @@ shows "searching" until the answer is in, then lists the found Cube as
 not selectable with the env lines to add, and the log has its
 cube_found; a cube_found event adds another one live, and a refused
 search (stubbed 503) shows the server's message. A state event with
-changes shows in the log as what changed. In Settings → Appearance a
+changes shows in the log as what changed. In Settings → Cubes a name
+is saved and taken back from the settings file, hidden devices take
+their room's tile away and back, and a found Cube is added and removed.
+In Settings → Appearance a
 scheme changes the computed --bg, the dark mode sets data-theme, the
 editor applies a colour live and keeps a saved scheme in the browser,
 Export downloads the scheme document (a blob: link under the page's
@@ -172,6 +175,68 @@ def discover(page, label, lang):
     check(wait_until(page, "document.getElementById('cube-search').classList.contains('bad')", 5)
           and "no discovery socket" in page.locator("#cube-search").inner_text(), f"{label}: a refused search shows the server's message")
     page.unroute("**/api/v1/cubes/discover")
+
+
+def cubes(page, label, lang):
+    """Settings → Cubes: a new name is saved and shown in the header; the
+    settings file's differing name is offered and taken back; hiding the
+    devices of a room makes its tile go, showing them again brings it
+    back; a Cube found on the LAN is added and removed again, and is then
+    listed as found. Everything is put back as it was, since the next run
+    uses the same server."""
+    width = page.viewport_size["width"]
+    page.locator("#view-settings").click()
+    panel = page.locator(".cube-panel[data-serial='KEQ0537249']")
+    check(panel.count() == 1, f"{label}: the Cube in Settings → Cubes")
+    panel.locator("summary").click()
+    form = panel.locator("form")
+    check(form.is_visible(), f"{label}: the Cube's panel opens")
+    form.locator("input[name=name]").fill("Renamed")
+    form.locator("button[type=submit]").click()
+    check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.name === 'Renamed')", 5), f"{label}: the new name is saved")
+    check("Renamed" in page.locator("#cube-select option[value='KEQ0537249']").inner_text(), f"{label}: the header shows the new name")
+    take = panel.locator(".take-file[data-field=name]")
+    check(take.count() == 1 and "MASSIMO_CUBE_KEQ0537249_NAME" in panel.locator(".cube-differs").inner_text(),
+          f"{label}: the settings file's name is offered")
+    take.click()
+    check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.name === 'Fake Cube')", 5), f"{label}: the file's value taken")
+    check(panel.locator(".cube-differs").count() == 0, f"{label}: no difference left")
+    check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll with the Cube's panel")
+
+    room = page.evaluate("(() => { const r = state.rooms[state.rooms.length - 1];"
+                         " return { name: r.name, rfs: r.devices.map((d) => d.rf_address) }; })()")
+    for rf in room["rfs"]:
+        form.locator("input[name=hide]").fill(rf)
+        form.locator(".cube-hide-add button").click()
+    check(form.locator(".cube-hidden-list li").count() == len(room["rfs"]), f"{label}: devices listed to hide")
+    form.locator("button[type=submit]").click()
+    gone = "!state.rooms.some((r) => r.name === %s)" % json.dumps(room["name"])
+    check(wait_until(page, gone, 5), f"{label}: hiding the devices removes their room")
+    page.locator("#view-tiles").click()
+    check(page.evaluate("![...document.querySelectorAll('.room .room-name')].some((e) => e.textContent.trim() === %s)" % json.dumps(room["name"])),
+          f"{label}: the room's tile is gone")
+    page.locator("#view-settings").click()
+    for _ in room["rfs"]:
+        form.locator(".cube-hidden-list button").first.click()
+    form.locator("button[type=submit]").click()
+    check(wait_until(page, "!(" + gone + ")", 5), f"{label}: showing them again brings the room back")
+    check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.hidden.length === 0)", 5), f"{label}: nothing hidden any more")
+
+    found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
+    if found.count() == 0:
+        print(f"skip  {label}: no found Cube to add (discovery did not answer)")
+    else:
+        found.locator("button").click()
+        check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), f"{label}: Add serves the found Cube")
+        check(page.evaluate("state.serial") == "KEQ0537249", f"{label}: the selected Cube stays")
+        other = page.locator(".cube-panel[data-serial='KEQ0000000']")
+        other.locator("summary").click()
+        page.once("dialog", lambda d: d.accept())
+        other.locator(".remove-cube").click()
+        check(wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5),
+              f"{label}: Remove lists it as found again")
+    check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll in Settings → Cubes")
+    page.locator("#view-tiles").click()
 
 
 def log_changes(page, label, lang):
@@ -367,6 +432,7 @@ with sync_playwright() as pw, tempfile.TemporaryDirectory() as tmpdir:
                 stream(page, label, streams, refused)
                 ages(page, label, lang)
                 discover(page, label, lang)
+                cubes(page, label, lang)
                 log_changes(page, label, lang)
                 appearance(page, label, lang, tmp)
             except Exception as e:  # a timeout or a missing element

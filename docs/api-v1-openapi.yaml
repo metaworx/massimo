@@ -1110,6 +1110,7 @@ components:
           type: array
           description: The settings file's lines for this Cube whose values differ from the store's, which wins
           items: {$ref: "#/components/schemas/FileDifference"}
+        configured_address: {type: string, description: "The stored address; empty: from discovery (address is where it connects now)"}
         follow_discovery: {type: boolean}
         proxy_address: {type: string, description: "The configured proxy address; empty: the default"}
         proxy_serial: {type: string}

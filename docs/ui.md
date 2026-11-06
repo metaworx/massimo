@@ -128,6 +128,27 @@ server keeps its log.
   Polish are machine-translated and not yet reviewed by a native
   speaker; a note under the choice says so, in the language and in
   English.
+- **Cubes**: the Cubes the server serves, kept in its store, each in a
+  panel that opens with a click: its connection, where its settings
+  came from (the settings file, changed here, or for this run only),
+  and the fields **Name**, **Address** (empty: the address the Cube
+  answers discovery from, shown in grey), **Follow the address the Cube
+  answers discovery from**, **Proxy address** (the address of this
+  server other programs connect to for this Cube; empty: :62910 when it
+  is the only Cube) and **Serial in discovery replies**. **Hidden
+  devices** lists the devices hidden besides those of room 255, each
+  with **Show again**; **Hide** takes a radio address, with the Cube's
+  devices to choose from. **Save** sends the changes, which apply at
+  once: a hidden device leaves the tiles, the API and the original
+  software, and a room that holds only hidden devices goes with it.
+  When a line of the server's settings file says something else than
+  the panel, a notice names the line and **Take the file's value**
+  takes it. **Remove** stops serving the Cube; it keeps its settings
+  and history in the store and is listed under **Found on the LAN**
+  once discovery sees it, with **Add**, which serves a found Cube at
+  once (also in the list of found Cubes under the header). A Cube
+  served for this run only (`serve -addr` or `-sn`) cannot be changed
+  here.
 - **Appearance**: **Mode** is light, dark, or as the system, which
   follows the device's setting and changes with it. **Colour scheme**
   picks the colours: the built-in Massimo (the default), High contrast
@@ -153,4 +174,5 @@ server keeps its log.
   While the helper works, **Check for updates** and **Update** are greyed
   out, also after a reload of the page, until it reports that it is done.
 
-The settings are kept in the browser, per browser.
+The settings are kept in the browser, per browser, except the Cubes,
+which are the server's.

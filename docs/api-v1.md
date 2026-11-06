@@ -252,6 +252,8 @@ object names it (`name`, `address`, `proxy_address`, `proxy_serial`,
 absent when the file agrees or has no lines for the Cube.
 
 The configuration the routes below change is in the object too:
+`configured_address` (the stored address; empty when the Cube follows
+discovery, while `address` is where it connects now),
 `follow_discovery` (the address follows the Cube's discovery answers;
 always true without an address), `proxy_address` and `proxy_serial`
 as stored (empty: the default), `proxy_listening` (the addresses its

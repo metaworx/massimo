@@ -104,6 +104,14 @@
         <select id="lang-select" class="setting-control"></select>
         <p id="lang-note" class="muted small lang-note hidden"></p>
       </div>
+      <div class="cubes-settings" aria-live="polite">
+        <div class="cubes-head">
+          <span class="muted" data-i18n="cubes.title">Cubes</span>
+          <span data-help="cubes" data-help-label="cubes.title"></span>
+        </div>
+        <div id="cubes-list"></div>
+        <p id="cubes-msg" class="small cubes-msg hidden" role="status"></p>
+      </div>
       <div class="appearance">
         <span class="muted" data-i18n="appearance.title">Appearance</span>
         <div class="setting">
@@ -317,6 +325,7 @@
 <script src="/ui/config.js"></script>
 <script src="/ui/log.js"></script>
 <script src="/ui/update.js"></script>
+<script src="/ui/cubes.js"></script>
 <script src="/ui/theme.js"></script>
 </body>
 </html>
