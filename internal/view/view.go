@@ -11,6 +11,7 @@ package view
 
 import (
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -167,7 +168,26 @@ type Device struct {
 // temperature only occasionally, but their valve or temperature changes
 // several times a day while heating; outside the heating season they
 // may well be quiet for longer, so stale is a hint, not a fault.
+// It is the default; serve takes the store's stale_after through
+// SetStaleAfter.
 const StaleAfter = 24 * time.Hour
+
+// staleAfter is the threshold in effect, in nanoseconds.
+var staleAfter atomic.Int64
+
+func init() { staleAfter.Store(int64(StaleAfter)) }
+
+// SetStaleAfter sets the stale threshold in effect; 0 or less goes back
+// to StaleAfter.
+func SetStaleAfter(d time.Duration) {
+	if d <= 0 {
+		d = StaleAfter
+	}
+	staleAfter.Store(int64(d))
+}
+
+// StaleAfterNow returns the stale threshold in effect.
+func StaleAfterNow() time.Duration { return time.Duration(staleAfter.Load()) }
 
 // now is the clock of the stale rule, replaced in tests.
 var now = time.Now
@@ -203,7 +223,7 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress) Device {
 			d.Received = t.Fields
 		}
 		thermostat := d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat
-		d.Stale = thermostat && now().Sub(changed) > StaleAfter
+		d.Stale = thermostat && now().Sub(changed) > StaleAfterNow()
 	}
 	return d
 }
