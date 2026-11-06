@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -190,14 +191,80 @@ func tokenMatches(want, got string) bool {
 	return got != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
 }
 
-// clientIP is the address a request came from, without the port. Headers
-// such as X-Forwarded-For are not trusted: anyone can set them.
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+// clientIP is the address a request came from, without the port: the
+// TCP peer's, or, when the peer is one of Options.TrustedProxies, the
+// client that proxy names in X-Forwarded-For (the rightmost entry that
+// is not a trusted proxy itself) or X-Real-IP. Without trusted proxies
+// the headers are ignored: anyone can set them. One address serves the
+// lockout, the local-network check of the first owner, the audit and
+// the log.
+func (s *Server) clientIP(r *http.Request) string {
+	peer := peerIP(r.RemoteAddr)
+	if len(s.opts.TrustedProxies) == 0 || !s.trustedProxy(peer) {
+		return peer
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		for i := len(parts) - 1; i >= 0; i-- {
+			a, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+			if err != nil {
+				break // a proxy would not write this; the peer it is
+			}
+			if !s.trustedProxy(a.Unmap().String()) {
+				return a.Unmap().String()
+			}
+		}
+	}
+	if a, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil {
+		return a.Unmap().String()
+	}
+	return peer
+}
+
+// peerIP is the host of a remote address.
+func peerIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		return remoteAddr
+	}
+	if a, err := netip.ParseAddr(host); err == nil {
+		return a.Unmap().String()
 	}
 	return host
+}
+
+// trustedProxy reports whether an address is one of the trusted proxies.
+func (s *Server) trustedProxy(ip string) bool {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	a = a.Unmap()
+	for _, p := range s.opts.TrustedProxies {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseTrustedProxies reads -trusted-proxies: addresses and CIDRs
+// separated by commas or spaces, an address standing for itself.
+func ParseTrustedProxies(v string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, f := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == ';' || r == '\t' }) {
+		if p, err := netip.ParsePrefix(f); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		a, err := netip.ParseAddr(f)
+		if err != nil {
+			return nil, fmt.Errorf("-trusted-proxies: %q is neither an address nor a CIDR", f)
+		}
+		a = a.Unmap()
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out, nil
 }
 
 // localPeer reports whether an address is on the local network:
@@ -549,7 +616,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	case mode == modeLegacy && s.opts.Token == "":
 		return &principal{mode: modeLegacy}, true
 	}
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	key := store.LockoutAddr(ip)
 	if d := s.limiter.lockedFor(ctx, key); d > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))

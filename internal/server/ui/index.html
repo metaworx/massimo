@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Massimo</title>
-<link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="ui/style.css">
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true" focusable="false">
@@ -51,6 +51,7 @@
     </div>
   </div>
   <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
+  <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span> <span id="tls-fingerprint" class="mono tls-fp"></span></p>
   <details id="cube-found" class="cube-found hidden">
     <summary></summary>
     <div class="cube-found-body"></div>
@@ -59,6 +60,7 @@
     <div><dt data-i18n="budget.server">Server</dt><dd id="version">–</dd></div>
     <div><dt data-i18n="budget.built">Built with</dt><dd id="version-rest">–</dd></div>
     <div><dt data-i18n="budget.started">Server started</dt><dd id="server-started">–</dd></div>
+    <div><dt data-i18n="budget.certificate">Certificate</dt><dd id="tls-cert">–</dd></div>
     <div><dt data-i18n="budget.firmware">Firmware</dt><dd id="cube-fw">–</dd></div>
     <div><dt data-i18n="budget.address">Address</dt><dd id="cube-addr">–</dd></div>
     <div><dt data-i18n="budget.radio">Radio</dt><dd id="cube-rf" class="mono">–</dd></div>
@@ -208,17 +210,17 @@
 
 <!-- partials: templates -->
 
-<script src="/ui/i18n.js"></script>
-<script src="/ui/components.js"></script>
-<script src="/ui/app.js"></script>
-<script src="/ui/tiles.js"></script>
-<script src="/ui/config.js"></script>
-<script src="/ui/log.js"></script>
-<script src="/ui/update.js"></script>
-<script src="/ui/cubes.js"></script>
-<script src="/ui/login.js"></script>
-<script src="/ui/users.js"></script>
-<script src="/ui/roles.js"></script>
-<script src="/ui/theme.js"></script>
+<script src="ui/i18n.js"></script>
+<script src="ui/components.js"></script>
+<script src="ui/app.js"></script>
+<script src="ui/tiles.js"></script>
+<script src="ui/config.js"></script>
+<script src="ui/log.js"></script>
+<script src="ui/update.js"></script>
+<script src="ui/cubes.js"></script>
+<script src="ui/login.js"></script>
+<script src="ui/users.js"></script>
+<script src="ui/roles.js"></script>
+<script src="ui/theme.js"></script>
 </body>
 </html>

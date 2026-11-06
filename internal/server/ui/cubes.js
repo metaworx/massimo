@@ -50,7 +50,7 @@ function deviceLabel(rf) {
 // remembers their names.
 async function loadCubeDevices(serial) {
   try {
-    const devs = (await api("GET", "/api/v1/cubes/" + encodeURIComponent(serial) + "/devices")) || [];
+    const devs = (await api("GET", "api/v1/cubes/" + encodeURIComponent(serial) + "/devices")) || [];
     cubesUI.devices[serial] = devs;
     for (const d of devs) if (d.name) cubesUI.names[d.rf_address] = d.name;
   } catch (e) {
@@ -78,11 +78,11 @@ async function cubeAction(fn, okText, serial) {
 }
 
 function saveCube(serial, body) {
-  return cubeAction(() => api("PUT", "/api/v1/cubes/" + encodeURIComponent(serial), body), t("cubes.saved", { serial }), serial);
+  return cubeAction(() => api("PUT", "api/v1/cubes/" + encodeURIComponent(serial), body), t("cubes.saved", { serial }), serial);
 }
 
 function addCube(serial) {
-  return cubeAction(() => api("POST", "/api/v1/cubes", { serial }), t("cubes.added", { serial }), serial);
+  return cubeAction(() => api("POST", "api/v1/cubes", { serial }), t("cubes.added", { serial }), serial);
 }
 
 // removeCube asks in the panel, in place of its actions, whether to stop
@@ -90,7 +90,7 @@ function addCube(serial) {
 function removeCube(serial, actions) {
   const box = confirmBox(t("cubes.removeConfirm", { serial }), { yes: t("cubes.remove"), no: t("action.keep") }, () => {
     cubesUI.open.delete(serial);
-    cubeAction(() => api("DELETE", "/api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
+    cubeAction(() => api("DELETE", "api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
   }, () => {
     box.replaceWith(actions);
     actions.querySelector(".remove-cube").focus();

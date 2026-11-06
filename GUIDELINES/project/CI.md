@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.6.0)
+# Massimo — CI Conventions (v1.7.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,7 +33,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | release published | publish.yml: the Homebrew formula of the release's channel rendered and pushed to the tap, with the deploy key set |
 | tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the apt key set, rebuild the apt repository from the releases and deploy it to GitHub Pages |
@@ -197,6 +197,11 @@ a box following a suite takes the release through `apt upgrade`.
   so the 409 comes first at any runner speed.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
+- The macOS job's update from the API installs the newest alpha release,
+  which knows no `-tls` until a release with it is cut:
+  that server serves plain HTTP, the helper's `https://` health check fails,
+  and the job takes its rollback branch, which it accepts.
+  Once such a release is out the job takes the other branch by itself.
 - `ubuntu-latest` moves to a newer Ubuntu on GitHub's schedule;
   the annotation on every run says when.
 - The Debian package job's container has no systemd:

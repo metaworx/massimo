@@ -66,7 +66,7 @@ function loadSettings() {
 // --- API --------------------------------------------------------------
 
 function base() {
-  return "/api/v1/cubes/" + encodeURIComponent(state.serial);
+  return "api/v1/cubes/" + encodeURIComponent(state.serial);
 }
 
 async function api(method, path, body) {
@@ -388,7 +388,7 @@ function applySettings() {
 // --- loading ----------------------------------------------------------
 
 async function loadCubes() {
-  const all = (await api("GET", "/api/v1/cubes")) || [];
+  const all = (await api("GET", "api/v1/cubes")) || [];
   state.cubes = all.filter(isConfigured);
   state.found = all.filter((c) => !isConfigured(c));
   renderFound();
@@ -408,7 +408,7 @@ async function loadCubes() {
 // loadTimeZone reads the Cube's daylight-saving rules once per Cube.
 async function loadTimeZone(serial) {
   try {
-    const detail = await api("GET", "/api/v1/cubes/" + encodeURIComponent(serial));
+    const detail = await api("GET", "api/v1/cubes/" + encodeURIComponent(serial));
     const cfg = detail && detail.config;
     state.tz[serial] = cfg && cfg.tz_winter ? { winter: cfg.tz_winter, summer: cfg.tz_summer } : false;
   } catch (e) {
@@ -467,7 +467,7 @@ async function discoverCubes() {
   showSearch(t("discover.searching"));
   renderCubeSelect();
   try {
-    const res = (await api("POST", "/api/v1/cubes/discover")) || {};
+    const res = (await api("POST", "api/v1/cubes/discover")) || {};
     await loadCubes();
     const n = (res.found || []).filter((c) => !isConfigured(c)).length;
     showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
@@ -569,15 +569,49 @@ function renderStarted(iso) {
   if (age) dd.appendChild(age);
 }
 
+// renderTLS shows the certificate the server serves, from /healthz's
+// tls: in expert mode its source, names and expiry, and under the header
+// a notice with the fingerprint while it is self-signed, so the owner
+// can compare it with the server's log after the browser's warning, and
+// a warning while the certificate ends within two weeks (or has none
+// yet), computed here from not_after so that it speaks the page's
+// language.
+function renderTLS(tls) {
+  const dd = $("tls-cert");
+  const notice = $("tls-notice");
+  if (!tls) {
+    dd.textContent = "–";
+    notice.classList.add("hidden");
+    return;
+  }
+  const until = Date.parse(tls.not_after || "");
+  const parts = [tls.source, (tls.names || []).join(", ")];
+  if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
+  dd.textContent = parts.filter(Boolean).join(" · ");
+  const texts = [];
+  if (tls.self_signed) texts.push(t("header.selfSigned"));
+  if (isNaN(until)) {
+    if (tls.warning) texts.push(t("header.certMissing"));
+  } else {
+    const days = Math.floor((until - Date.now()) / 86400000);
+    if (days < 0) texts.push(t("header.certExpired"));
+    else if (days < 14) texts.push(tn("header.certExpires", days));
+  }
+  $("tls-notice-text").textContent = texts.join(" ");
+  $("tls-fingerprint").textContent = tls.self_signed ? tls.fingerprint || "" : "";
+  notice.classList.toggle("hidden", texts.length === 0);
+}
+
 async function checkVersion() {
   let h;
   try {
-    h = await api("GET", "/healthz");
+    h = await api("GET", "healthz");
   } catch (e) {
     return;
   }
   const v = h && h.version ? h.version : "";
   renderStarted(h && h.started_at);
+  renderTLS(h && h.tls);
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);

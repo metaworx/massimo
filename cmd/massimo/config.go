@@ -12,9 +12,11 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -55,6 +57,7 @@ func runConfig(args []string) error {
 	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(env.Proxy)))
 	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(env.ProxySerial)))
 	fmt.Printf("name:          %s\n", orNone(cubeEnv(env.Name)))
+	printTLS(os.Stdout)
 
 	var names []string
 	for _, kv := range os.Environ() {
@@ -204,6 +207,85 @@ func printStore(w io.Writer) {
 	}
 	if len(rows) == 0 && len(file) == 0 && plain == nil {
 		fmt.Fprintln(w, "  (none)")
+	}
+}
+
+// printTLS says how serve serves: plain, or over TLS from which files,
+// with the certificate's names, expiry and fingerprint when the files
+// can be read here (they belong to the service user).
+func printTLS(w io.Writer) {
+	certPath, keyPath := os.Getenv(tlsCertVar), os.Getenv(tlsKeyVar)
+	mode := tlsMode(os.Getenv(tlsVar), certPath, keyPath)
+	if mode == "off" {
+		fmt.Fprintf(w, "tls:           off\n")
+		return
+	}
+	days, err := hstsDays(os.Getenv(hstsVar))
+	hsts := fmt.Sprintf("%d days", days)
+	if err != nil {
+		hsts = "invalid: " + os.Getenv(hstsVar)
+	}
+	if mode == "acme" {
+		fmt.Fprintf(w, "tls:           acme (hsts %s)\n", hsts)
+		printACME(w)
+		return
+	}
+	if mode == "self-signed" {
+		certPath, keyPath = certs.SelfSignedPaths(dataDir())
+		fmt.Fprintf(w, "tls:           self-signed (%s; hsts %s)\n", filepath.Dir(certPath), hsts)
+		if names := os.Getenv(tlsNamesVar); names != "" {
+			fmt.Fprintf(w, "               names given: %s\n", names)
+		}
+		printCertificate(w, mode, certPath, keyPath)
+		return
+	}
+	fmt.Fprintf(w, "tls:           %s (cert %s, key %s; hsts %s)\n", mode, orNone(certPath), orNone(keyPath), hsts)
+	if mode != "files" || certPath == "" || keyPath == "" {
+		return
+	}
+	printCertificate(w, mode, certPath, keyPath)
+}
+
+// printACME prints, for config and tls show, the certificate autocert
+// cached for each name of MASSIMO_TLS_NAMES, or that there is none yet.
+func printACME(w io.Writer) {
+	dir, _ := certs.ACMEPaths(dataDir(), "")
+	names := certs.ParseNames(os.Getenv(tlsNamesVar))
+	if hook := os.Getenv(acmeDNSHookVar); hook != "" {
+		fmt.Fprintf(w, "source:        acme by DNS-01 (%s; names %s; directory %s; hook %s)\n", dir, orNone(strings.Join(names, ", ")), orNone(os.Getenv(acmeDirectoryVar)), hook)
+		if len(names) == 0 {
+			return
+		}
+		certPath, keyPath := certs.DNS01Paths(dataDir(), names[0])
+		if _, err := os.Stat(certPath); err != nil {
+			fmt.Fprintf(w, "               no certificate yet (serve orders one at its start)\n")
+			return
+		}
+		printCertificate(w, "acme", certPath, keyPath)
+		return
+	}
+	fmt.Fprintf(w, "source:        acme (%s; names %s; directory %s; http %s)\n", dir, orNone(strings.Join(names, ", ")), orNone(os.Getenv(acmeDirectoryVar)), orNone(os.Getenv(tlsHTTPVar)))
+	for _, n := range names {
+		st, err := certs.LoadACMECache(dataDir(), n)
+		if err != nil {
+			fmt.Fprintf(w, "               %s: no certificate yet (serve orders one at its start)\n", n)
+			continue
+		}
+		fmt.Fprintf(w, "               %s: expires %s; fingerprint %s\n", n, st.NotAfter.Format("2006-01-02"), st.Fingerprint)
+	}
+}
+
+// printCertificate prints a certificate's names, expiry and fingerprint
+// under a line of config or tls show.
+func printCertificate(w io.Writer, mode, certPath, keyPath string) {
+	_, st, err := certs.Load(mode, certPath, keyPath)
+	if err != nil {
+		fmt.Fprintf(w, "               cannot read the certificate here: %v\n", err)
+		return
+	}
+	fmt.Fprintf(w, "               names %s; expires %s; fingerprint %s\n", strings.Join(st.Names, ", "), st.NotAfter.Format("2006-01-02"), st.Fingerprint)
+	if st.SelfSigned {
+		fmt.Fprintf(w, "               self-signed: browsers warn once per device; compare this fingerprint there\n")
 	}
 }
 

@@ -189,7 +189,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	switch {
 	case p.mode == modeOpen:
 		// The first owner: the form of docs/store.md section 10, item 4.
-		if !localPeer(clientIP(r)) {
+		if !localPeer(s.clientIP(r)) {
 			return fail(http.StatusForbidden, "the first owner is created from the local network, or on the box with massimo user add")
 		}
 		if password == "" {
@@ -219,9 +219,9 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	if p.mode == modeOpen {
-		s.log.Info("first owner created", "user", created.Name, "remote", clientIP(r))
+		s.log.Info("first owner created", "user", created.Name, "remote", s.clientIP(r))
 	} else {
-		s.log.Info("user added", "user", created.Name, "role", created.Role, "remote", clientIP(r))
+		s.log.Info("user added", "user", created.Name, "role", created.Role, "remote", s.clientIP(r))
 	}
 	writeJSON(w, http.StatusCreated, s.viewUserOf(r, st, created))
 	return nil
@@ -339,12 +339,12 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 				return userFail(err)
 			}
 		}
-		s.log.Info("password set", "user", u.Name, "by_self", a.self, "remote", clientIP(r))
+		s.log.Info("password set", "user", u.Name, "by_self", a.self, "remote", s.clientIP(r))
 		if u, _, err = st.User(ctx, u.Name); err != nil {
 			return userFail(err)
 		}
 	}
-	s.log.Info("user changed", "user", u.Name, "remote", clientIP(r))
+	s.log.Info("user changed", "user", u.Name, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, s.viewUserOf(r, st, u))
 	return nil
 }
@@ -367,7 +367,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	if err := st.DeleteUser(r.Context(), u.Name, by); err != nil {
 		return userFail(err)
 	}
-	s.log.Info("user removed", "user", u.Name, "remote", clientIP(r))
+	s.log.Info("user removed", "user", u.Name, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": u.Name})
 	return nil
 }
@@ -421,7 +421,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
-	s.log.Info("api key created", "user", u.Name, "label", req.Label, "remote", clientIP(r))
+	s.log.Info("api key created", "user", u.Name, "label", req.Label, "remote", s.clientIP(r))
 	v := viewToken(tok)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
 	return nil
@@ -452,7 +452,7 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if err := st.RevokeToken(r.Context(), id); err != nil {
 		return userFail(err)
 	}
-	s.log.Info("token revoked", "user", u.Name, "token", id, "kind", tok.Kind, "remote", clientIP(r))
+	s.log.Info("token revoked", "user", u.Name, "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 	return nil
 }

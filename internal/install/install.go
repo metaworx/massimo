@@ -54,6 +54,20 @@ type Options struct {
 	// Listen, when set, is the API and web UI address (host:port), kept
 	// in drop-ins that later installs leave alone; "" keeps what is there.
 	Listen string
+	// TLS is -tls: "" keeps what the settings file says, "off" switches
+	// it off there, "files" (implied by TLSCert) installs TLSCert and
+	// TLSKey beside the settings and names them in the settings file,
+	// "self-signed" has the server make a certificate for the box's
+	// names and TLSNames (tls.go).
+	TLS             string
+	TLSCert, TLSKey string
+	TLSNames        string
+	// ACMEEmail and TLSHTTP go with "acme": the account's contact
+	// address, and the plain helper address (:80) for HTTP-01.
+	ACMEEmail string
+	TLSHTTP   string
+	// ACMEDNSHook, with "acme", is the executable of the DNS-01 challenge.
+	ACMEDNSHook string
 	// DryRun only says what would be done.
 	DryRun bool
 	// Out receives one line per step; nil is os.Stdout.
@@ -147,9 +161,12 @@ func Install(o Options) error {
 		return err
 	}
 	if o.Listen != "" {
-		if _, _, err := listenDropIns(o.Listen); err != nil {
+		if _, _, err := listenDropIns(o.Listen, false, ""); err != nil {
 			return err
 		}
+	}
+	if err := o.checkTLS(); err != nil {
+		return err
 	}
 	in := newInstaller(o)
 	if err := in.binary(); err != nil {
@@ -162,13 +179,16 @@ func Install(o Options) error {
 	if err != nil {
 		return err
 	}
+	if err := in.tlsFiles(EnvDir+"/"+certName, EnvDir+"/"+keyName, EnvPath, true); err != nil {
+		return err
+	}
 	if startable {
 		in.checkSettings()
 	}
 	if err := in.units(); err != nil {
 		return err
 	}
-	if err := in.listen(); err != nil {
+	if err := in.listen(in.tlsEffective(in.path(EnvPath)), in.tlsHTTPEffective(in.path(EnvPath))); err != nil {
 		return err
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
@@ -198,7 +218,9 @@ func Install(o Options) error {
 }
 
 // configure is Install on a packaged box: -settings over a settings file
-// the package left as the template, the -listen drop-ins, a restart.
+// the package left as the template, the TLS options into the settings as
+// on a hand install, the listen drop-in, a restart. The package has no
+// update helper, so there is no health drop-in to write.
 func configure(o Options, m Manager) error {
 	if !m.Configurable() {
 		return fmt.Errorf("%s; massimo install is for a box without the package", m)
@@ -207,20 +229,27 @@ func configure(o Options, m Manager) error {
 		return err
 	}
 	if o.Listen != "" {
-		if _, _, err := listenDropIns(o.Listen); err != nil {
+		if _, _, err := listenDropIns(o.Listen, false, ""); err != nil {
 			return err
 		}
 	}
+	if err := o.checkTLS(); err != nil {
+		return err
+	}
+	o.NoUpdateHelper = true
 	in := newInstaller(o)
 	fmt.Fprintf(in.Out, "%s: the binary, the user and the unit are the package's; configuring only\n", m)
 	startable, err := in.packagedSettings()
 	if err != nil {
 		return err
 	}
+	if err := in.tlsFiles(EnvDir+"/"+certName, EnvDir+"/"+keyName, EnvPath, true); err != nil {
+		return err
+	}
 	if startable {
 		in.checkSettings()
 	}
-	if err := in.listen(); err != nil {
+	if err := in.listen(in.tlsEffective(in.path(EnvPath)), in.tlsHTTPEffective(in.path(EnvPath))); err != nil {
 		return err
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
@@ -401,6 +430,7 @@ func (in *installer) checkSettings() {
 	if vars["MASSIMO_API_TOKEN"] == "" {
 		fmt.Fprintln(in.Out, "warning: no MASSIMO_API_TOKEN: the API is open to the LAN and the web UI cannot start updates")
 	}
+	in.checkTLSSettings(vars)
 	lookup := in.LocalAddrs
 	if lookup == nil {
 		lookup = localAddrs

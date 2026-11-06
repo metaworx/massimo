@@ -138,24 +138,59 @@ func TestRemoveDarwin(t *testing.T) {
 }
 
 func TestLaunchdPlists(t *testing.T) {
-	serve, helper, err := launchdPlists("[::]:8100", false)
+	serve, helper, err := launchdPlists("[::]:8100", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ListenFromPlist(serve) != "[::]:8100" || !bytes.Contains(helper, []byte("http://[::1]:8100/healthz")) {
 		t.Fatalf("%s\n%s", serve, helper)
 	}
-	serve, _, _ = launchdPlists("a&b:81", false)
+	if _, helper, _ = launchdPlists(":8443", true, false); !bytes.Contains(helper, []byte("<string>https://127.0.0.1:8443/healthz</string>")) {
+		t.Fatalf("with TLS:\n%s", helper)
+	}
+	serve, _, _ = launchdPlists("a&b:81", false, false)
 	if !bytes.Contains(serve, []byte("a&amp;b:81")) || ListenFromPlist(serve) != "a&b:81" {
 		t.Error("not escaped")
 	}
 	for _, bad := range []string{"8099", ":0", ":x"} {
-		if _, _, err := launchdPlists(bad, false); err == nil {
+		if _, _, err := launchdPlists(bad, false, false); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
 	if ListenFromPlist([]byte("<plist/>")) != "" {
 		t.Error("listen from nothing")
+	}
+}
+
+func TestInstallDarwinTLS(t *testing.T) {
+	root, bin := setup(t)
+	src := t.TempDir()
+	cert, key := filepath.Join(src, "cert.pem"), filepath.Join(src, "key.pem")
+	os.WriteFile(cert, []byte("CERT"), 0o644)
+	os.WriteFile(key, []byte("KEY"), 0o600)
+	rec := &recorder{}
+	var out bytes.Buffer
+	o := darwinOpts(root, bin, rec, &out)
+	o.TLSCert, o.TLSKey = cert, key
+	if err := InstallDarwin(o); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(root, EnvDir, certName)) != "CERT" || !rec.has("chown _massimo:_massimo "+filepath.Join(root, EnvDir, keyName)) {
+		t.Fatalf("files: %q", rec.cmds)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") {
+		t.Fatal("settings")
+	}
+	if !strings.Contains(read(t, filepath.Join(root, PlistPath(HelperLabel))), "<string>https://127.0.0.1:8099/healthz</string>") {
+		t.Fatal("helper health URL not https")
+	}
+	// Installing again keeps it.
+	o = darwinOpts(root, bin, rec, &out)
+	if err := InstallDarwin(o); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, PlistPath(HelperLabel))), "https://127.0.0.1:8099/healthz") {
+		t.Fatal("TLS not kept")
 	}
 }
 

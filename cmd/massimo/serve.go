@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -60,9 +61,19 @@ func runServe(args []string) error {
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's, for this run (default the store's proxy serial; the original software keeps one answer per serial)")
 	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+"; on Windows the server then starts the helper itself (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
 	updateStatus := fs.String("update-status", defaultUpdateStatus(), "the update helper's status file (on Windows install passes it, and the helper's update.log goes next to it)")
+	tlsFlag := fs.String("tls", os.Getenv(tlsVar), "serve over TLS: off; files for the certificate of -tls-cert and -tls-key; self-signed for one the server makes for the box's names in the data directory's tls/; acme for one from Let's Encrypt for the names of -tls-names (default "+tlsVar+", else off; files when -tls-cert is given)")
+	tlsCert := fs.String("tls-cert", os.Getenv(tlsCertVar), "the certificate for -tls files, PEM, the chain after the server's certificate; re-read when it changes (default "+tlsCertVar+")")
+	tlsKey := fs.String("tls-key", os.Getenv(tlsKeyVar), "the certificate's private key, PEM (default "+tlsKeyVar+")")
+	tlsNames := fs.String("tls-names", os.Getenv(tlsNamesVar), "with -tls self-signed, names and addresses the certificate holds besides the box's own; with -tls acme, the DNS names to get a certificate for; comma-separated (default "+tlsNamesVar+")")
+	acmeEmail := fs.String("acme-email", os.Getenv(acmeEmailVar), "with -tls acme, the account's contact address, which the CA writes to about its certificates (default "+acmeEmailVar+")")
+	acmeDirectory := fs.String("acme-directory", os.Getenv(acmeDirectoryVar), "with -tls acme, the ACME directory URL (default "+acmeDirectoryVar+", else Let's Encrypt's; its staging directory for experiments)")
+	tlsHTTP := fs.String("tls-http", os.Getenv(tlsHTTPVar), "with -tls acme, also listen on this plain address, such as :80, for the HTTP-01 challenge and a redirect to https:// (default "+tlsHTTPVar+"; without it the TLS-ALPN-01 challenge on the TLS listener alone)")
+	trustedProxies := fs.String("trusted-proxies", os.Getenv(trustedProxiesVar), "the reverse proxies whose X-Forwarded-For and X-Real-IP name the client, addresses and CIDRs separated by commas, such as 127.0.0.1 for a proxy on this box (default "+trustedProxiesVar+"; empty: the headers are ignored, anyone can set them)")
+	acmeDNSHook := fs.String("acme-dns-hook", os.Getenv(acmeDNSHookVar), "with -tls acme, get the certificate by the DNS-01 challenge through this executable, run as '<hook> set <record> <txt>' and '<hook> clear <record> <txt>' (packaging/acme-dns-hooks/); no port needed, wildcards allowed (default "+acmeDNSHookVar+")")
+	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -78,6 +89,19 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
+	hsts, err := hstsDays(*hstsFlag)
+	if err != nil {
+		return err
+	}
+	trusted, err := server.ParseTrustedProxies(*trustedProxies)
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	src, err := tlsSource(tlsOptions{mode: *tlsFlag, certPath: *tlsCert, keyPath: *tlsKey, names: *tlsNames, listen: *listen, dataDir: dataDir(),
+		email: *acmeEmail, directory: *acmeDirectory, httpAddr: *tlsHTTP, hook: *acmeDNSHook}, logger)
+	if err != nil {
+		return err
+	}
 
 	st, err := openServeStore(*addr, logger)
 	if err != nil {
@@ -118,12 +142,12 @@ func runServe(args []string) error {
 		upd.Managed = m.String()
 	}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
-		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, *updateRequest, *updateStatus); err != nil {
+		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, src != nil, *updateRequest, *updateStatus); err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
 	}
 	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
-		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd})
+		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd, TLS: src, HSTSDays: hsts, TrustedProxies: trusted})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -131,23 +155,42 @@ func runServe(args []string) error {
 	for _, c := range setup.cubes {
 		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
 	}
+	auth := any(*token != "")
 	if st != nil {
-		logger.Info("api listening", "addr", ln.Addr().String(), "auth", srv.AuthMode(), "data", st.Dir(), "node", st.NodeID())
-	} else {
-		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "store", "none (-addr)")
+		auth = srv.AuthMode()
 	}
+	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "tls", "off"}
 	hs := &http.Server{Handler: srv.Handler()}
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		hs.Shutdown(shutdown)
-	}()
-	go srv.Run(ctx)
-	if err := hs.Serve(ln); err != nil && err != http.ErrServerClosed {
-		return err
+	if src != nil {
+		hs.TLSConfig = certs.Config(src)
+		cs := src.Status()
+		attrs = append(attrs[:len(attrs)-1], cs.Source, "names", strings.Join(cs.Names, ","), "expires", cs.NotAfter.Format(time.RFC3339), "fingerprint", cs.Fingerprint, "hsts_days", hsts)
 	}
-	return nil
+	if st != nil {
+		attrs = append(attrs, "data", st.Dir(), "node", st.NodeID())
+	} else {
+		attrs = append(attrs, "store", "none (-addr)")
+	}
+	logger.Info("api listening", attrs...)
+	if a, ok := src.(*certs.ACME); ok && *tlsHTTP != "" {
+		// The plain helper: the HTTP-01 challenge and a redirect to
+		// https://; serving it is what lets the manager use HTTP-01.
+		hln, err := net.Listen("tcp", *tlsHTTP)
+		if err != nil {
+			return fmt.Errorf("serve: -tls-http: %w", err)
+		}
+		logger.Info("http helper listening", "addr", hln.Addr().String(), "for", "the ACME HTTP-01 challenge and the redirect to https://")
+		go func() {
+			if err := serveHTTP(ctx, &http.Server{Handler: a.HTTPHandler()}, hln); err != nil {
+				logger.Error("http helper", "error", err)
+			}
+		}()
+	}
+	go srv.Run(ctx)
+	if src != nil {
+		go certs.Watch(ctx, src, certWatch)
+	}
+	return serveHTTP(ctx, hs, ln)
 }
 
 // defaultUpdateStatus is the helper's status file where install puts it:
@@ -161,13 +204,14 @@ func defaultUpdateStatus() string {
 
 // serveUpdateHelper prepares the start of the update helper by the
 // server itself (Windows): this binary in its helper mode, with the
-// /healthz of the listen address and update.log next to the status file.
-func serveUpdateHelper(log *slog.Logger, listen, request, status string) (func() error, string, error) {
+// /healthz of the listen address, https:// when this server has TLS,
+// and update.log next to the status file.
+func serveUpdateHelper(log *slog.Logger, listen string, tls bool, request, status string) (func() error, string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, "", err
 	}
-	health, err := install.HealthURL(listen)
+	health, err := install.HealthURL(listen, tls)
 	if err != nil {
 		return nil, "", err
 	}

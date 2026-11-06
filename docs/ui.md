@@ -47,7 +47,14 @@ so the session never appears in a URL.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and not the settings page.
 - In expert mode the header also shows the Cube's details and its radio budget,
-  and when the server was started, with how long ago.
+  when the server was started, with how long ago,
+  and the certificate the server serves (its source, names and expiry).
+- With a self-signed certificate (`massimo serve -tls self-signed`)
+  the browser warned once, and a line under the header shows the
+  certificate's fingerprint: compare it with the server's log,
+  or with `massimo tls show` on the box.
+- A certificate that ends within two weeks, or one the server could not
+  get from Let's Encrypt yet, is a warning in the same line.
   The duty cycle and the free memory slots limit how many radio commands the
   Cube can send.
 
@@ -259,3 +266,7 @@ with its script added to the `<script>` tags of `index.html` and to the embed
 list in `ui.go`; a new text is a key in all six files,
 which `go test ./internal/server` checks against the markup and the scripts,
 as it checks every id the scripts look up.
+Every URL the page and the scripts use is relative to the page (`ui/style.css`,
+`api/v1/cubes`, `healthz`),
+so that a reverse proxy may serve the UI under a path prefix it strips
+(docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.

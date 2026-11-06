@@ -1,6 +1,9 @@
 # Massimo HTTP API, version 1
 
-The API is served by `massimo serve` (default `127.0.0.1:8099`).
+The API is served by `massimo serve` (default `127.0.0.1:8099`),
+plain HTTP, or TLS with `-tls` (README.md, "Server");
+with TLS every response carries `Strict-Transport-Security`,
+a year by default (`-hsts <days>`, `0` clears it).
 Every response is JSON unless stated otherwise.
 The machine-readable description is in [api-v1-openapi.yaml](api-v1-openapi.yaml).
 
@@ -214,10 +217,13 @@ A wrong ticket counts as a failed check,
 and a failed login counts against the address and against the user name,
 so that password guessing from many addresses locks the name.
 With a store the counters survive a restart.
-The address is the TCP peer's; `X-Forwarded-For` is not trusted,
-since anyone can set it,
-so behind a reverse proxy the limit applies to the proxy as a whole,
-and the proxy should limit by client itself.
+The address is the TCP peer's, or,
+with `-trusted-proxies` naming the proxy's address,
+the client the proxy passes in `X-Forwarded-For`
+(the rightmost entry that is not a trusted proxy) or `X-Real-IP`;
+without it the headers are ignored, since anyone can set them,
+and behind a reverse proxy the limit then applies to the proxy as a whole
+(docs/reverse-proxy.md).
 
 The event stream is opened by browsers without headers,
 so it takes a ticket instead:
@@ -276,6 +282,15 @@ a new time with the same version means the server was restarted.
 `node_id` is the box's identifier from its store (`node.id`,
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
+`tls`, with TLS, describes the certificate served:
+`{"source": "files", "names": ["massimo.example.net"], "not_after": "2027-02-01T00:00:00Z", "fingerprint": "SHA256:…", "self_signed": false}`;
+`source` is `files` (the owner's files, re-read when they change),
+`self-signed` (the certificate the server made, `self_signed` true)
+or `acme` (Let's Encrypt),
+the fingerprint is the SHA-256 of the certificate as browsers show it,
+and `warning` is set while something needs the owner:
+a certificate within two weeks of its end,
+or an order from Let's Encrypt that has not succeeded yet.
 
 ### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
 

@@ -219,6 +219,7 @@ Stays in `.env`, because it is needed before the store is open, or is a secret:
 | Variable | Why it stays |
 |---|---|
 | `MASSIMO_LISTEN`, `-listen` | the API's address, needed to start; changing it is a restart anyway |
+| `MASSIMO_TLS`, `MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`, `MASSIMO_HSTS`, `MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`, `MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`, `-tls`, `-tls-cert`, `-tls-key`, `-tls-names`, `-hsts`, `-acme-email`, `-acme-directory`, `-tls-http`, `-acme-dns-hook` | the listener's TLS, needed to start; `massimo install -tls …` writes them; the owner's files live beside this one, the self-signed pair and the ACME account and certificates in the data directory's `tls/` |
 | `MASSIMO_LOG`, `-log` | opened before anything else, and the place errors of the store itself go |
 | `MASSIMO_API_TOKEN`, `-token` | a secret; becomes the owner's API key (section 6) and keeps working as today |
 | `MASSIMO_CUBE_<SN>_KEY`, `_IV` | secrets; stay in the file in version 1 (open decision 2) |
@@ -1042,9 +1043,11 @@ table (NOTE StoreUsers v1.0: commands history).
    one-time form in the UI,
    which works while there are no users and is answered only to clients on the
    local network: the request's own address is loopback,
-   a private range (RFC 1918) or link-local; `X-Forwarded-For` is not trusted,
-   so behind a reverse proxy the form is not offered and `massimo user add` on
-   the box is the way.
+   a private range (RFC 1918) or link-local;
+   `X-Forwarded-For` is believed only from the proxies `-trusted-proxies` names
+   (docs/reverse-proxy.md),
+   so behind one of them the form is offered to local-network clients,
+   and behind any other `massimo user add` on the box is the way.
 5. Retention defaults: events 30 days, automatic backups 90 days,
    manual and before-restore backups 365 days; and whether `events`
    should also be capped by size for the SD card.

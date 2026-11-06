@@ -128,6 +128,30 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 		t.Fatalf("not restarted: %v", rec.cmds)
 	}
 
+	// -tls goes into the settings as on a hand install; the package has
+	// no helper, so there is no health drop-in.
+	out.Reset()
+	if err := Install(Options{Root: root, TLS: "self-signed", TLSNames: "massimo.example.net", Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	env := read(t, filepath.Join(root, EnvPath))
+	if strings.Count(env, "MASSIMO_TLS=self-signed\n") != 1 || !strings.Contains(env, "MASSIMO_TLS_NAMES=massimo.example.net\n") {
+		t.Fatalf("settings after -tls self-signed:\n%s", env)
+	}
+	if _, err := os.Stat(filepath.Join(root, HealthDropIn)); err == nil {
+		t.Fatal("a health drop-in for the helper the package lacks")
+	}
+	cert, key := filepath.Join(t.TempDir(), "cert.pem"), filepath.Join(t.TempDir(), "key.pem")
+	os.WriteFile(cert, []byte("CERT"), 0o644)
+	os.WriteFile(key, []byte("KEY"), 0o600)
+	if err := Install(Options{Root: root, TLSCert: cert, TLSKey: key, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	certDst := filepath.Join(root, EnvDir, certName)
+	if read(t, certDst) != "CERT" || !rec.has("chown massimo:massimo "+certDst) || strings.Count(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") != 1 {
+		t.Fatalf("TLS files on a packaged box: %v", rec.cmds)
+	}
+
 	// Filled in, the settings are kept whatever -settings names.
 	os.WriteFile(filepath.Join(root, EnvPath), []byte("MASSIMO_API_TOKEN=mine\n"), 0o600)
 	out.Reset()

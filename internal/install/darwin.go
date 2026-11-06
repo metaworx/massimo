@@ -59,15 +59,12 @@ const (
 )
 
 // launchdPlists returns the service's and the helper's property lists for
-// a listen address; without the helper the service gets no
-// -update-request.
-func launchdPlists(listen string, noHelper bool) (serve, helper []byte, err error) {
-	host, port, err := net.SplitHostPort(listen)
+// a listen address, the helper's health URL https:// when the service
+// has TLS; without the helper the service gets no -update-request.
+func launchdPlists(listen string, tls, noHelper bool) (serve, helper []byte, err error) {
+	host, port, err := splitListen(listen)
 	if err != nil {
-		return nil, nil, fmt.Errorf("-listen %q: %v (want host:port or :port)", listen, err)
-	}
-	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
-		return nil, nil, fmt.Errorf("-listen %q: bad port", listen)
+		return nil, nil, err
 	}
 	if serve, err = readPlist(Label); err != nil {
 		return nil, nil, err
@@ -80,7 +77,7 @@ func launchdPlists(listen string, noHelper bool) (serve, helper []byte, err erro
 		return nil, nil, err
 	}
 	// Twice: in the comment and in the arguments.
-	helper = bytes.ReplaceAll(helper, []byte(healthMark), []byte(xmlEscape(healthURL(host, port))))
+	helper = bytes.ReplaceAll(helper, []byte(healthMark), []byte(xmlEscape(healthURL(host, port, tls))))
 	return serve, helper, nil
 }
 
@@ -135,9 +132,12 @@ func InstallDarwin(o Options) error {
 		return err
 	}
 	if o.Listen != "" {
-		if _, _, err := launchdPlists(o.Listen, false); err != nil {
+		if _, _, err := launchdPlists(o.Listen, false, false); err != nil {
 			return err
 		}
+	}
+	if err := o.checkTLS(); err != nil {
+		return err
 	}
 	in := newInstaller(o)
 	in.svcUser = DarwinUser
@@ -153,11 +153,10 @@ func InstallDarwin(o Options) error {
 	if listen == "" {
 		listen = DefaultListen
 	}
-	serve, helper, err := launchdPlists(listen, in.NoUpdateHelper)
-	if err != nil {
-		return err
-	}
 	in.checkDarwinListen(listen)
+	if o.TLSHTTP != "" {
+		in.checkDarwinListen(o.TLSHTTP)
+	}
 
 	if err := in.binary(); err != nil {
 		return err
@@ -166,6 +165,13 @@ func InstallDarwin(o Options) error {
 		return err
 	}
 	startable, err := in.settings()
+	if err != nil {
+		return err
+	}
+	if err := in.tlsFiles(EnvDir+"/"+certName, EnvDir+"/"+keyName, EnvPath, true); err != nil {
+		return err
+	}
+	serve, helper, err := launchdPlists(listen, in.tlsEffective(in.path(EnvPath)), in.NoUpdateHelper)
 	if err != nil {
 		return err
 	}

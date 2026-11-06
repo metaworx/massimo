@@ -463,9 +463,59 @@ Dutch and Polish (from the browser, or chosen in the settings),
 from the translation files in `internal/server/ui/i18n/`, one per language.
 [docs/ui.md](docs/ui.md) describes how to use it.
 It is meant for the LAN.
-The listener defaults to localhost;
-put a reverse proxy with TLS in front before exposing it, and the UI,
-which needs the same token as the API, with it.
+The listener defaults to localhost and plain HTTP.
+`-tls files -tls-cert <pem> -tls-key <pem>` (or `MASSIMO_TLS_CERT`
+and `MASSIMO_TLS_KEY` in the settings) serves the API and the UI over TLS from
+any certificate,
+the chain after the server's certificate as every ACME client writes it;
+the files are re-read when they change,
+so a renewal by certbot or acme.sh needs no restart,
+only a deploy hook that copies the files where the service user can read them
+(`massimo install -tls-cert … -tls-key …` does that once,
+see [packaging/README.md](packaging/README.md)).
+`-tls self-signed` needs no certificate:
+the server makes one at its first start for the box's names (its hostname,
+`<hostname>.local`, `localhost`, its addresses,
+and `-tls-names` for a name you gave it) into the data directory's `tls/`,
+valid 825 days and renewed 30 days before the end;
+every browser warns once per device,
+and the fingerprint to compare is in the log, in `massimo config`,
+in `massimo tls show`, in `/healthz` and under the page's header.
+A box whose address changed gets a new one with `massimo tls self-signed`,
+which a running server takes up at once.
+`-tls acme -tls-names <name>` gets a certificate from Let's Encrypt for a
+DNS name that resolves to the box, and renews it by itself:
+the validation reaches the box on port 443 (a router forwards its public
+443 to the server's port; the name's record is the public address,
+dynamic DNS where it changes), by TLS-ALPN-01 on the listener itself,
+or with `-tls-http :80` by HTTP-01 on a plain port 80 as well,
+which then redirects to `https://`.
+`-acme-email` gives the account a contact address;
+the account key and the certificates live in the data directory's `tls/acme/`.
+Let's Encrypt allows five failed orders an hour per name,
+so experiments use its staging directory
+(`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`).
+`-acme-dns-hook <script>` takes the DNS-01 challenge instead:
+the server asks the script to set and clear a TXT record under `_acme-challenge.<name>`,
+so no port has to be open, the name may point at the box's LAN address,
+and wildcards (`-tls-names '*.example.net,example.net'`) work;
+`packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone at Infomaniak,
+and any other provider's API fits in a dozen lines (see
+[packaging/README.md](packaging/README.md)).
+A certificate that ends within two weeks, or an order that has not succeeded,
+is a warning in the log, in `/healthz` and under the page's header.
+With TLS the server tells browsers to use `https://` for its host for a year
+(`-hsts <days>`);
+a browser that saw that refuses `http://` until the days are up,
+so before switching TLS off, run the server once with `-hsts 0` over TLS,
+which clears it.
+A reverse proxy with TLS in front works as before and sets its own HSTS;
+the UI needs the same token as the API either way.
+`-trusted-proxies <addresses or CIDRs>` tells the server which peers'
+`X-Forwarded-For` to believe,
+so the lockout and the first-owner form see the real client,
+and the page works under a path prefix such as `/massimo/`
+([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
 Every six hours (`-refresh`,
@@ -639,7 +689,7 @@ and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
 The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`,
-the update variables and `MASSIMO_CUBE_SN` stay in the file only,
+the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;
 `serve -addr` runs without the store altogether (no `massimo.db` is opened or created,

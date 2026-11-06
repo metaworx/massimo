@@ -10,6 +10,26 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `massimo serve -tls files -tls-cert … -tls-key …`: TLS from certificate
+  files, re-read when they change, with HSTS for a year (`-hsts <days>`);
+  `massimo install -tls-cert … -tls-key …` installs them (README.md).
+
+- `massimo serve -tls self-signed`: a certificate the server makes for
+  the box's names, renewed 30 days before it expires; `massimo tls show`
+  and the web UI's header show its fingerprint (README.md, "Server").
+
+- `massimo serve -tls acme -tls-names <name>`: a Let's Encrypt
+  certificate by TLS-ALPN-01, renewed by itself (`-tls-http :80` adds
+  HTTP-01 and the redirect); the UI warns two weeks before an expiry.
+
+- `massimo serve -tls acme -acme-dns-hook <script>`: the certificate by
+  DNS-01 through a hook that sets the TXT record, wildcards included,
+  no open port; `packaging/acme-dns-hooks/infomaniak.sh` for Infomaniak.
+
+- `massimo serve -trusted-proxies <addresses or CIDRs>`: the client's
+  address from `X-Forwarded-For` behind a reverse proxy, the stream
+  unbuffered, the UI under a path prefix (docs/reverse-proxy.md).
+
 - A Debian package per release (amd64, arm64, armhf for a 32-bit Pi OS),
   installed with apt, which then owns the binary: `massimo update` and
   the web UI show what is out (packaging/README.md, "Debian package").

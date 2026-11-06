@@ -241,7 +241,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		case wr.number != nil:
 			value = strconv.Itoa(*wr.number)
 		}
-		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", r.RemoteAddr)
+		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", s.clientIP(r))
 	}
 	return s.getSettings(w, r)
 }

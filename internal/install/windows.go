@@ -47,9 +47,12 @@ func connect() (*mgr.Mgr, error) {
 // InstallWindows installs or updates massimo serve as a Windows service.
 func InstallWindows(o Options) error {
 	if o.Listen != "" {
-		if _, _, err := listenDropIns(o.Listen); err != nil { // the same validation as on Linux
+		if _, _, err := listenDropIns(o.Listen, false, ""); err != nil { // the same validation as on Linux
 			return err
 		}
+	}
+	if err := o.checkTLS(); err != nil {
+		return err
 	}
 	in := newInstaller(o)
 	p := winPaths()
@@ -88,6 +91,11 @@ func InstallWindows(o Options) error {
 	}
 	startable, err := in.winSettings(p)
 	if err != nil {
+		return err
+	}
+	// The data directory's rights (SYSTEM and Administrators) cover the
+	// copies; serve reads the variables from the settings file.
+	if err := in.tlsFiles(winJoin(p.DataDir, certName), winJoin(p.DataDir, keyName), p.Env, false); err != nil {
 		return err
 	}
 

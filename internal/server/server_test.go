@@ -5,14 +5,17 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -295,5 +298,111 @@ func TestDeviceValueTimes(t *testing.T) {
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/14d08e", &u)
 	if _, ok := u["last_seen"]; ok || u["rf_address"] != "14d08e" {
 		t.Fatalf("unreported device has times: %v", u)
+	}
+}
+
+// fakeSource stands in for a certificate source: what the server does
+// with one (the HSTS header, /healthz) is tested over httptest's plain
+// listener, so no certificate is ever served.
+type fakeSource struct{ st certs.Status }
+
+func (f fakeSource) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return nil, errors.New("not served in the test")
+}
+
+func (f fakeSource) Status() certs.Status { return f.st }
+
+func TestHSTSAndHealthzTLS(t *testing.T) {
+	st := certs.Status{Source: "files", Names: []string{"massimo.example.net"}, NotAfter: time.Now().Add(24 * time.Hour).Truncate(time.Second), Fingerprint: "SHA256:00:11"}
+	header := func(ts *httptest.Server, token, path string) (string, map[string]any) {
+		t.Helper()
+		req, _ := http.NewRequest("GET", ts.URL+path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var body map[string]any
+		json.NewDecoder(resp.Body).Decode(&body)
+		return resp.Header.Get("Strict-Transport-Security"), body
+	}
+	t.Run("a year", func(t *testing.T) {
+		_, ts, _ := startWith(t, Options{Token: "secret", TLS: fakeSource{st}, HSTSDays: 365})
+		h, body := header(ts, "", "/healthz")
+		if h != "max-age=31536000" {
+			t.Fatalf("HSTS %q", h)
+		}
+		tlsInfo, _ := body["tls"].(map[string]any)
+		if tlsInfo["source"] != "files" || tlsInfo["fingerprint"] != "SHA256:00:11" || tlsInfo["self_signed"] != false {
+			t.Fatalf("healthz tls %v", body["tls"])
+		}
+		if h, _ := header(ts, "secret", "/api/v1/cubes"); h != "max-age=31536000" {
+			t.Fatalf("HSTS on the API %q", h)
+		}
+	})
+	t.Run("cleared", func(t *testing.T) {
+		_, ts, _ := startWith(t, Options{TLS: fakeSource{st}, HSTSDays: 0})
+		if h, _ := header(ts, "", "/healthz"); h != "max-age=0" {
+			t.Fatalf("HSTS %q", h)
+		}
+	})
+	t.Run("plain", func(t *testing.T) {
+		_, ts, _ := start(t, "")
+		h, body := header(ts, "", "/healthz")
+		if h != "" {
+			t.Fatalf("HSTS without TLS %q", h)
+		}
+		if _, ok := body["tls"]; ok {
+			t.Fatal("tls reported without TLS")
+		}
+	})
+}
+
+// TestLockoutBehindProxy counts failed token checks per client the proxy
+// names, not per proxy, and the stream asks nginx not to buffer.
+func TestLockoutBehindProxy(t *testing.T) {
+	proxies, _ := ParseTrustedProxies("127.0.0.1,::1")
+	_, ts, _ := startWith(t, Options{Token: "secret", TrustedProxies: proxies, AuthFailures: 3})
+	try := func(client, token string) int {
+		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes", nil)
+		req.Header.Set("X-Forwarded-For", client)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for i := 0; i < 3; i++ {
+		if try("192.0.2.10", "wrong") != 401 {
+			t.Fatal("not 401")
+		}
+	}
+	if try("192.0.2.10", "secret") != 429 {
+		t.Fatal("the client that failed is not locked out")
+	}
+	if try("192.0.2.11", "secret") != 200 {
+		t.Fatal("another client behind the same proxy locked out")
+	}
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("X-Accel-Buffering") != "no" {
+		t.Fatalf("stream: %d %q", resp.StatusCode, resp.Header.Get("X-Accel-Buffering"))
 	}
 }

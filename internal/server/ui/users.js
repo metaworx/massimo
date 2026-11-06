@@ -37,10 +37,10 @@ function mayManage(u) {
 
 async function loadUsers() {
   if (!canManageUsers()) return;
-  usersUI.users = (await api("GET", "/api/v1/users")) || [];
+  usersUI.users = (await api("GET", "api/v1/users")) || [];
   if (hasCap("roles") && !usersUI.roles) {
     try {
-      usersUI.roles = ((await api("GET", "/api/v1/roles")) || {}).roles || null;
+      usersUI.roles = ((await api("GET", "api/v1/roles")) || {}).roles || null;
     } catch (e) {
       usersUI.roles = null;
     }
@@ -106,7 +106,7 @@ function userBadges(u) {
 function removeUser(u, actions) {
   const box = confirmBox(t("users.removeConfirm", { name: u.name }), { yes: t("users.remove"), no: t("action.keep") }, () => {
     usersUI.open.delete(u.name);
-    userAction(() => api("DELETE", "/api/v1/users/" + encodeURIComponent(u.name)), t("users.removed", { name: u.name }), u.name);
+    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name)), t("users.removed", { name: u.name }), u.name);
   }, () => {
     box.replaceWith(actions);
     actions.querySelector(".remove-user").focus();
@@ -133,7 +133,7 @@ function tokenRow(u, tk) {
   const revoke = li.querySelector(".revoke-token");
   revoke.setAttribute("aria-label", t("users.revokeLabel", { label: tk.label || t("users.kind." + tk.kind) }));
   revoke.addEventListener("click", () => {
-    userAction(() => api("DELETE", "/api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name);
+    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name);
   });
   return li;
 }
@@ -145,7 +145,7 @@ async function fillTokens(u, box) {
   clear(ul);
   let tokens = [];
   try {
-    tokens = (await api("GET", "/api/v1/users/" + encodeURIComponent(u.name) + "/tokens")) || [];
+    tokens = (await api("GET", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens")) || [];
   } catch (e) {
     ul.appendChild(textEl("li", e.message, "muted small bad"));
     return;
@@ -169,7 +169,7 @@ async function fillTokens(u, box) {
       return;
     }
     userAction(async () => {
-      const res = await api("POST", "/api/v1/users/" + encodeURIComponent(u.name) + "/tokens", { label });
+      const res = await api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens", { label });
       usersUI.keys[u.name] = res.token;
     }, t("users.keyCreated", { label }), u.name);
   });
@@ -233,7 +233,7 @@ function userPanel(u) {
       usersMsg(t("users.unchanged"), true);
       return;
     }
-    userAction(() => api("PUT", "/api/v1/users/" + encodeURIComponent(u.name), body), t("users.saved", { name: u.name }), u.name).then((ok) => {
+    userAction(() => api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body), t("users.saved", { name: u.name }), u.name).then((ok) => {
       if (ok && self && body.password) loadMe();
     });
   });
@@ -264,7 +264,7 @@ function newUserForm() {
     if (password) body.password = password;
     const end = isoOf(field("expires").value);
     if (end) body.expires_at = end;
-    userAction(() => api("POST", "/api/v1/users", body), t("users.created", { name: body.name }), body.name).then((ok) => {
+    userAction(() => api("POST", "api/v1/users", body), t("users.created", { name: body.name }), body.name).then((ok) => {
       if (ok) {
         clear($("user-new"));
         $("user-add").classList.remove("hidden");
