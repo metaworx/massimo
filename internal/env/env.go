@@ -173,22 +173,43 @@ func WithPort(addr string) string {
 	return addr
 }
 
+// ProxyMode says how ResolveAddr treats a configured proxy.
+type ProxyMode int
+
+const (
+	// ProxyFallback, the default, uses the proxy when it answers and
+	// otherwise the Cube itself, with a warning: while serve restarts, a
+	// direct connection takes the Cube's only client slot and keeps
+	// serve from reconnecting until the command ends.
+	ProxyFallback ProxyMode = iota
+	// ProxyRequired (-no-direct) makes a proxy that does not answer an
+	// error instead.
+	ProxyRequired
+	// ProxySkip (-direct) ignores the proxy and dials the Cube itself,
+	// even when the proxy answers.
+	ProxySkip
+)
+
 // ResolveAddr finds the address a command connects to for the Cube sn
 // (sn may be empty). A proxy (MASSIMO_CUBE_<SN>_PROXY, a running
 // `massimo serve`) is tried first, with a short timeout, because the
 // Cube itself serves one client at a time and serve usually holds that
 // connection; then MASSIMO_CUBE_<SN>_ADDRESS; then, with a serial, UDP
-// discovery on the LAN. Progress goes to log; cmd names the command in
+// discovery on the LAN. mode says what happens with the proxy, see
+// ProxyMode. Progress and warnings go to log; cmd names the command in
 // errors.
-func ResolveAddr(cmd, sn string, log io.Writer) (string, error) {
-	if p := Get(Proxy, sn); p != "" {
+func ResolveAddr(cmd, sn string, mode ProxyMode, log io.Writer) (string, error) {
+	if p := Get(Proxy, sn); p != "" && mode != ProxySkip {
 		p = WithPort(p)
 		if c, err := net.DialTimeout("tcp", p, proxyProbe); err == nil {
 			c.Close()
 			fmt.Fprintf(log, "using the massimo proxy at %s\n", p)
 			return p, nil
 		}
-		fmt.Fprintf(log, "proxy %s does not answer, using the cube directly\n", p)
+		if mode == ProxyRequired {
+			return "", fmt.Errorf("%s: the massimo proxy at %s does not answer (is massimo serve running?); -direct connects to the cube itself for this run, -addr to a given address", cmd, p)
+		}
+		fmt.Fprintf(log, "warning: the massimo proxy at %s does not answer; connecting to the cube directly, which takes the cube's only connection while massimo serve is away (-no-direct makes this an error)\n", p)
 	}
 	if a := Get(Address, sn); a != "" {
 		return a, nil

@@ -3,7 +3,13 @@
 
 package main
 
-import "testing"
+import (
+	"net"
+	"strings"
+	"testing"
+
+	"go.metaworx.ch/massimo/internal/env"
+)
 
 func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_KEY", "default")
@@ -41,5 +47,70 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	useDeviceSerial("KEQ0000001")
 	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
 		t.Fatalf("key after device serial %q", v)
+	}
+}
+
+func TestDirectAndNoDirect(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	dl, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := dl.Addr().String()
+	dl.Close()
+	t.Setenv("MASSIMO_CUBE_ADDRESS", "")
+	t.Setenv("MASSIMO_CUBE_PROXY", "")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", dead)
+	t.Cleanup(func() { selectedSN, snExplicit, proxyMode = "", false, env.ProxyFallback })
+	selectedSN, snExplicit, proxyMode = "KEQ0000001", true, env.ProxyFallback
+
+	// Default: the proxy does not answer, the Cube itself.
+	addr := ""
+	if err := defaultAddr(&addr, "backup"); err != nil || addr != "10.0.0.1" {
+		t.Fatalf("fallback: addr %q err %v", addr, err)
+	}
+	// -no-direct: an error; -addr still wins.
+	if _, err := globalOptions([]string{"-no-direct", "backup"}); err != nil || proxyMode != env.ProxyRequired {
+		t.Fatalf("-no-direct: %v %v", err, proxyMode)
+	}
+	addr = ""
+	if err := defaultAddr(&addr, "backup"); err == nil || !strings.Contains(err.Error(), "-direct") {
+		t.Fatalf("-no-direct: addr %q err %v", addr, err)
+	}
+	addr = "given"
+	if err := defaultAddr(&addr, "backup"); err != nil || addr != "given" {
+		t.Fatalf("-addr wins: %q %v", addr, err)
+	}
+	// Both together are refused.
+	if _, err := globalOptions([]string{"-direct", "backup"}); err == nil || !strings.Contains(err.Error(), "exclude") {
+		t.Fatalf("-no-direct -direct: %v", err)
+	}
+	// -direct: the Cube itself although the proxy answers.
+	proxyMode = env.ProxyFallback
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", ln.Addr().String())
+	rest, err := globalOptions([]string{"-direct", "backup"})
+	if err != nil || len(rest) != 1 || rest[0] != "backup" || proxyMode != env.ProxySkip {
+		t.Fatalf("-direct: rest %v err %v mode %v", rest, err, proxyMode)
+	}
+	addr = ""
+	if err := defaultAddr(&addr, "backup"); err != nil || addr != "10.0.0.1" {
+		t.Fatalf("-direct: addr %q err %v", addr, err)
+	}
+	if _, err := globalOptions([]string{"-no-direct", "backup"}); err == nil {
+		t.Fatal("-direct -no-direct accepted")
 	}
 }
