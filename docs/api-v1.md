@@ -825,7 +825,7 @@ asks GitHub at most every ten minutes; `refresh` asks now.
 compiled into the server (see `internal/update`). `check_error` says why
 a check failed. `can_update` is true when POST would start an update;
 otherwise `blocked` says why it cannot be started from here (no API
-token, no update helper, Windows). `helper` is the update helper's last
+token, no update helper, a development build). `helper` is the update helper's last
 run: `state` is one of `checking`, `installing`, `restarting`, `done`,
 `up-to-date`, `failed`, `rolled-back`, with `message` on failure.
 
@@ -833,7 +833,9 @@ run: `state` is one of `checking`, `installing`, `restarting`, `done`,
 
 Asks the update helper to install the newest release on the channel:
 the server writes the channel into its request file, and the helper
-(`massimo-update.service`, running as root; see
+(started by `massimo-update.path` as root on Linux, by launchd's
+`ch.metaworx.massimo-update` on macOS, by the server itself as a
+detached process on Windows; see
 [packaging/README.md](../packaging/README.md)) downloads and verifies the
 release, test-runs it, replaces the binary, restarts the server and
 rolls back if the new version does not answer `/healthz`. The request
@@ -843,9 +845,11 @@ newest signed release. Answers `202` with `{"ok":true,"requested":"v…",
 
 Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even
 though the other routes are open. `403` also when no helper is
-configured (`serve -update-request`) or on Windows; `409` when already up
-to date, when the channel has no release or while an update is running;
-`502` when GitHub could not be asked.
+configured (`serve -update-request`); `409` when already up to date,
+when the channel has no release or while an update is running (on
+Windows also in the moment between the start of the helper and its first
+status); `500` on Windows when the helper could not be started (the
+request is withdrawn); `502` when GitHub could not be asked.
 
 ## The LAN proxy
 

@@ -228,9 +228,12 @@ any error that ended `serve`), and, for the service manager's view, in
 `Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 10`.
 Running `install` again from a newer downloaded binary also replaces
 the binary and keeps the settings. The Update button under Settings →
-Software does not work on Windows yet; it will once
-[docs/update-windows.md](docs/update-windows.md), the design for it, is
-implemented. Details: [Windows](packaging/README.md#windows) and
+Software works as on Linux (with `MASSIMO_API_TOKEN` set): the server
+starts the same `update` in the background, which stops and starts the
+service, rolls back when the new version does not come up, and logs to
+`C:\ProgramData\Massimo\update.log`
+([docs/update-windows.md](docs/update-windows.md)). Details:
+[Windows](packaging/README.md#windows) and
 [Updating](packaging/README.md#updating) in packaging/README.md.
 
 ### macOS
