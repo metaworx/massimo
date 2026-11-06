@@ -153,8 +153,7 @@ function renderConfig(el, room) {
   area.classList.remove("hidden");
   clear(area);
   area.appendChild(renderTabs(room, c));
-  const body = document.createElement("div");
-  body.className = "config-body";
+  const body = elem("div", "config-body");
   area.appendChild(body);
   if (c.loading) {
     body.appendChild(textEl("p", t("cfg.loading"), "muted"));
@@ -183,7 +182,8 @@ function renderConfig(el, room) {
       break;
   }
   if (c.result) {
-    const p = textEl("p", c.result.text, "tile-result " + (c.result.ok ? "ok" : "bad"));
+    const p = elem("p", "tile-result");
+    showResult(p, c.result.text, c.result.ok);
     body.appendChild(p);
   }
 }
@@ -191,10 +191,7 @@ function renderConfig(el, room) {
 // renderTabs builds the configuration area's sub-navigation: the
 // section tabs in a tab list, and the close button outside it.
 function renderTabs(room, c) {
-  const bar = document.createElement("div");
-  bar.className = "config-tabs";
-  const list = document.createElement("span");
-  list.className = "config-tablist";
+  const list = elem("span", "config-tablist");
   list.setAttribute("role", "tablist");
   list.setAttribute("aria-label", t("cfg.sections"));
   for (const key of TABS) {
@@ -207,12 +204,8 @@ function renderTabs(room, c) {
     b.setAttribute("aria-selected", c.tab === key ? "true" : "false");
     list.appendChild(b);
   }
-  bar.appendChild(list);
-  const close = button("×", "tab close", () => closeConfig(room));
-  close.title = t("cfg.closeTitle");
-  close.setAttribute("aria-label", t("cfg.close"));
-  bar.appendChild(close);
-  return bar;
+  const close = button("×", { cls: "tab close", aria: t("cfg.close"), title: t("cfg.closeTitle") }, () => closeConfig(room));
+  return elem("div", "config-tabs", list, close);
 }
 
 // --- room tab ---------------------------------------------------------
@@ -322,7 +315,7 @@ function deviceResults(label, res) {
 // --- devices tab ------------------------------------------------------
 
 function renderDevicesTab(room, c) {
-  const wrap = document.createElement("div");
+  const wrap = elem("div");
   const thermostats = room.devices.filter(isThermostat);
   if (thermostats.length) {
     const form = formEl(() => sendRoomConfig(room, c, VALVE_FIELDS, t("cfg.deviceSettings")), "cfg-form");
@@ -334,13 +327,9 @@ function renderDevicesTab(room, c) {
     form.appendChild(fieldRow(t("cfg.boostMinutes"), numberInput(e.boost_minutes, 0, 60, 5, set("boost_minutes")), { unit: t("unit.minutes"), help: "boostMinutes" }));
     form.appendChild(fieldRow(t("cfg.boostValve"), numberInput(e.boost_valve_pct, 0, 100, 5, set("boost_valve_pct")), { unit: "%", help: "boostValve" }));
     const dayOpts = DAYS.map((d) => [d, dayLong(d)]);
-    const decalc = document.createElement("span");
-    decalc.className = "inline";
-    decalc.appendChild(selectInput(dayOpts, e.decalc_day, set("decalc_day")));
     const hour = numberInput(e.decalc_hour, 0, 23, 1, set("decalc_hour"));
     hour.setAttribute("aria-label", t("cfg.decalcHour"));
-    decalc.appendChild(hour);
-    decalc.appendChild(textEl("span", ":00", "muted"));
+    const decalc = elem("span", "inline", selectInput(dayOpts, e.decalc_day, set("decalc_day")), hour, textEl("span", ":00", "muted"));
     form.appendChild(fieldRow(t("cfg.decalc"), decalc, { help: "decalc" }));
     form.appendChild(fieldRow(t("cfg.maxValve"), numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), { unit: "%", help: "maxValve" }));
     form.appendChild(fieldRow(t("cfg.valveOffset"), numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), { unit: "%", help: "valveOffset" }));
@@ -360,12 +349,10 @@ function renderDeviceForm(room, c, d) {
   const e = c.edit.devices[d.rf_address];
   const form = formEl(() => sendDevice(room, c, d), "cfg-form");
   form.className += " cfg-device";
-  const head = document.createElement("div");
-  head.className = "device-main";
-  head.appendChild(textEl("span", d.name || d.rf_address, "device-name"));
-  head.appendChild(textEl("span", typeName(d.type), "muted expert-only"));
-  head.appendChild(textEl("span", d.rf_address, "muted mono expert-only"));
-  form.appendChild(head);
+  form.appendChild(elem("div", "device-main",
+    textEl("span", d.name || d.rf_address, "device-name"),
+    textEl("span", typeName(d.type), "muted expert-only"),
+    textEl("span", d.rf_address, "muted mono expert-only")));
   const name = document.createElement("input");
   name.type = "text";
   name.value = e.name;
@@ -391,23 +378,16 @@ function renderDeviceForm(room, c, d) {
     e.confirmMove = false;
   }), { help: "deviceRoom" }));
   if (e.confirmMove) {
-    const box = document.createElement("div");
-    box.className = "panel delete-confirm";
     const target = state.rooms.find((r) => r.id === e.room_id);
-    box.appendChild(textEl("span", t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id })));
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    actions.appendChild(button(t("action.keep"), "", () => {
+    const text = t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id });
+    form.appendChild(confirmBox(text, { yes: t("cfg.move"), no: t("action.keep") }, () => {
+      e.confirmMove = false;
+      sendDevice(room, c, d, true);
+    }, () => {
       e.confirmMove = false;
       e.room_id = room.id;
       rerenderRoom(room);
     }));
-    actions.appendChild(button(t("cfg.move"), "primary", () => {
-      e.confirmMove = false;
-      sendDevice(room, c, d, true);
-    }));
-    box.appendChild(actions);
-    form.appendChild(box);
   }
   form.appendChild(formFooter({ submit: t("action.send") }));
   return form;
@@ -493,23 +473,21 @@ function renderProgramTab(room, c) {
   const p = c.prog;
   const form = formEl(() => sendProgram(room, c), "cfg-form");
   const dirty = new Set(dirtyDays(p));
-  const days = document.createElement("div");
-  days.className = "day-bar week";
+  const days = elem("div", "day-bar week");
   days.setAttribute("role", "group");
   days.setAttribute("aria-label", t("prog.dayToEdit"));
   for (const day of DAYS) {
     const editing = p.day === day;
     const sel = p.selected.has(day);
-    const b = button(dayShort(day), "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : ""), () => {
+    let name = dayLong(day);
+    if (sel && !editing) name = t("prog.editedTogether", { day: name });
+    if (dirty.has(day)) name = t("prog.changed", { day: name });
+    const cls = "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : "");
+    const b = button(dayShort(day), { cls, aria: name, title: t("prog.dayTitle", { day: dayLong(day) }) }, () => {
       selectDay(p, day);
       rerenderRoom(room);
     });
     b.setAttribute("aria-pressed", editing ? "true" : "false");
-    let name = dayLong(day);
-    if (sel && !editing) name = t("prog.editedTogether", { day: name });
-    if (dirty.has(day)) name = t("prog.changed", { day: name });
-    b.setAttribute("aria-label", name);
-    b.title = t("prog.dayTitle", { day: dayLong(day) });
     days.appendChild(b);
   }
   form.appendChild(days);
@@ -531,21 +509,19 @@ function renderProgramTab(room, c) {
   const dev = src && c.cfg && c.cfg.devices.find((d) => d.rf_address === src);
   const note = dirty.size ? t("prog.sendNoteDays", { days: dayList([...dirty]) }) : t("prog.sendNote");
   form.appendChild(textEl("p", (src ? t("prog.storedOn", { device: dev && dev.name ? dev.name : src }) + " " : "") + note, "muted small"));
-  const resetDay = button(t("prog.resetDay"), "", () => {
+  const resetDay = button(t("prog.resetDay"), { title: t("prog.resetDayTitle", { day: dayLong(p.day) }) }, () => {
     p.days[p.day] = copyPoints(p.orig[p.day]);
     selectDay(p, p.day);
     rerenderRoom(room);
   });
   resetDay.disabled = !dirty.has(p.day);
-  resetDay.title = t("prog.resetDayTitle", { day: dayLong(p.day) });
-  const resetAll = button(t("prog.resetAll"), "", () => {
+  const resetAll = button(t("prog.resetAll"), { title: t("prog.resetAllTitle") }, () => {
     p.days = copyDays(p.orig);
     p.copyTo = new Set();
     selectDay(p, p.day);
     rerenderRoom(room);
   });
   resetAll.disabled = dirty.size === 0;
-  resetAll.title = t("prog.resetAllTitle");
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send"), extra: [resetDay, resetAll] }));
   return form;
 }
@@ -555,25 +531,19 @@ function renderProgramTab(room, c) {
 // and Copy, which gives the ticked days the edited day's programme.
 // With "only" off they then join the selection and are edited together.
 function renderDayCopy(room, p) {
-  const box = document.createElement("div");
-  box.className = "day-copy";
-  box.setAttribute("role", "group");
   const title = t("prog.copyTo", { day: dayLong(p.day) });
-  box.setAttribute("aria-label", title);
-  box.appendChild(textEl("h4", title));
-  const row = document.createElement("div");
-  row.className = "day-bar week";
+  const row = elem("div", "day-bar week");
   const free = DAYS.filter((d) => !p.selected.has(d));
   for (const day of DAYS) {
     const on = p.copyTo.has(day);
-    const b = button(dayShort(day), "day" + (on ? " chosen" : ""), () => {
+    const has = p.selected.has(day);
+    const b = button(dayShort(day), { cls: "day" + (on ? " chosen" : ""), aria: has ? t("prog.hasProgramme", { day: dayLong(day) }) : dayLong(day) }, () => {
       if (p.copyTo.has(day)) p.copyTo.delete(day);
       else p.copyTo.add(day);
       rerenderRoom(room);
     });
-    b.disabled = p.selected.has(day);
+    b.disabled = has;
     b.setAttribute("aria-pressed", on ? "true" : "false");
-    b.setAttribute("aria-label", b.disabled ? t("prog.hasProgramme", { day: dayLong(day) }) : dayLong(day));
     row.appendChild(b);
   }
   const all = button(t("prog.allDays"), "day all", () => {
@@ -581,10 +551,6 @@ function renderDayCopy(room, p) {
     rerenderRoom(room);
   });
   all.disabled = free.length === 0 || free.every((d) => p.copyTo.has(d));
-  box.appendChild(row);
-  const tools = document.createElement("div");
-  tools.className = "day-bar";
-  tools.appendChild(all);
   const copy = button(t("prog.copy"), "day copy", () => {
     for (const d of p.copyTo) {
       p.days[d] = copyPoints(p.days[p.day]);
@@ -594,15 +560,15 @@ function renderDayCopy(room, p) {
     rerenderRoom(room);
   });
   copy.disabled = p.copyTo.size === 0;
-  tools.appendChild(copy);
-  box.appendChild(tools);
+  const box = elem("div", "day-copy", textEl("h4", title), row, elem("div", "day-bar", all, copy));
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-label", title);
   return box;
 }
 
 // renderDayBar draws the day as segments proportional to their length.
 function renderDayBar(points) {
-  const bar = document.createElement("div");
-  bar.className = "prog-bar";
+  const bar = elem("div", "prog-bar");
   let start = 0;
   const temps = points.map((p) => p.temp);
   const lo = Math.min(...temps), hi = Math.max(...temps);
@@ -629,13 +595,10 @@ function renderPoints(room, c, day) {
     programEdited(p);
     rerenderRoom(room);
   };
-  const list = document.createElement("div");
-  list.className = "prog-points";
+  const list = elem("div", "prog-points");
   pts.forEach((pt, i) => {
     const last = i === pts.length - 1;
-    const row = document.createElement("div");
-    row.className = "prog-point";
-    row.appendChild(textEl("span", t("prog.until"), "muted"));
+    const row = elem("div", "prog-point", textEl("span", t("prog.until"), "muted"));
     if (last) {
       row.appendChild(textEl("span", "24:00", "prog-end"));
     } else {
@@ -663,22 +626,18 @@ function renderPoints(room, c, day) {
     row.appendChild(temp);
     row.appendChild(textEl("span", "°C", "muted"));
     if (!last) {
-      const rm = button("−", "step small", () => {
+      const rm = button("−", { cls: "step small", aria: t("prog.remove"), title: t("prog.removeTitle") }, () => {
         pts.splice(i, 1);
         edited();
       });
-      rm.title = t("prog.removeTitle");
-      rm.setAttribute("aria-label", t("prog.remove"));
       row.appendChild(rm);
     } else if (pts.length < MAX_POINTS) {
-      const add = button("+", "step small", () => {
+      const add = button("+", { cls: "step small", aria: t("prog.add"), title: t("prog.addTitle") }, () => {
         const prev = pts.length > 1 ? minutesOf(pts[pts.length - 2].until) : 0;
         const mid = Math.round(((prev + 1440) / 2) / 5) * 5;
         pts.splice(pts.length - 1, 0, { temp: pt.temp, until: clockOf(Math.min(1435, Math.max(prev + 5, mid))) });
         edited();
       });
-      add.title = t("prog.addTitle");
-      add.setAttribute("aria-label", t("prog.add"));
       row.appendChild(add);
     }
     list.appendChild(row);
@@ -734,28 +693,17 @@ function renderCopyTab(room, c) {
   form.appendChild(textEl("p", t("copy.intro"), "muted small"));
   const others = state.rooms.filter((r) => r.id !== room.id && roomThermostat(r));
 
-  const rooms = document.createElement("div");
-  rooms.className = "copy-section";
-  rooms.setAttribute("role", "group");
-  rooms.setAttribute("aria-label", t("copy.roomsAria"));
-  const head = document.createElement("div");
-  head.className = "copy-head";
-  head.appendChild(textEl("h4", t("copy.rooms")));
   const allBtn = button(t("copy.allRooms"), "", () => {
     k.rooms = new Set(others.map((r) => r.id));
     rerenderRoom(room);
   });
   allBtn.disabled = others.length === 0 || others.every((r) => k.rooms.has(r.id));
-  head.appendChild(allBtn);
   const noneBtn = button(t("copy.none"), "", () => {
     k.rooms = new Set();
     rerenderRoom(room);
   });
   noneBtn.disabled = k.rooms.size === 0;
-  head.appendChild(noneBtn);
-  rooms.appendChild(head);
-  const list = document.createElement("div");
-  list.className = "copy-list";
+  const list = elem("div", "copy-list");
   if (others.length === 0) list.appendChild(textEl("p", t("copy.noOther"), "muted"));
   for (const r of others) {
     list.appendChild(switchEl(r.name, k.rooms.has(r.id), (on) => {
@@ -764,28 +712,24 @@ function renderCopyTab(room, c) {
       rerenderRoom(room);
     }));
   }
-  rooms.appendChild(list);
+  const rooms = elem("div", "copy-section", elem("div", "copy-head", textEl("h4", t("copy.rooms")), allBtn, noneBtn), list);
+  rooms.setAttribute("role", "group");
+  rooms.setAttribute("aria-label", t("copy.roomsAria"));
   form.appendChild(rooms);
 
-  const settings = document.createElement("div");
-  settings.className = "copy-section";
-  settings.setAttribute("role", "group");
-  settings.setAttribute("aria-label", t("copy.settingsAria"));
-  settings.appendChild(textEl("h4", t("copy.settings")));
-  const slist = document.createElement("div");
-  slist.className = "copy-list";
-  slist.appendChild(switchEl(t("copy.temps"), k.temps, (on) => {
+  const temps = switchEl(t("copy.temps"), k.temps, (on) => {
     k.temps = on;
-  }));
+  });
   const prog = switchEl(t("copy.program"), k.program && !!c.prog, (on) => {
     k.program = on;
   });
-  if (!c.prog) prog.querySelector("input").disabled = true;
-  slist.appendChild(prog);
-  slist.appendChild(switchEl(t("copy.radiator"), k.radiator, (on) => {
+  if (!c.prog) prog.control.disabled = true;
+  const radiator = switchEl(t("copy.radiator"), k.radiator, (on) => {
     k.radiator = on;
-  }));
-  settings.appendChild(slist);
+  });
+  const settings = elem("div", "copy-section", textEl("h4", t("copy.settings")), elem("div", "copy-list", temps, prog, radiator));
+  settings.setAttribute("role", "group");
+  settings.setAttribute("aria-label", t("copy.settingsAria"));
   form.appendChild(settings);
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("copy.send") }));
   return form;
@@ -836,6 +780,8 @@ async function sendCopy(room, c) {
 
 // --- results ----------------------------------------------------------
 
+// setConfigResult keeps the result of the last send for the area, which
+// renderConfig shows (showResult) under the section.
 function setConfigResult(room, c, text, ok) {
   c.result = { text, ok };
   rerenderRoom(room);
