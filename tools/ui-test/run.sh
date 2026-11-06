@@ -88,9 +88,10 @@ until curl -sf -H "Authorization: Bearer $token" "${url}api/v1/cubes" 2>/dev/nul
 	sleep 0.2
 done
 
-# An operator with a password, for the sign-in tests: user add opens the
-# store beside the running server.
+# An operator and a guest with passwords, for the sign-in and the
+# preferences tests: user add opens the store beside the running server.
 printf 'op-pass\n' | env -i PATH="$PATH" HOME="$HOME" ./massimo -data "$work" user add operator -role operator -password-stdin >/dev/null 2>>serve.log
+printf 'guest-pass\n' | env -i PATH="$PATH" HOME="$HOME" ./massimo -data "$work" user add guest1 -role guest -password-stdin >/dev/null 2>>serve.log
 
 if [ "$mode" = screenshots ]; then
 	"$py" "$here/screenshots.py" "$url" "$token"

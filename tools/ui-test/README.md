@@ -126,11 +126,19 @@ what a test stores in the browser goes with its context.
 - `test_users.py`, Settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-pass`) are listed with the operator's tokens,
-  and the six default roles with the operator's six capabilities.
+  and the six default roles with the operator's seven capabilities.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,
   and Log out brings the dialog back and forgets the token.
+- `test_preferences.py`, the settings that follow the user:
+  the poll and the scheme set in one browser reach the server and a fresh
+  browser with the same token,
+  the mode kept "only on this device" stays in its browser and the user's
+  applies again when the switch is off; the guest the runner creates (`guest1`,
+  password `guest-pass`) has no switches, and its poll stays in the browser.
+  Since the four cases share the server,
+  the page fixture removes the token's user's preferences before every page.
 - `test_log.py`:
   the log opens, and a state event with changes shows what changed.
 - `test_appearance.py`, Settings → Appearance:
