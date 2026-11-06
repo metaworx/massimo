@@ -21,6 +21,16 @@ the next minor, a fix counts the suffix up.
   as the original software does, under `structure`; a client's `t:`
   through the proxy drops the devices from the server's copy too.
 
+### Changed
+
+- `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
+  room's settings as the original software does, the programme days
+  that differ only; `"copy": false` skips it (docs/api-v1.md).
+
+## [0.9.0-alpha.1] - 2026-11-06
+
+### Added
+
 - Store stage (c), the settings per user (`docs/store.md` section 9):
   kept per user and key for a role with the capability `preferences`
   (migration 0003), through `/api/v1/me/preferences` (`docs/api-v1.md`).
@@ -62,10 +72,6 @@ the next minor, a fix counts the suffix up.
   as apt does (packaging/README.md, "Homebrew").
 
 ### Changed
-
-- `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
-  room's settings as the original software does, the programme days
-  that differ only; `"copy": false` skips it (docs/api-v1.md).
 
 - CI runs once per commit (a push to `main` or a pull request), and the
   Screenshots job runs in the Playwright image, without apt.
