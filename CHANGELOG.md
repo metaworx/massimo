@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- Store stage (b), users, login, tokens, the audit and commands
+  (`docs/store.md` section 9): migration 0002 adds `commands`,
+  `users.auth_version` and `audit.command_id`.
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

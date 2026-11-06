@@ -433,3 +433,37 @@ func TestBackupAndInfo(t *testing.T) {
 		t.Fatal("write on a read-only store")
 	}
 }
+
+// A file left at version 1 by v0.7.0-alpha.1 is migrated to version 2
+// by the next binary, additively: min_reader stays 1, and the columns
+// and the table of 0002 are there.
+func TestMigratesAVersionOneFile(t *testing.T) {
+	dir := t.TempDir()
+	s1, err := Open(dir, Options{Version: "v0.7.0-alpha.1", Logger: quiet(), readerVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s1.SchemaVersion(); v != 1 {
+		t.Fatalf("version %d after the first open", v)
+	}
+	s1.Close()
+	s := open(t, dir)
+	if v, mr := s.SchemaVersion(); v != SchemaVersion() || v < 2 || mr != 1 {
+		t.Fatalf("schema %d min_reader %d", v, mr)
+	}
+	has := func(table, col string) bool {
+		var n int
+		s.db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = ?`, table, col).Scan(&n)
+		return n == 1
+	}
+	if !has("users", "auth_version") || !has("audit", "command_id") || !has("commands", "idempotency_key") {
+		t.Fatal("the columns of 0002 are missing")
+	}
+	if _, err := os.Stat(Path(dir) + ".before-2"); err == nil {
+		t.Fatal("an additive migration made a copy")
+	}
+	in, err := s.Info(context.Background())
+	if err != nil || in.Counts["commands"] != 0 || in.Schema != SchemaVersion() {
+		t.Fatalf("info %+v %v", in, err)
+	}
+}
