@@ -740,6 +740,21 @@ a fix or another round counts the suffix up (`v0.2.0-alpha.2`);
 the suffix names the channel,
 so promoting to a later `beta` branch tags `-beta.N`.
 
+A release is made on `main`, checked out, clean and equal to `origin/main`.
+`make release-alpha` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
+section with `GUIDELINES/shared/tools/changelog.sh`,
+commits it on `main` as `chore(release): vX.Y.Z-alpha.N`, and tags that commit,
+signed, with the section as the tag's message,
+so the tag carries the release notes.
+It then pushes `main`, `alpha` and the tag together or not at all.
+It refuses when `alpha` has commits `main` lacks,
+when `main`'s head is released already,
+when `changelog.sh check` finds something,
+and when `[Unreleased]` holds no bullet.
+`make release-alpha DRY=1` shows what it would cut, tag and push,
+and does none of it;
+`ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
+
 Boxes following the update channel `alpha` get each release from `massimo
 update` or the web UI (see [packaging/README.md](packaging/README.md#updating)).
 `make` builds carry the version from `git describe`, `go run` builds

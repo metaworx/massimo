@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.1.0)
+# Massimo — CI Conventions (v1.2.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -110,16 +110,24 @@ Never echo any slice of a secret to the log.
 
 ## 6. Releases
 
-`make release-alpha` on `main` tags its head `vX.Y.Z-alpha.N`
-(`BUMP=minor` for a feature, nothing for a fix) and fast-forwards the
-branch `alpha` to it, both pushed atomically;
+`make release-alpha` on `main` (checked out, clean,
+equal to `origin/main`) cuts `CHANGELOG.md`'s `[Unreleased]` into the section of
+`vX.Y.Z-alpha.N` (`BUMP=minor` for a feature,
+nothing for a fix) with `changelog.sh cut --commit --tag create`:
+the `chore(release):` commit on `main`,
+and the signed tag at it with the section as its message.
+`main`, `alpha` fast-forwarded to that commit and the tag are pushed atomically;
 the tag's push starts release.yml.
-The update channel of a release is the pre-release identifier of the
-tag's name (`v0.7.0-alpha.1` is on `alpha`), then the `channel:` line
-`make release-alpha` writes into the tag message, then the one branch
-holding the commit;
-the name comes first so that a tag message rewritten with its changelog
-section (`changelog.sh tag`) keeps its channel.
+So a released section and its tag agree from the start, which is what
+`changelog.sh check` holds them to in the guidelines job.
+`DRY=1` runs every step as a dry run.
+The update channel of a release is the pre-release identifier of the tag's name
+(`v0.7.0-alpha.1` is on `alpha`),
+then a `channel:` line in the tag message (which `make release-alpha` no longer writes:
+the name of every tag it makes holds the channel),
+then the one branch holding the commit.
+The GitHub release's notes are a fixed line naming the channel,
+not the tag's message.
 A tag whose commit `git describe` does not name is refused.
 Every release below 1.0.0 is a pre-release on GitHub.
 The boxes on the alpha channel (the Raspberry Pi) take a release through
