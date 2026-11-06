@@ -10,8 +10,19 @@ import (
 	"runtime"
 	"testing"
 
+	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/update"
 )
+
+// TestUpdateVariablesAreKnown keeps massimo config from flagging the
+// variables massimo update reads as typos.
+func TestUpdateVariablesAreKnown(t *testing.T) {
+	for _, k := range []string{update.TokenVar, "MASSIMO_UPDATE_CHANNEL"} {
+		if !env.Known(k) {
+			t.Errorf("%s unknown to massimo config", k)
+		}
+	}
+}
 
 // TestSmokeRunsRealBinary builds massimo and runs the update's smoke test
 // on it: the stand-in scripts of internal/update cannot show how the real
