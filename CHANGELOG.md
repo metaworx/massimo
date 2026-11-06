@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Added
+
+- The store keeps the Cubes' events, written in batches of one
+  transaction and pruned daily by `log.keep_days` (30 days; 0 keeps
+  them), so that the log survives a restart (`docs/store.md` section 9).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
