@@ -955,6 +955,7 @@ function applyLanguage() {
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   renderRooms();
+  fillLogSelects();
   renderLog();
   if (updState.info) renderUpdate(updState.info);
 }

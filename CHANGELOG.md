@@ -14,6 +14,10 @@ the next minor, a fix counts the suffix up.
   transaction and pruned daily by `log.keep_days` in `/api/v1/settings`
   (30 days; 0 keeps them), so that the log survives a restart.
 
+- The web UI's log pages back with "Older events" and shows one kind
+  of event or one device, from the server's log, which reaches back
+  across restarts (`docs/ui.md`, "Log").
+
 ### Changed
 
 - `GET …/log` pages back with `before` (an event's `id` or a time) and

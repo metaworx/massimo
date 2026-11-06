@@ -1,18 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, log view: the selected Cube's recent events from
-// GET …/log, then the live events of the stream, one line each, with a
-// filter and a clear that only empties the view. Uses the state, api
-// and helpers of app.js and tiles.js.
+// The Massimo web UI, log view: the selected Cube's events from
+// GET …/log, a page at a time with "Older" back through the server's
+// log, then the live events of the stream, one line each, with a text
+// filter, a choice of kind and of device, and a clear that only empties
+// the view. Uses the state, api and helpers of app.js and tiles.js.
 "use strict";
 
 const LOG_MAX_LINES = 2000;
 
+// LOG_PAGE is how many events a page asks for; a shorter page is the
+// log's beginning.
+const LOG_PAGE = 200;
+
+// LOG_KINDS are the kinds of event the server sends, in its order
+// (eventKinds in internal/server/log.go, which TestLogKinds compares).
+const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
+  "cube_found", "restore_step", "restore_done"];
+
 const logState = {
   open: false,
-  lines: [], // {time, kind, device, text}
+  lines: [], // {id, time, at, kind, device, text}
   filter: "",
+  kind: "", // the kind chosen, "" for all
+  device: "", // the radio address chosen, "" for all
+  cursor: null, // the oldest line's id, else its time as received: where Older pages from
+  more: false, // the server may have older events
+  loading: false,
   stick: true, // auto-scroll to the bottom unless the user scrolled up
 };
 
@@ -105,6 +120,8 @@ function logChangesText(changes) {
 function logLine(ev) {
   const time = ev.time ? new Date(ev.time) : new Date();
   return {
+    id: ev.id || 0,
+    at: ev.time || "",
     time,
     kind: ev.kind || "",
     device: ev.device || "",
@@ -135,6 +152,8 @@ function fmtLogTime(d) {
 }
 
 function logLineMatches(line) {
+  if (logState.kind && line.kind !== logState.kind) return false;
+  if (logState.device && line.device !== logState.device) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
   const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, logDeviceName(line.device), logText(line)].join(" ").toLowerCase();
@@ -169,6 +188,34 @@ function renderLog() {
     if (logLineMatches(line)) box.appendChild(renderLogLine(line));
   }
   if (logState.stick) box.scrollTop = box.scrollHeight;
+  renderOlder();
+}
+
+// renderOlder shows whether Older can page further back.
+function renderOlder() {
+  const btn = $("log-older");
+  const can = logState.more && logState.cursor !== null;
+  btn.disabled = !can || logState.loading;
+  btn.textContent = t(can ? "log.older" : "log.noOlder");
+}
+
+// logCursor is where the next older page starts: the oldest line's id,
+// else its time as the server sent it (a Cube without a row in the
+// store, whose log has no ids).
+function logCursor() {
+  const first = logState.lines[0];
+  if (!first) return null;
+  return first.id ? String(first.id) : first.at || null;
+}
+
+// logQuery is the query of a page: the size, the kind and the device
+// chosen, and where it starts.
+function logQuery(before) {
+  let q = "?limit=" + LOG_PAGE;
+  if (logState.kind) q += "&kind=" + encodeURIComponent(logState.kind);
+  if (logState.device) q += "&device=" + encodeURIComponent(logState.device);
+  if (before) q += "&before=" + encodeURIComponent(before);
+  return q;
 }
 
 // appendLogEvent adds a live event; the view is updated in place when
@@ -176,7 +223,11 @@ function renderLog() {
 function appendLogEvent(ev) {
   const line = logLine(ev);
   logState.lines.push(line);
-  if (logState.lines.length > LOG_MAX_LINES) logState.lines.splice(0, logState.lines.length - LOG_MAX_LINES);
+  if (logState.lines.length > LOG_MAX_LINES) {
+    logState.lines.splice(0, logState.lines.length - LOG_MAX_LINES);
+    logState.cursor = logCursor(); // Older goes on from the oldest line kept
+    logState.more = true;
+  }
   if (!logState.open) return;
   if (logLineMatches(line)) {
     const box = $("log-lines");
@@ -185,17 +236,63 @@ function appendLogEvent(ev) {
   }
 }
 
-// loadLog replaces the lines with the Cube's recent events.
+// loadLog replaces the lines with the Cube's newest events of the kind
+// and the device chosen.
 async function loadLog() {
   if (!state.serial) return;
   try {
-    const evs = (await api("GET", base() + "/log?limit=200")) || [];
+    const evs = (await api("GET", base() + "/log" + logQuery())) || [];
     logState.lines = evs.map(logLine);
+    logState.cursor = logCursor();
+    logState.more = evs.length >= LOG_PAGE;
   } catch (e) {
-    logState.lines = [{ time: new Date(), kind: "error", device: "", state: null, text: t("log.cannotLoad", { error: e.message }) }];
+    logState.lines = [{ id: 0, at: "", time: new Date(), kind: "error", device: "", state: null, text: t("log.cannotLoad", { error: e.message }) }];
+    logState.cursor = null;
+    logState.more = false;
   }
   logState.stick = true;
   renderLog();
+}
+
+// loadOlder puts the page before the oldest line above the lines, the
+// view staying where it was.
+async function loadOlder() {
+  if (logState.loading || !logState.more || logState.cursor === null || !state.serial) return;
+  logState.loading = true;
+  renderOlder();
+  const box = $("log-lines");
+  const height = box.scrollHeight;
+  const top = box.scrollTop;
+  try {
+    const evs = (await api("GET", base() + "/log" + logQuery(logState.cursor))) || [];
+    logState.lines = evs.map(logLine).concat(logState.lines);
+    logState.more = evs.length >= LOG_PAGE;
+    if (evs.length) logState.cursor = logCursor();
+  } catch (e) {
+    showMessage(t("log.cannotLoad", { error: e.message }), false);
+  } finally {
+    logState.loading = false;
+  }
+  const stick = logState.stick;
+  logState.stick = false;
+  renderLog();
+  box.scrollTop = top + (box.scrollHeight - height);
+  logState.stick = stick && box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+}
+
+// fillLogSelects fills the choice of kind, every kind the server sends,
+// and of device, the Cube's devices by name; a choice that is gone falls
+// back to all.
+function fillLogSelects() {
+  const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(LOG_KINDS.map((k) => [k, logKind(k)])));
+  kinds.value = logState.kind;
+  const devs = [];
+  for (const r of state.rooms) for (const d of r.devices) devs.push(d);
+  for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
+  devs.sort((a, b) => (a.name || a.rf_address).localeCompare(b.name || b.rf_address));
+  const sel = fillOptions($("log-device"), [["", t("log.allDevices")]].concat(devs.map((d) => [d.rf_address, d.name ? d.name + " · " + d.rf_address : d.rf_address])));
+  if (!devs.some((d) => d.rf_address === logState.device)) logState.device = "";
+  sel.value = logState.device;
 }
 
 // showView switches the main area between the three pages: the tiles
@@ -214,7 +311,10 @@ function showView(view) {
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
-  if (view === "log") loadLog();
+  if (view === "log") {
+    fillLogSelects();
+    loadLog();
+  }
 }
 
 function initLog() {
@@ -227,8 +327,19 @@ function initLog() {
   });
   $("log-clear").addEventListener("click", () => {
     logState.lines = [];
+    logState.cursor = null;
+    logState.more = false;
     renderLog();
   });
+  $("log-kind").addEventListener("change", (ev) => {
+    logState.kind = ev.target.value;
+    loadLog();
+  });
+  $("log-device").addEventListener("change", (ev) => {
+    logState.device = ev.target.value;
+    loadLog();
+  });
+  $("log-older").addEventListener("click", loadOlder);
   const box = $("log-lines");
   box.addEventListener("scroll", () => {
     logState.stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;

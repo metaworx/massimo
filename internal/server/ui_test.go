@@ -18,6 +18,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/cubelan"
 )
 
 func TestUIServed(t *testing.T) {
@@ -500,6 +502,32 @@ func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
 					t.Errorf("theme.js %s.%s: %s on %s has contrast %.1f, want 4.5", id, mode, p[0], p[1], r)
 				}
 			}
+		}
+	}
+}
+
+// TestLogKinds keeps the page's kinds of event (LOG_KINDS in log.js), the
+// server's (eventKinds) and the Cube driver's (cubelan.EventKind) one
+// list.
+func TestLogKinds(t *testing.T) {
+	js, err := uiFiles.ReadFile("ui/log.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?s)const LOG_KINDS = \[(.*?)\];`).FindSubmatch(js)
+	if m == nil {
+		t.Fatal("log.js: no LOG_KINDS")
+	}
+	var page []string
+	for _, k := range regexp.MustCompile(`"([a-z_]+)"`).FindAllSubmatch(m[1], -1) {
+		page = append(page, string(k[1]))
+	}
+	if strings.Join(page, " ") != strings.Join(eventKinds, " ") {
+		t.Fatalf("log.js LOG_KINDS %v, the server's eventKinds %v", page, eventKinds)
+	}
+	for k := cubelan.EventKind(0); k.String() != "unknown"; k++ {
+		if !slices.Contains(eventKinds, k.String()) {
+			t.Errorf("the Cube driver's kind %q is not in eventKinds", k)
 		}
 	}
 }

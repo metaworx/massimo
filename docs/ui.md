@@ -136,11 +136,21 @@ the header says how many are pending.
 
 ## Log
 
-Shows the Cube's recent events and new ones as they arrive: device states,
-configuration and name changes, connections to the Cube and errors.
+Shows the Cube's newest 200 events and new ones as they arrive: device states,
+configuration and name changes, connections to the Cube, pairing,
+restores and errors.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
+**Older events** above the lines loads the 200 before the oldest shown,
+the view staying where it was,
+until the server has nothing older ("No older events").
+The server keeps its log in its store across restarts and updates,
+for the days `log.keep_days` says (30 by default; docs/api-v1.md,
+"GET and PUT /api/v1/settings").
+The two choices in the head show one kind of event (all kinds by default)
+and one device (all devices); the server answers what matches,
+and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
 **Clear** empties the view only; the server keeps its log.
 
