@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Changed
+
+- The release workflow reads the update channel from the tag's name
+  (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
+  line, so a message rewritten with the changelog keeps its channel.
+
 ## [0.7.0-alpha.1] - 2026-11-06
 
 ### Added

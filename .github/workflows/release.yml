@@ -12,9 +12,12 @@ name: Release
 # publishing, and publishes exactly what it signed.
 #
 # The update channel of a release is the release branch it was promoted
-# to, as `make release-alpha` writes it into the tag message ("channel:
-# alpha"); for a tag without that line, the one branch on GitHub holding
-# its commit. Development happens on main; the release branches only ever
+# to, which is the pre-release identifier of the tag's name (v0.7.0-alpha.1
+# is on channel alpha); for a tag without one, the "channel:" line
+# `make release-alpha` writes into the tag message, else the one branch on
+# GitHub holding its commit. The name comes first so that a tag message
+# rewritten with the changelog section (changelog.sh tag) keeps its
+# channel. Development happens on main; the release branches only ever
 # fast-forward to it.
 on:
   push:
@@ -47,7 +50,10 @@ jobs:
             echo "::error::git describe does not name ${tag} for ${sha}."
             exit 1
           fi
-          channel="$(git for-each-ref --format='%(contents)' "refs/tags/${tag}" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]')"
+          channel="$(printf '%s\n' "$tag" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')"
+          if [ -z "$channel" ]; then
+            channel="$(git for-each-ref --format='%(contents)' "refs/tags/${tag}" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]')"
+          fi
           if [ -z "$channel" ]; then
             branches="$(git branch -r --format='%(refname:lstrip=3)' --contains "$sha" | grep -vx HEAD || true)"
             if [ "$(printf '%s\n' "$branches" | grep -c .)" != 1 ]; then
