@@ -610,6 +610,9 @@ so the room is marked not ready (`-json` for machines).
 and with `-discovery 127.0.0.1:23273` it also answers UDP discovery as a further
 Cube (`-discovery-serial`),
 which `serve -discover-target 127.0.0.1:23273` finds.
+`-pair 1514b6,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
+after `n:`, a copy of the greeting's 1514b6 as 0abcde in no room,
+and joins again after it was removed (a fourth field sets the delay).
 
 ```bash
 massimo discover
