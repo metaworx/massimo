@@ -6,14 +6,15 @@
 
 # Massimo (v1.0.0)
 
-Massimo is open-source successor software for eQ-3 MAX! heating systems
-(the MAX! Cube LAN gateway, radiator and wall thermostats, window
-contacts, eco switches) after the vendor's end of life: one Go binary
-per platform that keeps the Cubes connected, serves a JSON API and a web
-UI, answers as a Cube for the original software and other programs, and
-backs up and restores a Cube. It is for the owners of such systems and
-for the people and agents who develop it; `README.md` at the root is the
-user's document.
+Massimo is open-source successor software for eQ-3 MAX! heating systems (the MAX!
+Cube LAN gateway, radiator and wall thermostats, window contacts,
+eco switches) after the vendor's end of life:
+one Go binary per platform that keeps the Cubes connected,
+serves a JSON API and a web UI,
+answers as a Cube for the original software and other programs,
+and backs up and restores a Cube.
+It is for the owners of such systems and for the people and agents who develop it;
+`README.md` at the root is the user's document.
 
 ## Working on it
 
@@ -30,9 +31,9 @@ Everything runs against the fake Cube: `./massimo fakecube -listen
 in one terminal, `MASSIMO_ENV_FILE=/dev/null ./massimo serve -addr
 127.0.0.1:62910 -proxy off` in another, the web UI at
 <http://127.0.0.1:8099/>. The UI smoke test needs Python with Playwright
-once (`tools/ui-test/README.md`), then `make ui-test`. Real hardware is
-reached through the `.env` file (gitignored; `README.md`, "Cube
-variables") and only through the proxy of a running `serve`.
+once (`tools/ui-test/README.md`), then `make ui-test`.
+Real hardware is reached through the `.env` file (gitignored; `README.md`,
+"Cube variables") and only through the proxy of a running `serve`.
 
 ## The rules that apply here
 
@@ -149,50 +150,58 @@ The coding standard at the end of `docs/review-2026-11-05.md` and the
 "Conventions" of `docs/handover-session.md` are the rules; the ones an
 agent trips over most:
 
-- **Secrets and identities.** No keys, IVs, tokens, real device names or
-  real Cube serials in code, fixtures, documents or commit messages;
-  placeholders such as `KEQ0000000`. `.env`, backups and logs are
-  gitignored. The checkout's `.env` points at real hardware, so tests
-  and manual runs use `MASSIMO_ENV_FILE=/dev/null` or the fake Cube
+- **Secrets and identities.**
+  No keys, IVs, tokens, real device names or real Cube serials in code,
+  fixtures, documents or commit messages; placeholders such as `KEQ0000000`.
+  `.env`, backups and logs are gitignored.
+  The checkout's `.env` points at real hardware,
+  so tests and manual runs use `MASSIMO_ENV_FILE=/dev/null` or the fake Cube
   (`massimo fakecube`).
-- **The Cube.** Protocol bytes are built only in `internal/protocol/cube`
-  and tested against captured lines byte for byte; a command the
-  hardware has not confirmed says so in its comment and in
-  `docs/portal-protocol.md`. Hardware findings go into
-  `docs/portal-protocol.md` the day they are made, with the date and the
-  Cube firmware. A Cube serves one LAN client at a time: commands go
-  through the proxy of a running `serve`, never to a Cube another
-  program holds; a radio write costs duty cycle (about 1.25 % each,
-  36 s of air time an hour), so nothing is sent to a real Cube without
-  the owner's go.
-- **Tests** run against the fake Cube with the recorded greeting; none
-  needs hardware or the network. A new API route gets a test that
-  checks the exact line sent to the fake Cube, and
-  `TestOpenAPICoversRoutes` fails when `docs/api-v1-openapi.yaml` and the
+- **The Cube.**
+  Protocol bytes are built only in `internal/protocol/cube` and tested against
+  captured lines byte for byte;
+  a command the hardware has not confirmed says so in its comment and in
+  `docs/portal-protocol.md`.
+  Hardware findings go into `docs/portal-protocol.md` the day they are made,
+  with the date and the Cube firmware.
+  A Cube serves one LAN client at a time:
+  commands go through the proxy of a running `serve`,
+  never to a Cube another program holds;
+  a radio write costs duty cycle (about 1.25 % each, 36 s of air time an hour),
+  so nothing is sent to a real Cube without the owner's go.
+- **Tests** run against the fake Cube with the recorded greeting;
+  none needs hardware or the network.
+  A new API route gets a test that checks the exact line sent to the fake Cube,
+  and `TestOpenAPICoversRoutes` fails when `docs/api-v1-openapi.yaml` and the
   routes differ.
-- **The web UI** is plain HTML, CSS and JavaScript under
-  `internal/server/ui/`, embedded with `go:embed`: no build step, no
-  framework, no inline handlers, API text only through `textContent`,
-  every text through `i18n.js` (six languages, FR/IT/NL/PL machine-
-  translated and marked), CSS variables for light and dark, phone width
-  first (390 px), verified with `make ui-test` at 1100 and 390 px.
-- **Documents move with the code**: `README.md` for the command line,
-  `docs/api-v1.md` and the OpenAPI file for every route, `packaging/`
-  and `docs/update-windows.md` for the installers, `docs/ui.md` for the
-  UI, `docs/roadmap.md` and `docs/handover-session.md` at the end of a
-  session by the coordinating session only.
-- **Branches and pull requests**: develop on `main` through pull
-  requests the owner merges; `alpha` is the release branch, only ever
-  fast-forwarded by `make release-alpha`. A branch merges `origin/main`
-  before its pull request (merge, never rebase a stack). Commits are
-  signed (SSH, the repository's git config); run `timeout 60 git
-  commit …` because a locked key agent hangs instead of failing.
-- **Hosts.** WSL 2 in NAT mode has no LAN broadcast and no inbound
-  connections: `massimo discover`, the proxy and discovery answers from a
-  `serve` in WSL do not work there; hardware work goes through the
-  Raspberry Pi's `serve` or the Windows side. Windows executables run
-  from WSL through interop and use Windows networking; elevation needs
-  `gsudo` and the owner's UAC confirmation.
+- **The web UI** is plain HTML, CSS and JavaScript under `internal/server/ui/`,
+  embedded with `go:embed`: no build step, no framework, no inline handlers,
+  API text only through `textContent`,
+  every text through `i18n.js` (six languages,
+  FR/IT/NL/PL machine- translated and marked), CSS variables for light and dark,
+  phone width first (390 px), verified with `make ui-test` at 1100 and 390 px.
+- **Documents move with the code**:
+  `README.md` for the command line,
+  `docs/api-v1.md` and the OpenAPI file for every route,
+  `packaging/` and `docs/update-windows.md` for the installers,
+  `docs/ui.md` for the UI,
+  `docs/roadmap.md` and `docs/handover-session.md` at the end of a session by
+  the coordinating session only.
+- **Branches and pull requests**:
+  develop on `main` through pull requests the owner merges;
+  `alpha` is the release branch,
+  only ever fast-forwarded by `make release-alpha`.
+  A branch merges `origin/main` before its pull request (merge,
+  never rebase a stack).
+  Commits are signed (SSH, the repository's git config);
+  run `timeout 60 git commit …` because a locked key agent hangs instead of failing.
+- **Hosts.**
+  WSL 2 in NAT mode has no LAN broadcast and no inbound connections:
+  `massimo discover`,
+  the proxy and discovery answers from a `serve` in WSL do not work there;
+  hardware work goes through the Raspberry Pi's `serve` or the Windows side.
+  Windows executables run from WSL through interop and use Windows networking;
+  elevation needs `gsudo` and the owner's UAC confirmation.
 
 ## 4. Document Governance
 

@@ -7,14 +7,15 @@
      project document written for people first. Replace every {{TODO: …}}.
      Keep it short: what this is, how to work on it, where the rules live. -->
 
-Massimo is open-source successor software for eQ-3 MAX! heating systems
-(the MAX! Cube LAN gateway, radiator and wall thermostats, window
-contacts, eco switches) after the vendor's end of life: one Go binary
-per platform that keeps the Cubes connected, serves a JSON API and a web
-UI, answers as a Cube for the original software and other programs, and
-backs up and restores a Cube. It is for the owners of such systems and
-for the people and agents who develop it; `README.md` at the root is the
-user's document.
+Massimo is open-source successor software for eQ-3 MAX! heating systems (the MAX!
+Cube LAN gateway, radiator and wall thermostats, window contacts,
+eco switches) after the vendor's end of life:
+one Go binary per platform that keeps the Cubes connected,
+serves a JSON API and a web UI,
+answers as a Cube for the original software and other programs,
+and backs up and restores a Cube.
+It is for the owners of such systems and for the people and agents who develop it;
+`README.md` at the root is the user's document.
 
 ## Working on it
 
@@ -31,9 +32,9 @@ Everything runs against the fake Cube: `./massimo fakecube -listen
 in one terminal, `MASSIMO_ENV_FILE=/dev/null ./massimo serve -addr
 127.0.0.1:62910 -proxy off` in another, the web UI at
 <http://127.0.0.1:8099/>. The UI smoke test needs Python with Playwright
-once (`tools/ui-test/README.md`), then `make ui-test`. Real hardware is
-reached through the `.env` file (gitignored; `README.md`, "Cube
-variables") and only through the proxy of a running `serve`.
+once (`tools/ui-test/README.md`), then `make ui-test`.
+Real hardware is reached through the `.env` file (gitignored; `README.md`,
+"Cube variables") and only through the proxy of a running `serve`.
 
 ## The rules that apply here
 
