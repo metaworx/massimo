@@ -1,0 +1,20 @@
+# Line endings for files whose bytes matter on every checkout, Windows
+# with core.autocrlf included.
+
+# Embedded into the binary with go:embed and written as they are by
+# massimo install (systemd units, logrotate, launchd plists), served by
+# the web UI, or checked by the updater.
+packaging/**                  text eol=lf
+internal/server/ui/**         text eol=lf
+internal/update/release-key.pem text eol=lf
+
+# Read by Unix tools, which take a CR as part of the line.
+*.service                     text eol=lf
+*.path                        text eol=lf
+*.plist                       text eol=lf
+*.sh                          text eol=lf
+*.yaml                        text eol=lf
+*.yml                         text eol=lf
+
+# The Cube ends its lines with CRLF; the recorded greeting keeps them.
+internal/protocol/cube/testdata/cube-fw0113-greeting.txt -text

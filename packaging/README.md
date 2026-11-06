@@ -19,6 +19,11 @@ LaunchDaemons (see "macOS").
   `launchd/ch.metaworx.massimo-update.plist`: the service and the update
   helper on macOS (see "macOS").
 
+The repository's `.gitattributes` keeps everything in this directory
+with LF line endings, also in a Windows checkout with `core.autocrlf`,
+so that the binary embeds the files byte for byte as reviewed. A binary
+file added here needs its own `-text` line there.
+
 Each Cube accepts exactly one TCP client. Only one `massimo serve` can be
 connected to a Cube at a time, so stop any other server (and close the
 original MAX! software) before starting this one; afterwards, clients
