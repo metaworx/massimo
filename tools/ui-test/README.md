@@ -143,7 +143,21 @@ what a test stores in the browser goes with its context.
   Since the four cases share the server,
   the page fixture removes the token's user's preferences before every page.
 - `test_log.py`:
-  the log opens, and a state event with changes shows what changed.
+  the log opens, and a state event with changes shows what changed;
+  `state` chosen as the kind shows only state events,
+  the seven devices' at least, a device chosen shows only its events,
+  all again shows the lines of before,
+  and Older is offered as the page's size says,
+  nothing older after a page shorter than 200;
+  with the server's answers stubbed, Older puts a page above the lines,
+  oldest first, the view staying where it was,
+  until a short page ends the paging;
+  with the page's `api()` holding the log's requests until the test answers
+  them, an Older answer after Clear is dropped,
+  a Cube switch takes the device chosen back to all,
+  2200 lines stay when a live event comes,
+  past 2000 lines without Older the oldest go from the lines and the view alike,
+  and the error line shows with a kind chosen.
 - `test_pairing.py`, pairing and removal:
   in Settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,

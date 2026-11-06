@@ -829,7 +829,9 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .prog-end { display: inline-block; width: 7.2em; padding: 6px 6px; font-variant-numeric: tabular-nums; flex: none; }
 
 /* log view */
-.log .tile-head { gap: 12px; }
+.log .tile-head { gap: 8px 12px; flex-wrap: wrap; }
+.log .tile-head select { max-width: 14em; min-width: 0; }
+.log-older { display: flex; justify-content: center; padding: 6px 14px 0; }
 .log .tile-head h2 { flex: 0 0 auto; }
 #log-filter { flex: 1; min-width: 8em; }
 .log-lines {

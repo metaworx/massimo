@@ -6,8 +6,8 @@ users and roles, the commands, the migration of an installed box,
 the stages of the work and the decisions the owner takes before any code is written.
 It follows section 4 of the proposal of 2026-11-05 and roadmap item 6;
 docs/design.md sections 2, 6 and 7 are the frame.
-Stages (a) and (b) shipped in v0.7.0-alpha.1 and v0.8.0-alpha.1,
-and stage (c) is implemented (section 9);
+Stages (a) to (c) shipped in v0.7.0-alpha.1 to v0.9.0-alpha.1,
+and stage (d) is implemented (section 9);
 the owner's decisions are listed at the end. docs/server.md looks further ahead,
 at encryption at rest, the public server and sync,
 and says what version 1 prepares for them.
@@ -420,7 +420,11 @@ CREATE TABLE events (
     data      TEXT    NOT NULL                   -- JSON: the event object as GET …/log returns it today
 );
 CREATE INDEX events_cube_time ON events (cube_id, time);
-CREATE INDEX events_device_time ON events (cube_id, device, time);
+-- migration 0004 (stage (d)), in place of events_device_time (cube_id, device, time):
+-- each in id order within its terms, since SQLite keeps the rowid last in an index
+CREATE INDEX events_cube ON events (cube_id);
+CREATE INDEX events_cube_kind ON events (cube_id, kind);
+CREATE INDEX events_cube_device ON events (cube_id, device);
 
 CREATE TABLE audit (
     id        INTEGER PRIMARY KEY,
@@ -468,15 +472,23 @@ Notes on the tables:
   A Cube row is never deleted by the server;
   "Remove" sets `configured = 0` and keeps the events,
   the audit and the backups of the Cube.
-- `events.data` is the event JSON as the stream and `GET …/log` send it today,
-  so the UI's log view keeps its format; `kind`,
-  `device` and `time` are copied out for the indexes.
-  Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days` (default 30,
-  open decision 5), and a size estimate has to be measured on the Pi:
-  a state event is a few hundred bytes,
-  a house with thirty devices sends a few thousand a day,
-  so roughly a megabyte a day and tens of megabytes at the default retention,
-  in a file on an SD card.
+- `events.data` is the event JSON as the stream and `GET …/log` send it,
+  so the UI's log view keeps its format,
+  less a `state` event's `state.received`,
+  the per-value times the tiles' ages read and the log does not;
+  `kind`, `device` and `time` are copied out for the indexes,
+  and the row's `id` is the log's cursor (stage (d)).
+  A page reads one index of migration 0004 from its end, in id order,
+  under 2 ms at 90,000 events of one Cube (`TestEventsPageQuery`);
+  a page before a time looks up the newest id before it first.
+  Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days`,
+  30 days by default as decision 5 took it, 0 keeping everything.
+  Measured in `TestEventSize` (stage (d)):
+  a state event of about 420 bytes of JSON takes about 640 bytes in the file,
+  its indexes included,
+  so a house with thirty devices that sends 3000 events a day adds about 2 MB a day
+  and 60 MB at the default retention,
+  in a file on an SD card; the owner's Pi gives the real figure.
 - `audit` makes durable what today only the log has:
   which client sent which write.
   The `api()` wrapper in `server.go` is the one place every handler passes through,
@@ -968,19 +980,52 @@ Implemented on 2026-11-06 (AP StorePrefs v1.0).
 
 ### (d) The log in the store
 
-- Files: `internal/store/events.go` (batched writer, paging queries,
-  the daily prune),
-  `internal/server/server.go` (`remember` hands the event to the writer;
-  `getLog` reads the store), app.js (the log view pages: "Older",
-  filters by kind and device).
-- API: `GET …/log?before=<time>&limit=&kind=&device=` replaces the one `limit`;
-  the answer keeps the event objects.
-  The ring of 500 goes; the stream is unchanged.
-- Settings: `log.keep_days` under Settings → Server.
-- Tests: a burst of events lands in one transaction;
-  paging returns every event once; the prune keeps the window;
-  the size per event measured in the test and noted in the document;
-  the smoke test pages the log.
+Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
+
+- Files: `internal/store/events.go` (the writer: a batch in one transaction at
+  100 events or a second after the first, before a read and at the stop;
+  the paging query; the daily prune per Cube in chunks of 5000,
+  answering a read and a stop between two chunks);
+  `internal/server/log.go` (`remember` hands a Cube's event to the writer,
+  `GET …/log` reads the store), `log.js` (the log view pages with "Older",
+  chooses a kind and a device).
+  Migration 0004 (v1.1): the indexes a page walks in id order;
+  the review found a page sorting every one of a Cube's rows,
+  1.3 s at 90,000 events, while it held the store's one connection.
+  The writer stops after the server's other goroutines,
+  so that what they emit as they stop is written.
+- API: `GET …/log?before=&limit=&kind=&device=`,
+  `before` an event's `id` or a time, `limit` 1 to 1000 (200),
+  each event with its `id`, oldest first; the stream is unchanged.
+  The ring of 500 stays only for a Cube without a row in the store (`serve -addr`,
+  a `-sn` Cube before discovery noted it);
+  once it gains its row, the log is the store's, without the ring's events.
+  A device hidden later keeps its events until the prune.
+- Settings: `log.keep_days` in `/api/v1/settings` (30, 0 keeps everything,
+  at most 3650), applied at once; Settings → Server waits for its own plan.
+- UI: "Older events" above the log's lines, a choice of kind and of device;
+  the server's log reaches back across restarts.
+  The pages fetched stay past 2000 lines; an answer after Clear, another choice
+  or another Cube is dropped; the error line shows whatever is chosen.
+- Tests: a burst of events in one transaction;
+  every event of a Cube once when paged by id, its times shared;
+  the time bound and the filters; the prune per Cube in chunks;
+  the size per event, about 640 bytes for a state event (section 5's note);
+  the log across a restart on one store;
+  the pytest suite's filters and Older. v1.1:
+  the plan of every page shape without a sort;
+  a prune that answers a flush and stops on a stop;
+  the last events of a stopping server; the ring by device and by time;
+  the pytest suite's late and failed answers.
+- Decisions, as recommended: the cursor is the event's `id`,
+  since a burst's events share a millisecond (D1);
+  a page oldest first, as before (D2);
+  the stored copy without `state.received` (D3); 30 days, 0 for ever (D4);
+  the ring only as the fallback without a row (D5);
+  the setting in the API only (D6); no migration 0004 for a kind index (D7).
+  After the review: findings 1 to 8 fixed, 9 documented, 10's gaps closed (D8);
+  each fix on the branch of its code (D9);
+  migration 0004 after all, D7 reversed (D10).
 
 ### (e) Backup history
 
@@ -1031,6 +1076,9 @@ table (NOTE StoreUsers v1.0: commands history).
 Stage (c) followed (AP StorePrefs v1.0): the keys `ui` and `schemes`,
 a switch per setting for this device only,
 and the capability `preferences`, which a guest has not.
+Stage (d) followed (AP StoreLog v1.0 and v1.1): the log in the store,
+paged by the event's id, 30 days kept, the ring only without a row,
+migration 0004 for the pages' indexes.
 
 1. Taken: SQLite through `modernc.org/sqlite`.
    For it: SQL with indexes and queries for the log,

@@ -24,6 +24,15 @@ import (
 	"go.metaworx.ch/massimo/internal/view"
 )
 
+// eventKinds are the kinds of event the stream sends and the log keeps,
+// in this order: the Cube driver's (cubelan.EventKind), then the
+// server's own. The web UI's kind choice (log.js LOG_KINDS) lists the
+// same; TestLogKinds holds the three together.
+var eventKinds = []string{
+	"connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
+	"device_forgotten", "cube_found", "restore_step", "restore_done",
+}
+
 // Limits of a page of the log.
 const (
 	defaultLogPage = 200
