@@ -462,6 +462,50 @@ one for every role but `owner`, whatever the roles' sets say
 or `update` on a box the owner updates by hand), and `false` enables it again.
 Both need `capabilities`, which only `owner` has by default.
 
+### Preferences: /api/v1/me/preferences
+
+`GET /api/v1/me/preferences`; `GET`,
+`PUT` and `DELETE /api/v1/me/preferences/{key}`.
+
+The signed-in user's preferences (docs/store.md section 9 (c)):
+a JSON document per key, which the web UI uses so that its settings follow
+the user across browsers.
+The page keeps two keys:
+
+```json
+{
+  "ui": {"poll": 10, "expert": false, "clock": "browser", "lang": "auto", "theme": "system", "scheme": "custom:Mine"},
+  "schemes": {"format": "massimo-schemes/1", "schemes": [{"format": "massimo-scheme/1", "name": "Mine", "light": {…}, "dark": {…}}]}
+}
+```
+
+`GET /api/v1/me/preferences` is every key the user has, `{}` for none;
+`GET …/{key}` the document, `404` when the key is not set.
+`PUT …/{key}` with any JSON document of at most 64 KiB as the body replaces
+the key's and answers how it was stored:
+
+```json
+{"key": "ui", "value": {"poll": 10, …}, "updated_at": "2026-11-06T18:46:40.233Z", "version": 3}
+```
+
+`version` counts the writes of the key;
+between two browsers the later write wins.
+`DELETE …/{key}` removes it,
+`{"ok": true, "key": "ui"}` also when it was not set.
+A key is 1 to 32 of lower-case letters, digits, `_`, `.` and `-`,
+starting with a letter; a bad key or a body that is not JSON is `400`,
+a body over 64 KiB `413`.
+
+Reading needs a signed-in user only; writing needs `preferences`,
+which manager, operator and viewer have and guest and integration not:
+a guest's settings stay in its browser.
+Without a signed-in user (an open server,
+or the API token) the routes answer `409`, and without a store `503`;
+the page then keeps its settings in the browser as before.
+A write is an audit row (`preference.set`, `preference.delete`,
+the target `preference:<key>`) but no command, since nothing goes to a Cube,
+and takes no `Idempotency-Key`.
+
 ### GET /api/v1/audit?before=&limit=&user=
 
 The audit (docs/store.md section 5): every request that changed something,
@@ -576,7 +620,8 @@ the path, the query or the body differ) is `422`,
 and one whose request is still running `409`.
 A page that lost the connection while a setpoint was on its way retries
 with the key and learns the outcome without a second radio command.
-The login, the logout and the stream ticket take no key.
+The login, the logout, the stream ticket and the preferences take no key
+and are no commands.
 
 Finished commands are kept for `commands.keep_days` (`GET`/`PUT /api/v1/settings`),
 0 for ever, the default;

@@ -11,8 +11,8 @@ the next minor, a fix counts the suffix up.
 ### Added
 
 - Store stage (c), the settings per user (`docs/store.md` section 9):
-  preferences per user and key, kept for a role with the capability
-  `preferences` (migration 0003); a guest keeps them in the browser.
+  kept per user and key for a role with the capability `preferences`
+  (migration 0003), through `/api/v1/me/preferences` (`docs/api-v1.md`).
 
 - `massimo serve -tls files -tls-cert … -tls-key …`: TLS from certificate
   files, re-read when they change, with HSTS for a year (`-hsts <days>`);

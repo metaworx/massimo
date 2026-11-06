@@ -143,6 +143,99 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/me/preferences:
+    get:
+      summary: The signed-in user's preferences, by key
+      x-capability: any
+      description: |
+        The web UI's settings (ui) and colour schemes (schemes), each a
+        JSON document; {} when none is kept. 409 without a signed-in user
+        (an open server, or the API token): the
+        page then keeps its settings in the browser.
+      responses:
+        "200":
+          description: The preferences by key
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {description: The JSON document of the key}
+              example:
+                ui: {poll: 10, expert: false, clock: browser, lang: auto, theme: system, scheme: massimo}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/me/preferences/{key}:
+    get:
+      summary: One of the signed-in user's preferences
+      x-capability: any
+      parameters: [{$ref: "#/components/parameters/prefKey"}]
+      responses:
+        "200":
+          description: The JSON document of the key
+          content:
+            application/json:
+              schema: {description: The document as it was put}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: The key is not set
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    put:
+      summary: Keep one of the signed-in user's preferences on the server
+      x-capability: preferences
+      description: |
+        The body is the value, any JSON document of at most 64 KiB; it
+        replaces the key's. Needs preferences, which a guest has not: a
+        guest's settings stay in the browser. An audit row, no command.
+      parameters: [{$ref: "#/components/parameters/prefKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {description: Any JSON document}
+      responses:
+        "200":
+          description: How it was stored
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Preference"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "413": {$ref: "#/components/responses/TooLarge"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Remove one of the signed-in user's preferences
+      x-capability: preferences
+      description: Answers ok also when the key was not set.
+      parameters: [{$ref: "#/components/parameters/prefKey"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  key: {type: string}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/audit:
     get:
       summary: The audit, newest first
@@ -1436,6 +1529,12 @@ components:
       name: token
       description: The event stream only, deprecated; the API token itself.
   parameters:
+    prefKey:
+      name: key
+      in: path
+      required: true
+      description: "A preference's key: 1 to 32 of lower-case letters, digits, _ . -, starting with a letter; the web UI uses ui and schemes"
+      schema: {type: string, example: ui}
     sn:
       name: sn
       in: path
@@ -1560,6 +1659,11 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    NoSignedInUser:
+      description: No user is signed in (an open server, or the API token), so there is no one to keep preferences for
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
     NoStore:
       description: The server has no store (serve -addr), so no users
       content:
@@ -1610,6 +1714,13 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    Preference:
+      type: object
+      properties:
+        key: {type: string, example: ui}
+        value: {description: The JSON document as stored}
+        updated_at: {type: string, format: date-time}
+        version: {type: integer, description: Counts the writes of the key; a later write wins}
     CommandState:
       type: string
       enum: [queued, sent, acknowledged, failed, dropped]
