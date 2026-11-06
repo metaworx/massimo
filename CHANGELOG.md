@@ -12,7 +12,8 @@ the next minor, a fix counts the suffix up.
 
 - Store stage (b) in `internal/store` (`docs/store.md` section 9):
   migration 0002 (`commands`, `users.auth_version`, `audit.command_id`),
-  users with argon2id passwords, roles, tokens and the bootstrap.
+  users with argon2id passwords, roles, tokens, the bootstrap, the audit,
+  the lockout counters and the commands with their steps.
 
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
