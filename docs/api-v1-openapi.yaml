@@ -1371,17 +1371,37 @@ paths:
         "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/log:
     get:
-      summary: The last events of the Cube, oldest first
+      summary: A page of the Cube's events, oldest first
       x-capability: read
+      description: |
+        The events the stream sends, kept in the store for log.keep_days
+        (30 by default, 0 for ever), each with its id; without
+        parameters the newest 200. A client pages back with before set
+        to the id of the oldest event it has, until a page is empty. A
+        state event's stored copy leaves out state.received. A Cube
+        without a row in the store keeps its last 500 events in memory,
+        without ids.
       parameters:
         - {$ref: "#/components/parameters/sn"}
-        - {name: limit, in: query, schema: {type: integer, default: 200, maximum: 500}}
+        - {name: before, in: query, description: "An event's id for the page before it, or an RFC 3339 time for the events before that time", schema: {type: string, example: "4711"}}
+        - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
+        - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
+        - {name: device, in: query, description: Only events of this radio address, schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: 0abcde}}
       responses:
         "200":
-          description: Events as the stream sends them
+          description: Events as the stream sends them, each with its id in the log
           content:
             application/json:
-              schema: {type: array, items: {type: object}}
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: integer, description: The event's place in the log; absent for a Cube without a row in the store}
+                    kind: {type: string}
+                    device: {type: string}
+                    time: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
@@ -1464,6 +1484,7 @@ paths:
               example:
                 stale_after: {value: 24h, default: 24h, set: false, in_effect: 24h, applies: now}
                 commands.keep_days: {value: "0", default: "0", set: false, in_effect: "0", applies: now}
+                log.keep_days: {value: "30", default: "30", set: false, in_effect: "30", applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}

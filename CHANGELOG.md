@@ -11,8 +11,8 @@ the next minor, a fix counts the suffix up.
 ### Added
 
 - The store keeps the Cubes' events (migration 0004), written in
-  batches and pruned daily by `log.keep_days` (30 days; 0 keeps them),
-  so that the log survives a restart (`docs/store.md` section 9).
+  batches and pruned daily by `log.keep_days` in `/api/v1/settings`
+  (30 days; 0 keeps them), so that the log survives a restart.
 
 - The web UI pairs a device in Settings → Cubes and puts it into a room
   with the room's settings; Devices without a room and the Devices tab
@@ -26,6 +26,10 @@ the next minor, a fix counts the suffix up.
   through the proxy drops the devices from the server's copy too.
 
 ### Changed
+
+- `GET …/log` pages back with `before` (an event's `id` or a time) and
+  filters by `kind` and `device`, from the store; a `limit` above 1000
+  answers 400, and `state` events lack `received` (`docs/api-v1.md`).
 
 - `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
   room's settings, as the original software does, with `configure`;

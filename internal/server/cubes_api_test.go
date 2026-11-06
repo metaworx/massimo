@@ -283,4 +283,18 @@ func TestSettingsAPI(t *testing.T) {
 	if code != 200 || stale["set"] != false || stale["value"] != "24h" || srv.StaleAfter() != view.StaleAfter {
 		t.Fatalf("back to the default %d %v", code, out)
 	}
+	// The log's retention: 30 days unset, 0 keeps everything, at most 3650.
+	keep := func(out map[string]any) map[string]any { m, _ := out["log.keep_days"].(map[string]any); return m }
+	if code, out := do(t, ts, "GET", "/api/v1/settings", ""); code != 200 || keep(out)["value"] != "30" || keep(out)["default"] != "30" || keep(out)["set"] != false || keep(out)["applies"] != "now" {
+		t.Fatalf("log.keep_days unset: %d %v", code, keep(out))
+	}
+	if code, out := do(t, ts, "PUT", "/api/v1/settings", `{"log.keep_days": 0}`); code != 200 || keep(out)["value"] != "0" || keep(out)["set"] != true {
+		t.Fatalf("log.keep_days 0: %d %v", code, keep(out))
+	}
+	if code, _ := do(t, ts, "PUT", "/api/v1/settings", `{"log.keep_days": 3651}`); code != 400 {
+		t.Fatalf("log.keep_days 3651: %d", code)
+	}
+	if code, out := do(t, ts, "PUT", "/api/v1/settings", `{"log.keep_days": null}`); code != 200 || keep(out)["value"] != "30" || keep(out)["set"] != false {
+		t.Fatalf("log.keep_days back to the default: %d %v", code, keep(out))
+	}
 }

@@ -37,7 +37,7 @@ type proxyRun struct {
 // CubeFromRow is the configuration of a Cube row of the store.
 func CubeFromRow(row store.Cube) (CubeConfig, error) {
 	c := CubeConfig{Serial: row.Serial, Name: row.Name, Addr: row.Address, FollowDiscovery: row.FollowDiscovery, Source: row.Source,
-		ProxyAddress: row.ProxyAddress, ProxySerial: row.ProxySerial}
+		ProxyAddress: row.ProxyAddress, ProxySerial: row.ProxySerial, StoreID: row.ID}
 	for _, a := range row.Hidden {
 		rf, err := cube.ParseRFAddress(a)
 		if err != nil {
@@ -86,6 +86,10 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	qopts := opts.Queue
 	qopts.Observer = s.newObserver()
 	rt.queue = engine.NewQueue(rt.client, qopts)
+	rt.store = opts.Store
+	if opts.Store != nil {
+		rt.storeID.Store(c.StoreID)
+	}
 	return rt
 }
 

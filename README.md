@@ -418,8 +418,8 @@ keeps every Cube from the environment connected (one connection and one command
 queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `/api/v1/cubes/{serial}` (with rooms;
 `PUT` and `DELETE` change and remove the Cube, `POST /api/v1/cubes` adds one),
-`/api/v1/settings` (the stale threshold and the intervals), `/devices`,
-`/devices/{rf}`,
+`/api/v1/settings` (the stale threshold, the intervals and the retentions),
+`/devices`, `/devices/{rf}`,
 `PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
 `{"mode":"manual","temp":21.5}`,
 `{"mode":"auto"}` or `{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,
