@@ -80,7 +80,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	f := found[0].(map[string]any)
 	if f["serial"] != "KEQ0000000" || f["configured"] != false || f["address"] != "127.0.0.1" || f["rf_address"] != "0a0b0c" ||
-		f["firmware"] != "1.1.3" || f["found_at"] == nil || f["last_seen"] == nil {
+		f["firmware"] != "1.1.3" || f["dhcp"] != true || f["found_at"] == nil || f["last_seen"] == nil {
 		t.Fatalf("found cube %v", f)
 	}
 
@@ -95,7 +95,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	for k := range cubes[1] {
 		switch k {
-		case "serial", "configured", "address", "mac", "rf_address", "firmware", "found_at", "last_seen":
+		case "serial", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "found_at", "last_seen":
 		default:
 			t.Errorf("unexpected field %q in a found cube", k)
 		}
@@ -112,7 +112,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	for _, e := range evs {
 		if e.Kind == "cube_found" {
 			n++
-			if e.Cube == nil || e.Cube.Serial != "KEQ0000000" || e.Cube.Configured {
+			if e.Cube == nil || e.Cube.Serial != "KEQ0000000" || e.Cube.Configured || e.Cube.DHCP == nil || !*e.Cube.DHCP {
 				t.Fatalf("event %+v", e)
 			}
 		}
@@ -135,6 +135,75 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	wg.Wait()
 	if ran[0] == nil || ran[0] != ran[1] {
 		t.Fatalf("runs %v", ran)
+	}
+}
+
+// TestDiscoveryDHCPFlag follows the flag through runs: false for a static
+// address, absent for a Cube that never answered c, and kept when a
+// later run gets no answer to c.
+func TestDiscoveryDHCPFlag(t *testing.T) {
+	static, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer static.Close()
+	static.SetStatic(true)
+	mute, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000001", 0x0a0b0d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mute.Close()
+	mute.SetConfigSilent(true)
+	ts, _ := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{static.Addr(), mute.Addr()}})
+
+	flags := func(found []any) map[string]any {
+		out := map[string]any{}
+		for _, f := range found {
+			m := f.(map[string]any)
+			out[m["serial"].(string)] = m["dhcp"]
+		}
+		return out
+	}
+	listed := func() map[string]any {
+		var cubes []any
+		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+		return flags(cubes[1:])
+	}
+	_, out := postDiscovery(t, ts)
+	if got := flags(out["found"].([]any)); len(got) != 2 || got["KEQ0000000"] != false || got["KEQ0000001"] != nil {
+		t.Fatalf("discovery answer %v", got)
+	}
+	if got := listed(); got["KEQ0000000"] != false || got["KEQ0000001"] != nil {
+		t.Fatalf("listed %v", got)
+	}
+	var evs []event
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log", &evs)
+	for _, e := range evs {
+		if e.Kind != "cube_found" {
+			continue
+		}
+		switch e.Cube.Serial {
+		case "KEQ0000000":
+			if e.Cube.DHCP == nil || *e.Cube.DHCP {
+				t.Fatalf("event %+v", e.Cube)
+			}
+		case "KEQ0000001":
+			if e.Cube.DHCP != nil {
+				t.Fatalf("event %+v", e.Cube)
+			}
+		}
+	}
+
+	// The flag follows a change; a run without an answer keeps it.
+	static.SetStatic(false)
+	postDiscovery(t, ts)
+	if got := listed(); got["KEQ0000000"] != true {
+		t.Fatalf("after DHCP on %v", got)
+	}
+	static.SetConfigSilent(true)
+	postDiscovery(t, ts)
+	if got := listed(); got["KEQ0000000"] != true || got["KEQ0000001"] != nil {
+		t.Fatalf("after a run without c %v", got)
 	}
 }
 

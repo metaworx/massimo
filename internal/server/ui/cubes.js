@@ -261,7 +261,9 @@ function foundRow(c) {
     if (v.length) el.textContent = " · " + v.join(" · ");
     else el.remove();
   };
-  part(".found-facts", [c.address, c.firmware ? t("budget.firmware") + " " + c.firmware : ""]);
+  // dhcp is absent until the Cube has answered the c request.
+  const dhcp = c.dhcp === true ? t("cubes.dhcp") : c.dhcp === false ? t("cubes.static") : "";
+  part(".found-facts", [c.address, dhcp, c.firmware ? t("budget.firmware") + " " + c.firmware : ""]);
   part(".found-extra", [c.rf_address, c.mac]);
   const add = li.querySelector(".add-cube");
   const age = ageEl(c.last_seen, false, true);
