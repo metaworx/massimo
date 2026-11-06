@@ -35,6 +35,7 @@ var contentColumns = map[string][]string{
 	"events":      {"data"},
 	"audit":       {"detail", "remote"},
 	"backups":     {"body", "note"},
+	"commands":    {"request", "result"},
 }
 
 func isContent(table, col string) bool {

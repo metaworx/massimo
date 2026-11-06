@@ -7,9 +7,9 @@
       <details class="menu">
         <summary aria-label="room actions" title="Room actions" data-i18n-attr="aria-label:room.actions title:room.actionsTitle">⋯</summary>
         <div class="menu-items">
-          <button type="button" class="menu-lock" data-i18n="room.lock">Lock thermostats</button>
-          <button type="button" class="menu-unlock" data-i18n="room.unlock">Unlock thermostats</button>
-          <button type="button" class="menu-delete" data-i18n="room.delete">Delete room</button>
+          <button type="button" class="menu-lock needs-lock" data-i18n="room.lock">Lock thermostats</button>
+          <button type="button" class="menu-unlock needs-lock" data-i18n="room.unlock">Unlock thermostats</button>
+          <button type="button" class="menu-delete needs-structure" data-i18n="room.delete">Delete room</button>
         </div>
       </details>
     </header>
@@ -27,7 +27,7 @@
         <span class="temp-tag"><svg class="ti" aria-hidden="true"><use href="#icon-set"/></svg><span class="temp-label" data-i18n="room.set">SET</span></span>
         <span class="temp-big setpoint-big" aria-label="set temperature" data-i18n-attr="aria-label:room.setTemp"></span>
       </div>
-      <div class="stepper">
+      <div class="stepper needs-setpoint">
         <button type="button" class="step step-plus" aria-label="0.5 degrees more" title="0.5 °C more" data-i18n-attr="aria-label:temp.more title:temp.moreTitle">&#x2303;</button>
         <button type="button" class="step step-minus" aria-label="0.5 degrees less" title="0.5 °C less" data-i18n-attr="aria-label:temp.less title:temp.lessTitle">&#x2304;</button>
       </div>
@@ -37,7 +37,7 @@
       <button type="button" class="pending-cancel" data-i18n="action.cancel">Cancel</button>
     </div>
     <div class="mode-row">
-      <span class="mode-group" role="group" aria-label="mode" data-i18n-attr="aria-label:room.modeGroup">
+      <span class="mode-group needs-setpoint" role="group" aria-label="mode" data-i18n-attr="aria-label:room.modeGroup">
         <button type="button" class="mode-auto" aria-pressed="false" data-i18n="mode.auto">AUTO</button>
         <button type="button" class="mode-manual" aria-pressed="false" data-i18n="mode.manu">MANU</button>
         <button type="button" class="mode-holiday" aria-pressed="false" title="holiday: a temperature until a date" data-i18n="mode.holiday" data-i18n-attr="title:room.holidayTitle">HOLIDAY</button>
@@ -46,7 +46,7 @@
       <span class="mode-mixed hidden"></span>
       <span class="tile-tools">
         <button type="button" class="tool-btn tile-info" aria-label="devices of the room" title="Devices" aria-expanded="false" data-i18n-attr="aria-label:room.devices title:room.devicesTitle"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg></button>
-        <button type="button" class="tool-btn tile-cog" aria-label="configure the room" title="Configure" aria-expanded="false" data-i18n-attr="aria-label:room.configure title:room.configureTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+        <button type="button" class="tool-btn tile-cog needs-configure" aria-label="configure the room" title="Configure" aria-expanded="false" data-i18n-attr="aria-label:room.configure title:room.configureTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
       </span>
     </div>
     <form class="panel vacation-panel hidden">

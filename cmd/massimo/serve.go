@@ -129,7 +129,7 @@ func runServe(args []string) error {
 		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
 	}
 	if st != nil {
-		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "data", st.Dir(), "node", st.NodeID())
+		logger.Info("api listening", "addr", ln.Addr().String(), "auth", srv.AuthMode(), "data", st.Dir(), "node", st.NodeID())
 	} else {
 		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "store", "none (-addr)")
 	}
