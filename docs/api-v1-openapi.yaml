@@ -861,7 +861,15 @@ paths:
         (unlisted, for example just paired) needs room_id and is linked
         with the room's members (0x20 both ways, after a wakeup), given
         the room's group (0x22) and listed under name; without room_id it
-        answers 409.
+        answers 409. A thermostat put into a room, by an add or a move,
+        then gets the room's settings from its first other thermostat:
+        0x40 auto, 0x11 to every thermostat of the room, 0x12, and 0x10
+        for each day of the programme that differs, then 0x11 again;
+        hidden devices are left out. The copy needs the capability
+        configure as well (403 without it); copy false skips it. A
+        discarded 0x40 sets mode_not_set and ends nothing; any other
+        command that fails ends the copy with its error, the device in
+        the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -872,6 +880,10 @@ paths:
               properties:
                 name: {type: string, maxLength: 32}
                 room_id: {type: integer, minimum: 1, maximum: 255}
+                copy:
+                  type: boolean
+                  default: true
+                  description: With room_id, give the device the room's settings.
       responses:
         "200":
           description: Done
@@ -881,6 +893,17 @@ paths:
                 type: object
                 properties:
                   ok: {type: boolean}
+                  copied:
+                    type: object
+                    description: What of the room's settings was sent; absent when nothing was.
+                    properties:
+                      temperatures:
+                        type: array
+                        description: The thermostats that got the room's temperatures (0x11).
+                        items: {type: string, pattern: "^[0-9a-f]{6}$"}
+                      valve: {type: boolean, description: The device got the room's valve settings (0x12).}
+                      days: {type: integer, minimum: 0, maximum: 7, description: The days of the week programme sent (0x10).}
+                      mode_not_set: {type: boolean, description: The Cube discarded the 0x40 that sets auto; the device keeps its mode.}
                   budget: {$ref: "#/components/schemas/Budget"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}

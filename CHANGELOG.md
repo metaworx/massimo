@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Changed
+
+- `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
+  room's settings, as the original software does, with `configure`;
+  `"copy": false` skips it (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

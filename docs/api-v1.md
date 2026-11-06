@@ -182,7 +182,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
+| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
 | `structure` | move devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/rooms/{id}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
@@ -1022,12 +1022,58 @@ then a re-read of its C line.
 A device whose C line names another room (paired long ago and never listed) is
 first unlinked from that room with 0x21 remove link partner and 0x23 remove group,
 as in a move.
-The room's temperatures,
-valve settings and week programme are not copied to the new device,
-unlike in the original software, which sends 0x40 auto, 0x11,
-0x12 and 0x10 afterwards:
-use `PUT …/rooms/{id}/config` and `PUT …/rooms/{id}/program` for that.
-The answer is `{"ok": true, "budget": {…}}`.
+
+A thermostat put into a room, by an add or a move,
+then gets the room's settings, as the original software gives them to a device
+it pairs or moves:
+0x40 auto with temperature 0, to the device directly,
+without the error reset and the retry other writes get;
+after a wakeup of the room,
+0x11 to every thermostat of the room, the device included,
+with the room's comfort, eco, maximum, minimum and window-open temperatures
+and window-open minutes, each keeping its own temperature offset;
+after a wakeup,
+0x12 with the room's boost, descaling and valve settings to the device;
+after a wakeup, one 0x10 per day of the room's week programme that differs from
+the device's own, then 0x11 to the device once more.
+The room's settings are those of its first other thermostat,
+radiator thermostats first;
+a hidden device is neither linked with the device nor given anything,
+nor taken for the room's settings;
+where that is a wall thermostat,
+the window-open minutes, descaling and valve limits it does not store are the
+original software's defaults.
+A room without another thermostat has nothing to copy,
+and the device gets 0x40 alone;
+a shutter contact or an eco switch gets nothing.
+The copy needs the capability `configure` as well as `structure`,
+since its 0x11 changes the room's other thermostats too:
+without it the request is refused with `403` before anything is sent,
+unless the body says `"copy": false`, which skips the copy;
+`name` alone never starts it.
+The copy costs radio budget,
+0x11 and 0x12 about 3 % each and 0x10 about 8 % per day,
+so a factory-fresh thermostat takes about 65 % of an hour's budget with every day sent;
+the queue waits for the budget as for every write.
+
+The answer is
+
+```json
+{"ok": true, "copied": {"temperatures": ["14d08e", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
+```
+
+with `copied` absent when nothing was copied,
+and `"mode_not_set": true` in it when the Cube discarded the 0x40,
+which leaves the device's mode as it was and ends nothing:
+on 2026-11-04 the Cube discarded a direct 0x40 to a device in a room.
+Any other command of the copy that fails ends it with its error (`502`,
+`409` when superseded), which says that the device is in the room:
+what was sent until then stays sent,
+and `PUT …/rooms/{id}/config` and `PUT …/rooms/{id}/program` complete it.
+The links and the metadata of one change of rooms and devices at a time
+are written per Cube (this route, `DELETE …/rooms/{id}`, `PUT …/rooms/{id}`):
+a second request waits for the first's metadata, up to its time limit,
+and then answers `503`; the copies run side by side afterwards.
 
 ### PUT /api/v1/cubes/{sn}/devices/{rf}/config
 
@@ -1156,7 +1202,8 @@ and `pairing_ended`.
 A joined device is in the device list right after (`GET …/devices`,
 with `"unlisted": true` and no name;
 the server fetches its configuration with `c:`) but in no room and not under `rooms`.
-Put it into a room with `PUT …/devices/{rf}` and `{"name": "…", "room_id": N}` (above).
+Put it into a room with `PUT …/devices/{rf}` and `{"name": "…", "room_id": N}` (above),
+which also gives it the room's settings.
 A client pairing a device therefore: `POST …/pairing`,
 waits for the `paired` event (or polls `GET …/pairing`),
 asks the user for a room and a name, `PUT …/devices/{rf}`,
