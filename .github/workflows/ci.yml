@@ -462,7 +462,7 @@ jobs:
           up
           curl -fsSk "$health" | grep -q 'v0.0.0-ci.1'
           curl -fsSk "$health" | grep -Eq '"self_signed": ?true'
-          curl -fsSkI "$health" | grep -q 'Strict-Transport-Security: max-age=31536000'
+          curl -fsSkI "$health" | grep -qi 'strict-transport-security: max-age=31536000'
           test "$(sudo stat -f %Su:%Lp /var/lib/massimo/tls/self-signed.key)" = _massimo:600
           sudo grep -q 'MASSIMO_TLS=self-signed' /etc/massimo/env
           sudo grep -q '<string>https://127.0.0.1:18099/healthz</string>' /Library/LaunchDaemons/ch.metaworx.massimo-update.plist
