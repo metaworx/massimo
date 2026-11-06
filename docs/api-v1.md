@@ -108,7 +108,7 @@ IP address and radio address, the duty cycle, free slots,
 queued and pending commands and the Cube clock,
 and the tiles show radio addresses and device types),
 whether the Cube clock is shown in the browser's time zone or the Cube's own,
-and "forget token".
+and Log out.
 In the tiles a thermometer marks the measured temperature (IS) and a target the
 setpoint (SET);
 AUTO and MANU close an open holiday panel and drop a pending stepper value.
@@ -125,7 +125,9 @@ The selected Cube and the settings are kept in the browser.
 Results of every action appear in the tile,
 including the devices to nudge when the Cube discarded a room command.
 The page follows the event stream.
-With a token configured, the page asks for it once and keeps it in the browser;
+With users, the page asks for a name and a password (or an API key) once and
+keeps the session in the browser, hides what the role may not do, and offers
+Settings → Users and Roles to those who may;
 every route needs the header except the event stream,
 which browsers open without headers and which takes a ticket (see Authentication):
 the page gets a new one for every connection and, after an error,
@@ -137,15 +139,84 @@ The page and its files are public, the API behind them is not.
 
 ## Authentication
 
-With `MASSIMO_API_TOKEN` (or `-token`) set, every `/api` request must
-carry `Authorization: Bearer <token>`; otherwise the response is `401`.
+The server authenticates in one of three ways, by what it has:
+
+- **Users**, a store with at least one user: every `/api` request carries
+  `Authorization: Bearer <token>`, a session from `POST /api/v1/login` or
+  an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
+  The token names a user, the user's role grants capabilities,
+  and every route needs one of them (the table below);
+  a request without it is `403` with the message `capability "pair" required`.
+  A disabled user, a guest past its end date or a disabled role is `403` too,
+  with the reason.
+- **Open**, a store without users, the state before the first owner:
+  every request may do everything,
+  which is only acceptable on the default localhost listener.
+  `POST /api/v1/users` from an address on the local network creates the first
+  owner (see that route), and `massimo user add` does the same on the box.
+- **Token**, no store (`serve -addr`):
+  `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
+  without it the API is open.
+
 `/healthz` is always open.
-Without a token the API is unauthenticated,
-which is only acceptable on the default localhost listener.
+The errors say which: `401` is a missing, wrong, revoked or expired token,
+`403` a token whose user may not do this.
+
+`MASSIMO_API_TOKEN` and the store:
+at the first start with the variable set and no user,
+the server creates the user `owner` with the role `owner`,
+no password and the token as its API key (label `MASSIMO_API_TOKEN`),
+so every client that sends the token keeps working with full rights.
+At every later start, a token in the file that the store does not know is
+added to an enabled owner's keys,
+and a key with that label whose secret is not the file's any more is revoked.
+The file stays the way to recover an owner who lost the password:
+put a token into it, restart, log in with it, set a password.
+
+The capabilities, what each allows and the routes it guards;
+the OpenAPI file carries each operation's as `x-capability`:
+
+| Capability | Allows | Routes |
+|---|---|---|
+| `read` | see everything of the Cubes and one's own user | every `GET` of a Cube, its rooms, devices, configuration, programmes, log, pairing, restore and backup state, the event stream and its ticket, `GET /api/v1/update`, `GET /api/v1/me` |
+| `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
+| `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
+| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
+| `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
+| `structure` | move devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/rooms/{id}` |
+| `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
+| `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
+| `backup` | download a backup | `GET …/backup` |
+| `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
+| `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
+| `users` | every user: create, role, disable, password, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
+| `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
+| `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
+| `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
+| `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
+| `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
+| `update` | start a software update | `POST /api/v1/update` |
+| `audit` | read the audit | `GET /api/v1/audit` |
+
+The default roles and their sets are those of docs/store.md section 6:
+`owner` has every capability and cannot be changed,
+`manager` is `operator` plus guests, pairing, names, structure and restore,
+`operator` runs the heating, locks, configures, discovers and takes backups,
+`guest` is `operator` without the lock, backups and discovery,
+`viewer` reads, `integration` reads, sets and locks.
+A role's set can be changed, a role renamed, created and disabled,
+and a capability disabled for every role but `owner`,
+through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
+A user's own user and the routes of `/api/v1/users/{name}` with the user's
+own name are open to it for its display name and its password.
 
 Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
 answered `429` with a `Retry-After` header, the right token included.
+A wrong ticket counts as a failed check,
+and a failed login counts against the address and against the user name,
+so that password guessing from many addresses locks the name.
+With a store the counters survive a restart.
 The address is the TCP peer's; `X-Forwarded-For` is not trusted,
 since anyone can set it,
 so behind a reverse proxy the limit applies to the proxy as a whole,
@@ -155,7 +226,8 @@ The event stream is opened by browsers without headers,
 so it takes a ticket instead:
 `POST /api/v1/cubes/{sn}/events/ticket` with the token returns one,
 and `GET /api/v1/cubes/{sn}/events?ticket=<ticket>` opens the stream with it.
-A ticket is good for one connection to that Cube's stream within a minute;
+A ticket is good for one connection to that Cube's stream within a minute
+and carries the user that asked for it;
 a client gets a new one for every connection,
 also after the stream broke off (an `EventSource` stops retrying after a `401`,
 so it reports the error and the client opens a new one).
@@ -163,7 +235,6 @@ so it reports the error and the client opens a new one).
 and the response says so with the header `Deprecation: @1793836800` (RFC 9745):
 it puts the token into URLs, browser history and proxy logs,
 and it will be removed in a later release.
-A wrong ticket counts as a failed token check.
 
 ## Identifiers
 
@@ -175,7 +246,8 @@ A wrong ticket counts as a failed token check.
 ## Errors
 
 Errors are `{"error": "<message>"}` with a matching status: `400` bad input,
-`401` missing or wrong token, `429` locked out after repeated wrong tokens,
+`401` missing or wrong token, `403` a user who may not do this,
+`429` locked out after repeated wrong tokens,
 `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before it was sent (or,
 for a restore, a guard rail: see POST /restore),
@@ -212,6 +284,295 @@ it stays the same across restarts and updates.
 `source` is `files` (the owner's files, re-read when they change),
 the fingerprint is the SHA-256 of the certificate as browsers show it,
 and `warning` is set while something needs the owner.
+
+### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
+
+`POST /api/v1/login` with `{"user": "anna", "password": "…"}`,
+and an optional `label` that names the session under the user's tokens
+("Firefox on the laptop"; the browser's `User-Agent` when absent),
+answers a session:
+
+```json
+{
+  "token": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "expires_at": "2026-12-06T10:42:00Z",
+  "user": {"name": "anna", "display_name": "Anna", "role": "operator", "disabled": false, "has_password": true,
+           "auth_version": 1, "created_at": "…", "updated_at": "…", "last_login_at": "…"},
+  "role": {"key": "operator", "name": "", "disabled": false},
+  "capabilities": ["backup", "configure", "discover", "lock", "read", "setpoint"]
+}
+```
+
+The token is shown once; the client sends it as the bearer header.
+A session lasts 30 days from its last use;
+its end and its last use are written at most once an hour.
+Case does not matter in the name.
+A wrong name or password is `401` and counts against the address and the name
+(ten in a minute lock either for five minutes, `429`);
+a disabled user or a guest past its end date is `403`;
+a user whose role is disabled logs in and is then refused every route.
+`409` on a server without users, where the first owner is created with
+`POST /api/v1/users` or `massimo user add`,
+and on one without a store (`serve -addr`), which takes the API token.
+
+`POST /api/v1/logout` revokes the session that makes the call, `{"ok": true}`.
+An API key answers `400`; a key is revoked under the user's tokens.
+
+`GET /api/v1/me` says who the caller is:
+
+```json
+{
+  "mode": "users",
+  "user": {"name": "anna", "role": "operator", …},
+  "role": {"key": "operator", "name": "", "disabled": false},
+  "capabilities": ["backup", "configure", "discover", "lock", "read", "setpoint"],
+  "token": {"id": 3, "kind": "session", "label": "Firefox on the laptop", "created_at": "…", "expires_at": "…", "last_used_at": "…", "last_used_from": "192.168.1.20"}
+}
+```
+
+`mode` is how the server authenticates (Authentication above).
+With users, `user`, `role`, `capabilities` (the effective set:
+the role's minus the disabled capabilities, every one for `owner`,
+none for a disabled role) and `token`, the one presented;
+outside users mode `user` and `role` are null and `capabilities` is every one.
+`setup` is true on an open server for a caller on the local network,
+the one that may create the first owner.
+`auth_version` 1 says the server hashes the password;
+docs/server.md ("What version 1 prepares", item 6) says what 2 will mean.
+
+### Users: /api/v1/users and /api/v1/users/{name}
+
+`GET` and `POST /api/v1/users`; `GET`, `PUT` and `DELETE /api/v1/users/{name}`.
+The users of the store (docs/store.md section 6), each with one role.
+The routes need `users`; a holder of `guests` reaches them for users whose role
+is `guest`, and a user reaches its own name (see below).
+Every one answers `503` on a server without a store.
+
+`GET /api/v1/users` lists the users by name, as `GET /api/v1/me` shows a user;
+a `guests` holder sees the guests and itself.
+
+`POST /api/v1/users` creates one:
+
+```json
+{"name": "anna", "display_name": "Anna", "role": "operator", "password": "…"}
+```
+
+`name` is the login name, 1 to 64 of letters, digits, `.`, `_`, `-` and `@`,
+kept in lower case; `role` is a role's key, `viewer` when absent;
+`password` may be absent for a user that logs in with keys only;
+`disabled` and, for a guest, `expires_at` (RFC 3339) as well.
+A `guests` holder creates guests only (`403` otherwise).
+The answer is `201` with the user; a name in use is `409`, a bad name,
+an unknown role or an unknown field `400`.
+The name of a removed user can be used again;
+the new user takes over the old one's row,
+so the audit's history of the name reads on.
+
+On a server without users, `POST /api/v1/users` creates the first owner:
+open to a caller on the local network (loopback, a private range,
+link-local), `role` `owner` (absent, or that) and a password required,
+`403` from anywhere else;
+`massimo user add` on the box is the other way.
+From then on the server is in users mode (Authentication).
+
+`GET /api/v1/users/{name}` is one user.
+`PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
+`expires_at` (`null` clears it) and `password`;
+absent fields stay, an unknown one is `400`.
+A user changes its own `display_name` and, with `current_password`,
+its own `password`; the rest needs `users` (`guests` for a guest).
+A password set by someone else ends the user's sessions;
+an empty password removes it.
+The last enabled owner cannot be disabled or demoted (`409`).
+
+`DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+and its row stays for the audit; `{"ok": true, "name": "anna"}`.
+The last enabled owner stays (`409`); a user cannot remove itself.
+
+### Tokens: /api/v1/users/{name}/tokens
+
+`GET` and `POST /api/v1/users/{name}/tokens`;
+`DELETE /api/v1/users/{name}/tokens/{id}`.
+A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
+the same rules of access as the user.
+
+`GET` lists the live ones, oldest first, without their secrets.
+`POST` with `{"label": "Loxone"}` creates an API key, which never expires,
+and answers `201` with the key once:
+
+```json
+{"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
+```
+
+`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
+a token of another user is `404`.
+
+### Roles: /api/v1/roles and /api/v1/roles/{key}
+
+`GET` and `POST /api/v1/roles`; `PUT` and `DELETE /api/v1/roles/{key}`;
+`PUT /api/v1/roles/{key}/disabled`.
+A role is a set of capabilities (Authentication).
+The six default roles keep their keys; each can be renamed (`name`,
+empty shows the key's translated default) and given another set,
+except `owner`, which has every capability and cannot be changed,
+disabled or removed.
+The routes need `roles`, disabling `roles.disable`.
+
+`GET /api/v1/roles` answers the roles, the default ones first,
+and every capability with whether it is disabled, for a roles editor:
+
+```json
+{
+  "roles": [
+    {"key": "owner", "builtin": true, "disabled": false, "capabilities": ["read", "setpoint", …], "users": 1, "created_at": "…", "updated_at": "…"},
+    {"key": "operator", "name": "", "builtin": true, "disabled": false, "capabilities": ["backup", "configure", "discover", "lock", "read", "setpoint"], "users": 2, …},
+    {"key": "night", "name": "Night shift", "builtin": false, "disabled": false, "capabilities": ["read", "setpoint"], "users": 0, …}
+  ],
+  "capabilities": [{"key": "read", "disabled": false}, {"key": "pair", "disabled": true}, …]
+}
+```
+
+`POST /api/v1/roles` with `{"key": "night", "name": "Night shift",
+"capabilities": ["read", "setpoint"]}` creates a role:
+the key is 1 to 32 of letters, digits, `_` and `-`,
+starting with a letter, kept in lower case; `201` with the role,
+`409` for a key in use, `400` for a bad key or an unknown capability.
+`PUT /api/v1/roles/{key}` changes `name` and `capabilities` (the whole set);
+`DELETE /api/v1/roles/{key}` removes a created role that no user has
+(`409` while one does, `403` for a default role).
+`PUT /api/v1/roles/{key}/disabled` with `{"disabled": true}` disables a role:
+its users keep their login and are refused every route, with the reason,
+until it is enabled again.
+
+### Capabilities: /api/v1/capabilities
+
+`GET /api/v1/capabilities`; `PUT /api/v1/capabilities/{key}`.
+`GET` lists every capability in the order of the table under Authentication,
+with whether it is disabled; `PUT …/{key}` with `{"disabled": true}` disables
+one for every role but `owner`, whatever the roles' sets say
+(for example `pair` while nobody should pair,
+or `update` on a box the owner updates by hand), and `false` enables it again.
+Both need `capabilities`, which only `owner` has by default.
+
+### GET /api/v1/audit?before=&limit=&user=
+
+The audit (docs/store.md section 5): every request that changed something,
+or tried to, newest first.
+Needs `audit`, which only `owner` has by default; `503` without a store.
+
+```json
+[
+  {
+    "id": 42,
+    "time": "2026-11-06T10:42:00.123Z",
+    "user": "anna",
+    "token_id": 3,
+    "remote": "192.168.1.20",
+    "action": "setpoint",
+    "cube": "KEQ0000000",
+    "target": "room:6",
+    "detail": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/rooms/6/setpoint", "status": 200, "ms": 812, "bytes": 15, "body": {"mode": "auto"}},
+    "result": "ok"
+  },
+  {
+    "id": 41,
+    "time": "…",
+    "remote": "192.168.1.20",
+    "action": "login.failed",
+    "target": "user:anna",
+    "detail": {"method": "POST", "path": "/api/v1/login", "status": 401, "ms": 310, "bytes": 38, "body": {"user": "anna", "password": "…"}, "error": "wrong user or password"},
+    "result": "refused"
+  }
+]
+```
+
+Every route but the `GET`s and the stream ticket leaves a row:
+`action` names what was asked (`setpoint`, `device.lock`, `device.update`,
+`room.rename`, `room.config`, `room.program`, `room.delete`,
+`pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
+`login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
+`capability.disable`, …), `cube` the Cube of the route, `target` the device,
+room, user, role, token or Cube concerned, `user` and `token_id` who asked
+(absent without authentication, for a failed login,
+and for `massimo user` on the box, whose `remote` is `cli`),
+and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
+`403` or `429` (the refused request is a row too, with who was refused),
+`failed` otherwise.
+`detail` keeps the method, the path, the status, the milliseconds,
+the body's size and, when it is JSON of at most 4 KB,
+the body with `password`, `current_password` and `token` replaced by `…`,
+and the error of a failed answer.
+Nothing in a row is a secret.
+
+`before`
+(RFC 3339) pages: the rows before that time;
+`limit` is 100 by default and at most 1000; `user` filters by login name.
+The rows are append-only; a later stage prunes them by age.
+
+### Commands and Idempotency-Key: GET /api/v1/commands/{id}
+
+Every request that changes something is a **command** in the store
+(docs/store.md section 5; docs/server.md, "What version 1 prepares", item 7):
+a row with who asked, the Cube,
+the action and the target as the audit names them, the request, and a state;
+and every protocol command the request puts on the Cube's queue is a **step** beneath it,
+written by the queue as it goes.
+The audit row of the request names the command in `command_id`.
+
+The states are those of docs/design.md section 5:
+`queued` while the request runs and nothing has gone to the Cube,
+`sent` once a step went to the Cube, or the request was answered `202`
+and its run goes on (a restore, an update),
+`acknowledged` when the request was answered `2xx` (a step:
+the Cube accepted it),
+`failed` for a `5xx` (a step: the send failed),
+`dropped` for a `4xx` or `503`, nothing sent (a step: superseded by a newer
+command with its key, discarded by the Cube, or the server stopped);
+at a start of the server every command still `queued` or `sent` is `dropped`,
+since the queue it was in is gone.
+A restore's command is `sent` with its `202` and takes `acknowledged` or
+`failed` from its run, with the run's id, state and counts as its result.
+
+`GET /api/v1/commands/{id}` is one command with its steps:
+
+```json
+{
+  "id": "01a1b0c2-5a3e-7b1c-9d4e-0f1a2b3c4d5e",
+  "action": "device.update",
+  "target": "device:1514b6",
+  "cube": "KEQ0000000",
+  "user": "anna",
+  "state": "acknowledged",
+  "status": 200,
+  "request": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/devices/1514b6", "query": "", "hash": "…"},
+  "result": {"ok": true, "budget": {…}},
+  "created_at": "…", "updated_at": "…", "finished_at": "…",
+  "steps": [
+    {"id": "…", "target": "device:1514b6", "state": "acknowledged", "request": {"key": "", "priority": 1, "lines": 2, "radio": 2, "wakeup": true, "room": 6, "reconnect": false}, "result": {"discarded": false, "budget": {…}}, "created_at": "…", "finished_at": "…"},
+    {"id": "…", "target": "device:1514b6", "state": "acknowledged", "request": {…}, "result": {…}, "created_at": "…", "finished_at": "…"},
+    {"id": "…", "state": "acknowledged", "request": {"key": "metadata", "priority": 2, "lines": 1, "radio": 0, …}, "result": {…}, "created_at": "…", "finished_at": "…"}
+  ]
+}
+```
+
+Needs `read`; a user without `audit` sees its own commands only,
+and another's is `404`.
+
+**`Idempotency-Key`**:
+a write route takes the header with a key of the client's choice,
+at most 128 characters, kept per user for 24 hours.
+A retry with the same key answers what the first request answered,
+status and body, with the header `Idempotent-Replayed: true`,
+and sends nothing to the Cube; the same key with another request (the method,
+the path, the query or the body differ) is `422`,
+and one whose request is still running `409`.
+A page that lost the connection while a setpoint was on its way retries
+with the key and learns the outcome without a second radio command.
+The login, the logout and the stream ticket take no key.
+
+Finished commands are kept for `commands.keep_days` (`GET`/`PUT /api/v1/settings`),
+0 for ever, the default;
+the key is forgotten after 24 hours whatever the setting.
 
 ### GET /api/v1/cubes
 
@@ -379,9 +740,12 @@ The server's settings in the store:
 `-discover-interval`) overrides for one run.
 `stale_after` is when a thermostat that has not changed counts as stale,
 and applies at once; the intervals apply at the next start.
+`commands.keep_days` is how many days finished commands are kept (see Commands),
+a number, 0 for ever, and applies at once.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
+A number setting takes a JSON number, or the number as a string.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.
@@ -1022,6 +1386,6 @@ See [proxy.md](proxy.md).
 
 ## Not in version 1
 
-Removing devices, creating rooms, user accounts and ownership.
+Removing devices, creating rooms, and ownership per Cube.
 Removing needs the original software for now; `massimo restore` or
 `POST …/restore` from an edited backup covers everything else in bulk.

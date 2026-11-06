@@ -33,6 +33,13 @@ It checks that:
 - the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
   which the server answers with 401) the page opens it again with a new ticket;
+- Settings → Users lists the owner and the operator the runner creates
+  (`massimo user add operator`, password `op-pass`) with the operator's tokens,
+  Settings → Roles the six default roles with the operator's six capabilities;
+  a fresh browser without the stored token gets the sign-in dialog,
+  is refused a wrong password, signs in as the operator,
+  sees the tiles but neither Users, Roles nor Cubes,
+  and Log out brings the dialog back;
 - the room with the open window shows "Open" on its tile, and only that room;
   the badge goes when a state event closes the window;
 - the measured temperature shows its age;
@@ -47,8 +54,7 @@ It checks that:
   an injected `cube_found` event adds another one live;
   a refused search (a stubbed 503) shows the server's message.
   The fake Cube answers discovery on loopback (`-discovery`,
-  `UI_TEST_DISCOVERY_PORT`, 23919) and the server asks it there
-  (`-discover-target`).
+  `UI_TEST_DISCOVERY_PORT`, 23919) and the server asks it there (`-discover-target`).
   The server's own discovery socket is UDP 23272 as always,
   so where another program holds that port the search answers 503
   and the test skips the checks that need an answer;

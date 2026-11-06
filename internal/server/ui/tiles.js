@@ -524,7 +524,7 @@ function renderDevice(d) {
   const actions = el.querySelector(".device-actions");
   if (isThermostat(d)) {
     const locked = !!(d.state && d.state.panel_locked);
-    actions.appendChild(button(t(locked ? "device.unlock" : "device.lock"), "", () => setLock(d, !locked)));
+    actions.appendChild(button(t(locked ? "device.unlock" : "device.lock"), "needs-lock", () => setLock(d, !locked)));
   }
   return el;
 }
