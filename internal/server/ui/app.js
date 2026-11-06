@@ -516,7 +516,8 @@ async function refresh() {
   try {
     await loadCubes();
     await loadRooms();
-    $("message").classList.add("hidden");
+    if (langError) showLanguageError();
+    else $("message").classList.add("hidden");
   } catch (e) {
     showMessage(t("msg.cannotLoad", { error: e.message }), false);
   }
@@ -828,8 +829,7 @@ function initSettings() {
   $("lang-select").addEventListener("change", (ev) => {
     state.settings.lang = ev.target.value;
     store("massimo.lang", state.settings.lang === "auto" ? null : state.settings.lang);
-    setLanguage(state.settings.lang);
-    applyLanguage();
+    changeLanguage(state.settings.lang).then(applyLanguage);
   });
   $("forget-token").addEventListener("click", () => {
     state.token = null;
@@ -865,9 +865,31 @@ function renderLangSelect() {
   if (texts) for (const s of texts) note.appendChild(textEl("span", s));
 }
 
+// langError is the error of the last language load that failed, null
+// once one succeeds.
+let langError = null;
+
+// changeLanguage loads and applies a language setting; when the language
+// cannot be loaded, the page stays in English (in the static English of
+// the markup when even English is missing) and the message line says why.
+async function changeLanguage(setting) {
+  try {
+    await setLanguage(setting);
+    if (langError) $("message").classList.add("hidden");
+    langError = null;
+  } catch (e) {
+    langError = e;
+    showLanguageError();
+  }
+}
+
+function showLanguageError() {
+  showMessage(I18N.en ? t("msg.cannotLoad", { error: langError.message }) : langError.message, false);
+}
+
 // applyLanguage redraws every text after a change of language.
 function applyLanguage() {
-  applyI18n(document);
+  if (I18N.en) applyI18n(document);
   initHelpSlots();
   renderLangSelect();
   applyAppearance();
@@ -881,12 +903,13 @@ function applyLanguage() {
   if (updState.info) renderUpdate(updState.info);
 }
 
-function init() {
+// init starts the page once English and the chosen language are loaded.
+async function init() {
   state.token = readStored("massimo.token");
   state.serial = readStored("massimo.serial");
   loadSettings();
-  setLanguage(state.settings.lang);
-  applyI18n(document);
+  await changeLanguage(state.settings.lang);
+  if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
   initSettings();

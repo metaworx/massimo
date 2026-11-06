@@ -23,6 +23,10 @@ the next minor, a fix counts the suffix up.
   colour, and its contrast badges stand before the colours, which now
   line up (docs/ui.md, "Appearance").
 
+- The web UI loads the texts of the chosen language only
+  (`ui/i18n/<lang>.json`), and the browser revalidates the UI's files
+  by their ETag instead of downloading them again.
+
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
