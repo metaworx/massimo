@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The store keeps the Cubes' events (migration 0004), written in
+  batches and pruned daily by `log.keep_days` (30 days; 0 keeps them),
+  so that the log survives a restart (`docs/store.md` section 9).
+
 - The web UI pairs a device in Settings → Cubes and puts it into a room
   with the room's settings; Devices without a room and the Devices tab
   remove one from the Cube (`docs/ui.md`).
