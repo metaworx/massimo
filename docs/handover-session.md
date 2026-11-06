@@ -11,8 +11,11 @@ Branches and releases: develop on `main` through pull requests the owner merges;
 promoted from `main` with `make release-alpha` (`BUMP=minor` for a feature).
 Newest release: v0.7.0-alpha.1 (2026-11-06), the first with the store.
 CI runs the Go checks, the service installs on Windows and macOS runners,
+the web UI smoke test with the screenshot set (the Screenshots job),
 and the guidelines' checks (`GUIDELINES/shared/tools/check`) on every push
 and pull request.
+A ruleset on `main` requires those seven checks and auto-merge is on,
+so `gh pr merge --auto` waits for them; the owner's own pushes bypass it.
 
 ## Where things run
 
@@ -67,8 +70,9 @@ docs/review-2026-11-05.md has the coding standard they came from.
 - The built-in colour schemes: Massimo,
   High contrast and Graphite are the ones shipped;
   the owner picks the final set.
-- Real Cube serials and room names in the documents and the test reports (in the
-  public history already).
+- Real Cube serials and room names in the documents, the test reports and the
+  screenshot set under docs/screenshots (in the public history already);
+  a fixture with placeholder names would take them out of the set.
 - The items of docs/store.md section 10 marked open, and docs/server.md's,
   once the server mode starts.
 
@@ -111,14 +115,32 @@ docs/review-2026-11-05.md has the coding standard they came from.
   NL and PL await a native speaker.
 - `serve -log` writes to the file and to stderr,
   twice under a supervisor that keeps stderr.
-- The UI smoke test does not run in CI;
-  docs/ui-testing.md (in progress) says what to do about it.
+- The web UI is built from components.js,
+  partials under internal/server/ui/partials/ and one translation file per
+  language (docs/ui.md, "How the page is built"); the pairing,
+  backup and Users panels are written from them.
+  `detailsPanel` and `stepper` are written and have no caller yet.
+- The UI smoke test runs in CI's Screenshots job since 2026-11-06;
+  docs/ui-testing.md recommends moving it to pytest and keeping Playwright,
+  not Cypress.
 - On the Pi: delete `~/massimo-alpha12.*`,
   `/usr/local/bin/massimo.alpha9.bak` and, once the M7 setup is settled,
   `/etc/massimo/env.before-m7`; keep `massimo.prev`.
 
 The lessons of the hardware days are in docs/portal-protocol.md ("Lessons from
 the hardware days") and packaging/README.md ("Learnings").
+
+## Sessions in flight
+
+- **Store stage (b)** (users, login, the capability model, the audit,
+  `commands`; docs/store.md section 9) runs in a session of its own on the
+  branch `claude/store-b`; its login form in the UI waits for the components,
+  which are in.
+- **TLS for `serve`** is being planned in a session of its own from an
+  evaluation of 2026-11-06: certificate files by flags with reload,
+  self-signed at first start, the reverse-proxy support,
+  autocert with TLS-ALPN-01; a DNS-01 hook and UPnP later.
+  Its reverse-proxy block touches auth.go after stage (b) lands.
 
 ## Next steps in order
 
@@ -127,8 +149,7 @@ the hardware days") and packaging/README.md ("Learnings").
 2. The store's first start on the Pi (Settings → Software),
    then the hardware checks, pairing first.
 3. The UI sessions from the briefs: backup and restore, the pairing panel,
-   the notice when the server is gone.
-4. Store stage (b): users, login, the capability model, the audit,
-   `commands` (docs/store.md section 9).
+   the notice when the server is gone, written from the components.
+4. The two sessions in flight to their pull requests: store stage (b), TLS.
 5. Firmware dump when the adapter is in (docs/firmware-extraction.md).
 6. The server mode (docs/server.md), Loxone.
