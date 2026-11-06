@@ -21,6 +21,14 @@ on a Mac LaunchDaemons (see "macOS").
   weekly rotation of that log.
 - `launchd/ch.metaworx.massimo.plist` and `launchd/ch.metaworx.massimo-update.plist`:
   the service and the update helper on macOS (see "macOS").
+- `env.template`:
+  the settings file every install starts from, embedded as well.
+- `nfpm.yaml` and `deb/`:
+  the Debian package `make packages` builds (see "Debian package").
+- `apt/`:
+  the apt repository the release workflow publishes (see "The apt repository").
+- `homebrew/`:
+  the Homebrew formula's template and renderer (see "Homebrew").
 
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
@@ -196,6 +204,117 @@ for a year otherwise.
 `massimo install -remove` stops and removes the service,
 its units and the binary; `-purge` also removes the settings, the state,
 the logs and the user.
+
+## Debian package
+
+Every release also carries a Debian package per architecture,
+`massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`,
+the release's version written as dpkg sorts it (`0.7.0~alpha.1` for `v0.7.0-alpha.1`).
+The armhf one holds the armv6 binary and runs on every 32-bit Raspberry Pi OS,
+the Pi 1 and the Zero included (Debian's own armhf needs a Pi 2 or later).
+On a Debian, Ubuntu, Raspberry Pi OS or LoxBerry box:
+
+```bash
+curl -fLO https://github.com/metaworx/massimo/releases/download/<tag>/massimo_<version>_arm64.deb
+sudo apt install ./massimo_<version>_arm64.deb
+```
+
+It installs the release binary as `/usr/bin/massimo`,
+the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
+that path and without the update helper),
+the log rotation and the marker `/usr/share/massimo/packaged`;
+its scripts create the user `massimo` and `/etc/massimo/env` from the template
+when they are missing, enable the service,
+and start it once the file differs from the template,
+so that a fresh box does not serve the LAN without a token.
+Fill in `/etc/massimo/env` as "Install by hand" describes,
+then `sudo systemctl start massimo`.
+The next package upgrades the binary and restarts the service;
+the settings and the store are left alone.
+
+**One owner of the binary.**
+On such a box apt owns `/usr/bin/massimo`, and the marker tells massimo so:
+`massimo update` and the web UI's button still say when a newer release is out,
+but leave the install to `sudo apt update && sudo apt install massimo`
+(the apt repository below) or to the next release's package by hand.
+`massimo install` keeps only what configures:
+`-settings` over a settings file that is still the template,
+`-tls` and its options into the settings as "Install with `massimo install`" puts them,
+`-listen` as the listen drop-in there (the package has no update helper,
+so no health drop-in), then a restart.
+`massimo install -remove` points at `apt remove massimo`;
+`apt purge massimo` takes the settings, the store, the logs and the user too,
+as `-remove -purge` does.
+A box set up with `massimo install` keeps its own updater:
+the package refuses to install over it until `sudo massimo install -remove` has run,
+which keeps the settings and the store;
+a `-listen` address is set again afterwards with `sudo massimo install -listen <addr>`.
+
+The package is built by `make packages` (nfpm, at the version the Makefile pins,
+through `go run`) from `nfpm.yaml`,
+the scripts in `deb/` and the unit `deb/unit.sh` derives;
+`make deb-test` installs,
+checks and purges it in a Debian container (`deb/test.sh`),
+as CI does on trixie and on bookworm. lintian reports two errors by design,
+the statically linked binary and the missing Debian-format changelog (the
+changelog is `CHANGELOG.md` on GitHub).
+
+## The apt repository
+
+The packages of the newest ten releases of every update channel are also in an
+apt repository on the project's GitHub Pages,
+<https://metaworx.github.io/massimo/apt/>, one suite per channel (`alpha`;
+later `beta` and `stable`),
+the same for every Debian and Ubuntu release since the binary is static,
+signed with the repository's own OpenPGP key (RSA 4096;
+not the Ed25519 release key of the manifest, which apt cannot use).
+To follow a channel:
+
+```bash
+sudo curl -fsSLo /etc/apt/keyrings/massimo.asc https://metaworx.github.io/massimo/apt/massimo.asc
+sudo tee /etc/apt/sources.list.d/massimo.sources <<'EOF'
+Types: deb
+URIs: https://metaworx.github.io/massimo/apt
+Suites: alpha
+Components: main
+Signed-By: /etc/apt/keyrings/massimo.asc
+EOF
+sudo apt update && sudo apt install massimo
+```
+
+`apt upgrade` then installs each release as it is published,
+and `apt install massimo=0.6.0~alpha.1` goes back to one still in the pool.
+`unattended-upgrades` upgrades Debian's own origins only;
+`"origin=Massimo";` in its `Unattended-Upgrade::Origins-Pattern` adds this repository.
+The package `massimo-archive-keyring` carries the key as
+`/usr/share/keyrings/massimo-archive-keyring.gpg`;
+with `Signed-By:` pointing there instead of the downloaded file,
+an extended or a rotated key arrives through apt
+(the package's version is the key's expiry date).
+
+The site is built by `packaging/apt/publish.sh` in the release workflow (the
+pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
+the keyring package by nfpm) and deployed with `actions/deploy-pages`;
+it has no state of its own,
+so a release that is deleted on GitHub leaves the pool at the next release.
+`packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
+verifies `InRelease`, and installs from it in a container,
+as CI does on trixie and on bookworm (`make apt-test`).
+Until the owner has made the key and set the secrets,
+the workflow skips the steps.
+
+The owner's steps, once:
+
+- Make the key, offline:
+  `gpg --quick-gen-key "Massimo apt repository" rsa4096 sign 2y`;
+  the fingerprint is `<fpr>` below.
+- Put `gpg --armor --export-secret-keys <fpr>` into the secret `MASSIMO_APT_KEY`
+  of the `signing` environment and the passphrase into `MASSIMO_APT_KEY_PASSPHRASE`
+  (GUIDELINES/project/CI.md, section 5).
+- In the repository's settings, Pages → Source: GitHub Actions.
+- Before the key expires,
+  `gpg --quick-set-expire <fpr> 2y` and the secret again;
+  the next release publishes the renewed key and a newer keyring package.
 
 ## Install by hand
 
@@ -589,6 +708,53 @@ sudo massimo update -restart ch.metaworx.massimo -health http://127.0.0.1:8099/h
 As on Linux the new binary is renamed into place (which macOS needs for a signed binary:
 one overwritten in place is killed), the old one kept as `massimo.prev`,
 and `-rollback` goes back.
+
+## Homebrew
+
+On a Mac with Homebrew the tap `metaworx/massimo` carries a formula per update channel,
+`massimo-alpha` for `alpha` (and `massimo` once there is a stable channel),
+built from the release's source on the Mac, so that nothing needs notarization:
+
+```sh
+brew install metaworx/massimo/massimo-alpha
+brew services start massimo-alpha
+```
+
+The formula builds `bin/massimo` with Go,
+writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
+keeps the store in `$(brew --prefix)/var/massimo` and the log in
+`$(brew --prefix)/var/log/massimo.log`,
+and its service runs `massimo serve -listen :8099` as you while you are logged in;
+`sudo brew services start massimo-alpha` installs a LaunchDaemon that runs as
+root at boot instead.
+Fill in the settings file (the Cubes and `MASSIMO_API_TOKEN`),
+then start or restart the service.
+
+One owner of the binary: brew owns it,
+and the marker under the formula's `share/massimo` tells massimo so.
+`massimo update` and the web UI say when a release is out and leave it to
+`brew upgrade massimo-alpha`; `massimo install` refuses,
+since that is the layout of a Mac without Homebrew (on an Intel Mac both would
+write to `/usr/local/bin`).
+`brew uninstall massimo-alpha` removes it;
+the settings under `etc/massimo` stay, as brew keeps them.
+
+The formula is rendered from `homebrew/massimo.rb.in` by `homebrew/render.sh`
+for each release,
+conflicting with the tap's other formulae (all install `bin/massimo`),
+and pushed to the tap by `.github/workflows/publish.yml` (on a published release,
+with a deploy key); CI's macOS job renders it for a tarball of the checkout,
+builds and tests it, and checks the marker.
+Until the owner has made the tap and the key, the workflow skips the push.
+
+The owner's steps, once:
+
+- Create the repository `metaworx/homebrew-massimo`;
+  the workflow writes `Formula/<name>.rb`.
+- Make a deploy key, `ssh-keygen -t ed25519 -f tap-deploy-key -N ''`:
+  the public half as a deploy key of the tap with write access,
+  the private half as the repository secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository
+  (GUIDELINES/project/CI.md, section 5).
 
 ## Resource use
 

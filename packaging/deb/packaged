@@ -1,0 +1,3 @@
+apt
+sudo apt update && sudo apt install massimo
+sudo apt remove massimo (sudo apt purge massimo takes the settings, the store, the logs and the user too)

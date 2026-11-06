@@ -30,6 +30,18 @@ the next minor, a fix counts the suffix up.
   address from `X-Forwarded-For` behind a reverse proxy, the stream
   unbuffered, the UI under a path prefix (docs/reverse-proxy.md).
 
+- A Debian package per release (amd64, arm64, armhf for a 32-bit Pi OS),
+  installed with apt, which then owns the binary: `massimo update` and
+  the web UI show what is out (packaging/README.md, "Debian package").
+
+- An apt repository on the project's GitHub Pages, one suite per update
+  channel, signed with the repository key, with the keyring package;
+  `apt upgrade` then follows the channel (packaging/README.md).
+
+- A Homebrew tap, `brew install metaworx/massimo/massimo-alpha`, built
+  from source and run with `brew services`; brew then owns the binary,
+  as apt does (packaging/README.md, "Homebrew").
+
 ### Changed
 
 - CI runs once per commit (a push to `main` or a pull request), and the

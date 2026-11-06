@@ -15,7 +15,22 @@ CROSS    = CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-linux-armv6 \
            massimo-darwin-amd64 massimo-darwin-arm64 massimo-windows-amd64.exe
 
-.PHONY: all build test vet ui-test ui-screenshots windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross release clean release-alpha
+# The Debian packages (packaging/README.md, "Debian package"), built from
+# the binaries above with nfpm at a pinned version through `go run`;
+# NFPM=nfpm uses an installed one. Their version is the tag without its
+# v and with ~ for -, so that 0.7.0~alpha.1 sorts before 0.7.0 as dpkg
+# compares versions. armhf holds the armv6 binary, which runs on every
+# 32-bit Raspberry Pi OS, the Pi 1 included.
+NFPM_VERSION = v2.48.0
+NFPM    ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
+DEBVER   = $(shell echo '$(VERSION)' | sed 's/^v//; s/-/~/g')
+PACKAGES = massimo_$(DEBVER)_amd64.deb massimo_$(DEBVER)_arm64.deb massimo_$(DEBVER)_armhf.deb
+# Reproducible packages: every file in them carries the commit's time.
+export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date +%s)
+# The container the package test runs in (make deb-test).
+DEB_IMAGE ?= debian:trixie-slim
+
+.PHONY: all build test vet ui-test ui-screenshots windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
 
 # Development happens on main; a release promotes main to a release
 # branch, which is also the update channel boxes follow (internal/update).
@@ -126,14 +141,36 @@ darwin: darwin-amd64 darwin-arm64
 
 cross: linux linux-arm64 linux-armv7 linux-armv6 darwin windows
 
-# release builds every binary and the files a GitHub release carries
-# besides them: SHA256SUMS for people, and the manifest the release
-# workflow signs and `massimo update` verifies. Run by the workflow with
-# VERSION and CHANNEL set; locally it shows what a release would hold.
-release: clean cross
-	cd $(OUT) && sha256sum $(BINARIES) > SHA256SUMS
+# The package's unit: the embedded one with the package's binary path and
+# without the update helper's flag (packaging/deb/unit.sh).
+deb-unit:
+	packaging/deb/unit.sh packaging/systemd/massimo.service $(OUT)/deb/massimo.service
+
+# One Debian package per architecture, from the binaries of `make cross`.
+packages: linux linux-arm64 linux-armv6 deb-unit
+	VERSION=$(VERSION) NFPM_ARCH=amd64 BINARY=$(OUT)/massimo-linux-amd64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_amd64.deb
+	VERSION=$(VERSION) NFPM_ARCH=arm64 BINARY=$(OUT)/massimo-linux-arm64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_arm64.deb
+	VERSION=$(VERSION) NFPM_ARCH=arm6 BINARY=$(OUT)/massimo-linux-armv6 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_armhf.deb
+
+# The amd64 package installed, checked and purged in a Debian container
+# (packaging/deb/test.sh); DEB_IMAGE picks the release.
+deb-test:
+	docker run --rm -v "$(CURDIR)/$(OUT):/dist:ro" -v "$(CURDIR)/packaging/deb/test.sh:/test.sh:ro" $(DEB_IMAGE) bash /test.sh
+
+# The apt repository built from the packages with a throwaway key and
+# installed from in a Debian container (packaging/apt/test.sh).
+apt-test:
+	packaging/apt/test.sh $(DEB_IMAGE)
+
+# release builds every binary and package and the files a GitHub release
+# carries besides them: SHA256SUMS for people, and the manifest the
+# release workflow signs and `massimo update` verifies. Run by the
+# workflow with VERSION and CHANNEL set; locally it shows what a release
+# would hold.
+release: clean cross packages
+	cd $(OUT) && sha256sum $(BINARIES) $(PACKAGES) > SHA256SUMS
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
-		-channel $(CHANNEL) -dir $(OUT) $(BINARIES) > $(OUT)/massimo-release.json
+		-channel $(CHANNEL) -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
 
 clean:
 	rm -rf massimo $(OUT)

@@ -77,6 +77,6 @@ func ListenFromCommandLine(cmdline string) string {
 
 // windowsEnvTemplate is envTemplate with the log in the data directory.
 func windowsEnvTemplate(p WinPaths) string {
-	t := strings.Replace(envTemplate, "MASSIMO_LOG=/var/log/massimo/serve.log", "MASSIMO_LOG="+p.Log, 1)
+	t := strings.Replace(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log", "MASSIMO_LOG="+p.Log, 1)
 	return strings.Replace(t, "Readable only by the user massimo.", "Readable only by SYSTEM and Administrators.", 1)
 }

@@ -121,8 +121,13 @@ func CheckDarwin(o Options) error {
 	return nil
 }
 
-// InstallDarwin installs or updates massimo serve as a LaunchDaemon.
+// InstallDarwin installs or updates massimo serve as a LaunchDaemon. A
+// Mac whose package manager owns the binary (Homebrew) runs it through
+// that manager's services, not through this layout.
 func InstallDarwin(o Options) error {
+	if m, ok := Packaged(o.Root); ok {
+		return fmt.Errorf("%s; massimo install is for a Mac without it (packaging/README.md, \"Homebrew\")", m)
+	}
 	if err := CheckDarwin(o); err != nil {
 		return err
 	}
@@ -244,7 +249,7 @@ func (in *installer) checkDarwinListen(listen string) {
 // darwinEnvTemplate is envTemplate without MASSIMO_LOG: launchd writes
 // serve's stderr to the log.
 func darwinEnvTemplate() string {
-	t := strings.Replace(envTemplate, "MASSIMO_LOG=/var/log/massimo/serve.log\n",
+	t := strings.Replace(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log\n",
 		"# The log is "+DarwinLog+", written by launchd; no MASSIMO_LOG here.\n", 1)
 	return strings.Replace(t, "by the user "+User+".", "by the user "+DarwinUser+".", 1)
 }
@@ -444,8 +449,12 @@ func (in *installer) darwinFirewall() {
 }
 
 // RemoveDarwin unloads and removes both LaunchDaemons and the binary;
-// with purge also the settings, the state, the logs and the user.
+// with purge also the settings, the state, the logs and the user. A
+// packaged Mac is left to its package manager.
 func RemoveDarwin(o Options, purge bool) error {
+	if m, ok := Packaged(o.Root); ok {
+		return fmt.Errorf("%s; %s", m, m.RemoveHint())
+	}
 	if err := CheckDarwin(o); err != nil {
 		return err
 	}

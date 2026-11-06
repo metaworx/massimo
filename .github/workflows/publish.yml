@@ -1,0 +1,53 @@
+name: Publish
+
+# After a release is published: the Homebrew formula of its channel,
+# rendered from packaging/homebrew/massimo.rb.in for the tag and pushed
+# to the tap metaworx/homebrew-massimo with a deploy key
+# (packaging/README.md, "Homebrew"). Skipped until the owner has made
+# the tap and put the key into the secret HOMEBREW_TAP_DEPLOY_KEY.
+on:
+  release:
+    types: [ published ]
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    name: Homebrew formula
+    runs-on: ubuntu-latest
+    env:
+      HAS_TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: env.HAS_TAP_KEY == 'true'
+
+      # The tap is cloned first: the formula conflicts with the other
+      # formulae then in it (all install bin/massimo), and brew wants a
+      # conflicts_with to name a formula it can find. The tarball's
+      # SHA-256 is computed from GitHub's archive of the tag.
+      - name: Render the formula and push it to the tap
+        if: env.HAS_TAP_KEY == 'true'
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --depth 1 git@github.com:metaworx/homebrew-massimo.git tap
+          others=""
+          if [ -d tap/Formula ]; then
+            others="$(find tap/Formula -maxdepth 1 -name '*.rb' -exec basename {} .rb \; | paste -sd, -)"
+          fi
+          name="$(packaging/homebrew/render.sh --tag "$TAG" --conflicts "$others" --out formula.rb)"
+          cat formula.rb
+          install -D formula.rb "tap/Formula/$name.rb"
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Formula/$name.rb"
+          git commit -m "$name $TAG" -m "Rendered by metaworx/massimo's release workflow from packaging/homebrew/massimo.rb.in."
+          git push

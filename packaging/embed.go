@@ -9,8 +9,9 @@ package packaging
 import "embed"
 
 // Files holds systemd/, logrotate/ and launchd/ as they are in the
-// repository.
+// repository, and env.template, the settings file a fresh install gets.
 //
+//go:embed env.template
 //go:embed systemd/massimo.service systemd/massimo-update.path systemd/massimo-update.service logrotate/massimo
 //go:embed launchd/ch.metaworx.massimo.plist launchd/ch.metaworx.massimo-update.plist
 var Files embed.FS

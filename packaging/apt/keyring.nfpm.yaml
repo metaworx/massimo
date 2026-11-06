@@ -1,0 +1,23 @@
+# The keyring package of the apt repository, built by packaging/apt/publish.sh
+# from the repository's public key: apt verifies the suites with it through
+# a Signed-By line naming it (packaging/README.md, "The apt repository").
+# VERSION (the key's creation date), KEYRING (the exported key) and
+# MAINTAINER come from the script.
+name: massimo-archive-keyring
+arch: all
+platform: linux
+version: ${VERSION}
+section: misc
+priority: optional
+maintainer: ${MAINTAINER}
+vendor: metaworx
+homepage: https://go.metaworx.ch/massimo
+license: AGPL-3.0-or-later
+description: |
+  OpenPGP key of the Massimo apt repository
+  The key apt verifies the Massimo repository with, for the Signed-By line
+  of /etc/apt/sources.list.d/massimo.sources.
+contents:
+  - src: ${KEYRING}
+    dst: /usr/share/keyrings/massimo-archive-keyring.gpg
+    expand: true

@@ -29,6 +29,10 @@ import (
 // at build time by the Makefile like version.
 var channel = ""
 
+// packaged says whether a package manager owns this binary, in which case
+// update leaves the install to it; a variable for the test.
+var packaged = func() (install.Manager, bool) { return install.Packaged("") }
+
 // updateChannel is the channel updates come from: MASSIMO_UPDATE_CHANNEL,
 // else the one compiled in.
 func updateChannel() string {
@@ -79,6 +83,16 @@ func runUpdate(args []string) (err error) {
 			*ch = c
 		}
 		*yes = true
+	}
+
+	// A package manager that owns the binary keeps owning it: -check still
+	// says what is out, nothing is installed or rolled back from here.
+	if !*check {
+		if m, ok := packaged(); ok {
+			err := fmt.Errorf("this massimo is %s", m)
+			status(update.Status{State: "failed", From: version, Message: err.Error()})
+			return err
+		}
 	}
 
 	target := *binary

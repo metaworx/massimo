@@ -1,0 +1,13 @@
+#!/bin/sh
+# The massimo package's prerm: the service is stopped on removal; on an
+# upgrade it keeps running from the old binary until postinst restarts it.
+set -e
+
+case "$1" in
+remove)
+	if [ -d /run/systemd/system ] && command -v deb-systemd-invoke >/dev/null 2>&1; then
+		deb-systemd-invoke stop massimo.service >/dev/null || true
+	fi
+	;;
+esac
+exit 0

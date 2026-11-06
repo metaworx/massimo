@@ -1362,8 +1362,9 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
 the server (see `internal/update`).
 `check_error` says why a check failed.
 `can_update` is true when POST would start an update;
-otherwise `blocked` says why it cannot be started from here (no API token,
-no update helper, a development build).
+otherwise `blocked` says why it cannot be started from here (a package
+manager owning the binary, which then also upgrades it; no API token;
+no update helper; a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.

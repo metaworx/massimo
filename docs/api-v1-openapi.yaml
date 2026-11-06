@@ -1863,7 +1863,7 @@ components:
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
-        blocked: {type: string, description: Why an update cannot be started from the API}
+        blocked: {type: string, description: Why an update cannot be started from the API (a package manager owning the binary, no token, no helper, a development build)}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
     UpdateStatus:
       type: object

@@ -1,0 +1,30 @@
+#!/bin/sh
+# The massimo package's postrm: a removal leaves the settings, the store,
+# the logs and the user, as `massimo install -remove` does; a purge takes
+# them too, as `-remove -purge` does.
+set -e
+
+case "$1" in
+remove)
+	if [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+	fi
+	if command -v deb-systemd-helper >/dev/null 2>&1; then
+		deb-systemd-helper mask massimo.service >/dev/null || true
+	fi
+	;;
+purge)
+	if command -v deb-systemd-helper >/dev/null 2>&1; then
+		deb-systemd-helper purge massimo.service >/dev/null || true
+		deb-systemd-helper unmask massimo.service >/dev/null || true
+	fi
+	rm -rf /etc/massimo /var/lib/massimo /var/log/massimo
+	if getent passwd massimo >/dev/null; then
+		deluser --system --quiet massimo || true
+	fi
+	if getent group massimo >/dev/null; then
+		delgroup --system --quiet massimo || true
+	fi
+	;;
+esac
+exit 0

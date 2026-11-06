@@ -138,6 +138,9 @@ func runServe(args []string) error {
 		return err
 	}
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
+	if m, ok := install.Packaged(""); ok {
+		upd.Managed = m.String()
+	}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
 		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, src != nil, *updateRequest, *updateStatus); err != nil {
 			return fmt.Errorf("serve: %w", err)

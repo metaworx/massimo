@@ -1,0 +1,19 @@
+#!/bin/sh
+# The massimo package's preinst. A box set up by `massimo install` (the
+# unit in /etc/systemd/system, the binary in /usr/local/bin) keeps its
+# own updater, and two owners of one service would fight; the hand
+# install is removed first, which keeps the settings, the store, the logs
+# and the user (packaging/README.md, "Debian package").
+set -e
+
+case "$1" in
+install)
+	if [ -e /etc/systemd/system/massimo.service ]; then
+		echo "massimo: a hand install is in place (/etc/systemd/system/massimo.service)." >&2
+		echo "massimo: remove it first, which keeps the settings and the store:" >&2
+		echo "massimo:     sudo massimo install -remove" >&2
+		exit 1
+	fi
+	;;
+esac
+exit 0
