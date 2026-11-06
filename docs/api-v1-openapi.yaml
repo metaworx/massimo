@@ -1415,7 +1415,8 @@ paths:
         then an event per change the Cube reports. Kinds: connected,
         disconnected, hello, metadata, config, state, pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
-        cube_found (with a Cube that is not configured in "cube"),
+        device_forgotten (a device deleted from the Cube left the server's
+        copy), cube_found (with a Cube that is not configured in "cube"),
         restore_step and restore_done (with the progress of a restore in
         "restore", see POST …/restore). A state
         event after a device's first one has "changes": per changed value
