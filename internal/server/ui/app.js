@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, core: API access with the token, the DOM and
-// formatting helpers the other files share (textEl, button,
-// submitButton, badgeEl, iconEl, fmtTemp, ageEl; fmtNum is in i18n.js),
+// The Massimo web UI, core: API access with the token, the helpers the
+// other files share that read the page's state (fmtTemp, ageEl,
+// helpParts; fmtNum is in i18n.js, the components in components.js),
 // settings, the header with the Cube clock, loading of cubes and rooms,
 // polling and the event stream with its tickets. The tiles and their
 // actions are in tiles.js.
@@ -124,56 +124,9 @@ async function deviceDetail(rf) {
 
 // --- helpers ----------------------------------------------------------
 
-function clear(el) {
-  while (el.firstChild) el.removeChild(el.firstChild);
-}
-
-function textEl(tag, text, cls) {
-  const el = document.createElement(tag);
-  el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-}
-
-function button(label, cls, onClick) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.textContent = label;
-  if (cls) b.className = cls;
-  b.addEventListener("click", onClick);
-  return b;
-}
-
+// showMessage says how something went on the page's message line.
 function showMessage(text, ok) {
-  const m = $("message");
-  m.textContent = text;
-  m.className = "message " + (ok ? "ok" : "bad");
-}
-
-// submitButton is a form's primary submit button.
-function submitButton(label) {
-  const b = document.createElement("button");
-  b.type = "submit";
-  b.className = "primary";
-  b.textContent = label;
-  return b;
-}
-
-// badgeEl is a small outlined or filled label (.flag) of a kind: ok,
-// warn, bad, mode, fill-ok, fill-warn, fill-bad.
-function badgeEl(text, kind) {
-  return textEl("span", text, "flag " + kind);
-}
-
-// iconEl returns a small inline icon referencing a symbol of the page.
-function iconEl(symbol, cls) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", cls);
-  svg.setAttribute("aria-hidden", "true");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", "#" + symbol);
-  svg.appendChild(use);
-  return svg;
+  showResult($("message"), text, ok);
 }
 
 // fmtTemp is a temperature with one decimal and a unit ("°C" unless
@@ -289,13 +242,8 @@ let helpSeq = 0;
 function helpParts(key, label) {
   const text = textEl("p", t("help." + key), "help-text");
   text.id = "help-" + key + "-" + ++helpSeq;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "help-btn";
+  const btn = iconButton("icon-help", t("help.button", { label }), null, { cls: "help-btn", title: t("help.title"), iconCls: "hi" });
   btn.setAttribute("aria-controls", text.id);
-  btn.setAttribute("aria-label", t("help.button", { label }));
-  btn.title = t("help.title");
-  btn.appendChild(iconEl("icon-help", "hi"));
   const show = (on) => {
     text.classList.toggle("hidden", !on);
     btn.classList.toggle("active", on);
@@ -432,32 +380,15 @@ function renderUpdated() {
 // those found on the LAN but not configured (shown, not selectable),
 // then the entry that searches the LAN for new ones.
 function renderCubeSelect() {
-  const sel = $("cube-select");
-  clear(sel);
-  for (const c of state.cubes) {
-    const o = document.createElement("option");
-    o.value = c.serial;
+  const options = state.cubes.map((c) => {
     const name = c.name ? c.name + " (" + c.serial + ")" : c.serial;
-    o.textContent = c.connected ? name : t("header.cubeDisconnected", { name });
-    sel.appendChild(o);
-  }
+    return [c.serial, c.connected ? name : t("header.cubeDisconnected", { name })];
+  });
   if (state.found.length) {
-    const group = document.createElement("optgroup");
-    group.label = t("discover.group");
-    for (const c of state.found) {
-      const o = document.createElement("option");
-      o.value = "found:" + c.serial;
-      o.disabled = true;
-      o.textContent = c.serial + (c.address ? " · " + c.address : "");
-      group.appendChild(o);
-    }
-    sel.appendChild(group);
+    options.push({ group: t("discover.group"), options: state.found.map((c) => ["found:" + c.serial, c.serial + (c.address ? " · " + c.address : ""), true]) });
   }
-  const search = document.createElement("option");
-  search.value = DISCOVER;
-  search.textContent = t(discovery.running ? "discover.searching" : "discover.search");
-  search.disabled = discovery.running;
-  sel.appendChild(search);
+  options.push([DISCOVER, t(discovery.running ? "discover.searching" : "discover.search"), discovery.running]);
+  const sel = fillOptions($("cube-select"), options);
   sel.value = state.serial || "";
 }
 
@@ -516,7 +447,8 @@ async function refresh() {
   try {
     await loadCubes();
     await loadRooms();
-    $("message").classList.add("hidden");
+    if (langError) showLanguageError();
+    else $("message").classList.add("hidden");
   } catch (e) {
     showMessage(t("msg.cannotLoad", { error: e.message }), false);
   }
@@ -578,8 +510,8 @@ function addFound(c) {
 }
 
 // renderFound lists, under the header, the Cubes found on the LAN that
-// the server does not serve, each with Add (cubes.js), which serves it
-// at once, and the other way to add them: the lines for the server's
+// the server does not serve, each with Add (foundRow, cubes.js), which
+// serves it at once, and the other way to add them: the lines for the server's
 // env file, ready to copy. The address makes serve take the Cube; a
 // name alone would as well, serve then follows the address the Cube
 // answers discovery from.
@@ -591,21 +523,8 @@ function renderFound() {
   box.querySelector("summary").textContent = tn("discover.found", n);
   const body = box.querySelector(".cube-found-body");
   clear(body);
-  const list = document.createElement("ul");
-  for (const c of state.found) {
-    const li = document.createElement("li");
-    li.appendChild(textEl("span", c.serial, "mono"));
-    const facts = [c.address, c.firmware ? t("budget.firmware") + " " + c.firmware : ""].filter((x) => x);
-    if (facts.length) li.appendChild(textEl("span", " · " + facts.join(" · ")));
-    const extra = [c.rf_address, c.mac].filter((x) => x);
-    if (extra.length) li.appendChild(textEl("span", " · " + extra.join(" · "), "mono expert-only"));
-    const age = ageEl(c.last_seen, false, true);
-    if (age) li.appendChild(age);
-    const add = button(t("cubes.add"), "add-cube", () => addCube(c.serial));
-    add.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
-    li.appendChild(add);
-    list.appendChild(li);
-  }
+  const list = elem("ul");
+  for (const c of state.found) list.appendChild(foundRow(c)); // cubes.js
   body.appendChild(list);
   body.appendChild(textEl("p", t("discover.hintAdd")));
   body.appendChild(textEl("p", t("discover.hint")));
@@ -828,8 +747,7 @@ function initSettings() {
   $("lang-select").addEventListener("change", (ev) => {
     state.settings.lang = ev.target.value;
     store("massimo.lang", state.settings.lang === "auto" ? null : state.settings.lang);
-    setLanguage(state.settings.lang);
-    applyLanguage();
+    changeLanguage(state.settings.lang).then(applyLanguage);
   });
   $("forget-token").addEventListener("click", () => {
     state.token = null;
@@ -845,18 +763,9 @@ function initSettings() {
 // renderLangSelect fills the language choice: from the browser, then
 // every language with a translation table, by its own name.
 function renderLangSelect() {
-  const sel = $("lang-select");
-  clear(sel);
-  const auto = document.createElement("option");
-  auto.value = "auto";
-  auto.textContent = t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")";
-  sel.appendChild(auto);
-  for (const l of languages()) {
-    const o = document.createElement("option");
-    o.value = l;
-    o.textContent = LANGUAGE_NAMES[l] || l;
-    sel.appendChild(o);
-  }
+  const options = [["auto", t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")"]];
+  for (const l of languages()) options.push([l, LANGUAGE_NAMES[l] || l]);
+  const sel = fillOptions($("lang-select"), options);
   sel.value = i18n.setting;
   const note = $("lang-note");
   const texts = machineNote();
@@ -865,9 +774,31 @@ function renderLangSelect() {
   if (texts) for (const s of texts) note.appendChild(textEl("span", s));
 }
 
+// langError is the error of the last language load that failed, null
+// once one succeeds.
+let langError = null;
+
+// changeLanguage loads and applies a language setting; when the language
+// cannot be loaded, the page stays in English (in the static English of
+// the markup when even English is missing) and the message line says why.
+async function changeLanguage(setting) {
+  try {
+    await setLanguage(setting);
+    if (langError) $("message").classList.add("hidden");
+    langError = null;
+  } catch (e) {
+    langError = e;
+    showLanguageError();
+  }
+}
+
+function showLanguageError() {
+  showMessage(I18N.en ? t("msg.cannotLoad", { error: langError.message }) : langError.message, false);
+}
+
 // applyLanguage redraws every text after a change of language.
 function applyLanguage() {
-  applyI18n(document);
+  if (I18N.en) applyI18n(document);
   initHelpSlots();
   renderLangSelect();
   applyAppearance();
@@ -881,12 +812,13 @@ function applyLanguage() {
   if (updState.info) renderUpdate(updState.info);
 }
 
-function init() {
+// init starts the page once English and the chosen language are loaded.
+async function init() {
   state.token = readStored("massimo.token");
   state.serial = readStored("massimo.serial");
   loadSettings();
-  setLanguage(state.settings.lang);
-  applyI18n(document);
+  await changeLanguage(state.settings.lang);
+  if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
   initSettings();

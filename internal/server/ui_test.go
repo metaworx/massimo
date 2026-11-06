@@ -5,10 +5,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"io/fs"
+	"maps"
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,7 +34,7 @@ func TestUIServed(t *testing.T) {
 	if code, ct, body := get("/"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="/ui/app.js">`) {
 		t.Fatalf("GET /: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/i18n.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/theme.js"} {
+	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/theme.js"} {
 		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
@@ -38,9 +42,45 @@ func TestUIServed(t *testing.T) {
 	if code, ct, _ := get("/ui/style.css"); code != 200 || !strings.HasPrefix(ct, "text/css") {
 		t.Fatalf("GET /ui/style.css: %d %s", code, ct)
 	}
-	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/other"} {
+	for _, lang := range uiLanguages {
+		p := "/ui/i18n/" + lang + ".json"
+		if code, ct, body := get(p); code != 200 || !strings.HasPrefix(ct, "application/json") || !strings.HasPrefix(body, "{") {
+			t.Fatalf("GET %s: %d %s", p, code, ct)
+		}
+	}
+	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/other"} {
 		if code, _, _ := get(p); code != 404 {
 			t.Fatalf("GET %s: %d, want 404", p, code)
+		}
+	}
+	// Every file carries an ETag and answers 304 to it; no-cache stays.
+	for _, p := range []string{"/", "/ui/app.js", "/ui/i18n/de.json"} {
+		resp, err := http.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		etag := resp.Header.Get("ETag")
+		if !strings.HasPrefix(etag, `"`) || !strings.HasSuffix(etag, `"`) || resp.Header.Get("Cache-Control") != "no-cache" {
+			t.Fatalf("GET %s: ETag %q, Cache-Control %q", p, etag, resp.Header.Get("Cache-Control"))
+		}
+		req, _ := http.NewRequest("GET", ts.URL+p, nil)
+		req.Header.Set("If-None-Match", etag)
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotModified {
+			t.Fatalf("GET %s with If-None-Match %s: %d, want 304", p, etag, resp.StatusCode)
+		}
+		req.Header.Set("If-None-Match", `"other"`)
+		if resp, err = http.DefaultClient.Do(req); err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("GET %s with another ETag: %d, want 200", p, resp.StatusCode)
 		}
 	}
 	// The API behind it still needs the token in the header; only the
@@ -70,6 +110,132 @@ func TestUIServed(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 401 {
 		t.Fatalf("events?token=wrong: %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestUIETagVersion(t *testing.T) {
+	started := time.Unix(0, 36*36)
+	for v, want := range map[string]string{
+		"massimo v0.2.0-alpha.1 (go1.26.8, linux/amd64)":        "v0.2.0-alpha.1",
+		"massimo v0.2.0-3-g1a2b3c4 (go1.26.8, linux/amd64)":     "v0.2.0-3-g1a2b3c4",
+		"massimo v0.2.0-3-g1a2b3c4-dirty (go1.26.8, linux/arm)": "v0.2.0-3-g1a2b3c4-dirty+100",
+		"test":  "test",
+		"":      "dev+100",
+		"v1\"x": "v1_x",
+	} {
+		if got := uiETagVersion(v, started); got != want {
+			t.Errorf("uiETagVersion(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// uiLanguages are the languages of LANGUAGE_NAMES in i18n.js, each with
+// its file ui/i18n/<code>.json.
+var uiLanguages = []string{"en", "de", "fr", "it", "nl", "pl"}
+
+// The translation files hold the texts of the page: each parses, the
+// other languages have no key English lacks (but their own plural forms
+// and the machine-translation note), and English has every key the
+// markup and the scripts ask for.
+func TestUITranslations(t *testing.T) {
+	js, err := uiFiles.ReadFile("ui/i18n.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`const LANGUAGE_NAMES = \{([^}]*)\}`).FindSubmatch(js)
+	if m == nil {
+		t.Fatal("i18n.js: no LANGUAGE_NAMES")
+	}
+	var named []string
+	for _, c := range regexp.MustCompile(`(\w+):`).FindAllSubmatch(m[1], -1) {
+		named = append(named, string(c[1]))
+	}
+	if strings.Join(named, " ") != strings.Join(uiLanguages, " ") {
+		t.Fatalf("i18n.js LANGUAGE_NAMES %v, want %v", named, uiLanguages)
+	}
+	files, _ := fs.Glob(uiFiles, "ui/i18n/*.json")
+	if len(files) != len(uiLanguages) {
+		t.Errorf("ui/i18n: %d files %v, want one per language %v", len(files), files, uiLanguages)
+	}
+	tables := map[string]map[string]string{}
+	for _, lang := range uiLanguages {
+		b, err := uiFiles.ReadFile("ui/i18n/" + lang + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var table map[string]string
+		if err := json.Unmarshal(b, &table); err != nil {
+			t.Fatalf("ui/i18n/%s.json: %v", lang, err)
+		}
+		tables[lang] = table
+	}
+	en := tables["en"]
+	plural := regexp.MustCompile(`^(.+)\.(zero|one|two|few|many|other)$`)
+	for _, lang := range uiLanguages[1:] {
+		for _, k := range slices.Sorted(maps.Keys(tables[lang])) {
+			if _, ok := en[k]; ok || k == "i18n.machineNote" {
+				continue
+			}
+			if p := plural.FindStringSubmatch(k); p != nil {
+				if _, ok := en[p[1]+".other"]; ok {
+					continue
+				}
+			}
+			t.Errorf("ui/i18n/%s.json: %q is not in en.json", lang, k)
+		}
+	}
+	if _, ok := en["i18n.machineNote"]; ok {
+		t.Errorf("ui/i18n/en.json: has i18n.machineNote, which marks a machine-translated language")
+	}
+
+	// The keys the markup asks for: data-i18n, data-i18n-attr pairs, and
+	// the help slots (data-help is the key of help.<key>).
+	used := map[string]string{} // key: where
+	html, err := uiFiles.ReadFile("ui/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range regexp.MustCompile(`data-(i18n|i18n-attr|help|help-label)="([^"]*)"`).FindAllStringSubmatch(string(html), -1) {
+		switch m[1] {
+		case "i18n", "help-label":
+			used[m[2]] = "index.html"
+		case "help":
+			used["help."+m[2]] = "index.html"
+		case "i18n-attr":
+			for _, pair := range strings.Fields(m[2]) {
+				if i := strings.Index(pair, ":"); i > 0 {
+					used[pair[i+1:]] = "index.html"
+				}
+			}
+		}
+	}
+	// The string literals of t("…") and tn("…") in the scripts, a key
+	// that is not put together ("help." + key); tn's have their plural
+	// forms, .one and .other at least.
+	call := regexp.MustCompile(`\b(tn?)\("([^"]+)"\s*[,)]`)
+	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
+	for _, f := range scripts {
+		b, err := uiFiles.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		name := strings.TrimPrefix(f, "ui/")
+		for _, m := range call.FindAllStringSubmatch(string(b), -1) {
+			if m[1] == "tn" {
+				used[m[2]+".one"] = name
+				used[m[2]+".other"] = name
+			} else {
+				used[m[2]] = name
+			}
+		}
+	}
+	if len(used) < 100 {
+		t.Fatalf("only %d keys found in the markup and the scripts", len(used))
+	}
+	for _, k := range slices.Sorted(maps.Keys(used)) {
+		if _, ok := en[k]; !ok {
+			t.Errorf("%s asks for %q, which is not in ui/i18n/en.json", used[k], k)
+		}
 	}
 }
 

@@ -21,7 +21,8 @@ cube_found; a cube_found event adds another one live, and a refused
 search (stubbed 503) shows the server's message. A state event with
 changes shows in the log as what changed. In Settings → Cubes a name
 is saved and taken back from the settings file, hidden devices take
-their room's tile away and back, and a found Cube is added and removed.
+their room's tile away and back, and a found Cube is added and removed,
+Remove asking in the panel.
 In Settings → Appearance a
 scheme changes the computed --bg, the dark mode sets data-theme, the
 editor applies a colour live and keeps a saved scheme in the browser,
@@ -31,7 +32,9 @@ colour inputs line up,
 Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
-is not a scheme shows a message. Any console error, page error or horizontal scroll fails the
+is not a scheme shows a message. Update asks in the page, and Cancel
+sends nothing. On every page it opens, every button
+has an accessible name (text, aria-label or title). Any console error, page error or horizontal scroll fails the
 test.
 """
 import json
@@ -65,6 +68,18 @@ def check(cond, what):
     print(("ok    " if cond else "FAIL  ") + what)
     if not cond:
         failures.append(what)
+
+
+def named_buttons(page, label, where):
+    """Every button of the page has an accessible name: its text, an
+    aria-label, an aria-labelledby or a title. The scripts build most of
+    them, so this runs on every page the test opens."""
+    nameless = page.evaluate("""() => [...document.querySelectorAll('button')].filter((b) => {
+      const by = (b.getAttribute('aria-labelledby') || '').split(/\\s+/).map((id) => document.getElementById(id))
+        .filter((e) => e).map((e) => e.textContent).join('');
+      return ![b.textContent, b.getAttribute('aria-label'), b.title, by].some((n) => n && n.trim());
+    }).map((b) => b.outerHTML.slice(0, 160))""")
+    check(not nameless, f"{label}: every button has a name on {where}" + (f": {nameless}" if nameless else ""))
 
 
 def wait_until(page, expr, seconds):
@@ -197,6 +212,7 @@ def cubes(page, label, lang):
     panel.locator("summary").click()
     form = panel.locator("form")
     check(form.is_visible(), f"{label}: the Cube's panel opens")
+    named_buttons(page, label, "a Cube's panel")
     form.locator("input[name=name]").fill("Renamed")
     form.locator("button[type=submit]").click()
     check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.name === 'Renamed')", 5), f"{label}: the new name is saved")
@@ -237,8 +253,13 @@ def cubes(page, label, lang):
         check(page.evaluate("state.serial") == "KEQ0537249", f"{label}: the selected Cube stays")
         other = page.locator(".cube-panel[data-serial='KEQ0000000']")
         other.locator("summary").click()
-        page.once("dialog", lambda d: d.accept())
         other.locator(".remove-cube").click()
+        confirm = other.locator(".confirm-box")
+        check(confirm.is_visible() and other.locator(".remove-cube").count() == 0, f"{label}: Remove asks in the panel")
+        confirm.locator(".confirm-no").click()
+        check(other.locator(".confirm-box").count() == 0 and other.locator(".remove-cube").is_visible(), f"{label}: Keep takes the question back")
+        other.locator(".remove-cube").click()
+        other.locator(".confirm-box .confirm-yes").click()
         check(wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5),
               f"{label}: Remove lists it as found again")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll in Settings → Cubes")
@@ -332,6 +353,7 @@ def appearance(page, label, lang, tmp):
     check(editor.is_visible() and editor.locator("input[type=color]").count() == 38, f"{label}: editor with a colour input per token and set")
     check(editor.locator(".contrast.ok").count() == 14, f"{label}: contrast badges, all ok for a built-in scheme")
     check(editor.locator("#scheme-delete").is_disabled(), f"{label}: no Delete for a built-in scheme")
+    named_buttons(page, label, "the scheme editor")
     scheme_hex(page, label, lang)
     page.locator("#scheme-light-bg").fill("#112233")
     check(bg() == "#112233", f"{label}: the editor applies live")
@@ -385,10 +407,12 @@ def run(page, label, lang):
     page.wait_for_selector(".room", timeout=10000)
     check(page.locator(".room").count() > 0, f"{label}: room tiles shown")
     check(page.evaluate("document.documentElement.lang") == lang, f"{label}: page language {lang}")
+    named_buttons(page, label, "the rooms")
     tile = page.locator(".room").first
     tile.locator(".room-name-btn").click()
     page.wait_for_selector(".room .device", timeout=5000)
     check(tile.locator(".device").count() > 0, f"{label}: device list opens")
+    named_buttons(page, label, "a device list")
     tile.locator(".tile-cog").click()
     page.wait_for_selector(".room .config-body", timeout=5000)
     tabs = tile.locator(".config-tabs [role=tab]")
@@ -396,17 +420,21 @@ def run(page, label, lang):
     for name in tabs.all_text_contents():
         tabs.filter(has_text=name).first.click()
         check(tile.locator(".config-body").is_visible(), f"{label}: tab {name.strip()}")
+        named_buttons(page, label, f"the configuration tab {name.strip()}")
     tile.locator(".config-tabs .close").click()
     check(tile.locator(".config-body").count() == 0, f"{label}: configuration closes")
     width = page.viewport_size["width"]
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the tiles")
     page.locator("#view-log").click()
     check(page.locator("#logview").is_visible(), f"{label}: log opens")
+    named_buttons(page, label, "the log")
     page.locator("#view-settings").click()
     check(page.locator("#settings").is_visible(), f"{label}: settings open")
     page.wait_for_timeout(500)
+    named_buttons(page, label, "the settings")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the settings")
     update_busy(page, label)
+    update_confirm(page, label)
     page.locator("#view-tiles").click()
     check(page.locator(".room").first.is_visible(), f"{label}: back to the tiles")
 
@@ -432,6 +460,23 @@ def update_busy(page, label):
         status=200, content_type="application/json", body=update_json("done", "v0.0.1-test", False)))
     check(wait_until(page, "!document.getElementById('update-check').disabled && !document.getElementById('update-btn').disabled", 10),
           f"{label}: Software buttons back once the helper is done")
+    page.unroute("**/api/v1/update*")
+
+
+def update_confirm(page, label):
+    """Update asks in the Software section, not in a browser dialog, and
+    Cancel takes the question back without a request."""
+    posts = []
+    page.route("**/api/v1/update*", lambda route: posts.append(1) if route.request.method == "POST" else route.fulfill(
+        status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True)))
+    page.locator("#update-check").click()
+    btn = page.locator("#update-btn")
+    btn.wait_for(state="visible")
+    btn.click()
+    box = page.locator(".update .confirm-box")
+    check(box.is_visible() and "v0.0.1-test" in box.inner_text() and btn.is_hidden(), f"{label}: Update asks in the page")
+    box.locator(".confirm-no").click()
+    check(page.locator(".update .confirm-box").count() == 0 and btn.is_visible() and not posts, f"{label}: Cancel takes it back, nothing sent")
     page.unroute("**/api/v1/update*")
 
 

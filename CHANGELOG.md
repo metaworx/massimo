@@ -23,6 +23,18 @@ the next minor, a fix counts the suffix up.
   colour, and its contrast badges stand before the colours, which now
   line up (docs/ui.md, "Appearance").
 
+- The web UI loads the texts of the chosen language only
+  (`ui/i18n/<lang>.json`), and the browser revalidates the UI's files
+  by their ETag instead of downloading them again.
+
+- The web UI's settings and room configuration share one row layout:
+  the label at the left and the control at the right, a text field or
+  a long choice on a line of its own (docs/screenshots).
+
+- The web UI asks in the page, translated, before it removes a Cube or
+  installs an update, instead of in a browser dialog; Settings → Cubes
+  lists a found Cube with its firmware and age, as the header does.
+
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
