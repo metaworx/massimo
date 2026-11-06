@@ -31,6 +31,82 @@ paths:
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
                   node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
+  /api/v1/login:
+    post:
+      summary: Log in with a name and a password
+      x-capability: none
+      description: |
+        Answers a session token, good for 30 days from its last use,
+        which the client sends as the bearer header. A wrong pair counts
+        against the address and the user name (429 after ten in a
+        minute). 409 on a server without users (create the first owner
+        with POST /api/v1/users) or without a store (the API token).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Login"}
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Session"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401":
+          description: Wrong user or password
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/logout:
+    post:
+      summary: End the session that makes the call
+      x-capability: any
+      description: An API key is not a session and answers 400; it is revoked under the user's tokens.
+      responses:
+        "200":
+          description: Ended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+        "400":
+          description: The token is an API key, or the server has no users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/me:
+    get:
+      summary: Who the caller is and what the caller may do
+      x-capability: any
+      description: |
+        The mode (users, open, token, none), the caller's user, role and
+        effective capabilities, and the token presented; outside users
+        mode user and role are null and the capabilities are all of
+        them. setup is true on an open server for a caller on the local
+        network, which may create the first owner.
+      responses:
+        "200":
+          description: The caller
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Me"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes:
     get:
       summary: List the Cubes
@@ -1067,6 +1143,71 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    Login:
+      type: object
+      required: [user, password]
+      properties:
+        user: {type: string, description: The login name; case does not matter}
+        password: {type: string}
+        label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+    Session:
+      type: object
+      properties:
+        token: {type: string, description: The session token, shown once; sent as the bearer header}
+        expires_at: {type: string, format: date-time, description: 30 days from now, moved by use}
+        user: {$ref: "#/components/schemas/User"}
+        role: {$ref: "#/components/schemas/RoleRef"}
+        capabilities:
+          type: array
+          description: The effective set
+          items: {type: string}
+    User:
+      type: object
+      properties:
+        name: {type: string, description: The login name, lower case}
+        display_name: {type: string}
+        role: {type: string, description: The role's key}
+        disabled: {type: boolean}
+        has_password: {type: boolean, description: False for a user with keys only}
+        expires_at: {type: string, format: date-time, description: "Guests: disabled from then on"}
+        invited_by: {type: string, description: The user that created this one}
+        auth_version: {type: integer, description: "1: the server hashes the password"}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_login_at: {type: string, format: date-time}
+    RoleRef:
+      type: object
+      properties:
+        key: {type: string}
+        name: {type: string, description: The display name; empty shows the key's translated default}
+        disabled: {type: boolean}
+    Token:
+      type: object
+      description: A session or an API key, without its secret
+      properties:
+        id: {type: integer}
+        kind: {type: string, enum: [session, api]}
+        label: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, description: Absent for an API key}
+        last_used_at: {type: string, format: date-time}
+        last_used_from: {type: string, description: The client's address}
+    Me:
+      type: object
+      properties:
+        mode: {type: string, enum: [users, open, token, none], description: How the server authenticates}
+        user:
+          nullable: true
+          allOf: [{$ref: "#/components/schemas/User"}]
+        role:
+          nullable: true
+          allOf: [{$ref: "#/components/schemas/RoleRef"}]
+        capabilities:
+          type: array
+          description: What the caller may do; every capability outside users mode
+          items: {type: string}
+        setup: {type: boolean, description: The first owner can be created from here}
+        token: {$ref: "#/components/schemas/Token"}
     RestoreStep:
       type: object
       description: One command of a restore plan

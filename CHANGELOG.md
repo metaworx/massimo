@@ -20,6 +20,10 @@ the next minor, a fix counts the suffix up.
   becomes the owner's key, the lockout survives a restart
   (`docs/api-v1.md`, "Authentication").
 
+- `POST /api/v1/login`, `POST /api/v1/logout` and `GET /api/v1/me`: a
+  session for a name and a password, 30 days from its last use, and who
+  the caller is with the effective capabilities (`docs/api-v1.md`).
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

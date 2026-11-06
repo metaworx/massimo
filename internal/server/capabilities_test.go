@@ -189,7 +189,7 @@ func TestRolesAgainstRoutes(t *testing.T) {
 			}
 			code, text := callAPI(t, ts, r.method, fillRoute(r.path), tok, body)
 			refused := code == 403 && strings.Contains(text, "capability")
-			want := role == store.RoleOwner || has[r.capability]
+			want := role == store.RoleOwner || has[r.capability] || r.capability == capNone || r.capability == capAny
 			if want && refused {
 				t.Errorf("%s: %s %s refused: %s", role, r.method, r.path, text)
 			}

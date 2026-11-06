@@ -275,6 +275,61 @@ a new time with the same version means the server was restarted.
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
 
+### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
+
+`POST /api/v1/login` with `{"user": "anna", "password": "…"}`,
+and an optional `label` that names the session under the user's tokens
+("Firefox on the laptop"; the browser's `User-Agent` when absent),
+answers a session:
+
+```json
+{
+  "token": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "expires_at": "2026-12-06T10:42:00Z",
+  "user": {"name": "anna", "display_name": "Anna", "role": "operator", "disabled": false, "has_password": true,
+           "auth_version": 1, "created_at": "…", "updated_at": "…", "last_login_at": "…"},
+  "role": {"key": "operator", "name": "", "disabled": false},
+  "capabilities": ["backup", "configure", "discover", "lock", "read", "setpoint"]
+}
+```
+
+The token is shown once; the client sends it as the bearer header.
+A session lasts 30 days from its last use;
+its end and its last use are written at most once an hour.
+Case does not matter in the name.
+A wrong name or password is `401` and counts against the address and the name
+(ten in a minute lock either for five minutes, `429`);
+a disabled user or a guest past its end date is `403`;
+a user whose role is disabled logs in and is then refused every route.
+`409` on a server without users, where the first owner is created with
+`POST /api/v1/users` or `massimo user add`,
+and on one without a store (`serve -addr`), which takes the API token.
+
+`POST /api/v1/logout` revokes the session that makes the call, `{"ok": true}`.
+An API key answers `400`; a key is revoked under the user's tokens.
+
+`GET /api/v1/me` says who the caller is:
+
+```json
+{
+  "mode": "users",
+  "user": {"name": "anna", "role": "operator", …},
+  "role": {"key": "operator", "name": "", "disabled": false},
+  "capabilities": ["backup", "configure", "discover", "lock", "read", "setpoint"],
+  "token": {"id": 3, "kind": "session", "label": "Firefox on the laptop", "created_at": "…", "expires_at": "…", "last_used_at": "…", "last_used_from": "192.168.1.20"}
+}
+```
+
+`mode` is how the server authenticates (Authentication above).
+With users, `user`, `role`, `capabilities` (the effective set:
+the role's minus the disabled capabilities, every one for `owner`,
+none for a disabled role) and `token`, the one presented;
+outside users mode `user` and `role` are null and `capabilities` is every one.
+`setup` is true on an open server for a caller on the local network,
+the one that may create the first owner.
+`auth_version` 1 says the server hashes the password;
+docs/server.md ("What version 1 prepares", item 6) says what 2 will mean.
+
 ### GET /api/v1/cubes
 
 Every configured Cube,

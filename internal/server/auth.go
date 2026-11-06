@@ -66,6 +66,14 @@ var capabilities = []string{
 	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit",
 }
 
+// Two more values a route may be registered with, which no role holds:
+// capNone, no authentication (the login), and capAny, any authenticated
+// principal (logout, me).
+const (
+	capNone = "none"
+	capAny  = "any"
+)
+
 func validCapability(c string) bool {
 	for _, k := range capabilities {
 		if k == c {
@@ -514,7 +522,7 @@ func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time
 // user's own name, and the device route a structure holder; the
 // handlers narrow what those may do.
 func (s *Server) allowed(p *principal, capability string, r *http.Request) bool {
-	if p.has(capability) {
+	if capability == capAny || p.has(capability) {
 		return true
 	}
 	if capability == "users" && (p.has("guests") || p.named() && strings.EqualFold(r.PathValue("name"), p.user.Name)) {
@@ -547,6 +555,10 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
 		writeError(w, http.StatusTooManyRequests, "too many failed token checks from this address; try again later")
 		return nil, false
+	}
+	if capability == capNone {
+		// The login: nobody yet, but a locked-out address stays out.
+		return &principal{mode: mode}, true
 	}
 	var p *principal
 	var why error
