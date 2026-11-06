@@ -5,7 +5,10 @@ package cubelan
 
 import (
 	"encoding/binary"
+	"net"
 	"testing"
+
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 )
 
 func TestUDPIdentifyReply(t *testing.T) {
@@ -29,5 +32,36 @@ func TestUDPIdentifyReply(t *testing.T) {
 	}
 	if _, _, _, _, ok := parseUDPReply([]byte("eQ3Max*\x00**********I")); ok {
 		t.Fatal("our own request parsed as a reply")
+	}
+}
+
+func TestQueryConfigReadsTheDHCPFlag(t *testing.T) {
+	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0b9573)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fake.Close()
+	to, err := net.ResolveUDPAddr("udp4", fake.Addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pc.Close()
+	for _, static := range []bool{false, true} {
+		fake.SetStatic(static)
+		d := &Discovered{Serial: "KEQ0000000"}
+		queryConfig(pc, to, d)
+		if d.DHCP == nil || *d.DHCP == static {
+			t.Fatalf("static %v: dhcp %v", static, d.DHCP)
+		}
+	}
+	// Another serial gets no answer and no flag.
+	d := &Discovered{Serial: "KEQ0000001"}
+	queryConfig(pc, to, d)
+	if d.DHCP != nil {
+		t.Fatalf("other cube: dhcp %v", *d.DHCP)
 	}
 }

@@ -28,6 +28,7 @@ var (
 	udpBroadcast  = net.IPv4bcast
 	udpIdentify   = byte('I')
 	udpNetConfig  = byte('N')
+	udpGetConfig  = byte('c')
 	udpReplyMinSz = 8 + 10 + 2
 )
 
@@ -42,7 +43,10 @@ type Discovered struct {
 	Gateway net.IP   `json:"gateway,omitempty"`
 	Netmask net.IP   `json:"netmask,omitempty"`
 	DNS     []net.IP `json:"dns,omitempty"`
-	MAC     string   `json:"mac,omitempty"` // from the ARP cache, when known
+	// DHCP says whether the Cube takes its address by DHCP, from the c
+	// reply, when the Cube answered it.
+	DHCP *bool  `json:"dhcp,omitempty"`
+	MAC  string `json:"mac,omitempty"` // from the ARP cache, when known
 }
 
 // udpRequest builds a discovery packet: signature, serial, opcode.
@@ -136,43 +140,68 @@ func Discover(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Dis
 	var out []Discovered
 	for _, s := range order {
 		d := found[s]
-		queryNetwork(pc, d)
+		// A massimo proxy answers neither N nor c; skip the second wait.
+		if queryNetwork(pc, d) {
+			queryConfig(pc, &net.UDPAddr{IP: d.IP, Port: DiscoveryPort}, d)
+		}
 		d.MAC = lookupMAC(d.IP)
 		out = append(out, *d)
 	}
 	return out, nil
 }
 
-// queryNetwork sends N to one Cube and fills in what it answers: the
-// original software reads the IP only; other clients report ip, gateway,
-// netmask and two DNS servers.
-func queryNetwork(pc net.PacketConn, d *Discovered) {
-	pc.WriteTo(udpRequest(d.Serial, udpNetConfig), &net.UDPAddr{IP: d.IP, Port: DiscoveryPort})
+// ask sends the request op to one Cube at to and returns the data of
+// its reply, waiting a second at most.
+func ask(pc net.PacketConn, to net.Addr, serial string, op byte) ([]byte, bool) {
+	pc.WriteTo(udpRequest(serial, op), to)
 	buf := make([]byte, 1024)
 	pc.SetReadDeadline(time.Now().Add(time.Second))
 	for {
 		n, _, err := pc.ReadFrom(buf)
 		if err != nil {
-			return
+			return nil, false
 		}
-		serial, _, op, data, ok := parseUDPReply(buf[:n])
-		if !ok || op != udpNetConfig || serial != d.Serial {
-			continue
+		s, _, o, data, ok := parseUDPReply(buf[:n])
+		if ok && o == op && s == serial {
+			return data, true
 		}
-		ips := make([]net.IP, 0, 5)
-		for off := 0; off+4 <= len(data) && len(ips) < 5; off += 4 {
-			ips = append(ips, net.IPv4(data[off], data[off+1], data[off+2], data[off+3]))
-		}
-		if len(ips) >= 3 {
-			d.Gateway, d.Netmask = ips[1], ips[2]
-		}
-		for _, ip := range ips[min(3, len(ips)):] {
-			if !ip.Equal(net.IPv4zero) {
-				d.DNS = append(d.DNS, ip)
-			}
-		}
+	}
+}
+
+// queryConfig sends c to one Cube and fills in its DHCP flag. The reply
+// carries ip, gateway, netmask, dns1, dns2 (four bytes each), then the
+// DHCP flag and the encryption flag, one byte each; the order is the PC
+// software's, the byte offsets are not confirmed on the wire.
+func queryConfig(pc net.PacketConn, to net.Addr, d *Discovered) {
+	data, ok := ask(pc, to, d.Serial, udpGetConfig)
+	if !ok || len(data) < 21 {
 		return
 	}
+	dhcp := data[20] != 0
+	d.DHCP = &dhcp
+}
+
+// queryNetwork sends N to one Cube and fills in what it answers: the
+// original software reads the IP only; other clients report ip, gateway,
+// netmask and two DNS servers. It reports whether the Cube answered.
+func queryNetwork(pc net.PacketConn, d *Discovered) bool {
+	data, ok := ask(pc, &net.UDPAddr{IP: d.IP, Port: DiscoveryPort}, d.Serial, udpNetConfig)
+	if !ok {
+		return false
+	}
+	ips := make([]net.IP, 0, 5)
+	for off := 0; off+4 <= len(data) && len(ips) < 5; off += 4 {
+		ips = append(ips, net.IPv4(data[off], data[off+1], data[off+2], data[off+3]))
+	}
+	if len(ips) >= 3 {
+		d.Gateway, d.Netmask = ips[1], ips[2]
+	}
+	for _, ip := range ips[min(3, len(ips)):] {
+		if !ip.Equal(net.IPv4zero) {
+			d.DNS = append(d.DNS, ip)
+		}
+	}
+	return true
 }
 
 func firmwareString(v uint16) string {

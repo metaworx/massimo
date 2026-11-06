@@ -489,6 +489,13 @@ Replies: `"eQ3MaxAp"` (application) or `"eQ3MaxBl"` (bootloader), serial,
 zero) and the firmware version (2 bytes), as seen on the wire:
 `eQ3MaxApKEQ0537249>I 00 0b 95 73 01 13`.
 
+For `c`, `massimo discover` (since 2026-11-06) reads the data as ip,
+gateway, netmask, dns1, dns2 (four bytes each) followed by the DHCP
+flag and the encryption flag (one byte each), the order of the PC
+software's fields, and shows byte 20 as the DHCP flag. Not confirmed
+byte for byte on the wire: capture a `c` reply from a Cube with DHCP
+and one with a static address to settle the offsets.
+
 Firmware update: `N`, `I`, `B` (then wait for the bootloader to answer
 `N`), `U`, then one `W` per frame (`index16, length16, data`, reply
 `status, index16` with status 0 fail / 1 ok / 2 restart), then wait for
