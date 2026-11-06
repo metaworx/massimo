@@ -39,6 +39,24 @@ func ParseIdentifyReply(b []byte, from net.IP) (Discovered, bool) {
 	}, true
 }
 
+// ConfigRequest asks the Cube with serial for its stored network
+// configuration and flags (c), a read that sends nothing over the radio.
+func ConfigRequest(serial string) []byte { return udpRequest(serial, udpGetConfig) }
+
+// ParseConfigReply decodes a Cube's answer to ConfigRequest: the serial
+// it names and its DHCP flag; ok is false for anything else.
+func ParseConfigReply(b []byte) (serial string, dhcp bool, ok bool) {
+	serial, _, op, data, ok := parseUDPReply(b)
+	if !ok || op != udpGetConfig {
+		return "", false, false
+	}
+	cfg, err := parseNetConfig(data)
+	if err != nil {
+		return "", false, false
+	}
+	return serial, cfg.DHCP, true
+}
+
 // DiscoveryTargets are the addresses a discovery request goes to: the
 // limited broadcast, the multicast group and every interface's directed
 // broadcast, on DiscoveryPort.

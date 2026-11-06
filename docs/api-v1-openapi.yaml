@@ -1900,6 +1900,7 @@ components:
         mac: {type: string, description: From the host's ARP cache; absent when unknown}
         rf_address: {type: string}
         firmware: {type: string, example: "1.1.3"}
+        dhcp: {type: boolean, description: "Whether the Cube takes its address by DHCP, from its answer to the c request in this server run's latest discovery that had one; absent until it has answered c"}
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Cube:
