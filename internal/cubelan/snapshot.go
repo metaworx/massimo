@@ -29,6 +29,9 @@ type Snapshot struct {
 	// fresh collects the devices it sent a C line for.
 	greeting bool
 	fresh    map[cube.RFAddress]bool
+	// forgotten are the devices Forget dropped: an L line does not bring
+	// one back, a C line for it or a new greeting does.
+	forgotten map[cube.RFAddress]bool
 }
 
 func newSnapshot() *Snapshot {
@@ -97,6 +100,7 @@ func (s *Snapshot) beginGreeting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.greeting, s.fresh = true, map[cube.RFAddress]bool{}
+	s.forgotten = nil // the greeting says what the Cube holds
 	s.mparts = s.mparts[:0]
 }
 
@@ -168,6 +172,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 			return nil, err
 		}
 		s.configs[c.RFAddress] = c
+		delete(s.forgotten, c.RFAddress)
 		if s.greeting {
 			s.fresh[c.RFAddress] = true
 		}
@@ -190,6 +195,9 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		var evs []Event
 		listed := map[cube.RFAddress]bool{}
 		for _, st := range states {
+			if s.forgotten[st.RFAddress] {
+				continue
+			}
 			listed[st.RFAddress] = true
 			s.noteLocked(st.RFAddress)
 			old, had := s.states[st.RFAddress]
@@ -285,11 +293,18 @@ func (s *Snapshot) Devices() []cube.RFAddress {
 // state, its place in the Cube's order and its entry in the metadata,
 // so that Devices no longer names it. The Cube's own metadata keeps the
 // entry until a client writes it without the device, which the original
-// software does right after t:; a new greeting brings back whatever the
-// Cube still holds. It reports whether the snapshot knew the device.
+// software does right after t:. A device the Cube keeps, one that never
+// answers its reset, stays in the Cube's L lines: they do not bring it
+// back, but a C line for it does, and a new greeting brings back
+// whatever the Cube still holds. It reports whether the snapshot knew
+// the device.
 func (s *Snapshot) Forget(rf cube.RFAddress) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.forgotten == nil {
+		s.forgotten = map[cube.RFAddress]bool{}
+	}
+	s.forgotten[rf] = true
 	_, known := s.configs[rf]
 	if _, ok := s.states[rf]; ok {
 		known = true

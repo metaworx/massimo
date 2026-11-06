@@ -1073,19 +1073,23 @@ Any other command of the copy that fails ends it with its error (`502`,
 what was sent until then stays sent,
 and `PUT …/rooms/{id}/config` and `PUT …/rooms/{id}/program` complete it.
 The links and the metadata of one change of rooms and devices at a time
-are written per Cube (this route, `DELETE …/rooms/{id}`, `PUT …/rooms/{id}`):
+are written per Cube (this route, `DELETE …/devices/{rf}`,
+`DELETE …/rooms/{id}`, `PUT …/rooms/{id}`):
 a second request waits for the first's metadata, up to its time limit,
 and then answers `503`; the copies run side by side afterwards.
 
 ### DELETE /api/v1/cubes/{sn}/devices/{rf}
 
-Removes a device from the Cube, as the original software's "delete device" does,
-with the capability `structure`.
+Removes a device from the Cube, with the capability `structure`,
+as the original software's "delete device" does,
+and also removes the device's group, which the original software leaves.
 A device in a room, the metadata's or else its C line's,
 is unlinked from that room first:
 after a wakeup of the room (`z:1e,G,<room>`),
 one 0x21 remove link partner radiogram per room member it is linked with,
 in each direction (addressed as 0x20 is in an add), then 0x23 remove group.
+Hidden devices are no partners,
+and a device whose C line names room 255 is not unlinked at all.
 Then `t:01,1,<rf>`, delete with the force flag,
 which the Cube answers `A:` and which makes it send the device a factory reset;
 then, for a device the metadata lists, the metadata without it.
@@ -1093,15 +1097,22 @@ The server's copy forgets the device at once:
 it is gone from the devices, the rooms and the counts,
 and the stream reports `metadata` (for a listed device) and `device_forgotten`.
 
+A device the metadata lists without a C line, a leftover,
+loses its entry in the metadata, and nothing is sent by radio.
+
 The answer is `{"ok": true, "budget": {…}}`.
 A hidden device and an unknown address are `404`, the Cube itself `400`,
 a Cube that is not connected `503`;
-a write that fails is `502` with the Cube's answer, and stops the removal there.
+a write that fails is `502` with the Cube's answer, and stops the removal there:
+one that stops after the unlink leaves the device in its room,
+without links or group, and a second `DELETE` finishes it.
 The device is paired again like a new one (Pairing).
 
 The Cube drops a device only when it answers the reset:
 a device out of range or out of battery stays in the Cube's memory,
-and comes back, unlisted, with the server's next full read of the Cube.
+and comes back, unlisted, with the server's next full read of the Cube
+(a reconnect or the periodic refresh);
+the Cube's device lists in between do not bring it back.
 Seen on hardware for devices that never report (portal-protocol.md);
 that one which answers is dropped is expected, not yet seen.
 Such a device is parked in room 255 instead, and hidden (above).

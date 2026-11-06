@@ -151,14 +151,14 @@ func TestCopyCommands(t *testing.T) {
 func TestRemoveCommands(t *testing.T) {
 	_, w, _ := connect(t)
 	snap := w.Client.Snapshot()
-	unlink, del, ok := RemoveCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat)
+	unlink, del, ok := RemoveCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, nil)
 	if !ok || !unlink.Wakeup || unlink.RoomID != 6 || len(unlink.Lines) != 1 || unlink.Lines[0].String() != cube.CmdSetGroup(0x1514b6, 6, true).String() {
 		t.Fatalf("unlink %+v %v", unlink, ok)
 	}
 	if len(del.Lines) != 1 || del.Lines[0].String() != "t:01,1,FRS2" || del.Key != "delete:1514b6" {
 		t.Fatalf("del %+v", del)
 	}
-	if _, _, ok := RemoveCommands(snap, 0x0b9573, cube.DeviceCube); ok {
+	if _, _, ok := RemoveCommands(snap, 0x0b9573, cube.DeviceCube, nil); ok {
 		t.Fatal("the Cube's own C line taken for a room")
 	}
 }

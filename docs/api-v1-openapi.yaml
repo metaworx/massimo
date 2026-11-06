@@ -922,12 +922,15 @@ paths:
       description: >-
         As the original software deletes a device: a device in a room (the
         metadata's, else its C line's) is unlinked from the room's members
-        in both directions after a wakeup (0x21) and its group removed
-        (0x23); then t: with the force flag, which makes the Cube send the
-        device a factory reset; then the metadata without it, where it was
-        listed. The server's copy forgets the device at once. A device that
-        never answers stays in the Cube's memory and comes back, unlisted,
-        with the next full read.
+        in both directions after a wakeup (0x21), hidden devices left out,
+        and its group removed (0x23), which the original software leaves;
+        a device in room 255 by its C line is not unlinked. Then t: with
+        the force flag, which makes the Cube send the device a factory
+        reset; then the metadata without it, where it was listed. A device
+        the metadata lists without a C line loses its entry alone. The
+        server's copy forgets the device at once. A device that never
+        answers stays in the Cube's memory and comes back, unlisted, with
+        the next full read.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":

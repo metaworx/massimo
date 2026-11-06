@@ -309,4 +309,23 @@ func TestForgetDevice(t *testing.T) {
 		}
 	case <-time.After(50 * time.Millisecond):
 	}
+	// The Cube's next device list, which still has it, does not bring it
+	// back; a C line for it does, and its state follows.
+	if _, err := c.Send(ctx, cube.CmdList); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.State(rf); ok {
+		t.Fatal("the device list brought the forgotten device back")
+	}
+	line, err := c.Send(ctx, cube.Message{Type: 'c', Data: rf.String()})
+	if err != nil || line.Type != 'C' {
+		t.Fatalf("c: %s %v", line, err)
+	}
+	c.ApplyLocal(line)
+	if _, err := c.Send(ctx, cube.CmdList); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.State(rf); !ok || s.Config(rf) == nil {
+		t.Fatal("not back after its C line")
+	}
 }

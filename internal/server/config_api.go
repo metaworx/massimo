@@ -425,28 +425,65 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 
 // removeDevice handles DELETE /devices/{rf}: the device is deleted from
 // the Cube as the original software deletes it
-// (cubeio.Writer.RemoveDevice), unlinked from its room's partners, t:,
-// and the metadata without it. The metadata write's event, or the
-// device_forgotten one of a device in no room, tells the clients.
+// (cubeio.Writer.RemoveDevice, the hidden devices left out), unlinked
+// from its room's partners, t:, and the metadata without it; a device
+// only the metadata lists, without a C line, loses its entry alone. The
+// metadata write's event, or the device_forgotten one of a device in no
+// room, tells the clients. It runs under the Cube's structure lock.
 func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
 	}
-	rf, c, err := s.visibleDevice(rt, r)
+	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
 	if err != nil {
-		return err
-	}
-	if c.Type == cube.DeviceCube {
-		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
-	}
-	md := rt.client.Snapshot().Metadata()
-	if md == nil || !rt.client.Connected() {
-		return fail(http.StatusServiceUnavailable, "cube not connected")
+		return fail(http.StatusBadRequest, "%v", err)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c)
+	unlock, err := rt.lockStructure(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	snap := rt.client.Snapshot()
+	md := snap.Metadata()
+	hidden := rt.hidden()
+	c := snap.Config(rf)
+	var listed *cube.DeviceMeta
+	if md != nil {
+		for i := range md.Devices {
+			if md.Devices[i].RFAddress == rf {
+				listed = &md.Devices[i]
+			}
+		}
+	}
+	switch {
+	case hidden[rf] || c == nil && listed == nil:
+		return fail(http.StatusNotFound, "no device %s", rf)
+	case c != nil && c.Type == cube.DeviceCube:
+		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
+	case md == nil || !rt.client.Connected():
+		return fail(http.StatusServiceUnavailable, "cube not connected")
+	}
+	if c == nil {
+		// A leftover of the metadata: the Cube holds no device to delete.
+		cp := *md
+		cp.Devices = nil
+		for _, d := range md.Devices {
+			if d.RFAddress != rf {
+				cp.Devices = append(cp.Devices, d)
+			}
+		}
+		if err := s.writeMetadata(ctx, rt, &cp); err != nil {
+			return err
+		}
+		rt.client.ForgetDevice(rf)
+		s.log.Info("device removed", "cube", rt.serial, "device", rf, "type", listed.Type, "from", "metadata", "remote", s.clientIP(r))
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
+		return nil
+	}
+	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c, hidden)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}

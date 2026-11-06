@@ -692,3 +692,91 @@ func TestConcurrentAddsIntoOneRoom(t *testing.T) {
 		t.Fatalf("%d of 2 listed in room 1, valve settings sent %v", listed, valves)
 	}
 }
+
+// A removal keeps away from hidden devices: a hidden partner is not
+// unlinked, and a device whose C line names room 255 is not unlinked
+// at all.
+func TestRemoveLeavesHiddenDevicesAlone(t *testing.T) {
+	fc, ts, s := startCopyCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, cube.HiddenRoom) })
+	s.cubes["keq0537249"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/14d08e", ""); code != 200 {
+		t.Fatalf("remove 14d08e: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01", cube.CmdSetGroup(0x14d08e, 1, true).String(), "t:01,1,FNCO", "m:"})
+	sent = len(fc.Received())
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/0d0e0f", ""); code != 200 {
+		t.Fatalf("remove 0d0e0f: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"t:01,1,DQ4P"})
+}
+
+// A device only the metadata lists, without a C line, loses its entry;
+// nothing is sent by radio.
+func TestRemoveListedOnly(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) {
+		kept := fc.Greeting[:0]
+		for _, g := range fc.Greeting {
+			if g.Type != 'C' || !strings.HasPrefix(g.Data, "151495,") {
+				kept = append(kept, g)
+			}
+		}
+		fc.Greeting = kept
+	})
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/151495", ""); code != 200 {
+		t.Fatalf("remove: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"m:"})
+	if device, inRoom := listedRF(t, ts, "151495"); device || inRoom {
+		t.Fatalf("still listed: device %v, in a room %v", device, inRoom)
+	}
+}
+
+// A device the Cube keeps after t:, as one that never answers: the
+// Cube's next device list does not bring it back, the next greeting does.
+func TestRemovedDeviceTheCubeKeeps(t *testing.T) {
+	_, ts, s := startCopyCube(t, func(fc *fakecube.Server) { fc.Keep = map[cube.RFAddress]bool{0x14d08e: true} })
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/14d08e", ""); code != 200 {
+		t.Fatalf("remove: %d %v", code, out)
+	}
+	rt := s.cubes["keq0537249"]
+	if _, err := rt.client.Send(t.Context(), cube.CmdList); err != nil {
+		t.Fatal(err)
+	}
+	if device, _ := listedRF(t, ts, "14d08e"); device {
+		t.Fatal("the device list brought it back")
+	}
+	if res := rt.queue.Enqueue(engine.Command{Reconnect: true}).Wait(t.Context()); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	waitFor(t, "the device after the greeting", func() bool { return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/14d08e", nil) == 200 })
+}
+
+// A removal and an add at once: each reads the metadata the other wrote,
+// so the added device is listed and the removed one is not.
+func TestRemoveAndAddAtOnce(t *testing.T) {
+	_, ts, s := startCopyCube(t, nil)
+	codes := make(chan int, 2)
+	go func() {
+		code, _ := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/14d08e", "")
+		codes <- code
+	}()
+	go func() {
+		code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1,"copy":false}`)
+		codes <- code
+	}()
+	for range 2 {
+		if code := <-codes; code != 200 {
+			t.Fatalf("a request answered %d", code)
+		}
+	}
+	added, removed := false, true
+	for _, d := range s.cubes["keq0537249"].client.Snapshot().Metadata().Devices {
+		added = added || d.RFAddress == copyNew && d.RoomID == 1
+		removed = removed && d.RFAddress != 0x14d08e
+	}
+	if !added || !removed {
+		t.Fatalf("metadata: added %v, removed %v", added, removed)
+	}
+}
