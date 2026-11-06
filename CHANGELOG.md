@@ -27,6 +27,16 @@ the next minor, a fix counts the suffix up.
 - CI runs once per commit (a push to `main` or a pull request), and the
   Screenshots job runs in the Playwright image, without apt.
 
+- The web UI's tests are a pytest suite (tools/ui-test/); CI's
+  Screenshots job fails when they cannot run instead of skipping them,
+  and keeps a failed test's trace, screenshot and video as an artifact.
+
+### Fixed
+
+- CI's Windows job sends the second `POST /api/v1/update`, which must
+  be refused, on the first's connection: a second curl could start
+  after the helper had stopped the service (GUIDELINES/project/CI.md).
+
 ## [0.8.0-alpha.1] - 2026-11-06
 
 ### Added

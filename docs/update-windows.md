@@ -16,7 +16,11 @@ a job object that would kill the helper reaches `blocked` through `UpdateOptions
 a 409 from the starter's own guard leaves the request file alone (the running
 helper may not have taken it yet);
 the stage 2 stand-in's rollback is checked for event 7000, 7009 or 7034,
-since a process that exits at once may not end in 7009.
+since a process that exits at once may not end in 7009;
+and the CI test's second POST, which must be refused,
+goes on the first's connection from the same curl,
+since in stage 2 the helper stops the service before a second curl process
+is up (GUIDELINES/project/CI.md, "Runner Constraints").
 
 The text below is the design as written before it.
 Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/update,

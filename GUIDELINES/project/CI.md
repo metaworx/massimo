@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.5.0)
+# Massimo — CI Conventions (v1.6.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,7 +33,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI smoke test, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | release published | publish.yml: the Homebrew formula of the release's channel rendered and pushed to the tap, with the deploy key set |
 | tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the apt key set, rebuild the apt repository from the releases and deploy it to GitHub Pages |
@@ -94,6 +94,12 @@ Where CI differs, and why:
   on top of `tools/ui-test/requirements.txt`, which keeps its minimum versions,
   because the browsers in the image fit that Playwright version only:
   the image's tag and the pin move together.
+  The suite's step sets `UI_TEST_REQUIRED=1`,
+  so that a missing Playwright, pytest or pytest-playwright fails the job
+  instead of skipping the tests, as `run.sh` does on a developer's machine.
+  When a step fails, the job uploads `tools/ui-test/results/`,
+  where pytest-playwright keeps a failed test's trace, screenshot and video,
+  so that a failure on the runner can be replayed rather than retold.
   The smoke test runs in the same job, before the captures,
   because Playwright and Chromium are there anyway;
   it is not part of the test gate's job,
@@ -182,6 +188,13 @@ a box following a suite takes the release through `apt upgrade`.
 - The service manager on Windows gives a binary that never connects 30 s
   (error 1053) before the job's own two-minute health timeout matters;
   a stand-in that exits at once fails in two seconds.
+- The Windows job's stage 2 serves its releases locally,
+  and the helper then stops the service within about 100 ms of the API's 202;
+  so `post_update` sends the second POST, which must be refused,
+  on the first's connection from the same curl (`--next`):
+  a second curl process started too late once.
+  The server's answer to it is less work than the helper needs before the stop,
+  so the 409 comes first at any runner speed.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
 - `ubuntu-latest` moves to a newer Ubuntu on GitHub's schedule;
