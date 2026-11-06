@@ -7,6 +7,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Linkable reports whether a device type takes part in room links.
@@ -44,12 +45,13 @@ func linkTarget(rf cube.RFAddress, typ cube.DeviceType, room uint8) cube.Target 
 // remove its group, then link it with every partner among newMembers in
 // both directions and set the new group, each half after a wakeup of
 // the room concerned. The metadata write that records the new room is
-// not included.
-func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta) (out, in engine.Command) {
+// not included. A device in skip, a hidden one, is no partner: every
+// write keeps away from it.
+func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta, skip view.Hidden) (out, in engine.Command) {
 	var outLines []cube.Message
 	if md := snap.Metadata(); md != nil {
 		for _, d := range md.Devices {
-			if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) {
+			if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) || skip[d.RFAddress] {
 				continue
 			}
 			outLines = append(outLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
@@ -61,7 +63,7 @@ func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 
 	var inLines []cube.Message
 	for _, d := range newMembers {
-		if d.RFAddress == rf || !linkPair(d.Type, typ) {
+		if d.RFAddress == rf || !linkPair(d.Type, typ) || skip[d.RFAddress] {
 			continue
 		}
 		inLines = append(inLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, newRoom), true, rf, typ))

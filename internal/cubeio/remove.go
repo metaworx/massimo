@@ -38,7 +38,7 @@ func RemoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceTy
 	if room == 0 {
 		return engine.Command{}, del, false
 	}
-	unlink, _ = MoveCommands(snap, rf, typ, room, 0, nil)
+	unlink, _ = MoveCommands(snap, rf, typ, room, 0, nil, nil)
 	return unlink, del, true
 }
 

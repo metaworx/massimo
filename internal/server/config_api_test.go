@@ -177,11 +177,12 @@ func TestConfigEndpoints(t *testing.T) {
 
 // The devices the copy tests add to the fixture: a wall thermostat in
 // room 1 beside 14d08e, a radiator thermostat paired but in no room,
-// whose Saturday and Sunday are room 1's already, and a shutter contact
-// in no room.
+// whose Saturday and Sunday are room 1's already, a second one like it,
+// and a shutter contact in no room.
 const (
 	copyWall    cube.RFAddress = 0x0c0d0e
 	copyNew     cube.RFAddress = 0x0a0b0c
+	copyNew2    cube.RFAddress = 0x0b0c0d
 	copyContact cube.RFAddress = 0x0d0e0f
 )
 
@@ -251,7 +252,7 @@ func copyGreeting(t *testing.T) []cube.Message {
 			g = cube.Message{Type: 'M', Data: "00,01," + base64.StdEncoding.EncodeToString(enc)}
 		case 'L':
 			out = append(out, configLine(wall, copyWall, 1, "NEQ0000002"), configLine(fresh, copyNew, 0, "TEQ0000001"),
-				configLine(contact, copyContact, 0, "IEQ0000003"))
+				configLine(contact, copyContact, 0, "IEQ0000003"), configLine(fresh, copyNew2, 0, "TEQ0000004"))
 		}
 		out = append(out, g)
 	}
@@ -610,5 +611,84 @@ func TestRemoveRefused(t *testing.T) {
 	}
 	if got := fc.Received(); len(got) != 0 {
 		t.Fatalf("cube received %v", lineStrings(got))
+	}
+}
+
+// The Cube discarding the copy's 0x40 ends nothing: the rest of the
+// copy follows, the answer says the mode was not set, and no error
+// reset is sent for it.
+func TestCopyAfterADiscardedMode(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) {
+		fc.DiscardIf = func(m cube.Message) bool {
+			rc, err := cube.ParseRadioCommand(m.Data)
+			return m.Type == 's' && err == nil && rc.Command == cube.RFSetTemperature
+		}
+	})
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1}`)
+	copied, _ := out["copied"].(map[string]any)
+	if code != 200 || copied["mode_not_set"] != true || copied["valve"] != true || copied["days"] != float64(5) {
+		t.Fatalf("add with a discarded 0x40: %d %v", code, out)
+	}
+	if n := countType(fc, 'r'); n != 0 {
+		t.Fatalf("%d error resets sent", n)
+	}
+}
+
+// A hidden device in the room is neither linked with the new device nor
+// given the room's temperatures, nor taken for the room's reference.
+func TestCopyKeepsAwayFromHiddenDevices(t *testing.T) {
+	fc, ts, s := startCopyCube(t, nil)
+	s.cubes["keq0537249"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
+	before := len(fc.Received())
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1}`)
+	if code != 200 {
+		t.Fatalf("add: %d %v", code, out)
+	}
+	w := copyWall.Bytes()
+	for _, m := range fc.Received()[before:] {
+		raw, _ := base64.StdEncoding.DecodeString(m.Data)
+		if m.Type == 's' && len(raw) >= 10 && cube.RFAddressFromBytes(raw[6:9]) == copyWall || strings.Contains(string(raw), string(w[:])) {
+			t.Fatalf("a line for the hidden device: %s", m)
+		}
+	}
+	if temps, _ := out["copied"].(map[string]any)["temperatures"].([]any); len(temps) != 2 || temps[0] != "14d08e" || temps[1] != "0a0b0c" {
+		t.Fatalf("copied %v", out["copied"])
+	}
+}
+
+// Two thermostats put into one room at once: each is linked, listed in
+// the room and given its own copy, the second request reading the
+// metadata the first one wrote.
+func TestConcurrentAddsIntoOneRoom(t *testing.T) {
+	fc, ts, s := startCopyCube(t, nil)
+	answers := make(chan map[string]any, 2)
+	for _, rf := range []string{"0a0b0c", "0b0c0d"} {
+		go func() {
+			code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf, `{"room_id":1}`)
+			if code != 200 {
+				out = map[string]any{"code": code, "answer": out}
+			}
+			answers <- out
+		}()
+	}
+	for range 2 {
+		if out := <-answers; out["ok"] != true || out["copied"].(map[string]any)["valve"] != true {
+			t.Fatalf("an add: %v", out)
+		}
+	}
+	listed := 0
+	for _, d := range s.cubes["keq0537249"].client.Snapshot().Metadata().Devices {
+		if (d.RFAddress == copyNew || d.RFAddress == copyNew2) && d.RoomID == 1 {
+			listed++
+		}
+	}
+	valves := map[cube.RFAddress]int{}
+	for _, l := range sLines(fc) {
+		if l[2] == cube.RFSetValveConfig {
+			valves[cube.RFAddressFromBytes(l[6:9])]++
+		}
+	}
+	if listed != 2 || valves[copyNew] != 1 || valves[copyNew2] != 1 {
+		t.Fatalf("%d of 2 listed in room 1, valve settings sent %v", listed, valves)
 	}
 }
