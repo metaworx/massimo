@@ -21,6 +21,10 @@ EOF
 }
 
 here=$(cd "$(dirname "$0")" && pwd)
+# sha256sum on Linux, shasum on macOS.
+checksum() {
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi
+}
 tag=""
 out=""
 url=""
@@ -57,11 +61,12 @@ else
 	name=massimo-$channel
 	conflicts='conflicts_with "massimo", because: "both install bin/massimo"'
 fi
-# The class: the name in PascalCase, massimo-alpha → MassimoAlpha.
-class=$(printf '%s\n' "$name" | sed 's/\(^\|-\)\([a-z]\)/\U\2/g')
+# The class: the name in PascalCase, massimo-alpha → MassimoAlpha, by awk,
+# since macOS's sed has neither \U nor \| (CI's macOS job renders it there).
+class=$(printf '%s\n' "$name" | awk -F- -v OFS= '{ for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2); print }')
 [ -n "$url" ] || url="https://github.com/metaworx/massimo/archive/refs/tags/$tag.tar.gz"
 if [ -z "$sha256" ]; then
-	sha256=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
+	sha256=$(curl -fsSL "$url" | checksum | cut -d' ' -f1)
 fi
 
 sed -e "s|@CLASS@|$class|g" -e "s|@NAME@|$name|g" -e "s|@CHANNEL@|$channel|g" \
