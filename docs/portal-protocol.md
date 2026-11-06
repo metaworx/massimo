@@ -496,6 +496,34 @@ software's fields, and shows byte 20 as the DHCP flag. Not confirmed
 byte for byte on the wire: capture a `c` reply from a Cube with DHCP
 and one with a static address to settle the offsets.
 
+On 2026-11-06 a Cube with firmware 1.1.3 on DHCP answered `c` with values
+that matched its LAN (gateway, netmask, DNS) and the DHCP flag set, so
+the field order holds for that case; a Cube with a static address has
+not been read yet.
+
+`C` as `massimo netconfig` sends it (since 2026-11-06), **layout mirrors
+the `c` reply; not yet confirmed on hardware**:
+
+    bytes 0..7   "eQ3Max*\0"
+    bytes 8..17  the Cube's serial, padded with '*' (never "**********")
+    byte 18      'C'
+    bytes 19..22 ip
+    bytes 23..26 gateway
+    bytes 27..30 netmask
+    bytes 31..34 dns1 (zero when none)
+    bytes 35..38 dns2 (zero when none)
+    byte 39      DHCP flag, 0 or 1
+    byte 40      encryption flag, 0 or 1, copied from a `c` read
+
+41 bytes; for 192.168.1.50/24, gateway and DNS 192.168.1.1, no DHCP:
+`eQ3Max*\0 KEQ0000000 C c0a80132 c0a80101 ffffff00 c0a80101 00000000 00 00`
+(spaces added). Whether the Cube answers `C`, and whether it applies the
+new configuration at once or after a restart, is not known: `netconfig`
+waits a second for an answer, then re-reads with `c`. Because the serial
+selects the Cube, the request also works as a broadcast, the way back
+for a Cube on a wrong address (`netconfig -sn <serial> -broadcast
+-dhcp`, which sends zeros for the addresses).
+
 Firmware update: `N`, `I`, `B` (then wait for the bootloader to answer
 `N`), `U`, then one `W` per frame (`index16, length16, data`, reply
 `status, index16` with status 0 fail / 1 ok / 2 restart), then wait for
