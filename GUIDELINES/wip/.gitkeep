@@ -1,0 +1,9 @@
+# Keeps this directory present when it holds no plan.
+#
+# An empty wip/ says "this is the place, and there is nothing in it". A
+# missing one says nothing, and reads as looking in the wrong place - and an
+# IDE that drops the node on deletion makes you find and expand it again
+# every time a plan appears.
+#
+# What belongs here, and when it is retired: see AGENTS.md, UAMF and Action
+# Plan.

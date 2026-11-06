@@ -1,0 +1,3 @@
+[submodule "GUIDELINES/shared"]
+	path = GUIDELINES/shared
+	url = https://gitlab.com/metaworx/open-source/mwx-guidelines.git
