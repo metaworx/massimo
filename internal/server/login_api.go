@@ -117,6 +117,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	st := s.opts.Store
 	name := store.NormalName(req.User)
 	ip := clientIP(r)
+	auditTarget(r, "user:"+name)
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
 	if d := s.limiter.lockedFor(ctx, userKey); d > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
@@ -130,6 +131,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		if s.limiter.fail(ctx, addrKey) {
 			s.log.Warn("api: address locked out after failed logins", "remote", ip, "for", s.authLockout)
 		}
+		auditAction(r, "login.failed")
 		s.log.Warn("api: login failed", "user", name, "remote", ip)
 		return fail(http.StatusUnauthorized, "wrong user or password")
 	}
@@ -185,6 +187,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	if p.token.Kind != store.TokenSession {
 		return fail(http.StatusBadRequest, "the token is an API key, not a session: revoke it under the user's tokens")
 	}
+	auditTarget(r, "user:"+p.user.Name)
 	if err := s.opts.Store.RevokeToken(r.Context(), p.token.ID); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}

@@ -381,7 +381,8 @@ The last enabled owner stays (`409`); a user cannot remove itself.
 
 ### Tokens: /api/v1/users/{name}/tokens
 
-`GET` and `POST /api/v1/users/{name}/tokens`; `DELETE /api/v1/users/{name}/tokens/{id}`.
+`GET` and `POST /api/v1/users/{name}/tokens`;
+`DELETE /api/v1/users/{name}/tokens/{id}`.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
@@ -442,6 +443,61 @@ one for every role but `owner`, whatever the roles' sets say
 (for example `pair` while nobody should pair,
 or `update` on a box the owner updates by hand), and `false` enables it again.
 Both need `capabilities`, which only `owner` has by default.
+
+### GET /api/v1/audit?before=&limit=&user=
+
+The audit (docs/store.md section 5): every request that changed something,
+or tried to, newest first.
+Needs `audit`, which only `owner` has by default; `503` without a store.
+
+```json
+[
+  {
+    "id": 42,
+    "time": "2026-11-06T10:42:00.123Z",
+    "user": "anna",
+    "token_id": 3,
+    "remote": "192.168.1.20",
+    "action": "setpoint",
+    "cube": "KEQ0000000",
+    "target": "room:6",
+    "detail": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/rooms/6/setpoint", "status": 200, "ms": 812, "bytes": 15, "body": {"mode": "auto"}},
+    "result": "ok"
+  },
+  {
+    "id": 41,
+    "time": "…",
+    "remote": "192.168.1.20",
+    "action": "login.failed",
+    "target": "user:anna",
+    "detail": {"method": "POST", "path": "/api/v1/login", "status": 401, "ms": 310, "bytes": 38, "body": {"user": "anna", "password": "…"}, "error": "wrong user or password"},
+    "result": "refused"
+  }
+]
+```
+
+Every route but the `GET`s and the stream ticket leaves a row:
+`action` names what was asked (`setpoint`, `device.lock`, `device.update`,
+`room.rename`, `room.config`, `room.program`, `room.delete`,
+`pairing.start`, `restore.start`, `cube.add`, `settings.update`, `login`,
+`login.failed`, `logout`, `user.add`, `token.add`, `role.update`,
+`capability.disable`, …), `cube` the Cube of the route, `target` the device,
+room, user, role, token or Cube concerned, `user` and `token_id` who asked
+(absent without authentication, for a failed login,
+and for `massimo user` on the box, whose `remote` is `cli`),
+and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
+`403` or `429` (the refused request is a row too, with who was refused),
+`failed` otherwise.
+`detail` keeps the method, the path, the status, the milliseconds,
+the body's size and, when it is JSON of at most 4 KB,
+the body with `password`, `current_password` and `token` replaced by `…`,
+and the error of a failed answer.
+Nothing in a row is a secret.
+
+`before`
+(RFC 3339) pages: the rows before that time;
+`limit` is 100 by default and at most 1000; `user` filters by login name.
+The rows are append-only; a later stage prunes them by age.
 
 ### GET /api/v1/cubes
 

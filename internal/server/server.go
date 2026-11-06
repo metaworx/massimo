@@ -569,8 +569,20 @@ func (s *Server) routes() {
 		if capability != capNone && capability != capAny && !validCapability(capability) {
 			panic(fmt.Sprintf("route %s: unknown capability %q", pattern, capability))
 		}
+		action, audited := actions[pattern]
+		if strings.HasPrefix(pattern, "GET ") {
+			audited = false
+		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			var au *auditInfo
+			if audited && action != "" && s.opts.Store != nil {
+				au, w, r = s.beginAudit(w, r, pattern, action)
+				defer func() { s.endAudit(r.Context(), au, clientIP(r)) }()
+			}
 			p, ok := s.authorize(w, r, capability)
+			if au != nil {
+				au.p = p
+			}
 			if !ok {
 				return
 			}
@@ -596,6 +608,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/login", "none", s.login)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("GET /api/v1/me", "any", s.me)
+	api("GET /api/v1/audit", "audit", s.getAudit)
 	api("GET /api/v1/users", "users", s.listUsers)
 	api("POST /api/v1/users", "users", s.postUser)
 	api("GET /api/v1/users/{name}", "users", s.getUser)

@@ -210,6 +210,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 			return fail(http.StatusForbidden, "capability %q required to create a user with the role %s", "users", u.Role)
 		}
 	}
+	auditTarget(r, "user:"+store.NormalName(u.Name))
 	created, err := st.AddUser(ctx, u, password, by)
 	if errors.Is(err, store.ErrNoRole) {
 		return fail(http.StatusBadRequest, "%v", err)
@@ -419,6 +420,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
+	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
 	s.log.Info("api key created", "user", u.Name, "label", req.Label, "remote", clientIP(r))
 	v := viewToken(tok)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})

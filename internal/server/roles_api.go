@@ -128,6 +128,7 @@ func (s *Server) postRole(w http.ResponseWriter, r *http.Request) error {
 	if req.Capabilities != nil {
 		ro.Capabilities = *req.Capabilities
 	}
+	auditTarget(r, "role:"+strings.ToLower(strings.TrimSpace(ro.Key)))
 	created, err := st.AddRole(r.Context(), ro, byOf(r))
 	if err != nil {
 		return userFail(err)

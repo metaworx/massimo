@@ -28,6 +28,10 @@ the next minor, a fix counts the suffix up.
   remove users and their API keys, reshape roles, disable a role or a
   capability, the first owner from the local network (`docs/api-v1.md`).
 
+- The audit: every request that changes something, or tries to, is a row
+  with who, from where, what and how it went, read with
+  `GET /api/v1/audit` (`docs/api-v1.md`).
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

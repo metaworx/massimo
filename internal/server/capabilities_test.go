@@ -34,7 +34,15 @@ var roleSets = map[string][]string{
 // stays quick.
 func storeOptions(t *testing.T, dir, token string) Options {
 	t.Helper()
-	return Options{Store: testStore(t, dir), Token: token, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{"127.0.0.1:9"}, DiscoveryWait: 20 * time.Millisecond}
+	st := testStore(t, dir)
+	// The fake Cube has a row, as a served Cube has in production, so
+	// that the audit can name it; the runtime itself comes from Cubes.
+	if _, ok, _ := st.Cube(t.Context(), "KEQ0537249"); !ok {
+		if _, err := st.AddCube(t.Context(), store.Cube{Serial: "KEQ0537249", Configured: true, Source: store.SourceEnv}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return Options{Store: st, Token: token, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{"127.0.0.1:9"}, DiscoveryWait: 20 * time.Millisecond}
 }
 
 // userToken adds a user with a role and returns an API key of it.

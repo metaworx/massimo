@@ -596,7 +596,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	s.limiter.succeed(ctx, key)
 	if !s.allowed(p, capability, r) {
 		writeError(w, http.StatusForbidden, fmt.Sprintf("capability %q required", capability))
-		return nil, false
+		return p, false // the audit names who was refused
 	}
 	return p, true
 }
