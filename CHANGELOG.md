@@ -51,6 +51,10 @@ the next minor, a fix counts the suffix up.
 - `make ui-screenshots` takes the web UI's screenshot set; CI's
   Screenshots job runs the UI smoke test and uploads the set.
 
+- A Cube found by the server's discovery shows whether it takes its
+  address by DHCP, in the web UI and as `dhcp` in the API
+  (docs/api-v1.md).
+
 ### Changed
 
 - The colour-scheme editor takes typed or pasted hex values next to each

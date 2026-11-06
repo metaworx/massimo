@@ -39,11 +39,15 @@ const (
 
 // foundCube is a Cube that answered discovery.
 type foundCube struct {
-	Serial     string    `json:"serial"`
-	Address    string    `json:"address"` // the IP it answered from
-	MAC        string    `json:"mac,omitempty"`
-	RFAddress  string    `json:"rf_address"`
-	Firmware   string    `json:"firmware"`
+	Serial    string `json:"serial"`
+	Address   string `json:"address"` // the IP it answered from
+	MAC       string `json:"mac,omitempty"`
+	RFAddress string `json:"rf_address"`
+	Firmware  string `json:"firmware"`
+	// DHCP says whether the Cube takes its address by DHCP, from its
+	// answer to c in this process's latest discovery that had one; nil
+	// until then. It is kept in memory only, not in the store.
+	DHCP       *bool     `json:"dhcp,omitempty"`
 	Configured bool      `json:"configured"`
 	FoundAt    time.Time `json:"found_at"`
 	LastSeen   time.Time `json:"last_seen"`
@@ -224,6 +228,10 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	f.Address, f.RFAddress, f.Firmware, f.LastSeen = d.IP.String(), d.RFAddress.String(), d.Firmware, now
 	if mac := cubelan.LookupMAC(d.IP); mac != "" {
 		f.MAC = mac
+	}
+	if d.DHCP != nil {
+		dhcp := *d.DHCP
+		f.DHCP = &dhcp
 	}
 	f.Configured = rt != nil
 	cp := *f

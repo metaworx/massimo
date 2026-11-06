@@ -60,7 +60,7 @@ VERSION = "massimo v0.0.0-screenshots (go, linux/amd64)"
 UPDATE = {"current": "v0.0.0-screenshots", "channel": "alpha", "latest": "v0.0.0-screenshots",
           "available": False, "can_update": False}
 FOUND = {"serial": "KEQ0000000", "configured": False, "address": "192.168.1.77", "rf_address": "0a1b2c",
-         "firmware": "1.1.3", "found_at": SERVER_TIME, "last_seen": SERVER_TIME}
+         "firmware": "1.1.3", "dhcp": True, "found_at": SERVER_TIME, "last_seen": SERVER_TIME}
 CUBE_ADDRESS = "192.168.1.76:62910"         # the fake Cube's loopback address, which has run.sh's port
 ADDRESS_RE = re.compile(r"127\.0\.0\.1:\d+")
 TIME_RE = re.compile(r'"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)"')
