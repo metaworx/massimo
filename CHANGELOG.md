@@ -22,6 +22,19 @@ the next minor, a fix counts the suffix up.
   certificate by TLS-ALPN-01, renewed by itself (`-tls-http :80` adds
   HTTP-01 and the redirect); the UI warns two weeks before an expiry.
 
+### Changed
+
+- CI runs once per commit (a push to `main` or a pull request), and the
+  Screenshots job runs in the Playwright image, without apt.
+
+- The web UI's tests are a pytest suite (tools/ui-test/); CI's
+  Screenshots job fails when they cannot run instead of skipping them,
+  and keeps a failed test's trace, screenshot and video as an artifact.
+
+## [0.8.0-alpha.1] - 2026-11-06
+
+### Added
+
 - Store stage (b) in `internal/store` (`docs/store.md` section 9):
   migration 0002 (`commands`, `users.auth_version`, `audit.command_id`),
   users with argon2id passwords, roles, tokens, the bootstrap, the audit,
@@ -88,6 +101,13 @@ the next minor, a fix counts the suffix up.
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
+
+- `make release-alpha` cuts the changelog's `[Unreleased]` into the
+  release's section on `main` and tags with that section; `DRY=1`
+  shows what it would cut, tag and push (README.md, "Versions").
+
+- A GitHub release's notes are its tag's changelog section, then the
+  sentence on the channel and how to install and verify a download.
 
 ### Fixed
 
