@@ -9,11 +9,13 @@
       <option value="light" data-i18n="appearance.modeLight">light</option>
       <option value="dark" data-i18n="appearance.modeDark">dark</option>
     </select>
+    <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="theme"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
   </div>
   <div class="field wide">
     <label for="scheme-select" data-i18n="appearance.scheme">Colour scheme</label>
     <span data-help="scheme" data-help-label="appearance.scheme"></span>
     <select id="scheme-select" class="field-control"></select>
+    <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="scheme"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
   </div>
   <div class="scheme-actions">
     <button type="button" id="scheme-customise" aria-expanded="false" aria-controls="scheme-editor" data-i18n="appearance.customise">Customise…</button>

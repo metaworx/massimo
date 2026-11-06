@@ -146,6 +146,20 @@ The filter matches any part of a line (time, kind, device, text).
 
 ## Settings
 
+Signed in with a role that has the capability `preferences` (manager,
+operator and viewer by default),
+the settings and your own colour schemes follow you:
+the server keeps them for you,
+and every browser you sign in on takes them at sign-in,
+the first one handing over what it had.
+Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
+**Language**, **Mode** and **Colour scheme** a switch **only on this device**
+keeps that setting's value in this browser instead,
+for a phone that polls less often or a wall tablet that stays dark;
+switched off, your value applies again.
+A guest, a server without users and the API token keep every setting in the browser,
+without the switches.
+
 - **Poll every**:
   how often the page asks the server for the state.
   Device changes arrive in between as they happen.
