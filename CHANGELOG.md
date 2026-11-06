@@ -10,8 +10,8 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
-- The store keeps the Cubes' events, written in batches of one
-  transaction and pruned daily by `log.keep_days` in `/api/v1/settings`
+- The store keeps the Cubes' events (migration 0004), written in
+  batches and pruned daily by `log.keep_days` in `/api/v1/settings`
   (30 days; 0 keeps them), so that the log survives a restart.
 
 ### Changed
