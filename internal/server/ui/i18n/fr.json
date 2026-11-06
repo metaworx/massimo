@@ -599,6 +599,7 @@
   "role.viewer": "Lecteur",
   "role.integration": "Intégration",
   "cap.read": "tout voir",
+  "cap.preferences": "garder les réglages sur le serveur",
   "cap.setpoint": "régler les températures et les modes",
   "cap.lock": "verrouiller et déverrouiller les thermostats",
   "cap.configure": "températures, réglages des appareils, programmes hebdomadaires",

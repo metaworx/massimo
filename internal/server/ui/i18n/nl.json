@@ -598,6 +598,7 @@
   "role.viewer": "Kijker",
   "role.integration": "Integratie",
   "cap.read": "alles zien",
+  "cap.preferences": "de instellingen op de server bewaren",
   "cap.setpoint": "temperaturen en standen instellen",
   "cap.lock": "thermostaten vergrendelen en ontgrendelen",
   "cap.configure": "temperaturen, apparaatinstellingen, weekprogramma's",

@@ -609,7 +609,8 @@ The capabilities, what each allows, and the routes it guards:
 
 | Capability | Allows | Routes |
 |---|---|---|
-| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, the update state | `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/update`, `GET /api/v1/me`, one's own preferences |
+| `read` | see everything of the Cubes and one's own user: rooms, devices, configuration, programmes, the log and the stream, the pairing and restore state, the update state | `GET /api/v1/cubes`, `…/cubes/{sn}`, `…/rooms`, `…/devices`, `…/devices/{rf}`, `…/rooms/{id}/config`, `…/rooms/{id}/program`, `…/log`, `…/events`, `POST …/events/ticket`, `GET …/pairing`, `GET …/restore`, `GET /api/v1/update`, `GET /api/v1/me`, one's own preferences (`GET /api/v1/me/preferences`, any signed-in user) |
+| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
 | `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
@@ -635,6 +636,7 @@ The default roles, as seeded.
 | Capability | `manager` | `operator` | `guest` | `viewer` | `integration` |
 |---|---|---|---|---|---|
 | `read` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `preferences` | ✓ | ✓ | | ✓ | |
 | `setpoint` | ✓ | ✓ | ✓ | | ✓ |
 | `lock` | ✓ | ✓ | | | ✓ |
 | `configure` | ✓ | ✓ | ✓ | | |
@@ -649,11 +651,16 @@ The default roles, as seeded.
 
 So `manager` is `operator` plus guests, pairing, names, structure and restore;
 `operator` runs the heating, locks, configures, discovers and takes backups;
-`guest` is `operator` without the lock, backups and discovery; `viewer` reads;
+`guest` is `operator` without the lock, backups, discovery and preferences;
+`viewer` reads;
 `integration` is what a home automation needs and nothing it does not.
 Moves and deletions (`structure`) go with the names to `manager`,
 because a move changes the house as a name does; if `operator` should keep them,
 that is one row of the seed.
+`preferences` keeps one's settings and colour schemes on the server (stage (c));
+a guest has it not, so a guest's settings stay on its devices,
+where the defaults apply anyway (decided 2026-11-06),
+and `integration` has no page to keep settings for.
 
 Guests are users with the role `guest`,
 created by a holder of `guests` with an invitation (a one-time code or link;

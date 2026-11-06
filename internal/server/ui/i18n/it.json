@@ -599,6 +599,7 @@
   "role.viewer": "Osservatore",
   "role.integration": "Integrazione",
   "cap.read": "vedere tutto",
+  "cap.preferences": "tenere le impostazioni sul server",
   "cap.setpoint": "impostare temperature e modalità",
   "cap.lock": "bloccare e sbloccare i termostati",
   "cap.configure": "temperature, impostazioni dei dispositivi, programmi settimanali",

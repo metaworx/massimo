@@ -179,6 +179,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | Capability | Allows | Routes |
 |---|---|---|
 | `read` | see everything of the Cubes and one's own user | every `GET` of a Cube, its rooms, devices, configuration, programmes, log, pairing, restore and backup state, the event stream and its ticket, `GET /api/v1/update`, `GET /api/v1/me` |
+| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
 | `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
@@ -202,7 +203,7 @@ The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
 `manager` is `operator` plus guests, pairing, names, structure and restore,
 `operator` runs the heating, locks, configures, discovers and takes backups,
-`guest` is `operator` without the lock, backups and discovery,
+`guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, `integration` reads, sets and locks.
 A role's set can be changed, a role renamed, created and disabled,
 and a capability disabled for every role but `owner`,

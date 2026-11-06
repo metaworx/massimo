@@ -12,7 +12,7 @@
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
 // "Authentication"); each hides, as a class needs-<capability> in the
 // markup, what it alone allows.
-const CAPABILITIES = ["read", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
   "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice

@@ -610,6 +610,7 @@
   "role.viewer": "Obserwator",
   "role.integration": "Integracja",
   "cap.read": "widzieć wszystko",
+  "cap.preferences": "trzymać ustawienia na serwerze",
   "cap.setpoint": "ustawiać temperatury i tryby",
   "cap.lock": "blokować i odblokowywać termostaty",
   "cap.configure": "temperatury, ustawienia urządzeń, programy tygodniowe",

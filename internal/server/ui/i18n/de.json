@@ -597,6 +597,7 @@
   "role.viewer": "Betrachter",
   "role.integration": "Integration",
   "cap.read": "alles sehen",
+  "cap.preferences": "die Einstellungen auf dem Server behalten",
   "cap.setpoint": "Temperaturen und Modi setzen",
   "cap.lock": "Thermostate sperren und entsperren",
   "cap.configure": "Temperaturen, Geräteeinstellungen, Wochenprogramme",
