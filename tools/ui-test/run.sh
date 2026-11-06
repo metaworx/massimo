@@ -8,26 +8,34 @@
 # no MASSIMO_* variables but a test API token, so the page goes through
 # the token and the stream tickets, and the fake Cube's address and name,
 # which serve seeds into its store, massimo.db in that directory), then
-# runs smoke.py with Playwright; `run.sh screenshots` (make ui-screenshots)
-# runs screenshots.py instead, which takes the screenshot set into
-# docs/screenshots/.
-# Without Playwright it says so and exits 0, so `make ui-test` never
-# fails on a machine that cannot run it.
+# runs the pytest suite next to this script (conftest.py, test_*.py) with
+# the page's address in UI_TEST_URL and the token in UI_TEST_TOKEN; the
+# arguments after "smoke" go to pytest, as do those in PYTEST_ADDOPTS
+# (PYTEST_ADDOPTS='-k cubes' make ui-test). Of a failed test it keeps
+# the trace, the screenshot and the video under tools/ui-test/results/.
+# `run.sh screenshots` (make ui-screenshots) runs screenshots.py instead,
+# which takes the screenshot set into docs/screenshots/.
+# Without Playwright (and, for the suite, pytest and pytest-playwright)
+# it says so and exits 0, so `make ui-test` never fails on a machine that
+# cannot run it; UI_TEST_REQUIRED=1, as CI sets it, makes that exit 1.
 #
 # The fake Cube also answers UDP discovery, as a Cube that is not
 # configured (KEQ0000000), on a loopback port the server asks instead of
 # broadcasting; the server's own discovery socket is UDP 23272 as always,
 # so a search answers 503 where another program holds that port, and
-# smoke.py then skips the checks that need an answer.
+# the suite then skips the tests that need an answer.
 #
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
-# when present, else python3), UI_TEST_CUBE_PORT (62919),
-# UI_TEST_API_PORT (8119), UI_TEST_DISCOVERY_PORT (23919).
+# when present, else python3), UI_TEST_REQUIRED, UI_TEST_CUBE_PORT
+# (62919), UI_TEST_API_PORT (8119), UI_TEST_DISCOVERY_PORT (23919).
 set -eu
 
-case "${1:-smoke}" in
-	smoke | screenshots) script=${1:-smoke} ;;
-	*) echo "usage: run.sh [smoke|screenshots]" >&2; exit 2 ;;
+mode=${1:-smoke}
+[ $# -gt 0 ] && shift
+case "$mode" in
+	smoke) needs='import playwright.sync_api, pytest, pytest_playwright'; what="pytest, pytest-playwright and Playwright" ;;
+	screenshots) needs='import playwright.sync_api'; what="Playwright" ;;
+	*) echo "usage: run.sh [smoke [pytest arguments…]|screenshots]" >&2; exit 2 ;;
 esac
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -35,8 +43,12 @@ py=${UI_TEST_PYTHON:-}
 if [ -z "$py" ]; then
 	if [ -x "$here/.venv/bin/python" ]; then py="$here/.venv/bin/python"; else py=python3; fi
 fi
-if ! "$py" -c 'import playwright.sync_api' 2>/dev/null; then
-	echo "ui-test: $script skipped, Playwright for Python is not installed for $py (see tools/ui-test/README.md)"
+if ! "$py" -c "$needs" 2>/dev/null; then
+	if [ "${UI_TEST_REQUIRED:-}" = 1 ]; then
+		echo "ui-test: $mode cannot run, not installed for $py: $what for Python (see tools/ui-test/README.md)" >&2
+		exit 1
+	fi
+	echo "ui-test: $mode skipped, not installed for $py: $what for Python (see tools/ui-test/README.md)"
 	exit 0
 fi
 
@@ -76,4 +88,9 @@ until curl -sf -H "Authorization: Bearer $token" "${url}api/v1/cubes" 2>/dev/nul
 	sleep 0.2
 done
 
-"$py" "$here/$script.py" "$url" "$token"
+if [ "$mode" = screenshots ]; then
+	"$py" "$here/screenshots.py" "$url" "$token"
+	exit
+fi
+cd "$here"
+UI_TEST_URL="$url" UI_TEST_TOKEN="$token" "$py" -m pytest --output "$here/results" "$@"
