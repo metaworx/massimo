@@ -189,19 +189,24 @@ jobs:
           up() { for i in $(seq 30); do curl -fsS "$health" && echo && return; sleep 2; done; return 1; }
           # As the web UI does it: POST, a second POST in the same moment
           # must be refused, then the helper's states until the last one,
-          # left in $st.
+          # left in $st. Both POSTs go out of one curl, the second on the
+          # first's connection the moment the first is answered: in stage 2
+          # the helper stops the service faster than a second curl process
+          # starts (GUIDELINES/project/CI.md, "Runner Constraints").
           post_update() {
-            rm -f "$data/update-status.json"
-            local code second
-            code="$(curl -sS -o post.json -w '%{http_code}' -X POST -H 'Authorization: Bearer ci' "$api" || true)"
-            cat post.json; echo
+            rm -f "$data/update-status.json" post.json second.json
+            local codes code second
+            codes="$(curl -sS -o post.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" \
+              --next -sS -o second.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" || true)"
+            code="${codes%%$'\n'*}"
+            second="${codes#*$'\n'}"
+            cat post.json 2>/dev/null || true; echo
             if [ "$code" != 202 ]; then
               echo "::error::POST /api/v1/update answered $code"
               curl -sS -H 'Authorization: Bearer ci' "$api" || true
               return 1
             fi
-            second="$(curl -sS -o second.json -w '%{http_code}' -X POST -H 'Authorization: Bearer ci' "$api" || true)"
-            cat second.json; echo
+            cat second.json 2>/dev/null || true; echo
             if [ "$second" != 409 ]; then echo "::error::the second POST answered $second, want 409"; return 1; fi
             st=""
             for i in $(seq 90); do
