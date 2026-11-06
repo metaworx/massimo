@@ -2,8 +2,9 @@ name: CI
 
 # Every push to any branch and every pull request: formatting, vet, the
 # tests, a cross build of every release binary (so that a tag finds
-# nothing new to fail on), govulncheck, and the Windows service on a
-# Windows runner. Tags are tested again by release.yml.
+# nothing new to fail on), govulncheck, the Debian package in a
+# container, and the Windows service on a Windows runner. Tags are
+# tested again by release.yml.
 on:
   push:
     branches: [ '**' ]
@@ -124,6 +125,42 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
           GOOS=${{ matrix.goos }} "$(go env GOPATH)/bin/govulncheck" ./...
+
+  # The Debian package (packaging/README.md, "Debian package"): built for
+  # the three architectures as `make release` builds it, then the amd64
+  # one installed, checked and purged in a Debian container
+  # (packaging/deb/test.sh), on trixie and on bookworm, which the
+  # Raspberry Pi OS Legacy images run. A container has no systemd, so
+  # the start on a real box is not covered here.
+  deb:
+    name: Debian package (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ 'debian:trixie-slim', 'debian:bookworm-slim' ]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # git describe names the version
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Build the packages
+        run: make packages
+
+      - name: Install, check and purge in a container
+        run: make deb-test DEB_IMAGE=${{ matrix.image }}
+
+      - uses: actions/upload-artifact@v6
+        if: matrix.image == 'debian:trixie-slim'
+        with:
+          name: packages
+          path: dist/*.deb
+          if-no-files-found: error
 
   # The Windows service for real: install from a settings file, the
   # service answering on /healthz against a fake Cube, an update through

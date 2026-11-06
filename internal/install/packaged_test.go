@@ -1,0 +1,184 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+
+package install
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+const aptMarker = "apt\nsudo apt update && sudo apt install massimo\nsudo apt remove massimo\n"
+
+// packagedRoot is a root the Debian package has been installed into: the
+// marker, the template and the settings file left as the template.
+func packagedRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	write := func(p, content string) {
+		t.Helper()
+		os.MkdirAll(filepath.Dir(filepath.Join(root, p)), 0o755)
+		if err := os.WriteFile(filepath.Join(root, p), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(PackagedPath, aptMarker)
+	write("/usr/share/massimo/env.template", envTemplate())
+	write(EnvPath, envTemplate())
+	return root
+}
+
+func TestReadMarker(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := readMarker(filepath.Join(dir, "none")); ok {
+		t.Fatal("a missing marker")
+	}
+	cases := []struct {
+		name, content string
+		want          Manager
+		ok            bool
+	}{
+		{"three lines", aptMarker, Manager{Name: "apt", Command: "sudo apt update && sudo apt install massimo", Remove: "sudo apt remove massimo"}, true},
+		{"one line", "brew\n", Manager{Name: "brew"}, true},
+		{"spaces", "  dnf \n sudo dnf upgrade massimo \n", Manager{Name: "dnf", Command: "sudo dnf upgrade massimo"}, true},
+		{"empty", "\n\n", Manager{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(dir, strings.ReplaceAll(tc.name, " ", "_"))
+			os.WriteFile(p, []byte(tc.content), 0o644)
+			got, ok := readMarker(p)
+			if ok != tc.ok || got != tc.want {
+				t.Fatalf("got %+v %v, want %+v %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func TestManagerText(t *testing.T) {
+	m := Manager{Name: "apt", Command: "sudo apt install massimo", Remove: "sudo apt remove massimo"}
+	if m.String() != "managed by apt: sudo apt install massimo" {
+		t.Fatal(m.String())
+	}
+	if m.RemoveHint() != "remove it with: sudo apt remove massimo" {
+		t.Fatal(m.RemoveHint())
+	}
+	if (Manager{Name: "brew"}).String() != "managed by brew" {
+		t.Fatal("bare manager")
+	}
+	if !m.Configurable() || (Manager{Name: "brew"}).Configurable() {
+		t.Fatal("configurable")
+	}
+}
+
+func TestPackagedBesideBinary(t *testing.T) {
+	prefix := t.TempDir()
+	exe := filepath.Join(prefix, "bin", "massimo")
+	os.MkdirAll(filepath.Dir(exe), 0o755)
+	os.WriteFile(exe, []byte("binary"), 0o755)
+	if _, ok := packagedIn(t.TempDir(), exe); ok {
+		t.Fatal("no marker anywhere")
+	}
+	os.MkdirAll(filepath.Join(prefix, "share", "massimo"), 0o755)
+	os.WriteFile(filepath.Join(prefix, "share", "massimo", "packaged"), []byte("brew\nbrew upgrade massimo-alpha\n"), 0o644)
+	m, ok := packagedIn(t.TempDir(), exe)
+	if !ok || m.Name != "brew" || m.Command != "brew upgrade massimo-alpha" {
+		t.Fatalf("beside the binary: %+v %v", m, ok)
+	}
+	root := packagedRoot(t)
+	if m, ok := packagedIn(root, ""); !ok || m.Name != "apt" {
+		t.Fatalf("below the root: %+v %v", m, ok)
+	}
+}
+
+func TestInstallPackagedConfiguresOnly(t *testing.T) {
+	root := packagedRoot(t)
+	bin := filepath.Join(t.TempDir(), "massimo-linux-arm64")
+	os.WriteFile(bin, []byte("binary v2"), 0o755)
+	settings := filepath.Join(t.TempDir(), "settings.env")
+	os.WriteFile(settings, []byte("MASSIMO_CUBE_KEQ0000000_ADDRESS=192.0.2.10\nMASSIMO_API_TOKEN=t\n"), 0o600)
+	rec := &recorder{}
+	var out bytes.Buffer
+	o := Options{Root: root, Binary: bin, Settings: settings, Listen: ":80", Out: &out, Run: rec.run}
+	if err := Install(o); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "managed by apt") {
+		t.Fatalf("output: %s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, BinPath)); err == nil {
+		t.Fatal("the binary was written")
+	}
+	if _, err := os.Stat(filepath.Join(root, UnitDir, "massimo.service")); err == nil {
+		t.Fatal("a unit was written")
+	}
+	if rec.has("useradd") || rec.has("systemctl enable") {
+		t.Fatalf("the package's work was done again: %v", rec.cmds)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, EnvPath)), "MASSIMO_API_TOKEN=t") {
+		t.Fatal("the settings were not copied over the template")
+	}
+	if !strings.Contains(read(t, filepath.Join(root, ListenDropIn)), "MASSIMO_LISTEN=:80") {
+		t.Fatal("no listen drop-in")
+	}
+	if !rec.has("systemctl daemon-reload") || !rec.has("systemctl restart massimo.service") {
+		t.Fatalf("not restarted: %v", rec.cmds)
+	}
+
+	// Filled in, the settings are kept whatever -settings names.
+	os.WriteFile(filepath.Join(root, EnvPath), []byte("MASSIMO_API_TOKEN=mine\n"), 0o600)
+	out.Reset()
+	if err := Install(Options{Root: root, Settings: settings, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(root, EnvPath)) != "MASSIMO_API_TOKEN=mine\n" || !strings.Contains(out.String(), "kept it and did not copy") {
+		t.Fatalf("settings replaced: %s", out.String())
+	}
+
+	// Still the template, nothing to start.
+	root2 := packagedRoot(t)
+	rec2 := &recorder{}
+	out.Reset()
+	if err := Install(Options{Root: root2, Out: &out, Run: rec2.run}); err != nil {
+		t.Fatal(err)
+	}
+	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") {
+		t.Fatalf("started with the template: %v %s", rec2.cmds, out.String())
+	}
+}
+
+func TestInstallPackagedBrewRefuses(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, filepath.Dir(PackagedPath)), 0o755)
+	os.WriteFile(filepath.Join(root, PackagedPath), []byte("brew\nbrew upgrade massimo-alpha\n"), 0o644)
+	err := Install(Options{Root: root, Out: &bytes.Buffer{}})
+	if err == nil || !strings.Contains(err.Error(), "managed by brew") {
+		t.Fatalf("got %v", err)
+	}
+	err = InstallDarwin(Options{Root: root, Out: &bytes.Buffer{}})
+	if err == nil || !strings.Contains(err.Error(), "Homebrew") {
+		t.Fatalf("darwin: got %v", err)
+	}
+}
+
+func TestRemovePackagedRefuses(t *testing.T) {
+	root := packagedRoot(t)
+	for _, f := range []func(Options, bool) error{Remove, RemoveDarwin} {
+		err := f(Options{Root: root, Out: &bytes.Buffer{}}, true)
+		if err == nil || !strings.Contains(err.Error(), "sudo apt remove massimo") {
+			t.Fatalf("got %v", err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, EnvPath)); err != nil {
+		t.Fatal("the settings went")
+	}
+}
+
+func TestEnvTemplateEmbedded(t *testing.T) {
+	if !strings.Contains(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log") {
+		t.Fatal(envTemplate())
+	}
+}

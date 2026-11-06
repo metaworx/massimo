@@ -39,6 +39,10 @@ type UpdateOptions struct {
 	// Blocked is a reason the helper cannot be started on this machine,
 	// found by whoever provides Start; it is reported like the others.
 	Blocked string
+	// Managed is set where a package manager owns the binary
+	// (install.Packaged): the reason updates are not installed from here,
+	// given ahead of every other and shown beside the newer version.
+	Managed string
 }
 
 // ReleaseFinder finds the newest signed release on a channel; nil, nil
@@ -82,6 +86,8 @@ func (s *Server) latest(ctx context.Context, refresh bool) (*update.Release, tim
 // updateBlocked says why an update cannot be started from the API, or "".
 func (s *Server) updateBlocked() string {
 	switch {
+	case s.opts.Update.Managed != "":
+		return s.opts.Update.Managed
 	case s.opts.Token == "":
 		return "set MASSIMO_API_TOKEN to start updates from the API"
 	case s.opts.Update.Request == "" && goruntime.GOOS == "windows":

@@ -135,8 +135,14 @@ func Check(o Options) error {
 	return nil
 }
 
-// Install installs or updates massimo serve as a systemd service.
+// Install installs or updates massimo serve as a systemd service. On a
+// box whose package manager owns the binary (Packaged) it only
+// configures: the settings and the listen address are still the box's
+// own, the binary, the user and the unit are the package's.
 func Install(o Options) error {
+	if m, ok := Packaged(o.Root); ok {
+		return configure(o, m)
+	}
 	if err := Check(o); err != nil {
 		return err
 	}
@@ -191,6 +197,91 @@ func Install(o Options) error {
 	return nil
 }
 
+// configure is Install on a packaged box: -settings over a settings file
+// the package left as the template, the -listen drop-ins, a restart.
+func configure(o Options, m Manager) error {
+	if !m.Configurable() {
+		return fmt.Errorf("%s; massimo install is for a box without the package", m)
+	}
+	if err := Check(o); err != nil {
+		return err
+	}
+	if o.Listen != "" {
+		if _, _, err := listenDropIns(o.Listen); err != nil {
+			return err
+		}
+	}
+	in := newInstaller(o)
+	fmt.Fprintf(in.Out, "%s: the binary, the user and the unit are the package's; configuring only\n", m)
+	startable, err := in.packagedSettings()
+	if err != nil {
+		return err
+	}
+	if startable {
+		in.checkSettings()
+	}
+	if err := in.listen(); err != nil {
+		return err
+	}
+	if err := in.run("systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	switch {
+	case in.NoStart:
+		fmt.Fprintln(in.Out, "not restarted; restart it with: systemctl restart massimo")
+	case !startable:
+		fmt.Fprintf(in.Out, "not started: put the Cubes into %s first (see packaging/README.md), then: systemctl start massimo\n", EnvPath)
+	default:
+		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
+			return err
+		}
+		in.say("restart massimo.service; follow it with: journalctl -u massimo -f")
+	}
+	return nil
+}
+
+// packagedSettings copies -settings over a settings file the package
+// left as the template (its copy under /usr/share/massimo, else the
+// embedded one), keeps one that was filled in, and reports whether the
+// file holds settings.
+func (in *installer) packagedSettings() (bool, error) {
+	env := in.path(EnvPath)
+	cur, err := os.ReadFile(env)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	tmpl, terr := os.ReadFile(in.path("/usr/share/massimo/env.template"))
+	if terr != nil {
+		tmpl = []byte(envTemplate())
+	}
+	isTemplate := err != nil || bytes.Equal(cur, tmpl)
+	switch {
+	case in.Settings == "" && isTemplate:
+		fmt.Fprintf(in.Out, "%s is still the template\n", EnvPath)
+		return false, nil
+	case in.Settings == "":
+		fmt.Fprintf(in.Out, "%s exists; kept it\n", EnvPath)
+		return true, nil
+	case !isTemplate:
+		fmt.Fprintf(in.Out, "%s exists; kept it and did not copy %s\n", EnvPath, in.Settings)
+		return true, nil
+	}
+	b, err := os.ReadFile(in.Settings)
+	if err != nil {
+		return false, err
+	}
+	in.say("copy %s to %s", in.Settings, EnvPath)
+	if !in.DryRun {
+		if err := os.MkdirAll(filepath.Dir(env), 0o750); err != nil {
+			return false, err
+		}
+		if err := writeAtomic(env, b, 0o600); err != nil {
+			return false, err
+		}
+	}
+	return true, in.run("chown", in.svcUser+":"+in.svcUser, env)
+}
+
 func (in *installer) binary() error {
 	src := in.Binary
 	if src == "" {
@@ -235,26 +326,15 @@ func (in *installer) user() error {
 	return in.run("useradd", "--system", "--user-group", "--home-dir", "/var/lib/massimo", "--no-create-home", "--shell", nologin, User)
 }
 
-const envTemplate = `# Settings of massimo serve, read by the service with -env (see README.md
-# and packaging/README.md). Readable only by the user massimo.
-#
-# Per Cube (the serial as printed on it):
-# MASSIMO_CUBE_<SN>_ADDRESS=192.168.1.10
-# MASSIMO_CUBE_<SN>_KEY=...
-# MASSIMO_CUBE_<SN>_IV=...
-# MASSIMO_CUBE_<SN>_PROXY=<an address of this box, one per Cube>
-#
-# serve keeps the Cubes in its store, massimo.db in the data directory:
-# at its first start it adds every Cube of this file, and from then on
-# the store wins. _ADDRESS, _NAME, _PROXY, _PROXY_SERIAL and _IGNORE here
-# only add a Cube the store does not know yet; a line that differs from
-# the store is logged at the start. Change a known Cube in the web UI,
-# Settings → Cubes. _KEY and _IV are read from here only.
-#
-# Needed to start updates from the web UI, and recommended anyway:
-# MASSIMO_API_TOKEN=...
-MASSIMO_LOG=/var/log/massimo/serve.log
-`
+// envTemplate is the commented settings file a fresh install gets,
+// packaging/env.template, which the Debian package ships as well.
+func envTemplate() string {
+	b, err := fs.ReadFile(packaging.Files, "env.template")
+	if err != nil {
+		panic("install: env.template not embedded: " + err.Error())
+	}
+	return string(b)
+}
 
 // settings makes EnvDir and EnvPath; it reports whether the file holds
 // settings (an existing or copied one) rather than the fresh template.
@@ -279,7 +359,7 @@ func (in *installer) settings() (bool, error) {
 		}
 		return true, nil
 	}
-	content, startable := []byte(envTemplate), false
+	content, startable := []byte(envTemplate()), false
 	if in.svcUser == DarwinUser {
 		content = []byte(darwinEnvTemplate())
 	}
@@ -447,7 +527,11 @@ func (in *installer) units() error {
 
 // Remove stops and removes the service, the units and the binary. With
 // purge it removes the settings, the state, the logs and the user too.
+// A packaged box is left to its package manager.
 func Remove(o Options, purge bool) error {
+	if m, ok := Packaged(o.Root); ok {
+		return fmt.Errorf("%s; %s", m, m.RemoveHint())
+	}
 	if err := Check(o); err != nil {
 		return err
 	}

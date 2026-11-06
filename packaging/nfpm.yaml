@@ -1,0 +1,52 @@
+# The Debian package, built by `make packages` with nfpm at the version
+# the Makefile pins, from the release binary and the files of
+# packaging/deb/; packaging/README.md, "Debian package", says what it
+# installs and what its scripts do. VERSION, NFPM_ARCH and BINARY are set
+# by the Makefile for each architecture.
+name: massimo
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: semver
+section: net
+priority: optional
+maintainer: Martin Rüegg <martin.rueegg@metaworx.ch>
+vendor: metaworx
+homepage: https://go.metaworx.ch/massimo
+license: AGPL-3.0-or-later
+description: |
+  Server for eQ-3 MAX! Cube heating systems
+  Massimo keeps the MAX! Cubes connected, serves a JSON API and a web UI
+  on port 8099, answers as a Cube on the LAN for other clients, and runs
+  as the systemd service massimo. The settings go into /etc/massimo/env.
+depends:
+  - adduser
+  - init-system-helpers (>= 1.52)
+recommends:
+  - logrotate
+contents:
+  - src: ${BINARY}
+    dst: /usr/bin/massimo
+    expand: true
+    file_info:
+      mode: 0755
+  - src: dist/deb/massimo.service
+    dst: /usr/lib/systemd/system/massimo.service
+  - src: packaging/logrotate/massimo
+    dst: /etc/logrotate.d/massimo
+    type: config
+  - src: packaging/deb/packaged
+    dst: /usr/share/massimo/packaged
+  - src: packaging/env.template
+    dst: /usr/share/massimo/env.template
+  - src: packaging/deb/copyright
+    dst: /usr/share/doc/massimo/copyright
+scripts:
+  preinstall: packaging/deb/preinst
+  postinstall: packaging/deb/postinst
+  preremove: packaging/deb/prerm
+  postremove: packaging/deb/postrm
+deb:
+  compression: xz
+  fields:
+    Bugs: https://github.com/metaworx/massimo/issues

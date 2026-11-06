@@ -21,6 +21,10 @@ on a Mac LaunchDaemons (see "macOS").
   weekly rotation of that log.
 - `launchd/ch.metaworx.massimo.plist` and `launchd/ch.metaworx.massimo-update.plist`:
   the service and the update helper on macOS (see "macOS").
+- `env.template`:
+  the settings file every install starts from, embedded as well.
+- `nfpm.yaml` and `deb/`:
+  the Debian package `make packages` builds (see "Debian package").
 
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
@@ -129,6 +133,58 @@ Deleting both files (and `systemctl daemon-reload`,
 `massimo install -remove` stops and removes the service,
 its units and the binary; `-purge` also removes the settings, the state,
 the logs and the user.
+
+## Debian package
+
+Every release also carries a Debian package per architecture,
+`massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`,
+the release's version written as dpkg sorts it (`0.7.0~alpha.1` for `v0.7.0-alpha.1`).
+The armhf one holds the armv6 binary and runs on every 32-bit Raspberry Pi OS,
+the Pi 1 and the Zero included (Debian's own armhf needs a Pi 2 or later).
+On a Debian, Ubuntu, Raspberry Pi OS or LoxBerry box:
+
+```bash
+curl -fLO https://github.com/metaworx/massimo/releases/download/<tag>/massimo_<version>_arm64.deb
+sudo apt install ./massimo_<version>_arm64.deb
+```
+
+It installs the release binary as `/usr/bin/massimo`,
+the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
+that path and without the update helper),
+the log rotation and the marker `/usr/share/massimo/packaged`;
+its scripts create the user `massimo` and `/etc/massimo/env` from the template
+when they are missing, enable the service,
+and start it once the file differs from the template,
+so that a fresh box does not serve the LAN without a token.
+Fill in `/etc/massimo/env` as "Install by hand" describes,
+then `sudo systemctl start massimo`.
+The next package upgrades the binary and restarts the service;
+the settings and the store are left alone.
+
+**One owner of the binary.**
+On such a box apt owns `/usr/bin/massimo`, and the marker tells massimo so:
+`massimo update` and the web UI's button still say when a newer release is out,
+but leave the install to `sudo apt update && sudo apt install massimo`
+(the apt repository below) or to the next release's package by hand.
+`massimo install` keeps only what configures:
+`-settings` over a settings file that is still the template,
+`-listen` as the drop-ins of "Install with `massimo install`", then a restart.
+`massimo install -remove` points at `apt remove massimo`;
+`apt purge massimo` takes the settings, the store, the logs and the user too,
+as `-remove -purge` does.
+A box set up with `massimo install` keeps its own updater:
+the package refuses to install over it until `sudo massimo install -remove` has run,
+which keeps the settings and the store;
+a `-listen` address is set again afterwards with `sudo massimo install -listen <addr>`.
+
+The package is built by `make packages` (nfpm, at the version the Makefile pins,
+through `go run`) from `nfpm.yaml`,
+the scripts in `deb/` and the unit `deb/unit.sh` derives;
+`make deb-test` installs,
+checks and purges it in a Debian container (`deb/test.sh`),
+as CI does on trixie and on bookworm. lintian reports two errors by design,
+the statically linked binary and the missing Debian-format changelog (the
+changelog is `CHANGELOG.md` on GitHub).
 
 ## Install by hand
 

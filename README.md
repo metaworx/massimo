@@ -103,6 +103,7 @@ so take the newest release from the page and put its tag in place of `<tag>` bel
 | `massimo-windows-amd64.exe` | Windows PC, 64-bit |
 | `massimo-darwin-arm64` | Mac with Apple silicon |
 | `massimo-darwin-amd64` | Mac with an Intel processor |
+| `massimo_<version>_<arch>.deb` | the Linux binary as a Debian package: `amd64`, `arm64`, `armhf` (every 32-bit Raspberry Pi OS), see [Linux](#linux) |
 
 To build instead, with Go 1.26 or later installed:
 `make` runs the tests and builds `./massimo` for this machine;
@@ -210,6 +211,16 @@ Details: [Install with
 `massimo install`](packaging/README.md#install-with-massimo-install),
 [Moving to another network](packaging/README.md#moving-to-another-network),
 [Updating](packaging/README.md#updating).
+
+**As a package.**
+On Debian, Ubuntu, Raspberry Pi OS or LoxBerry the release's `.deb` does the
+same install through apt (`sudo apt install ./massimo_<version>_arm64.deb`;
+`_armhf` for a 32-bit Raspberry Pi OS, the Pi 1 included, `_amd64` for a PC),
+creates the user and `/etc/massimo/env` to fill in,
+and owns the binary from then on:
+the web UI and `massimo update` say when a release is out and apt installs it,
+`apt purge massimo` removes everything.
+Details: [Debian package](packaging/README.md#debian-package).
 
 ### Windows
 

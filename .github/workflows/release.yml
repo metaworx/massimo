@@ -1,8 +1,9 @@
 name: Release
 
 # A version tag (v1.2.3, v0.1.0-alpha.10) is tested, built for every
-# platform, signed and published as a GitHub release, which
-# `massimo update` installs (internal/update).
+# platform (the binaries, and the Debian packages holding them), signed
+# and published as a GitHub release, which `massimo update` installs
+# (internal/update).
 #
 # Three jobs, the key in one: `build` runs the toolchain and the
 # third-party actions and holds no secret; `sign` holds the release key
@@ -92,7 +93,7 @@ jobs:
       - name: go test
         run: go test ./...
 
-      - name: Build every binary, SHA256SUMS and the manifest
+      - name: Build every binary and package, SHA256SUMS and the manifest
         run: make release VERSION="${{ steps.meta.outputs.tag }}" CHANNEL="${{ steps.meta.outputs.channel }}"
 
       - name: Hand the files to the signing job
@@ -149,5 +150,5 @@ jobs:
         run: |
           flags=()
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
-          notes="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes "$notes" "${flags[@]}" dist/*
+          notes="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\`, or install the Debian package with \`apt install ./massimo_<version>_<arch>.deb\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes "$notes" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS

@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- A Debian package per release (amd64, arm64, armhf for a 32-bit Pi OS),
+  installed with apt, which then owns the binary: `massimo update` and
+  the web UI show what is out (packaging/README.md, "Debian package").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

@@ -174,3 +174,22 @@ func TestUpdateStartsHelper(t *testing.T) {
 		t.Fatalf("request left after a failed start: %v", err)
 	}
 }
+
+// TestUpdateManaged: where a package manager owns the binary, the API
+// still says what is out, names the manager as the reason, and starts
+// nothing.
+func TestUpdateManaged(t *testing.T) {
+	req := filepath.Join(t.TempDir(), "update-request")
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	ts, _ := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: f, Managed: "managed by apt: sudo apt install massimo"})
+	code, out := call(t, ts, "GET", "secret")
+	if code != 200 || out["available"] != true || out["can_update"] != false || out["blocked"] != "managed by apt: sudo apt install massimo" {
+		t.Fatalf("GET: %d %v", code, out)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 403 {
+		t.Fatalf("POST: %d %v", code, out)
+	}
+	if _, err := os.Stat(req); err == nil {
+		t.Fatal("a request was written")
+	}
+}
