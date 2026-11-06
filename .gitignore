@@ -31,3 +31,6 @@ massimo.db
 massimo.db-*
 massimo.db.before-*
 node.key
+
+# Python leaves it behind wherever the UI smoke test runs.
+__pycache__/
