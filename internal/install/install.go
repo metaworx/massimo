@@ -66,6 +66,8 @@ type Options struct {
 	// address, and the plain helper address (:80) for HTTP-01.
 	ACMEEmail string
 	TLSHTTP   string
+	// ACMEDNSHook, with "acme", is the executable of the DNS-01 challenge.
+	ACMEDNSHook string
 	// DryRun only says what would be done.
 	DryRun bool
 	// Out receives one line per step; nil is os.Stdout.

@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   certificate by TLS-ALPN-01, renewed by itself (`-tls-http :80` adds
   HTTP-01 and the redirect); the UI warns two weeks before an expiry.
 
+- `massimo serve -tls acme -acme-dns-hook <script>`: the certificate by
+  DNS-01 through a hook that sets the TXT record, wildcards included,
+  no open port; `packaging/acme-dns-hooks/infomaniak.sh` for Infomaniak.
+
 ### Changed
 
 - CI runs once per commit (a push to `main` or a pull request), and the

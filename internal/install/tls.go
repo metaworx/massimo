@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 )
 
@@ -23,6 +24,7 @@ const (
 	tlsNamesVar = "MASSIMO_TLS_NAMES"
 	acmeEmail   = "MASSIMO_ACME_EMAIL"
 	tlsHTTPVar  = "MASSIMO_TLS_HTTP"
+	acmeDNSHook = "MASSIMO_ACME_DNS_HOOK"
 	// The owner's files beside the settings.
 	certName = "cert.pem"
 	keyName  = "key.pem"
@@ -74,6 +76,18 @@ func (o Options) checkTLS() error {
 				return fmt.Errorf("-tls-http: %v", err)
 			}
 		}
+		if o.ACMEDNSHook != "" {
+			if o.TLSHTTP != "" {
+				return errors.New("-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
+			}
+			fi, err := os.Stat(o.ACMEDNSHook)
+			if err != nil {
+				return fmt.Errorf("-acme-dns-hook: %v", err)
+			}
+			if runtime.GOOS != "windows" && fi.Mode()&0o111 == 0 {
+				return fmt.Errorf("-acme-dns-hook %s is not executable", o.ACMEDNSHook)
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("-tls %q: want off, files, self-signed or acme", o.TLS)
@@ -107,6 +121,9 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 		}
 		if in.TLSHTTP != "" {
 			vars = append(vars, [2]string{tlsHTTPVar, in.TLSHTTP})
+		}
+		if in.ACMEDNSHook != "" {
+			vars = append(vars, [2]string{acmeDNSHook, in.ACMEDNSHook})
 		}
 		return in.setSettings(env, chown, vars)
 	}

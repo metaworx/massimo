@@ -156,6 +156,38 @@ port 443 to the service's port (`-listen :443` with the capability,
 or the forward to `:8099`);
 with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
 `massimo tls show` (as `massimo`) prints what was issued.
+`-acme-dns-hook <script>` with `-tls acme -tls-names …` takes the DNS-01
+challenge instead of a port: the server runs
+`<script> set _acme-challenge.<name> <value>` before the validation and
+`<script> clear …` after it, waits until the resolver shows the record,
+and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
+The name may point at the box's LAN address,
+and wildcards work (`-tls-names '*.example.net,example.net'`).
+The script runs as `massimo` with the server's environment less the `MASSIMO_` variables,
+so its own secret comes from a file.
+`packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
+Infomaniak (its name servers, not merely registered there):
+it needs `curl` and `jq`,
+and a token with the DNS scope from the API section of the Infomaniak
+manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
+It is untested against the real API until the owner's day;
+the test runs it against a fake one.
+
+```bash
+sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/infomaniak.sh /usr/local/lib/massimo/infomaniak.sh
+sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
+sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/infomaniak.sh
+```
+
+Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:
+`certbot certonly --authenticator dns-infomaniak -d massimo.example.net` with
+the plugin `certbot-dns-infomaniak` (`pip install`) and its credentials file
+(`dns_infomaniak_token = …`, mode 0600, `--dns-infomaniak-credentials`),
+plus the deploy hook above that copies the files;
+certbot's renewal service sees no shell environment,
+so the token goes into the credentials file or the unit's `Environment=`.
+`lego --dns infomaniak -d massimo.example.net run` with
+`INFOMANIAK_ACCESS_TOKEN` is the other way.
 `-tls off` switches it off again;
 run the service once with `-hsts 0` over TLS first,
 since a browser that saw the server's HSTS header refuses `http://` to it
