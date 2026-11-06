@@ -25,6 +25,8 @@ on a Mac LaunchDaemons (see "macOS").
   the settings file every install starts from, embedded as well.
 - `nfpm.yaml` and `deb/`:
   the Debian package `make packages` builds (see "Debian package").
+- `apt/`:
+  the apt repository the release workflow publishes (see "The apt repository").
 
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
@@ -185,6 +187,63 @@ checks and purges it in a Debian container (`deb/test.sh`),
 as CI does on trixie and on bookworm. lintian reports two errors by design,
 the statically linked binary and the missing Debian-format changelog (the
 changelog is `CHANGELOG.md` on GitHub).
+
+## The apt repository
+
+The packages of the newest ten releases of every update channel are also in an
+apt repository on the project's GitHub Pages,
+<https://metaworx.github.io/massimo/apt/>, one suite per channel (`alpha`;
+later `beta` and `stable`),
+the same for every Debian and Ubuntu release since the binary is static,
+signed with the repository's own OpenPGP key (RSA 4096;
+not the Ed25519 release key of the manifest, which apt cannot use).
+To follow a channel:
+
+```bash
+sudo curl -fsSLo /etc/apt/keyrings/massimo.asc https://metaworx.github.io/massimo/apt/massimo.asc
+sudo tee /etc/apt/sources.list.d/massimo.sources <<'EOF'
+Types: deb
+URIs: https://metaworx.github.io/massimo/apt
+Suites: alpha
+Components: main
+Signed-By: /etc/apt/keyrings/massimo.asc
+EOF
+sudo apt update && sudo apt install massimo
+```
+
+`apt upgrade` then installs each release as it is published,
+and `apt install massimo=0.6.0~alpha.1` goes back to one still in the pool.
+`unattended-upgrades` upgrades Debian's own origins only;
+`"origin=Massimo";` in its `Unattended-Upgrade::Origins-Pattern` adds this repository.
+The package `massimo-archive-keyring` carries the key as
+`/usr/share/keyrings/massimo-archive-keyring.gpg`;
+with `Signed-By:` pointing there instead of the downloaded file,
+an extended or a rotated key arrives through apt
+(the package's version is the key's expiry date).
+
+The site is built by `packaging/apt/publish.sh` in the release workflow (the
+pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
+the keyring package by nfpm) and deployed with `actions/deploy-pages`;
+it has no state of its own,
+so a release that is deleted on GitHub leaves the pool at the next release.
+`packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
+verifies `InRelease`, and installs from it in a container,
+as CI does on trixie and on bookworm (`make apt-test`).
+Until the owner has made the key and set the secrets,
+the workflow skips the steps.
+
+The owner's steps, once:
+
+- Make the key, offline:
+  `gpg --quick-gen-key "Massimo apt repository" rsa4096 sign 2y`;
+  the fingerprint is `<fpr>` below.
+- Put `gpg --armor --export-secret-keys <fpr>` into the secret `MASSIMO_APT_KEY`
+  of the `signing` environment and the passphrase into `MASSIMO_APT_KEY_PASSPHRASE`
+  (GUIDELINES/project/CI.md, section 5).
+- In the repository's settings, Pages → Source: GitHub Actions.
+- Before the key expires,
+  `gpg --quick-set-expire <fpr> 2y` and the secret again;
+  the next release publishes the renewed key and a newer keyring package.
 
 ## Install by hand
 

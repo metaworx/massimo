@@ -5,12 +5,16 @@ name: Release
 # and published as a GitHub release, which `massimo update` installs
 # (internal/update).
 #
-# Three jobs, the key in one: `build` runs the toolchain and the
+# The jobs, a key in one each: `build` runs the toolchain and the
 # third-party actions and holds no secret; `sign` holds the release key
 # through the `signing` environment, which only v* tags may use, runs
 # nothing but openssl and gh on what build handed over, checks the
 # signature against the public key compiled into massimo before
-# publishing, and publishes exactly what it signed.
+# publishing, and publishes exactly what it signed. `apt-build` holds
+# the apt repository's key through the same environment and rebuilds
+# the site from the releases (packaging/apt/publish.sh); `apt-deploy`
+# puts it on GitHub Pages. Both are skipped until the owner has made
+# the key (packaging/README.md, "The apt repository").
 #
 # The update channel of a release is the release branch it was promoted
 # to, which is the pre-release identifier of the tag's name (v0.7.0-alpha.1
@@ -152,3 +156,67 @@ jobs:
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
           notes="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\`, or install the Debian package with \`apt install ./massimo_<version>_<arch>.deb\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
           gh release create "$TAG" --verify-tag --title "$TAG" --notes "$notes" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+
+  # The apt repository: the packages of the newest releases of every
+  # channel, one suite per channel, signed with the repository key
+  # (MASSIMO_APT_KEY, with its passphrase, in the signing environment)
+  # and built into the Pages artifact; nothing of it runs without the
+  # key. The site has no state: every release rebuilds it from GitHub.
+  apt-build:
+    name: Build the apt repository
+    needs: sign
+    runs-on: ubuntu-latest
+    environment: signing
+    outputs:
+      built: ${{ steps.site.outputs.built }}
+    env:
+      HAS_APT_KEY: ${{ secrets.MASSIMO_APT_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: env.HAS_APT_KEY == 'true'
+
+      # nfpm, for the keyring package, through go run at the Makefile's version.
+      - uses: actions/setup-go@v6
+        if: env.HAS_APT_KEY == 'true'
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Build the site from the releases
+        id: site
+        if: env.HAS_APT_KEY == 'true'
+        env:
+          APT_KEY: ${{ secrets.MASSIMO_APT_KEY }}
+          APT_KEY_PASSPHRASE: ${{ secrets.MASSIMO_APT_KEY_PASSPHRASE }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
+          printf '%s\n' "$APT_KEY" | gpg --batch --quiet --import
+          key="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')"
+          command -v apt-ftparchive >/dev/null || sudo apt-get -qq install -y apt-utils
+          packaging/apt/publish.sh --out site --key "$key"
+          echo "built=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-pages-artifact@v4
+        if: env.HAS_APT_KEY == 'true'
+        with:
+          path: site
+
+  # Pages deploys from the artifact; the repository's Pages source must
+  # be "GitHub Actions" (a setting of the owner's).
+  apt-deploy:
+    name: Deploy the apt repository
+    needs: apt-build
+    if: needs.apt-build.outputs.built == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

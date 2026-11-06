@@ -220,6 +220,9 @@ creates the user and `/etc/massimo/env` to fill in,
 and owns the binary from then on:
 the web UI and `massimo update` say when a release is out and apt installs it,
 `apt purge massimo` removes everything.
+The project's apt repository makes that an `apt upgrade`:
+one suite per update channel, the snippet in
+[The apt repository](packaging/README.md#the-apt-repository).
 Details: [Debian package](packaging/README.md#debian-package).
 
 ### Windows

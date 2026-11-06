@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.2.0)
+# Massimo — CI Conventions (v1.3.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,8 +33,8 @@ There is no second pipeline.
 
 | Trigger | Jobs |
 |---------|------|
-| push to any branch, pull request | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI smoke test, then the screenshot set and its slideshow, uploaded as the artifact `ui-screenshots`); Guidelines (section 4) |
-| tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release |
+| push to any branch, pull request | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI smoke test, then the screenshot set and its slideshow, uploaded as the artifact `ui-screenshots`); Guidelines (section 4) |
+| tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the apt key set, rebuild the apt repository from the releases and deploy it to GitHub Pages |
 
 The web UI smoke test (`make ui-test`) and the screenshot set
 (`make ui-screenshots`) run in the Screenshots job,
@@ -103,6 +103,7 @@ follow COMMIT.md either and is not rewritten.
 | Name | Set where | Used by |
 |------|-----------|---------|
 | `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by `v*` tags only | release.yml, to sign the release manifest; its public half is `internal/update/release-key.pem` |
+| `MASSIMO_APT_KEY`, `MASSIMO_APT_KEY_PASSPHRASE` | the `signing` environment, once the owner has made the key (packaging/README.md, "The apt repository") | release.yml's `apt-build` job, to sign the apt suites; the site's `massimo.asc` is its public half; without them the apt jobs are skipped |
 | `GITHUB_TOKEN` | provided by GitHub | the release jobs to publish, the Windows and macOS jobs as `MASSIMO_GITHUB_TOKEN` for the release checks against the API's rate limit |
 
 Never echo any slice of a secret to the log.
@@ -123,6 +124,12 @@ Every release below 1.0.0 is a pre-release on GitHub.
 The boxes on the alpha channel (the Raspberry Pi) take a release through
 `massimo update` or the web UI;
 nothing in CI touches them.
+A release also carries a Debian package per architecture,
+and once the apt key is set the `apt-build` job rebuilds the apt repository from
+the newest ten releases of every channel (`packaging/apt/publish.sh`,
+one suite per channel) and `apt-deploy` puts it on the project's GitHub Pages,
+whose source must be set to GitHub Actions;
+a box following a suite takes the release through `apt upgrade`.
 
 ## 7. Runner Constraints
 

@@ -14,6 +14,10 @@ the next minor, a fix counts the suffix up.
   installed with apt, which then owns the binary: `massimo update` and
   the web UI show what is out (packaging/README.md, "Debian package").
 
+- An apt repository on the project's GitHub Pages, one suite per update
+  channel, signed with the repository key, with the keyring package;
+  `apt upgrade` then follows the channel (packaging/README.md).
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

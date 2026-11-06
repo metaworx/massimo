@@ -29,7 +29,7 @@ if grep '^ExecStart=' "$unit" | grep -q -- '-update-request'; then fail "the uni
 [ -L /etc/systemd/system/multi-user.target.wants/massimo.service ] || fail "the unit is not enabled"
 [ "$(head -n 1 /usr/share/massimo/packaged)" = apt ] || fail "the marker does not say apt"
 [ -f /usr/share/doc/massimo/copyright ] || fail "no copyright file"
-massimo version | grep -q '^massimo ' || fail "massimo version"
+grep -q '^massimo ' <<<"$(massimo version)" || fail "massimo version"
 
 # On a packaged box massimo install only configures, and refuses to remove.
 out=$(massimo install -dry-run 2>&1) || fail "install -dry-run failed: $out"

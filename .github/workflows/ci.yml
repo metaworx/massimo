@@ -130,8 +130,9 @@ jobs:
   # the three architectures as `make release` builds it, then the amd64
   # one installed, checked and purged in a Debian container
   # (packaging/deb/test.sh), on trixie and on bookworm, which the
-  # Raspberry Pi OS Legacy images run. A container has no systemd, so
-  # the start on a real box is not covered here.
+  # Raspberry Pi OS Legacy images run, and installed again from an apt
+  # repository built with a throwaway key (packaging/apt/test.sh). A
+  # container has no systemd, so the start on a real box is not covered.
   deb:
     name: Debian package (${{ matrix.image }})
     runs-on: ubuntu-latest
@@ -154,6 +155,14 @@ jobs:
 
       - name: Install, check and purge in a container
         run: make deb-test DEB_IMAGE=${{ matrix.image }}
+
+      # The apt repository (packaging/README.md, "The apt repository")
+      # built from the packages with a throwaway key, verified, and
+      # installed from in the same container image.
+      - name: Build an apt repository with a throwaway key and install from it
+        run: |
+          command -v apt-ftparchive >/dev/null || sudo apt-get -qq install -y apt-utils
+          make apt-test DEB_IMAGE=${{ matrix.image }}
 
       - uses: actions/upload-artifact@v6
         if: matrix.image == 'debian:trixie-slim'
