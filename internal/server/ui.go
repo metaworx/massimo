@@ -34,7 +34,7 @@ var uiPartials = []struct {
 	files  []string
 }{
 	{"settings", []string{"cubes.html", "users.html", "roles.html", "appearance.html", "page.html", "software.html"}},
-	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "found.html", "scheme.html", "log.html", "users-panel.html", "roles-panel.html"}},
+	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "roles-panel.html"}},
 }
 
 // uiPage assembles the page: index.html, the skeleton, with each marker

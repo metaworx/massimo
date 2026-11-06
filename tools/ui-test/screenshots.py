@@ -271,7 +271,7 @@ def step(page, which):
         page.locator("#view-settings").click()
         panel = page.locator(".cube-panel[data-serial='KEQ0537249']")
         panel.locator("summary").click()
-        panel.locator("form").wait_for(state="visible")
+        panel.locator("form.cube-form").wait_for(state="visible")
         page.locator(".cube-found-row[data-serial='KEQ0000000']").wait_for(state="visible")
         to_top(page, page.locator("#settings .cubes-settings"))
     else:

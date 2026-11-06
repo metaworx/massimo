@@ -342,6 +342,22 @@ by its time or by `x:`; the metadata does not change by pairing;
 commands such as `c:` work while the mode lasts.
 Massimo also ends the mode itself ten seconds after the requested time.
 
+Massimo gives a thermostat it puts into a room, after pairing or in a move
+(`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),
+the room's settings as in steps 4 to 7:
+0x40 auto with temperature 0 directly to the device (flags 0, room 0,
+as in the log above),
+0x11 to every thermostat of the room with the values of its first other thermostat,
+each keeping its own offset, 0x12 to the device,
+and 0x10 only for the days that differ from the device's own,
+then 0x11 to the device; `"copy": false` skips it.
+The payloads and the order of steps 4 to 7 are the original software's,
+but Massimo writes the metadata (step 8) before them, with the links.
+That a device which was in a room before takes the direct 0x40 is *unverified*,
+since a direct 0x40 to a room member was discarded on 2026-11-04 (below):
+Massimo sends it without the error reset and the retry,
+and its discard ends nothing but says so in the answer.
+
 Moving a device to another room (same software,
 wall thermostat from room 4 to room 5): wakeup of the old room,
 0x23 remove group (`… 23 … 15667d 00 04`),
@@ -433,6 +449,12 @@ logged as `arrangeNewDevice`, `removeDevices`,
 unnamed, and a power cycle of the Cube did not drop them.
 The FHEM project notes that `t:` makes the Cube send a factory reset to the device,
 so a device that never answers is apparently never dropped.
+Massimo deletes a device the same way (`DELETE /api/v1/cubes/{sn}/devices/{rf}`,
+2026-11-06):
+wakeup, 0x21 per partner in both directions and 0x23 for a device in a room,
+`t:01,1,<rf>`, `m:` without it, and its copy forgets the device on the `A:`.
+That a device which answers is dropped from the C lines and the next `L:` is
+*unverified* on hardware.
 
 Which room such a device blocks is decided by the room byte of its own C line,
 not by the metadata (experiment 2026-11-04, one never-reporting device 001867):

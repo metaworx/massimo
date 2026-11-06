@@ -1,0 +1,48 @@
+<!-- Pairing in a Cube's panel of Settings → Cubes, cubes.js; and the form that puts a device that is in no room into one, there and under Devices without a room, tiles.js. -->
+<template id="tpl-pairing">
+  <div class="cube-pairing needs-pair">
+    <button type="button" class="pair-open" data-i18n="pairing.open">Pair a device</button>
+    <form class="pairing-form">
+      <div class="field">
+        <label data-i18n="pairing.seconds">Pairing time</label>
+        <span class="inline field-control"><input type="number" name="seconds" min="1" max="600" step="1" value="60"> <span class="muted" data-i18n="settings.seconds">s</span></span>
+      </div>
+      <p class="muted small pairing-how" data-i18n="pairing.how">Start puts the Cube into pairing mode. Then press the pairing button of the new device, as its manual says; each device that joins is listed here.</p>
+      <div class="actions">
+        <span class="actions-right"><button type="button" class="pair-cancel" data-i18n="action.cancel">Cancel</button><button type="submit" class="primary" data-i18n="pairing.start">Start</button></span>
+      </div>
+    </form>
+    <div class="pairing-running">
+      <p class="pairing-countdown" role="status"></p>
+      <div class="actions">
+        <span class="actions-right"><button type="button" class="pair-stop" data-i18n="pairing.stop">Stop</button></span>
+      </div>
+    </div>
+    <p class="small pairing-msg hidden" role="status"></p>
+    <div class="pairing-devices"></div>
+  </div>
+</template>
+
+<template id="tpl-pair-device">
+  <form class="pair-device-form needs-structure">
+    <div class="field wide needs-rename">
+      <label data-i18n="cfg.name">Name</label>
+      <input type="text" name="name" class="field-control" maxlength="32" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field wide">
+      <label data-i18n="cfg.room">Room</label>
+      <select name="room" class="field-control"></select>
+    </div>
+    <div class="field pair-copy needs-configure">
+      <label class="switch">
+        <input type="checkbox" name="copy" checked>
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="pairing.copy">Copy the room's settings</span>
+      </label>
+    </div>
+    <p class="small pair-result hidden" role="status"></p>
+    <div class="actions">
+      <span class="actions-right"><button type="button" class="pair-device-cancel" data-i18n="action.cancel">Cancel</button><button type="submit" class="primary" data-i18n="pairing.put">Put into a room</button></span>
+    </div>
+  </form>
+</template>

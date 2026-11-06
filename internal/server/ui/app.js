@@ -841,14 +841,32 @@ async function connectEvents() {
     if (!initial) appendLogEvent(data);
   });
   const logged = (handler) => (ev) => {
-    appendLogEvent(JSON.parse(ev.data));
-    handler();
+    const data = JSON.parse(ev.data);
+    appendLogEvent(data);
+    handler(data);
   };
   es.addEventListener("hello", logged(() => loadCubes()));
   es.addEventListener("metadata", logged(() => loadRooms()));
+  // Pairing (cubes.js): a device that joined is among the devices
+  // without a room once the server read its C line, which the reload
+  // after its config event finds as well.
+  const serial = state.serial;
+  es.addEventListener("pairing_started", logged(() => pairingEvent(serial)));
+  es.addEventListener("pairing_ended", logged(() => pairingEvent(serial)));
+  es.addEventListener("paired", (ev) => {
+    const data = JSON.parse(ev.data);
+    appendLogEvent(data);
+    pairingJoined(serial, data.paired);
+    loadRooms().catch(() => {});
+  });
+  es.addEventListener("device_forgotten", logged(() => loadRooms()));
   es.addEventListener("connected", logged(() => refresh()));
   es.addEventListener("disconnected", logged(() => loadCubes()));
-  es.addEventListener("config", logged(() => {}));
+  es.addEventListener("config", logged((data) => {
+    // a device that just joined pairing: its C line makes it a device without a room
+    if (data && data.device && !state.unlisted.some((d) => d.rf_address === data.device) &&
+        !state.rooms.some((r) => r.devices.some((d) => d.rf_address === data.device))) loadRooms().catch(() => {});
+  }));
   es.addEventListener("cube_found", (ev) => {
     const data = JSON.parse(ev.data);
     appendLogEvent(data);
