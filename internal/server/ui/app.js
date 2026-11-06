@@ -528,8 +528,8 @@ function addFound(c) {
 }
 
 // renderFound lists, under the header, the Cubes found on the LAN that
-// the server does not serve, each with Add (cubes.js), which serves it
-// at once, and the other way to add them: the lines for the server's
+// the server does not serve, each with Add (foundRow, cubes.js), which
+// serves it at once, and the other way to add them: the lines for the server's
 // env file, ready to copy. The address makes serve take the Cube; a
 // name alone would as well, serve then follows the address the Cube
 // answers discovery from.
@@ -541,21 +541,8 @@ function renderFound() {
   box.querySelector("summary").textContent = tn("discover.found", n);
   const body = box.querySelector(".cube-found-body");
   clear(body);
-  const list = document.createElement("ul");
-  for (const c of state.found) {
-    const li = document.createElement("li");
-    li.appendChild(textEl("span", c.serial, "mono"));
-    const facts = [c.address, c.firmware ? t("budget.firmware") + " " + c.firmware : ""].filter((x) => x);
-    if (facts.length) li.appendChild(textEl("span", " · " + facts.join(" · ")));
-    const extra = [c.rf_address, c.mac].filter((x) => x);
-    if (extra.length) li.appendChild(textEl("span", " · " + extra.join(" · "), "mono expert-only"));
-    const age = ageEl(c.last_seen, false, true);
-    if (age) li.appendChild(age);
-    const add = button(t("cubes.add"), "add-cube", () => addCube(c.serial));
-    add.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
-    li.appendChild(add);
-    list.appendChild(li);
-  }
+  const list = elem("ul");
+  for (const c of state.found) list.appendChild(foundRow(c)); // cubes.js
   body.appendChild(list);
   body.appendChild(textEl("p", t("discover.hintAdd")));
   body.appendChild(textEl("p", t("discover.hint")));

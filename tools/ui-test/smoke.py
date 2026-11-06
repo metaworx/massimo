@@ -21,7 +21,8 @@ cube_found; a cube_found event adds another one live, and a refused
 search (stubbed 503) shows the server's message. A state event with
 changes shows in the log as what changed. In Settings → Cubes a name
 is saved and taken back from the settings file, hidden devices take
-their room's tile away and back, and a found Cube is added and removed.
+their room's tile away and back, and a found Cube is added and removed,
+Remove asking in the panel.
 In Settings → Appearance a
 scheme changes the computed --bg, the dark mode sets data-theme, the
 editor applies a colour live and keeps a saved scheme in the browser,
@@ -251,8 +252,13 @@ def cubes(page, label, lang):
         check(page.evaluate("state.serial") == "KEQ0537249", f"{label}: the selected Cube stays")
         other = page.locator(".cube-panel[data-serial='KEQ0000000']")
         other.locator("summary").click()
-        page.once("dialog", lambda d: d.accept())
         other.locator(".remove-cube").click()
+        confirm = other.locator(".confirm-box")
+        check(confirm.is_visible() and other.locator(".remove-cube").count() == 0, f"{label}: Remove asks in the panel")
+        confirm.locator(".confirm-no").click()
+        check(other.locator(".confirm-box").count() == 0 and other.locator(".remove-cube").is_visible(), f"{label}: Keep takes the question back")
+        other.locator(".remove-cube").click()
+        other.locator(".confirm-box .confirm-yes").click()
         check(wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5),
               f"{label}: Remove lists it as found again")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll in Settings → Cubes")

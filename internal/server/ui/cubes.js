@@ -21,11 +21,7 @@ const cubesUI = {
 
 // cubesMsg shows the outcome of the last action under the list.
 function cubesMsg(text, ok) {
-  const m = $("cubes-msg");
-  m.textContent = text || "";
-  m.classList.toggle("hidden", !text);
-  m.classList.toggle("ok", !!ok);
-  m.classList.toggle("bad", !ok);
+  showResult($("cubes-msg"), text, ok);
 }
 
 // cubesVisible reports whether the settings page is shown.
@@ -89,10 +85,18 @@ function addCube(serial) {
   return cubeAction(() => api("POST", "/api/v1/cubes", { serial }), t("cubes.added", { serial }), serial);
 }
 
-function removeCube(serial) {
-  if (!confirm(t("cubes.removeConfirm", { serial }))) return;
-  cubesUI.open.delete(serial);
-  return cubeAction(() => api("DELETE", "/api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
+// removeCube asks in the panel, in place of its actions, whether to stop
+// serving the Cube; Keep puts the actions back.
+function removeCube(serial, actions) {
+  const box = confirmBox(t("cubes.removeConfirm", { serial }), { yes: t("cubes.remove"), no: t("action.keep") }, () => {
+    cubesUI.open.delete(serial);
+    cubeAction(() => api("DELETE", "/api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
+  }, () => {
+    box.replaceWith(actions);
+    actions.querySelector(".remove-cube").focus();
+  });
+  actions.replaceWith(box);
+  box.focusFirst();
 }
 
 // cubeField is a labelled text input of a Cube panel, the hint its
@@ -112,27 +116,16 @@ function cubeField(c, name, labelKey, value, hintKey) {
 // and a field with the Cube's devices to hide another; the changes are
 // sent with Save.
 function hiddenEditor(c) {
-  const box = document.createElement("div");
-  box.className = "cube-hidden";
-  box.appendChild(textEl("span", t("cubes.hidden"), "cube-hidden-title"));
   const list = cubesUI.edits[c.serial] || (cubesUI.edits[c.serial] = [...(c.hidden || [])]);
-  const ul = document.createElement("ul");
-  ul.className = "cube-hidden-list";
+  const ul = elem("ul", "cube-hidden-list");
   if (!list.length) ul.appendChild(textEl("li", t("cubes.hiddenNone"), "muted small"));
   for (const rf of list) {
-    const li = document.createElement("li");
-    li.appendChild(textEl("span", deviceLabel(rf), "mono"));
-    const b = button(t("cubes.unhide"), "subtle", () => {
+    const show = button(t("cubes.unhide"), { cls: "subtle", aria: t("cubes.unhideLabel", { device: deviceLabel(rf) }) }, () => {
       cubesUI.edits[c.serial] = list.filter((x) => x !== rf);
       renderCubes();
     });
-    b.setAttribute("aria-label", t("cubes.unhideLabel", { device: deviceLabel(rf) }));
-    li.appendChild(b);
-    ul.appendChild(li);
+    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
   }
-  box.appendChild(ul);
-  const add = document.createElement("div");
-  add.className = "inline cube-hide-add";
   const input = document.createElement("input");
   input.type = "text";
   input.name = "hide";
@@ -141,7 +134,7 @@ function hiddenEditor(c) {
   input.spellcheck = false;
   input.setAttribute("aria-label", t("cubes.hideLabel"));
   input.placeholder = "0abc12";
-  const dl = document.createElement("datalist");
+  const dl = elem("datalist");
   dl.id = "cube-devices-" + c.serial;
   fillDatalist(dl, c.serial, list);
   input.setAttribute("list", dl.id);
@@ -161,22 +154,15 @@ function hiddenEditor(c) {
       hide();
     }
   });
-  add.append(input, dl, button(t("cubes.hide"), "", hide));
-  box.appendChild(add);
-  return box;
+  const add = elem("div", "inline cube-hide-add", input, dl, button(t("cubes.hide"), "", hide));
+  return elem("div", "cube-hidden", textEl("span", t("cubes.hidden"), "cube-hidden-title"), ul, add);
 }
 
 // fillDatalist offers the Cube's visible devices that are not hidden
 // yet in the hide field.
 function fillDatalist(dl, serial, hidden) {
-  clear(dl);
-  for (const d of cubesUI.devices[serial] || []) {
-    if (hidden.includes(d.rf_address)) continue;
-    const o = document.createElement("option");
-    o.value = d.rf_address;
-    o.label = d.name || d.rf_address;
-    dl.appendChild(o);
-  }
+  const devs = (cubesUI.devices[serial] || []).filter((d) => !hidden.includes(d.rf_address));
+  fillOptions(dl, devs.map((d) => [d.rf_address, d.name || d.rf_address]));
 }
 
 // devicesLoaded fills an open panel's device choice in place, so that
@@ -195,86 +181,38 @@ function sameList(a, b) {
 
 // cubePanel is one configured Cube.
 function cubePanel(c) {
-  const d = document.createElement("details");
-  d.className = "panel cube-panel";
-  d.dataset.serial = c.serial;
-  d.open = cubesUI.open.has(c.serial);
-  d.addEventListener("toggle", () => {
-    if (d.open) {
+  const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
+  if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
+  if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
+  const d = detailsPanel({ name: c.name ? c.name + " " : "", mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel", onToggle: (open) => {
+    if (open) {
       cubesUI.open.add(c.serial);
       if (!cubesUI.devices[c.serial]) loadCubeDevices(c.serial).then(() => devicesLoaded(c.serial));
     } else {
       cubesUI.open.delete(c.serial);
       delete cubesUI.edits[c.serial];
     }
-  });
-  const sum = document.createElement("summary");
-  sum.appendChild(textEl("span", c.name ? c.name + " " : "", "cube-panel-name"));
-  sum.appendChild(textEl("span", c.serial, "mono"));
-  const badges = document.createElement("span");
-  badges.className = "cube-badges";
-  badges.appendChild(badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn"));
-  if (c.source) badges.appendChild(badgeEl(t("cubes.source." + c.source), "mode"));
-  if ((c.file_differs || []).length) badges.appendChild(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
-  sum.appendChild(badges);
-  d.appendChild(sum);
+  } });
+  d.dataset.serial = c.serial;
 
   if (c.source === "flag" || !c.source) {
     d.appendChild(textEl("p", t("cubes.flagNote"), "muted small"));
     return d;
   }
   for (const fd of c.file_differs || []) {
-    const p = document.createElement("div");
-    p.className = "cube-differs";
-    p.appendChild(textEl("p", t("cubes.differs", { variable: fd.variable, file: valueText(fd.file), store: valueText(fd.store) }), "small"));
     const b = button(t("cubes.takeFile"), "take-file", () => saveCube(c.serial, { [fd.field]: fd.file }));
     b.dataset.field = fd.field;
-    p.appendChild(b);
-    d.appendChild(p);
+    const text = t("cubes.differs", { variable: fd.variable, file: valueText(fd.file), store: valueText(fd.store) });
+    d.appendChild(elem("div", "cube-differs", textEl("p", text, "small"), b));
   }
 
-  const form = document.createElement("form");
-  form.className = "cube-form";
-  form.appendChild(cubeField(c, "name", "cubes.name", c.name));
-  form.appendChild(cubeField(c, "address", "cubes.address", c.configured_address, "cubes.addressHint"));
-  const addr = form.querySelector("input[name=address]");
-  if (!c.configured_address && c.address) addr.placeholder = t("cubes.addressFound", { address: c.address });
-  const follow = document.createElement("div");
-  follow.className = "field";
-  const sw = document.createElement("label");
-  sw.className = "switch";
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.name = "follow";
-  cb.checked = !!c.follow_discovery;
-  const slider = document.createElement("span");
-  slider.className = "slider";
-  slider.setAttribute("aria-hidden", "true");
-  sw.append(cb, slider, textEl("span", t("cubes.follow"), "switch-label"));
-  follow.appendChild(sw);
-  form.appendChild(follow);
-  form.appendChild(cubeField(c, "proxy", "cubes.proxy", c.proxy_address, "cubes.proxyHint"));
-  if ((c.proxy_listening || []).length) {
-    form.appendChild(textEl("p", t("cubes.listening", { addr: c.proxy_listening.join(", ") }), "muted small cube-listening"));
-  }
-  form.appendChild(cubeField(c, "proxy_serial", "cubes.proxySerial", c.proxy_serial, "cubes.proxySerialHint"));
-  form.appendChild(hiddenEditor(c));
-
-  const actions = document.createElement("div");
-  actions.className = "actions";
-  const left = document.createElement("span");
-  left.className = "actions-left";
-  left.appendChild(button(t("cubes.remove"), "remove-cube", () => removeCube(c.serial)));
-  actions.append(left, submitButton(t("cubes.save")));
-  form.appendChild(actions);
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
+  const form = formEl(() => {
     const body = {};
     const name = form.querySelector("input[name=name]").value.trim();
     if (name !== (c.name || "")) body.name = name;
     const a = addr.value.trim();
     if (a !== (c.configured_address || "")) body.address = a;
-    if (cb.checked !== !!c.follow_discovery) body.follow_discovery = cb.checked;
+    if (follow.control.checked !== !!c.follow_discovery) body.follow_discovery = follow.control.checked;
     const proxy = form.querySelector("input[name=proxy]").value.trim();
     if (proxy !== (c.proxy_address || "")) body.proxy_address = proxy;
     const ps = form.querySelector("input[name=proxy_serial]").value.trim();
@@ -286,21 +224,40 @@ function cubePanel(c) {
       return;
     }
     saveCube(c.serial, body);
-  });
+  }, "cube-form");
+  form.appendChild(cubeField(c, "name", "cubes.name", c.name));
+  form.appendChild(cubeField(c, "address", "cubes.address", c.configured_address, "cubes.addressHint"));
+  const addr = form.querySelector("input[name=address]");
+  if (!c.configured_address && c.address) addr.placeholder = t("cubes.addressFound", { address: c.address });
+  const follow = switchEl(t("cubes.follow"), c.follow_discovery, null, "follow");
+  form.appendChild(fieldRow(null, follow));
+  form.appendChild(cubeField(c, "proxy", "cubes.proxy", c.proxy_address, "cubes.proxyHint"));
+  if ((c.proxy_listening || []).length) {
+    form.appendChild(textEl("p", t("cubes.listening", { addr: c.proxy_listening.join(", ") }), "muted small cube-listening"));
+  }
+  form.appendChild(cubeField(c, "proxy_serial", "cubes.proxySerial", c.proxy_serial, "cubes.proxySerialHint"));
+  form.appendChild(hiddenEditor(c));
+  const remove = button(t("cubes.remove"), "remove-cube", () => removeCube(c.serial, actions));
+  const actions = formFooter({ submit: t("cubes.save"), extra: [remove] });
+  form.appendChild(actions);
   d.appendChild(form);
   return d;
 }
 
-// foundRow is a Cube found on the LAN with its Add button.
+// foundRow is a Cube found on the LAN: its serial, address and firmware,
+// in expert mode its radio and MAC address, how long ago it answered, and
+// Add (addCube), which serves it at once; the header's list of found
+// Cubes (app.js) and Settings → Cubes show it.
 function foundRow(c) {
-  const li = document.createElement("li");
-  li.className = "cube-found-row";
+  const li = elem("li", "", textEl("span", c.serial, "mono"));
   li.dataset.serial = c.serial;
-  li.appendChild(textEl("span", c.serial, "mono"));
-  if (c.address) li.appendChild(textEl("span", " · " + c.address));
-  const b = button(t("cubes.add"), "add-cube", () => addCube(c.serial));
-  b.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
-  li.appendChild(b);
+  const facts = [c.address, c.firmware ? t("budget.firmware") + " " + c.firmware : ""].filter((x) => x);
+  if (facts.length) li.appendChild(textEl("span", " · " + facts.join(" · ")));
+  const extra = [c.rf_address, c.mac].filter((x) => x);
+  if (extra.length) li.appendChild(textEl("span", " · " + extra.join(" · "), "mono expert-only"));
+  const age = ageEl(c.last_seen, false, true);
+  if (age) li.appendChild(age);
+  li.appendChild(button(t("cubes.add"), { cls: "add-cube", aria: t("cubes.addLabel", { serial: c.serial }) }, () => addCube(c.serial)));
   return li;
 }
 
@@ -313,9 +270,12 @@ function renderCubes() {
   for (const c of state.cubes) box.appendChild(cubePanel(c));
   if (state.found.length) {
     box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title"));
-    const ul = document.createElement("ul");
-    ul.className = "cube-found-list";
-    for (const c of state.found) ul.appendChild(foundRow(c));
+    const ul = elem("ul", "cube-found-list");
+    for (const c of state.found) {
+      const li = foundRow(c);
+      li.classList.add("cube-found-row");
+      ul.appendChild(li);
+    }
     box.appendChild(ul);
   }
 }

@@ -22,6 +22,15 @@ function textEl(tag, text, cls) {
   return el;
 }
 
+// elem is an element of a tag with a class and children (elements, or
+// strings, which become text).
+function elem(tag, cls, ...children) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  e.append(...children);
+  return e;
+}
+
 // buttonOpts reads the options of button and iconButton: a string is the
 // class; an object gives cls, aria (the accessible name, when the text
 // alone does not say it) and title (the tooltip).
