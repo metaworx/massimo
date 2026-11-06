@@ -611,6 +611,53 @@ each frame `length16` + data,
 the content has the entropy of ciphertext and the key lives in the Cube's bootloader,
 so the firmware cannot be analysed from the software alone.
 
+## Lessons from the hardware days
+
+What the days at the Cube taught beyond the protocol lines,
+kept here because they cost time to learn.
+
+- A Cube with a client drops a second client's SYNs silently:
+  a direct test connection times out and looks like a dead Cube.
+  Test through the proxy.
+- A Cube that moved networks or booted during an unstable network can answer
+  ping but not TCP 62910 or UDP 23272; a power cycle fixes it.
+- Removing the IP address `serve` used as its source before restarting `serve`
+  leaves the Cube holding a dead session, since the FIN cannot be sent;
+  the Cube needed a power cycle.
+  Restart `serve` first, then change addresses.
+  Linux picks the first static address on the interface as the source for Cube
+  connections, not the DHCP one.
+- Two routers on the same 192.168.1.0/24 (wired and Wi-Fi) on one box make
+  routing ambiguous; the Wi-Fi side needed SO_BINDTODEVICE.
+- A Cube restart drops undelivered radiograms.
+  A device move whose radiograms are lost leaves the metadata right and the
+  device's links half done; the only sign is the device's link_error flag,
+  and the fix is repeating the move.
+- A window contact fetches radiograms only right after it transmits
+  and not always all at once: a move needed two window cycles per direction,
+  with an error reset first.
+  Read the pending count fresh from the Cube to know when a move is done.
+- Functional link check for a contact: window open,
+  that room's thermostat goes to its window-open temperature within a minute,
+  other rooms do not react, and it goes back after closing.
+- Cost: about 1.25 % duty cycle per radio configuration write,
+  about 8 % per device move; 1 % per hour is about 36 s of air time.
+- The Cube sends its H line (budget, free slots,
+  hence pending radiograms) only when a connection starts and in S replies;
+  no command asks for it.
+  The Cube changes a device's C line only after the device acknowledged (1 to 4 min);
+  the setpoint shows in L at once, the mode only with the device's report.
+- The Cube answers UDP discovery only to port 23272,
+  whatever the request's source port, so on the box running `serve`,
+  `massimo discover` sees only `serve`'s own proxy answer;
+  use `POST /api/v1/cubes/discover` there.
+  GitHub creates no push event for more than three tags pushed at once,
+  which is unrelated to Cubes but was learned the same night.
+- After a Cube restart, the eco switch stays "not reported" until someone presses it;
+  harmless.
+- The original MAX! software cannot find a Cube again in the same run after it
+  moved the Cube to a static address; a restart of the software does.
+
 ## Open questions
 
 - Does `i:00000000,00000000` start the Cube's polling immediately,
