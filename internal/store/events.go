@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,8 +45,11 @@ var (
 	pruneEvery  = 24 * time.Hour   // between two prunes
 	pruneChunk  = 5000             // rows a prune deletes per statement
 	warnEvery   = time.Minute      // between two warnings of one kind
-	eventsQuiet = 10 * time.Second // how long FlushEvents waits for a writer that is gone
+	eventsQuiet = 10 * time.Second // how long FlushEvents waits for the writer's answer
 )
+
+// pruneStep runs after each chunk of a prune, nil but in the tests.
+var pruneStep func()
 
 // MaxEventsPage is the most events a page of Events holds.
 const MaxEventsPage = 1000
@@ -188,8 +192,28 @@ func (s *Store) RunEvents(ctx context.Context) {
 			}
 		}
 	}
+	// Between two chunks of a prune the writer goes on with its work: it
+	// answers a flush, writes what is due, and ends the prune once ctx is
+	// done, so that neither a read nor a shutdown waits for all of it.
+	between := func() bool {
+		drain()
+		select {
+		case reply := <-w.flush:
+			reply <- write()
+		case <-due:
+			write()
+		default:
+			if len(batch) >= flushAt {
+				write()
+			} else if len(batch) > 0 && due == nil {
+				timer = time.NewTimer(flushAfter)
+				due = timer.C
+			}
+		}
+		return ctx.Err() == nil
+	}
 	prune := func() {
-		if _, err := s.PruneEvents(context.WithoutCancel(ctx), s.now()); err != nil && s.warn("prune") {
+		if _, err := s.pruneEvents(context.WithoutCancel(ctx), s.now(), between); err != nil && s.warn("prune") {
 			s.log.Error("store: events not pruned", "error", err)
 		}
 	}
@@ -265,7 +289,8 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 }
 
 // FlushEvents asks the writer to write what is pending and waits until
-// it is readable; without a writer it returns at once.
+// it is readable; without a writer it returns at once, and it gives up
+// after eventsQuiet, the handover to the writer included.
 func (s *Store) FlushEvents(ctx context.Context) error {
 	w := &s.ev
 	w.mu.Lock()
@@ -274,6 +299,8 @@ func (s *Store) FlushEvents(ctx context.Context) error {
 	if done == nil {
 		return nil
 	}
+	quiet := time.NewTimer(eventsQuiet)
+	defer quiet.Stop()
 	reply := make(chan error, 1)
 	select {
 	case w.flush <- reply:
@@ -281,13 +308,15 @@ func (s *Store) FlushEvents(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-quiet.C:
+		return errors.New("store: the events writer did not answer")
 	}
 	select {
 	case err := <-reply:
 		return err
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(eventsQuiet):
+	case <-quiet.C:
 		return errors.New("store: the events writer did not answer")
 	}
 }
@@ -316,6 +345,12 @@ func (s *Store) LogKeepDays(ctx context.Context) (int, error) {
 // PruneEvents removes the events older than log.keep_days before now,
 // per Cube and in chunks, and returns how many it removed.
 func (s *Store) PruneEvents(ctx context.Context, now time.Time) (int, error) {
+	return s.pruneEvents(ctx, now, nil)
+}
+
+// pruneEvents is PruneEvents with between, when given, run after each
+// chunk that removed rows; the prune stops where it returns false.
+func (s *Store) pruneEvents(ctx context.Context, now time.Time, between func() bool) (int, error) {
 	if err := s.writable(); err != nil {
 		return 0, err
 	}
@@ -338,7 +373,8 @@ func (s *Store) PruneEvents(ctx context.Context, now time.Time) (int, error) {
 		cubes = append(cubes, id)
 	}
 	rows.Close()
-	removed := 0
+	removed, stopped := 0, false
+cubes:
 	for _, cube := range cubes {
 		for {
 			res, err := s.db.ExecContext(ctx, `DELETE FROM events WHERE id IN (SELECT id FROM events WHERE cube_id = ? AND time < ? LIMIT ?)`, cube, cutoff, pruneChunk)
@@ -347,13 +383,20 @@ func (s *Store) PruneEvents(ctx context.Context, now time.Time) (int, error) {
 			}
 			n, _ := res.RowsAffected()
 			removed += int(n)
+			if pruneStep != nil {
+				pruneStep()
+			}
 			if n == 0 {
 				break
 			}
+			if between != nil && !between() {
+				stopped = true
+				break cubes
+			}
 		}
 	}
-	if removed > 0 {
-		s.log.Info("events pruned", "removed", removed, "keep_days", days)
+	if removed > 0 || stopped {
+		s.log.Info("events pruned", "removed", removed, "keep_days", days, "stopped", stopped)
 	}
 	return removed, nil
 }
@@ -366,14 +409,8 @@ func (s *Store) Events(ctx context.Context, q EventQuery) ([]Event, error) {
 	if limit <= 0 || limit > MaxEventsPage {
 		limit = MaxEventsPage
 	}
-	before := ""
-	if !q.Before.IsZero() {
-		before = formatTime(q.Before)
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, cube_id, time, kind, device, data FROM events
-		WHERE cube_id = ? AND (? = 0 OR id < ?) AND (? = '' OR time < ?) AND (? = '' OR kind = ?) AND (? = '' OR device = ?)
-		ORDER BY id DESC LIMIT ?`,
-		q.CubeID, q.BeforeID, q.BeforeID, before, before, q.Kind, q.Kind, q.Device, q.Device, limit)
+	query, args := eventsQuery(q, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: events: %w", err)
 	}
@@ -390,4 +427,29 @@ func (s *Store) Events(ctx context.Context, q EventQuery) ([]Event, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// eventsQuery is the SELECT of a page with only the terms q gives, every
+// value bound, so that SQLite walks one index of migration 0004 in id
+// order from the end instead of sorting all of the Cube's rows. A time
+// bound becomes an id bound first, the newest id before that time, and
+// stays a filter without its index (+time), which keeps the id order.
+func eventsQuery(q EventQuery, limit int) (string, []any) {
+	where, args := []string{"cube_id = ?"}, []any{q.CubeID}
+	if q.BeforeID > 0 {
+		where, args = append(where, "id < ?"), append(args, q.BeforeID)
+	}
+	if !q.Before.IsZero() {
+		at := formatTime(q.Before)
+		where = append(where, "id <= (SELECT max(id) FROM events WHERE cube_id = ? AND time < ?)", "+time < ?")
+		args = append(args, q.CubeID, at, at)
+	}
+	if q.Kind != "" {
+		where, args = append(where, "kind = ?"), append(args, q.Kind)
+	}
+	if q.Device != "" {
+		where, args = append(where, "device = ?"), append(args, q.Device)
+	}
+	return `SELECT id, cube_id, time, kind, device, data FROM events WHERE ` + strings.Join(where, " AND ") +
+		` ORDER BY id DESC LIMIT ?`, append(args, limit)
 }

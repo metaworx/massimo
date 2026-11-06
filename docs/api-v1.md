@@ -1349,6 +1349,12 @@ A Cube served for this run only, without a row in the store (`serve -addr`,
 or `-sn` before discovery noted it), keeps its last 500 events in memory,
 without `id`, as before the store;
 `before` then takes a time, and an `id` answers an empty page.
+Such a Cube that gains its row while it runs, as discovery notes it,
+answers from the store from then on,
+and the events it kept in memory leave the log.
+A device hidden later keeps its events in the log until `log.keep_days` removes them.
+A page before a time first looks up the newest event before it,
+which reads the Cube's times up to there: an `id` is the quicker cursor.
 `400` for a bad `before`, `limit` or `device`.
 
 ### GET /api/v1/cubes/{sn}/events

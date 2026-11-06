@@ -10,8 +10,8 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
-- The store keeps the Cubes' events, written in batches of one
-  transaction and pruned daily by `log.keep_days` in `/api/v1/settings`
+- The store keeps the Cubes' events (migration 0004), written in
+  batches and pruned daily by `log.keep_days` in `/api/v1/settings`
   (30 days; 0 keeps them), so that the log survives a restart.
 
 - The web UI's log pages back with "Older events" and shows one kind
@@ -21,8 +21,8 @@ the next minor, a fix counts the suffix up.
 ### Changed
 
 - `GET …/log` pages back with `before` (an event's `id` or a time) and
-  filters by `kind` and `device`, from the store instead of the last 500
-  events in memory (`docs/api-v1.md`).
+  filters by `kind` and `device`, from the store; a `limit` above 1000
+  answers 400, and `state` events lack `received` (`docs/api-v1.md`).
 
 ## [0.9.0-alpha.1] - 2026-11-06
 

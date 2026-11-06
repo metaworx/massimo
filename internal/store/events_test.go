@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -265,9 +267,226 @@ func TestEventsPruned(t *testing.T) {
 	if n, _ := s.PruneEvents(ctx, now); n != 0 {
 		t.Fatalf("a second prune removed %d", n)
 	}
-	s.PruneEventsSoon()
-	s.PruneEventsSoon() // one pending is enough
+
+	// A request prunes now: the two events older than the retention go.
+	s.AddEvent(ev(a.ID, t0, "state", "", 100))
+	s.AddEvent(ev(b.ID, t0, "state", "", 100))
 	flush(t, s)
+	s.PruneEventsSoon()
+	s.PruneEventsSoon()
+	cutoff := now.Add(-time.Duration(DefaultLogKeepDays) * 24 * time.Hour)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		pa, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Before: cutoff})
+		pb, _ := s.Events(ctx, EventQuery{CubeID: b.ID, Before: cutoff})
+		if len(pa)+len(pb) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("PruneEventsSoon left %d and %d", len(pa), len(pb))
+		}
+	}
+	// Without a writer, a request while one is pending adds nothing.
+	idle := open(t, t.TempDir())
+	idle.PruneEventsSoon()
+	idle.PruneEventsSoon()
+	if n := len(idle.ev.prune); n != 1 {
+		t.Fatalf("%d requests pending", n)
+	}
+}
+
+// stateData is a state event of the shape the log keeps, about 420
+// bytes of JSON.
+const stateData = `{"kind":"state","device":"0abc01","time":"2026-11-06T10:00:00.000+01:00","state":{"rf_address":"0abc01","name":"Radiator 1","type":"radiator thermostat","room_id":1,"room":"Room 1","mode":"auto","setpoint":20.5,"temperature":21.3,"valve_pct":30,"battery_low":false,"window_open":false,"link_error":false,"panel_locked":false,"stale":false},"changes":{"valve_pct":{"from":20,"to":30}}}`
+
+// fill writes n events of a Cube straight into the table, step apart
+// from start: one in 500 connected, one in 97 config, the others state,
+// over thirty devices.
+func fill(t *testing.T, s *Store, cube int64, n int, start time.Time, step time.Duration) {
+	t.Helper()
+	_, err := s.db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ? - 1)
+		INSERT INTO events (uuid, cube_id, time, kind, device, data)
+		SELECT printf('fill-%d-%d-%d', ?, ?, i), ?, strftime('%Y-%m-%dT%H:%M:%fZ', ? + i * ?, 'unixepoch'),
+			CASE WHEN i % 500 = 0 THEN 'connected' WHEN i % 97 = 0 THEN 'config' ELSE 'state' END,
+			printf('0abc%02d', i % 30), ? FROM n`,
+		n, cube, start.UnixMilli(), cube, float64(start.UnixMilli())/1000, step.Seconds(), stateData)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A page reads one index of migration 0004 in id order, whatever its
+// terms, instead of sorting every one of the Cube's rows (the review of
+// 2026-11-06: 1.3 s a page at 90,000 events); each page holds what its
+// terms ask, newest first, and a page by time is the events before it.
+// 90,000 events of one Cube beside 10,000 of another, 3000 under -short;
+// the time of each page is logged.
+func TestEventsPageQuery(t *testing.T) {
+	s, a, b := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	n := 90000
+	if testing.Short() {
+		n = 3000
+	}
+	start := time.Now().UTC().Add(-30 * 24 * time.Hour).Truncate(time.Second)
+	step := 30 * 24 * time.Hour / time.Duration(n)
+	fill(t, s, a.ID, n, start, step)
+	fill(t, s, b.ID, n/9, start, 9*step)
+	mid := start.Add(15 * 24 * time.Hour)
+	shapes := []struct {
+		name string
+		q    EventQuery
+	}{
+		{"none", EventQuery{CubeID: a.ID}},
+		{"id", EventQuery{CubeID: a.ID, BeforeID: int64(n / 2)}},
+		{"time", EventQuery{CubeID: a.ID, Before: mid}},
+		{"kind", EventQuery{CubeID: a.ID, Kind: "connected"}},
+		{"kind and id", EventQuery{CubeID: a.ID, Kind: "connected", BeforeID: int64(n / 2)}},
+		{"device", EventQuery{CubeID: a.ID, Device: "0abc07"}},
+		{"kind and device", EventQuery{CubeID: a.ID, Kind: "state", Device: "0abc07"}},
+		{"time and device", EventQuery{CubeID: a.ID, Device: "0abc07", Before: mid}},
+		{"the other Cube", EventQuery{CubeID: b.ID}},
+	}
+	for _, sh := range shapes {
+		query, args := eventsQuery(sh.q, 200)
+		rows, err := s.db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+query, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		rows.Close()
+		joined := strings.Join(plan, "; ")
+		if strings.Contains(joined, "TEMP B-TREE") || strings.Contains(joined, "SCAN events") {
+			t.Errorf("%s: %s", sh.name, joined)
+		}
+		q := sh.q
+		q.Limit = 200
+		began := time.Now()
+		page, err := s.Events(ctx, q)
+		took := time.Since(began)
+		if err != nil || len(page) == 0 {
+			t.Fatalf("%s: %d events, %v", sh.name, len(page), err)
+		}
+		for i, e := range page {
+			if e.CubeID != q.CubeID || (q.Kind != "" && e.Kind != q.Kind) || (q.Device != "" && e.Device != q.Device) ||
+				(q.BeforeID > 0 && e.ID >= q.BeforeID) || (!q.Before.IsZero() && !e.Time.Before(q.Before)) ||
+				(i > 0 && e.ID >= page[i-1].ID) {
+				t.Fatalf("%s: event %d: %+v", sh.name, i, e)
+			}
+		}
+		t.Logf("%-16s %3d events in %8v: %s", sh.name, len(page), took, joined)
+	}
+	page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Before: mid, Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM events WHERE cube_id = ? AND time < ? ORDER BY id DESC LIMIT 5`, a.ID, formatTime(mid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for i := 0; rows.Next(); i++ {
+		var id int64
+		rows.Scan(&id)
+		if i >= len(page) || page[i].ID != id {
+			t.Fatalf("the page before %v: %+v, event %d is %d", mid, page, i, id)
+		}
+	}
+}
+
+// A prune hands over between its chunks: a flush during it is answered,
+// the event written, while the prune goes on to the end.
+func TestEventsPruneYields(t *testing.T) {
+	keep := pruneChunk
+	pruneChunk = 10
+	// Registered before the writer starts, so run after it stopped.
+	t.Cleanup(func() { pruneChunk, pruneStep = keep, nil })
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	a, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill(t, s, a.ID, 500, time.Now().Add(-60*24*time.Hour), time.Second)
+	var steps, after atomic.Int32
+	var flushed atomic.Bool
+	inPrune := make(chan struct{})
+	pruneStep = func() {
+		if steps.Add(1) == 1 {
+			close(inPrune)
+		}
+		if flushed.Load() {
+			after.Add(1)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	startWriter(t, s)
+	select {
+	case <-inPrune:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no prune at the writer's start")
+	}
+	s.AddEvent(ev(a.ID, time.Now(), "hello", "", 1))
+	flush(t, s)
+	flushed.Store(true)
+	if page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Kind: "hello"}); len(page) != 1 {
+		t.Fatalf("the flush during the prune: %d events", len(page))
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Kind: "state", Limit: 1}); len(page) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the prune did not end")
+		}
+	}
+	if after.Load() == 0 {
+		t.Fatalf("the flush waited for the whole prune (%d chunks)", steps.Load())
+	}
+}
+
+// A done ctx ends a prune between two chunks; the writer's last write
+// still follows.
+func TestEventsPruneStops(t *testing.T) {
+	keep := pruneChunk
+	pruneChunk = 10
+	t.Cleanup(func() { pruneChunk, pruneStep = keep, nil })
+	s := open(t, t.TempDir())
+	a, err := s.AddCube(context.Background(), Cube{Serial: "KEQ0000001", Configured: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill(t, s, a.ID, 500, time.Now().Add(-60*24*time.Hour), time.Second)
+	s.AddEvent(ev(a.ID, time.Now(), "hello", "", 1)) // queued before the writer runs
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var steps atomic.Int32
+	pruneStep = func() {
+		if steps.Add(1) == 2 {
+			cancel()
+		}
+	}
+	done := make(chan struct{})
+	go func() { s.RunEvents(ctx); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the writer did not stop")
+	}
+	var left int
+	if err := s.db.QueryRow(`SELECT count(*) FROM events WHERE kind != 'hello'`).Scan(&left); err != nil || left != 480 {
+		t.Fatalf("%d left after two chunks (%d steps), %v", left, steps.Load(), err)
+	}
+	if page, _ := s.Events(context.Background(), EventQuery{CubeID: a.ID, Kind: "hello"}); len(page) != 1 {
+		t.Fatalf("the pending event: %d", len(page))
+	}
 }
 
 // TestEventSize measures what a state event of the measured shape costs

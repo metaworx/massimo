@@ -1,4 +1,4 @@
-# AP StoreLog v1.0: the log in the store
+# AP StoreLog v1.1: the log in the store
 
 ## TL;DR
 
@@ -6,32 +6,41 @@ Store stage (d): a Cube's events leave the ring of 500 in memory for the
 `events` table of `massimo.db`: written in batches by one goroutine,
 paged and filtered through `GET …/log`, pruned daily by `log.keep_days`,
 paged in the web UI with "Older" and filtered by kind and device.
+Blocks 1 to 3 are done; Blocks 4 to 6 fix what the review of 2026-11-06 found.
 
-- `remember` → `Store.AddEvent`, never blocking;
-  a flush at 100 events or 1 s, one transaction; a read flushes first
-- `GET …/log?before=&limit=&kind=&device=` → the page before an event's `id` or a time,
-  oldest first as today; the stream unchanged
-- `log.keep_days` → the settings API, 30 days, 0 keeps all;
-  a prune at the start, daily, on a change; never `VACUUM`
-- the ring → only without a store or a row (`-addr`)
-- stored copy without `state.received` → 0.4 KB a state event (measured)
-- UI → "Older", a kind and a device select, six languages;
-  Settings → Server waits for its plan
-- tests → store, server with the fake Cube, pytest
+- `remember` → `Store.AddEvent`, never blocking; a batch one transaction
+- `GET …/log?before=&limit=&kind=&device=` → the page before an `id` or a time
+- `log.keep_days` → 30 days, 0 keeps all; pruned at the start, daily,
+  on a change
+- a page → every row of the Cube sorted (1.3 s at 90,000) → the terms given only,
+  migration 0004's indexes in id order (1 to 3 ms)
+- a prune → blocking every read → yields to flushes and to a shutdown between chunks
+- the writer → stopping with the server's goroutines → after them
+- UI → late answers dropped, the device choice per Cube,
+  pages kept past 2000 lines, the error shown under a choice
+- the CHANGELOG's two incompatible changes, two behaviours documented,
+  the tests' gaps
 
-No analysis file: the Analysis below holds the findings of 2026-11-06.
-The decisions D1 to D7, each with a recommendation, are in the Discussion.
-Run order 1, 2, 3.
+The review: [ANALYSIS StoreLog](2026-11-06_22-38_ANALYSIS_StoreLog_review_stage_d.md);
+the decisions D1 to D10 in the Discussion.
+Run order 4, 5, 6, each on the branch holding its code, merged forward.
 
 ### Blocks
 
 1. StoreEvents: `internal/store/events.go`, the batched writer,
-   the paging query, the prune, `log.keep_days`, the size test
+   the paging query, the prune, `log.keep_days`, the size test (done)
 2. ServerLog: `remember` to the store, `GET …/log` with `before`,
    `kind` and `device`, the fallback ring, the setting in the API,
-   the writer started by `Run`, the API documents
+   the writer started by `Run`, the API documents (done)
 3. UiLog: "Older" and the two selects in `log.js`, six translations,
-   the pytest tests, docs/ui.md, docs/store.md section 9 (d)
+   the pytest tests, docs/ui.md, docs/store.md section 9 (d) (done)
+4. StoreFix: `Events` with the terms given, migration 0004,
+   the prune between chunks, `FlushEvents` bounded, on `claude/store-d`
+5. ServerFix: the writer's own context, the restore tracked,
+   the CHANGELOG's Changed bullet, two behaviours in docs/api-v1.md,
+   the ring's tests, on `claude/store-d-2`
+6. UiFix: late answers, the Cube switch, the paging room,
+   the error line, pytest, docs/ui.md and docs/store.md, on `claude/store-d-3`
 
 ## Discussion
 
@@ -138,6 +147,13 @@ and what the others cost, so that an answer can be "D2-B".
     Two more entries per row, about 50 bytes,
     a schema version for two indexes,
     and a test fixture of the version for `TestMinReader`'s set.
+  - Taken in v1.0: A.
+    Wrong on its first point, as the review of 2026-11-06 measured:
+    `(? = 0 OR id < ?)` keeps SQLite off the id order,
+    so a page took `events_cube_time` and sorted every one of the Cube's rows,
+    1.3 s a page at 90,000 events,
+    holding the one connection. v1.1 adds migration 0004 after all (D10,
+    Block 4); `TestMinReader` builds its migrations itself and needs no fixture.
 
 **Measured on 2026-11-06 at 716b6cf**,
 `massimo serve` against the fake Cube of `tools/ui-test/greeting.txt` (seven
@@ -184,6 +200,50 @@ so that the WAL and the one connection are never held for long;
 `CubeConfig.StoreID` carries the row's id into the runtime;
 the store's `Events` returns newest first as `AuditList` does and the server
 turns the page round.
+
+### Decisions of v1.1, after the review
+
+The review of 2026-11-06,
+[ANALYSIS StoreLog](2026-11-06_22-38_ANALYSIS_StoreLog_review_stage_d.md),
+found ten defects in Blocks 1 to 3, each rechecked in the code.
+The gate after Block 3 put three decisions to the owner, taken as recommended:
+
+- **D8.
+  Which findings.**
+  - A (taken): 1 to 8 fixed, 9 documented, the gaps of 10 closed.
+    Finding 1 alone makes 30 days of log unusable on a Pi.
+  - B: 1, 2 and 7 only; the UI's defects ship.
+  - C: none; the slow query ships.
+- **D9.
+  Where the fixes go.**
+  - A (taken): each on the branch that holds its code,
+    merged forward into the next,
+    so that the first pull request is correct by itself.
+  - B: one block on `claude/store-d-3`;
+    `main` has the slow query until the third merges.
+- **D10.
+  The page query.**
+  - A (taken): the WHERE built from the terms given, every value bound,
+    and migration 0004 with indexes in id order within a Cube,
+    measured on 90,000 events in a test.
+    Fast with several Cubes, at a few bytes per event.
+  - B: `+cube_id`, no migration; slow for a quiet Cube beside a busy one.
+
+Measured before the plan (an overlay test, 100,000 events,
+nine in ten of one Cube): with `events_cube (cube_id)`,
+`events_cube_kind (cube_id, kind)` and `events_cube_device (cube_id, device)`,
+every shape (none, `id`, kind, kind and `id`, device, kind and device,
+the other Cube) searches one index without a temporary B-tree,
+0.7 to 3 ms a page;
+a time bound turned into an id bound first (`max(id)` over the covering
+`events_cube_time`) takes 28 to 59 ms, reading the Cube's times up to it.
+
+Live events carry no id, and v1.1 gives them none:
+an id handed out before the write would be a second source of ids beside
+SQLite's, which the replicated rows (docs/store.md,
+decision 7) would have to share.
+So the UI's cursor falls back to a time only once every fetched line has
+been trimmed (Block 6), as on the ring.
 
 ## Analysis
 
@@ -309,7 +369,8 @@ and `massimo store info`'s count of `events`, which now says something.
   at a `FlushEvents` call, and once more when `ctx` ends;
   `serve` closes the store after `Run` returned,
   so nothing writes after `Close`,
-  and an `AddEvent` with no writer running is dropped.
+  and an `AddEvent` with no writer running is queued,
+  up to the buffer (v1.1: as built; v1.0 said dropped).
   The same goroutine prunes: at its start, every 24 hours,
   and when `PruneEventsSoon` is called, so that `PUT /api/v1/settings` with
   `log.keep_days` applies now, as the API says of a whole-number setting.
@@ -348,7 +409,9 @@ and `massimo store info`'s count of `events`, which now says something.
 
 - The one connection: a chunk of the prune or a batch of the writer holds
   it for milliseconds, during which an API read waits;
-  the chunk size and the batch size keep that short,
+  the chunk size and the batch size keep that short.
+  v1.1: a log read waited for the whole prune, not for a chunk,
+  since the writer answered no flush while it pruned (Block 4);
   and `-race` on `internal/store` and `internal/server` covers the channel,
   the timer and the flush.
 - A `state` event's size: 0.4 KB with D3-A, measured on seven devices;
@@ -365,6 +428,7 @@ and `massimo store info`'s count of `events`, which now says something.
 - A kind filter without an index (D7-A) is a scan of a Cube's rows:
   measured only by reasoning here;
   if the Pi shows seconds, D7-B is one additive migration later.
+  v1.1: the review measured worse, every page sorted (D7, D10).
 
 ## Implementation Plan
 
@@ -379,7 +443,8 @@ every test runs against the fake Cube and a store in a temporary directory;
 serials,
 addresses and names in tests and documents are placeholders (`KEQ0000000`,
 `0abcde`, `Radiator 1`), no key, token or real device name anywhere.
-Each block is one or more functional commits citing `AP StoreLog v1.0, Block <n>`,
+Each block is one or more functional commits citing the revision it ran under,
+`AP StoreLog v1.0, Block 1` to `3` and `AP StoreLog v1.1, Block 4` to `6`,
 each with its CHANGELOG bullet, signed with `timeout 60 git commit …`,
 and one pull request, stacked as the Discussion says.
 The commit headline's component carries the part it changes:
@@ -403,7 +468,8 @@ The commit headline's component carries the part it changes:
    `FlushEvents(ctx) error` sends a request and waits for the writer's answer,
    `nil` at once when the writer is not running;
    a last flush when `ctx` ends, then the loop returns.
-   `EventStats() (written, dropped, flushes int64)` for the tests and `store info`.
+   `EventStats() (written, dropped, flushes int64)` for the tests
+   and `store info` (v1.1: the tests only; `store info` does not show it).
 3. `Events(ctx, q EventQuery) ([]Event, error)` with
    `EventQuery{CubeID, BeforeID int64; Before time.Time; Kind, Device string; Limit int}`:
    `WHERE cube_id = ? AND (? = 0 OR id < ?) AND (? = '' OR time < ?)
@@ -576,7 +642,109 @@ the test gate; `make ui-test` at 1100 and 390 px in English and German with
 the two new tests and the two of today; the shots looked at;
 `GUIDELINES/shared/tools/check --commit-range` clean.
 
-After the run, the completion gate names the NOTE recording how the run went,
+### Block 4: StoreFix
+
+On `claude/store-d`, after the commit of v1.1 there (D9).
+
+1. `internal/store/migrations/0004_events_pages.sql`, `min_reader` 1,
+   additive: `events_cube (cube_id)`, `events_cube_kind (cube_id, kind)`,
+   and `events_cube_device (cube_id, device)` in place of `events_device_time`.
+   SQLite keeps the rowid last in every index,
+   so each is in id order within a Cube, a kind or a device,
+   and a page reads its rows from the end without a sort;
+   `events_cube_time` stays for the prune and the time bound.
+2. `Events`:
+   the WHERE holds only the terms given, every value bound.
+   A time bound becomes an id bound first, the newest id before that time
+   (`max(id)` over `events_cube_time`), the time kept as a filter (`+time < ?`),
+   so that a page by time is exact and walks by id too.
+3. `RunEvents`:
+   the prune hands over between chunks: it answers a pending flush,
+   writes the queue, and stops once `ctx` is done,
+   the loop's last write following.
+   A hook for the tests, `pruneStep`, runs after each chunk.
+   `PruneEvents(ctx, now)` keeps its form.
+   `FlushEvents` gives up after `eventsQuiet` from its call,
+   the handover to the writer included.
+4. Tests: `TestEventsPageQuery`,
+   the plan of every shape without a temporary B-tree,
+   and the time of a page on 90,000 events logged (not under `-short`);
+   `TestEventsPruneYields`,
+   a flush answered and an event written in the middle of a prune,
+   and a done `ctx` ending a prune early; `TestEventsPruned`,
+   the second `PruneEventsSoon` leaving one request pending;
+   `TestEventSize` measured again with the new indexes.
+5. The CHANGELOG's Added bullet of the store's events names migration 0004.
+
+**Verification:**
+the test gate with `-race ./internal/store/...`;
+the page times and `TestEventSize`'s figure noted for Blocks 5 and 6;
+`GUIDELINES/shared/tools/check --commit-range` clean.
+
+### Block 5: ServerFix
+
+On `claude/store-d-2`, after `claude/store-d` is merged into it.
+
+1. `Run`:
+   the writer runs on a context of its own,
+   cancelled once `s.wg.Wait()` has returned, and `Run` waits for it,
+   so that what the server's goroutines emit as they stop is written.
+2. `restore_api.go`:
+   the restore's goroutine counted through `s.track` while `Run` runs,
+   so that `Run` waits for its `restore_done`.
+3. The CHANGELOG's Changed bullet of `GET …/log`:
+   `limit` above 1000 answers 400,
+   and the log's `state` events carry no `received`.
+4. docs/api-v1.md, the log:
+   a Cube that gains its row while it runs answers from the store from then on,
+   the events it kept in memory left out;
+   a device hidden later keeps its events in the log until `log.keep_days`
+   removes them;
+   a page by time first finds the newest id before it. packaging/README.md:
+   the size per event Block 4 measured.
+5. Tests: `TestLogWithoutStore` with `device` and a time cursor;
+   `TestLogLastEvents`, an event a tracked goroutine emits after the end of
+   `Run`'s context is in the store after `Run` returned.
+
+**Verification:**
+the test gate with `-race ./internal/server/... ./internal/store/...`;
+`GUIDELINES/shared/tools/check --commit-range` clean.
+
+### Block 6: UiFix
+
+On `claude/store-d-3`, after `claude/store-d-2` is merged into it.
+
+1. `log.js`:
+   `logState.gen`, raised by `loadLog`, Clear and a Cube switch;
+   an answer of an older generation is dropped, in `loadLog` and in `loadOlder`.
+2. `logCubeChanged()`, called by `selectCube`:
+   the device choice back to all, the lines, the cursor and the room reset,
+   the log loaded again when it is open.
+   `loadRooms` fills the selects again while the log is open,
+   and loads the log again when the device chosen is gone.
+3. `logState.room`:
+   how many lines live events may grow the log to,
+   `LOG_MAX_LINES` after `loadLog` and Clear,
+   and the lines plus `LOG_MAX_LINES` after Older,
+   so that a live event never trims a page just fetched.
+   The cursor stays the oldest line's `id`;
+   its time only once every fetched line has been trimmed (the Discussion).
+4. `logLineMatches`:
+   a line of kind `error` passes the kind and the device chosen.
+5. pytest: `test_log_filters` reads Older's state from the page's size,
+   not from the shared server's count;
+   `test_log_answers`, new, with the page's `api` stubbed:
+   a late answer after Clear dropped, the device choice reset by a Cube switch,
+   2200 lines kept after a live event, the error line shown with a kind chosen.
+6. docs/ui.md "Log": the room and the time cursor;
+   docs/store.md: section 5's indexes (0004), section 9 (d) with D8 to D10
+   and the size measured again, section 10's line.
+
+**Verification:**
+the test gate; `make ui-test` at 1100 and 390 px in English and German;
+`GUIDELINES/shared/tools/check --commit-range` clean.
+
+After each run, the completion gate names the NOTE recording how the run went,
 the measured size on the owner's Pi being the owner's to add.
 
 ## Proposed commit message
@@ -604,7 +772,20 @@ and `Assisted-by: claude-code:<model>` of the implementing session as the last t
    `test(ui-test): the log's filters and paging in the pytest suite`,
    `docs(store): stage (d) implemented, and the decisions it took`
 
+v1.1's commit, of its own on `claude/store-d` before Block 4's first write,
+`chore(aps): +StoreLog v1.1, +ANALYSIS StoreLog`, with a `File-revision-v1`
+trailer for each file; then, each with a merge of the branch below before it:
+
+4. `fix(store.log): the log's pages walk by id, and a prune yields to reads`
+5. `fix(server.log): the writer outlives the server's goroutines, the log's changes listed`
+6. `fix(ui.log): late answers, the Cube switch and paging past 2000 lines`
+
 ## Change History
 
 - v1.0 (2026-11-06): the first revision, from docs/store.md section 9 (d)
   and the code as of main 716b6cf.
+- v1.1 (2026-11-06): Blocks 4 to 6 for the review's findings 1 to 10 (ANALYSIS
+  StoreLog), with D8-A, D9-A and D10-A as the owner took them; D7's first point,
+  the writer's queue,
+  the prune's hold on the connection and `EventStats` corrected where the review
+  proved v1.0 wrong.
