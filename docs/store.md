@@ -98,8 +98,9 @@ toolchain.
   age, all in the engine with indexes; retention is one `DELETE`.
 - The server mode of design.md (PostgreSQL, many tenants) gets the
   same schema with another driver; the SQL stays in the common subset
-  (section 5), and `tenant_id` is there from day one as section 6 of
-  design.md asks.
+  (section 5). Tenancy is a file per tenant, not a column (section 5,
+  docs/server.md), so design.md section 6's `tenant_id` lives in the
+  server's account database, not here.
 - One file to copy for a backup of the server itself, and a format
   every tool can open (`sqlite3 massimo.db`), which matters for the
   support bundle and the export of design.md section 7.
@@ -290,9 +291,14 @@ are `TEXT`; booleans are `INTEGER` 0 or 1; identifiers are the rowid.
 The dialect stays in the subset PostgreSQL takes with mechanical
 changes (`INTEGER PRIMARY KEY` to identity columns, `TEXT` times to
 `timestamptz`, JSON `TEXT` to `jsonb`), so the server mode is a second
-migration directory, not a second schema. `tenant_id` is on every row
-that belongs to an installation, with the default tenant 1; the
-standalone server never shows it.
+migration directory, not a second schema. There is no `tenant_id` and
+no `tenants` table (decided 2026-11-06, against design.md section 6's
+"from day one"): a store is one tenant's, on a box by nature and on
+the portal tier as one file per tenant (docs/server.md), so a tenant
+column inside the file would be the same value on every row. The
+server's account database, where tenants matter, has its own schema.
+The file knows whose it is by `tenant.id`, a UUID in `settings`,
+seeded at the first start next to `node.id`.
 
 ```sql
 CREATE TABLE schema_version (
@@ -302,23 +308,17 @@ CREATE TABLE schema_version (
     applied_by TEXT    NOT NULL    -- the massimo version string
 );
 
-CREATE TABLE tenants (
-    id         INTEGER PRIMARY KEY,
-    name       TEXT    NOT NULL,
-    created_at TEXT    NOT NULL
-);
-INSERT INTO tenants (id, name, created_at) VALUES (1, 'default', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));
-
 CREATE TABLE roles (
     id         INTEGER PRIMARY KEY,
-    tenant_id  INTEGER NOT NULL REFERENCES tenants (id),
     key        TEXT    NOT NULL,              -- 'owner', 'manager', 'operator', 'guest', 'viewer', 'integration', or the key of a created role
     name       TEXT    NOT NULL DEFAULT '',   -- display name; '' shows the key's translated default
     builtin    INTEGER NOT NULL DEFAULT 0,    -- 1: seeded; owner is builtin and immutable
     disabled   INTEGER NOT NULL DEFAULT 0,
     created_at TEXT    NOT NULL,
     updated_at TEXT    NOT NULL,
-    UNIQUE (tenant_id, key)
+    updated_by INTEGER REFERENCES users (id),
+    created_by INTEGER REFERENCES users (id),
+    UNIQUE (key)
 );
 
 CREATE TABLE role_capabilities (
@@ -328,16 +328,14 @@ CREATE TABLE role_capabilities (
 );
 
 CREATE TABLE capabilities_disabled (
-    tenant_id   INTEGER NOT NULL REFERENCES tenants (id),
     capability  TEXT    NOT NULL,
     disabled_at TEXT    NOT NULL,
     disabled_by INTEGER REFERENCES users (id),
-    PRIMARY KEY (tenant_id, capability)
+    PRIMARY KEY (capability)
 );
 
 CREATE TABLE users (
     id            INTEGER PRIMARY KEY,
-    tenant_id     INTEGER NOT NULL REFERENCES tenants (id),
     name          TEXT    NOT NULL,              -- the login name, lower case
     display_name  TEXT    NOT NULL DEFAULT '',
     password_hash TEXT    NOT NULL DEFAULT '',   -- argon2id in PHC string form; '' = no password login (keys only)
@@ -347,13 +345,13 @@ CREATE TABLE users (
     invited_by    INTEGER REFERENCES users (id),
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL,
+    updated_by    INTEGER REFERENCES users (id),
     last_login_at TEXT,
-    UNIQUE (tenant_id, name)
+    UNIQUE (name)
 );
 
 CREATE TABLE tokens (
     id             INTEGER PRIMARY KEY,
-    tenant_id      INTEGER NOT NULL REFERENCES tenants (id),
     user_id        INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     kind           TEXT    NOT NULL CHECK (kind IN ('session', 'api')),
     hash           TEXT    NOT NULL UNIQUE,      -- SHA-256 of the token, hex; the token itself is never stored
@@ -367,17 +365,15 @@ CREATE TABLE tokens (
 CREATE INDEX tokens_user ON tokens (user_id);
 
 CREATE TABLE settings (
-    tenant_id  INTEGER NOT NULL REFERENCES tenants (id),
     key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days', …
     value      TEXT    NOT NULL,   -- JSON: a string, a number or a document
     updated_at TEXT    NOT NULL,
     updated_by INTEGER REFERENCES users (id),
-    PRIMARY KEY (tenant_id, key)
+    PRIMARY KEY (key)
 );
 
 CREATE TABLE cubes (
     id                 INTEGER PRIMARY KEY,
-    tenant_id          INTEGER NOT NULL REFERENCES tenants (id),
     serial             TEXT    NOT NULL,              -- upper case, as printed on the Cube
     configured         INTEGER NOT NULL DEFAULT 1,    -- 0: found by discovery, not served
     name               TEXT    NOT NULL DEFAULT '',
@@ -396,7 +392,8 @@ CREATE TABLE cubes (
     last_seen          TEXT,
     created_at         TEXT    NOT NULL,
     updated_at         TEXT    NOT NULL,
-    UNIQUE (tenant_id, serial)
+    updated_by         INTEGER REFERENCES users (id),
+    UNIQUE (serial)
 );
 
 CREATE TABLE preferences (
@@ -409,7 +406,6 @@ CREATE TABLE preferences (
 
 CREATE TABLE events (
     id        INTEGER PRIMARY KEY,
-    tenant_id INTEGER NOT NULL REFERENCES tenants (id),
     cube_id   INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
     time      TEXT    NOT NULL,
     kind      TEXT    NOT NULL,                  -- connected, state, paired, cube_found, … as the stream names them
@@ -421,7 +417,6 @@ CREATE INDEX events_device_time ON events (cube_id, device, time);
 
 CREATE TABLE audit (
     id        INTEGER PRIMARY KEY,
-    tenant_id INTEGER NOT NULL REFERENCES tenants (id),
     time      TEXT    NOT NULL,
     user_id   INTEGER REFERENCES users (id),     -- NULL: no authentication configured, or the server itself
     token_id  INTEGER REFERENCES tokens (id),
@@ -432,12 +427,11 @@ CREATE TABLE audit (
     detail    TEXT    NOT NULL DEFAULT '{}',     -- JSON: the request as received, secrets removed, and the result
     result    TEXT    NOT NULL DEFAULT 'ok' CHECK (result IN ('ok', 'refused', 'failed'))
 );
-CREATE INDEX audit_time ON audit (tenant_id, time);
+CREATE INDEX audit_time ON audit (time);
 CREATE INDEX audit_user ON audit (user_id, time);
 
 CREATE TABLE backups (
     id         INTEGER PRIMARY KEY,
-    tenant_id  INTEGER NOT NULL REFERENCES tenants (id),
     cube_id    INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
     taken_at   TEXT    NOT NULL,
     reason     TEXT    NOT NULL CHECK (reason IN ('connect', 'daily', 'before_restore', 'manual', 'upload')),
@@ -502,13 +496,38 @@ Notes on the tables:
   2026-11-06; docs/server.md says why). The owned tables (`users`,
   `tokens`, `cubes`, `settings`, `preferences`, `backups`) also carry
   `version INTEGER`, `deleted_at TEXT` and `origin TEXT` (decision 14,
-  taken), and the first migration seeds `settings` with `node.id`.
+  taken), and the first migration seeds `settings` with `node.id` and `tenant.id`.
   The listing above leaves those columns out so that it stays
   readable; the migration file has them.
 - `roles`, `role_capabilities` and `capabilities_disabled` are the
   capability model of section 6; the first migration seeds the six
   default roles with their sets. `users.role_id` replaces the role
   text; `expires_at` and `invited_by` are for guests.
+- Provenance and the audit (decided 2026-11-06): every row a user can
+  edit carries `updated_at` and `updated_by` (`users`, `roles`,
+  `cubes`, `settings`; `preferences` belong to their user, a token to
+  its user, a backup has `user_id`), and `created_by` where it says
+  something (`roles`; `users.invited_by`). That is the current
+  state's provenance, cheap to show ("changed by anna, 3 days ago")
+  without a join over the audit, and it survives the audit's
+  retention. The audit is the history: every write, who, when, what,
+  including the refused ones; it is append-only and pruned, so it
+  cannot serve as the current state. `role_capabilities` has no
+  timestamps: a row is inserted or deleted, never updated, and the
+  change of a role's set is recorded on the role row (`updated_at`,
+  `updated_by`, `version`) and in the audit with the capability
+  added or removed. Sync (docs/server.md) replicates owned rows by
+  `version` and `updated_at`, so those two are needed on every owned
+  row regardless of the audit; a role replicates with its set.
+- Times are `TEXT` because SQLite has no date type: a column declared
+  `DATETIME` has numeric affinity and stores whatever is inserted. The
+  choices are text in ISO 8601, integer seconds or milliseconds since
+  the epoch, or a Julian day as a real. Text in RFC 3339 with the `Z`
+  suffix sorts correctly, reads in `sqlite3` and in exports and
+  diffs, is what SQLite's own date functions take, and maps to
+  PostgreSQL's `timestamptz` without conversion; the cost is 20 bytes
+  against 8 and a string comparison, which is nothing at this scale.
+  The columns are declared `TEXT`, not `DATETIME`, on purpose.
 
 ### Migrations
 
@@ -926,10 +945,12 @@ mode.
 Status on 2026-11-06: the owner took 4 (the form, for local-network
 clients only), 7 (UUIDv7), replaced 6 by the capability model of
 section 6, and took every other item as recommended, 2, 3, 5 and 8
-to 18 included. Item 1, the engine, is open; the comparison it asked
-for is below, and stage (a) waits for it.
+to 18 included. Item 1, the engine, was taken the same day: SQLite;
+the comparison the owner asked for stays below for the record. Also
+decided that day: no `tenant_id` in the site store and the provenance
+columns, both in the notes of section 5. Stage (a) can start.
 
-1. The engine, open. For SQLite through `modernc.org/sqlite`: SQL
+1. Taken: SQLite through `modernc.org/sqlite`. For it: SQL
    with indexes and queries for the log, the audit and the backup
    history; one file per tenant on the portal tier with the same code
    (docs/server.md) and the same SQL for PostgreSQL later;

@@ -855,7 +855,9 @@ sentence; the CI job's `-health-timeout 90s` is unaffected.
 
 ## 9. Open questions for the owner
 
-Positions taken above, for the owner to confirm or change:
+Positions taken above, for the owner to confirm or change. Confirmed
+by the owner on 2026-11-06, all nine as positioned; the implementation
+follows them.
 
 1. Option A over B2. The reasons are in section 4; B2 is the fallback
    if the CI job or the real PC shows the detached child dying with the

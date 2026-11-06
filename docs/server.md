@@ -338,8 +338,11 @@ Identity and authentication across nodes:
   one edge serves several Cubes already today. A box serving two
   tenants (a property manager's) is the manager being a member of
   each tenant, not a shared edge.
-- **Version 1** has `tenant_id`, and `origin` (the node identity
-  below) is the site's identity, since a standalone box is one site.
+- **Version 1** has no `tenant_id` (a store is one tenant's, on a box
+  and as one file per tenant on the portal tier; the server's account
+  database has its own schema; docs/store.md section 5), only
+  `tenant.id` in `settings`, and `origin` (the node identity below) is
+  the site's identity, since a standalone box is one site.
   The identity lives in the store and the state directory and
   survives a replaced Pi by copying them; a `sites` table comes with
   the server.
