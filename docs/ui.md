@@ -40,7 +40,12 @@ so the token never appears in a URL.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and not the settings page.
 - In expert mode the header also shows the Cube's details and its radio budget,
-  and when the server was started, with how long ago.
+  when the server was started, with how long ago,
+  and the certificate the server serves (its source, names and expiry).
+- With a self-signed certificate (`massimo serve -tls self-signed`)
+  the browser warned once, and a line under the header shows the
+  certificate's fingerprint: compare it with the server's log,
+  or with `massimo tls show` on the box.
   The duty cycle and the free memory slots limit how many radio commands the
   Cube can send.
 

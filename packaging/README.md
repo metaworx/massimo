@@ -138,6 +138,15 @@ readable by root only, so a deploy hook copies them over
 The update helper then checks `https://127.0.0.1:8099/healthz`
 (`massimo-update.service.d/listen.conf`),
 without verifying the certificate of a loopback address.
+`-tls self-signed [-tls-names <list>]` sets `MASSIMO_TLS=self-signed` instead:
+the server makes a certificate for the box's names at its first start into
+`/var/lib/massimo/tls/`, renews it 30 days before it expires,
+and logs its fingerprint,
+which `massimo tls show` prints too (as the user `massimo`,
+with `-data /var/lib/massimo`); browsers warn once per device.
+After a move to another address,
+`sudo -u massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
+served at the next connection.
 `-tls off` switches it off again;
 run the service once with `-hsts 0` over TLS first,
 since a browser that saw the server's HSTS header refuses `http://` to it

@@ -331,8 +331,20 @@ func TestInstallTLSFiles(t *testing.T) {
 		t.Fatal("the helper still checks https")
 	}
 
+	// -tls self-signed: the settings say so, the server makes the pair.
+	if err := Install(Options{Root: root, Binary: bin, TLS: "self-signed", TLSNames: "massimo.example.net", Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	env = read(t, filepath.Join(root, EnvPath))
+	if strings.Count(env, "MASSIMO_TLS=self-signed\n") != 1 || !strings.Contains(env, "MASSIMO_TLS_NAMES=massimo.example.net\n") {
+		t.Fatalf("settings after -tls self-signed:\n%s", env)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "https://127.0.0.1:443/healthz") {
+		t.Fatal("the helper does not check https for self-signed")
+	}
+
 	// Refused: a missing file, -tls off with files, a mode not there yet.
-	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed"}, {TLS: "yes"}} {
+	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed", TLSCert: cert, TLSKey: key}, {TLS: "acme"}, {TLS: "yes"}} {
 		o.Root, o.Binary, o.Out, o.Run = root, bin, &bytes.Buffer{}, rec.run
 		if err := Install(o); err == nil {
 			t.Errorf("%+v accepted", o)

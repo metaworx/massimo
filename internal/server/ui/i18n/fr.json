@@ -38,6 +38,8 @@
   "header.pending": "{n} en attente, les états peuvent encore changer",
   "header.pendingExpert.one": "{n} télégramme radio pas encore confirmé, les états peuvent encore changer",
   "header.pendingExpert.other": "{n} télégrammes radio pas encore confirmés, les états peuvent encore changer",
+  "header.selfSigned": "Certificat auto-signé ; comparez cette empreinte avec le journal du serveur (massimo tls show) :",
+  "header.certUntil": "jusqu'au {date}",
   "header.pendingExpert.many": "{n} télégrammes radio pas encore confirmés, les états peuvent encore changer",
   "nav.pages": "pages",
   "nav.rooms": "pièces",
@@ -57,6 +59,7 @@
   "budget.queued": "File d’attente",
   "budget.pending": "En attente",
   "budget.clock": "Horloge du Cube",
+  "budget.certificate": "Certificat",
   "msg.cannotLoad": "Chargement impossible : {error}",
   "api.badToken": "jeton manquant ou erroné",
 

@@ -33,7 +33,9 @@ Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
 is not a scheme shows a message. Update asks in the page, and Cancel
-sends nothing. A language chosen in the settings redraws the open Cube
+sends nothing. A self-signed certificate reported by /healthz (stubbed)
+shows its fingerprint under the header and the certificate in the
+expert details, and nothing without one. A language chosen in the settings redraws the open Cube
 panel, which is cloned from a template, in that language. On every page
 it opens, every button
 has an accessible name (text, aria-label or title). Any console error, page error or horizontal scroll fails the
@@ -457,6 +459,7 @@ def run(page, label, lang):
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the settings")
     update_busy(page, label)
     update_confirm(page, label)
+    tls_notice(page, label)
     page.locator("#view-tiles").click()
     check(page.locator(".room").first.is_visible(), f"{label}: back to the tiles")
 
@@ -483,6 +486,28 @@ def update_busy(page, label):
     check(wait_until(page, "!document.getElementById('update-check').disabled && !document.getElementById('update-btn').disabled", 10),
           f"{label}: Software buttons back once the helper is done")
     page.unroute("**/api/v1/update*")
+
+
+def tls_notice(page, label):
+    """The header shows a self-signed certificate's fingerprint, from
+    /healthz's tls, and the expert details the certificate; nothing of
+    either without TLS. /healthz is stubbed with the page's own version,
+    so the page does not reload."""
+    check(page.locator("#tls-notice").is_hidden() and page.evaluate("document.getElementById('tls-cert').textContent") == "–",
+          f"{label}: no certificate notice without TLS")
+    version = page.evaluate("state.version")
+    health = {"ok": True, "version": version, "started_at": "2026-11-06T12:00:00Z",
+              "tls": {"source": "self-signed", "names": ["massimo.example.net", "192.0.2.10"], "not_after": "2029-02-08T12:00:00Z",
+                      "fingerprint": "SHA256:AB:CD:EF:01", "self_signed": True}}
+    page.route("**/healthz", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(health)))
+    page.locator("#refresh-btn").click()
+    check(wait_until(page, "!document.getElementById('tls-notice').classList.contains('hidden') && document.getElementById('tls-fingerprint').textContent === 'SHA256:AB:CD:EF:01'", 5),
+          f"{label}: self-signed notice with the fingerprint")
+    cert = page.evaluate("document.getElementById('tls-cert').textContent")
+    check(cert.startswith("self-signed · massimo.example.net, 192.0.2.10 · "), f"{label}: certificate in the expert details ({cert})")
+    page.unroute("**/healthz")
+    page.locator("#refresh-btn").click()
+    check(wait_until(page, "document.getElementById('tls-notice').classList.contains('hidden')", 5), f"{label}: notice gone without TLS")
 
 
 def update_confirm(page, label):

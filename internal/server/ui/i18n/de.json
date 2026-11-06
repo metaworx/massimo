@@ -37,6 +37,8 @@
   "header.pending": "{n} ausstehend, Zustände können sich noch ändern",
   "header.pendingExpert.one": "{n} Funktelegramm noch nicht bestätigt, Zustände können sich noch ändern",
   "header.pendingExpert.other": "{n} Funktelegramme noch nicht bestätigt, Zustände können sich noch ändern",
+  "header.selfSigned": "Selbstsigniertes Zertifikat; diesen Fingerabdruck mit dem Log des Servers vergleichen (massimo tls show):",
+  "header.certUntil": "bis {date}",
   "nav.pages": "Seiten",
   "nav.rooms": "Räume",
   "nav.roomsTitle": "Räume",
@@ -55,6 +57,7 @@
   "budget.queued": "Warteschlange",
   "budget.pending": "Ausstehend",
   "budget.clock": "Cube-Uhr",
+  "budget.certificate": "Zertifikat",
   "msg.cannotLoad": "Laden fehlgeschlagen: {error}",
   "api.badToken": "Token fehlt oder ist falsch",
 

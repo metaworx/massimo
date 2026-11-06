@@ -97,6 +97,13 @@ func (f *Files) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return f.cert, nil
 }
 
+// Reload re-reads the files now, for a pair just written.
+func (f *Files) Reload() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reloadLocked()
+}
+
 // Status describes the pair served.
 func (f *Files) Status() Status {
 	f.mu.Lock()

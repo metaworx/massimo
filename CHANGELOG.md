@@ -14,6 +14,10 @@ the next minor, a fix counts the suffix up.
   files, re-read when they change, with HSTS for a year (`-hsts <days>`);
   `massimo install -tls-cert … -tls-key …` installs them (README.md).
 
+- `massimo serve -tls self-signed`: a certificate the server makes for
+  the box's names, renewed 30 days before it expires; `massimo tls show`
+  and the web UI's header show its fingerprint (README.md, "Server").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

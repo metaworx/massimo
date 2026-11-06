@@ -61,13 +61,14 @@ func runServe(args []string) error {
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's, for this run (default the store's proxy serial; the original software keeps one answer per serial)")
 	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+"; on Windows the server then starts the helper itself (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
 	updateStatus := fs.String("update-status", defaultUpdateStatus(), "the update helper's status file (on Windows install passes it, and the helper's update.log goes next to it)")
-	tlsFlag := fs.String("tls", os.Getenv(tlsVar), "serve over TLS: off, or files for the certificate of -tls-cert and -tls-key (default "+tlsVar+", else off; files when -tls-cert is given)")
+	tlsFlag := fs.String("tls", os.Getenv(tlsVar), "serve over TLS: off; files for the certificate of -tls-cert and -tls-key; self-signed for one the server makes for the box's names in the data directory's tls/ (default "+tlsVar+", else off; files when -tls-cert is given)")
 	tlsCert := fs.String("tls-cert", os.Getenv(tlsCertVar), "the certificate for -tls files, PEM, the chain after the server's certificate; re-read when it changes (default "+tlsCertVar+")")
 	tlsKey := fs.String("tls-key", os.Getenv(tlsKeyVar), "the certificate's private key, PEM (default "+tlsKeyVar+")")
+	tlsNames := fs.String("tls-names", os.Getenv(tlsNamesVar), "with -tls self-signed, names and addresses the certificate holds besides the box's own, comma-separated (default "+tlsNamesVar+")")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-tls files -tls-cert <pem> -tls-key <pem>]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; browsers are then told to use https:// for a year (-hsts). Without\nit the listener is plain HTTP, for localhost or behind a reverse proxy.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows. Browsers are then\ntold to use https:// for a year (-hsts). Without -tls the listener is plain\nHTTP, for localhost or behind a reverse proxy.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -87,7 +88,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	src, err := tlsSource(*tlsFlag, *tlsCert, *tlsKey, logger)
+	src, err := tlsSource(tlsOptions{mode: *tlsFlag, certPath: *tlsCert, keyPath: *tlsKey, names: *tlsNames, listen: *listen, dataDir: dataDir()}, logger)
 	if err != nil {
 		return err
 	}
@@ -155,6 +156,9 @@ func runServe(args []string) error {
 	}
 	logger.Info("api listening", attrs...)
 	go srv.Run(ctx)
+	if src != nil {
+		go certs.Watch(ctx, src, certWatch)
+	}
 	return serveHTTP(ctx, hs, ln)
 }
 

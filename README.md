@@ -438,6 +438,16 @@ so a renewal by certbot or acme.sh needs no restart,
 only a deploy hook that copies the files where the service user can read them
 (`massimo install -tls-cert … -tls-key …` does that once,
 see [packaging/README.md](packaging/README.md)).
+`-tls self-signed` needs no certificate:
+the server makes one at its first start for the box's names (its hostname,
+`<hostname>.local`, `localhost`, its addresses,
+and `-tls-names` for a name you gave it) into the data directory's `tls/`,
+valid 825 days and renewed 30 days before the end;
+every browser warns once per device,
+and the fingerprint to compare is in the log, in `massimo config`,
+in `massimo tls show`, in `/healthz` and under the page's header.
+A box whose address changed gets a new one with `massimo tls self-signed`,
+which a running server takes up at once.
 With TLS the server tells browsers to use `https://` for its host for a year
 (`-hsts <days>`);
 a browser that saw that refuses `http://` until the days are up,

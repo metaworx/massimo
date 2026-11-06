@@ -588,6 +588,31 @@ function renderStarted(iso) {
   if (age) dd.appendChild(age);
 }
 
+// renderTLS shows the certificate the server serves, from /healthz's
+// tls: in expert mode its source, names and expiry, and under the header
+// a notice with the fingerprint while it is self-signed, so the owner
+// can compare it with the server's log after the browser's warning.
+function renderTLS(tls) {
+  const dd = $("tls-cert");
+  const notice = $("tls-notice");
+  if (!tls) {
+    dd.textContent = "–";
+    notice.classList.add("hidden");
+    return;
+  }
+  const until = Date.parse(tls.not_after || "");
+  const parts = [tls.source, (tls.names || []).join(", ")];
+  if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
+  dd.textContent = parts.filter(Boolean).join(" · ");
+  if (tls.self_signed) {
+    $("tls-notice-text").textContent = t("header.selfSigned");
+    $("tls-fingerprint").textContent = tls.fingerprint || "";
+    notice.classList.remove("hidden");
+  } else {
+    notice.classList.add("hidden");
+  }
+}
+
 async function checkVersion() {
   let h;
   try {
@@ -597,6 +622,7 @@ async function checkVersion() {
   }
   const v = h && h.version ? h.version : "";
   renderStarted(h && h.started_at);
+  renderTLS(h && h.tls);
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);
