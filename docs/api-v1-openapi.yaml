@@ -31,6 +31,16 @@ paths:
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
                   node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
+                  tls:
+                    type: object
+                    description: With TLS, the certificate served; absent without.
+                    properties:
+                      source: {type: string, description: "Where the certificate comes from: files."}
+                      names: {type: array, items: {type: string}, description: The certificate's names and addresses.}
+                      not_after: {type: string, format: date-time}
+                      fingerprint: {type: string, description: The SHA-256 of the certificate, as browsers show it.}
+                      self_signed: {type: boolean}
+                      warning: {type: string, description: Set while something needs the owner.}
   /api/v1/cubes:
     get:
       summary: List the Cubes

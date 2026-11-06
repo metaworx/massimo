@@ -428,9 +428,23 @@ Dutch and Polish (from the browser, or chosen in the settings),
 from the translation files in `internal/server/ui/i18n/`, one per language.
 [docs/ui.md](docs/ui.md) describes how to use it.
 It is meant for the LAN.
-The listener defaults to localhost;
-put a reverse proxy with TLS in front before exposing it, and the UI,
-which needs the same token as the API, with it.
+The listener defaults to localhost and plain HTTP.
+`-tls files -tls-cert <pem> -tls-key <pem>` (or `MASSIMO_TLS_CERT`
+and `MASSIMO_TLS_KEY` in the settings) serves the API and the UI over TLS from
+any certificate,
+the chain after the server's certificate as every ACME client writes it;
+the files are re-read when they change,
+so a renewal by certbot or acme.sh needs no restart,
+only a deploy hook that copies the files where the service user can read them
+(`massimo install -tls-cert … -tls-key …` does that once,
+see [packaging/README.md](packaging/README.md)).
+With TLS the server tells browsers to use `https://` for its host for a year
+(`-hsts <days>`);
+a browser that saw that refuses `http://` until the days are up,
+so before switching TLS off, run the server once with `-hsts 0` over TLS,
+which clears it.
+A reverse proxy with TLS in front works as before and sets its own HSTS;
+the UI needs the same token as the API either way.
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
 Every six hours (`-refresh`,
@@ -602,7 +616,7 @@ and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
 The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`,
-the update variables and `MASSIMO_CUBE_SN` stay in the file only,
+the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;
 `serve -addr` runs without the store altogether (no `massimo.db` is opened or created,

@@ -17,8 +17,9 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-# The server's /healthz, matching MASSIMO_LISTEN of massimo.service;
-# `massimo install -listen` sets both (massimo-update.service.d/listen.conf).
+# The server's /healthz, matching MASSIMO_LISTEN of massimo.service and its
+# scheme (https:// once the settings give the server TLS); `massimo install`
+# sets both in massimo-update.service.d/listen.conf.
 Environment=MASSIMO_HEALTH=http://127.0.0.1:8099/healthz
 ExecStart=/usr/local/bin/massimo update -request /var/lib/massimo/update-request -status /var/lib/massimo-update/status.json -restart massimo.service -health ${MASSIMO_HEALTH}
 # No .env file is read: the working directory is / and this one does not exist.

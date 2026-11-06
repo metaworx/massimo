@@ -122,6 +122,8 @@ func Known(k string) bool {
 	switch k {
 	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST",
+		// massimo serve's TLS (internal/certs) and its HSTS days.
+		"MASSIMO_TLS", "MASSIMO_TLS_CERT", "MASSIMO_TLS_KEY", "MASSIMO_HSTS",
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.
 		"MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN":

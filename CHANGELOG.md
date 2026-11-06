@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `massimo serve -tls files -tls-cert … -tls-key …`: TLS from certificate
+  files, re-read when they change, with HSTS for a year (`-hsts <days>`);
+  `massimo install -tls-cert … -tls-key …` installs them (README.md).
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

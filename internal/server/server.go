@@ -38,6 +38,11 @@
 // deprecated, ?token=<token>. Repeated failed token checks lock the client's address
 // out for a while (auth.go). A web UI for all of this is served at / (see ui.go).
 //
+// With Options.TLS set the server terminates TLS itself (the certificate
+// from internal/certs, the listener wrapped by cmd/massimo), /healthz
+// reports the certificate, and every response carries
+// Strict-Transport-Security.
+//
 // With proxy listeners configured, the server also answers as a Cube on
 // the LAN (TCP 62910 and UDP discovery), see internal/proxy.
 package server
@@ -57,6 +62,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
@@ -158,6 +164,15 @@ type Options struct {
 	// StaleAfter is the stale threshold of the device views (0:
 	// view.StaleAfter); SetStaleAfter changes it while the server runs.
 	StaleAfter time.Duration
+	// TLS, when set, is the certificate source of a server that
+	// terminates TLS itself (cmd/massimo wraps the listener with
+	// certs.Config): /healthz then reports the certificate as "tls", and
+	// every response carries Strict-Transport-Security for HSTSDays
+	// days, max-age=0 with zero, which clears what a browser remembered.
+	// nil is plain HTTP, with no HSTS header: behind a reverse proxy the
+	// proxy terminates TLS and sets it.
+	TLS      certs.Source
+	HSTSDays int
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -181,6 +196,7 @@ type Server struct {
 	cubes   map[string]*runtime // by serial, lower case
 	order   []string
 	mux     *http.ServeMux
+	handler http.Handler // the mux, behind the HSTS header with TLS
 
 	limiter *authLimiter
 	tickets *ticketStore
@@ -541,7 +557,7 @@ func (s *Server) SetStaleAfter(d time.Duration) {
 func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
 
 // Handler returns the HTTP handler.
-func (s *Server) Handler() http.Handler { return s.mux }
+func (s *Server) Handler() http.Handler { return s.handler }
 
 func (s *Server) routes() {
 	mux := http.NewServeMux()
@@ -549,6 +565,9 @@ func (s *Server) routes() {
 		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started}
 		if s.opts.Store != nil {
 			h["node_id"] = s.opts.Store.NodeID()
+		}
+		if s.opts.TLS != nil {
+			h["tls"] = s.opts.TLS.Status()
 		}
 		writeJSON(w, http.StatusOK, h)
 	})
@@ -604,6 +623,18 @@ func (s *Server) routes() {
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
+	s.handler = mux
+	if s.opts.TLS != nil {
+		// HSTS on every response, the API's included: a browser that saw
+		// it refuses http:// to this host for that long, so it goes out
+		// only from a server that terminates TLS itself, and max-age=0
+		// (-hsts 0) is how a box going back to plain HTTP clears it.
+		hsts := "max-age=" + strconv.Itoa(max(s.opts.HSTSDays, 0)*24*60*60)
+		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Strict-Transport-Security", hsts)
+			mux.ServeHTTP(w, r)
+		})
+	}
 }
 
 type httpError struct {

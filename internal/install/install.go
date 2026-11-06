@@ -54,6 +54,12 @@ type Options struct {
 	// Listen, when set, is the API and web UI address (host:port), kept
 	// in drop-ins that later installs leave alone; "" keeps what is there.
 	Listen string
+	// TLS is -tls: "" keeps what the settings file says, "off" switches
+	// it off there, "files" (implied by TLSCert) installs TLSCert and
+	// TLSKey beside the settings and names them in the settings file
+	// (tls.go).
+	TLS             string
+	TLSCert, TLSKey string
 	// DryRun only says what would be done.
 	DryRun bool
 	// Out receives one line per step; nil is os.Stdout.
@@ -141,9 +147,12 @@ func Install(o Options) error {
 		return err
 	}
 	if o.Listen != "" {
-		if _, _, err := listenDropIns(o.Listen); err != nil {
+		if _, _, err := listenDropIns(o.Listen, false); err != nil {
 			return err
 		}
+	}
+	if err := o.checkTLS(); err != nil {
+		return err
 	}
 	in := newInstaller(o)
 	if err := in.binary(); err != nil {
@@ -156,13 +165,16 @@ func Install(o Options) error {
 	if err != nil {
 		return err
 	}
+	if err := in.tlsFiles(EnvDir+"/"+certName, EnvDir+"/"+keyName, EnvPath, true); err != nil {
+		return err
+	}
 	if startable {
 		in.checkSettings()
 	}
 	if err := in.units(); err != nil {
 		return err
 	}
-	if err := in.listen(); err != nil {
+	if err := in.listen(in.tlsEffective(in.path(EnvPath))); err != nil {
 		return err
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
@@ -321,6 +333,7 @@ func (in *installer) checkSettings() {
 	if vars["MASSIMO_API_TOKEN"] == "" {
 		fmt.Fprintln(in.Out, "warning: no MASSIMO_API_TOKEN: the API is open to the LAN and the web UI cannot start updates")
 	}
+	in.checkTLSSettings(vars)
 	lookup := in.LocalAddrs
 	if lookup == nil {
 		lookup = localAddrs
