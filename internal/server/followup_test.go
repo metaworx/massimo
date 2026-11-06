@@ -4,10 +4,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"log/slog"
+	"net"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,4 +149,130 @@ func eventually(t *testing.T, what string, cond func() bool) {
 		}
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+// syncBuffer collects log output from several goroutines.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
+// proxyClient connects to a proxy and reads its greeting.
+func proxyClient(t *testing.T, addr string) (net.Conn, *cube.Reader) {
+	t.Helper()
+	var conn net.Conn
+	eventually(t, "the proxy", func() bool {
+		var err error
+		conn, err = net.DialTimeout("tcp", addr, time.Second)
+		return err == nil
+	})
+	t.Cleanup(func() { conn.Close() })
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	r := cube.NewReader(conn)
+	for {
+		m, err := r.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Type == 'L' {
+			return conn, r
+		}
+	}
+}
+
+// proxyWrite sends one s: line through a proxy client and reads the S
+// reply.
+func proxyWrite(t *testing.T, conn net.Conn, r *cube.Reader, data string) {
+	t.Helper()
+	conn.Write([]byte("s:" + data + "\r\n"))
+	if m, err := r.Read(); err != nil || m.Type != 'S' {
+		t.Fatalf("s:%s answered %v %v", data, m, err)
+	}
+}
+
+// A write that a client of the LAN proxy sends is followed up as the
+// API's own: a configuration write has the device's C line re-read until
+// it changes, then the budget reconnect; a setpoint gets the budget
+// reconnect only.
+func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyAddr := ln.Addr().String()
+	ln.Close()
+	var logs syncBuffer
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
+		RefreshInterval: time.Hour, FollowUpDelays: []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
+		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}},
+		Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	eventually(t, "the cube", func() bool {
+		var c cubeView
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+	})
+	sent := func() (rereads, others int) {
+		for _, m := range fc.Received() {
+			switch {
+			case m.String() == "c:14d08e":
+				rereads++
+			case m.Type == 'c':
+				others++
+			}
+		}
+		return rereads, others
+	}
+
+	// The original software's 0x11 (preset temperatures) to 14d08e.
+	conn, r := proxyClient(t, proxyAddr)
+	proxyWrite(t, conn, r, "AAARAAAAFNCOACwePQkDCgM=")
+	eventually(t, "a re-read", func() bool { n, _ := sent(); return n >= 1 })
+	fc.SetConfig(withEco(t, greeting, 0x14d08e, 17))
+	eventually(t, "the device's new configuration", func() bool {
+		return strings.Contains(logs.String(), "device configuration taken over by the device")
+	})
+	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0537249/devices/14d08e", "")
+	if th, _ := d["thermostat"].(map[string]any); th["eco_temp"] != float64(17) {
+		t.Fatalf("eco after the follow-up %v", th["eco_temp"])
+	}
+	// The fake's S reply left one radiogram pending.
+	eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
+	eventually(t, "the budget refresh logged", func() bool { return strings.Contains(logs.String(), "budget refreshed after writes") })
+	time.Sleep(200 * time.Millisecond)
+	before, others := sent()
+	if before > 5 || others != 0 {
+		t.Fatalf("%d re-reads of the device, %d of others", before, others)
+	}
+
+	// A room setpoint re-reads nothing, but wants the budget again.
+	conn, r = proxyClient(t, proxyAddr)
+	proxyWrite(t, conn, r, "AARAAAAAFRS2BgA=")
+	eventually(t, "the second budget reconnect", func() bool { return fc.Connections() == 3 })
+	if after, others := sent(); after != before || others != 0 {
+		t.Fatalf("a setpoint re-read: %d re-reads of the device (%d before), %d of others", after, before, others)
+	}
 }

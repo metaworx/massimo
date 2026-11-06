@@ -442,6 +442,8 @@ After a configuration write it reads the device's configuration again for about
 six minutes until the device has taken it,
 and after radio writes it reconnects once for the Cube's budget if radiograms
 were pending, at most every 15 minutes (only while `-refresh` is on).
+Writes that a client of the proxy (below) sends,
+such as the original software's, are followed up the same way.
 The log lists every wakeup and every radio command the Cube accepted,
 with its duty cycle and free slots.
 

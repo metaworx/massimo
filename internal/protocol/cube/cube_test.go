@@ -627,6 +627,28 @@ func TestWallDisplayMode(t *testing.T) {
 	}
 }
 
+// The headers of s: commands the original software sent, as captured.
+func TestParseRadioCommand(t *testing.T) {
+	for _, tc := range []struct {
+		data string
+		want RadioCommand
+	}{
+		{"AAQQAAAAFNCOAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}}},
+		{"AAARAAAAFNCOACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x14d08e}}},
+		{"AARAAAAAFRS2BgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x1514b6, RoomID: 6, Room: true}}},
+	} {
+		got, err := ParseRadioCommand(tc.data)
+		if err != nil || got != tc.want {
+			t.Errorf("%s: %+v %v, want %+v", tc.data, got, err, tc.want)
+		}
+	}
+	for _, bad := range []string{"", "!!", "AARAAAAA"} {
+		if _, err := ParseRadioCommand(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
 func TestParseDeleteDevices(t *testing.T) {
 	force, addrs, err := ParseDeleteDevices(CmdDeleteDevices(true, 0x0f1d54, 0x1514b6).Data)
 	if err != nil || !force || len(addrs) != 2 || addrs[0] != 0x0f1d54 || addrs[1] != 0x1514b6 {

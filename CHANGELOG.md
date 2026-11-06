@@ -39,6 +39,12 @@ the next minor, a fix counts the suffix up.
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
 
+### Fixed
+
+- Writes from LAN proxy clients, such as the original software, get
+  the server's follow-up re-reads and budget reconnect, instead of a
+  stale copy of the device until the six-hourly refresh.
+
 ## [0.7.0-alpha.1] - 2026-11-06
 
 ### Added
