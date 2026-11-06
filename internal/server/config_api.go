@@ -35,6 +35,7 @@ const maxNameBytes = 32
 func (s *Server) configRoutes(api func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error)) {
 	api("PUT /api/v1/cubes/{sn}/rooms/{id}", "rename", s.renameRoom)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}", "rename", s.updateDevice)
+	api("DELETE /api/v1/cubes/{sn}/devices/{rf}", "structure", s.removeDevice)
 	api("GET /api/v1/cubes/{sn}/rooms/{id}/config", "read", s.getRoomConfig)
 	api("PUT /api/v1/cubes/{sn}/rooms/{id}/config", "configure", s.setRoomConfig)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/config", "configure", s.setDeviceConfig)
@@ -382,6 +383,42 @@ func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	}
 	answer["budget"] = rt.client.Budget()
 	writeJSON(w, http.StatusOK, answer)
+	return nil
+}
+
+// removeDevice handles DELETE /devices/{rf}: the device is deleted from
+// the Cube as the original software deletes it
+// (cubeio.Writer.RemoveDevice), unlinked from its room's partners, t:,
+// and the metadata without it. The metadata write's event, or the
+// device_forgotten one of a device in no room, tells the clients.
+func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
+	rt, err := s.cube(r)
+	if err != nil {
+		return err
+	}
+	rf, c, err := s.visibleDevice(rt, r)
+	if err != nil {
+		return err
+	}
+	if c.Type == cube.DeviceCube {
+		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
+	}
+	md := rt.client.Snapshot().Metadata()
+	if md == nil || !rt.client.Connected() {
+		return fail(http.StatusServiceUnavailable, "cube not connected")
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c)
+	if err != nil {
+		return fail(http.StatusBadRequest, "%v", err)
+	}
+	if err := s.commandError(rt, res, 0); err != nil {
+		return err
+	}
+	rt.afterWrite() // the unlinks were radio writes
+	s.log.Info("device removed", "cube", rt.serial, "device", rf, "type", c.Type, "remote", s.clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil
 }
 

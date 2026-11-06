@@ -467,3 +467,148 @@ func TestCopyStopsAtADiscard(t *testing.T) {
 		t.Fatalf("device after the failed copy: %d %v", code, d)
 	}
 }
+
+// withConfigRoom sets the room byte of a C line of the greeting.
+func withConfigRoom(t *testing.T, greeting []cube.Message, rf cube.RFAddress, room uint8) {
+	t.Helper()
+	for i, g := range greeting {
+		if g.Type == 'C' && strings.HasPrefix(g.Data, rf.String()+",") {
+			raw := rawConfig(t, greeting, rf)
+			greeting[i] = configLine(raw, rf, room, string(raw[8:18]))
+			return
+		}
+	}
+	t.Fatalf("no C line for %s", rf)
+}
+
+// logKinds returns the kinds of the Cube's log events from the n-th on.
+func logKinds(t *testing.T, ts *httptest.Server, n int) []string {
+	t.Helper()
+	var evs []event
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log?limit=500", &evs)
+	var kinds []string
+	for i, e := range evs {
+		if i >= n {
+			kinds = append(kinds, e.Kind+":"+e.Device)
+		}
+	}
+	return kinds
+}
+
+// hasKind reports whether kinds holds kind.
+func hasKind(kinds []string, kind string) bool {
+	for _, k := range kinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// listedRF reports whether the device list, or a room's, names rf.
+func listedRF(t *testing.T, ts *httptest.Server, rf string) (device, inRoom bool) {
+	t.Helper()
+	var devs []map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
+	for _, d := range devs {
+		device = device || d["rf_address"] == rf
+	}
+	var rooms []map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
+	for _, r := range rooms {
+		for _, d := range r["devices"].([]any) {
+			inRoom = inRoom || d.(map[string]any)["rf_address"] == rf
+		}
+	}
+	return device, inRoom
+}
+
+// A listed thermostat is deleted as the original software deletes it:
+// after a wakeup of its room it is unlinked from the room's wall
+// thermostat in both directions and its group removed, then t: with
+// the force flag, then the metadata without it; it is gone from the
+// devices, the rooms and the counts, and the metadata event came.
+func TestRemoveListedDevice(t *testing.T) {
+	fc, ts, s := startCopyCube(t, nil)
+	const base = "/api/v1/cubes/KEQ0537249"
+	var before cubeView
+	getJSON(t, ts, "", base, &before)
+	events := len(logKinds(t, ts, 0))
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "DELETE", base+"/devices/14d08e", ""); code != 200 || out["ok"] != true || out["budget"] == nil {
+		t.Fatalf("remove: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, false, 0x14d08e, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e}, false, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdSetGroup(0x14d08e, 1, true).String(),
+		"t:01,1,FNCO", "m:"})
+	for _, d := range s.cubes["keq0537249"].client.Snapshot().Metadata().Devices {
+		if d.RFAddress == 0x14d08e {
+			t.Fatal("the metadata still lists the device")
+		}
+	}
+	if device, inRoom := listedRF(t, ts, "14d08e"); device || inRoom {
+		t.Fatalf("still listed: device %v, in a room %v", device, inRoom)
+	}
+	if code := getJSON(t, ts, "", base+"/devices/14d08e", nil); code != 404 {
+		t.Fatalf("GET the removed device: %d", code)
+	}
+	var after cubeView
+	getJSON(t, ts, "", base, &after)
+	if after.Devices != before.Devices-1 || after.Rooms != before.Rooms {
+		t.Fatalf("counts %d devices %d rooms, before %d and %d", after.Devices, after.Rooms, before.Devices, before.Rooms)
+	}
+	waitFor(t, "the events", func() bool {
+		kinds := logKinds(t, ts, events)
+		return hasKind(kinds, "metadata:") && hasKind(kinds, "device_forgotten:14d08e")
+	})
+}
+
+// A device in no room by the metadata and by its C line gets t: alone.
+func TestRemoveUnlistedDevice(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, nil)
+	events := len(logKinds(t, ts, 0))
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", ""); code != 200 {
+		t.Fatalf("remove: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"t:01,1,CgsM"})
+	if device, _ := listedRF(t, ts, "0a0b0c"); device {
+		t.Fatal("still among the devices")
+	}
+	waitFor(t, "device_forgotten", func() bool { return hasKind(logKinds(t, ts, events), "device_forgotten:0a0b0c") })
+}
+
+// A device in no room by the metadata whose C line names room 1, as one
+// paired long ago, is unlinked from room 1's members before t:; no
+// metadata is written for it.
+func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, 1) })
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/0d0e0f", ""); code != 200 {
+		t.Fatalf("remove: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}, false, copyContact, cube.DeviceShutterContact).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, false, 0x14d08e, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, false, copyContact, cube.DeviceShutterContact).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, false, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdSetGroup(copyContact, 1, true).String(),
+		"t:01,1,DQ4P"})
+}
+
+// A hidden device is not found, the Cube itself and a bad address are
+// refused, and nothing reaches the Cube.
+func TestRemoveRefused(t *testing.T) {
+	fc, ts, s := start(t, "")
+	s.cubes["keq0537249"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x1514b6} })
+	for path, want := range map[string]int{"1514b6": 404, "0b9573": 400, "zz": 400, "0f0f0f": 404} {
+		if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/"+path, ""); code != want {
+			t.Fatalf("DELETE %s: %d %v, want %d", path, code, out, want)
+		}
+	}
+	if got := fc.Received(); len(got) != 0 {
+		t.Fatalf("cube received %v", lineStrings(got))
+	}
+}

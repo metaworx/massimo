@@ -419,6 +419,16 @@ func (c *Client) Reconnect(ctx context.Context) error {
 // because the Cube does not echo the new M lines.
 func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
 
+// ForgetDevice drops a device the Cube deleted with t: from the
+// snapshot (Snapshot.Forget) and tells the observers with an
+// EventForgotten, when the snapshot knew it.
+func (c *Client) ForgetDevice(rf cube.RFAddress) {
+	if c.snap.Forget(rf) {
+		c.emit(Event{Kind: EventForgotten, Device: rf})
+		c.log.Info("device forgotten", "addr", c.Address(), "device", rf)
+	}
+}
+
 // ApplyMetadataWrite mirrors a metadata write (the m: commands as sent,
 // one per part) into the snapshot, since the Cube acknowledges such a
 // write without echoing the new M lines.

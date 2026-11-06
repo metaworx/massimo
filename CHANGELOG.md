@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `DELETE /api/v1/cubes/{sn}/devices/{rf}` removes a device from the Cube
+  as the original software does, under `structure`; a client's `t:`
+  through the proxy drops the devices from the server's copy too.
+
 - Store stage (c), the settings per user (`docs/store.md` section 9):
   kept per user and key for a role with the capability `preferences`
   (migration 0003), through `/api/v1/me/preferences` (`docs/api-v1.md`).

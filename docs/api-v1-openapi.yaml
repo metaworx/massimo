@@ -912,6 +912,36 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "502": {$ref: "#/components/responses/CubeError"}
+    delete:
+      summary: Remove a device from the Cube
+      x-capability: structure
+      description: >-
+        As the original software deletes a device: a device in a room (the
+        metadata's, else its C line's) is unlinked from the room's members
+        in both directions after a wakeup (0x21) and its group removed
+        (0x23); then t: with the force flag, which makes the Cube send the
+        device a factory reset; then the metadata without it, where it was
+        listed. The server's copy forgets the device at once. A device that
+        never answers stays in the Cube's memory and comes back, unlisted,
+        with the next full read.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  budget: {$ref: "#/components/schemas/Budget"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/CubeError"}
+        "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/devices/{rf}/setpoint:
     put:
       summary: Set mode and setpoint of one thermostat
