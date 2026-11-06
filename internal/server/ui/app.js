@@ -124,10 +124,9 @@ async function deviceDetail(rf) {
 
 // --- helpers ----------------------------------------------------------
 
+// showMessage says how something went on the page's message line.
 function showMessage(text, ok) {
-  const m = $("message");
-  m.textContent = text;
-  m.className = "message " + (ok ? "ok" : "bad");
+  showResult($("message"), text, ok);
 }
 
 // fmtTemp is a temperature with one decimal and a unit ("°C" unless
@@ -381,32 +380,15 @@ function renderUpdated() {
 // those found on the LAN but not configured (shown, not selectable),
 // then the entry that searches the LAN for new ones.
 function renderCubeSelect() {
-  const sel = $("cube-select");
-  clear(sel);
-  for (const c of state.cubes) {
-    const o = document.createElement("option");
-    o.value = c.serial;
+  const options = state.cubes.map((c) => {
     const name = c.name ? c.name + " (" + c.serial + ")" : c.serial;
-    o.textContent = c.connected ? name : t("header.cubeDisconnected", { name });
-    sel.appendChild(o);
-  }
+    return [c.serial, c.connected ? name : t("header.cubeDisconnected", { name })];
+  });
   if (state.found.length) {
-    const group = document.createElement("optgroup");
-    group.label = t("discover.group");
-    for (const c of state.found) {
-      const o = document.createElement("option");
-      o.value = "found:" + c.serial;
-      o.disabled = true;
-      o.textContent = c.serial + (c.address ? " · " + c.address : "");
-      group.appendChild(o);
-    }
-    sel.appendChild(group);
+    options.push({ group: t("discover.group"), options: state.found.map((c) => ["found:" + c.serial, c.serial + (c.address ? " · " + c.address : ""), true]) });
   }
-  const search = document.createElement("option");
-  search.value = DISCOVER;
-  search.textContent = t(discovery.running ? "discover.searching" : "discover.search");
-  search.disabled = discovery.running;
-  sel.appendChild(search);
+  options.push([DISCOVER, t(discovery.running ? "discover.searching" : "discover.search"), discovery.running]);
+  const sel = fillOptions($("cube-select"), options);
   sel.value = state.serial || "";
 }
 
@@ -781,18 +763,9 @@ function initSettings() {
 // renderLangSelect fills the language choice: from the browser, then
 // every language with a translation table, by its own name.
 function renderLangSelect() {
-  const sel = $("lang-select");
-  clear(sel);
-  const auto = document.createElement("option");
-  auto.value = "auto";
-  auto.textContent = t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")";
-  sel.appendChild(auto);
-  for (const l of languages()) {
-    const o = document.createElement("option");
-    o.value = l;
-    o.textContent = LANGUAGE_NAMES[l] || l;
-    sel.appendChild(o);
-  }
+  const options = [["auto", t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")"]];
+  for (const l of languages()) options.push([l, LANGUAGE_NAMES[l] || l]);
+  const sel = fillOptions($("lang-select"), options);
   sel.value = i18n.setting;
   const note = $("lang-note");
   const texts = machineNote();
