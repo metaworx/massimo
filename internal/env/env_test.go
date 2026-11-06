@@ -154,7 +154,7 @@ func TestResolveAddrWhenTheProxyDoesNotAnswer(t *testing.T) {
 }
 
 func TestKnown(t *testing.T) {
-	for _, k := range []string{"MASSIMO_CUBE_KEY", "MASSIMO_CUBE_KEQ1_PROXY_SERIAL", "MASSIMO_LISTEN", "MASSIMO_API_TOKEN"} {
+	for _, k := range []string{"MASSIMO_CUBE_KEY", "MASSIMO_CUBE_KEQ1_PROXY_SERIAL", "MASSIMO_LISTEN", "MASSIMO_API_TOKEN", "MASSIMO_DATA", "MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN"} {
 		if !Known(k) {
 			t.Errorf("%s unknown", k)
 		}
