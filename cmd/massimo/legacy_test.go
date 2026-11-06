@@ -45,7 +45,7 @@ func TestLegacyKeepsTheCubeSearch(t *testing.T) {
 	}
 	drop := []string{
 		`01:55:05,772 DEBUG [org.springframework.beans.factory.support.DefaultListableBeanFactory] () Creating shared instance`,
-		`        at de.eq3.max.al.local.update.CubeUdpProxy.performRequest(CubeUdpProxy.java:312)`,
+		`        at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:312)`,
 		`something trying hard without an interface`,
 		`ethernet : no colon pattern`,
 	}
