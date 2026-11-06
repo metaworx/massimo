@@ -10,21 +10,31 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
 
-// The server runs unprivileged and cannot replace its own binary. It asks
-// for an update by writing a request file into its state directory; a
-// systemd path unit sees the file and starts the update helper as root
-// (packaging/systemd/massimo-update.*), which reads and removes it,
-// finds, verifies and installs the release itself and reports in a status
-// file the server reads. The request holds nothing but the channel, so
-// the server can neither choose a version nor hand over a binary.
+// The server cannot replace its own binary. It asks for an update by
+// writing a request file; the update helper reads and removes it, finds,
+// verifies and installs the release itself and reports in a status file
+// the server reads. Who starts the helper depends on the platform: on
+// Linux a systemd path unit sees the file and starts it as root
+// (packaging/systemd/massimo-update.*), on macOS launchd's WatchPaths
+// does (packaging/launchd), and on Windows, where nothing watches a file
+// and the service already runs as LocalSystem, the server starts it
+// itself as a detached process (cmd/massimo). The request holds nothing
+// but the channel, so the server can neither choose a version nor hand
+// over a binary. The paths here are the Unix ones; the Windows ones come
+// from internal/install's WindowsPaths.
 const (
 	DefaultRequestPath = "/var/lib/massimo/update-request"
 	DefaultStatusPath  = "/var/lib/massimo-update/status.json"
 )
+
+// ErrHelperRunning is returned by a helper starter while a helper it
+// started has not exited yet.
+var ErrHelperRunning = errors.New("an update is already running")
 
 // WriteRequest asks the helper for an update to the newest release on
 // the channel.
@@ -119,7 +129,20 @@ func WriteStatus(path string, s Status) error {
 	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	return renameRetrying(tmp, path)
+}
+
+// renameRetrying renames tmp over path. On Windows a rename over a file
+// another process has open fails (Go opens files without
+// FILE_SHARE_DELETE), which happens when the server reads the status in
+// the same moment; a few retries ride that out.
+func renameRetrying(tmp, path string) error {
+	err := os.Rename(tmp, path)
+	for i := 0; err != nil && runtime.GOOS == "windows" && i < 10; i++ {
+		time.Sleep(50 * time.Millisecond)
+		err = os.Rename(tmp, path)
+	}
+	return err
 }
 
 // ReadStatus reads the status file; no file gives a zero Status.

@@ -11,8 +11,10 @@ import (
 )
 
 // openNoFollow refuses a symbolic link; without O_NOFOLLOW the check
-// comes before the open, which is enough where no helper runs as another
-// user (the update helper is Linux only for now).
+// comes before the open, which is enough where the helper runs as the
+// same user as the server (on Windows both run as LocalSystem, and the
+// request file lies in a folder only SYSTEM and the Administrators can
+// write).
 func openNoFollow(path string) (*os.File, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {

@@ -75,14 +75,21 @@ func Smoke(ctx context.Context, path, tag string) error {
 
 // Swap installs the staged file as target and keeps the current target
 // as PrevPath. target is replaced by a rename, so it is always either the
-// old or the new binary, also for a process starting it meanwhile.
+// old or the new binary, also for a process starting it meanwhile
+// (except on Windows: see swapRenaming). A FailedPath left by an earlier
+// failed update goes: a new binary replaces the one it was kept against,
+// and an update that fails again keeps a fresh one.
 func Swap(target string) error {
 	staged := stagedPath(target)
 	if err := os.Chmod(staged, 0o755); err != nil {
 		return err
 	}
 	if runtime.GOOS == "windows" {
-		return swapRenaming(staged, target, PrevPath(target))
+		if err := swapRenaming(staged, target, PrevPath(target)); err != nil {
+			return err
+		}
+		removeFailed(target)
+		return nil
 	}
 	if err := keepAs(target, PrevPath(target)); err != nil {
 		return err
@@ -90,18 +97,33 @@ func Swap(target string) error {
 	if err := os.Rename(staged, target); err != nil {
 		return err
 	}
+	removeFailed(target)
 	return syncDir(filepath.Dir(target))
+}
+
+// removeFailed removes FailedPath; failing to is no reason to fail the
+// update, the file is only kept for diagnosis.
+func removeFailed(target string) {
+	if err := os.Remove(FailedPath(target)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(os.Stderr, "update:", err)
+	}
 }
 
 // Rollback puts PrevPath back as target. The current target is kept as
 // keep: PrevPath again for a manual rollback (so that a second one goes
-// forward again), or FailedPath after a failed health check.
+// forward again), or FailedPath after a failed health check. A missing
+// target is no obstacle: PrevPath is renamed into its place.
 func Rollback(target, keep string) error {
 	prev := PrevPath(target)
 	if _, err := os.Stat(prev); err != nil {
 		return fmt.Errorf("nothing to roll back to: %w", err)
 	}
 	swap := target + ".swap"
+	if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
+		// The target is gone (an antivirus quarantined it after the swap):
+		// put PrevPath in its place, there is nothing to keep.
+		return os.Rename(prev, target)
+	}
 	if runtime.GOOS == "windows" {
 		if err := swapRenaming(prev, target, swap); err != nil {
 			return err
