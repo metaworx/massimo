@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,11 +23,20 @@ const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
 
 func setup(t *testing.T) (*fakecube.Server, *Proxy, *cubelan.Client, context.Context) {
 	t.Helper()
+	return setupWith(t, nil)
+}
+
+// setupWith is setup with the fake Cube changed by mod before it starts.
+func setupWith(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, *Proxy, *cubelan.Client, context.Context) {
+	t.Helper()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fc := &fakecube.Server{Greeting: greeting, Duty: 0x19}
+	if mod != nil {
+		mod(fc)
+	}
 	addr, err := fc.Start("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -504,5 +514,68 @@ func TestProxyPairing(t *testing.T) {
 	}
 	if strings.Join(got, " ") != "n:001e c:0a0b0c x:" {
 		t.Fatalf("cube received %v", got)
+	}
+}
+
+// A client's radio write that the Cube took is reported to OnWrite with
+// the device and the radio command; a read and a write the Cube
+// discarded are not.
+func TestProxyReportsWrites(t *testing.T) {
+	for _, discard := range []bool{false, true} {
+		fc, p, _, ctx := setupWith(t, func(fc *fakecube.Server) { fc.Discard = discard })
+		var mu sync.Mutex
+		var got []cube.RadioCommand
+		p.opts.OnWrite = func(c cube.RadioCommand) {
+			mu.Lock()
+			got = append(got, c)
+			mu.Unlock()
+		}
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go p.ServeTCP(ctx, ln)
+		conn, err := net.DialTimeout("tcp", ln.Addr().String(), 5*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		conn.SetDeadline(time.Now().Add(10 * time.Second))
+		r := cube.NewReader(conn)
+		for readLine(t, r).Type != 'L' {
+		}
+		reported := func() []cube.RadioCommand {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]cube.RadioCommand(nil), got...)
+		}
+
+		conn.Write([]byte("f:\r\n"))
+		if m := readLine(t, r); m.Type != 'F' {
+			t.Fatalf("f: answered %s", m)
+		}
+		if countType(fc, 'f') != 1 || len(reported()) != 0 {
+			t.Fatalf("a read reported as a write: %v", reported())
+		}
+		// The preset temperatures of one device, then a room setpoint.
+		for _, l := range []string{"s:AAARAAAAFNCOACwePQkDCgM=\r\n", "s:AARAAAAAFRS2BgA=\r\n"} {
+			conn.Write([]byte(l))
+			if m := readLine(t, r); m.Type != 'S' {
+				t.Fatalf("s: answered %s", m)
+			}
+		}
+		if countType(fc, 's') != 2 {
+			t.Fatalf("cube received %d s commands", countType(fc, 's'))
+		}
+		want := []cube.RadioCommand{
+			{Command: cube.RFSetTemperatures, Target: cube.Target{RFAddress: 0x14d08e}},
+			{Command: cube.RFSetTemperature, Target: cube.Target{RFAddress: 0x1514b6, RoomID: 6, Room: true}},
+		}
+		if discard {
+			want = nil
+		}
+		if g := reported(); len(g) != len(want) || (len(want) > 0 && (g[0] != want[0] || g[1] != want[1])) {
+			t.Fatalf("discard %v: reported %+v, want %+v", discard, g, want)
+		}
 	}
 }
