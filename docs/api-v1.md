@@ -184,7 +184,9 @@ battery, or remove the device from the Cube:
 `{"ok": true, "version": "massimo v0.1.0 …", "started_at": "2026-11-05T18:20:00+01:00"}`
 
 `started_at` is when the server process started; a new time with the
-same version means the server was restarted.
+same version means the server was restarted. `node_id` is the box's
+identifier from its store (`node.id`, a UUID made at the first start,
+see docs/store.md); it stays the same across restarts and updates.
 
 ### GET /api/v1/cubes
 
@@ -198,6 +200,10 @@ is not configured:
     "name": "Ground floor",
     "address": "192.168.1.9",
     "configured": true,
+    "source": "env",
+    "file_differs": [
+      {"field": "name", "variable": "MASSIMO_CUBE_JEQ0192422_NAME", "file": "Downstairs", "store": "Ground floor"}
+    ],
     "mac": "00:1a:22:0a:0b:0c",
     "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
@@ -231,7 +237,18 @@ once discovery has seen it. A found Cube has only the fields shown:
 saw it, `last_seen` its latest answer; `mac` comes from the host's ARP
 cache and may be missing. To use it, configure it (its address, or its
 serial with `-sn` or a `_NAME`, see the README) and restart serve. The
-answers of serve's own proxies (docs/proxy.md) are not listed.
+answers of serve's own proxies (docs/proxy.md) are not listed. Found
+Cubes are kept in the server's store, so they are listed again after a
+restart, with their first and latest sighting.
+
+`source` says where a configured Cube's configuration comes from:
+`env` (taken over from the settings file into the store), `ui` (changed
+through the API), `flag` (`-addr` or `-sn`, for this run). The store
+wins over the settings file; `file_differs` lists the file's lines for
+the Cube whose values differ from the store's, with the field as this
+object names it (`name`, `address`, `proxy_address`, `proxy_serial`,
+`hidden`), the variable, and both values (lists for `hidden`); it is
+absent when the file agrees or has no lines for the Cube.
 
 `budget` is what the Cube last reported: the share of the hourly radio
 budget already used, and the free memory slots (each unacknowledged

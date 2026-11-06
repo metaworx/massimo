@@ -14,7 +14,7 @@ func TestWindowsLayout(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 	args := ServiceArgs(p, "")
-	if strings.Join(args, " ") != `-env D:\Data\Massimo\env serve -listen :8099 -log D:\Data\Massimo\serve.log` {
+	if strings.Join(args, " ") != `-env D:\Data\Massimo\env -data D:\Data\Massimo serve -listen :8099 -log D:\Data\Massimo\serve.log` {
 		t.Fatalf("%q", args)
 	}
 	cmdline := `"C:\Program Files\Massimo\massimo.exe" -env "C:\ProgramData\Massimo\env" serve -listen 192.168.1.200:80 -log x`

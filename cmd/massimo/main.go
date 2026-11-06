@@ -65,6 +65,8 @@ func main() {
 		err = runLegacy(rest)
 	case "update":
 		err = runUpdate(rest)
+	case "store":
+		err = runStore(rest)
 	case "install":
 		err = runInstall(rest)
 	case "version", "--version", "-v", "-V":
@@ -83,7 +85,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-sn <serial>] [-show-hidden] <command> [args]
+	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-data <dir>] [-sn <serial>] [-show-hidden] <command> [args]
 
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
@@ -96,6 +98,11 @@ report) and those in MASSIMO_CUBE_<SN>_IGNORE are hidden everywhere;
 -show-hidden (older names -show-ghosts, -no-ignore) shows and touches
 them for this run. With -addr, the serial the Cube reports selects its
 key. -addr defaults to MASSIMO_CUBE_ADDRESS.
+
+serve keeps the Cubes and its settings in massimo.db in the data directory
+(-data, MASSIMO_DATA, else the current directory); after its first start
+the file's _ADDRESS, _NAME, _PROXY, _PROXY_SERIAL and _IGNORE lines only
+add Cubes the store does not know. The other commands keep reading them.
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON
@@ -111,6 +118,7 @@ commands:
   config          show the settings in effect, with keys and IVs redacted
   serve           keep the Cubes connected, serve the JSON API and act as a Cube on the LAN
   legacy          run the original MAX! software with filtered output
+  store           back up, migrate or describe serve's store, massimo.db (see its usage)
   install         install massimo serve as a service (systemd), or update or -remove it
   update          install the newest signed release from GitHub (-check only looks)
   version         print the version (also --version)

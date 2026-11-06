@@ -18,7 +18,7 @@ const DefaultListen = ":8099"
 type WinPaths struct {
 	Dir     string // %ProgramFiles%\Massimo
 	Bin     string // …\massimo.exe
-	DataDir string // %ProgramData%\Massimo: settings and log, SYSTEM and Administrators only
+	DataDir string // %ProgramData%\Massimo: settings, store and log, SYSTEM and Administrators only
 	Env     string // …\env
 	Log     string // …\serve.log
 }
@@ -40,12 +40,13 @@ func WindowsPaths(programFiles, programData string) WinPaths {
 func winJoin(a, b string) string { return strings.TrimRight(a, `\`) + `\` + b }
 
 // ServiceArgs is the command line the service runs massimo with, after
-// the binary: the same serve as the systemd unit's.
+// the binary: the same serve as the systemd unit's, with the store
+// (-data) in the data directory.
 func ServiceArgs(p WinPaths, listen string) []string {
 	if listen == "" {
 		listen = DefaultListen
 	}
-	return []string{"-env", p.Env, "serve", "-listen", listen, "-log", p.Log}
+	return []string{"-env", p.Env, "-data", p.DataDir, "serve", "-listen", listen, "-log", p.Log}
 }
 
 // ListenFromCommandLine returns the -listen value of a service command

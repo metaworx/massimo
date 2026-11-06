@@ -4,13 +4,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 // runConfig prints the MASSIMO_* settings in effect. Keys and IVs are
@@ -39,7 +45,9 @@ func runConfig(args []string) error {
 	case selectedSN != "":
 		src = env.SN
 	}
+	fmt.Printf("data dir:      %s (%s)\n", dataDir(), storeState())
 	fmt.Printf("selected cube: %s (from %s)\n", orNone(selectedSN), src)
+	fmt.Println("for the commands (serve takes these from its store, see below):")
 	fmt.Printf("key in effect: %s\n", redact(cubeEnv(env.Key)))
 	fmt.Printf("iv in effect:  %s\n", redact(cubeEnv(env.IV)))
 	fmt.Printf("address:       %s\n", orNone(cubeEnv(env.Address)))
@@ -68,6 +76,7 @@ func runConfig(args []string) error {
 		}
 		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
+	printStore(os.Stdout)
 	if sns, _ := env.Serials(env.Key); len(sns) > 0 {
 		fmt.Printf("\ncubes with a key: %s\n", strings.Join(sns, ", "))
 		for _, sn := range sns {
@@ -83,6 +92,119 @@ func runConfig(args []string) error {
 		}
 	}
 	return nil
+}
+
+// openStoreToRead opens the data directory's store read-only, or says
+// why it cannot.
+func openStoreToRead() (*store.Store, error) {
+	return store.OpenReadOnly(dataDir(), store.Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+}
+
+// storeState says whether the data directory has a store and its
+// version.
+func storeState() string {
+	st, err := openStoreToRead()
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "no " + store.FileName + " yet; serve creates it"
+	case err != nil:
+		return store.FileName + ": " + err.Error()
+	}
+	defer st.Close()
+	v, _ := st.SchemaVersion()
+	return fmt.Sprintf("%s, schema version %d, node %s", store.FileName, v, st.NodeID())
+}
+
+// printStore prints, for each Cube serve would serve, every value of the
+// settings file's kind and where it comes from: the store (which wins),
+// or the file (a Cube the store does not know yet, added at serve's next
+// start), with the file's line where it differs.
+func printStore(w io.Writer) {
+	file, plain, err := fileCubes()
+	if err != nil {
+		fmt.Fprintf(w, "\nsettings file: %v\n", err)
+		return
+	}
+	var rows []store.Cube
+	if st, err := openStoreToRead(); err == nil {
+		rows, err = st.Cubes(context.Background())
+		if sn, _ := st.PlainSerial(context.Background()); sn != "" && plain != nil {
+			plain.Serial = sn
+			file, plain = append(file, *plain), nil
+		}
+		st.Close()
+		if err != nil {
+			fmt.Fprintf(w, "\nstore: %v\n", err)
+		}
+	}
+	byFile := map[string]store.FileCube{}
+	for _, fc := range file {
+		byFile[store.NormalSerial(fc.Serial)] = fc
+	}
+	fmt.Fprintln(w, "\ncubes for serve (the store wins; the file's lines add a Cube the store does not know):")
+	shown := map[string]bool{}
+	value := func(field, v, src string) {
+		fmt.Fprintf(w, "    %-14s %-30s (%s)\n", field, orNone(v), src)
+	}
+	for _, row := range rows {
+		if !row.Configured && row.Source == store.SourceDiscovery {
+			fmt.Fprintf(w, "  %s  found on the LAN at %s, not configured\n", row.Serial, orNone(row.DiscoveredAddress))
+			if _, ok := byFile[row.Serial]; !ok {
+				continue
+			}
+		}
+		shown[row.Serial] = true
+		fc, inFile := byFile[row.Serial]
+		state := "configured"
+		if !row.Configured {
+			state = "removed, not served"
+			if row.Source == store.SourceDiscovery {
+				state = "found; added from the file at serve's next start"
+			}
+		}
+		fmt.Fprintf(w, "  %s  in the store (source %s), %s\n", row.Serial, row.Source, state)
+		diffs := map[string]store.Difference{}
+		for _, d := range store.Differences(row, fc) {
+			diffs[d.Field] = d
+		}
+		for _, f := range store.Fields {
+			src := "store"
+			if fv, ok := fc.Values[f]; inFile && ok {
+				if d, differs := diffs[f]; differs {
+					src = fmt.Sprintf("store; the file's %s=%s differs and is ignored", d.Variable, d.File)
+				} else {
+					src = "store, same as " + fv.Variable
+				}
+			}
+			v := store.StoreValue(row, f)
+			if f == store.FieldAddress && row.FollowDiscovery {
+				v = strings.TrimSpace(v + " (follows discovery)")
+			}
+			value(f, v, src)
+		}
+	}
+	for _, fc := range file {
+		if shown[store.NormalSerial(fc.Serial)] {
+			continue
+		}
+		fmt.Fprintf(w, "  %s  in the settings file only; added to the store at serve's next start\n", fc.Serial)
+		for _, f := range store.Fields {
+			if fv, ok := fc.Values[f]; ok {
+				value(f, fv.Value, "file, "+fv.Variable)
+			}
+		}
+	}
+	if plain != nil {
+		fmt.Fprintln(w, "  (serial not known yet)  the plain lines; added to the store once the Cube reports its serial")
+		for _, f := range store.Fields {
+			if fv, ok := plain.Values[f]; ok {
+				value(f, fv.Value, "file, "+fv.Variable)
+			}
+		}
+	}
+	if len(rows) == 0 && len(file) == 0 && plain == nil {
+		fmt.Fprintln(w, "  (none)")
+	}
 }
 
 func orNone(s string) string {

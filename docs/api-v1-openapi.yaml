@@ -30,6 +30,7 @@ paths:
                   ok: {type: boolean}
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
+                  node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
   /api/v1/cubes:
     get:
       summary: List the Cubes
@@ -935,9 +936,14 @@ components:
       type: object
       properties:
         serial: {type: string}
-        name: {type: string, description: User-friendly name from MASSIMO_CUBE_<SN>_NAME, when set}
+        name: {type: string, description: User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set}
         address: {type: string}
         configured: {type: boolean, description: Always true here; found Cubes are FoundCube}
+        source: {type: string, enum: [env, ui, flag], description: Where the configuration comes from; absent without a store}
+        file_differs:
+          type: array
+          description: The settings file's lines for this Cube whose values differ from the store's, which wins
+          items: {$ref: "#/components/schemas/FileDifference"}
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
@@ -950,6 +956,13 @@ components:
         devices: {type: integer}
         queued: {type: integer, description: Commands waiting in the queue}
         cube_time: {type: string, example: "2026-11-04 15:28"}
+    FileDifference:
+      type: object
+      properties:
+        field: {type: string, enum: [name, address, proxy_address, proxy_serial, hidden]}
+        variable: {type: string, example: MASSIMO_CUBE_KEQ0000000_NAME}
+        file: {description: The file's value; a list of radio addresses for hidden}
+        store: {description: The store's value, in effect; a list for hidden}
     CubeDetail:
       allOf:
         - {$ref: "#/components/schemas/Cube"}

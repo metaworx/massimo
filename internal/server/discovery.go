@@ -25,6 +25,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 // Defaults of discovery.
@@ -227,6 +228,11 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	f.Configured = rt != nil
 	cp := *f
 	s.foundMu.Unlock()
+	if s.opts.Store != nil {
+		if _, _, err := s.opts.Store.NoteDiscovered(ctx, store.Discovered{Serial: serial, Address: cp.Address, MAC: cp.MAC, RFAddress: cp.RFAddress, Firmware: cp.Firmware, At: now}); err != nil {
+			s.log.Warn("store: found cube not recorded", "serial", serial, "error", err)
+		}
+	}
 
 	if rt == nil {
 		if !known {
@@ -239,7 +245,7 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	if host == cp.Address {
 		return cp
 	}
-	if rt.cfg.Addr != "" {
+	if rt.cfg.Addr != "" && !rt.cfg.FollowDiscovery {
 		if ip := net.ParseIP(host); ip != nil {
 			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", rt.cfg.Addr, "found", cp.Address)
 		}

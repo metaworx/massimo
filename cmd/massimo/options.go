@@ -42,13 +42,13 @@ func useDeviceSerial(serial string) {
 }
 
 // globalOptions parses options that precede the command name:
-// -env <file>, -sn <serial> and -show-hidden. It returns the remaining
-// arguments.
+// -env <file>, -data <dir>, -sn <serial> and -show-hidden. It returns
+// the remaining arguments.
 func globalOptions(args []string) ([]string, error) {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(args[0], "-"), "=")
 		switch name {
-		case "env", "sn":
+		case "env", "data", "sn":
 		case "show-hidden", "no-ignore", "show-ghosts":
 			showHidden = true
 			args = args[1:]
@@ -66,11 +66,27 @@ func globalOptions(args []string) ([]string, error) {
 		switch name {
 		case "env":
 			os.Setenv(env.FileVar, value)
+		case "data":
+			os.Setenv(env.DataVar, value)
 		case "sn":
 			selectedSN, snExplicit = value, true
 		}
 	}
 	return args, nil
+}
+
+// dataDir is the data directory, where serve keeps massimo.db: -data,
+// else MASSIMO_DATA, else the current directory; a Windows service
+// started without either (a binary updated by hand before install wrote
+// -data) uses %ProgramData%\Massimo, since a service runs in System32.
+func dataDir() string {
+	if d := os.Getenv(env.DataVar); d != "" {
+		return d
+	}
+	if d := serviceDataDir(); d != "" {
+		return d
+	}
+	return "."
 }
 
 // snFlag registers -sn on a command's flag set, so that both

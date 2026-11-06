@@ -3,9 +3,9 @@
 
 // Package env reads the command line's configuration from the process
 // environment and the .env file: the per-Cube variables, the hidden set
-// and the address a command connects to. Every command, serve included,
-// goes through it, so that a settings database can later replace it in
-// one place.
+// and the address a command connects to. Every command goes through it;
+// serve reads it at the start to seed its store (internal/store), which
+// holds the Cube values of the variables in Moved from then on.
 //
 // Each Cube variable has a per-Cube form with the serial number inserted
 // (MASSIMO_CUBE_KEQ0123456_KEY for MASSIMO_CUBE_KEY), which wins for that
@@ -46,7 +46,16 @@ const (
 	Name        = Prefix + "NAME" // a user-friendly name for the Cube
 	// FileVar names the env file to read instead of ./.env.
 	FileVar = "MASSIMO_ENV_FILE"
+	// DataVar names the data directory, where serve keeps massimo.db
+	// (internal/store); default the current directory.
+	DataVar = "MASSIMO_DATA"
 )
+
+// Moved lists the per-Cube variables whose values serve keeps in its
+// store after the first start (docs/store.md section 4): for serve the
+// file's lines are seeds and fallbacks, for the other commands they are
+// still the configuration.
+var Moved = []string{Address, Name, Proxy, ProxySerial, Ignore}
 
 // perCubeSuffixes are the variables that have a per-Cube form.
 var perCubeSuffixes = []string{"_KEY", "_IV", "_ADDRESS", "_IGNORE", "_PROXY", "_PROXY_SERIAL", "_NAME"}
@@ -111,8 +120,9 @@ func Serials(name string) (serials []string, values map[string]string) {
 // Known reports whether a MASSIMO_* name is one the program reads.
 func Known(k string) bool {
 	switch k {
-	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar,
-		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST":
+	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar,
+		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST",
+		"MASSIMO_UPDATE_CHANNEL", "MASSIMO_GITHUB_TOKEN":
 		return true
 	}
 	mid, ok := strings.CutPrefix(k, Prefix)

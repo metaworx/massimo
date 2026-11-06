@@ -8,7 +8,8 @@
   installs) and loads it with launchctl bootstrap (see packaging/README.md).
 
   It runs as the hidden system user _massimo. Settings and secrets are read
-  by massimo itself from /etc/massimo/env (mode 0600, owned by _massimo).
+  by massimo itself from /etc/massimo/env (mode 0600, owned by _massimo);
+  -data names the directory of its store, massimo.db.
   -update-request lets the web UI ask the update helper
   (ch.metaworx.massimo-update, root) to install a newer release.
 -->
@@ -21,6 +22,8 @@
 		<string>/usr/local/bin/massimo</string>
 		<string>-env</string>
 		<string>/etc/massimo/env</string>
+		<string>-data</string>
+		<string>/var/lib/massimo</string>
 		<string>serve</string>
 		<string>-listen</string>
 		<string>@LISTEN@</string>
