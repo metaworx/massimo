@@ -29,6 +29,7 @@ type fileDifference struct {
 // found Cubes are listed again and announced only once.
 func (s *Server) loadFound() {
 	s.fileCubes = map[string]store.FileCube{}
+	s.diffs = map[string][]fileDifference{}
 	for k, v := range s.opts.FileCubes {
 		s.fileCubes[strings.ToUpper(k)] = v
 	}
@@ -41,6 +42,7 @@ func (s *Server) loadFound() {
 		return
 	}
 	for _, c := range rows {
+		s.noteRow(c)
 		if c.LastSeen.IsZero() {
 			continue // never answered discovery
 		}
@@ -71,26 +73,24 @@ func (s *Server) seedLearned(ctx context.Context, rt *runtime) {
 		s.log.Warn("store: cube not added", "serial", fc.Serial, "error", err)
 		return
 	}
+	if row, ok, err := s.opts.Store.Cube(ctx, fc.Serial); err == nil && ok {
+		s.noteRow(row)
+	}
 	if err := s.opts.Store.SetSetting(ctx, store.PlainSerialKey, fc.Serial); err != nil {
 		s.log.Warn("store: cube not added", "serial", fc.Serial, "error", err)
 	}
 }
 
-// fileDiffers lists the settings file's lines for a Cube that differ
-// from its row in the store.
-func (s *Server) fileDiffers(serial string) []fileDifference {
-	if s.opts.Store == nil || serial == "" {
-		return nil
-	}
+// noteRow computes the settings file's differences for a Cube row: at
+// the start, and whenever the row changes through the server, so that
+// listing the Cubes asks the store nothing.
+func (s *Server) noteRow(row store.Cube) {
 	s.fileMu.Lock()
-	fc, ok := s.fileCubes[strings.ToUpper(serial)]
-	s.fileMu.Unlock()
+	defer s.fileMu.Unlock()
+	fc, ok := s.fileCubes[strings.ToUpper(row.Serial)]
 	if !ok {
-		return nil
-	}
-	row, ok, err := s.opts.Store.Cube(context.Background(), serial)
-	if err != nil || !ok {
-		return nil
+		delete(s.diffs, row.Serial)
+		return
 	}
 	var out []fileDifference
 	for _, d := range store.Differences(row, fc) {
@@ -100,5 +100,13 @@ func (s *Server) fileDiffers(serial string) []fileDifference {
 		}
 		out = append(out, fd)
 	}
-	return out
+	s.diffs[row.Serial] = out
+}
+
+// fileDiffers lists the settings file's lines for a Cube that differ
+// from its row in the store, as noteRow last computed them.
+func (s *Server) fileDiffers(serial string) []fileDifference {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+	return s.diffs[strings.ToUpper(serial)]
 }

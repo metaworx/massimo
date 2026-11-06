@@ -325,8 +325,9 @@ with its history. Discovery lists it as found again, `POST` adds it
 back, and a line in the settings file does not bring it back by
 itself.
 
-A Cube served for this run only (`serve -addr`, or `-sn` without a row)
-is not in the store and answers `409` to `PUT` and `DELETE`.
+A Cube served by serial for this run only (`-sn` without a row)
+is not in the store and answers `409` to `PUT` and `DELETE`; `serve -addr`
+runs without a store, so these routes answer `503` there.
 
 ### GET and PUT /api/v1/settings
 

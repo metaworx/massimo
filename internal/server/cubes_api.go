@@ -183,6 +183,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return storeFail(err)
 	}
+	s.noteRow(row)
 	rt, err := s.addCube(row)
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
@@ -234,6 +235,7 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return storeFail(err)
 	}
+	s.noteRow(row)
 	if err := s.applyCube(rt, row); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -287,12 +289,14 @@ func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if _, err := st.UpdateCube(r.Context(), rt.serial, func(c *store.Cube) error {
+	row, err := st.UpdateCube(r.Context(), rt.serial, func(c *store.Cube) error {
 		c.Configured, c.Source = false, store.SourceUI
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return storeFail(err)
 	}
+	s.noteRow(row)
 	s.removeCube(rt)
 	s.log.Info("cube removed", "serial", rt.serial, "remote", r.RemoteAddr)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "serial": rt.serial})

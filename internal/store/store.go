@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,6 +78,11 @@ type Store struct {
 
 	nodeID string
 	key    nodeKey
+
+	// seenWritten holds the serials whose last_seen this run has
+	// written, see NoteDiscovered.
+	seenMu      sync.Mutex
+	seenWritten map[string]bool
 }
 
 // Path returns the database file of the data directory dir.
@@ -139,7 +145,7 @@ func OpenReadOnly(dir string, o Options) (*Store, error) {
 }
 
 func newStore(dir string, o Options) *Store {
-	s := &Store{dir: dir, path: Path(dir), log: o.Logger, now: o.Now, version: o.Version}
+	s := &Store{dir: dir, path: Path(dir), log: o.Logger, now: o.Now, version: o.Version, seenWritten: map[string]bool{}}
 	if s.log == nil {
 		s.log = slog.Default()
 	}

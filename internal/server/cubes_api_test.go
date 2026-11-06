@@ -249,8 +249,7 @@ func TestCubeRoutesNeedAStore(t *testing.T) {
 
 // The settings: defaults, a change that applies at once, the checks.
 func TestSettingsAPI(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{PollInterval: 2 * time.Minute})
-	t.Cleanup(func() { view.SetStaleAfter(0) })
+	_, ts, srv, st := startStored(t, Options{PollInterval: 2 * time.Minute})
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")
 	stale, _ := out["stale_after"].(map[string]any)
 	poll, _ := out["poll_interval"].(map[string]any)
@@ -264,8 +263,8 @@ func TestSettingsAPI(t *testing.T) {
 	if code != 200 || stale["value"] != "36h" || stale["set"] != true || stale["in_effect"] != "36h" || refresh["value"] != "0" {
 		t.Fatalf("put %d %v", code, out)
 	}
-	if view.StaleAfterNow() != 36*time.Hour {
-		t.Fatalf("stale threshold in effect %v", view.StaleAfterNow())
+	if srv.StaleAfter() != 36*time.Hour {
+		t.Fatalf("stale threshold in effect %v", srv.StaleAfter())
 	}
 	if d, ok, _ := st.SettingDuration(context.Background(), store.StaleAfterKey); !ok || d != 36*time.Hour {
 		t.Fatalf("stored %v %v", d, ok)
@@ -281,7 +280,7 @@ func TestSettingsAPI(t *testing.T) {
 	}
 	code, out = do(t, ts, "PUT", "/api/v1/settings", `{"stale_after":null}`)
 	stale, _ = out["stale_after"].(map[string]any)
-	if code != 200 || stale["set"] != false || stale["value"] != "24h" || view.StaleAfterNow() != view.StaleAfter {
+	if code != 200 || stale["set"] != false || stale["value"] != "24h" || srv.StaleAfter() != view.StaleAfter {
 		t.Fatalf("back to the default %d %v", code, out)
 	}
 }

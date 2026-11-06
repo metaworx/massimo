@@ -381,7 +381,7 @@ which value is the store's and which line of the file differs. The
 keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`, the
 update variables and `MASSIMO_CUBE_SN` stay in the file only, and every
 command other than `serve` keeps reading all of its lines as before.
-`-addr` and `-sn` still pick a Cube for one run and write nothing.
+`-addr` and `-sn` still pick a Cube for one run and write nothing for it; `serve -addr` runs without the store altogether (no `massimo.db` is opened or created, found Cubes are not kept).
 `massimo store backup <file>` writes a consistent copy of the store,
 also while `serve` runs (copying `massimo.db` alone can miss the last
 writes, which are in `massimo.db-wal` until a checkpoint), `store
@@ -555,7 +555,9 @@ massimo legacy -out max-session.log
 
 starts the original MAX! software (Java 8, installation directory
 `C:\ProgramData\MAX` by default, `-dir` otherwise) and prints only the
-protocol-relevant lines: API and gateway calls, radiograms, send results.
+protocol-relevant lines: API and gateway calls, radiograms, send results,
+and the Cube search (the interfaces it binds to, the adapters it tries,
+how many gateways it found).
 The software never prints the LAN lines it writes, not even at debug
 level, so `legacy` reconstructs them from the logged gateway calls
 (`s:`, `t:`, `m:`, `z:`, `c:`, `l:`, `n:`, `x:`, `q:`) and prints each

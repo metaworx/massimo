@@ -40,7 +40,7 @@ const (
 
 var durationSettings = []durationSetting{
 	{key: store.StaleAfterKey, def: view.StaleAfter, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
-		inEffect: func(*Server) time.Duration { return view.StaleAfterNow() }},
+		inEffect: func(s *Server) time.Duration { return s.StaleAfter() }},
 	{key: store.PollIntervalKey, def: defaultPoll, min: 10 * time.Second, max: time.Hour,
 		inEffect: func(s *Server) time.Duration { return s.opts.PollInterval }},
 	{key: store.RefreshIntervalKey, def: defaultRefresh, min: 10 * time.Minute, max: 7 * 24 * time.Hour, zero: true,
@@ -176,9 +176,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		if wr.d.key == store.StaleAfterKey {
 			if wr.value == nil {
-				view.SetStaleAfter(0)
+				s.SetStaleAfter(0)
 			} else {
-				view.SetStaleAfter(*wr.value)
+				s.SetStaleAfter(*wr.value)
 			}
 		}
 		s.log.Info("setting changed", "key", wr.d.key, "value", settingLogValue(wr.value), "remote", r.RemoteAddr)

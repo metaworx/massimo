@@ -53,6 +53,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
@@ -154,6 +155,9 @@ type Options struct {
 	// (-proxy): a proxy address changed through the API is stored, and
 	// takes effect at the next start without -proxy.
 	ProxyFixed bool
+	// StaleAfter is the stale threshold of the device views (0:
+	// view.StaleAfter); SetStaleAfter changes it while the server runs.
+	StaleAfter time.Duration
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -194,11 +198,15 @@ type Server struct {
 	wg      sync.WaitGroup
 	proxyMu sync.Mutex
 	proxies []*proxyRun
+	// staleAfter is the stale threshold in effect, in nanoseconds.
+	staleAfter atomic.Int64
 
 	// fileCubes is Options.FileCubes, by serial in upper case; "" is the
 	// plain MASSIMO_CUBE_ADDRESS Cube until it reports its serial.
 	fileMu    sync.Mutex
 	fileCubes map[string]store.FileCube
+	// diffs are the file's differing lines per serial (noteRow).
+	diffs map[string][]fileDifference
 }
 
 type runtime struct {
@@ -311,6 +319,7 @@ func New(opts Options) *Server {
 	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}}
+	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	for _, c := range opts.Cubes {
 		s.register(s.newRuntime(c, c.Addr))
@@ -415,7 +424,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
-					dv := view.DeviceOf(rt.client.Snapshot(), e.Device)
+					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -510,6 +519,18 @@ func stateAttrs(serial string, d view.Device) []any {
 	}
 	return attrs
 }
+
+// SetStaleAfter sets the stale threshold of the device views; 0 or less
+// goes back to view.StaleAfter.
+func (s *Server) SetStaleAfter(d time.Duration) {
+	if d <= 0 {
+		d = view.StaleAfter
+	}
+	s.staleAfter.Store(int64(d))
+}
+
+// StaleAfter returns the stale threshold in effect.
+func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
 
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.mux }
@@ -744,11 +765,13 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 }
 
 // rooms is the room list of a Cube as the API shows it.
-func (s *Server) rooms(rt *runtime) []view.Room { return view.Rooms(rt.client.Snapshot(), rt.hidden()) }
+func (s *Server) rooms(rt *runtime) []view.Room {
+	return view.Rooms(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
+}
 
 // devices is the device list of a Cube as the API shows it.
 func (s *Server) devices(rt *runtime) []view.Device {
-	return view.Devices(rt.client.Snapshot(), rt.hidden())
+	return view.Devices(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
 }
 
 func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
@@ -784,7 +807,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	if !ok && c == nil || rt.hidden()[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
-	d := deviceDetail{Device: view.DeviceOf(snap, rf)}
+	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.StaleAfter())}
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {

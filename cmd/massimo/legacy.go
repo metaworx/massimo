@@ -20,8 +20,12 @@ import (
 )
 
 // Lines of the original software's output that tell what it does on the
-// Cube: API calls, gateway calls, radiograms, send results, update steps.
-var legacyKeep = regexp.MustCompile(`MaxLocalApi:method|CubeGateway:method|ClientCommand:radiogram|DeviceSendCommand:parseStatus|CubeUpdateService|CubeUdpProxy|NewDeviceSerializer|ERROR|Exception$`)
+// Cube: API calls, gateway calls, radiograms, send results, update steps,
+// and the Cube search, which the software prints without a log prefix:
+// the interfaces it binds the multicast address to ("eth7 : 192.168.1.45
+// : subnetMask 255.255.255.0"), each adapter it tries, how long it
+// listened and how many gateways it found.
+var legacyKeep = regexp.MustCompile(`MaxLocalApi:method|CubeGateway:method|ClientCommand:radiogram|DeviceSendCommand:parseStatus|CubeUpdateService|CubeUdpProxy|NewDeviceSerializer|ERROR|Exception$|^--> |^eth[0-9]+ : |^subnetMask |^trying .*\(eth[0-9]+\)\s*$`)
 
 // runLegacy starts the original MAX! software and shows only the lines
 // that matter for protocol work. The complete output can be saved.
@@ -33,7 +37,7 @@ func runLegacy(args []string) error {
 	all := fs.Bool("all", false, "print everything instead of the filtered lines")
 	width := fs.Int("width", 300, "shorten printed lines to this many characters (0 = no limit)")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo legacy [-java PATH] [-dir DIR] [-out FILE] [-all] [-width N]\n\nStart the original MAX! software (needs a Java 8 runtime) and show its\nprotocol-relevant output: API and gateway calls, radiograms, send results.\nStack traces and framework noise are dropped unless -all is given.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo legacy [-java PATH] [-dir DIR] [-out FILE] [-all] [-width N]\n\nStart the original MAX! software (needs a Java 8 runtime) and show its\nprotocol-relevant output: API and gateway calls, radiograms, send results,\nand the Cube search over the network interfaces. Stack traces and\nframework noise are dropped unless -all is given.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

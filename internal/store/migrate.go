@@ -190,12 +190,18 @@ func (s *Store) migrate(ctx context.Context, fsys fs.FS, reader int) error {
 		if m.version <= cur || m.version > reader {
 			continue
 		}
+		copied := ""
 		if cur > 0 && m.minReader > minReader {
-			if err := s.copyBefore(ctx, m.version); err != nil {
+			if copied, err = s.copyBefore(ctx, m.version, cur); err != nil {
 				return err
 			}
 		}
 		if err := s.apply(ctx, m); err != nil {
+			if copied != "" {
+				// The file is unchanged; a copy left behind would only be
+				// in the way of the next start.
+				os.Remove(copied)
+			}
 			return err
 		}
 		s.log.Info("schema migrated", "path", s.path, "version", m.version, "min_reader", m.minReader)
@@ -237,17 +243,28 @@ var afterMigration = map[int]func(context.Context, *Store, *sql.Tx) error{
 }
 
 // copyBefore writes a consistent copy of the file, as it is before the
-// migration to version, to massimo.db.before-<version>, mode 0600.
-func (s *Store) copyBefore(ctx context.Context, version int) error {
+// migration to version, to massimo.db.before-<version>, mode 0600, and
+// returns its path; cur is the file's version. A copy left from an
+// earlier attempt (a crash between the copy and the commit) is of the
+// same state while the file is still at version-1, so it is replaced;
+// a file that has moved on is refused, since the copy is then the only
+// state an older binary can read.
+func (s *Store) copyBefore(ctx context.Context, version, cur int) (string, error) {
 	dst := s.path + ".before-" + strconv.Itoa(version)
+	if cur != version-1 {
+		return "", fmt.Errorf("store: %s is at version %d, not %d; the copy %s is not made again", s.path, cur, version-1, dst)
+	}
 	if _, err := os.Stat(dst); err == nil {
-		return fmt.Errorf("store: %s exists already; move it away before the migration to version %d", dst, version)
+		s.log.Info("store: replacing a copy left by an earlier attempt", "copy", dst, "version", version)
+		if err := os.Remove(dst); err != nil {
+			return "", fmt.Errorf("store: %w", err)
+		}
 	}
 	if err := s.copyTo(ctx, dst); err != nil {
-		return fmt.Errorf("store: copy before migration %d: %w", version, err)
+		return "", fmt.Errorf("store: copy before migration %d: %w", version, err)
 	}
 	s.log.Info("store copied before a migration that older binaries cannot read", "copy", dst, "version", version)
-	return nil
+	return dst, nil
 }
 
 // copyTo writes a consistent copy of the database to dst, which must

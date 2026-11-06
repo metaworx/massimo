@@ -25,7 +25,6 @@ import (
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
-	"go.metaworx.ch/massimo/internal/view"
 )
 
 // runServe starts the HTTP API over every configured Cube.
@@ -36,7 +35,7 @@ func runServe(args []string) error {
 		listenDefault = "127.0.0.1:8099"
 	}
 	listen := fs.String("listen", listenDefault, "address to listen on (default MASSIMO_LISTEN, else 127.0.0.1:8099)")
-	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones, for this run")
+	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones, for this run and without the store: massimo.db is neither opened nor created, and nothing is written")
 	poll := fs.Duration("poll", time.Minute, "how often to poll the device list (default the store's poll_interval, else 1m)")
 	refresh := fs.Duration("refresh", 6*time.Hour, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
 	discoverEvery := fs.Duration("discover-interval", 30*time.Minute, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API; default the store's discover_interval, else 30m)")
@@ -80,34 +79,34 @@ func runServe(args []string) error {
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
 
-	st, err := store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
+	st, err := openServeStore(*addr, logger)
 	if err != nil {
-		return fmt.Errorf("serve: %w", err)
+		return err
 	}
-	defer st.Close()
+	if st != nil {
+		defer st.Close()
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	// The flags given win for this run; otherwise the store's settings.
-	given := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
-	for _, d := range []struct {
-		flag, key string
-		v         *time.Duration
-	}{{"poll", store.PollIntervalKey, poll}, {"refresh", store.RefreshIntervalKey, refresh}, {"discover-interval", store.DiscoverIntervalKey, discoverEvery}} {
-		if given[d.flag] {
-			continue
+	var staleAfter time.Duration
+	if st != nil {
+		given := map[string]bool{}
+		fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
+		for _, d := range []struct {
+			flag, key string
+			v         *time.Duration
+		}{{"poll", store.PollIntervalKey, poll}, {"refresh", store.RefreshIntervalKey, refresh}, {"discover-interval", store.DiscoverIntervalKey, discoverEvery}, {"", store.StaleAfterKey, &staleAfter}} {
+			if d.flag != "" && given[d.flag] {
+				continue
+			}
+			if v, ok, err := st.SettingDuration(ctx, d.key); err != nil {
+				logger.Warn("setting ignored", "key", d.key, "error", err)
+			} else if ok {
+				*d.v = v
+			}
 		}
-		if v, ok, err := st.SettingDuration(ctx, d.key); err != nil {
-			logger.Warn("setting ignored", "key", d.key, "error", err)
-		} else if ok {
-			*d.v = v
-		}
-	}
-	if v, ok, err := st.SettingDuration(ctx, store.StaleAfterKey); err != nil {
-		logger.Warn("setting ignored", "key", store.StaleAfterKey, "error", err)
-	} else if ok {
-		view.SetStaleAfter(v)
 	}
 
 	setup, err := serveSetup(ctx, st, *addr, proxies, *proxySerial, logger)
@@ -121,7 +120,7 @@ func runServe(args []string) error {
 		}
 	}
 	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
-		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), ProxyFixed: len(proxies) > 0, Update: upd})
+		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -129,7 +128,11 @@ func runServe(args []string) error {
 	for _, c := range setup.cubes {
 		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
 	}
-	logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "data", st.Dir(), "node", st.NodeID())
+	if st != nil {
+		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "data", st.Dir(), "node", st.NodeID())
+	} else {
+		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "store", "none (-addr)")
+	}
 	for _, pl := range setup.listeners {
 		logger.Info("cube proxy listening", "addr", pl.Addr, "serial", pl.Serial, "discovery", pl.Discovery, "discovery_serial", pl.DiscoverySerial)
 	}
@@ -173,6 +176,20 @@ func serveUpdateHelper(log *slog.Logger, listen, request, status string) (func()
 		log.Warn("updates cannot be started from the API", "reason", blocked)
 	}
 	return start, blocked, nil
+}
+
+// openServeStore opens the store of the data directory, or, with -addr,
+// none: such a run serves one Cube for this run only and writes nothing,
+// not even the found Cubes.
+func openServeStore(addr string, logger *slog.Logger) (*store.Store, error) {
+	if addr != "" {
+		return nil, nil
+	}
+	st, err := store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
+	if err != nil {
+		return nil, fmt.Errorf("serve: %w", err)
+	}
+	return st, nil
 }
 
 // setup is what serve starts with: the Cubes, the proxy listeners, and

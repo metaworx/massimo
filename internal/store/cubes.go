@@ -134,9 +134,25 @@ func (s *Store) cube(ctx context.Context, q queryer, serial string) (Cube, bool,
 	return c, true, nil
 }
 
-// AddCube inserts a row for c.Serial; a serial that has one is
-// ErrExists. The identifier, the times, the version and the origin are
-// set by the store.
+// rowOf finds the row of a serial, a tombstoned one (deleted_at set)
+// included: its id, and whether it is tombstoned.
+func (s *Store) rowOf(ctx context.Context, q queryer, serial string) (id int64, tombstoned, ok bool, err error) {
+	var deleted sql.NullString
+	err = q.QueryRowContext(ctx, `SELECT id, deleted_at FROM cubes WHERE serial = ?`, serial).Scan(&id, &deleted)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, false, nil
+	}
+	if err != nil {
+		return 0, false, false, fmt.Errorf("store: cube %s: %w", serial, err)
+	}
+	return id, deleted.Valid, true, nil
+}
+
+// AddCube inserts a row for c.Serial; a serial that has a live row is
+// ErrExists. A tombstoned row of the serial is taken over: it gets c's
+// values, its tombstone cleared and its version bumped, and keeps its
+// identifier, so that what referred to it still does. The identifier,
+// the times, the version and the origin are set by the store.
 func (s *Store) AddCube(ctx context.Context, c Cube) (Cube, error) {
 	if err := s.writable(); err != nil {
 		return Cube{}, err
@@ -157,15 +173,34 @@ func (s *Store) AddCube(ctx context.Context, c Cube) (Cube, error) {
 	if !c.LastSeen.IsZero() {
 		last = formatTime(c.LastSeen)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, hidden, source,
-		mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, origin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), c.Serial, c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source,
-		c.MAC, c.RFAddress, c.Firmware, c.DiscoveredAddress, first, last, now, now, s.nodeID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return Cube{}, fmt.Errorf("%w: %s", ErrExists, c.Serial)
-		}
+		return Cube{}, fmt.Errorf("store: add cube %s: %w", c.Serial, err)
+	}
+	defer tx.Rollback()
+	id, tombstoned, ok, err := s.rowOf(ctx, tx, c.Serial)
+	switch {
+	case err != nil:
+		return Cube{}, err
+	case ok && !tombstoned:
+		return Cube{}, fmt.Errorf("%w: %s", ErrExists, c.Serial)
+	case ok:
+		_, err = tx.ExecContext(ctx, `UPDATE cubes SET configured = ?, name = ?, address = ?, follow_discovery = ?, proxy_address = ?, proxy_serial = ?, hidden = ?, source = ?,
+			mac = ?, rf_address = ?, firmware = ?, discovered_address = ?, first_seen = coalesce(?, first_seen), last_seen = coalesce(?, last_seen),
+			deleted_at = NULL, updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
+			c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source,
+			c.MAC, c.RFAddress, c.Firmware, c.DiscoveredAddress, first, last, now, s.nodeID, id)
+	default:
+		_, err = tx.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, hidden, source,
+			mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, origin)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), c.Serial, c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source,
+			c.MAC, c.RFAddress, c.Firmware, c.DiscoveredAddress, first, last, now, now, s.nodeID)
+	}
+	if err != nil {
+		return Cube{}, fmt.Errorf("store: add cube %s: %w", c.Serial, err)
+	}
+	if err := tx.Commit(); err != nil {
 		return Cube{}, fmt.Errorf("store: add cube %s: %w", c.Serial, err)
 	}
 	out, _, err := s.Cube(ctx, c.Serial)
@@ -219,10 +254,19 @@ type Discovered struct {
 	At        time.Time
 }
 
-// NoteDiscovered records a discovery answer: a Cube without a row gets
+// NoteDiscovered records a discovery answer. A Cube without a row gets
 // one with configured = 0 and source 'discovery', which survives a
-// restart as the found Cube; a known one gets its discovery columns
-// updated. It reports whether the row is new.
+// restart as the found Cube; a tombstoned row comes back that way. Both
+// report the row as new.
+//
+// A known row is not a configuration change: its version, updated_at
+// and origin stay, which keep meaning "last changed by a user or a
+// node". Its discovery columns are written only when one of them
+// differs from the row (a known MAC stays when the answer has none),
+// compared here rather than in SQL since some of them are content
+// columns; last_seen alone is written once per run of the store, so
+// that an answer every 30 minutes is not an SD card write every 30
+// minutes. The Cube returned has LastSeen of this answer either way.
 func (s *Store) NoteDiscovered(ctx context.Context, d Discovered) (Cube, bool, error) {
 	if err := s.writable(); err != nil {
 		return Cube{}, false, err
@@ -231,26 +275,62 @@ func (s *Store) NoteDiscovered(ctx context.Context, d Discovered) (Cube, bool, e
 	if serial == "" {
 		return Cube{}, false, errors.New("store: a cube needs a serial")
 	}
-	_, known, err := s.Cube(ctx, serial)
-	if err != nil {
-		return Cube{}, false, err
-	}
 	at := d.At
 	if at.IsZero() {
 		at = s.now()
 	}
-	seen, now := formatTime(at), s.nowText()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, source, mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, origin)
-		VALUES (?, ?, 0, 'discovery', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (serial) DO UPDATE SET
-			mac = CASE excluded.mac WHEN '' THEN cubes.mac ELSE excluded.mac END,
-			rf_address = excluded.rf_address, firmware = excluded.firmware, discovered_address = excluded.discovered_address,
-			first_seen = coalesce(cubes.first_seen, excluded.first_seen), last_seen = excluded.last_seen,
-			updated_at = excluded.updated_at, origin = excluded.origin, version = cubes.version + 1`,
-		newUUID(), serial, d.MAC, d.RFAddress, d.Firmware, d.Address, seen, seen, now, now, s.nodeID)
+	seen := formatTime(at)
+	id, tombstoned, ok, err := s.rowOf(ctx, s.db, serial)
+	if err != nil {
+		return Cube{}, false, err
+	}
+	switch {
+	case !ok:
+		now := s.nowText()
+		_, err = s.db.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, source, mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, origin)
+			VALUES (?, ?, 0, 'discovery', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), serial, d.MAC, d.RFAddress, d.Firmware, d.Address, seen, seen, now, now, s.nodeID)
+	case tombstoned:
+		_, err = s.db.ExecContext(ctx, `UPDATE cubes SET configured = 0, source = 'discovery', deleted_at = NULL,
+			mac = CASE ? WHEN '' THEN mac ELSE ? END, rf_address = ?, firmware = ?, discovered_address = ?,
+			first_seen = coalesce(first_seen, ?), last_seen = ?, updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
+			d.MAC, d.MAC, d.RFAddress, d.Firmware, d.Address, seen, seen, s.nowText(), s.nodeID, id)
+	default:
+		row, _, err := s.Cube(ctx, serial)
+		if err != nil {
+			return Cube{}, false, err
+		}
+		mac := row.MAC
+		if d.MAC != "" {
+			mac = d.MAC
+		}
+		changed := mac != row.MAC || d.RFAddress != row.RFAddress || d.Firmware != row.Firmware || d.Address != row.DiscoveredAddress || row.FirstSeen.IsZero()
+		s.seenMu.Lock()
+		first := !s.seenWritten[serial]
+		s.seenWritten[serial] = true
+		s.seenMu.Unlock()
+		switch {
+		case changed:
+			_, err = s.db.ExecContext(ctx, `UPDATE cubes SET mac = ?, rf_address = ?, firmware = ?, discovered_address = ?,
+				first_seen = coalesce(first_seen, ?), last_seen = ? WHERE id = ?`,
+				mac, d.RFAddress, d.Firmware, d.Address, seen, seen, id)
+		case first:
+			_, err = s.db.ExecContext(ctx, `UPDATE cubes SET last_seen = ? WHERE id = ?`, seen, id)
+		}
+		if err != nil {
+			return Cube{}, false, fmt.Errorf("store: cube %s: %w", serial, err)
+		}
+		if !changed && !first {
+			row.LastSeen = at
+			return row, false, nil
+		}
+		out, _, err := s.Cube(ctx, serial)
+		out.LastSeen = at
+		return out, false, err
+	}
 	if err != nil {
 		return Cube{}, false, fmt.Errorf("store: cube %s: %w", serial, err)
 	}
 	c, _, err := s.Cube(ctx, serial)
-	return c, !known, err
+	return c, true, err
 }
