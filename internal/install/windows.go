@@ -25,7 +25,10 @@ import (
 // automatically as LocalSystem and restarted by the service manager when
 // it fails. The binary answers the service manager by itself
 // (cmd/massimo/service_windows.go). A firewall rule lets the LAN reach
-// it on private and domain networks.
+// it on private and domain networks. The service's command line names
+// the update request and status files in the data folder; nothing
+// watches them, the server starts the update helper itself
+// (cmd/massimo/update_helper_windows.go).
 
 func winPaths() WinPaths {
 	return WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData"))
@@ -88,7 +91,7 @@ func InstallWindows(o Options) error {
 		return err
 	}
 
-	args := ServiceArgs(p, listen)
+	args := ServiceArgs(p, listen, in.NoUpdateHelper)
 	cfg := mgr.Config{
 		DisplayName: "Massimo",
 		Description: "Keeps the MAX! Cubes connected, serves the API and web UI and answers as a Cube on the LAN.",

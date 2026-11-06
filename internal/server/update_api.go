@@ -4,13 +4,17 @@
 package server
 
 // Software updates: GET /api/v1/update says whether a newer signed release
-// is out on the update channel, POST /api/v1/update asks the root update
-// helper to install it (internal/update, packaging/systemd). The server
-// itself only checks and asks; it cannot replace its own binary.
+// is out on the update channel, POST /api/v1/update asks the update
+// helper to install it (internal/update): through a request file that a
+// systemd path unit (packaging/systemd) or launchd (packaging/launchd)
+// watches, and on Windows by starting the helper itself (Start). The
+// server only checks and asks; the helper replaces the binary.
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"os"
 	goruntime "runtime"
 	"sync"
 	"time"
@@ -27,6 +31,14 @@ type UpdateOptions struct {
 	Request string
 	Status  string        // the helper's status file
 	Finder  ReleaseFinder // where releases come from; nil: GitHub
+	// Start starts the helper once the request is written; nil where the
+	// operating system does that (the systemd path unit, launchd's
+	// WatchPaths). update.ErrHelperRunning from it means a helper it
+	// started is still at work.
+	Start func() error
+	// Blocked is a reason the helper cannot be started on this machine,
+	// found by whoever provides Start; it is reported like the others.
+	Blocked string
 }
 
 // ReleaseFinder finds the newest signed release on a channel; nil, nil
@@ -70,12 +82,14 @@ func (s *Server) latest(ctx context.Context, refresh bool) (*update.Release, tim
 // updateBlocked says why an update cannot be started from the API, or "".
 func (s *Server) updateBlocked() string {
 	switch {
-	case goruntime.GOOS == "windows":
-		return "updates are not installed automatically on Windows yet"
 	case s.opts.Token == "":
 		return "set MASSIMO_API_TOKEN to start updates from the API"
+	case s.opts.Update.Request == "" && goruntime.GOOS == "windows":
+		return "start updates from the installed service (massimo install)"
 	case s.opts.Update.Request == "":
 		return "no update helper installed (see packaging/README.md)"
+	case s.opts.Update.Blocked != "":
+		return s.opts.Update.Blocked
 	case !update.ValidChannel(s.opts.Update.Channel):
 		return "no update channel: set MASSIMO_UPDATE_CHANNEL"
 	}
@@ -149,6 +163,18 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "asking the update helper: %v", err)
 	}
 	s.log.Info("update requested", "from", v.Current, "to", v.Latest, "channel", v.Channel)
+	if start := s.opts.Update.Start; start != nil {
+		switch err := start(); {
+		case errors.Is(err, update.ErrHelperRunning):
+			// The running helper takes the request or has taken its own;
+			// a leftover one names the same channel and goes to the next.
+			return fail(http.StatusConflict, "%v (starting)", err)
+		case err != nil:
+			os.Remove(s.opts.Update.Request)
+			s.log.Error("update helper not started", "error", err)
+			return fail(http.StatusInternalServerError, "starting the update helper: %v", err)
+		}
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
 	return nil
 }

@@ -13,11 +13,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/update"
 )
@@ -53,8 +56,8 @@ func runServe(args []string) error {
 	fs.BoolVar(&showAll, "show-hidden", false, "show the hidden devices (those of room 255 and of "+env.Ignore+") in the API and to proxy clients")
 	fs.BoolVar(&showAll, "show-ghosts", false, "older name of -show-hidden")
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's (default "+env.ProxySerial+" or its per-Cube form; the original software keeps one answer per serial)")
-	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the root update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+" (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
-	updateStatus := fs.String("update-status", update.DefaultStatusPath, "the update helper's status file")
+	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+"; on Windows the server then starts the helper itself (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
+	updateStatus := fs.String("update-status", defaultUpdateStatus(), "the update helper's status file (on Windows install passes it, and the helper's update.log goes next to it)")
 	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>]\n\nKeep every Cube from the environment (MASSIMO_CUBE_<SN>_ADDRESS) connected,\nserve the JSON API (see internal/server for the routes) and answer as a Cube\non the LAN (port 62910 and UDP discovery), so that other programs and the\noriginal software connect to the server instead of the Cube, which serves\nonly one client at a time.\n\n")
@@ -77,8 +80,14 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
+	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
+	if runtime.GOOS == "windows" && *updateRequest != "" {
+		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, *updateRequest, *updateStatus); err != nil {
+			return fmt.Errorf("serve: %w", err)
+		}
+	}
 	srv := server.New(server.Options{Cubes: cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: listeners, ShowHidden: showAll || showHidden,
-		Update: server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}})
+		Update: upd})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -104,6 +113,34 @@ func runServe(args []string) error {
 		return err
 	}
 	return nil
+}
+
+// defaultUpdateStatus is the helper's status file where install puts it:
+// the Unix path, on Windows the one in %ProgramData%\Massimo.
+func defaultUpdateStatus() string {
+	if runtime.GOOS == "windows" {
+		return install.WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData")).Status
+	}
+	return update.DefaultStatusPath
+}
+
+// serveUpdateHelper prepares the start of the update helper by the
+// server itself (Windows): this binary in its helper mode, with the
+// /healthz of the listen address and update.log next to the status file.
+func serveUpdateHelper(log *slog.Logger, listen, request, status string) (func() error, string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, "", err
+	}
+	health, err := install.HealthURL(listen)
+	if err != nil {
+		return nil, "", err
+	}
+	start, blocked := updateHelperStarter(log, exe, request, status, health, filepath.Join(filepath.Dir(status), "update.log"))
+	if blocked != "" {
+		log.Warn("updates cannot be started from the API", "reason", blocked)
+	}
+	return start, blocked, nil
 }
 
 // serveTargets resolves the Cubes to serve and the proxy listeners from

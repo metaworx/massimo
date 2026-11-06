@@ -13,9 +13,25 @@ func TestWindowsLayout(t *testing.T) {
 	if p.Bin != `C:\Program Files\Massimo\massimo.exe` || p.Env != `D:\Data\Massimo\env` || p.Log != `D:\Data\Massimo\serve.log` {
 		t.Fatalf("%+v", p)
 	}
-	args := ServiceArgs(p, "")
-	if strings.Join(args, " ") != `-env D:\Data\Massimo\env serve -listen :8099 -log D:\Data\Massimo\serve.log` {
+	if p.Request != `D:\Data\Massimo\update-request` || p.Status != `D:\Data\Massimo\update-status.json` || p.UpdateLog != `D:\Data\Massimo\update.log` {
+		t.Fatalf("%+v", p)
+	}
+	args := ServiceArgs(p, "", false)
+	if strings.Join(args, " ") != `-env D:\Data\Massimo\env serve -listen :8099 -log D:\Data\Massimo\serve.log -update-request D:\Data\Massimo\update-request -update-status D:\Data\Massimo\update-status.json` {
 		t.Fatalf("%q", args)
+	}
+	args = ServiceArgs(p, "127.0.0.1:18099", true)
+	if strings.Join(args, " ") != `-env D:\Data\Massimo\env serve -listen 127.0.0.1:18099 -log D:\Data\Massimo\serve.log` {
+		t.Fatalf("without the helper: %q", args)
+	}
+	if u, err := HealthURL(":8099"); err != nil || u != "http://127.0.0.1:8099/healthz" {
+		t.Fatalf("health %q %v", u, err)
+	}
+	if u, err := HealthURL("192.168.1.5:8099"); err != nil || u != "http://192.168.1.5:8099/healthz" {
+		t.Fatalf("health %q %v", u, err)
+	}
+	if _, err := HealthURL("8099"); err == nil {
+		t.Fatal("health of a bare port")
 	}
 	cmdline := `"C:\Program Files\Massimo\massimo.exe" -env "C:\ProgramData\Massimo\env" serve -listen 192.168.1.200:80 -log x`
 	if got := ListenFromCommandLine(cmdline); got != "192.168.1.200:80" {

@@ -16,7 +16,7 @@ import (
 func runInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	settings := fs.String("settings", "", "copy this settings file (a .env) as the service's settings when there are none yet")
-	noHelper := fs.Bool("no-update-helper", false, "Linux and macOS: leave out the update helper (the web UI then cannot start updates)")
+	noHelper := fs.Bool("no-update-helper", false, "leave out the update helper (Linux and macOS: its units or LaunchDaemon; Windows: the service's -update-request); the web UI then cannot start updates")
 	noStart := fs.Bool("no-start", false, "enable the service without starting it")
 	listen := fs.String("listen", "", "serve the API and web UI on this address, such as :80 (default :8099; kept by later installs)")
 	dryRun := fs.Bool("dry-run", false, "only show what would be done")
@@ -38,7 +38,8 @@ run again (existing settings are kept):
 - Windows: the binary as %s, settings and log in %s
   (SYSTEM and Administrators only), the service "massimo" (automatic
   start, restarted on failure) and a firewall rule for private and
-  domain networks. Needs an administrator prompt.
+  domain networks; the server starts the update helper itself when the
+  web UI asks for an update. Needs an administrator prompt.
 - macOS: the binary as %s, the hidden user %s, %s, the
   LaunchDaemons %s and the update helper %s in
   %s, loaded with launchctl. Needs root.
@@ -63,8 +64,8 @@ See packaging/README.md.
 		}
 		return install.Install(o)
 	case "windows":
-		if *root != "" || *noHelper {
-			return errors.New("-root and -no-update-helper are for Linux")
+		if *root != "" {
+			return errors.New("-root is for Linux and macOS")
 		}
 		if *remove {
 			return install.RemoveWindows(o, *purge)
