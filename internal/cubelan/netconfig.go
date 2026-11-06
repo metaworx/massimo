@@ -310,6 +310,29 @@ func QueryNetConfig(ctx context.Context, addr string) (NetState, error) {
 	return readState(ctx, pc, []*net.UDPAddr{to}, id.serial, askWait)
 }
 
+// FindNetConfig asks the Cube with the given serial for N and c through
+// addr, typically a broadcast address (host or host:port, port 23272 by
+// default); to the limited broadcast the requests also go to every
+// interface's broadcast and the multicast group. Only the Cube with that
+// serial answers, whatever its address, as long as its answer can reach
+// this host. The error wraps ErrNoReply when no c answer comes.
+func FindNetConfig(ctx context.Context, addr, serial string) (NetState, error) {
+	to, err := udpTarget(addr)
+	if err != nil {
+		return NetState{}, err
+	}
+	pc, err := listenDiscovery()
+	if err != nil {
+		return NetState{}, err
+	}
+	defer pc.Close()
+	targets := []*net.UDPAddr{to}
+	if to.IP.Equal(net.IPv4bcast) {
+		targets = append(targets, DiscoveryTargets()...)
+	}
+	return readState(ctx, pc, targets, serial, askWait)
+}
+
 // SetResult is what SetNetConfig learned during and after the write.
 type SetResult struct {
 	// Status is the Cube's answer to C (SetStatusOK, SetStatusRestarting),

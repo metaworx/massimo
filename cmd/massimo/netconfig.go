@@ -41,12 +41,15 @@ allowing for the restart; -dry-run prints the C frame as hex and sends
 nothing.
 
 A wrong configuration strands the Cube on an address nothing can reach.
-The way back is -sn <serial> -broadcast -dhcp, which sends the write as a
-broadcast that carries the serial, so it reaches that one Cube whatever
-its address; with no read possible first, it sends zeros for the
-addresses and the encryption flag off unless -encryption is given. If
-that fails too, the Cube's factory fallback is 192.168.0.222/16; a Cube
-that moved networks may need a power cycle. -broadcast goes to
+The way back is -sn <serial> -broadcast -dhcp, which sends the requests
+as broadcasts that carry the serial, so they reach that one Cube whatever
+its address. It first asks for the stored configuration (c) that way;
+when the Cube answers, only the DHCP flag changes and the stored
+addresses and the encryption flag are kept. When no answer comes, it
+sends zeros for the addresses and the encryption flag off unless
+-encryption is given: the stored fallback addresses are then lost, and
+the factory values are not restored. A Cube that moved networks may need
+a power cycle. -broadcast goes to
 255.255.255.255 unless -addr names another target, such as a directed
 broadcast.
 
@@ -71,7 +74,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 	dns := fs.String("dns", "", "one or two DNS servers for -static, comma separated (default: as read)")
 	dhcp := fs.Bool("dhcp", false, "write DHCP on, keeping the addresses as read")
 	broadcast := fs.Bool("broadcast", false, "send the write as a broadcast carrying the serial (-sn), without reading first: the recovery for a Cube on a wrong address")
-	encryption := fs.Bool("encryption", false, "with -broadcast, send the encryption flag on (otherwise off; without -broadcast it is copied from the read)")
+	encryption := fs.Bool("encryption", false, "with -broadcast and no answer to the read, send the encryption flag on (otherwise off); a flag that was read is always copied")
 	dryRun := fs.Bool("dry-run", false, "print the C frame as hex and send nothing")
 	yes := fs.Bool("yes", false, "write without asking")
 	snFlag(fs)
@@ -101,14 +104,35 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		return errors.New("netconfig: -addr is required (massimo discover lists the Cubes)")
 	}
 
-	// The current configuration: read, unless the Cube cannot be reached.
+	// The static flags are checked before anything is sent.
+	if *static != "" {
+		if _, err := staticConfig(cubelan.NetConfig{}, *static, *gateway, *netmask, *dns); err != nil {
+			return err
+		}
+	}
+	info := stdout // with -json, stdout carries only the result
+	if *asJSON {
+		info = stderr
+	}
+
+	// The current configuration: read, at the address or by broadcast.
 	var serial, dest string
 	var cur *cubelan.NetConfig
 	var inUse *cubelan.NetAddrs
+	lost := false // no read: zeros replace the stored fallback
 	if *broadcast {
 		serial, dest = strings.ToUpper(selectedSN), *addr
 		if dest == "" {
 			dest = net.IPv4bcast.String()
+		}
+		if st, err := cubelan.FindNetConfig(ctx, dest, serial); err == nil {
+			cur, inUse = &st.Stored, st.Current
+			fmt.Fprintf(info, "found    cube %s answered the broadcast read from %s; its stored addresses and encryption flag are kept\n", serial, st.From.IP)
+		} else if errors.Is(err, cubelan.ErrNoReply) {
+			lost = true
+			fmt.Fprintf(info, "found    no answer to the broadcast read: zeros will be sent for the addresses, so the stored fallback addresses are lost and the factory values are not restored\n")
+		} else {
+			return fmt.Errorf("netconfig: %w", err)
 		}
 	} else {
 		st, err := cubelan.QueryNetConfig(ctx, *addr)
@@ -145,16 +169,12 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		return fmt.Errorf("netconfig: %w", err)
 	}
 
-	info := stdout // with -json, stdout carries only the result
-	if *asJSON {
-		info = stderr
-	}
 	fmt.Fprintf(info, "cube     %s at %s\n", serial, dest)
 	if cur != nil {
 		fmt.Fprintf(info, "stored   %s\n", summary(*cur))
 		fmt.Fprintf(info, "in use   %s\n", addrSummary(inUse))
 	} else {
-		fmt.Fprintln(info, "stored   unknown (broadcast, nothing read)")
+		fmt.Fprintln(info, "stored   unknown (no answer to the read)")
 	}
 	fmt.Fprintf(info, "new      %s\n", summary(next))
 	if *dryRun {
@@ -163,7 +183,10 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		return nil
 	}
 	fmt.Fprintf(stderr, "warning: a wrong configuration strands the Cube on an address nothing can reach. "+
-		"The way back is massimo netconfig -sn %s -broadcast -dhcp and, after that, the factory fallback 192.168.0.222/16 (and a power cycle).\n", serial)
+		"The way back is massimo netconfig -sn %s -broadcast -dhcp and, after that, the stored fallback addresses (192.168.0.222/16 on a Cube from the factory) and a power cycle.\n", serial)
+	if lost {
+		fmt.Fprintln(stderr, "warning: nothing was read, so this write sends zeros for the addresses: the Cube's stored fallback addresses are lost and the factory values are not restored.")
+	}
 	if !*yes {
 		fmt.Fprintf(stderr, "write the new configuration to cube %s? [y/N] ", serial)
 		line, _ := bufio.NewReader(stdin).ReadString('\n')
@@ -181,7 +204,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		if errors.Is(err, cubelan.ErrNoReply) {
 			fmt.Fprintf(stderr, "the write was sent, but the cube did not answer the read after it. It may be applying the change or "+
 				"may have moved: wait a minute and try massimo discover, or massimo netconfig -addr <new ip>; a power cycle can help. "+
-				"If it stays away: massimo netconfig -sn %s -broadcast -dhcp, then the factory fallback 192.168.0.222/16.\n", serial)
+				"If it stays away: massimo netconfig -sn %s -broadcast -dhcp.\n", serial)
 		}
 		return fmt.Errorf("netconfig: %w", err)
 	}

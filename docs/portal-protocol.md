@@ -549,8 +549,10 @@ with firmware 1.1.3, from a Wireshark capture of the original software
 
 Because the serial selects the Cube, `C` also works as a broadcast,
 the way back for a Cube on a wrong address (`netconfig -sn <serial>
--broadcast -dhcp`). With nothing read first it sends zeros for the
-addresses, which also become the stored fallback; not tried on
+-broadcast -dhcp`). It first sends `c` the same way and, when the Cube
+answers, writes its stored addresses and encryption flag back with only
+the DHCP flag changed; without an answer it sends zeros for the
+addresses, which then replace the stored fallback. Not tried on
 hardware.
 
 Firmware update: `N`, `I`, `B` (then wait for the bootloader to answer

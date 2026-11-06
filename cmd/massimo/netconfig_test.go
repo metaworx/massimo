@@ -23,21 +23,56 @@ func runNetconfigTest(t *testing.T, stdin string, args ...string) (string, strin
 	return out.String(), errw.String(), err
 }
 
-func TestNetconfigDryRunBroadcast(t *testing.T) {
-	out, _, err := runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-dhcp", "-dry-run")
+func TestNetconfigBroadcastRecovery(t *testing.T) {
+	// The fake on the loopback stands in for the broadcast target, so
+	// nothing goes to the LAN.
+	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Zeros for the addresses, DHCP on, encryption off.
-	frame := "frame    65 51 33 4d 61 78 2a 00 4b 45 51 30 30 30 30 30 30 30 43 " +
-		"00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00\n"
-	if !strings.Contains(out, frame) || !strings.Contains(out, "dry run: nothing sent") ||
-		!strings.Contains(out, "cube     KEQ0000000 at 255.255.255.255\n") {
-		t.Fatalf("output:\n%s", out)
+	defer fake.Close()
+	fake.SetStatic(true) // stranded on its stored static configuration
+
+	// The Cube answers the broadcast c: only the DHCP flag changes, the
+	// stored addresses and the encryption flag are kept.
+	out, _, err := runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-dry-run")
+	if err != nil {
+		t.Fatal(err)
 	}
-	out, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-dhcp", "-encryption", "-dry-run")
+	frame := "frame    65 51 33 4d 61 78 2a 00 4b 45 51 30 30 30 30 30 30 30 43 " +
+		"c0 a8 00 de c0 a8 00 01 ff ff 00 00 c0 a8 00 01 00 00 00 00 01 01\n"
+	if !strings.Contains(out, "answered the broadcast read") || !strings.Contains(out, frame) || !strings.Contains(out, "dry run: nothing sent") {
+		t.Fatalf("answered:\n%s", out)
+	}
+	// -encryption does not override a flag that was read.
+	if out, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-encryption", "-dry-run"); err != nil || !strings.Contains(out, frame) {
+		t.Fatalf("answered with -encryption: %v\n%s", err, out)
+	}
+	// And the write itself, confirmed.
+	out, errOut, err := runNetconfigTest(t, "y\n", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp")
+	if err != nil || strings.Contains(errOut, "are lost") || !strings.Contains(out, "mode        dhcp\n") {
+		t.Fatalf("answered write: %v\n%s\n%s", err, out, errOut)
+	}
+	if stored, _ := fake.NetConfig(); string(stored[:12]) != "\xc0\xa8\x00\xde\xc0\xa8\x00\x01\xff\xff\x00\x00" || stored[20] != 1 || stored[21] != 1 {
+		t.Fatalf("fake holds % x", stored)
+	}
+
+	// No answer: zeros, encryption off unless -encryption, and it says
+	// that the stored fallback is lost.
+	fake.SetSilent(true)
+	out, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-dry-run")
+	frame = "frame    65 51 33 4d 61 78 2a 00 4b 45 51 30 30 30 30 30 30 30 43 " +
+		"00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00\n"
+	if err != nil || !strings.Contains(out, frame) || !strings.Contains(out, "the stored fallback addresses are lost and the factory values are not restored") {
+		t.Fatalf("silent:\n%v\n%s", err, out)
+	}
+	out, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-encryption", "-dry-run")
 	if err != nil || !strings.Contains(out, " 01 01\n") {
-		t.Fatalf("with -encryption: %v\n%s", err, out)
+		t.Fatalf("silent with -encryption: %v\n%s", err, out)
+	}
+	_, errOut, _ = runNetconfigTest(t, "n\n", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp")
+	if !strings.Contains(errOut, "fallback addresses are lost and the factory values are not restored") {
+		t.Fatalf("silent warning:\n%s", errOut)
 	}
 }
 
