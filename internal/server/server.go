@@ -517,6 +517,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Err != nil {
 				ev.Error = e.Err.Error()
 			}
+			if e.Kind == cubelan.EventForgotten {
+				delete(rt.last, e.Device)
+				rt.follow.forget(e.Device)
+			}
 			if e.Kind == cubelan.EventPaired {
 				// The metadata does not change by pairing; the device's C
 				// line puts it into the device list, as unlisted.
@@ -531,7 +535,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				default: // slow subscriber: drop
 				}
 			}
-			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected {
+			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventForgotten {
 				for ch := range rt.push {
 					select {
 					case ch <- struct{}{}:

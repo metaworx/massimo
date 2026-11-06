@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Added
+
+- `DELETE /api/v1/cubes/{sn}/devices/{rf}` removes a device from the Cube
+  as the original software does, under `structure`; a client's `t:`
+  through the proxy drops the devices from the server's copy too.
+
 ### Changed
 
 - `PUT …/devices/{rf}` gives a thermostat put into a room or moved the

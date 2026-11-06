@@ -32,6 +32,9 @@ type Server struct {
 	DiscardIf func(cube.Message) bool
 	// Pair, when set, is a device that joins during inclusion mode.
 	Pair *Pairing
+	// Keep names devices that t: does not delete, as the Cube keeps a
+	// device that never answers.
+	Keep map[cube.RFAddress]bool
 
 	ln       net.Listener
 	mu       sync.Mutex
@@ -41,6 +44,7 @@ type Server struct {
 	joined   bool                    // the Pair device has joined
 	configs  map[string]cube.Message // C lines set with SetConfig, by address
 	list     *cube.Message           // the L line set with SetDeviceList
+	deleted  map[cube.RFAddress]bool // deleted with t:
 }
 
 // paired returns the Pair device once it has joined.
@@ -108,6 +112,62 @@ func (s *Server) config(rf string) (cube.Message, bool) {
 	defer s.mu.Unlock()
 	c, ok := s.configs[strings.ToLower(strings.TrimSpace(rf))]
 	return c, ok
+}
+
+// deleteDevices takes a t: (delete devices): every device not in Keep
+// is gone from the C lines and the L line the fake answers with and
+// from a new connection's greeting, as the Cube drops a device once it
+// answered; the Pair device may join again with the next n:.
+func (s *Server) deleteDevices(addrs []cube.RFAddress) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, rf := range addrs {
+		if s.Keep[rf] {
+			continue
+		}
+		if s.deleted == nil {
+			s.deleted = map[cube.RFAddress]bool{}
+		}
+		s.deleted[rf] = true
+		delete(s.configs, rf.String())
+		if s.Pair != nil && s.Pair.Device.RFAddress == rf {
+			s.joined = false
+		}
+	}
+}
+
+// isDeleted reports whether a t: deleted rf.
+func (s *Server) isDeleted(rf cube.RFAddress) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.deleted[rf]
+}
+
+// visible returns a line the fake sends without the devices deleted
+// with t:: an L line without their entries; false for a C line of one.
+func (s *Server) visible(m cube.Message) (cube.Message, bool) {
+	switch m.Type {
+	case 'C':
+		addr, _, _ := strings.Cut(m.Data, ",")
+		if rf, err := cube.ParseRFAddress(addr); err == nil && s.isDeleted(rf) {
+			return m, false
+		}
+	case 'L':
+		raw, err := base64.StdEncoding.DecodeString(m.Data)
+		if err != nil {
+			return m, true
+		}
+		var kept []byte
+		for i := 0; i < len(raw); {
+			end := min(i+1+int(raw[i]), len(raw))
+			if entry := raw[i:end]; len(entry) < 4 || !s.isDeleted(cube.RFAddressFromBytes(entry[1:4])) {
+				kept = append(kept, entry...)
+			}
+			i = end
+		}
+		return cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(kept)}, true
+	}
+	return m, true
 }
 
 // LoadGreeting reads protocol lines from a capture file.
@@ -190,6 +250,10 @@ func (s *Server) serve(conn net.Conn) {
 		return err
 	}
 	for _, m := range s.Greeting {
+		m, ok := s.visible(m)
+		if !ok {
+			continue
+		}
 		if err := write(m.Wire()); err != nil {
 			return
 		}
@@ -224,12 +288,17 @@ func (s *Server) serve(conn net.Conn) {
 		case 'q':
 			return
 		case 'l':
-			reply = last.Wire()
-			if l, ok := s.deviceList(); ok {
-				reply = l.Wire()
+			l := last
+			if set, ok := s.deviceList(); ok {
+				l = set
 			}
+			l, _ = s.visible(l)
+			reply = l.Wire()
 		case 'c':
 			reply = "A:\r\n"
+			if rf, err := cube.ParseRFAddress(m.Data); err == nil && s.isDeleted(rf) {
+				break
+			}
 			if p := s.paired(); p != nil && strings.EqualFold(strings.TrimSpace(m.Data), p.Device.RFAddress.String()) {
 				reply = p.Config.Wire()
 			}
@@ -252,6 +321,13 @@ func (s *Server) serve(conn net.Conn) {
 				s.NTP = strings.Split(m.Data, ",")
 			}
 			reply = "F:" + strings.Join(s.NTP, ",") + "\r\n"
+		case 't':
+			// One A line per address, as the Cube answered on hardware.
+			reply = "A:\r\n"
+			if _, addrs, err := cube.ParseDeleteDevices(m.Data); err == nil && len(addrs) > 0 {
+				s.deleteDevices(addrs)
+				reply = strings.Repeat("A:\r\n", len(addrs))
+			}
 		case 'e', 'd':
 			reply = fmt.Sprintf("%c:%s\r\n", m.Type-32, m.Data)
 		case 'n':
@@ -267,6 +343,7 @@ func (s *Server) serve(conn net.Conn) {
 				time.AfterFunc(p.Delay, func() {
 					s.mu.Lock()
 					s.joined = true
+					delete(s.deleted, p.Device.RFAddress)
 					s.mu.Unlock()
 					write(NewDeviceLine(p.Device).Wire())
 				})
