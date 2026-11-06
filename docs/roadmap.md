@@ -6,39 +6,36 @@ What is done is in CHANGELOG.md, one section per release;
 this file lists what is open, in order.
 docs/handover-session.md says where things run and what is owed on hardware.
 
-1. **The store, stages (c) to (e)** (docs/store.md section 9):
-   the preferences with the colour-scheme sync,
-   the log in the store with retention, and the backup history.
-   Stage (a) shipped in v0.7.0-alpha.1 and stage (b), users, login,
-   the capability model, the audit and `commands`, in v0.8.0-alpha.1;
-   neither has run on a real box yet.
-2. **Packaging**:
-   a Debian package, an apt repository on GitHub Pages and a Homebrew tap are in
-   pull request #63 from a session of its own (AP Packaging v1.0),
-   with the owner's steps for the keys, Pages and the tap repository;
-   then a release carrying them.
-   Windows code signing, rpm, MSI, a `.pkg`, a container image and LoxBerry
-   wait on their own decisions.
-3. **TLS for `serve`**:
-   the five sources are on `main` (files, self-signed, a reverse proxy,
-   Let's Encrypt by TLS-ALPN-01 and HTTP-01, and by DNS-01 through a hook);
-   the owner's hardware day is owed, then the plan retires.
-   A release with it ends CI's macOS rollback branch.
+1. **The store, stages (d) and (e)** (docs/store.md section 9):
+   the log in the store with paging and retention,
+   then the backup history.
+   Stages (a) to (c) shipped in v0.7.0-alpha.1 to v0.9.0-alpha.1 and have not
+   run on a real box yet;
+   stage (d) is planned (AP StoreLog v1.0) for the store session.
+2. **Pairing**:
+   the room's settings on a new device, an API to remove a device and the
+   panel in the UI are being built (AP Pairing v1.0) in a session of its own;
+   then the hardware test of the whole.
+3. **Packaging, the rest**:
+   the Debian package, the apt repository and the Homebrew tap shipped in
+   v0.9.0-alpha.1 and wait on the owner's keys, Pages and tap repository;
+   then Windows code signing, rpm, MSI and winget,
+   the UI's update button through apt or brew, a container image,
+   the LoxBerry plugin and a notarized `.pkg`, each on its own decision.
+4. **TLS, the rest**:
+   the five sources shipped in v0.9.0-alpha.1; the owner's hardware day is owed,
+   then the plan retires.
    Later, each a plan of its own: UPnP, a local CA, a Pebble job in CI.
-4. **Backup and restore in the web UI**:
+5. **Backup and restore in the web UI**:
    the API is in (plan, send, progress); the Settings panel is open,
    a session brief is ready; written from the UI's components (docs/ui.md,
    "How the page is built").
-5. **Pairing**:
-   the hardware test of the server side, then the panel in the UI,
-   copying the room's settings to a new device as the original software does,
-   and an API to remove a device (the protocol line is built;
-   a device that never answers is never dropped).
 6. **The UI when the server is gone**:
    a prominent notice, edits blocked, polling until it is back; brief ready.
 7. **Settings → Server** in the UI:
    the intervals and the stale threshold the API already takes,
-   and the certificate's details, in the header's expert list for now.
+   the certificate's details, in the header's expert list for now,
+   and the log's retention once stage (d) adds it.
 8. **Translations**:
    a native speaker's review of FR, IT, NL and PL;
    the server's error texts in the UI's language.
