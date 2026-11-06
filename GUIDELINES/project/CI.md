@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.3.2)
+# Massimo — CI Conventions (v1.4.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -177,6 +177,13 @@ nothing in CI touches them.
 - The service manager on Windows gives a binary that never connects 30 s
   (error 1053) before the job's own two-minute health timeout matters;
   a stand-in that exits at once fails in two seconds.
+- The Windows job's stage 2 serves its releases locally,
+  and the helper then stops the service within about 100 ms of the API's 202;
+  so `post_update` sends the second POST, which must be refused,
+  on the first's connection from the same curl (`--next`):
+  a second curl process started too late once.
+  The server's answer to it is less work than the helper needs before the stop,
+  so the 409 comes first at any runner speed.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
 - `ubuntu-latest` moves to a newer Ubuntu on GitHub's schedule;
