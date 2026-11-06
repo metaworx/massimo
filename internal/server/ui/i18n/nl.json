@@ -38,6 +38,8 @@
   "header.pending": "{n} in behandeling, toestanden kunnen nog veranderen",
   "header.pendingExpert.one": "{n} radiotelegram nog niet bevestigd, toestanden kunnen nog veranderen",
   "header.pendingExpert.other": "{n} radiotelegrammen nog niet bevestigd, toestanden kunnen nog veranderen",
+  "header.selfSigned": "Zelfondertekend certificaat; vergelijk deze vingerafdruk met het logboek van de server (massimo tls show):",
+  "header.certUntil": "tot {date}",
   "nav.pages": "pagina's",
   "nav.rooms": "ruimtes",
   "nav.roomsTitle": "Ruimtes",
@@ -56,6 +58,7 @@
   "budget.queued": "In wachtrij",
   "budget.pending": "In behandeling",
   "budget.clock": "Cube-klok",
+  "budget.certificate": "Certificaat",
   "msg.cannotLoad": "Laden mislukt: {error}",
   "api.badToken": "token ontbreekt of is onjuist",
 

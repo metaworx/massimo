@@ -56,10 +56,12 @@ type Options struct {
 	Listen string
 	// TLS is -tls: "" keeps what the settings file says, "off" switches
 	// it off there, "files" (implied by TLSCert) installs TLSCert and
-	// TLSKey beside the settings and names them in the settings file
-	// (tls.go).
+	// TLSKey beside the settings and names them in the settings file,
+	// "self-signed" has the server make a certificate for the box's
+	// names and TLSNames (tls.go).
 	TLS             string
 	TLSCert, TLSKey string
+	TLSNames        string
 	// DryRun only says what would be done.
 	DryRun bool
 	// Out receives one line per step; nil is os.Stdout.

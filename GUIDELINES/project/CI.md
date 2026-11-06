@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.4.0)
+# Massimo — CI Conventions (v1.4.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,7 +33,7 @@ There is no second pipeline.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release |
 
@@ -186,6 +186,11 @@ nothing in CI touches them.
   so the 409 comes first at any runner speed.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
+- The macOS job's update from the API installs the newest alpha release,
+  which knows no `-tls` until a release with it is cut:
+  that server serves plain HTTP, the helper's `https://` health check fails,
+  and the job takes its rollback branch, which it accepts.
+  Once such a release is out the job takes the other branch by itself.
 - `ubuntu-latest` moves to a newer Ubuntu on GitHub's schedule;
   the annotation on every run says when.
 

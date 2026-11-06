@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -224,10 +225,25 @@ func printTLS(w io.Writer) {
 	if err != nil {
 		hsts = "invalid: " + os.Getenv(hstsVar)
 	}
+	if mode == "self-signed" {
+		certPath, keyPath = certs.SelfSignedPaths(dataDir())
+		fmt.Fprintf(w, "tls:           self-signed (%s; hsts %s)\n", filepath.Dir(certPath), hsts)
+		if names := os.Getenv(tlsNamesVar); names != "" {
+			fmt.Fprintf(w, "               names given: %s\n", names)
+		}
+		printCertificate(w, mode, certPath, keyPath)
+		return
+	}
 	fmt.Fprintf(w, "tls:           %s (cert %s, key %s; hsts %s)\n", mode, orNone(certPath), orNone(keyPath), hsts)
 	if mode != "files" || certPath == "" || keyPath == "" {
 		return
 	}
+	printCertificate(w, mode, certPath, keyPath)
+}
+
+// printCertificate prints a certificate's names, expiry and fingerprint
+// under a line of config or tls show.
+func printCertificate(w io.Writer, mode, certPath, keyPath string) {
 	_, st, err := certs.Load(mode, certPath, keyPath)
 	if err != nil {
 		fmt.Fprintf(w, "               cannot read the certificate here: %v\n", err)

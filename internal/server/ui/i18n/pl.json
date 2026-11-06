@@ -40,6 +40,8 @@
   "header.pendingExpert.few": "{n} telegramy radiowe nie zostały jeszcze potwierdzone, stany mogą się jeszcze zmienić",
   "header.pendingExpert.many": "{n} telegramów radiowych nie zostało jeszcze potwierdzonych, stany mogą się jeszcze zmienić",
   "header.pendingExpert.other": "{n} telegramu radiowego nie zostało jeszcze potwierdzone, stany mogą się jeszcze zmienić",
+  "header.selfSigned": "Certyfikat samopodpisany; porównaj ten odcisk z dziennikiem serwera (massimo tls show):",
+  "header.certUntil": "do {date}",
   "nav.pages": "strony",
   "nav.rooms": "pomieszczenia",
   "nav.roomsTitle": "Pomieszczenia",
@@ -58,6 +60,7 @@
   "budget.queued": "W kolejce",
   "budget.pending": "Oczekujące",
   "budget.clock": "Zegar Cube",
+  "budget.certificate": "Certyfikat",
   "msg.cannotLoad": "Nie można wczytać: {error}",
   "api.badToken": "brak tokenu lub błędny token",
 

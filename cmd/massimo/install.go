@@ -19,16 +19,17 @@ func runInstall(args []string) error {
 	noHelper := fs.Bool("no-update-helper", false, "leave out the update helper (Linux and macOS: its units or LaunchDaemon; Windows: the service's -update-request); the web UI then cannot start updates")
 	noStart := fs.Bool("no-start", false, "enable the service without starting it")
 	listen := fs.String("listen", "", "serve the API and web UI on this address, such as :80 (default :8099; kept by later installs)")
-	tlsMode := fs.String("tls", "", "serve over TLS: files for -tls-cert and -tls-key, or off; written into the settings and kept by later installs (default: what the settings say)")
+	tlsMode := fs.String("tls", "", "serve over TLS: files for -tls-cert and -tls-key, self-signed for a certificate the server makes, or off; written into the settings and kept by later installs (default: what the settings say)")
 	tlsCert := fs.String("tls-cert", "", "the certificate to install beside the settings for -tls files: PEM, the chain after the server's certificate")
 	tlsKey := fs.String("tls-key", "", "its private key, PEM")
+	tlsNames := fs.String("tls-names", "", "with -tls self-signed, names and addresses the certificate holds besides the box's own, comma-separated")
 	dryRun := fs.Bool("dry-run", false, "only show what would be done")
 	remove := fs.Bool("remove", false, "stop and remove the service and the binary")
 	purge := fs.Bool("purge", false, "with -remove: also remove the settings and the logs (Linux and macOS: the state and the user too)")
 	root := fs.String("root", "", "Linux and macOS: install below this directory instead of / and run no commands (for images and tests)")
 	fs.Usage = func() {
 		win := install.WindowsPaths("", "")
-		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem>] [-no-update-helper] [-no-start] [-dry-run]
+		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>]] [-no-update-helper] [-no-start] [-dry-run]
        massimo install -remove [-purge]
 
 Install this binary and massimo serve as a service, or update both when
@@ -36,8 +37,11 @@ run again (existing settings are kept). With -tls-cert and -tls-key the
 files are copied beside the settings, owned by the service user, and
 MASSIMO_TLS, MASSIMO_TLS_CERT and MASSIMO_TLS_KEY are set in the settings,
 so the service serves https:// (and the update helper checks it there);
--tls off switches it off again. Run the service once with -hsts 0 over
-TLS first, or browsers refuse http:// for a year.
+-tls self-signed has the server make a certificate for the box's names
+at its start, which browsers warn about once per device (compare the
+fingerprint of the log, or of massimo tls show); -tls off switches TLS
+off again. Run the service once with -hsts 0 over TLS first, or browsers
+refuse http:// for a year.
 
 - Linux with systemd: the binary as %s, the user massimo, %s,
   the units massimo.service and the update helper
@@ -64,7 +68,7 @@ See packaging/README.md.
 	if *purge && !*remove {
 		return errors.New("-purge goes with -remove")
 	}
-	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey}
+	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames}
 	switch runtime.GOOS {
 	case "linux":
 		if *remove {

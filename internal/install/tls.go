@@ -17,9 +17,10 @@ import (
 // as they keep -listen. The update helper's health URL follows: https://
 // where the settings say the server has TLS.
 const (
-	tlsVar     = "MASSIMO_TLS"
-	tlsCertVar = "MASSIMO_TLS_CERT"
-	tlsKeyVar  = "MASSIMO_TLS_KEY"
+	tlsVar      = "MASSIMO_TLS"
+	tlsCertVar  = "MASSIMO_TLS_CERT"
+	tlsKeyVar   = "MASSIMO_TLS_KEY"
+	tlsNamesVar = "MASSIMO_TLS_NAMES"
 	// The owner's files beside the settings.
 	certName = "cert.pem"
 	keyName  = "key.pem"
@@ -54,10 +55,15 @@ func (o Options) checkTLS() error {
 			}
 		}
 		return nil
-	case "self-signed", "acme":
-		return fmt.Errorf("-tls %s is not in this version yet; use -tls-cert and -tls-key", o.TLS)
+	case "self-signed":
+		if o.TLSCert != "" || o.TLSKey != "" {
+			return errors.New("-tls self-signed and -tls-cert or -tls-key exclude each other")
+		}
+		return nil
+	case "acme":
+		return fmt.Errorf("-tls %s is not in this version yet; use -tls self-signed, or -tls-cert and -tls-key", o.TLS)
 	default:
-		return fmt.Errorf("-tls %q: want off or files", o.TLS)
+		return fmt.Errorf("-tls %q: want off, files or self-signed", o.TLS)
 	}
 }
 
@@ -71,6 +77,14 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 		return nil
 	case "off":
 		return in.setSettings(env, chown, [][2]string{{tlsVar, "off"}})
+	case "self-signed":
+		// The server makes the pair at its start, as the service user,
+		// into the data directory, which it may write.
+		vars := [][2]string{{tlsVar, "self-signed"}}
+		if in.TLSNames != "" {
+			vars = append(vars, [2]string{tlsNamesVar, in.TLSNames})
+		}
+		return in.setSettings(env, chown, vars)
 	}
 	for _, f := range [][2]string{{in.TLSCert, certDst}, {in.TLSKey, keyDst}} {
 		in.say("copy %s to %s", f[0], f[1])

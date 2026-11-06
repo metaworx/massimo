@@ -38,6 +38,8 @@
   "header.pending": "{n} in sospeso, gli stati possono ancora cambiare",
   "header.pendingExpert.one": "{n} radiotelegramma non ancora confermato, gli stati possono ancora cambiare",
   "header.pendingExpert.other": "{n} radiotelegrammi non ancora confermati, gli stati possono ancora cambiare",
+  "header.selfSigned": "Certificato autofirmato; confronta questa impronta con il log del server (massimo tls show):",
+  "header.certUntil": "fino al {date}",
   "header.pendingExpert.many": "{n} radiotelegrammi non ancora confermati, gli stati possono ancora cambiare",
   "nav.pages": "pagine",
   "nav.rooms": "locali",
@@ -57,6 +59,7 @@
   "budget.queued": "In coda",
   "budget.pending": "In sospeso",
   "budget.clock": "Orologio del Cube",
+  "budget.certificate": "Certificato",
   "msg.cannotLoad": "Impossibile caricare: {error}",
   "api.badToken": "token mancante o errato",
 

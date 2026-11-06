@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,19 +50,33 @@ func testPair(t *testing.T, dir string) (certPath, keyPath, fingerprint string) 
 
 func TestTLSSource(t *testing.T) {
 	certPath, keyPath, _ := testPair(t, t.TempDir())
-	if src, err := tlsSource("", "", "", nil); err != nil || src != nil {
+	if src, err := tlsSource(tlsOptions{}, nil); err != nil || src != nil {
 		t.Fatalf("off: %v %v", src, err)
 	}
-	if src, err := tlsSource("off", certPath, keyPath, nil); err != nil || src != nil {
+	if src, err := tlsSource(tlsOptions{mode: "off", certPath: certPath, keyPath: keyPath}, nil); err != nil || src != nil {
 		t.Fatalf("off with files: %v %v", src, err)
 	}
-	if src, err := tlsSource("", certPath, keyPath, quietLog()); err != nil || src == nil || src.Status().Source != "files" {
+	if src, err := tlsSource(tlsOptions{certPath: certPath, keyPath: keyPath}, quietLog()); err != nil || src == nil || src.Status().Source != "files" {
 		t.Fatalf("files implied: %v %v", src, err)
 	}
-	for _, c := range [][3]string{{"files", "", ""}, {"files", certPath, ""}, {"", certPath, ""}, {"self-signed", "", ""}, {"acme", "", ""}, {"yes", "", ""}, {"files", certPath, filepath.Join(t.TempDir(), "none.pem")}} {
-		if _, err := tlsSource(c[0], c[1], c[2], quietLog()); err == nil {
-			t.Errorf("%q accepted", c)
+	data := t.TempDir()
+	src, err := tlsSource(tlsOptions{mode: "self-signed", names: "massimo.example.net", listen: "192.0.2.10:8443", dataDir: data}, quietLog())
+	if err != nil || src == nil {
+		t.Fatalf("self-signed: %v %v", src, err)
+	}
+	if st := src.Status(); st.Source != "self-signed" || !st.SelfSigned || !slices.Contains(st.Names, "192.0.2.10") || !slices.Contains(st.Names, "massimo.example.net") || !slices.Contains(st.Names, "localhost") {
+		t.Fatalf("self-signed status %+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(data, "tls", "self-signed.key")); err != nil {
+		t.Fatal("no pair in the data directory")
+	}
+	for _, c := range []tlsOptions{{mode: "files"}, {mode: "files", certPath: certPath}, {certPath: certPath}, {mode: "acme"}, {mode: "yes"}, {mode: "files", certPath: certPath, keyPath: filepath.Join(t.TempDir(), "none.pem")}} {
+		if _, err := tlsSource(c, quietLog()); err == nil {
+			t.Errorf("%+v accepted", c)
 		}
+	}
+	if listenHost(":8099") != "" || listenHost("192.0.2.1:80") != "192.0.2.1" || listenHost("[::1]:80") != "::1" {
+		t.Fatal("listenHost")
 	}
 	for v, want := range map[string]int{"": 365, "0": 0, "30": 30} {
 		if n, err := hstsDays(v); err != nil || n != want {
@@ -79,7 +94,7 @@ func TestTLSSource(t *testing.T) {
 // /healthz over https.
 func TestServeTLS(t *testing.T) {
 	certPath, keyPath, fp := testPair(t, t.TempDir())
-	src, err := tlsSource("files", certPath, keyPath, quietLog())
+	src, err := tlsSource(tlsOptions{mode: "files", certPath: certPath, keyPath: keyPath}, quietLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +144,7 @@ func TestServeTLS(t *testing.T) {
 }
 
 func TestServeTLSVariablesAreKnown(t *testing.T) {
-	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, hstsVar} {
+	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar} {
 		if !env.Known(k) {
 			t.Errorf("%s unknown to massimo config", k)
 		}

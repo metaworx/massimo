@@ -85,6 +85,7 @@ h3 { margin: 0 0 12px; }
 .muted { color: var(--muted); }
 .mono { font-family: var(--mono); font-size: 0.9em; }
 .hidden { display: none !important; }
+.tls-fp { word-break: break-all; }
 body:not(.expert) .expert-only { display: none !important; }
 
 /* header */

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
@@ -21,10 +22,14 @@ import (
 // variables are those of the settings file, where install writes them
 // (docs/store.md section 4: needed before the store opens).
 const (
-	tlsVar     = "MASSIMO_TLS"
-	tlsCertVar = "MASSIMO_TLS_CERT"
-	tlsKeyVar  = "MASSIMO_TLS_KEY"
-	hstsVar    = "MASSIMO_HSTS"
+	tlsVar      = "MASSIMO_TLS"
+	tlsCertVar  = "MASSIMO_TLS_CERT"
+	tlsKeyVar   = "MASSIMO_TLS_KEY"
+	tlsNamesVar = "MASSIMO_TLS_NAMES"
+	hstsVar     = "MASSIMO_HSTS"
+	// certWatch is how often a source checks its certificate: a renewal
+	// 30 days before the end needs no finer clock.
+	certWatch = time.Hour
 	// defaultHSTSDays is how long browsers are told to use https://
 	// for the host: a year, as the owner decided.
 	defaultHSTSDays = 365
@@ -42,25 +47,48 @@ func tlsMode(mode, certPath, keyPath string) string {
 	return mode
 }
 
+// tlsOptions are serve's TLS flags.
+type tlsOptions struct {
+	mode, certPath, keyPath string
+	names                   string // -tls-names
+	listen                  string // -listen, for the self-signed names
+	dataDir                 string // where the self-signed pair lives
+}
+
 // tlsSource is the certificate source -tls names, nil for off.
-func tlsSource(mode, certPath, keyPath string, log *slog.Logger) (certs.Source, error) {
-	switch m := tlsMode(mode, certPath, keyPath); m {
+func tlsSource(o tlsOptions, log *slog.Logger) (certs.Source, error) {
+	switch m := tlsMode(o.mode, o.certPath, o.keyPath); m {
 	case "off":
 		return nil, nil
 	case "files":
-		if certPath == "" || keyPath == "" {
+		if o.certPath == "" || o.keyPath == "" {
 			return nil, errors.New("serve: -tls files needs -tls-cert and -tls-key (" + tlsCertVar + " and " + tlsKeyVar + ")")
 		}
-		src, err := certs.OpenFiles(certPath, keyPath, log)
+		src, err := certs.OpenFiles(o.certPath, o.keyPath, log)
 		if err != nil {
 			return nil, fmt.Errorf("serve: %w", err)
 		}
 		return src, nil
-	case "self-signed", "acme":
-		return nil, fmt.Errorf("serve: -tls %s is not in this version yet; use -tls files", m)
+	case "self-signed":
+		src, err := certs.OpenSelfSigned(o.dataDir, certs.Names(listenHost(o.listen), certs.ParseNames(o.names)), log, nil)
+		if err != nil {
+			return nil, fmt.Errorf("serve: %w", err)
+		}
+		return src, nil
+	case "acme":
+		return nil, fmt.Errorf("serve: -tls %s is not in this version yet; use -tls self-signed or -tls files", m)
 	default:
-		return nil, fmt.Errorf("serve: -tls %q: want off or files", m)
+		return nil, fmt.Errorf("serve: -tls %q: want off, files or self-signed", m)
 	}
+}
+
+// listenHost is the host of a listen address, "" for every interface.
+func listenHost(listen string) string {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return strings.Trim(listen, "[]")
+	}
+	return host
 }
 
 // hstsDays reads -hsts: a number of days, 0 or more; "" is the default.

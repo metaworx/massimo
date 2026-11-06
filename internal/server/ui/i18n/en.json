@@ -37,6 +37,8 @@
   "header.pending": "{n} pending, states may still change",
   "header.pendingExpert.one": "{n} radiogram not yet acknowledged, states may still change",
   "header.pendingExpert.other": "{n} radiograms not yet acknowledged, states may still change",
+  "header.selfSigned": "Self-signed certificate; compare this fingerprint with the server's log (massimo tls show):",
+  "header.certUntil": "until {date}",
   "nav.pages": "pages",
   "nav.rooms": "rooms",
   "nav.roomsTitle": "Rooms",
@@ -55,6 +57,7 @@
   "budget.queued": "Queued",
   "budget.pending": "Pending",
   "budget.clock": "Cube clock",
+  "budget.certificate": "Certificate",
   "msg.cannotLoad": "Cannot load: {error}",
   "api.badToken": "missing or wrong token",
 

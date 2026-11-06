@@ -11,6 +11,7 @@ package certs
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -29,9 +30,35 @@ type Source interface {
 	Status() Status
 }
 
+// Checker is a source with work to do now and then: a renewal, a
+// warning before an expiry.
+type Checker interface {
+	Check(now time.Time)
+}
+
+// Watch runs src's Check every interval until ctx is done, for a source
+// that is a Checker; the others need none.
+func Watch(ctx context.Context, src Source, every time.Duration) {
+	c, ok := src.(Checker)
+	if !ok {
+		return
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			c.Check(now)
+		}
+	}
+}
+
 // Status describes the certificate a source serves.
 type Status struct {
-	// Source is where the certificate comes from: "files".
+	// Source is where the certificate comes from: "files", or
+	// "self-signed" for the pair the server made.
 	Source string `json:"source"`
 	// Names are the certificate's subject alternative names, DNS names
 	// and addresses, else its common name.
