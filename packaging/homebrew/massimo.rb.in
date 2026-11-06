@@ -1,0 +1,77 @@
+# The Homebrew formula of Massimo for the update channel @CHANNEL@, rendered
+# from packaging/homebrew/massimo.rb.in by packaging/homebrew/render.sh at
+# each release and pushed to the tap metaworx/homebrew-massimo
+# (packaging/README.md, "Homebrew"). Built from source on the Mac, so
+# nothing needs notarization and nothing is quarantined; brew then owns
+# the binary, which the marker under share/massimo tells massimo.
+class @CLASS@ < Formula
+  desc "Server for eQ-3 MAX! Cube heating systems: API, web UI, the Cube proxy"
+  homepage "https://github.com/metaworx/massimo"
+  url "@URL@"
+  sha256 "@SHA256@"
+  version "@VERSION@"
+  license "AGPL-3.0-or-later"
+  head "https://github.com/metaworx/massimo.git", branch: "main"
+
+  @CONFLICTS@
+
+  depends_on "go" => :build
+
+  def install
+    system "go", "build", *std_go_args(output: bin/"massimo", ldflags: "-s -w -X main.version=v#{version} -X main.channel=@CHANNEL@"), "./cmd/massimo"
+    # The marker internal/install.Packaged reads: brew owns this binary, so
+    # massimo update and the web UI leave the install to it.
+    (share/"massimo").mkpath
+    (share/"massimo"/"packaged").write "brew\nbrew upgrade @NAME@\nbrew uninstall @NAME@\n"
+    template = (buildpath/"packaging/env.template").read
+    template = template.sub("MASSIMO_LOG=/var/log/massimo/serve.log",
+                            "# The log is #{var}/log/massimo.log, written by brew services; no MASSIMO_LOG here.")
+    (share/"massimo"/"env.template").write template
+  end
+
+  def post_install
+    (etc/"massimo").mkpath
+    (var/"massimo").mkpath
+    (var/"log").mkpath
+    env = etc/"massimo/env"
+    unless env.exist?
+      env.write (share/"massimo/env.template").read
+      env.chmod 0600
+    end
+  end
+
+  service do
+    run [opt_bin/"massimo", "-env", etc/"massimo/env", "-data", var/"massimo", "serve", "-listen", ":8099"]
+    keep_alive true
+    working_dir var/"massimo"
+    log_path var/"log/massimo.log"
+    error_log_path var/"log/massimo.log"
+  end
+
+  def caveats
+    <<~EOS
+      Put the Cubes' addresses and MASSIMO_API_TOKEN into
+        #{etc}/massimo/env
+      (README.md, "Cube variables"), then run massimo serve as yourself while
+      you are logged in with
+        brew services start @NAME@
+      or as a daemon at boot with
+        sudo brew services start @NAME@
+      The web UI is then at http://localhost:8099/. Updates come through
+      brew upgrade; massimo update leaves them to it. Do not mix this with
+      massimo install, which sets up a Mac without Homebrew.
+    EOS
+  end
+
+  test do
+    port = free_port
+    pid = spawn bin/"massimo", "serve", "-listen", "127.0.0.1:#{port}", "-proxy", "off"
+    sleep 3
+    begin
+      assert_match "\"ok\": true", shell_output("curl -s http://127.0.0.1:#{port}/healthz")
+    ensure
+      Process.kill("TERM", pid)
+      Process.wait(pid)
+    end
+  end
+end

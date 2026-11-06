@@ -396,6 +396,15 @@ The button under Settings → Software in the web UI works as on Linux,
 through the helper (its log is `/var/log/massimo-update.log`).
 Details: [macOS](packaging/README.md#macos).
 
+**With Homebrew.**
+`brew install metaworx/massimo/massimo-alpha` builds the release from source
+(nothing needs notarization), `brew services start massimo-alpha` runs it as you
+(`sudo` for a daemon at boot),
+and the settings are in `$(brew --prefix)/etc/massimo/env`;
+brew then owns the binary and `brew upgrade` updates it,
+while the web UI and `massimo update` say when a release is out.
+Details: [Homebrew](packaging/README.md#homebrew).
+
 ## Server
 
 ```bash

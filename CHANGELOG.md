@@ -18,6 +18,10 @@ the next minor, a fix counts the suffix up.
   channel, signed with the repository key, with the keyring package;
   `apt upgrade` then follows the channel (packaging/README.md).
 
+- A Homebrew tap, `brew install metaworx/massimo/massimo-alpha`, built
+  from source and run with `brew services`; brew then owns the binary,
+  as apt does (packaging/README.md, "Homebrew").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

@@ -556,6 +556,35 @@ jobs:
           done
           if dscl . -read /Users/_massimo >/dev/null 2>&1; then echo "::error::user left"; exit 1; fi
 
+      # The Homebrew formula (packaging/README.md, "Homebrew"), rendered
+      # for a tarball of this checkout, built from source as a user
+      # installs it, tested, and the marker checked: brew owns that
+      # binary, and update and install say so. The tarball is served from
+      # a local port, since a formula wants a URL.
+      - name: Homebrew formula from this checkout
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_ENV_HINTS: 1
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/src"
+          git archive --format=tar.gz --prefix=massimo/ -o "$RUNNER_TEMP/src/massimo.tar.gz" HEAD
+          sha="$(shasum -a 256 "$RUNNER_TEMP/src/massimo.tar.gz" | cut -d' ' -f1)"
+          python3 -m http.server 8321 --bind 127.0.0.1 --directory "$RUNNER_TEMP/src" > "$RUNNER_TEMP/http.log" 2>&1 &
+          for i in $(seq 20); do curl -fsS -o /dev/null http://127.0.0.1:8321/massimo.tar.gz && break; sleep 1; done
+          packaging/homebrew/render.sh --tag v0.0.0-ci.1 --url http://127.0.0.1:8321/massimo.tar.gz --sha256 "$sha" --out "$RUNNER_TEMP/massimo-ci.rb"
+          brew install --build-from-source --formula "$RUNNER_TEMP/massimo-ci.rb"
+          brew test "$RUNNER_TEMP/massimo-ci.rb"
+          prefix="$(brew --prefix massimo-ci)"
+          test "$(head -n 1 "$prefix/share/massimo/packaged")" = brew
+          test -f "$(brew --prefix)/etc/massimo/env"
+          if "$prefix/bin/massimo" update 2>err.txt; then echo "::error::update did not refuse under brew"; exit 1; fi
+          grep -q 'managed by brew' err.txt
+          if "$prefix/bin/massimo" install -dry-run 2>err.txt; then echo "::error::install did not refuse under brew"; exit 1; fi
+          grep -q 'Homebrew' err.txt
+          brew uninstall "$RUNNER_TEMP/massimo-ci.rb"
+
       - name: Logs
         if: always()
         run: |

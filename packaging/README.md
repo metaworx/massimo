@@ -27,6 +27,8 @@ on a Mac LaunchDaemons (see "macOS").
   the Debian package `make packages` builds (see "Debian package").
 - `apt/`:
   the apt repository the release workflow publishes (see "The apt repository").
+- `homebrew/`:
+  the Homebrew formula's template and renderer (see "Homebrew").
 
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
@@ -628,6 +630,52 @@ sudo massimo update -restart ch.metaworx.massimo -health http://127.0.0.1:8099/h
 As on Linux the new binary is renamed into place (which macOS needs for a signed binary:
 one overwritten in place is killed), the old one kept as `massimo.prev`,
 and `-rollback` goes back.
+
+## Homebrew
+
+On a Mac with Homebrew the tap `metaworx/massimo` carries a formula per update channel,
+`massimo-alpha` for `alpha` (and `massimo` once there is a stable channel),
+built from the release's source on the Mac, so that nothing needs notarization:
+
+```sh
+brew install metaworx/massimo/massimo-alpha
+brew services start massimo-alpha
+```
+
+The formula builds `bin/massimo` with Go,
+writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
+keeps the store in `$(brew --prefix)/var/massimo` and the log in
+`$(brew --prefix)/var/log/massimo.log`,
+and its service runs `massimo serve -listen :8099` as you while you are logged in;
+`sudo brew services start massimo-alpha` installs a LaunchDaemon that runs as
+root at boot instead.
+Fill in the settings file (the Cubes and `MASSIMO_API_TOKEN`),
+then start or restart the service.
+
+One owner of the binary: brew owns it,
+and the marker under the formula's `share/massimo` tells massimo so.
+`massimo update` and the web UI say when a release is out and leave it to
+`brew upgrade massimo-alpha`; `massimo install` refuses,
+since that is the layout of a Mac without Homebrew (on an Intel Mac both would
+write to `/usr/local/bin`).
+`brew uninstall massimo-alpha` removes it;
+the settings under `etc/massimo` stay, as brew keeps them.
+
+The formula is rendered from `homebrew/massimo.rb.in` by `homebrew/render.sh`
+for each release and pushed to the tap by `.github/workflows/publish.yml` (on a
+published release, with a deploy key);
+CI's macOS job renders it for a tarball of the checkout, builds and tests it,
+and checks the marker.
+Until the owner has made the tap and the key, the workflow skips the push.
+
+The owner's steps, once:
+
+- Create the repository `metaworx/homebrew-massimo`;
+  the workflow writes `Formula/<name>.rb`.
+- Make a deploy key, `ssh-keygen -t ed25519 -f tap-deploy-key -N ''`:
+  the public half as a deploy key of the tap with write access,
+  the private half as the repository secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository
+  (GUIDELINES/project/CI.md, section 5).
 
 ## Resource use
 
