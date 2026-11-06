@@ -31,9 +31,522 @@ paths:
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
                   node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
+  /api/v1/login:
+    post:
+      summary: Log in with a name and a password
+      x-capability: none
+      description: |
+        Answers a session token, good for 30 days from its last use,
+        which the client sends as the bearer header. A wrong pair counts
+        against the address and the user name (429 after ten in a
+        minute). 409 on a server without users (create the first owner
+        with POST /api/v1/users) or without a store (the API token).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Login"}
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Session"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401":
+          description: Wrong user or password
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/logout:
+    post:
+      summary: End the session that makes the call
+      x-capability: any
+      description: An API key is not a session and answers 400; it is revoked under the user's tokens.
+      responses:
+        "200":
+          description: Ended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+        "400":
+          description: The token is an API key, or the server has no users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/me:
+    get:
+      summary: Who the caller is and what the caller may do
+      x-capability: any
+      description: |
+        The mode (users, open, token, none), the caller's user, role and
+        effective capabilities, and the token presented; outside users
+        mode user and role are null and the capabilities are all of
+        them. setup is true on an open server for a caller on the local
+        network, which may create the first owner.
+      responses:
+        "200":
+          description: The caller
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Me"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/commands/{id}:
+    get:
+      summary: A command by its id, with its steps
+      x-capability: read
+      description: |
+        Every request that changes something is a command (its id is in
+        the audit's command_id), and every engine command it put on a
+        Cube's queue is a step beneath it. A user without audit sees its
+        own commands only; others are 404.
+      parameters:
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        A key of the client's choice, at most 128 characters, kept per user
+        for 24 hours: a retry with the same key answers what the first
+        request answered, with the header Idempotent-Replayed: true, and
+        sends nothing to the Cube; the same key with another request is
+        422, and one whose request is still running 409.
+      schema: {type: string, maxLength: 128}
+        - {name: id, in: path, required: true, description: The command's id, a UUID, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: The command
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Command"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such command, or not the caller's
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/audit:
+    get:
+      summary: The audit, newest first
+      x-capability: audit
+      description: |
+        Every request that changed something, or tried to: who, from
+        where, what, the request with its secrets removed, and how it
+        went. Paged by time with before, filtered by user.
+      parameters:
+        - {name: before, in: query, description: Rows before this time, RFC 3339, schema: {type: string, format: date-time}}
+        - {name: limit, in: query, description: At most this many rows (100), schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
+        - {name: user, in: query, description: Rows of this user's login name, schema: {type: string}}
+      responses:
+        "200":
+          description: The rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/AuditEntry"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users:
+    get:
+      summary: List the users
+      x-capability: users
+      description: Every user with users; the guests with guests alone; the own user otherwise.
+      responses:
+        "200":
+          description: The users by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Create a user
+      x-capability: users
+      description: |
+        With users, any role; with guests alone, the role guest. On a
+        server without users, the first owner: open to a caller on the
+        local network (loopback, a private range, link-local), the role
+        owner and a password required, refused from anywhere else.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UserCreate"}
+      responses:
+        "201":
+          description: The user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The name exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}:
+    get:
+      summary: One user
+      x-capability: users
+      parameters: [{$ref: "#/components/parameters/name"}]
+      responses:
+        "200":
+          description: The user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    put:
+      summary: Change a user
+      x-capability: users
+      description: |
+        Any of the fields; absent ones stay. A user changes its own
+        display_name and, with current_password, its password; the
+        role, disabled and expires_at need users (guests for a guest). A
+        password set by someone else ends the user's sessions. The last
+        enabled owner cannot be disabled or demoted (409).
+      parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UserChange"}
+      responses:
+        "200":
+          description: The user as changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "409":
+          description: The last enabled owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Remove a user
+      x-capability: users
+      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner stays (409).
+      parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  name: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "409":
+          description: The last enabled owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/tokens:
+    get:
+      summary: The user's sessions and API keys
+      x-capability: users
+      parameters: [{$ref: "#/components/parameters/name"}]
+      responses:
+        "200":
+          description: The live tokens, oldest first, without their secrets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Token"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Create an API key for the user
+      x-capability: users
+      description: The key is shown once, in token; the store keeps its hash. It never expires.
+      parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: {type: string, maxLength: 64, example: Loxone}
+      responses:
+        "201":
+          description: The key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: {type: string, description: The secret, shown once}
+                  id: {type: integer}
+                  kind: {type: string, enum: [api]}
+                  label: {type: string}
+                  created_at: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/tokens/{id}:
+    delete:
+      summary: Revoke a session or an API key
+      x-capability: users
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+    name:
+      name: name
+      in: path
+      required: true
+      description: A user's login name, case does not matter
+      schema: {type: string, example: anna}
+    roleKey:
+      name: key
+      in: path
+      required: true
+      description: A role's key
+      schema: {type: string, example: operator}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The token's id from the list, schema: {type: integer}}
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  id: {type: integer}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/roles:
+    get:
+      summary: The roles with their sets, and every capability
+      x-capability: roles
+      responses:
+        "200":
+          description: The default roles first, then the created ones by key; and the capabilities with whether each is disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items: {$ref: "#/components/schemas/Role"}
+                  capabilities:
+                    type: array
+                    items: {$ref: "#/components/schemas/Capability"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Create a role
+      x-capability: roles
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RoleCreate"}
+      responses:
+        "201":
+          description: The role
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Role"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The key exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/roles/{key}:
+    put:
+      summary: Rename a role or change its set
+      x-capability: roles
+      description: Absent fields stay. owner cannot be changed (403).
+      parameters: [{$ref: "#/components/parameters/roleKey"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RoleChange"}
+      responses:
+        "200":
+          description: The role as changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Role"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoRole"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Remove a created role no user has
+      x-capability: roles
+      description: A default role cannot be removed (403); one with users is 409.
+      parameters: [{$ref: "#/components/parameters/roleKey"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  key: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoRole"}
+        "409":
+          description: The role still has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/roles/{key}/disabled:
+    put:
+      summary: Disable or enable a role
+      x-capability: roles.disable
+      description: A disabled role's users keep their login and are refused every route. owner cannot be disabled (403).
+      parameters: [{$ref: "#/components/parameters/roleKey"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Disabled"}
+      responses:
+        "200":
+          description: The role
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Role"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoRole"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/capabilities:
+    get:
+      summary: Every capability, and whether it is disabled
+      x-capability: capabilities
+      responses:
+        "200":
+          description: The capabilities in the order of the table
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Capability"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/capabilities/{key}:
+    put:
+      summary: Disable or enable a capability
+      x-capability: capabilities
+      description: A disabled capability is denied to every role but owner, whatever the role's set says.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {name: key, in: path, required: true, description: The capability, schema: {type: string, example: pair}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Disabled"}
+      responses:
+        "200":
+          description: The capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Capability"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/cubes:
     get:
       summary: List the Cubes
+      x-capability: read
       description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false).
       responses:
         "200":
@@ -47,9 +560,11 @@ paths:
                     - {$ref: "#/components/schemas/Cube"}
                     - {$ref: "#/components/schemas/FoundCube"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
     post:
       summary: Serve a Cube from now on
+      x-capability: cubes
       description: |
         Adds a Cube to the store and starts serving it at once: one
         discovery found (its row becomes configured), or one given by
@@ -58,6 +573,7 @@ paths:
         or on :62910 when it is the only Cube and nothing else listens;
         with -proxy on serve's command line the listeners stay as they
         are. Needs the store.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -77,6 +593,7 @@ paths:
               schema: {$ref: "#/components/schemas/Cube"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "409":
           description: The Cube is served already
           content:
@@ -91,12 +608,14 @@ paths:
   /api/v1/cubes/discover:
     post:
       summary: Look for Cubes on the LAN now
+      x-capability: discover
       description: |
         UDP discovery, about three seconds. A call while a run is going
         waits for it and gets its result. serve also runs it at the start
         and every -discover-interval (30 minutes). A Cube that is not
         configured is announced once as a cube_found event on every
         Cube's stream.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Every Cube that answered, configured or not
@@ -110,6 +629,7 @@ paths:
                     type: array
                     items: {$ref: "#/components/schemas/FoundCube"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The discovery port (UDP 23272) is not available
@@ -119,6 +639,7 @@ paths:
   /api/v1/cubes/{sn}:
     get:
       summary: One Cube with its configuration and rooms
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -127,10 +648,12 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/CubeDetail"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Change a Cube's configuration
+      x-capability: cubes
       description: |
         Any of the fields; absent ones stay, unknown ones are refused.
         Written to the store (source becomes ui) and applied at once: a
@@ -138,7 +661,7 @@ paths:
         that Cube's listener (not with -proxy on serve's command line),
         a new hidden list hides at once. An empty address makes the Cube
         follow discovery.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -152,6 +675,7 @@ paths:
               schema: {$ref: "#/components/schemas/Cube"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
           description: The Cube is served for this run only (-addr or -sn) or has not reported its serial yet
@@ -166,12 +690,13 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
     delete:
       summary: Stop serving a Cube
+      x-capability: cubes
       description: |
         The server stops the Cube's connection and proxy. Its row stays
         in the store with configured = 0, with its history; discovery
         lists it as found again, and POST /api/v1/cubes adds it back. A
         line for it in the settings file does not bring it back.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Removed
@@ -183,6 +708,7 @@ paths:
                   ok: {type: boolean}
                   serial: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
           description: The Cube is served for this run only (-addr or -sn)
@@ -198,6 +724,7 @@ paths:
   /api/v1/cubes/{sn}/rooms:
     get:
       summary: Rooms with their devices and states
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -208,11 +735,13 @@ paths:
                 type: array
                 items: {$ref: "#/components/schemas/Room"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/devices:
     get:
       summary: Every device the Cube knows
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -223,11 +752,13 @@ paths:
                 type: array
                 items: {$ref: "#/components/schemas/Device"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/devices/{rf}:
     get:
       summary: One device with its configuration
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
       responses:
         "200":
@@ -237,10 +768,12 @@ paths:
               schema: {$ref: "#/components/schemas/DeviceDetail"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Rename a device and/or move it to another room, or add a paired device to one
+      x-capability: rename
       description: >-
         A move unlinks the device from its old room's partners and relinks
         it with the new room's, as the original software does, then writes
@@ -249,7 +782,7 @@ paths:
         with the room's members (0x20 both ways, after a wakeup), given
         the room's group (0x22) and listed under name; without room_id it
         answers 409.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -271,6 +804,7 @@ paths:
                   budget: {$ref: "#/components/schemas/Budget"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -282,18 +816,20 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/setpoint:
     put:
       summary: Set mode and setpoint of one thermostat
+      x-capability: setpoint
       description: |
         A device in a room is addressed as its room, since the Cube
         discards a direct command to a room member; every thermostat of
         that room takes the setpoint. A device outside any room is
         addressed directly. The request waits for the Cube's answer, up
         to two minutes when the radio budget is exhausted.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Setpoint"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -301,11 +837,12 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/lock:
     put:
       summary: Lock or unlock the buttons of one thermostat
+      x-capability: lock
       description: |
         The key lock ("LoC" on the display, `panel_locked` in the state).
         Radiogram 0x80, sent directly to the device after a wakeup of its
         room.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -319,6 +856,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -326,7 +864,8 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}:
     put:
       summary: Rename a room
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      x-capability: rename
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -347,13 +886,15 @@ paths:
                   ok: {type: boolean}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/CubeError"}
     delete:
       summary: Remove an empty room
+      x-capability: structure
       description: Writes the Cube's metadata without the room. A room that still has devices, hidden ones included, is refused with 409.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Removed
@@ -365,6 +906,7 @@ paths:
                   ok: {type: boolean}
                   rooms: {type: integer, description: Rooms left}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -376,12 +918,14 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}/setpoint:
     put:
       summary: Set mode and setpoint of a whole room
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      x-capability: setpoint
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Setpoint"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -390,6 +934,7 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}/config:
     get:
       summary: The room's settings, as the UI edits them
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
         "200":
@@ -398,12 +943,14 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/RoomConfig"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Write settings to every thermostat of the room
+      x-capability: configure
       description: Temperatures to radiator and wall thermostats, boost to both, descaling and valve limits to radiator thermostats, after one wakeup of the room. temp_offset and display_actual are per device.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Config"}
       responses:
         "200":
@@ -420,6 +967,7 @@ paths:
                   budget: {$ref: "#/components/schemas/Budget"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -427,6 +975,7 @@ paths:
   /api/v1/cubes/{sn}/rooms/{id}/program:
     get:
       summary: The week programme of the room's first thermostat
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
       responses:
         "200":
@@ -440,12 +989,14 @@ paths:
                     properties:
                       source: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Write the week programme of the whole room
+      x-capability: configure
       description: Any subset of days; one group radiogram 0x10 per day, which every thermostat of the room takes.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -455,6 +1006,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -462,13 +1014,15 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/config:
     put:
       summary: Write a thermostat's settings
+      x-capability: configure
       description: Every field optional, merged into the current configuration; 0x11 for temperatures, 0x12 for boost, descaling and valve limits, 0x82 for display_actual (wall thermostats), after a wakeup of the room.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Config"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -476,7 +1030,8 @@ paths:
   /api/v1/cubes/{sn}/devices/{rf}/program:
     put:
       summary: Write the week programme of one thermostat
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      x-capability: configure
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -486,6 +1041,7 @@ paths:
         "200": {$ref: "#/components/responses/CommandResult"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
@@ -493,6 +1049,7 @@ paths:
   /api/v1/cubes/{sn}/backup:
     get:
       summary: A backup file of the Cube
+      x-capability: backup
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - name: format
@@ -507,12 +1064,14 @@ paths:
             application/yaml:
               schema: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
   /api/v1/cubes/{sn}/restore/plan:
     post:
       summary: What restoring a backup would send
+      x-capability: restore
       description: |
         The dry run of massimo restore: the backup in the body (JSON or
         YAML, which may be edited by hand) is compared with the Cube and
@@ -523,6 +1082,7 @@ paths:
         clock group reads the Cube's NTP servers first; hidden devices
         are neither compared nor written.
       parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
         - {$ref: "#/components/parameters/restorePortal"}
         - {$ref: "#/components/parameters/restoreState"}
@@ -540,6 +1100,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "413": {$ref: "#/components/responses/TooLarge"}
@@ -547,6 +1108,7 @@ paths:
   /api/v1/cubes/{sn}/restore:
     post:
       summary: Restore a backup
+      x-capability: restore
       description: |
         The same body and options as POST …/restore/plan, plus the hash
         that answered. The plan is computed again and, when the hash is
@@ -558,6 +1120,7 @@ paths:
         plan, and radio commands while the duty cycle is above 80 %
         answer 409.
       parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
         - {name: plan, in: query, required: true, description: The hash from POST …/restore/plan, schema: {type: string}}
         - {$ref: "#/components/parameters/restorePortal"}
@@ -580,6 +1143,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -591,6 +1155,7 @@ paths:
         "503": {$ref: "#/components/responses/NotConnected"}
     get:
       summary: The last restore of the Cube
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -599,17 +1164,19 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/RestoreState"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/pairing:
     post:
       summary: Start pairing (inclusion mode)
+      x-capability: pair
       description: |
         Sends n:<seconds> to the Cube. Devices that join are reported as
         "paired" events on the stream and in the state, and appear in the
         device list as unlisted; PUT /devices/{rf} with room_id puts one
         into a room. The Cube may end the mode earlier on its own.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: false
         content:
@@ -626,6 +1193,7 @@ paths:
               schema: {$ref: "#/components/schemas/PairingState"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409":
@@ -637,6 +1205,7 @@ paths:
         "503": {$ref: "#/components/responses/NotReady"}
     get:
       summary: Pairing state and the devices that joined
+      x-capability: read
       parameters: [{$ref: "#/components/parameters/sn"}]
       responses:
         "200":
@@ -645,12 +1214,14 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/PairingState"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
     delete:
       summary: Stop pairing
+      x-capability: pair
       description: Sends x:, also when the server counts the mode as over already.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Pairing stopped
@@ -658,12 +1229,14 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/PairingState"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/CubeError"}
   /api/v1/cubes/{sn}/log:
     get:
       summary: The last events of the Cube, oldest first
+      x-capability: read
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {name: limit, in: query, schema: {type: integer, default: 200, maximum: 500}}
@@ -674,11 +1247,13 @@ paths:
             application/json:
               schema: {type: array, items: {type: object}}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/events:
     get:
       summary: Server-sent events for connection and state changes
+      x-capability: read
       description: |
         On connect, one `state` event per device with its current data,
         then an event per change the Cube reports. Kinds: connected,
@@ -708,11 +1283,13 @@ paths:
             text/event-stream:
               schema: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/cubes/{sn}/events/ticket:
     post:
       summary: A single-use ticket that opens the event stream
+      x-capability: read
       description: |
         Valid for one connection to this Cube's event stream within a
         minute, so that the token never goes into a URL.
@@ -728,11 +1305,13 @@ paths:
                   ticket: {type: string}
                   expires_at: {type: string, format: date-time}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/settings:
     get:
       summary: The server's settings
+      x-capability: settings
       description: |
         Every setting with the store's value (or the default), the
         default, whether the store holds one, the value this run uses
@@ -748,9 +1327,11 @@ paths:
                 additionalProperties: {$ref: "#/components/schemas/Setting"}
               example:
                 stale_after: {value: 24h, default: 24h, set: false, in_effect: 24h, applies: now}
+                commands.keep_days: {value: "0", default: "0", set: false, in_effect: "0", applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
@@ -759,6 +1340,7 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
     put:
       summary: Change settings
+      x-capability: settings
       description: |
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h), refresh_interval (10m to
@@ -766,6 +1348,7 @@ paths:
         only on request), the intervals at the next start; null goes
         back to the default. Every value is checked before any is
         written. The answer is that of GET.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -784,6 +1367,7 @@ paths:
                 additionalProperties: {$ref: "#/components/schemas/Setting"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
@@ -793,6 +1377,7 @@ paths:
   /api/v1/update:
     get:
       summary: The newest signed release on the update channel
+      x-capability: read
       parameters:
         - {name: refresh, in: query, description: Ask GitHub now instead of reusing a check of the last ten minutes, schema: {type: string}}
       responses:
@@ -802,14 +1387,17 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/UpdateInfo"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
     post:
       summary: Ask the update helper to install the newest release
+      x-capability: update
       description: |
         Needs a configured API token even where the other routes are open.
         The helper (massimo-update.service, root) verifies the release
         signature and checksum, replaces the binary, restarts the server and
         rolls back if the new version does not come up.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "202":
           description: Requested; follow the progress with GET
@@ -822,6 +1410,7 @@ paths:
                   requested: {type: string, description: The release tag that is newest now}
                   channel: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
           description: No API token configured, no update helper, or Windows
@@ -844,9 +1433,12 @@ components:
       type: http
       scheme: bearer
       description: >-
-        Required when the server runs with MASSIMO_API_TOKEN or -token.
-        Ten failed checks from one address within a minute lock it out
-        for five minutes (429).
+        A session or an API key of a user of the store, which names the
+        user whose role grants the capabilities (x-capability on each
+        operation, docs/api-v1.md "Authentication"); without a store,
+        the one token of MASSIMO_API_TOKEN or -token. Required once a
+        user exists, or a token is set. Ten failed checks from one
+        address within a minute lock it out for five minutes (429).
     ticket:
       type: apiKey
       in: query
@@ -940,6 +1532,14 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    Forbidden:
+      description: >-
+        The token's user may not do this: the capability the route needs
+        is not in the user's role, or the user or the role is disabled.
+        The message says which.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
     LockedOut:
       description: >-
         Too many failed token checks from this address (ten within a
@@ -948,6 +1548,21 @@ components:
         Retry-After:
           description: Seconds until the lockout ends
           schema: {type: integer}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoStore:
+      description: The server has no store (serve -addr), so no users
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoUser:
+      description: No such user
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoRole:
+      description: No such role
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
@@ -986,6 +1601,186 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    CommandState:
+      type: string
+      enum: [queued, sent, acknowledged, failed, dropped]
+      description: >-
+        queued, the request is running and nothing went to the Cube yet;
+        sent, a step went to the Cube, or the request was answered 202
+        and its run goes on; acknowledged, answered 2xx (a step: the Cube
+        accepted it); failed, answered 5xx (a step: the send failed);
+        dropped, answered 4xx or 503, nothing sent (a step: superseded,
+        discarded by the Cube, or the server stopped).
+    Command:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string, description: As the audit names it}
+        target: {type: string}
+        cube: {type: string, description: The Cube's serial}
+        user: {type: string, description: The login name of who asked}
+        state: {$ref: "#/components/schemas/CommandState"}
+        status: {type: integer, description: The HTTP status answered; absent while running}
+        request: {type: object, description: The method, the path, the query and a hash of the body}
+        result: {type: object, description: The answer's body; for a restore, the run's id, state and counts}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        steps:
+          type: array
+          description: The engine commands of the request, in order
+          items: {$ref: "#/components/schemas/CommandStep"}
+    CommandStep:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        target: {type: string, description: "device:1514b6 or room:6"}
+        state: {$ref: "#/components/schemas/CommandState"}
+        request: {type: object, description: The queue key, the priority, the number of lines and of radio lines, the wakeup, the room}
+        result: {type: object, description: discarded, the budget the Cube reported, and the error}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+    AuditEntry:
+      type: object
+      properties:
+        id: {type: integer}
+        time: {type: string, format: date-time}
+        user: {type: string, description: The login name; absent for no authentication, a failed login or the command line}
+        token_id: {type: integer, description: The session or key used}
+        remote: {type: string, description: The client's address, or cli}
+        action: {type: string, description: "setpoint, room.config, device.update, cube.add, user.add, login, login.failed, …", example: setpoint}
+        cube: {type: string, description: The Cube's serial, for a Cube's route}
+        target: {type: string, description: "device:1514b6, room:6, user:anna, role:night, token:4, cube:KEQ0000000", example: "room:6"}
+        detail:
+          type: object
+          description: The method, the path, the status, the milliseconds, the body's size and, when JSON and short, the body with password, current_password and token removed, and the error of a failed answer
+        result: {type: string, enum: [ok, refused, failed]}
+        command_id: {type: integer, description: The command the request is, when it is one}
+    UserCreate:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, description: "The login name: 1 to 64 of letters, digits, '.', '_', '-' and '@', case does not matter", example: anna}
+        display_name: {type: string, maxLength: 64}
+        role: {type: string, description: A role's key; viewer when absent, owner for the first owner}
+        password: {type: string, description: Absent for a user with keys only; required for the first owner}
+        disabled: {type: boolean}
+        expires_at: {type: string, format: date-time, description: "Guests: disabled from then on"}
+    UserChange:
+      type: object
+      properties:
+        display_name: {type: string, maxLength: 64}
+        role: {type: string}
+        disabled: {type: boolean}
+        expires_at: {type: string, format: date-time, nullable: true, description: null clears the end date}
+        password: {type: string, description: Empty removes the password}
+        current_password: {type: string, description: Required when a user sets its own password}
+    Role:
+      type: object
+      properties:
+        key: {type: string}
+        name: {type: string, description: The display name; empty shows the key's translated default}
+        builtin: {type: boolean, description: One of the six default roles, which keep their keys}
+        disabled: {type: boolean}
+        capabilities:
+          type: array
+          description: The role's set, sorted; every capability for owner
+          items: {type: string}
+        users: {type: integer, description: Users with this role}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RoleCreate:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, description: "1 to 32 of letters, digits, '_' and '-', starting with a letter; lower case", example: night}
+        name: {type: string, maxLength: 64}
+        capabilities:
+          type: array
+          items: {type: string}
+    RoleChange:
+      type: object
+      properties:
+        name: {type: string, maxLength: 64}
+        capabilities:
+          type: array
+          description: Replaces the set
+          items: {type: string}
+    Capability:
+      type: object
+      properties:
+        key: {type: string, example: pair}
+        disabled: {type: boolean, description: Denied to every role but owner}
+    Disabled:
+      type: object
+      required: [disabled]
+      properties:
+        disabled: {type: boolean}
+    Login:
+      type: object
+      required: [user, password]
+      properties:
+        user: {type: string, description: The login name; case does not matter}
+        password: {type: string}
+        label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+    Session:
+      type: object
+      properties:
+        token: {type: string, description: The session token, shown once; sent as the bearer header}
+        expires_at: {type: string, format: date-time, description: 30 days from now, moved by use}
+        user: {$ref: "#/components/schemas/User"}
+        role: {$ref: "#/components/schemas/RoleRef"}
+        capabilities:
+          type: array
+          description: The effective set
+          items: {type: string}
+    User:
+      type: object
+      properties:
+        name: {type: string, description: The login name, lower case}
+        display_name: {type: string}
+        role: {type: string, description: The role's key}
+        disabled: {type: boolean}
+        has_password: {type: boolean, description: False for a user with keys only}
+        expires_at: {type: string, format: date-time, description: "Guests: disabled from then on"}
+        invited_by: {type: string, description: The user that created this one}
+        auth_version: {type: integer, description: "1: the server hashes the password"}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_login_at: {type: string, format: date-time}
+    RoleRef:
+      type: object
+      properties:
+        key: {type: string}
+        name: {type: string, description: The display name; empty shows the key's translated default}
+        disabled: {type: boolean}
+    Token:
+      type: object
+      description: A session or an API key, without its secret
+      properties:
+        id: {type: integer}
+        kind: {type: string, enum: [session, api]}
+        label: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, description: Absent for an API key}
+        last_used_at: {type: string, format: date-time}
+        last_used_from: {type: string, description: The client's address}
+    Me:
+      type: object
+      properties:
+        mode: {type: string, enum: [users, open, token, none], description: How the server authenticates}
+        user:
+          nullable: true
+          allOf: [{$ref: "#/components/schemas/User"}]
+        role:
+          nullable: true
+          allOf: [{$ref: "#/components/schemas/RoleRef"}]
+        capabilities:
+          type: array
+          description: What the caller may do; every capability outside users mode
+          items: {type: string}
+        setup: {type: boolean, description: The first owner can be created from here}
+        token: {$ref: "#/components/schemas/Token"}
     RestoreStep:
       type: object
       description: One command of a restore plan
@@ -1096,6 +1891,7 @@ components:
         mac: {type: string, description: From the host's ARP cache; absent when unknown}
         rf_address: {type: string}
         firmware: {type: string, example: "1.1.3"}
+        dhcp: {type: boolean, description: "Whether the Cube takes its address by DHCP, from its answer to the c request in this server run's latest discovery that had one; absent until it has answered c"}
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Cube:

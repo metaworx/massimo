@@ -14,8 +14,8 @@ from helpers import FOUND2, SEARCHING, found_text, scroll_width, wait_until
 
 def test_search_held_then_answered(page, case):
     """The search shows "searching" while the request is held, then the
-    found Cube as not selectable with the env lines to add, and the log
-    has its cube_found."""
+    found Cube as not selectable with its DHCP flag and the env lines to
+    add, and the log has its cube_found."""
     sel = page.locator("#cube-select")
     assert sel.locator("option[value=__discover]").count() == 1, "search entry in the Cube choice"
     serial = page.evaluate("state.serial")
@@ -41,6 +41,8 @@ def test_search_held_then_answered(page, case):
     assert sel.input_value() == serial, "the selected Cube stays"
     assert page.locator("#cube-found").get_attribute("open") is not None, "found Cubes opened"
     assert "MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1" in page.locator("#cube-found .env-lines").inner_text(), "env lines for the found Cube"
+    facts = page.locator("#cube-found [data-serial='KEQ0000000'] .found-facts")
+    assert facts.count() == 1 and " · DHCP · " in facts.inner_text(), "the found Cube's DHCP flag"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes"
     page.locator("#view-log").click()
     assert wait_until(page, "[...document.querySelectorAll('.log-line.kind-cube_found')].some((l) => l.textContent.includes('KEQ0000000'))", 5), \

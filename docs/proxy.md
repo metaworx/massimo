@@ -74,6 +74,16 @@ The queue adds no wakeup or error reset for them:
 a client that speaks the protocol sends its own `z:` and `r:` lines,
 as the original software does.
 
+A client's radio write (`s:`) that the Cube took is followed up as the server's
+own writes are (README, "Server"): after a configuration write (week programme,
+preset temperatures, valve settings, display mode,
+room group) the server reads the device's `C` line again for about six minutes
+until it changes,
+for every thermostat of the room when the write was addressed to the room;
+after any radio write it reconnects once for the budget if radiograms were pending.
+A setpoint, a key lock or a link re-reads nothing.
+A write the Cube discarded is not followed up.
+
 ## Hidden devices
 
 The devices of room 255 and those on the server's hidden list

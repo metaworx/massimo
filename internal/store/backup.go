@@ -30,7 +30,7 @@ type Info struct {
 }
 
 // infoTables are the tables Info counts.
-var infoTables = []string{"cubes", "settings", "roles", "users", "tokens", "preferences", "events", "audit", "backups"}
+var infoTables = []string{"cubes", "settings", "roles", "users", "tokens", "preferences", "events", "audit", "backups", "commands"}
 
 // Info reads the file's version, identity and row counts.
 func (s *Store) Info(ctx context.Context) (Info, error) {

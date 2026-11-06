@@ -71,7 +71,8 @@ def test_hidden_devices(page, case):
 
 
 def test_found_cube_added_and_removed(page):
-    """The Cube the fake Cube announces is added and served, and Remove,
+    """The Cube the fake Cube announces, its DHCP flag shown, is added and
+    served, and Remove,
     asking in the panel, lists it as found again. The server keeps what a
     search found; where nothing was searched yet, this test searches."""
     if not page.evaluate("state.found.some((c) => c.serial === 'KEQ0000000')"):
@@ -81,6 +82,7 @@ def test_found_cube_added_and_removed(page):
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
     if found.count() == 0:
         pytest.skip("no found Cube to add (discovery did not answer)")
+    assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in Settings → Cubes"
     found.locator("button").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add serves the found Cube"
     assert page.evaluate("state.serial") == "KEQ0537249", "the selected Cube stays"

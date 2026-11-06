@@ -99,7 +99,7 @@ what a test stores in the browser goes with its context.
 - `test_discover.py`:
   the Cube choice's "Search for new Cubes…" shows "Searching…" until the server answers,
   then lists the Cube the fake Cube announces in discovery (KEQ0000000,
-  not configured) as not selectable,
+  not configured) as not selectable with its DHCP flag,
   with its env lines under the header and its `cube_found` in the log;
   an injected `cube_found` event adds another one live;
   a refused search (a stubbed 503) shows the server's message.
@@ -114,15 +114,23 @@ what a test stores in the browser goes with its context.
   the settings file's name is offered as a differing line and "Take the file's
   value" brings it back;
   hiding the devices of the last room takes its tile away and showing them again
-  brings it back;
-  the found Cube KEQ0000000 is added and removed again (the test searches first
-  where nothing was found yet, and is skipped without a discovery answer),
-  Remove asks in the panel, and Keep takes the question back.
+  brings it back; the found Cube KEQ0000000, its DHCP flag shown,
+  is added and removed again (the test searches first where nothing was found yet,
+  and is skipped without a discovery answer), Remove asks in the panel,
+  and Keep takes the question back.
 - `test_settings.py`:
   the settings page opens;
   with the Cube's panel open,
   English and then German chosen in the settings redraw its labels,
   cloned from a template, in that language, and the panel stays open.
+- `test_users.py`, Settings → Users and Roles as the owner:
+  the owner and the operator the runner creates (`massimo user add operator`,
+  password `op-pass`) are listed with the operator's tokens,
+  and the six default roles with the operator's six capabilities.
+- `test_login.py`, in a fresh browser context without the stored token:
+  the sign-in dialog opens, refuses a wrong password, signs in as the operator,
+  who sees the tiles but neither Users, Roles nor Cubes,
+  and Log out brings the dialog back and forgets the token.
 - `test_log.py`:
   the log opens, and a state event with changes shows what changed.
 - `test_appearance.py`, Settings → Appearance:

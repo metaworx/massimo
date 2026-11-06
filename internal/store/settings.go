@@ -131,3 +131,17 @@ func (s *Store) DeleteSetting(ctx context.Context, key string) error {
 	}
 	return nil
 }
+
+// SettingInt returns a setting that holds a JSON number, and whether it
+// is set.
+func (s *Store) SettingInt(ctx context.Context, key string) (int, bool, error) {
+	v, ok, err := s.Setting(ctx, key)
+	if err != nil || !ok {
+		return 0, false, err
+	}
+	var n int
+	if err := json.Unmarshal(v, &n); err != nil {
+		return 0, false, fmt.Errorf("store: setting %s: %w", key, err)
+	}
+	return n, true, nil
+}

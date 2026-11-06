@@ -47,7 +47,7 @@ func (s *Server) startPairing(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	_, stop, err := rt.writer().StartPairing(ctx, timeout)
+	_, stop, err := rt.writerOf(ctx).StartPairing(ctx, timeout)
 	if err != nil {
 		if errors.Is(err, cubelan.ErrInclusionActive) {
 			return fail(http.StatusConflict, "pairing is already running")
@@ -78,7 +78,7 @@ func (s *Server) stopPairing(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	if err := rt.writer().StopPairing(ctx); err != nil {
+	if err := rt.writerOf(ctx).StopPairing(ctx); err != nil {
 		return fail(http.StatusBadGateway, "%v", err)
 	}
 	writeJSON(w, http.StatusOK, rt.client.Inclusion())

@@ -16,6 +16,9 @@ A test marked used_ticket gets a used ticket for its first stream
 (`watch.refused`), which the server refuses with a 401; its page is
 handed over before the stream opens again.
 
+test_login.py opens a context of its own, without the token, from
+pytest-playwright's new_context with the case's viewport and locale.
+
 The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
 test and a stubbed 503 of the discovery are expected.
@@ -114,13 +117,16 @@ class Guard:
 
     def verify(self):
         problems = list(self.watch.problems)
-        if not self.page.is_closed() and scroll_width(self.page) > self.case.width:
+        if self.page is not None and not self.page.is_closed() and scroll_width(self.page) > self.case.width:
             problems.append(f"a horizontal scroll at the end: {scroll_width(self.page)} px wide")
         assert not problems, "; ".join(problems)
 
 
 @pytest.fixture(autouse=True)
-def guard(page, case, watch):
+def guard(request, case, watch):
+    """The page fixture's page; a test that opens its own page without
+    it (test_login.py) hands it to the guard itself."""
+    page = request.getfixturevalue("page") if "page" in request.fixturenames else None
     return Guard(page, case, watch)
 
 

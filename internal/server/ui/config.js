@@ -40,7 +40,8 @@ async function openConfig(room, el, tab) {
   closeMenu(el);
   const ui = roomUI(room);
   ui.open = false; // one of device list and configuration at a time
-  ui.config = { open: true, tab: tab || "room", loading: true, cfg: null, prog: null, edit: {}, result: null };
+  // The Room tab is a rename, which the role may not do: the temperatures then come first.
+  ui.config = { open: true, tab: tab || (hasCap("rename") ? "room" : "temps"), loading: true, cfg: null, prog: null, edit: {}, result: null };
   rerenderRoom(room);
   try {
     const [cfg, prog] = await Promise.all([
@@ -358,7 +359,9 @@ function renderDeviceForm(room, c, d) {
   name.addEventListener("input", () => {
     e.name = name.value;
   });
-  form.appendChild(fieldRow(t("cfg.name"), name, { help: "deviceName", wide: true }));
+  const nameRow = fieldRow(t("cfg.name"), name, { help: "deviceName", wide: true });
+  nameRow.classList.add("needs-rename");
+  form.appendChild(nameRow);
   if (isThermostat(d)) {
     form.appendChild(fieldRow(t("cfg.tempOffset"), numberInput(e.temp_offset, -3.5, 3.5, 0.5, (v) => {
       e.temp_offset = v;
@@ -371,10 +374,12 @@ function renderDeviceForm(room, c, d) {
     }
   }
   const others = state.rooms.map((r) => [String(r.id), r.id === room.id ? t("cfg.thisRoom", { name: r.name }) : r.name]);
-  form.appendChild(fieldRow(t("cfg.room"), selectInput(others, e.room_id, (v) => {
+  const roomRow = fieldRow(t("cfg.room"), selectInput(others, e.room_id, (v) => {
     e.room_id = Number(v);
     e.confirmMove = false;
-  }), { help: "deviceRoom" }));
+  }), { help: "deviceRoom" });
+  roomRow.classList.add("needs-structure");
+  form.appendChild(roomRow);
   if (e.confirmMove) {
     const target = state.rooms.find((r) => r.id === e.room_id);
     const text = t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id });

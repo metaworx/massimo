@@ -7,8 +7,9 @@ package server
 // changes a device's C line only when the device has acknowledged it,
 // which took one to four minutes on hardware, and it reports its budget
 // (free memory slots, so the pending radiograms) only in S replies and
-// in the H line of a new connection. After a configuration write the
-// server therefore re-reads the device's C line a few times with growing
+// in the H line of a new connection. After a configuration write, its
+// own or one a client of the LAN proxy sent (proxyWrote), the server
+// therefore re-reads the device's C line a few times with growing
 // pauses until it changes; after any radio write, once those re-reads
 // are done, it reconnects once to get a fresh H line if radiograms were
 // still pending, at most every FollowUpReconnectGap and only with the
@@ -93,6 +94,27 @@ func (rt *runtime) afterWrite(configured ...cube.RFAddress) {
 	select {
 	case f.wake <- struct{}{}:
 	default:
+	}
+}
+
+// proxyWrote follows up a radio write that a client of the LAN proxy
+// sent, as the API follows up its own: a configuration write (week
+// programme, preset temperatures, valve settings, display mode, room
+// group) has the C line of the device followed, or of every thermostat
+// of the room when it was sent to the room, as the original software
+// sends them; any other write (setpoint, key lock, links) only wants the
+// budget refresh.
+func (rt *runtime) proxyWrote(c cube.RadioCommand) {
+	switch c.Command {
+	case cube.RFSetWeekProgram, cube.RFSetTemperatures, cube.RFSetValveConfig, cube.RFSetDisplayMode, cube.RFSetGroupAddress, cube.RFRemoveGroup:
+		if c.Target.Room {
+			radiators, walls := roomThermostats(rt, c.Target.RoomID)
+			rt.afterWrite(append(radiators, walls...)...)
+			return
+		}
+		rt.afterWrite(c.Target.RFAddress)
+	default:
+		rt.afterWrite()
 	}
 }
 

@@ -10,12 +10,50 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- Store stage (b) in `internal/store` (`docs/store.md` section 9):
+  migration 0002 (`commands`, `users.auth_version`, `audit.command_id`),
+  users with argon2id passwords, roles, tokens, the bootstrap, the audit,
+  the lockout counters and the commands with their steps.
+
+- `massimo serve` authenticates users: a bearer token names a user whose
+  role grants what a route needs (`403` without), `MASSIMO_API_TOKEN`
+  becomes the owner's key, the lockout survives a restart
+  (`docs/api-v1.md`, "Authentication").
+
+- `POST /api/v1/login`, `POST /api/v1/logout` and `GET /api/v1/me`: a
+  session for a name and a password, 30 days from its last use, and who
+  the caller is with the effective capabilities (`docs/api-v1.md`).
+
+- The users, tokens, roles and capabilities routes: create, change and
+  remove users and their API keys, reshape roles, disable a role or a
+  capability, the first owner from the local network (`docs/api-v1.md`).
+
+- The audit: every request that changes something, or tries to, is a row
+  with who, from where, what and how it went, read with
+  `GET /api/v1/audit` (`docs/api-v1.md`).
+
+- Commands: every write request is a row with its steps on the Cube's
+  queue, `Idempotency-Key` answers a retry without a second radio
+  command, `GET /api/v1/commands/{id}` shows one (`docs/api-v1.md`).
+
+- The web UI signs in with a name and a password or an API key, hides
+  what the role may not do, creates the first owner from the local
+  network, and manages users and roles in Settings (`docs/ui.md`).
+
+- `massimo user add|list|passwd|disable|enable|token|revoke`: the users
+  of the store from the box, beside a running `serve` (`README.md`,
+  "Cube variables").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).
 
 - `make ui-screenshots` takes the web UI's screenshot set; CI's
   Screenshots job runs the UI smoke test and uploads the set.
+
+- A Cube found by the server's discovery shows whether it takes its
+  address by DHCP, in the web UI and as `dhcp` in the API
+  (docs/api-v1.md).
 
 ### Changed
 
@@ -42,6 +80,12 @@ the next minor, a fix counts the suffix up.
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
+
+### Fixed
+
+- Writes from LAN proxy clients, such as the original software, get
+  the server's follow-up re-reads and budget reconnect, instead of a
+  stale copy of the device until the six-hourly refresh.
 
 ## [0.7.0-alpha.1] - 2026-11-06
 
