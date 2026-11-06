@@ -313,7 +313,8 @@ body.expert #clock-plain { display: none; }
 .contrast.warn { color: var(--warn); border-color: var(--warn); }
 .contrast.bad { color: var(--bad); border-color: var(--bad); }
 .contrast.none { border-color: transparent; cursor: default; }
-.scheme-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 8px; }
+.scheme-name { margin: 12px 0 8px; }
+.scheme-name .inline { flex-wrap: wrap; }
 .scheme-name input[type="text"] { flex: 1 1 10em; min-width: 0; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 /* the summary of a details panel (components.js detailsPanel) */
