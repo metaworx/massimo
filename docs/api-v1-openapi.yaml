@@ -127,17 +127,6 @@ paths:
         Cube's queue is a step beneath it. A user without audit sees its
         own commands only; others are 404.
       parameters:
-    idempotencyKey:
-      name: Idempotency-Key
-      in: header
-      required: false
-      description: >-
-        A key of the client's choice, at most 128 characters, kept per user
-        for 24 hours: a retry with the same key answers what the first
-        request answered, with the header Idempotent-Replayed: true, and
-        sends nothing to the Cube; the same key with another request is
-        422, and one whose request is still running 409.
-      schema: {type: string, maxLength: 128}
         - {name: id, in: path, required: true, description: The command's id, a UUID, schema: {type: string, format: uuid}}
       responses:
         "200":
@@ -356,18 +345,6 @@ paths:
       x-capability: users
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
-    name:
-      name: name
-      in: path
-      required: true
-      description: A user's login name, case does not matter
-      schema: {type: string, example: anna}
-    roleKey:
-      name: key
-      in: path
-      required: true
-      description: A role's key
-      schema: {type: string, example: operator}
         - {$ref: "#/components/parameters/name"}
         - {name: id, in: path, required: true, description: The token's id from the list, schema: {type: integer}}
       responses:
@@ -1420,10 +1397,9 @@ paths:
                   requested: {type: string, description: The release tag that is newest now}
                   channel: {type: string}
         "401": {$ref: "#/components/responses/Unauthorized"}
-        "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "403":
-          description: No API token configured, no update helper, or Windows
+          description: The caller's role lacks update, no API token configured, no update helper, or Windows
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -1495,6 +1471,29 @@ components:
       in: query
       description: "Groups to leave alone, comma separated: names, settings, programs, clock"
       schema: {type: string, example: "names,clock"}
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        A key of the client's choice, at most 128 characters, kept per user
+        for 24 hours: a retry with the same key answers what the first
+        request answered, with the header Idempotent-Replayed: true, and
+        sends nothing to the Cube; the same key with another request is
+        422, and one whose request is still running 409.
+      schema: {type: string, maxLength: 128}
+    name:
+      name: name
+      in: path
+      required: true
+      description: A user's login name, case does not matter
+      schema: {type: string, example: anna}
+    roleKey:
+      name: key
+      in: path
+      required: true
+      description: A role's key
+      schema: {type: string, example: operator}
   requestBodies:
     Backup:
       required: true
