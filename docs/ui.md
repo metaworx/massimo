@@ -208,3 +208,32 @@ The filter matches any part of a line (time, kind, device, text).
 
 The settings are kept in the browser, per browser, except the Cubes,
 which are the server's.
+
+## How the page is built
+
+This section is for changing the UI;
+its rules are in the project contract (`AGENTS.md`, "The web UI").
+The page is plain HTML, CSS and JavaScript under `internal/server/ui/`,
+embedded in the binary, with no build step.
+`index.html` is the skeleton: the head, the icons, the header, the sections,
+the token dialog and the scripts, with two marker comments.
+At start the server replaces `<!-- partials: settings -->` with the settings
+panels and `<!-- partials: templates -->` with the templates,
+from the files in `ui/partials/` in the order `uiPartials` in
+`internal/server/ui.go` lists them, and serves the result at `/`.
+A partial is a file per feature,
+and its first line names the script that uses it.
+What a script builds again and again, a Cube's panel, a log line, a scheme row,
+is a `<template>` there, which the script clones with `fromTemplate`,
+fills with `textContent` and wires with `addEventListener`.
+The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
+come from `components.js`; the scripts never use `innerHTML`.
+The texts are in `ui/i18n/<lang>.json`, one flat table per language,
+English the base: markup takes them with `data-i18n` and `data-i18n-attr`,
+scripts with `t()` and `tn()`, and a change of language fills the page and
+the templates again and redraws what was cloned from them.
+A new panel is a partial, listed in `uiPartials`,
+with its script added to the `<script>` tags of `index.html` and to the embed
+list in `ui.go`; a new text is a key in all six files,
+which `go test ./internal/server` checks against the markup and the scripts,
+as it checks every id the scripts look up.
