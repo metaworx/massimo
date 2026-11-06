@@ -330,6 +330,119 @@ the one that may create the first owner.
 `auth_version` 1 says the server hashes the password;
 docs/server.md ("What version 1 prepares", item 6) says what 2 will mean.
 
+### Users: /api/v1/users and /api/v1/users/{name}
+
+`GET` and `POST /api/v1/users`; `GET`, `PUT` and `DELETE /api/v1/users/{name}`.
+The users of the store (docs/store.md section 6), each with one role.
+The routes need `users`; a holder of `guests` reaches them for users whose role
+is `guest`, and a user reaches its own name (see below).
+Every one answers `503` on a server without a store.
+
+`GET /api/v1/users` lists the users by name, as `GET /api/v1/me` shows a user;
+a `guests` holder sees the guests and itself.
+
+`POST /api/v1/users` creates one:
+
+```json
+{"name": "anna", "display_name": "Anna", "role": "operator", "password": "…"}
+```
+
+`name` is the login name, 1 to 64 of letters, digits, `.`, `_`, `-` and `@`,
+kept in lower case; `role` is a role's key, `viewer` when absent;
+`password` may be absent for a user that logs in with keys only;
+`disabled` and, for a guest, `expires_at` (RFC 3339) as well.
+A `guests` holder creates guests only (`403` otherwise).
+The answer is `201` with the user; a name in use is `409`, a bad name,
+an unknown role or an unknown field `400`.
+The name of a removed user can be used again;
+the new user takes over the old one's row,
+so the audit's history of the name reads on.
+
+On a server without users, `POST /api/v1/users` creates the first owner:
+open to a caller on the local network (loopback, a private range,
+link-local), `role` `owner` (absent, or that) and a password required,
+`403` from anywhere else;
+`massimo user add` on the box is the other way.
+From then on the server is in users mode (Authentication).
+
+`GET /api/v1/users/{name}` is one user.
+`PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
+`expires_at` (`null` clears it) and `password`;
+absent fields stay, an unknown one is `400`.
+A user changes its own `display_name` and, with `current_password`,
+its own `password`; the rest needs `users` (`guests` for a guest).
+A password set by someone else ends the user's sessions;
+an empty password removes it.
+The last enabled owner cannot be disabled or demoted (`409`).
+
+`DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+and its row stays for the audit; `{"ok": true, "name": "anna"}`.
+The last enabled owner stays (`409`); a user cannot remove itself.
+
+### Tokens: /api/v1/users/{name}/tokens
+
+`GET` and `POST /api/v1/users/{name}/tokens`; `DELETE /api/v1/users/{name}/tokens/{id}`.
+A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
+the same rules of access as the user.
+
+`GET` lists the live ones, oldest first, without their secrets.
+`POST` with `{"label": "Loxone"}` creates an API key, which never expires,
+and answers `201` with the key once:
+
+```json
+{"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
+```
+
+`DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
+a token of another user is `404`.
+
+### Roles: /api/v1/roles and /api/v1/roles/{key}
+
+`GET` and `POST /api/v1/roles`; `PUT` and `DELETE /api/v1/roles/{key}`;
+`PUT /api/v1/roles/{key}/disabled`.
+A role is a set of capabilities (Authentication).
+The six default roles keep their keys; each can be renamed (`name`,
+empty shows the key's translated default) and given another set,
+except `owner`, which has every capability and cannot be changed,
+disabled or removed.
+The routes need `roles`, disabling `roles.disable`.
+
+`GET /api/v1/roles` answers the roles, the default ones first,
+and every capability with whether it is disabled, for a roles editor:
+
+```json
+{
+  "roles": [
+    {"key": "owner", "builtin": true, "disabled": false, "capabilities": ["read", "setpoint", …], "users": 1, "created_at": "…", "updated_at": "…"},
+    {"key": "operator", "name": "", "builtin": true, "disabled": false, "capabilities": ["backup", "configure", "discover", "lock", "read", "setpoint"], "users": 2, …},
+    {"key": "night", "name": "Night shift", "builtin": false, "disabled": false, "capabilities": ["read", "setpoint"], "users": 0, …}
+  ],
+  "capabilities": [{"key": "read", "disabled": false}, {"key": "pair", "disabled": true}, …]
+}
+```
+
+`POST /api/v1/roles` with `{"key": "night", "name": "Night shift",
+"capabilities": ["read", "setpoint"]}` creates a role:
+the key is 1 to 32 of letters, digits, `_` and `-`,
+starting with a letter, kept in lower case; `201` with the role,
+`409` for a key in use, `400` for a bad key or an unknown capability.
+`PUT /api/v1/roles/{key}` changes `name` and `capabilities` (the whole set);
+`DELETE /api/v1/roles/{key}` removes a created role that no user has
+(`409` while one does, `403` for a default role).
+`PUT /api/v1/roles/{key}/disabled` with `{"disabled": true}` disables a role:
+its users keep their login and are refused every route, with the reason,
+until it is enabled again.
+
+### Capabilities: /api/v1/capabilities
+
+`GET /api/v1/capabilities`; `PUT /api/v1/capabilities/{key}`.
+`GET` lists every capability in the order of the table under Authentication,
+with whether it is disabled; `PUT …/{key}` with `{"disabled": true}` disables
+one for every role but `owner`, whatever the roles' sets say
+(for example `pair` while nobody should pair,
+or `update` on a box the owner updates by hand), and `false` enables it again.
+Both need `capabilities`, which only `owner` has by default.
+
 ### GET /api/v1/cubes
 
 Every configured Cube,

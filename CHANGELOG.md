@@ -24,6 +24,10 @@ the next minor, a fix counts the suffix up.
   session for a name and a password, 30 days from its last use, and who
   the caller is with the effective capabilities (`docs/api-v1.md`).
 
+- The users, tokens, roles and capabilities routes: create, change and
+  remove users and their API keys, reshape roles, disable a role or a
+  capability, the first owner from the local network (`docs/api-v1.md`).
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

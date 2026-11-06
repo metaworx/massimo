@@ -187,9 +187,13 @@ func TestRolesAgainstRoutes(t *testing.T) {
 			if r.method == "PUT" || r.method == "POST" {
 				body = "{}"
 			}
+			if r.method == "POST" && r.path == "/api/v1/users" {
+				body = `{"role":"guest"}` // what a guests holder may create; the empty name fails after the gate
+			}
 			code, text := callAPI(t, ts, r.method, fillRoute(r.path), tok, body)
 			refused := code == 403 && strings.Contains(text, "capability")
-			want := role == store.RoleOwner || has[r.capability] || r.capability == capNone || r.capability == capAny
+			// The users routes admit a guests holder too; the handlers narrow.
+			want := role == store.RoleOwner || has[r.capability] || r.capability == capNone || r.capability == capAny || r.capability == "users" && has["guests"]
 			if want && refused {
 				t.Errorf("%s: %s %s refused: %s", role, r.method, r.path, text)
 			}

@@ -107,6 +107,376 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/users:
+    get:
+      summary: List the users
+      x-capability: users
+      description: Every user with users; the guests with guests alone; the own user otherwise.
+      responses:
+        "200":
+          description: The users by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Create a user
+      x-capability: users
+      description: |
+        With users, any role; with guests alone, the role guest. On a
+        server without users, the first owner: open to a caller on the
+        local network (loopback, a private range, link-local), the role
+        owner and a password required, refused from anywhere else.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UserCreate"}
+      responses:
+        "201":
+          description: The user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The name exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}:
+    get:
+      summary: One user
+      x-capability: users
+      parameters: [{$ref: "#/components/parameters/name"}]
+      responses:
+        "200":
+          description: The user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    put:
+      summary: Change a user
+      x-capability: users
+      description: |
+        Any of the fields; absent ones stay. A user changes its own
+        display_name and, with current_password, its password; the
+        role, disabled and expires_at need users (guests for a guest). A
+        password set by someone else ends the user's sessions. The last
+        enabled owner cannot be disabled or demoted (409).
+      parameters: [{$ref: "#/components/parameters/name"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UserChange"}
+      responses:
+        "200":
+          description: The user as changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/User"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "409":
+          description: The last enabled owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Remove a user
+      x-capability: users
+      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner stays (409).
+      parameters: [{$ref: "#/components/parameters/name"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  name: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "409":
+          description: The last enabled owner
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/tokens:
+    get:
+      summary: The user's sessions and API keys
+      x-capability: users
+      parameters: [{$ref: "#/components/parameters/name"}]
+      responses:
+        "200":
+          description: The live tokens, oldest first, without their secrets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Token"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Create an API key for the user
+      x-capability: users
+      description: The key is shown once, in token; the store keeps its hash. It never expires.
+      parameters: [{$ref: "#/components/parameters/name"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: {type: string, maxLength: 64, example: Loxone}
+      responses:
+        "201":
+          description: The key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: {type: string, description: The secret, shown once}
+                  id: {type: integer}
+                  kind: {type: string, enum: [api]}
+                  label: {type: string}
+                  created_at: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/tokens/{id}:
+    delete:
+      summary: Revoke a session or an API key
+      x-capability: users
+      parameters:
+    name:
+      name: name
+      in: path
+      required: true
+      description: A user's login name, case does not matter
+      schema: {type: string, example: anna}
+    roleKey:
+      name: key
+      in: path
+      required: true
+      description: A role's key
+      schema: {type: string, example: operator}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The token's id from the list, schema: {type: integer}}
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  id: {type: integer}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such live token of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/roles:
+    get:
+      summary: The roles with their sets, and every capability
+      x-capability: roles
+      responses:
+        "200":
+          description: The default roles first, then the created ones by key; and the capabilities with whether each is disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items: {$ref: "#/components/schemas/Role"}
+                  capabilities:
+                    type: array
+                    items: {$ref: "#/components/schemas/Capability"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Create a role
+      x-capability: roles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RoleCreate"}
+      responses:
+        "201":
+          description: The role
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Role"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The key exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/roles/{key}:
+    put:
+      summary: Rename a role or change its set
+      x-capability: roles
+      description: Absent fields stay. owner cannot be changed (403).
+      parameters: [{$ref: "#/components/parameters/roleKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RoleChange"}
+      responses:
+        "200":
+          description: The role as changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Role"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoRole"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Remove a created role no user has
+      x-capability: roles
+      description: A default role cannot be removed (403); one with users is 409.
+      parameters: [{$ref: "#/components/parameters/roleKey"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  key: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoRole"}
+        "409":
+          description: The role still has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/roles/{key}/disabled:
+    put:
+      summary: Disable or enable a role
+      x-capability: roles.disable
+      description: A disabled role's users keep their login and are refused every route. owner cannot be disabled (403).
+      parameters: [{$ref: "#/components/parameters/roleKey"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Disabled"}
+      responses:
+        "200":
+          description: The role
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Role"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoRole"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/capabilities:
+    get:
+      summary: Every capability, and whether it is disabled
+      x-capability: capabilities
+      responses:
+        "200":
+          description: The capabilities in the order of the table
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Capability"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/capabilities/{key}:
+    put:
+      summary: Disable or enable a capability
+      x-capability: capabilities
+      description: A disabled capability is denied to every role but owner, whatever the role's set says.
+      parameters:
+        - {name: key, in: path, required: true, description: The capability, schema: {type: string, example: pair}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Disabled"}
+      responses:
+        "200":
+          description: The capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Capability"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such capability
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/cubes:
     get:
       summary: List the Cubes
@@ -1108,6 +1478,21 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    NoStore:
+      description: The server has no store (serve -addr), so no users
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoUser:
+      description: No such user
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoRole:
+      description: No such role
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
     NotFound:
       description: Unknown Cube, device or room
       content:
@@ -1143,6 +1528,66 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    UserCreate:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, description: "The login name: 1 to 64 of letters, digits, '.', '_', '-' and '@', case does not matter", example: anna}
+        display_name: {type: string, maxLength: 64}
+        role: {type: string, description: A role's key; viewer when absent, owner for the first owner}
+        password: {type: string, description: Absent for a user with keys only; required for the first owner}
+        disabled: {type: boolean}
+        expires_at: {type: string, format: date-time, description: "Guests: disabled from then on"}
+    UserChange:
+      type: object
+      properties:
+        display_name: {type: string, maxLength: 64}
+        role: {type: string}
+        disabled: {type: boolean}
+        expires_at: {type: string, format: date-time, nullable: true, description: null clears the end date}
+        password: {type: string, description: Empty removes the password}
+        current_password: {type: string, description: Required when a user sets its own password}
+    Role:
+      type: object
+      properties:
+        key: {type: string}
+        name: {type: string, description: The display name; empty shows the key's translated default}
+        builtin: {type: boolean, description: One of the six default roles, which keep their keys}
+        disabled: {type: boolean}
+        capabilities:
+          type: array
+          description: The role's set, sorted; every capability for owner
+          items: {type: string}
+        users: {type: integer, description: Users with this role}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RoleCreate:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, description: "1 to 32 of letters, digits, '_' and '-', starting with a letter; lower case", example: night}
+        name: {type: string, maxLength: 64}
+        capabilities:
+          type: array
+          items: {type: string}
+    RoleChange:
+      type: object
+      properties:
+        name: {type: string, maxLength: 64}
+        capabilities:
+          type: array
+          description: Replaces the set
+          items: {type: string}
+    Capability:
+      type: object
+      properties:
+        key: {type: string, example: pair}
+        disabled: {type: boolean, description: Denied to every role but owner}
+    Disabled:
+      type: object
+      required: [disabled]
+      properties:
+        disabled: {type: boolean}
     Login:
       type: object
       required: [user, password]
