@@ -723,21 +723,33 @@ function houseDuration() {
   return checked ? checked.value : "permanent";
 }
 
-// renderHouseRooms fills the room checkboxes of the House panel.
+// houseRoomRow is a checkbox of the House panel with its label, from
+// its template (tpl-house-room); label.control is the checkbox.
+function houseRoomRow(label, checked, onChange) {
+  const row = fromTemplate("tpl-house-room");
+  const cb = row.control;
+  cb.checked = !!checked;
+  cb.addEventListener("change", () => onChange(cb.checked));
+  row.append(" " + label);
+  return row;
+}
+
+// renderHouseRooms fills the room checkboxes of the House panel: All
+// rooms, then a room with a thermostat each.
 function renderHouseRooms() {
   const box = $("house-rooms");
   const wasChecked = {};
   for (const cb of box.querySelectorAll("input[data-room]")) wasChecked[cb.dataset.room] = cb.checked;
   clear(box);
   const rooms = () => [...box.querySelectorAll("input[data-room]")];
-  const all = checkRow(t("house.allRooms"), true, (on) => {
+  const all = houseRoomRow(t("house.allRooms"), true, (on) => {
     for (const cb of rooms()) cb.checked = on;
   });
   all.control.id = "house-all";
   box.appendChild(all);
   for (const room of state.rooms) {
     if (!roomThermostat(room)) continue;
-    const row = checkRow(room.name, wasChecked[room.id] === undefined ? true : wasChecked[room.id], () => {
+    const row = houseRoomRow(room.name, wasChecked[room.id] === undefined ? true : wasChecked[room.id], () => {
       all.control.checked = rooms().every((x) => x.checked);
     });
     row.control.dataset.room = String(room.id);

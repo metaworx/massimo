@@ -4,28 +4,93 @@
 package server
 
 import (
+	"bytes"
 	"embed"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
 
 // The web UI: plain HTML, CSS and JavaScript, no build step. It is
-// served at / (the page) and /ui/ (the files, the translations under
-// /ui/i18n/) and talks to the API.
+// served at / (the page, assembled from index.html and the partials at
+// start) and /ui/ (the files, the translations under /ui/i18n/) and
+// talks to the API.
 //
-//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/theme.js ui/style.css ui/i18n/*.json
+//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/theme.js ui/style.css ui/i18n/*.json ui/partials/*.html
 var uiFiles embed.FS
+
+// uiPartials are the parts of the page in ui/partials/, a file per
+// feature, by the marker of index.html they replace
+// (<!-- partials: settings -->), in their order there: the panels of the
+// settings, then the templates the scripts clone, each named for what it
+// holds and saying which script uses it.
+var uiPartials = []struct {
+	marker string
+	files  []string
+}{
+	{"settings", []string{"cubes.html", "appearance.html", "page.html", "software.html"}},
+	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "found.html", "scheme.html", "log.html"}},
+}
+
+// uiPage assembles the page: index.html, the skeleton, with each marker
+// line replaced by its partials, every line of them indented as the
+// marker is. A marker that is missing or there twice, or a partial that
+// is missing, is an error.
+func uiPage(files fs.FS) ([]byte, error) {
+	page, err := fs.ReadFile(files, "index.html")
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range uiPartials {
+		marker := []byte("<!-- partials: " + p.marker + " -->")
+		if n := bytes.Count(page, marker); n != 1 {
+			return nil, fmt.Errorf("index.html: %d markers %s, want 1", n, marker)
+		}
+		at := bytes.Index(page, marker)
+		start := bytes.LastIndexByte(page[:at], '\n') + 1
+		indent := page[start:at]
+		if len(bytes.TrimLeft(indent, " \t")) != 0 {
+			return nil, fmt.Errorf("index.html: marker %s not on a line of its own", marker)
+		}
+		end := at + len(marker)
+		if i := bytes.IndexByte(page[end:], '\n'); i >= 0 {
+			end += i + 1
+		} else {
+			end = len(page)
+		}
+		var b bytes.Buffer
+		for _, name := range p.files {
+			part, err := fs.ReadFile(files, "partials/"+name)
+			if err != nil {
+				return nil, err
+			}
+			for _, line := range bytes.SplitAfter(part, []byte("\n")) {
+				if len(bytes.TrimSpace(line)) > 0 {
+					b.Write(indent)
+				}
+				b.Write(line)
+			}
+			if len(part) > 0 && part[len(part)-1] != '\n' {
+				b.WriteByte('\n')
+			}
+		}
+		page = slices.Concat(page[:start], b.Bytes(), page[end:])
+	}
+	return page, nil
+}
 
 // uiLanguageFile is the name of a translation file: a language code.
 var uiLanguageFile = regexp.MustCompile(`^[a-z][a-z]\.json$`)
 
-// uiRoutes registers the page and its files. The token check applies to
-// /api only; the files are public, the API behind them is not. Every
-// file carries an ETag of the server version and its name, so that the
+// uiRoutes registers the page and its files. The page is assembled once
+// (uiPage); index.html and the partials are not served on their own.
+// The token check applies to /api only; the files are public, the API
+// behind them is not. Every file carries an ETag of the server version and its name, so that the
 // browser, which revalidates each (no-cache), gets a 304 instead of the
 // file again while the server version stays.
 func (s *Server) uiRoutes(mux *http.ServeMux) {
@@ -33,19 +98,27 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 	if err != nil {
 		panic(err)
 	}
+	page, err := uiPage(sub)
+	if err != nil {
+		panic(err)
+	}
 	version := uiETagVersion(s.opts.Version, s.started)
+	cache := func(w http.ResponseWriter, name string) {
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", `"`+version+"/"+name+`"`)
+	}
 	serve := func(w http.ResponseWriter, r *http.Request, name string) {
 		if st, err := fs.Stat(sub, name); err != nil || st.IsDir() {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("ETag", `"`+version+"/"+name+`"`)
+		cache(w, name)
 		http.ServeFileFS(w, r, sub, name)
 	}
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
-		serve(w, r, "index.html")
+		cache(w, "index.html")
+		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(page))
 	})
 	mux.HandleFunc("GET /ui/{file}", func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)

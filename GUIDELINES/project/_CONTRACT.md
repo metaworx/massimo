@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.0.0)
+# {{project_name}} — Project Contract (v1.1.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -105,10 +105,17 @@ agent trips over most:
   routes differ.
 - **The web UI** is plain HTML, CSS and JavaScript under `internal/server/ui/`,
   embedded with `go:embed`: no build step, no framework, no inline handlers,
-  API text only through `textContent`,
-  every text through `i18n.js` (six languages,
-  FR/IT/NL/PL machine- translated and marked), CSS variables for light and dark,
-  phone width first (390 px), verified with `make ui-test` at 1100 and 390 px.
+  no `innerHTML`, API text only through `textContent`.
+  `index.html` is the page's skeleton; a feature's markup (its settings panel,
+  the `<template>`s its script clones) is its partial under `ui/partials/`,
+  listed in `uiPartials` in `ui.go`.
+  Shared elements come from `components.js`,
+  and a label with its control is the one row style, `.field`,
+  or `.field.wide` for a control on a line of its own.
+  Every text goes through `t()` or `data-i18n`, its key in all six
+  `ui/i18n/<lang>.json` (FR/IT/NL/PL machine-translated and marked);
+  CSS variables for light and dark, phone width first (390 px),
+  verified with `make ui-test` at 1100 and 390 px.
 - **Documents move with the code**:
   `README.md` for the command line,
   `docs/api-v1.md` and the OpenAPI file for every route,

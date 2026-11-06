@@ -33,7 +33,9 @@ Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
 is not a scheme shows a message. Update asks in the page, and Cancel
-sends nothing. On every page it opens, every button
+sends nothing. A language chosen in the settings redraws the open Cube
+panel, which is cloned from a template, in that language. On every page
+it opens, every button
 has an accessible name (text, aria-label or title). Any console error, page error or horizontal scroll fails the
 test.
 """
@@ -61,6 +63,7 @@ SAVED = {"en": "Saved as “Test scheme”.", "de": "Als „Test scheme“ gespe
 HEX_LABEL = {"en": "Lines, hex", "de": "Linien, Hex"}
 HEX_BAD = {"en": "Lines: “nope” is not a colour. Write it as #rrggbb or #rgb, the # may be left out; Escape puts the colour back.",
            "de": "Linien: „nope“ ist keine Farbe. Als #rrggbb oder #rgb schreiben, das # darf fehlen; Escape stellt die Farbe wieder her."}
+PANEL_TEXTS = {"en": ["Address", "Hidden devices", "Save"], "de": ["Adresse", "Ausgeblendete Geräte", "Speichern"]}
 NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
@@ -263,6 +266,25 @@ def cubes(page, label, lang):
         check(wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5),
               f"{label}: Remove lists it as found again")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll in Settings → Cubes")
+    page.locator("#view-tiles").click()
+
+
+def language_redraw(page, label):
+    """A language chosen in the settings redraws what the scripts cloned
+    from the page's templates: with the Cube's panel open, English and
+    then German, its labels in the language chosen and the panel still
+    open; back to the browser's language at the end."""
+    page.locator("#view-settings").click()
+    panel = page.locator(".cube-panel[data-serial='KEQ0537249']")
+    if panel.get_attribute("open") is None:
+        panel.locator("summary").click()
+    for lang in ("en", "de"):
+        page.locator("#lang-select").select_option(lang)
+        check(wait_until(page, "document.documentElement.lang === %s" % json.dumps(lang), 5), f"{label}: {lang} chosen in the settings")
+        want = PANEL_TEXTS[lang]
+        got = [panel.locator(sel).inner_text().strip() for sel in ("label[for='cube-KEQ0537249-address']", ".cube-hidden-title", "button[type=submit]")]
+        check(panel.get_attribute("open") is not None and got == want, f"{label}: the open Cube panel redrawn in {lang}" + ("" if got == want else f": {got}"))
+    page.locator("#lang-select").select_option("auto")
     page.locator("#view-tiles").click()
 
 
@@ -527,6 +549,7 @@ with sync_playwright() as pw, tempfile.TemporaryDirectory() as tmpdir:
                 ages(page, label, lang)
                 discover(page, label, lang)
                 cubes(page, label, lang)
+                language_redraw(page, label)
                 log_changes(page, label, lang)
                 appearance(page, label, lang, tmp)
             except Exception as e:  # a timeout or a missing element

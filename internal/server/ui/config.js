@@ -10,7 +10,6 @@
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const MAX_POINTS = 13;
 const NAME_BYTES = 32;
-const TABS = ["room", "temps", "devices", "program", "copy"];
 // The common fields of a room's configuration, as GET /rooms/{id}/config
 // returns them and PUT /rooms/{id}/config takes them.
 const TEMP_FIELDS = ["comfort_temp", "eco_temp", "window_open_temp", "window_open_minutes", "max_setpoint", "min_setpoint"];
@@ -188,24 +187,23 @@ function renderConfig(el, room) {
   }
 }
 
-// renderTabs builds the configuration area's sub-navigation: the
-// section tabs in a tab list, and the close button outside it.
+// renderTabs builds the configuration area's sub-navigation from its
+// template (tpl-config-tabs): the section tabs in a tab list, each with
+// its section in data-tab, and the close button outside it.
 function renderTabs(room, c) {
-  const list = elem("span", "config-tablist");
-  list.setAttribute("role", "tablist");
-  list.setAttribute("aria-label", t("cfg.sections"));
-  for (const key of TABS) {
-    const b = button(t("cfg.tab." + key), "tab" + (c.tab === key ? " active" : ""), () => {
+  const bar = fromTemplate("tpl-config-tabs");
+  for (const b of bar.querySelectorAll("[role=tab]")) {
+    const key = b.dataset.tab;
+    b.classList.toggle("active", c.tab === key);
+    b.setAttribute("aria-selected", c.tab === key ? "true" : "false");
+    b.addEventListener("click", () => {
       c.tab = key;
       c.result = null;
       rerenderRoom(room);
     });
-    b.setAttribute("role", "tab");
-    b.setAttribute("aria-selected", c.tab === key ? "true" : "false");
-    list.appendChild(b);
   }
-  const close = button("×", { cls: "tab close", aria: t("cfg.close"), title: t("cfg.closeTitle") }, () => closeConfig(room));
-  return elem("div", "config-tabs", list, close);
+  bar.querySelector(".close").addEventListener("click", () => closeConfig(room));
+  return bar;
 }
 
 // --- room tab ---------------------------------------------------------

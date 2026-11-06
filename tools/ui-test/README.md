@@ -60,6 +60,14 @@ It checks that:
   and the found Cube KEQ0000000 is added and removed again (skipped without a
   discovery answer); everything is put back,
   since the four runs share one server;
+  Remove asks in the panel, and Keep takes the question back;
+- the Cube's panel open,
+  English and then German chosen in the settings redraw its labels,
+  cloned from a template, in that language, and the panel stays open;
+- Settings → Software: Update asks in the page with the version,
+  and Cancel takes the question back without a request;
+- every button on every page the test opens has an accessible name (its text,
+  `aria-label`, `aria-labelledby` or `title`);
 - there is no console error, no page error and no horizontal scroll.
 
 It sends nothing to the fake Cube;

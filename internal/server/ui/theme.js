@@ -431,38 +431,32 @@ function markHex(field, refused) {
   hexMessage(refused === null ? null : field);
 }
 
-// renderSchemeSet builds the inputs of one set (light or dark) of the
-// draft: a row per token with its name, the contrast badge for a
+// renderSchemeSet fills the fieldset of one set (light or dark) of the
+// draft: a row per token (tpl-scheme-row) with its name, the contrast badge for a
 // background of CONTRAST_PAIRS (an empty placeholder of the same width
 // on the other rows, so the colours and the hex fields line up), the
 // colour input and the hex field. The hex field takes a typed or pasted
 // value: a colour applies as it is typed and is written as #rrggbb once
 // the field is left; anything else is refused, the field marked
 // invalid, and the colour stays.
-function renderSchemeSet(mode) {
+function renderSchemeSet(fs, mode) {
   const d = themeState.draft;
-  const fs = elem("fieldset", "scheme-set", textEl("legend", t("appearance." + mode)));
   const badges = {};
   const refresh = () => {
     for (const [k, b] of Object.entries(badges)) fillContrast(b, d[mode], k);
   };
   for (const k of THEME_TOKENS) {
-    const input = document.createElement("input");
-    input.type = "color";
+    const row = fromTemplate("tpl-scheme-row");
+    const input = row.querySelector("input[type=color]");
     input.id = "scheme-" + mode + "-" + k;
     input.value = d[mode][k];
     input.title = "--" + k;
-    const label = textEl("label", tokenLabel(k));
+    const label = row.querySelector("label");
+    label.textContent = tokenLabel(k);
     label.htmlFor = input.id;
-    const hex = document.createElement("input");
-    hex.type = "text";
+    const hex = row.querySelector(".scheme-hex");
     hex.id = "scheme-" + mode + "-" + k + "-hex";
-    hex.className = "scheme-hex mono";
     hex.value = d[mode][k];
-    hex.size = 7;
-    hex.spellcheck = false;
-    hex.autocomplete = "off";
-    hex.setAttribute("autocapitalize", "off");
     hex.setAttribute("aria-label", t("appearance.hex", { token: tokenLabel(k) }));
     hex.dataset.token = tokenLabel(k);
     const take = (c) => {
@@ -500,37 +494,30 @@ function renderSchemeSet(mode) {
         markHex(hex, null);
       }
     });
-    const badge = elem("span", CONTRAST_PAIRS[k] ? "" : "contrast none");
+    const badge = label.nextElementSibling;
     if (CONTRAST_PAIRS[k]) {
       badge.setAttribute("role", "img"); // so the label is read out
       badges[k] = badge;
     } else {
+      badge.className = "contrast none";
       badge.setAttribute("aria-hidden", "true");
     }
-    fs.appendChild(elem("div", "scheme-row", label, badge, input, hex));
+    fs.appendChild(row);
   }
   refresh();
-  return fs;
 }
 
-// renderSchemeEditor draws the editor for the draft: the two sets, the
-// contrast note, the name with Save as, then Reset, Delete and Close.
+// renderSchemeEditor draws the editor for the draft from its template
+// (tpl-scheme-editor): the two sets, the contrast note, the name with
+// Save as, then Reset, Delete and Close.
 function renderSchemeEditor() {
   const d = themeState.draft;
   const base = schemeById(themeState.base);
   const ed = $("scheme-editor");
   clear(ed);
-  const title = textEl("h3", t("appearance.editorTitle"));
-  title.id = "scheme-editor-title";
-  ed.appendChild(title);
-  ed.appendChild(elem("div", "scheme-sets", renderSchemeSet("light"), renderSchemeSet("dark")));
-  const hexMsg = textEl("p", "", "small scheme-msg bad hidden");
-  hexMsg.id = "scheme-hex-msg";
-  hexMsg.setAttribute("role", "status");
-  ed.appendChild(hexMsg);
-  ed.appendChild(textEl("p", t("appearance.contrastNote"), "muted small"));
-  const name = document.createElement("input");
-  name.type = "text";
+  const frame = fragmentFromTemplate("tpl-scheme-editor");
+  for (const fs of frame.querySelectorAll(".scheme-set")) renderSchemeSet(fs, fs.dataset.mode);
+  const name = frame.querySelector("#scheme-name");
   name.maxLength = SCHEME_NAME_MAX;
   name.value = d.name;
   name.addEventListener("keydown", (ev) => {
@@ -539,13 +526,13 @@ function renderSchemeEditor() {
       saveSchemeDraft();
     }
   });
-  const nameRow = fieldRow(t("appearance.name"), elem("span", "inline", name, button(t("appearance.saveAs"), "primary", saveSchemeDraft)), { id: "scheme-name", wide: true });
-  nameRow.classList.add("scheme-name");
-  ed.appendChild(nameRow);
-  const del = button(t("action.delete"), "", deleteSchemeDraft);
-  del.id = "scheme-delete";
+  name.nextElementSibling.addEventListener("click", saveSchemeDraft);
+  frame.querySelector(".scheme-reset").addEventListener("click", resetSchemeDraft);
+  const del = frame.querySelector("#scheme-delete");
   del.disabled = !base || base.builtin;
-  ed.appendChild(formFooter({ cancel: closeSchemeEditor, cancelLabel: t("action.close"), extra: [button(t("appearance.reset"), "", resetSchemeDraft), del] }));
+  del.addEventListener("click", deleteSchemeDraft);
+  frame.querySelector(".scheme-close").addEventListener("click", closeSchemeEditor);
+  ed.appendChild(frame);
 }
 
 // --- export and import ------------------------------------------------

@@ -274,21 +274,19 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
   return box;
 }
 
-// checkRow is a checkbox with its label; label.control is the checkbox.
-function checkRow(label, checked, onChange) {
-  const row = document.createElement("label");
-  row.className = "check";
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.checked = !!checked;
-  if (onChange) cb.addEventListener("change", () => onChange(cb.checked));
-  row.append(cb, document.createTextNode(" " + label));
-  return row;
-}
-
 // fromTemplate clones the first element of a <template> of the page.
+// The template's data-i18n texts are those of the language of the last
+// applyI18n(document); a change of language applies them again and then
+// redraws what was cloned from them.
 function fromTemplate(id) {
   return document.getElementById(id).content.firstElementChild.cloneNode(true);
+}
+
+// fragmentFromTemplate clones the whole content of a <template> of the
+// page, for a frame of several elements that goes into a container of
+// the page as it is.
+function fragmentFromTemplate(id) {
+  return document.getElementById(id).content.cloneNode(true);
 }
 
 // detailsPanel is a <details> panel: a summary of a name, a monospaced

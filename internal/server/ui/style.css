@@ -317,7 +317,7 @@ body.expert #clock-plain { display: none; }
 .scheme-name .inline { flex-wrap: wrap; }
 .scheme-name input[type="text"] { flex: 1 1 10em; min-width: 0; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-/* the summary of a details panel (components.js detailsPanel) */
+/* the summary of a details panel (components.js detailsPanel, the Cube panel's template) */
 .panel-name { font-weight: 600; }
 .panel-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .panel-row {
