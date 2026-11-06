@@ -10,6 +10,13 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The web UI pairs a device in Settings → Cubes and puts it into a room
+  with the room's settings; Devices without a room and the Devices tab
+  remove one from the Cube (`docs/ui.md`).
+
+- `massimo fakecube -pair <template rf>,<rf>,<serial>`: a device that
+  joins pairing mode, and again after it was removed (README.md).
+
 - `DELETE /api/v1/cubes/{sn}/devices/{rf}` removes a device from the Cube
   as the original software does, under `structure`; a client's `t:`
   through the proxy drops the devices from the server's copy too.

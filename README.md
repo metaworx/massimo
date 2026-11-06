@@ -31,6 +31,9 @@ every release is a pre-release on the `alpha` channel (see [Versions](#versions)
   phone and desktop ([docs/ui.md](docs/ui.md)).
 - **A JSON API** with an OpenAPI description, live events and a bearer token
   ([docs/api-v1.md](docs/api-v1.md)).
+- **Pairing** a new device from the web UI or the API,
+  put into a room with the room's settings as the original software does,
+  and a device removed from the Cube again ([docs/ui.md](docs/ui.md)).
 - **Backup and restore** of a Cube's configuration as YAML or JSON,
   from the command line and the API.
 - **The server as a Cube** for other clients, the original software included:
@@ -610,6 +613,9 @@ so the room is marked not ready (`-json` for machines).
 and with `-discovery 127.0.0.1:23273` it also answers UDP discovery as a further
 Cube (`-discovery-serial`),
 which `serve -discover-target 127.0.0.1:23273` finds.
+`-pair 1514b6,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
+after `n:`, a copy of the greeting's 1514b6 as 0abcde in no room,
+and joins again after it was removed (a fourth field sets the delay).
 
 ```bash
 massimo discover
