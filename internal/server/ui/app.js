@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, core: API access with the token, the helpers the
+// The Massimo web UI, core: API access with the token (the sign-in is
+// login.js), the helpers the
 // other files share that read the page's state (fmtTemp, ageEl,
 // helpParts; fmtNum is in i18n.js, the components in components.js),
 // settings, the header with the Cube clock, loading of cubes and rooms,
@@ -16,6 +17,7 @@ const state = {
   rooms: [],
   unlisted: [],
   token: null,
+  me: null, // GET /api/v1/me: the mode, the user, the role, the capabilities, setup (login.js)
   events: null,
   eventsOpen: false,
   settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" },
@@ -73,8 +75,7 @@ async function api(method, path, body) {
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   if (resp.status === 401) {
-    const token = await askToken();
-    if (token) return api(method, path, body);
+    if (await askLogin()) return api(method, path, body); // login.js
     throw new Error(t("api.badToken"));
   }
   let data = null;
@@ -92,26 +93,6 @@ async function api(method, path, body) {
     throw err;
   }
   return data;
-}
-
-let tokenPromise = null;
-function askToken() {
-  if (tokenPromise) return tokenPromise;
-  tokenPromise = new Promise((resolve) => {
-    const dlg = $("token-dialog");
-    const input = $("token-input");
-    input.value = "";
-    $("token-form").onsubmit = () => {
-      state.token = input.value.trim();
-      store("massimo.token", state.token);
-      tokenPromise = null;
-      resolve(state.token);
-      connectEvents();
-    };
-    dlg.showModal();
-    input.focus();
-  });
-  return tokenPromise;
 }
 
 // deviceDetail fetches and caches a device's configuration.
@@ -387,7 +368,7 @@ function renderCubeSelect() {
   if (state.found.length) {
     options.push({ group: t("discover.group"), options: state.found.map((c) => ["found:" + c.serial, c.serial + (c.address ? " · " + c.address : ""), true]) });
   }
-  options.push([DISCOVER, t(discovery.running ? "discover.searching" : "discover.search"), discovery.running]);
+  if (hasCap("discover")) options.push([DISCOVER, t(discovery.running ? "discover.searching" : "discover.search"), discovery.running]);
   const sel = fillOptions($("cube-select"), options);
   sel.value = state.serial || "";
 }
@@ -553,7 +534,7 @@ function selectCube(serial) {
 function somethingOpen() {
   if (!$("settings").classList.contains("hidden")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
-  if ($("token-dialog").open) return true;
+  if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
     if (ui.pending !== null || ui.vacation || ui.confirm || ui.open || ui.config) return true;
   }
@@ -775,12 +756,6 @@ function initSettings() {
     store("massimo.lang", state.settings.lang === "auto" ? null : state.settings.lang);
     changeLanguage(state.settings.lang).then(applyLanguage);
   });
-  $("forget-token").addEventListener("click", () => {
-    state.token = null;
-    store("massimo.token", null);
-    showView("tiles");
-    refresh().then(connectEvents);
-  });
   initAppearance();
 }
 
@@ -830,6 +805,9 @@ function applyLanguage() {
   applyAppearance();
   renderCubeSelect();
   renderFound();
+  renderMe();
+  renderUsers();
+  renderRoles();
   renderCubes();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
@@ -850,6 +828,7 @@ async function init() {
   initSettings();
   applySettings();
   checkVersion();
+  await loadMe(); // login.js: who is signed in, or the sign-in dialog
   $("cube-select").addEventListener("change", (ev) => {
     if (ev.target.value !== DISCOVER) return selectCube(ev.target.value);
     ev.target.value = state.serial || "";

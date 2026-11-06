@@ -32,11 +32,23 @@
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	POST /api/v1/login                               a session for a name and a password (login_api.go)
+//	POST /api/v1/logout                              end the session
+//	GET  /api/v1/me                                  who the caller is and what the caller may do
+//	GET|POST /api/v1/users, /users/{name}, /users/{name}/tokens    the users and their tokens (users_api.go)
+//	GET|POST /api/v1/roles, /roles/{key}, /roles/{key}/disabled   the roles and their sets (roles_api.go)
+//	GET|PUT /api/v1/capabilities, /capabilities/{key}              the capabilities, disabled or not
+//	GET  /api/v1/audit                               every request that changed something (audit.go)
+//	GET  /api/v1/commands/{id}                       a write request with its steps on the queue (commands.go)
 //
-// With a token configured, every /api request needs "Authorization: Bearer <token>";
-// the event stream also opens with ?ticket=<ticket> from POST …/events/ticket and,
-// deprecated, ?token=<token>. Repeated failed token checks lock the client's address
-// out for a while (auth.go). A web UI for all of this is served at / (see ui.go).
+// Every route is registered with the capability it needs (auth.go): with users in
+// the store, every /api request carries "Authorization: Bearer <token>", a session or
+// an API key that names a user whose role grants the capabilities; without a store
+// the one token of Options.Token is checked as before. The event stream also opens
+// with ?ticket=<ticket> from POST …/events/ticket and, deprecated, ?token=<token>.
+// Repeated failed checks lock the client's address out for a while. Every request
+// that changes something is an audit row and a command row (audit.go, commands.go).
+// A web UI for all of this is served at / (see ui.go).
 //
 // With Options.TLS set the server terminates TLS itself (the certificate
 // from internal/certs, the listener wrapped by cmd/massimo), /healthz
@@ -198,9 +210,10 @@ type Server struct {
 	mux     *http.ServeMux
 	handler http.Handler // the mux, behind the HSTS header with TLS
 
-	limiter *authLimiter
-	tickets *ticketStore
-	updates updateCheck
+	limiter     failureLimiter
+	authLockout time.Duration // the lockout in effect, for the log
+	tickets     *ticketStore
+	updates     updateCheck
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -335,10 +348,24 @@ func New(opts Options) *Server {
 		opts.PollInterval = time.Minute
 	}
 	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
-		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
+		limiter: newLimiter(opts, opts.Logger), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
+	if s.authLockout <= 0 {
+		s.authLockout = DefaultAuthLockout
+	}
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
+	if opts.Store != nil {
+		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
+		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
+			s.log.Error("store: bootstrap failed", "error", err)
+		}
+		if n, err := opts.Store.DropUnfinished(context.Background(), "server restarted"); err != nil {
+			s.log.Error("store: unfinished commands not dropped", "error", err)
+		} else if n > 0 {
+			s.log.Info("unfinished commands dropped", "count", n)
+		}
+	}
 	for _, c := range opts.Cubes {
 		if err := s.register(s.newRuntime(c, c.Addr)); err != nil {
 			s.log.Error("cube not served", "serial", c.Serial, "addr", c.Addr, "error", err)
@@ -571,11 +598,34 @@ func (s *Server) routes() {
 		}
 		writeJSON(w, http.StatusOK, h)
 	})
-	api := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
+	// api registers a route with the capability it needs (auth.go): the
+	// wrapper authenticates, checks the capability, and maps the handler's
+	// error to a status.
+	api := func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error) {
+		if capability != capNone && capability != capAny && !validCapability(capability) {
+			panic(fmt.Sprintf("route %s: unknown capability %q", pattern, capability))
+		}
+		action, audited := actions[pattern]
+		if strings.HasPrefix(pattern, "GET ") {
+			audited = false
+		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if !s.authorize(w, r) {
+			var au *auditInfo
+			if audited && action != "" && s.opts.Store != nil {
+				au, w, r = s.beginAudit(w, r, pattern, action)
+				defer func() { s.endAudit(r.Context(), au, clientIP(r)) }()
+			}
+			p, ok := s.authorize(w, r, capability)
+			if au != nil {
+				au.p = p
+			}
+			if !ok {
 				return
 			}
+			if au != nil && action != "login" && action != "logout" && s.beginCommand(w, r, au) {
+				return
+			}
+			r = withPrincipal(r, p)
 			if err := h(w, r); err != nil {
 				var he *httpError
 				if errors.As(err, &he) {
@@ -593,33 +643,53 @@ func (s *Server) routes() {
 			}
 		})
 	}
-	api("GET /api/v1/cubes", s.listCubes)
-	api("POST /api/v1/cubes", s.postCube)
-	api("PUT /api/v1/cubes/{sn}", s.putCube)
-	api("DELETE /api/v1/cubes/{sn}", s.deleteCube)
-	api("GET /api/v1/settings", s.getSettings)
-	api("PUT /api/v1/settings", s.putSettings)
-	api("POST /api/v1/cubes/discover", s.postDiscover)
-	api("GET /api/v1/cubes/{sn}", s.getCube)
-	api("GET /api/v1/cubes/{sn}/rooms", s.getRooms)
-	api("GET /api/v1/cubes/{sn}/devices", s.getDevices)
-	api("GET /api/v1/cubes/{sn}/devices/{rf}", s.getDevice)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/setpoint", s.setDeviceSetpoint)
-	api("PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint", s.setRoomSetpoint)
-	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", s.deleteRoom)
-	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", s.setDeviceLock)
-	api("GET /api/v1/cubes/{sn}/backup", s.getBackup)
-	api("POST /api/v1/cubes/{sn}/restore/plan", s.planRestore)
-	api("POST /api/v1/cubes/{sn}/restore", s.startRestore)
-	api("GET /api/v1/cubes/{sn}/restore", s.getRestore)
-	api("GET /api/v1/cubes/{sn}/events", s.events)
-	api("POST /api/v1/cubes/{sn}/events/ticket", s.issueTicket)
-	api("GET /api/v1/cubes/{sn}/log", s.getLog)
-	api("POST /api/v1/cubes/{sn}/pairing", s.startPairing)
-	api("GET /api/v1/cubes/{sn}/pairing", s.getPairing)
-	api("DELETE /api/v1/cubes/{sn}/pairing", s.stopPairing)
-	api("GET /api/v1/update", s.getUpdate)
-	api("POST /api/v1/update", s.startUpdate)
+	api("GET /api/v1/cubes", "read", s.listCubes)
+	api("POST /api/v1/login", "none", s.login)
+	api("POST /api/v1/logout", "any", s.logout)
+	api("GET /api/v1/me", "any", s.me)
+	api("GET /api/v1/audit", "audit", s.getAudit)
+	api("GET /api/v1/commands/{id}", "read", s.getCommand)
+	api("GET /api/v1/users", "users", s.listUsers)
+	api("POST /api/v1/users", "users", s.postUser)
+	api("GET /api/v1/users/{name}", "users", s.getUser)
+	api("PUT /api/v1/users/{name}", "users", s.putUser)
+	api("DELETE /api/v1/users/{name}", "users", s.deleteUser)
+	api("GET /api/v1/users/{name}/tokens", "users", s.listTokens)
+	api("POST /api/v1/users/{name}/tokens", "users", s.postToken)
+	api("DELETE /api/v1/users/{name}/tokens/{id}", "users", s.deleteToken)
+	api("GET /api/v1/roles", "roles", s.listRoles)
+	api("POST /api/v1/roles", "roles", s.postRole)
+	api("PUT /api/v1/roles/{key}", "roles", s.putRole)
+	api("DELETE /api/v1/roles/{key}", "roles", s.deleteRole)
+	api("PUT /api/v1/roles/{key}/disabled", "roles.disable", s.putRoleDisabled)
+	api("GET /api/v1/capabilities", "capabilities", s.listCapabilities)
+	api("PUT /api/v1/capabilities/{key}", "capabilities", s.putCapability)
+	api("POST /api/v1/cubes", "cubes", s.postCube)
+	api("PUT /api/v1/cubes/{sn}", "cubes", s.putCube)
+	api("DELETE /api/v1/cubes/{sn}", "cubes", s.deleteCube)
+	api("GET /api/v1/settings", "settings", s.getSettings)
+	api("PUT /api/v1/settings", "settings", s.putSettings)
+	api("POST /api/v1/cubes/discover", "discover", s.postDiscover)
+	api("GET /api/v1/cubes/{sn}", "read", s.getCube)
+	api("GET /api/v1/cubes/{sn}/rooms", "read", s.getRooms)
+	api("GET /api/v1/cubes/{sn}/devices", "read", s.getDevices)
+	api("GET /api/v1/cubes/{sn}/devices/{rf}", "read", s.getDevice)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/setpoint", "setpoint", s.setDeviceSetpoint)
+	api("PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint", "setpoint", s.setRoomSetpoint)
+	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", "structure", s.deleteRoom)
+	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", "lock", s.setDeviceLock)
+	api("GET /api/v1/cubes/{sn}/backup", "backup", s.getBackup)
+	api("POST /api/v1/cubes/{sn}/restore/plan", "restore", s.planRestore)
+	api("POST /api/v1/cubes/{sn}/restore", "restore", s.startRestore)
+	api("GET /api/v1/cubes/{sn}/restore", "read", s.getRestore)
+	api("GET /api/v1/cubes/{sn}/events", "read", s.events)
+	api("POST /api/v1/cubes/{sn}/events/ticket", "read", s.issueTicket)
+	api("GET /api/v1/cubes/{sn}/log", "read", s.getLog)
+	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
+	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
+	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
+	api("GET /api/v1/update", "read", s.getUpdate)
+	api("POST /api/v1/update", "update", s.startUpdate)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
@@ -914,7 +984,7 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	m := cube.CmdLockControls(cube.Target{RFAddress: rf}, *req.Locked)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "lock:" + rf.String(), Priority: engine.PriorityHigh, Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: []cube.Message{m}}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Key: "lock:" + rf.String(), Priority: engine.PriorityHigh, Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: []cube.Message{m}}).Wait(ctx)
 	if res.Err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(res.Err, engine.ErrSuperseded) {
@@ -1011,7 +1081,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "setpoint:" + key, Priority: engine.PriorityHigh, Target: target, Lines: []cube.Message{m}}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Key: "setpoint:" + key, Priority: engine.PriorityHigh, Target: target, Lines: []cube.Message{m}}).Wait(ctx)
 	var roomCmd uint8
 	if t.Room {
 		roomCmd = t.RoomID

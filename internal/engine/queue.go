@@ -62,6 +62,23 @@ type Command struct {
 	// holds; run in queue order, it never cuts off another command. The
 	// gateway must support it (see Reconnector).
 	Reconnect bool
+	// ID names the request the command belongs to (the server's command
+	// row), for the Observer; empty for work of the server's own, which
+	// is not observed.
+	ID string
+	// Seq is the queue's number of the command, set by Enqueue, which
+	// tells the Observer's calls for one command from another's.
+	Seq uint64
+}
+
+// Observer is told what becomes of every command with an ID: that it
+// joined the queue, that the queue began sending it, and its result,
+// also when it was superseded by a newer command with its Key or
+// drained at the end. The server writes the commands table with it.
+type Observer interface {
+	Enqueued(cmd Command)
+	Started(cmd Command)
+	Finished(cmd Command, res Result)
 }
 
 // Reconnector is a Gateway that can drop its connection and wait for a
@@ -124,6 +141,8 @@ type Options struct {
 	// cycle next resets (default: the next full hour plus a margin).
 	Now     func() time.Time
 	ResetAt func(now time.Time) time.Time
+	// Observer, when set, is told of every command with an ID.
+	Observer Observer
 }
 
 func (o *Options) defaults() {
@@ -183,12 +202,14 @@ func NewQueue(gw Gateway, opts Options) *Queue {
 // the same Key is replaced and resolved with ErrSuperseded.
 func (q *Queue) Enqueue(cmd Command) *Ticket {
 	t := &Ticket{done: make(chan Result, 1)}
+	var superseded []Command
 	q.mu.Lock()
 	if cmd.Key != "" {
 		kept := q.items[:0]
 		for _, e := range q.items {
 			if e.cmd.Key == cmd.Key {
 				e.ticket.done <- Result{Err: ErrSuperseded}
+				superseded = append(superseded, e.cmd)
 				continue
 			}
 			kept = append(kept, e)
@@ -196,8 +217,13 @@ func (q *Queue) Enqueue(cmd Command) *Ticket {
 		q.items = kept
 	}
 	q.seq++
+	cmd.Seq = q.seq
 	q.items = append(q.items, &entry{cmd: cmd, ticket: t, seq: q.seq})
 	q.mu.Unlock()
+	for _, c := range superseded {
+		q.observe(c, func(o Observer) { o.Finished(c, Result{Err: ErrSuperseded}) })
+	}
+	q.observe(cmd, func(o Observer) { o.Enqueued(cmd) })
 	select {
 	case q.wake <- struct{}{}:
 	default:
@@ -247,7 +273,9 @@ func (q *Queue) Run(ctx context.Context) error {
 				continue
 			}
 		}
+		q.observe(e.cmd, func(o Observer) { o.Started(e.cmd) })
 		res := q.execute(ctx, e.cmd)
+		q.observe(e.cmd, func(o Observer) { o.Finished(e.cmd, res) })
 		e.ticket.done <- res
 		q.mu.Lock()
 		q.inFlght = nil
@@ -258,11 +286,21 @@ func (q *Queue) Run(ctx context.Context) error {
 
 func (q *Queue) drain(err error) {
 	q.mu.Lock()
-	defer q.mu.Unlock()
-	for _, e := range q.items {
-		e.ticket.done <- Result{Err: err}
-	}
+	items := q.items
 	q.items = nil
+	q.mu.Unlock()
+	for _, e := range items {
+		e.ticket.done <- Result{Err: err}
+		q.observe(e.cmd, func(o Observer) { o.Finished(e.cmd, Result{Err: err}) })
+	}
+}
+
+// observe tells the Observer about a command with an ID, outside the
+// queue's lock.
+func (q *Queue) observe(cmd Command, call func(Observer)) {
+	if cmd.ID != "" && q.opts.Observer != nil {
+		call(q.opts.Observer)
+	}
 }
 
 func (q *Queue) sleep(ctx context.Context, d time.Duration) {

@@ -6,11 +6,16 @@ on the address its `-listen` names.
 The page works on a phone as well as on a desktop,
 and follows the system's light or dark mode.
 
-When the server has an API token (`MASSIMO_API_TOKEN`),
-the page asks for it once and keeps it in the browser.
-Settings → Forget token removes it again.
+The page asks who you are: a name and a password,
+or an API key pasted into the second field,
+and keeps the session in the browser for 30 days from its last use;
+Settings → Log out ends it.
+A server without users shows the form that creates the first owner to a
+browser on the local network; until then everything is open.
+What the signed-in role may not do is not shown (docs/api-v1.md,
+"Authentication").
 The live updates come over a stream that opens with a single-use ticket,
-so the token never appears in a URL.
+so the session never appears in a URL.
 
 ## Header
 
@@ -201,8 +206,21 @@ The filter matches any part of a line (time, kind, device, text).
   **Import…** reads such a file and keeps it under its name.
   A token the file lacks takes the default's value, unknown ones are ignored,
   and a file that is not a scheme says so under the buttons.
-- **Forget token**:
-  removes the stored API token.
+- **Users** (with `users`, or `guests` for the guests alone):
+  every user in a panel with its display name, role, whether it is disabled,
+  a guest's end, and a new password, which ends the user's sessions;
+  **Remove**; the user's sessions and API keys with **Revoke**,
+  and **Create key**, which shows the new key once.
+  **Add a user** opens the form for one.
+- **Roles** (with `roles`):
+  every role in a panel with its display name and a switch per capability,
+  **Disable** (with `roles.disable`), **Remove** for a created role nobody has,
+  and **Add a role**; the owner cannot be changed.
+  **Capabilities for every role** (with `capabilities`) switches a capability
+  off for every role but the owner.
+- **Change password** and **Log out**:
+  the own password, with the current one, and the end of the session
+  (an API key is only forgotten).
 - **Software**:
   the running version, the update channel and whether a newer release is out.
   On a box with the update helper installed (packaging/README.md, "Updating"),
@@ -221,7 +239,8 @@ its rules are in the project contract (`AGENTS.md`, "The web UI").
 The page is plain HTML, CSS and JavaScript under `internal/server/ui/`,
 embedded in the binary, with no build step.
 `index.html` is the skeleton: the head, the icons, the header, the sections,
-the token dialog and the scripts, with two marker comments.
+the sign-in dialog, the first-owner form and the scripts,
+with two marker comments.
 At start the server replaces `<!-- partials: settings -->` with the settings
 panels and `<!-- partials: templates -->` with the templates,
 from the files in `ui/partials/` in the order `uiPartials` in

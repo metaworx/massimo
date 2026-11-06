@@ -82,7 +82,9 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
 		follow: newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
 	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
-	rt.queue = engine.NewQueue(rt.client, opts.Queue)
+	qopts := opts.Queue
+	qopts.Observer = s.newObserver()
+	rt.queue = engine.NewQueue(rt.client, qopts)
 	return rt
 }
 

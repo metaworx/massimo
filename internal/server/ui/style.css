@@ -869,3 +869,33 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   font-size: 0.85rem;
   color: var(--fg);
 }
+
+/* what the signed-in user may not do is hidden: login.js puts a class
+   no-<capability> on the body per capability the user lacks, and the
+   markup marks what each one hides with needs-<capability> */
+.no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
+.no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
+.no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
+.no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
+.no-settings .needs-settings, .no-update .needs-update { display: none !important; }
+.no-lock.no-structure .room .menu { display: none; }
+
+/* the sign-in dialog, the first-owner form, Settings → Users and Roles */
+.login-token summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
+#login-error.bad { color: var(--bad); }
+.setup { margin-bottom: 16px; }
+.setup-form { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+#me-line { margin: 8px 0 4px; }
+#me-password { margin-bottom: 8px; }
+#me-password summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+#me-password form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.user-form, .user-new, .role-form, .role-new { display: flex; flex-direction: column; gap: 6px; }
+.user-tokens-box { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.user-tokens { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.user-tokens li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.user-tokens li .revoke-token { margin-left: auto; }
+.user-key { word-break: break-all; user-select: all; }
+.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }
+.cap-grid .switch { align-items: center; }
+.cap-grid .flag { margin-left: 4px; }
+.caps-settings { margin-top: 12px; }

@@ -71,6 +71,8 @@ func main() {
 		err = runStore(rest)
 	case "tls":
 		err = runTLS(rest)
+	case "user":
+		err = runUser(rest)
 	case "install":
 		err = runInstall(rest)
 	case "version", "--version", "-v", "-V":
@@ -130,6 +132,7 @@ commands:
   legacy          run the original MAX! software with filtered output
   store           back up, migrate or describe serve's store, massimo.db (see its usage)
   tls             show the certificate serve presents, or make a new self-signed one (see its usage)
+  user            add, list, disable and enable the users of serve's store, set passwords, make API keys (see its usage)
   install         install massimo serve as a service (systemd), or update or -remove it
   update          install the newest signed release from GitHub (-check only looks)
   version         print the version (also --version)

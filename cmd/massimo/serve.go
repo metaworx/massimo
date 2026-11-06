@@ -142,7 +142,11 @@ func runServe(args []string) error {
 	for _, c := range setup.cubes {
 		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
 	}
-	attrs := []any{"addr", ln.Addr().String(), "auth", *token != "", "tls", "off"}
+	auth := any(*token != "")
+	if st != nil {
+		auth = srv.AuthMode()
+	}
+	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "tls", "off"}
 	hs := &http.Server{Handler: srv.Handler()}
 	if src != nil {
 		hs.TLSConfig = certs.Config(src)
