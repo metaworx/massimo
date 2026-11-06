@@ -12,17 +12,18 @@ promoted from `main` with `make release-alpha` (`BUMP=minor` for a feature,
 `DRY=1` to see what it would cut, tag and push),
 which cuts CHANGELOG.md's `[Unreleased]` into the release's section and tags
 with it (README.md, "Versions").
-Newest release: v0.8.0-alpha.1 (2026-11-06), the second with the store,
-the first with users and login.
+Newest release: v0.9.0-alpha.1 (2026-11-06): TLS, the Debian package,
+the apt repository and the Homebrew tap, the settings per user.
 CI runs once per commit (a push to `main` or a pull request, never both;
 a release branch runs nothing, being a fast-forward of a tested commit):
 the Go checks, govulncheck, the service installs on Windows and macOS runners,
+the Debian package in two containers,
 the web UI's pytest suite and the screenshot set in Microsoft's Playwright
-image (the Screenshots job, two to three minutes),
+image (the Screenshots job),
 and the guidelines' checks (`GUIDELINES/shared/tools/check`);
 GUIDELINES/project/CI.md says what runs and why.
-A ruleset on `main` requires those seven checks,
-auto-merge and delete-on-merge are on,
+A ruleset on `main` requires seven of those checks (the two Debian ones are
+not in it yet), auto-merge and delete-on-merge are on,
 so `gh pr merge --auto` waits for them and the branch goes with the merge;
 the owner's own pushes bypass the ruleset.
 The `gh` token on jaguar has the `workflow` scope since the evening of 2026-11-06;
@@ -41,9 +42,10 @@ and one (#55) was merged as a local signed `merge:` commit pushed to `main`.
   **.201** the proxy for the house Cube.
   Settings in `/etc/massimo/env`;
   its DHCP address is not reserved either (the M7 range is 20–199).
-  Its next update, to v0.8.0-alpha.1, creates `/var/lib/massimo/massimo.db`,
-  seeds it from the env file, migrates it to version 2 and creates the user
+  Its next update, to v0.9.0-alpha.1, creates `/var/lib/massimo/massimo.db`,
+  seeds it from the env file, migrates it to version 3 and creates the user
   `owner` from the API token; nobody has watched that yet.
+  It stays on plain HTTP until `-tls` is set (README.md, "Server").
 - **The spare Cube**
   (KEQ0537249) is on jaguar's network at .46 by DHCP,
   served by a Massimo Windows service on jaguar (.45: proxy on 62910,
@@ -51,7 +53,7 @@ and one (#55) was merged as a local signed `merge:` commit pushed to `main`.
   It is the Cube for hardware tests from jaguar and for the firmware dump.
   Its stored fallback address is .46 static since the netconfig test.
   The service ran the store's first start (version 1) on 2026-11-06;
-  the update to v0.8.0-alpha.1 (version 2,
+  the update to v0.9.0-alpha.1 (version 3,
   the user `owner`) is not watched either.
 - **jaguar** is the development machine, in WSL 2 in NAT mode:
   no LAN broadcast and no inbound connections,
@@ -74,6 +76,8 @@ a direct connection takes the Cube's only slot (`-no-direct` refuses the fallbac
 A client of the API needs a token since v0.8.0-alpha.1:
 `MASSIMO_API_TOKEN` is the owner's key, every other user has one of their own
 (docs/api-v1.md, "Authentication"); without one the API answers 401.
+Since v0.9.0-alpha.1 a signed-in manager, operator or viewer keeps the web
+UI's settings and colour schemes on the server (docs/store.md section 9 (c)).
 
 ## The checkout on jaguar
 
@@ -88,9 +92,11 @@ one test with `PYTEST_ADDOPTS='-k "<name> and 390-de"'`,
 tools/ui-test/README.md); a UI change brings its test there,
 and CI keeps a failed test's trace,
 screenshot and video as the artifact `ui-test-results`.
-The branches `claude/tls*` and `backup/claude/tls*` (ten) and
-`claude/ci-update-race` are merged and to delete.
-The two worktrees under `.claude/worktrees/` belong to the sessions in flight.
+The branches `claude/tls*` and `backup/claude/tls*` (ten),
+`claude/ci-update-race`, `claude/heuristic-noether-90a440` and
+`claude/store-c` are merged and to delete, with the worktrees that hold the
+last two once their sessions are gone;
+the worktrees under `.claude/worktrees/` otherwise belong to the sessions in flight.
 
 ## Decisions waiting for the owner
 
@@ -107,15 +113,21 @@ The two worktrees under `.claude/worktrees/` belong to the sessions in flight.
   the apt key and its passphrase in the `signing` environment with Pages
   deploying from Actions,
   the tap repository `metaworx/homebrew-massimo` with its deploy key in the secrets,
-  and the Pi moved to the package once a release carries it.
+  and the Pi moved to the package, which v0.9.0-alpha.1 carries;
+  until the secrets exist the apt and tap jobs skip themselves.
+- The packaging plan's waiting blocks, each a revision when wanted:
+  Windows signing (none for now; SignPath Foundation first, Certum as fallback),
+  rpm, the MSI and winget, the UI's update button through apt or brew,
+  a container image, the LoxBerry plugin, a notarized `.pkg`.
 
 ## Hardware checks still owed
 
 1. The store's first start on the Pi and the update on the Windows service:
-   the log of the update to v0.8.0-alpha.1 (`store created`,
+   the log of the update to v0.9.0-alpha.1 (`store created`,
    `cube added from the settings file`, `owner created from MASSIMO_API_TOKEN`),
    `massimo store info`, Settings → Cubes and Settings → Users,
-   every client still in with its token.
+   every client still in with its token,
+   and a manager's settings following them to another browser.
 2. TLS, the owner's day (the TLS plan's NOTE, item 10):
    a certificate from Let's Encrypt's staging directory on the Pi with a name
    and the router's port-443 forward
@@ -130,7 +142,9 @@ The two worktrees under `.claude/worktrees/` belong to the sessions in flight.
    HSTS is on for a year once TLS serves:
    a box that goes back to `http://` runs once with `-hsts 0` first.
 3. Pairing (docs/api-v1.md, "Pairing"): the six steps of pull request #10,
-   the assumptions marked unverified in docs/portal-protocol.md.
+   the assumptions marked unverified in docs/portal-protocol.md;
+   once AP Pairing lands, the copy of the room's settings on a real thermostat
+   and `t:` on a device that answers.
 4. Write test step 1 repeated,
    to watch the follow-up re-reads and the budget reconnect in the log and the stream,
    once from the original software through the proxy.
@@ -138,25 +152,26 @@ The two worktrees under `.claude/worktrees/` belong to the sessions in flight.
    a stream reconnect while `serve` restarts, the log texts with real changes.
 6. Windows on a real PC: docs/testing-windows.md step 7b (the Update button).
 7. macOS: a reboot with nobody logged in, the firewall rule across an update,
-   an Intel Mac, a real Cube or the proxy on a Mac.
+   an Intel Mac, a real Cube or the proxy on a Mac;
+   the formula with `brew services` on a real Mac.
 8. netconfig: a broadcast `C` to a Cube on a wrong subnet;
    `discover` on a Cube with a static address.
 9. Discovery on the Pi with the spare Cube on the same network,
    now with the DHCP flag in the found row.
-10. The Debian package on the Pi, once pull request #63 is in:
-    the service's start, which the container test cannot prove.
+10. The Debian package on the Pi once the apt repository is up:
+    the service's start, which the container test cannot prove;
+    the apt and publish jobs with real secrets.
 
 ## Code follow-ups
 
-- Pairing does not copy the room's settings to a new device;
-  removing a device has no API (the protocol line `t:` is built and tested,
-  sent by nobody);
-  the UI has no pairing panel (a session brief is ready).
+- Pairing does not copy the room's settings to a new device,
+  removing a device has no API and the UI has no pairing panel:
+  AP Pairing v1.0 builds the three in a session of its own (below).
 - The backup and restore panel in the UI (the API is in),
   and the notice when the server is gone (briefs ready).
 - Settings → Server in the UI (intervals, the stale threshold,
-  the certificate's details, which sit in the header's expert list for now);
-  the API exists.
+  the certificate's details, which sit in the header's expert list for now,
+  the log's retention once stage (d) adds it); the API exists.
 - The UI could ignore the short `connected: false` during the six-hourly refresh
   and the budget reconnects.
 - Server error texts reach the UI in English; FR, IT,
@@ -168,14 +183,12 @@ The two worktrees under `.claude/worktrees/` belong to the sessions in flight.
   language (docs/ui.md, "How the page is built"); the pairing,
   backup and Users panels are written from them.
   `detailsPanel` and `stepper` are written and have no caller yet.
-- CI's macOS job takes its rollback branch at the update from the API until
-  an alpha release knows `-tls` (CI.md section 7); the next release ends that.
-  No test reaches Let's Encrypt; a Pebble job in CI would be a plan of its own,
+- No test reaches Let's Encrypt; a Pebble job in CI would be a plan of its own,
   as would UPnP and a local CA.
 - docs/reverse-proxy.md's Synology and QNAP paragraphs come from their documentation,
   not from a NAS.
 - The armv6 binary is 14.5 MB since autocert (704 KiB more);
-  no release carries it yet, so the Pi 1 has not run it.
+  v0.9.0-alpha.1 is the first release with it, and the Pi 1 has not run it yet.
 - On the Pi: delete `~/massimo-alpha12.*`,
   `/usr/local/bin/massimo.alpha9.bak` and, once the M7 setup is settled,
   `/etc/massimo/env.before-m7`; keep `massimo.prev`.
@@ -187,38 +200,41 @@ the hardware days") and packaging/README.md ("Learnings").
 
 - **AP Tls v1.1**
   (GUIDELINES/wip/, with its analysis and its NOTE):
-  its five blocks are merged (#53, #55, #57, #58, #59);
+  its five blocks are released in v0.9.0-alpha.1;
   it retires with `chore(aps): -Tls` after the owner's TLS day,
   on the owner's `EXEC retire`, never earlier.
+- **AP Packaging v1.0** (with its NOTE and two analyses):
+  Blocks 1 to 3 are released in v0.9.0-alpha.1;
+  Blocks 4 to 10 wait on the owner's decisions above;
+  it retires, or is revised for one of them, on the owner's word.
+- **AP Pairing v1.0**:
+  running in the pairing session (below).
+- **AP StoreLog v1.0**:
+  stage (d) of the store, handed to the store session (below).
 
 ## Sessions in flight
 
-- **Packaging** runs in a session of its own on the branch
-  `claude/heuristic-noether-90a440` (pull request #63): AP Packaging v1.0,
-  a Debian package by nfpm with a marker that makes `massimo update` defer to apt,
-  an apt repository on GitHub Pages rebuilt at each release,
-  a Homebrew tap rendered by a workflow; its plan,
-  analyses and NOTE are on that branch.
-  Windows signing, rpm, MSI, pkg, a container and LoxBerry wait (its D5, D8).
+- **Pairing** runs AP Pairing v1.0 in the session "Build pairing: copy, removal,
+  panel" on stacked branches, one pull request per block:
+  the room's settings on a device put into a room, `DELETE …/devices/{rf}`,
+  the pairing flow and the removal in the UI.
+  It stops at its completion gate with a NOTE; the owner merges.
+- **Store stage (d)**, the log in the store with paging and retention
+  (docs/store.md section 9 (d)), goes to the session "Plan store stage (c):
+  preferences per user" with AP StoreLog v1.0, on a branch `claude/store-d`.
 
-- **Store stage (c)**, the preferences (docs/store.md section 9),
-  runs in the session that built stage (b), on the branch `claude/store-c`
-  in the worktree `xenodochial-pasteur-c0e0c8`: AP StorePrefs v1.0,
-  migration 0003 with the capability preferences,
-  preferences per user and key, `/api/v1/me/preferences`.
-
-The TLS session and the session that fixed CI's Windows update race (#62)
-are done and deleted.
+The TLS, packaging and Windows-race sessions are done and deleted.
 
 ## Next steps in order
 
 1. The owner's items above: the secrets and the key on the Mint box,
-   the M7 reservations, the Mac's sudoers file, the Mint key on the Pi.
-2. The update to v0.8.0-alpha.1 on the Pi and the Windows service (Settings → Software),
+   the M7 reservations, the Mac's sudoers file, the Mint key on the Pi,
+   the packaging steps.
+2. The update to v0.9.0-alpha.1 on the Pi and the Windows service (Settings → Software),
    watched as hardware check 1 says; then the TLS day, then pairing.
-3. Pull request #63 (packaging) to `main`, the owner's steps of its NOTE,
-   a release with TLS and the packages (`BUMP=minor`).
-4. The UI sessions from the briefs: backup and restore, the pairing panel,
+3. The pairing and store (d) pull requests to `main`;
+   the Debian package on the Pi once the apt repository is up.
+4. The UI sessions from the briefs: backup and restore,
    the notice when the server is gone, written from the components.
 5. Firmware dump when the adapter is in (docs/firmware-extraction.md).
 6. The server mode (docs/server.md), Loxone.
