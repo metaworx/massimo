@@ -95,24 +95,17 @@ function removeCube(serial) {
   return cubeAction(() => api("DELETE", "/api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
 }
 
-// fieldRow is a labelled text input of a Cube panel.
-function fieldRow(c, name, labelKey, value, hintKey) {
-  const row = document.createElement("div");
-  row.className = "setting";
-  const id = "cube-" + c.serial + "-" + name;
-  const label = textEl("label", t(labelKey));
-  label.htmlFor = id;
+// cubeField is a labelled text input of a Cube panel, the hint its
+// placeholder.
+function cubeField(c, name, labelKey, value, hintKey) {
   const input = document.createElement("input");
   input.type = "text";
-  input.id = id;
   input.name = name;
-  input.className = "setting-control";
   input.value = value || "";
   input.autocomplete = "off";
   input.spellcheck = false;
   if (hintKey) input.placeholder = t(hintKey);
-  row.append(label, input);
-  return row;
+  return fieldRow(t(labelKey), input, { id: "cube-" + c.serial + "-" + name, wide: true });
 }
 
 // hiddenEditor is the list of hidden devices with Show again per entry,
@@ -120,7 +113,7 @@ function fieldRow(c, name, labelKey, value, hintKey) {
 // sent with Save.
 function hiddenEditor(c) {
   const box = document.createElement("div");
-  box.className = "setting cube-hidden";
+  box.className = "cube-hidden";
   box.appendChild(textEl("span", t("cubes.hidden"), "cube-hidden-title"));
   const list = cubesUI.edits[c.serial] || (cubesUI.edits[c.serial] = [...(c.hidden || [])]);
   const ul = document.createElement("ul");
@@ -242,12 +235,12 @@ function cubePanel(c) {
 
   const form = document.createElement("form");
   form.className = "cube-form";
-  form.appendChild(fieldRow(c, "name", "cubes.name", c.name));
-  form.appendChild(fieldRow(c, "address", "cubes.address", c.configured_address, "cubes.addressHint"));
+  form.appendChild(cubeField(c, "name", "cubes.name", c.name));
+  form.appendChild(cubeField(c, "address", "cubes.address", c.configured_address, "cubes.addressHint"));
   const addr = form.querySelector("input[name=address]");
   if (!c.configured_address && c.address) addr.placeholder = t("cubes.addressFound", { address: c.address });
   const follow = document.createElement("div");
-  follow.className = "setting";
+  follow.className = "field";
   const sw = document.createElement("label");
   sw.className = "switch";
   const cb = document.createElement("input");
@@ -260,11 +253,11 @@ function cubePanel(c) {
   sw.append(cb, slider, textEl("span", t("cubes.follow"), "switch-label"));
   follow.appendChild(sw);
   form.appendChild(follow);
-  form.appendChild(fieldRow(c, "proxy", "cubes.proxy", c.proxy_address, "cubes.proxyHint"));
+  form.appendChild(cubeField(c, "proxy", "cubes.proxy", c.proxy_address, "cubes.proxyHint"));
   if ((c.proxy_listening || []).length) {
     form.appendChild(textEl("p", t("cubes.listening", { addr: c.proxy_listening.join(", ") }), "muted small cube-listening"));
   }
-  form.appendChild(fieldRow(c, "proxy_serial", "cubes.proxySerial", c.proxy_serial, "cubes.proxySerialHint"));
+  form.appendChild(cubeField(c, "proxy_serial", "cubes.proxySerial", c.proxy_serial, "cubes.proxySerialHint"));
   form.appendChild(hiddenEditor(c));
 
   const actions = document.createElement("div");

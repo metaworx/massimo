@@ -17,7 +17,7 @@ import (
 // served at / (the page) and /ui/ (the files, the translations under
 // /ui/i18n/) and talks to the API.
 //
-//go:embed ui/index.html ui/i18n.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/theme.js ui/style.css ui/i18n/*.json
+//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/theme.js ui/style.css ui/i18n/*.json
 var uiFiles embed.FS
 
 // uiLanguageFile is the name of a translation file: a language code.

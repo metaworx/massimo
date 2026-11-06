@@ -27,6 +27,10 @@ the next minor, a fix counts the suffix up.
   (`ui/i18n/<lang>.json`), and the browser revalidates the UI's files
   by their ETag instead of downloading them again.
 
+- The web UI's settings and room configuration share one row layout:
+  the label at the left and the control at the right, a text field or
+  a long choice on a line of its own (docs/screenshots).
+
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.

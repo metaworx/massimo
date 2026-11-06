@@ -31,7 +31,8 @@ colour inputs line up,
 Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
-is not a scheme shows a message. Any console error, page error or horizontal scroll fails the
+is not a scheme shows a message. On every page it opens, every button
+has an accessible name (text, aria-label or title). Any console error, page error or horizontal scroll fails the
 test.
 """
 import json
@@ -65,6 +66,18 @@ def check(cond, what):
     print(("ok    " if cond else "FAIL  ") + what)
     if not cond:
         failures.append(what)
+
+
+def named_buttons(page, label, where):
+    """Every button of the page has an accessible name: its text, an
+    aria-label, an aria-labelledby or a title. The scripts build most of
+    them, so this runs on every page the test opens."""
+    nameless = page.evaluate("""() => [...document.querySelectorAll('button')].filter((b) => {
+      const by = (b.getAttribute('aria-labelledby') || '').split(/\\s+/).map((id) => document.getElementById(id))
+        .filter((e) => e).map((e) => e.textContent).join('');
+      return ![b.textContent, b.getAttribute('aria-label'), b.title, by].some((n) => n && n.trim());
+    }).map((b) => b.outerHTML.slice(0, 160))""")
+    check(not nameless, f"{label}: every button has a name on {where}" + (f": {nameless}" if nameless else ""))
 
 
 def wait_until(page, expr, seconds):
@@ -197,6 +210,7 @@ def cubes(page, label, lang):
     panel.locator("summary").click()
     form = panel.locator("form")
     check(form.is_visible(), f"{label}: the Cube's panel opens")
+    named_buttons(page, label, "a Cube's panel")
     form.locator("input[name=name]").fill("Renamed")
     form.locator("button[type=submit]").click()
     check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.name === 'Renamed')", 5), f"{label}: the new name is saved")
@@ -332,6 +346,7 @@ def appearance(page, label, lang, tmp):
     check(editor.is_visible() and editor.locator("input[type=color]").count() == 38, f"{label}: editor with a colour input per token and set")
     check(editor.locator(".contrast.ok").count() == 14, f"{label}: contrast badges, all ok for a built-in scheme")
     check(editor.locator("#scheme-delete").is_disabled(), f"{label}: no Delete for a built-in scheme")
+    named_buttons(page, label, "the scheme editor")
     scheme_hex(page, label, lang)
     page.locator("#scheme-light-bg").fill("#112233")
     check(bg() == "#112233", f"{label}: the editor applies live")
@@ -385,10 +400,12 @@ def run(page, label, lang):
     page.wait_for_selector(".room", timeout=10000)
     check(page.locator(".room").count() > 0, f"{label}: room tiles shown")
     check(page.evaluate("document.documentElement.lang") == lang, f"{label}: page language {lang}")
+    named_buttons(page, label, "the rooms")
     tile = page.locator(".room").first
     tile.locator(".room-name-btn").click()
     page.wait_for_selector(".room .device", timeout=5000)
     check(tile.locator(".device").count() > 0, f"{label}: device list opens")
+    named_buttons(page, label, "a device list")
     tile.locator(".tile-cog").click()
     page.wait_for_selector(".room .config-body", timeout=5000)
     tabs = tile.locator(".config-tabs [role=tab]")
@@ -396,15 +413,18 @@ def run(page, label, lang):
     for name in tabs.all_text_contents():
         tabs.filter(has_text=name).first.click()
         check(tile.locator(".config-body").is_visible(), f"{label}: tab {name.strip()}")
+        named_buttons(page, label, f"the configuration tab {name.strip()}")
     tile.locator(".config-tabs .close").click()
     check(tile.locator(".config-body").count() == 0, f"{label}: configuration closes")
     width = page.viewport_size["width"]
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the tiles")
     page.locator("#view-log").click()
     check(page.locator("#logview").is_visible(), f"{label}: log opens")
+    named_buttons(page, label, "the log")
     page.locator("#view-settings").click()
     check(page.locator("#settings").is_visible(), f"{label}: settings open")
     page.wait_for_timeout(500)
+    named_buttons(page, label, "the settings")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the settings")
     update_busy(page, label)
     page.locator("#view-tiles").click()

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, core: API access with the token, the DOM and
-// formatting helpers the other files share (textEl, button,
-// submitButton, badgeEl, iconEl, fmtTemp, ageEl; fmtNum is in i18n.js),
+// The Massimo web UI, core: API access with the token, the helpers the
+// other files share that read the page's state (fmtTemp, ageEl,
+// helpParts; fmtNum is in i18n.js, the components in components.js),
 // settings, the header with the Cube clock, loading of cubes and rooms,
 // polling and the event stream with its tickets. The tiles and their
 // actions are in tiles.js.
@@ -124,56 +124,10 @@ async function deviceDetail(rf) {
 
 // --- helpers ----------------------------------------------------------
 
-function clear(el) {
-  while (el.firstChild) el.removeChild(el.firstChild);
-}
-
-function textEl(tag, text, cls) {
-  const el = document.createElement(tag);
-  el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-}
-
-function button(label, cls, onClick) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.textContent = label;
-  if (cls) b.className = cls;
-  b.addEventListener("click", onClick);
-  return b;
-}
-
 function showMessage(text, ok) {
   const m = $("message");
   m.textContent = text;
   m.className = "message " + (ok ? "ok" : "bad");
-}
-
-// submitButton is a form's primary submit button.
-function submitButton(label) {
-  const b = document.createElement("button");
-  b.type = "submit";
-  b.className = "primary";
-  b.textContent = label;
-  return b;
-}
-
-// badgeEl is a small outlined or filled label (.flag) of a kind: ok,
-// warn, bad, mode, fill-ok, fill-warn, fill-bad.
-function badgeEl(text, kind) {
-  return textEl("span", text, "flag " + kind);
-}
-
-// iconEl returns a small inline icon referencing a symbol of the page.
-function iconEl(symbol, cls) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", cls);
-  svg.setAttribute("aria-hidden", "true");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", "#" + symbol);
-  svg.appendChild(use);
-  return svg;
 }
 
 // fmtTemp is a temperature with one decimal and a unit ("°C" unless
@@ -289,13 +243,8 @@ let helpSeq = 0;
 function helpParts(key, label) {
   const text = textEl("p", t("help." + key), "help-text");
   text.id = "help-" + key + "-" + ++helpSeq;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "help-btn";
+  const btn = iconButton("icon-help", t("help.button", { label }), null, { cls: "help-btn", title: t("help.title"), iconCls: "hi" });
   btn.setAttribute("aria-controls", text.id);
-  btn.setAttribute("aria-label", t("help.button", { label }));
-  btn.title = t("help.title");
-  btn.appendChild(iconEl("icon-help", "hi"));
   const show = (on) => {
     text.classList.toggle("hidden", !on);
     btn.classList.toggle("active", on);
