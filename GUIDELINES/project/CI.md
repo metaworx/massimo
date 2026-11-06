@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.3.1)
+# Massimo — CI Conventions (v1.3.2)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,7 +33,7 @@ There is no second pipeline.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI smoke test, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release |
 
@@ -93,6 +93,12 @@ Where CI differs, and why:
   on top of `tools/ui-test/requirements.txt`, which keeps its minimum versions,
   because the browsers in the image fit that Playwright version only:
   the image's tag and the pin move together.
+  The suite's step sets `UI_TEST_REQUIRED=1`,
+  so that a missing Playwright, pytest or pytest-playwright fails the job
+  instead of skipping the tests, as `run.sh` does on a developer's machine.
+  When a step fails, the job uploads `tools/ui-test/results/`,
+  where pytest-playwright keeps a failed test's trace, screenshot and video,
+  so that a failure on the runner can be replayed rather than retold.
   The smoke test runs in the same job, before the captures,
   because Playwright and Chromium are there anyway;
   it is not part of the test gate's job,

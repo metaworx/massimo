@@ -13,6 +13,10 @@ the next minor, a fix counts the suffix up.
 - CI runs once per commit (a push to `main` or a pull request), and the
   Screenshots job runs in the Playwright image, without apt.
 
+- The web UI's tests are a pytest suite (tools/ui-test/); CI's
+  Screenshots job fails when they cannot run instead of skipping them,
+  and keeps a failed test's trace, screenshot and video as an artifact.
+
 ## [0.8.0-alpha.1] - 2026-11-06
 
 ### Added
