@@ -488,6 +488,11 @@ so before switching TLS off, run the server once with `-hsts 0` over TLS,
 which clears it.
 A reverse proxy with TLS in front works as before and sets its own HSTS;
 the UI needs the same token as the API either way.
+`-trusted-proxies <addresses or CIDRs>` tells the server which peers'
+`X-Forwarded-For` to believe,
+so the lockout and the first-owner form see the real client,
+and the page works under a path prefix such as `/massimo/`
+([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
 Every six hours (`-refresh`,

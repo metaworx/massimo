@@ -40,7 +40,7 @@ let i18nSeq = 0; // counts the language changes; only the latest is applied
 // returns a promise of it; a failed fetch is tried again next time.
 function loadLanguage(lang) {
   if (!i18nLoads[lang]) {
-    const path = "/ui/i18n/" + lang + ".json";
+    const path = "ui/i18n/" + lang + ".json";
     i18nLoads[lang] = fetch(path)
       .then((resp) => {
         if (!resp.ok) throw new Error(path + ": " + resp.status + " " + resp.statusText);

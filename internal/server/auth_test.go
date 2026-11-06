@@ -174,3 +174,50 @@ func TestFailedTokensLockTheAddressOut(t *testing.T) {
 		t.Fatalf("healthz during the lockout: %d", r.StatusCode)
 	}
 }
+
+func TestClientIP(t *testing.T) {
+	proxies, err := ParseTrustedProxies("127.0.0.1, 10.0.0.0/8 ::1")
+	if err != nil || len(proxies) != 3 || proxies[1].String() != "10.0.0.0/8" || proxies[0].String() != "127.0.0.1/32" {
+		t.Fatalf("parse: %v %v", proxies, err)
+	}
+	for _, bad := range []string{"host", "10.0.0.0/33", "192.0.2.1:80"} {
+		if _, err := ParseTrustedProxies(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	plain := &Server{opts: Options{}}
+	trusting := &Server{opts: Options{TrustedProxies: proxies}}
+	req := func(remote, xff, real string) *http.Request {
+		r := httptest.NewRequest("GET", "/api/v1/cubes", nil)
+		r.RemoteAddr = remote
+		if xff != "" {
+			r.Header.Set("X-Forwarded-For", xff)
+		}
+		if real != "" {
+			r.Header.Set("X-Real-IP", real)
+		}
+		return r
+	}
+	for _, c := range []struct {
+		s                 *Server
+		remote, xff, real string
+		want              string
+	}{
+		{plain, "192.0.2.10:1234", "", "", "192.0.2.10"},
+		{plain, "127.0.0.1:1234", "192.0.2.10", "192.0.2.11", "127.0.0.1"}, // headers ignored without trusted proxies
+		{trusting, "192.0.2.10:1234", "192.0.2.99", "", "192.0.2.10"},      // not from a proxy
+		{trusting, "127.0.0.1:1234", "192.0.2.10", "", "192.0.2.10"},
+		{trusting, "127.0.0.1:1234", "192.0.2.10, 10.1.2.3", "", "192.0.2.10"},     // a chain through two trusted proxies
+		{trusting, "127.0.0.1:1234", "198.51.100.1, 192.0.2.10", "", "192.0.2.10"}, // the rightmost client
+		{trusting, "127.0.0.1:1234", "10.1.2.3", "192.0.2.12", "192.0.2.12"},       // every hop trusted: X-Real-IP
+		{trusting, "127.0.0.1:1234", "", "192.0.2.12", "192.0.2.12"},
+		{trusting, "127.0.0.1:1234", "", "", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "garbage", "", "127.0.0.1"},
+		{trusting, "[::1]:1234", "2001:db8::10", "", "2001:db8::10"},
+		{trusting, "[::ffff:127.0.0.1]:1234", "192.0.2.10", "", "192.0.2.10"},
+	} {
+		if got := c.s.clientIP(req(c.remote, c.xff, c.real)); got != c.want {
+			t.Errorf("%s xff=%q real=%q: %q, want %q", c.remote, c.xff, c.real, got, c.want)
+		}
+	}
+}

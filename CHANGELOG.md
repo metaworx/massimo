@@ -26,6 +26,10 @@ the next minor, a fix counts the suffix up.
   DNS-01 through a hook that sets the TXT record, wildcards included,
   no open port; `packaging/acme-dns-hooks/infomaniak.sh` for Infomaniak.
 
+- `massimo serve -trusted-proxies <addresses or CIDRs>`: the client's
+  address from `X-Forwarded-For` behind a reverse proxy, the stream
+  unbuffered, the UI under a path prefix (docs/reverse-proxy.md).
+
 ### Changed
 
 - CI runs once per commit (a push to `main` or a pull request), and the

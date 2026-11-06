@@ -1043,9 +1043,11 @@ table (NOTE StoreUsers v1.0: commands history).
    one-time form in the UI,
    which works while there are no users and is answered only to clients on the
    local network: the request's own address is loopback,
-   a private range (RFC 1918) or link-local; `X-Forwarded-For` is not trusted,
-   so behind a reverse proxy the form is not offered and `massimo user add` on
-   the box is the way.
+   a private range (RFC 1918) or link-local;
+   `X-Forwarded-For` is believed only from the proxies `-trusted-proxies` names
+   (docs/reverse-proxy.md),
+   so behind one of them the form is offered to local-network clients,
+   and behind any other `massimo user add` on the box is the way.
 5. Retention defaults: events 30 days, automatic backups 90 days,
    manual and before-restore backups 365 days; and whether `events`
    should also be capped by size for the SD card.

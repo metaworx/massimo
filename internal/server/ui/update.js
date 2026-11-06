@@ -67,7 +67,7 @@ function renderUpdate(u) {
 
 async function loadUpdate(refresh) {
   try {
-    const u = await api("GET", "/api/v1/update" + (refresh ? "?refresh=1" : ""));
+    const u = await api("GET", "api/v1/update" + (refresh ? "?refresh=1" : ""));
     updState.info = u;
     renderUpdate(u);
     return u;
@@ -121,7 +121,7 @@ function startUpdate() {
 async function runUpdate(u) {
   setUpdateBusy(true);
   try {
-    await api("POST", "/api/v1/update", {});
+    await api("POST", "api/v1/update", {});
     $("update-helper").textContent = t("update.requested", { version: u.latest });
     updState.grace = Date.now() + 30 * 1000;
     followUpdate();

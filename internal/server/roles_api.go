@@ -133,7 +133,7 @@ func (s *Server) postRole(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	s.log.Info("role added", "role", created.Key, "remote", clientIP(r))
+	s.log.Info("role added", "role", created.Key, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusCreated, viewRole(created))
 	return nil
 }
@@ -163,7 +163,7 @@ func (s *Server) putRole(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	s.log.Info("role changed", "role", changed.Key, "remote", clientIP(r))
+	s.log.Info("role changed", "role", changed.Key, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, viewRole(changed))
 	return nil
 }
@@ -179,7 +179,7 @@ func (s *Server) deleteRole(w http.ResponseWriter, r *http.Request) error {
 	if err := st.DeleteRole(r.Context(), key, byOf(r)); err != nil {
 		return userFail(err)
 	}
-	s.log.Info("role removed", "role", key, "remote", clientIP(r))
+	s.log.Info("role removed", "role", key, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "key": key})
 	return nil
 }
@@ -203,7 +203,7 @@ func (s *Server) putRoleDisabled(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	s.log.Info("role disabled set", "role", key, "disabled", disabled, "remote", clientIP(r))
+	s.log.Info("role disabled set", "role", key, "disabled", disabled, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, viewRole(ro))
 	return nil
 }
@@ -267,7 +267,7 @@ func (s *Server) putCapability(w http.ResponseWriter, r *http.Request) error {
 	if err := st.SetCapabilityDisabled(r.Context(), key, disabled, byOf(r)); err != nil {
 		return userFail(err)
 	}
-	s.log.Info("capability disabled set", "capability", key, "disabled", disabled, "remote", clientIP(r))
+	s.log.Info("capability disabled set", "capability", key, "disabled", disabled, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, capabilityView{Key: key, Disabled: disabled})
 	return nil
 }

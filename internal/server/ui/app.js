@@ -66,7 +66,7 @@ function loadSettings() {
 // --- API --------------------------------------------------------------
 
 function base() {
-  return "/api/v1/cubes/" + encodeURIComponent(state.serial);
+  return "api/v1/cubes/" + encodeURIComponent(state.serial);
 }
 
 async function api(method, path, body) {
@@ -388,7 +388,7 @@ function applySettings() {
 // --- loading ----------------------------------------------------------
 
 async function loadCubes() {
-  const all = (await api("GET", "/api/v1/cubes")) || [];
+  const all = (await api("GET", "api/v1/cubes")) || [];
   state.cubes = all.filter(isConfigured);
   state.found = all.filter((c) => !isConfigured(c));
   renderFound();
@@ -408,7 +408,7 @@ async function loadCubes() {
 // loadTimeZone reads the Cube's daylight-saving rules once per Cube.
 async function loadTimeZone(serial) {
   try {
-    const detail = await api("GET", "/api/v1/cubes/" + encodeURIComponent(serial));
+    const detail = await api("GET", "api/v1/cubes/" + encodeURIComponent(serial));
     const cfg = detail && detail.config;
     state.tz[serial] = cfg && cfg.tz_winter ? { winter: cfg.tz_winter, summer: cfg.tz_summer } : false;
   } catch (e) {
@@ -467,7 +467,7 @@ async function discoverCubes() {
   showSearch(t("discover.searching"));
   renderCubeSelect();
   try {
-    const res = (await api("POST", "/api/v1/cubes/discover")) || {};
+    const res = (await api("POST", "api/v1/cubes/discover")) || {};
     await loadCubes();
     const n = (res.found || []).filter((c) => !isConfigured(c)).length;
     showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
@@ -605,7 +605,7 @@ function renderTLS(tls) {
 async function checkVersion() {
   let h;
   try {
-    h = await api("GET", "/healthz");
+    h = await api("GET", "healthz");
   } catch (e) {
     return;
   }

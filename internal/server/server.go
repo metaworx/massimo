@@ -66,6 +66,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -185,6 +186,10 @@ type Options struct {
 	// proxy terminates TLS and sets it.
 	TLS      certs.Source
 	HSTSDays int
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For and
+	// X-Real-IP name the client (clientIP); empty, the headers are
+	// ignored.
+	TrustedProxies []netip.Prefix
 }
 
 // ProxyListener describes one Cube-protocol listener of the server.
@@ -613,7 +618,7 @@ func (s *Server) routes() {
 			var au *auditInfo
 			if audited && action != "" && s.opts.Store != nil {
 				au, w, r = s.beginAudit(w, r, pattern, action)
-				defer func() { s.endAudit(r.Context(), au, clientIP(r)) }()
+				defer func() { s.endAudit(r.Context(), au, s.clientIP(r)) }()
 			}
 			p, ok := s.authorize(w, r, capability)
 			if au != nil {
@@ -1142,6 +1147,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	}()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	// nginx would hold the stream back until its buffer is full; this
+	// header switches that off, and Caddy streams on its own.
+	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	// Current state first, so a client needs no separate fetch.
 	for _, d := range s.devices(rt) {

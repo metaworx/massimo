@@ -27,7 +27,7 @@ function capLabel(c) {
 
 async function loadRoles() {
   if (!hasCap("roles")) return;
-  const res = (await api("GET", "/api/v1/roles")) || {};
+  const res = (await api("GET", "api/v1/roles")) || {};
   rolesUI.roles = res.roles || [];
   rolesUI.capabilities = res.capabilities || [];
   usersUI.roles = rolesUI.roles;
@@ -72,7 +72,7 @@ function setOf(grid) {
 function removeRole(r, actions) {
   const box = confirmBox(t("roles.removeConfirm", { role: r.key }), { yes: t("roles.remove"), no: t("action.keep") }, () => {
     rolesUI.open.delete(r.key);
-    roleAction(() => api("DELETE", "/api/v1/roles/" + encodeURIComponent(r.key)), t("roles.removed", { role: r.key }), r.key);
+    roleAction(() => api("DELETE", "api/v1/roles/" + encodeURIComponent(r.key)), t("roles.removed", { role: r.key }), r.key);
   }, () => {
     box.replaceWith(actions);
     actions.querySelector(".remove-role").focus();
@@ -113,7 +113,7 @@ function rolePanel(r) {
   toggle.textContent = t(r.disabled ? "roles.enable" : "roles.disable");
   toggle.classList.toggle("hidden", owner);
   toggle.addEventListener("click", () => {
-    roleAction(() => api("PUT", "/api/v1/roles/" + encodeURIComponent(r.key) + "/disabled", { disabled: !r.disabled }),
+    roleAction(() => api("PUT", "api/v1/roles/" + encodeURIComponent(r.key) + "/disabled", { disabled: !r.disabled }),
       t(r.disabled ? "roles.enabledNow" : "roles.disabledNow", { role: r.key }), r.key);
   });
   const remove = actions.querySelector(".remove-role");
@@ -132,7 +132,7 @@ function rolePanel(r) {
       rolesMsg(t("users.unchanged"), true);
       return;
     }
-    roleAction(() => api("PUT", "/api/v1/roles/" + encodeURIComponent(r.key), body), t("roles.saved", { role: r.key }), r.key);
+    roleAction(() => api("PUT", "api/v1/roles/" + encodeURIComponent(r.key), body), t("roles.saved", { role: r.key }), r.key);
   });
   return d;
 }
@@ -156,7 +156,7 @@ function newRoleForm() {
     const body = { key, capabilities: setOf(grid) };
     const n = form.querySelector("input[name=name]").value.trim();
     if (n) body.name = n;
-    roleAction(() => api("POST", "/api/v1/roles", body), t("roles.created", { role: key }), key).then((ok) => {
+    roleAction(() => api("POST", "api/v1/roles", body), t("roles.created", { role: key }), key).then((ok) => {
       if (ok) {
         clear($("role-new"));
         $("role-add").classList.remove("hidden");
@@ -174,7 +174,7 @@ function renderCapabilities() {
   const grid = elem("div", "cap-grid");
   for (const c of rolesUI.capabilities) {
     const sw = switchEl(capLabel(c.key), !c.disabled, (on) => {
-      roleAction(() => api("PUT", "/api/v1/capabilities/" + encodeURIComponent(c.key), { disabled: !on }),
+      roleAction(() => api("PUT", "api/v1/capabilities/" + encodeURIComponent(c.key), { disabled: !on }),
         t(on ? "roles.capEnabled" : "roles.capDisabled", { cap: capLabel(c.key) }), c.key);
     }, "global:" + c.key);
     sw.title = c.key;
