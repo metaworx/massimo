@@ -232,7 +232,7 @@ body.expert #clock-plain { display: none; }
 .message.ok { border-color: var(--ok); }
 .message.bad { border-color: var(--bad); }
 
-/* inline panels: settings, house, vacation, delete confirm */
+/* inline panels: settings, house, vacation, a confirmation (confirmBox) */
 .panel {
   width: 100%;
   background: var(--card);
@@ -353,8 +353,9 @@ input[type="datetime-local"] { max-width: 100%; }
 button.subtle { color: var(--muted); }
 .house .panel { margin: 0 14px 14px; width: auto; }
 .room .panel { margin: 8px 14px 6px; width: auto; }
-.delete-confirm, .confirm-box { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.delete-confirm .actions, .confirm-box .actions { margin: 0; }
+.confirm-box { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.confirm-box .actions { margin: 0; }
+.room-confirm:empty { display: none; }
 
 /* tiles */
 .tiles {
