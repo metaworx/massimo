@@ -31,9 +31,9 @@ the next minor, a fix counts the suffix up.
   the label at the left and the control at the right, a text field or
   a long choice on a line of its own (docs/screenshots).
 
-- The web UI asks in the page, translated, before it removes a Cube,
-  instead of in a browser dialog; Settings → Cubes lists a found Cube
-  with its firmware and age, as the header does.
+- The web UI asks in the page, translated, before it removes a Cube or
+  installs an update, instead of in a browser dialog; Settings → Cubes
+  lists a found Cube with its firmware and age, as the header does.
 
 - The release workflow reads the update channel from the tag's name
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`

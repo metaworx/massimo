@@ -32,7 +32,8 @@ colour inputs line up,
 Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
-is not a scheme shows a message. On every page it opens, every button
+is not a scheme shows a message. Update asks in the page, and Cancel
+sends nothing. On every page it opens, every button
 has an accessible name (text, aria-label or title). Any console error, page error or horizontal scroll fails the
 test.
 """
@@ -433,6 +434,7 @@ def run(page, label, lang):
     named_buttons(page, label, "the settings")
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the settings")
     update_busy(page, label)
+    update_confirm(page, label)
     page.locator("#view-tiles").click()
     check(page.locator(".room").first.is_visible(), f"{label}: back to the tiles")
 
@@ -458,6 +460,23 @@ def update_busy(page, label):
         status=200, content_type="application/json", body=update_json("done", "v0.0.1-test", False)))
     check(wait_until(page, "!document.getElementById('update-check').disabled && !document.getElementById('update-btn').disabled", 10),
           f"{label}: Software buttons back once the helper is done")
+    page.unroute("**/api/v1/update*")
+
+
+def update_confirm(page, label):
+    """Update asks in the Software section, not in a browser dialog, and
+    Cancel takes the question back without a request."""
+    posts = []
+    page.route("**/api/v1/update*", lambda route: posts.append(1) if route.request.method == "POST" else route.fulfill(
+        status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True)))
+    page.locator("#update-check").click()
+    btn = page.locator("#update-btn")
+    btn.wait_for(state="visible")
+    btn.click()
+    box = page.locator(".update .confirm-box")
+    check(box.is_visible() and "v0.0.1-test" in box.inner_text() and btn.is_hidden(), f"{label}: Update asks in the page")
+    box.locator(".confirm-no").click()
+    check(page.locator(".update .confirm-box").count() == 0 and btn.is_visible() and not posts, f"{label}: Cancel takes it back, nothing sent")
     page.unroute("**/api/v1/update*")
 
 
