@@ -1022,12 +1022,44 @@ then a re-read of its C line.
 A device whose C line names another room (paired long ago and never listed) is
 first unlinked from that room with 0x21 remove link partner and 0x23 remove group,
 as in a move.
-The room's temperatures,
-valve settings and week programme are not copied to the new device,
-unlike in the original software, which sends 0x40 auto, 0x11,
-0x12 and 0x10 afterwards:
-use `PUT …/rooms/{id}/config` and `PUT …/rooms/{id}/program` for that.
-The answer is `{"ok": true, "budget": {…}}`.
+
+A thermostat put into a room, by an add or a move,
+then gets the room's settings, as the original software gives them to a device
+it pairs or moves:
+0x40 auto with temperature 0, to the device directly;
+after a wakeup of the room,
+0x11 to every thermostat of the room, the device included,
+with the room's comfort, eco, maximum, minimum and window-open temperatures
+and window-open minutes, each keeping its own temperature offset;
+after a wakeup,
+0x12 with the room's boost, descaling and valve settings to the device;
+after a wakeup, one 0x10 per day of the room's week programme that differs from
+the device's own, then 0x11 to the device once more.
+The room's settings are those of its first other thermostat,
+radiator thermostats first;
+where that is a wall thermostat,
+the window-open minutes, descaling and valve limits it does not store are the
+original software's defaults.
+A room without another thermostat has nothing to copy,
+and the device gets 0x40 alone;
+a shutter contact or an eco switch gets nothing.
+`"copy": false` in the body skips the copy, which `name` alone never starts.
+The copy costs radio budget,
+0x11 and 0x12 about 3 % each and 0x10 about 8 % per day,
+so a factory-fresh thermostat takes about 65 % of an hour's budget with every day sent;
+the queue waits for the budget as for every write.
+
+The answer is
+
+```json
+{"ok": true, "copied": {"temperatures": ["14d08e", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
+```
+
+with `copied` absent when nothing was copied.
+The first command of the copy that fails ends it with its error (`502`,
+`409` when superseded), which says that the device is in the room:
+what was sent until then stays sent,
+and `PUT …/rooms/{id}/config` and `PUT …/rooms/{id}/program` complete it.
 
 ### PUT /api/v1/cubes/{sn}/devices/{rf}/config
 
@@ -1156,7 +1188,8 @@ and `pairing_ended`.
 A joined device is in the device list right after (`GET …/devices`,
 with `"unlisted": true` and no name;
 the server fetches its configuration with `c:`) but in no room and not under `rooms`.
-Put it into a room with `PUT …/devices/{rf}` and `{"name": "…", "room_id": N}` (above).
+Put it into a room with `PUT …/devices/{rf}` and `{"name": "…", "room_id": N}` (above),
+which also gives it the room's settings.
 A client pairing a device therefore: `POST …/pairing`,
 waits for the `paired` event (or polls `GET …/pairing`),
 asks the user for a room and a name, `PUT …/devices/{rf}`,

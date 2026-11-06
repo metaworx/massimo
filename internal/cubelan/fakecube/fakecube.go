@@ -27,6 +27,9 @@ type Server struct {
 	NTP      []string
 	Duty     int  // duty cycle reported in S replies (0..100)
 	Discard  bool // make S replies report the command as discarded
+	// DiscardIf, when set, makes the S reply to each s: or r: line it
+	// reports report the command as discarded.
+	DiscardIf func(cube.Message) bool
 	// Pair, when set, is a device that joins during inclusion mode.
 	Pair *Pairing
 
@@ -240,7 +243,7 @@ func (s *Server) serve(conn net.Conn) {
 			}
 		case 's', 'r':
 			d := 0
-			if s.Discard {
+			if s.Discard || s.DiscardIf != nil && s.DiscardIf(m) {
 				d = 1
 			}
 			reply = fmt.Sprintf("S:%02x,%d,31\r\n", s.Duty, d)

@@ -4,14 +4,18 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
 
@@ -148,10 +152,12 @@ func TestConfigEndpoints(t *testing.T) {
 	}
 
 	// Move the device to room 1: leave (group remove), join (links with the
-	// room's radiator both ways, group set), metadata.
+	// room's radiator both ways, group set), metadata; the copy of the
+	// room's settings, which follows by default, has tests of its own
+	// (TestAddCopiesTheRoomsSettings and those after it).
 	nS = len(sLines(fc))
 	nM := countType(fc, 'm')
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf, `{"room_id":1}`); code != 200 {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf, `{"room_id":1,"copy":false}`); code != 200 {
 		t.Fatalf("move: %d %v", code, out)
 	}
 	lines = sLines(fc)
@@ -166,5 +172,298 @@ func TestConfigEndpoints(t *testing.T) {
 		if d.RFAddress == dev && d.RoomID != 1 {
 			t.Fatalf("device still in room %d", d.RoomID)
 		}
+	}
+}
+
+// The devices the copy tests add to the fixture: a wall thermostat in
+// room 1 beside 14d08e, a radiator thermostat paired but in no room,
+// whose Saturday and Sunday are room 1's already, and a shutter contact
+// in no room.
+const (
+	copyWall    cube.RFAddress = 0x0c0d0e
+	copyNew     cube.RFAddress = 0x0a0b0c
+	copyContact cube.RFAddress = 0x0d0e0f
+)
+
+// rawConfig decodes a C line of the greeting.
+func rawConfig(t *testing.T, greeting []cube.Message, rf cube.RFAddress) []byte {
+	t.Helper()
+	for _, g := range greeting {
+		if g.Type == 'C' && strings.HasPrefix(g.Data, rf.String()+",") {
+			raw, err := base64.StdEncoding.DecodeString(g.Data[7:])
+			if err != nil {
+				t.Fatal(err)
+			}
+			return raw
+		}
+	}
+	t.Fatalf("no C line for %s", rf)
+	return nil
+}
+
+// configLine is a C line for raw with the header's address, room and
+// serial set.
+func configLine(raw []byte, rf cube.RFAddress, room uint8, serial string) cube.Message {
+	raw = append([]byte(nil), raw...)
+	b := rf.Bytes()
+	copy(raw[1:4], b[:])
+	raw[5] = room
+	copy(raw[8:18], serial)
+	return cube.Message{Type: 'C', Data: rf.String() + "," + base64.StdEncoding.EncodeToString(raw)}
+}
+
+// copyGreeting is the fixture with the copy tests' devices.
+func copyGreeting(t *testing.T) []cube.Message {
+	t.Helper()
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := rawConfig(t, greeting, 0x14d08e)  // room 1's radiator thermostat
+	tmpl := rawConfig(t, greeting, 0x1514b6) // room 6's, one programme every day
+	// A wall thermostat: comfort 21, eco 17, maximum 30.5, minimum 4.5,
+	// 14d08e's week programme, offset -0.5, window open 12.0, boost 5 min 80 %.
+	wall := append([]byte{0xce, 0, 0, 0, byte(cube.DeviceWallThermostat), 0, 0x10, 0xff}, make([]byte, 10)...)
+	wall = append(wall, 42, 34, 61, 9)
+	wall = append(wall, ref[0x1d:0x1d+cube.WeekProgramSize]...)
+	wall = append(wall, 6, 24, 0x30)
+	// The new device: 1514b6's settings, room 1's Saturday and Sunday.
+	fresh := append([]byte(nil), tmpl...)
+	copy(fresh[0x1d:0x1d+2*2*cube.DaySlots], ref[0x1d:])
+	contact := append([]byte{0x11, 0, 0, 0, byte(cube.DeviceShutterContact), 0, 0x10, 0xa0}, make([]byte, 10)...)
+	var out []cube.Message
+	for _, g := range greeting {
+		switch g.Type {
+		case 'M':
+			p, err := cube.ParseMetadataPart(g.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			md, err := cube.ParseMetadata([]cube.MetadataPart{p})
+			if err != nil {
+				t.Fatal(err)
+			}
+			md.Devices = append(md.Devices, cube.DeviceMeta{Type: cube.DeviceWallThermostat, RFAddress: copyWall, Serial: "NEQ0000002", Name: "Wall", RoomID: 1})
+			enc, err := md.Encode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			g = cube.Message{Type: 'M', Data: "00,01," + base64.StdEncoding.EncodeToString(enc)}
+		case 'L':
+			out = append(out, configLine(wall, copyWall, 1, "NEQ0000002"), configLine(fresh, copyNew, 0, "TEQ0000001"),
+				configLine(contact, copyContact, 0, "IEQ0000003"))
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+// startCopyCube starts a server over a fake Cube with copyGreeting; mod
+// changes the fake before it starts.
+func startCopyCube(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, *httptest.Server, *Server) {
+	t.Helper()
+	fc := &fakecube.Server{Greeting: copyGreeting(t)}
+	if mod != nil {
+		mod(fc)
+	}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	waitFor(t, "the cube", func() bool {
+		var c cubeView
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+	})
+	return fc, ts, s
+}
+
+// lineStrings writes protocol lines as the Cube received them.
+func lineStrings(lines []cube.Message) []string {
+	var out []string
+	for _, l := range lines {
+		out = append(out, l.String())
+	}
+	return out
+}
+
+// sameLines fails the test where got and want differ; a want of "m:"
+// stands for any metadata write.
+func sameLines(t *testing.T, got []cube.Message, want []string) {
+	t.Helper()
+	g := lineStrings(got)
+	if len(g) != len(want) {
+		t.Fatalf("cube received %d lines, want %d:\n%s", len(g), len(want), strings.Join(g, "\n"))
+	}
+	for i := range want {
+		if want[i] == "m:" && got[i].Type == 'm' {
+			continue
+		}
+		if g[i] != want[i] {
+			t.Fatalf("line %d: %s, want %s", i, g[i], want[i])
+		}
+	}
+}
+
+// roomTemps is room 1's 0x11 for one device: 14d08e's values with the
+// device's own offset.
+func roomTemps(t *testing.T, rf cube.RFAddress, offset float64) string {
+	t.Helper()
+	m, err := cube.CmdSetTemperatures(cube.Target{RFAddress: rf}, cube.TemperatureSettings{Comfort: 22, Eco: 15, Max: 30.5, Min: 4.5, Offset: offset,
+		WindowOpen: 5, WindowOpenMinutes: 15})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m.String()
+}
+
+// The new radiator thermostat put into room 1 (a radiator and a wall
+// thermostat): the links and the group, the metadata, the re-read, then
+// the room's settings as the original software sends them: 0x40 auto,
+// 0x11 to the room's three thermostats, 0x12, and the five days that
+// differ followed by 0x11 again.
+func TestAddCopiesTheRoomsSettings(t *testing.T) {
+	fc, ts, s := startCopyCube(t, nil)
+	const base = "/api/v1/cubes/KEQ0537249"
+	before := len(fc.Received())
+	code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"Neu","room_id":1}`)
+	if code != 200 {
+		t.Fatalf("add to room 1: %d %v", code, out)
+	}
+	mode, _ := cube.CmdSetTemperature(cube.Target{RFAddress: copyNew}, 0, cube.ModeAuto, cube.Until{})
+	valve, _ := cube.CmdSetValveConfig(cube.Target{RFAddress: copyNew}, cube.ValveSettings{BoostMinutes: 5, BoostValvePct: 80, DecalcDay: cube.Saturday,
+		DecalcHour: 12, MaxValvePct: 100})
+	want := []string{"z:1e,G,01",
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x14d08e, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdSetGroup(copyNew, 1, false).String(),
+		"m:", "c:0a0b0c",
+		mode.String(),
+		"z:1e,G,01", roomTemps(t, 0x14d08e, 0), roomTemps(t, copyNew, 0), roomTemps(t, copyWall, -0.5),
+		"z:1e,G,01", valve.String(),
+		"z:1e,G,01"}
+	prog := s.cubes["keq0537249"].client.Snapshot().Config(0x14d08e).Thermostat.WeekProgram
+	for _, d := range []cube.Weekday{cube.Monday, cube.Tuesday, cube.Wednesday, cube.Thursday, cube.Friday} {
+		ls, err := cube.CmdSetDayProgram(cube.Target{RFAddress: copyNew}, d, prog[d])
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, lineStrings(ls)...)
+	}
+	want = append(want, roomTemps(t, copyNew, 0))
+	sameLines(t, fc.Received()[before:], want)
+	copied, _ := out["copied"].(map[string]any)
+	if temps, _ := copied["temperatures"].([]any); len(temps) != 3 || temps[0] != "14d08e" || temps[1] != "0a0b0c" || temps[2] != "0c0d0e" ||
+		copied["valve"] != true || copied["days"] != float64(5) {
+		t.Fatalf("copied %v", out["copied"])
+	}
+	if code, d := do(t, ts, "GET", base+"/devices/0a0b0c", ""); code != 200 || d["unlisted"] == true || d["room_id"] != float64(1) {
+		t.Fatalf("device after the add: %d %v", code, d)
+	}
+}
+
+// "copy": false puts the device into the room as before: the links, the
+// group, the metadata and the re-read, nothing of the room's settings.
+func TestAddWithoutCopy(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, nil)
+	before := len(fc.Received())
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1,"copy":false}`)
+	if code != 200 || out["copied"] != nil {
+		t.Fatalf("add without copy: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x14d08e, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdSetGroup(copyNew, 1, false).String(), "m:", "c:0a0b0c"})
+}
+
+// A shutter contact has no settings: it is linked and listed, nothing
+// is copied.
+func TestAddContactCopiesNothing(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, nil)
+	before := len(fc.Received())
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0d0e0f", `{"name":"Fenster","room_id":1}`)
+	if code != 200 || out["copied"] != nil {
+		t.Fatalf("add a contact: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}, true, copyContact, cube.DeviceShutterContact).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, 0x14d08e, cube.DeviceRadiatorThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyContact, cube.DeviceShutterContact).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdSetGroup(copyContact, 1, false).String(), "m:", "c:0d0e0f"})
+}
+
+// A move copies the new room's settings after the move's own lines:
+// 1514b6 from room 6 into room 1 gets 0x40, 0x11 goes to the room's
+// three thermostats, then 0x12, every day of room 1's programme (none is
+// 1514b6's) and 0x11 again.
+func TestMoveCopiesTheNewRoomsSettings(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, nil)
+	before := len(fc.Received())
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/1514b6", `{"room_id":1}`)
+	if code != 200 {
+		t.Fatalf("move: %d %v", code, out)
+	}
+	got := fc.Received()[before:]
+	reread := -1
+	for i, m := range got {
+		if m.String() == "c:1514b6" {
+			reread = i
+		}
+	}
+	if reread < 0 || got[reread-1].Type != 'm' {
+		t.Fatalf("no metadata and re-read before the copy: %v", lineStrings(got))
+	}
+	var kinds []string
+	for _, m := range got[reread+1:] {
+		if m.Type != 's' {
+			kinds = append(kinds, m.String())
+			continue
+		}
+		rc, err := cube.ParseRadioCommand(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kinds = append(kinds, fmt.Sprintf("%s:%02x", rc.Target.RFAddress, rc.Command))
+	}
+	want := "1514b6:40 z:1e,G,01 1514b6:11 14d08e:11 0c0d0e:11 z:1e,G,01 1514b6:12 z:1e,G,01 " + strings.Repeat("1514b6:10 ", 7) + "1514b6:11"
+	if strings.Join(kinds, " ") != want {
+		t.Fatalf("copy after the move:\n%s\nwant\n%s", strings.Join(kinds, " "), want)
+	}
+	if copied, _ := out["copied"].(map[string]any); copied["days"] != float64(7) || copied["valve"] != true {
+		t.Fatalf("copied %v", out["copied"])
+	}
+}
+
+// A discarded 0x11 ends the copy: the answer is the error, which says
+// the device is in the room, and nothing after it is sent.
+func TestCopyStopsAtADiscard(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) {
+		fc.DiscardIf = func(m cube.Message) bool {
+			rc, err := cube.ParseRadioCommand(m.Data)
+			return m.Type == 's' && err == nil && rc.Command == cube.RFSetTemperatures
+		}
+	})
+	const base = "/api/v1/cubes/KEQ0537249"
+	code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"room_id":1}`)
+	if msg, _ := out["error"].(string); code != 502 || !strings.Contains(msg, "device 0a0b0c is in room 1, but copying the room's settings stopped") {
+		t.Fatalf("a discarded 0x11: %d %v", code, out)
+	}
+	for _, l := range sLines(fc) {
+		if l[2] == cube.RFSetValveConfig || l[2] == cube.RFSetWeekProgram {
+			t.Fatalf("sent after the discard: % x", l)
+		}
+	}
+	if code, d := do(t, ts, "GET", base+"/devices/0a0b0c", ""); code != 200 || d["unlisted"] == true || d["room_id"] != float64(1) {
+		t.Fatalf("device after the failed copy: %d %v", code, d)
 	}
 }

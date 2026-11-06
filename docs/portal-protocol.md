@@ -342,6 +342,20 @@ by its time or by `x:`; the metadata does not change by pairing;
 commands such as `c:` work while the mode lasts.
 Massimo also ends the mode itself ten seconds after the requested time.
 
+Massimo gives a thermostat it puts into a room, after pairing or in a move
+(`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),
+the room's settings as in steps 4 to 7:
+0x40 auto with temperature 0 directly to the device (flags 0, room 0,
+as in the log above),
+0x11 to every thermostat of the room with the values of its first other thermostat,
+each keeping its own offset, 0x12 to the device,
+and 0x10 only for the days that differ from the device's own,
+then 0x11 to the device; `"copy": false` skips it.
+The order and the payloads are the original software's;
+that a device which was in a room before takes the direct 0x40 is *unverified*,
+since a direct 0x40 to a room member was discarded on 2026-11-04 (below),
+and the first command the Cube discards ends the copy.
+
 Moving a device to another room (same software,
 wall thermostat from room 4 to room 5): wakeup of the old room,
 0x23 remove group (`… 23 … 15667d 00 04`),

@@ -108,3 +108,39 @@ func TestMoveCommands(t *testing.T) {
 		t.Fatalf("out %+v in %+v", out, in)
 	}
 }
+
+// The copy of a room's settings: a thermostat alone in its room gets
+// 0x40 only, a shutter contact nothing, and 1514b6 put into room 1
+// takes 14d08e's settings, the 0x11 going to both thermostats.
+func TestCopyCommands(t *testing.T) {
+	_, w, _ := connect(t)
+	snap := w.Client.Snapshot()
+	steps, err := CopyCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, 6)
+	if err != nil || len(steps) != 1 || steps[0].Command.Key != "copy-mode:1514b6" || !steps[0].Copies.Empty() {
+		t.Fatalf("alone in its room: %+v %v", steps, err)
+	}
+	if steps, err := CopyCommands(snap, 0x1514b6, cube.DeviceShutterContact, 1); err != nil || steps != nil {
+		t.Fatalf("a contact: %+v %v", steps, err)
+	}
+	steps, err = CopyCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, 1)
+	if err != nil || len(steps) != 4 {
+		t.Fatalf("into room 1: %+v %v", steps, err)
+	}
+	temps, valve, prog := steps[1], steps[2], steps[3]
+	if !temps.Command.Wakeup || temps.Command.RoomID != 1 || len(temps.Command.Lines) != 2 ||
+		len(temps.Copies.Temperatures) != 2 || temps.Copies.Temperatures[0] != 0x1514b6 || temps.Copies.Temperatures[1] != 0x14d08e {
+		t.Fatalf("temperatures %+v", temps)
+	}
+	ref := snap.Config(0x14d08e).Thermostat
+	want, _ := cube.CmdSetTemperatures(cube.Target{RFAddress: 0x1514b6}, cube.TemperatureSettings{Comfort: ref.ComfortTemp, Eco: ref.EcoTemp,
+		Max: ref.MaxSetpoint, Min: ref.MinSetpoint, WindowOpen: ref.WindowOpenTemp, WindowOpenMinutes: ref.WindowOpenMins})
+	if temps.Command.Lines[0].String() != want.String() {
+		t.Fatalf("0x11 %s, want %s", temps.Command.Lines[0], want)
+	}
+	if !valve.Copies.Valve || valve.Command.Target != 0x1514b6 || len(valve.Command.Lines) != 1 {
+		t.Fatalf("valve %+v", valve)
+	}
+	if prog.Copies.Days != 7 || len(prog.Command.Lines) != 8 || prog.Command.Lines[7].String() != want.String() {
+		t.Fatalf("programme %+v", prog)
+	}
+}

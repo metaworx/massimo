@@ -209,6 +209,8 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 // set the group, then the metadata. A device that is in no room yet,
 // such as one just paired, needs a room_id and is added to the room the
 // way the original software adds a new device (cubeio.Writer.AddDevice).
+// Either way the device then gets the room's settings
+// (cubeio.Writer.CopySettings), unless the body says "copy": false.
 func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -221,6 +223,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	var req struct {
 		Name   *string `json:"name"`
 		RoomID *int    `json:"room_id"`
+		Copy   *bool   `json:"copy"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Name == nil && req.RoomID == nil) {
 		return fail(http.StatusBadRequest, "body must have \"name\" and/or \"room_id\"")
@@ -252,8 +255,9 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			idx = i
 		}
 	}
+	withCopy := req.Copy == nil || *req.Copy
 	if idx < 0 {
-		return s.addDevice(w, r, rt, md, c, req.Name, req.RoomID)
+		return s.addDevice(w, r, rt, md, c, req.Name, req.RoomID, withCopy)
 	}
 	cur := md.Devices[idx]
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
@@ -292,17 +296,53 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
 		return err
 	}
+	answer := map[string]any{"ok": true}
 	if newRoom != cur.RoomID {
 		rt.writer().Reread(ctx, rf)
 		rt.afterWrite(rf) // the C line names the new room once the device acknowledged
+		if withCopy {
+			copied, err := s.copySettings(ctx, rt, rf, c.Type, newRoom)
+			if err != nil {
+				return err
+			}
+			if !copied.Empty() {
+				answer["copied"] = copied
+			}
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
+	answer["budget"] = rt.client.Budget()
+	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 
+// copySettings gives a device just put into room the room's settings
+// (cubeio.Writer.CopySettings), follows up the C lines it wrote and logs
+// what was sent. Its error says that the device is in the room and why
+// the copy stopped; what was copied until then is returned with it.
+func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddress, typ cube.DeviceType, room uint8) (cubeio.Copied, error) {
+	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room)
+	if err != nil {
+		return copied, fail(http.StatusBadGateway, "device %s is in room %d, but the room's settings cannot be copied: %v", rf, room, err)
+	}
+	rt.afterWrite(copied.Temperatures...) // with none, the budget's follow-up of the 0x40
+	if !copied.Empty() {
+		s.log.Info("settings copied", "cube", rt.serial, "device", rf, "room", room, "temperatures", len(copied.Temperatures),
+			"valve", copied.Valve, "days", copied.Days)
+	}
+	if err := s.commandError(rt, res, 0); err != nil {
+		var he *httpError
+		if errors.As(err, &he) {
+			he.msg = fmt.Sprintf("device %s is in room %d, but copying the room's settings stopped: %s", rf, room, he.msg)
+		}
+		return copied, err
+	}
+	return copied, nil
+}
+
 // addDevice puts a device that is not in the metadata, one just paired
-// or paired long ago and never listed, into a room.
-func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int) error {
+// or paired long ago and never listed, into a room, and with withCopy
+// gives it the room's settings.
+func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) error {
 	if roomID == nil {
 		return fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
 	}
@@ -330,7 +370,18 @@ func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, 
 		return err
 	}
 	rt.afterWrite(c.RFAddress) // the C line names the room once the device acknowledged
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
+	answer := map[string]any{"ok": true}
+	if withCopy {
+		copied, err := s.copySettings(ctx, rt, c.RFAddress, c.Type, room)
+		if err != nil {
+			return err
+		}
+		if !copied.Empty() {
+			answer["copied"] = copied
+		}
+	}
+	answer["budget"] = rt.client.Budget()
+	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 

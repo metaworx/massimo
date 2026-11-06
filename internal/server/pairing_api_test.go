@@ -114,12 +114,14 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 		t.Fatalf("rename of an unlisted device: %d", code)
 	}
 	before := len(fc.Received())
-	if code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"Neu","room_id":1}`); code != 200 {
+	if code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"Neu","room_id":1,"copy":false}`); code != 200 {
 		t.Fatalf("add to room 1: %d %v", code, out)
 	}
 	// Room 1 has one radiator thermostat, 14d08e. As the original
 	// software: wakeup, a link in each direction, the group, then the
-	// metadata and a re-read of the C line.
+	// metadata and a re-read of the C line; the copy of the room's
+	// settings, which follows by default, has tests of its own
+	// (TestAddCopiesTheRoomsSettings and those after it).
 	partner := cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}, true, newDevice, cube.DeviceRadiatorThermostat)
 	own := cube.CmdLinkPartner(cube.Target{RFAddress: newDevice}, true, 0x14d08e, cube.DeviceRadiatorThermostat)
 	group := cube.CmdSetGroup(newDevice, 1, false)

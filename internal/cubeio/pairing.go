@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
@@ -105,4 +106,226 @@ func (w Writer) AddDevice(ctx context.Context, md *cube.Metadata, c *cube.Device
 		return engine.Result{}, err
 	}
 	return w.Do(ctx, cmd, c.RFAddress), nil
+}
+
+// Copied says what a copy of a room's settings sent: the devices that
+// got the room's temperatures (0x11), whether the device got its valve
+// settings (0x12), and how many days of the week programme (0x10).
+type Copied struct {
+	Temperatures []cube.RFAddress `json:"temperatures"`
+	Valve        bool             `json:"valve"`
+	Days         int              `json:"days"`
+}
+
+// Empty reports whether nothing of the room's settings was sent.
+func (c Copied) Empty() bool { return len(c.Temperatures) == 0 && !c.Valve && c.Days == 0 }
+
+func (c *Copied) add(o Copied) {
+	c.Temperatures = append(c.Temperatures, o.Temperatures...)
+	c.Valve = c.Valve || o.Valve
+	c.Days += o.Days
+}
+
+// CopyStep is one command of a copy of a room's settings and what it
+// copies.
+type CopyStep struct {
+	Command engine.Command
+	Copies  Copied
+}
+
+// CopyCommands builds the commands that give a thermostat put into room
+// the room's settings, in the original software's order after pairing
+// and after a move (docs/portal-protocol.md, "Pairing a device, as the
+// original software does it", steps 4 to 7): 0x40 auto with temperature
+// 0 to the device; after a wakeup of the room, 0x11 with the room's
+// temperatures to every thermostat of the room, the device included,
+// each keeping its own temperature offset; after a wakeup, 0x12 with the
+// room's boost, descaling and valve settings to the device; after a
+// wakeup, one 0x10 per day of the room's week programme that differs
+// from the device's own, then 0x11 to the device once more, and no
+// command at all when no day differs. The room's thermostats are those
+// the metadata places in it, and the device, and its settings are those
+// of its first other thermostat (roomReference). A room without another
+// thermostat has nothing to copy, so the device gets 0x40 alone; a
+// shutter contact or an eco switch gets nothing.
+func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8) ([]CopyStep, error) {
+	if !isThermostat(typ) {
+		return nil, nil
+	}
+	mode, err := cube.CmdSetTemperature(cube.Target{RFAddress: rf}, 0, cube.ModeAuto, cube.Until{})
+	if err != nil {
+		return nil, err
+	}
+	steps := []CopyStep{{Command: engine.Command{Key: "copy-mode:" + rf.String(), Target: rf, Lines: []cube.Message{mode}}}}
+	ref, ok := roomReference(snap, room, rf)
+	if !ok {
+		return steps, nil
+	}
+	temps := func(dev cube.RFAddress) (cube.Message, error) {
+		return cube.CmdSetTemperatures(cube.Target{RFAddress: dev}, cube.TemperatureSettings{Comfort: ref.ComfortTemp, Eco: ref.EcoTemp,
+			Max: ref.MaxSetpoint, Min: ref.MinSetpoint, Offset: ownOffset(snap.Config(dev)), WindowOpen: ref.WindowOpenTemp,
+			WindowOpenMinutes: ref.WindowOpenMins})
+	}
+	var lines []cube.Message
+	var copied Copied
+	radiators, walls := roomMembers(snap, room, rf)
+	for _, dev := range append(radiators, walls...) {
+		l, err := temps(dev)
+		if err != nil {
+			return nil, fmt.Errorf("the room's temperatures for %s: %w", dev, err)
+		}
+		lines = append(lines, l)
+		copied.Temperatures = append(copied.Temperatures, dev)
+	}
+	if len(lines) > 0 {
+		steps = append(steps, CopyStep{Command: engine.Command{Key: fmt.Sprintf("copy-temps:%d", room), RoomID: room, Wakeup: true, Lines: lines}, Copies: copied})
+	}
+	valve, err := cube.CmdSetValveConfig(cube.Target{RFAddress: rf}, cube.ValveSettings{BoostMinutes: ref.BoostMinutes, BoostValvePct: ref.BoostValvePct,
+		DecalcDay: ref.DecalcDay, DecalcHour: ref.DecalcHour, MaxValvePct: ref.MaxValvePct, ValveOffsetPct: ref.ValveOffsetPct})
+	if err != nil {
+		return nil, fmt.Errorf("the room's valve settings: %w", err)
+	}
+	steps = append(steps, CopyStep{Command: engine.Command{Key: "copy-valve:" + rf.String(), Target: rf, RoomID: room, Wakeup: true,
+		Lines: []cube.Message{valve}}, Copies: Copied{Valve: true}})
+	own := ownProgram(snap.Config(rf))
+	var prog []cube.Message
+	days := 0
+	for _, d := range copyDayOrder {
+		if len(ref.WeekProgram[d]) == 0 || sameDay(ref.WeekProgram[d], own[d]) {
+			continue
+		}
+		ls, err := cube.CmdSetDayProgram(cube.Target{RFAddress: rf}, d, ref.WeekProgram[d])
+		if err != nil {
+			return nil, fmt.Errorf("the room's programme for %s: %w", d, err)
+		}
+		prog = append(prog, ls...)
+		days++
+	}
+	if days > 0 {
+		l, err := temps(rf)
+		if err != nil {
+			return nil, fmt.Errorf("the room's temperatures for %s: %w", rf, err)
+		}
+		steps = append(steps, CopyStep{Command: engine.Command{Key: "copy-program:" + rf.String(), Target: rf, RoomID: room, Wakeup: true,
+			Lines: append(prog, l)}, Copies: Copied{Days: days}})
+	}
+	return steps, nil
+}
+
+// copyDayOrder is the order the original software sends a week
+// programme's days in: Monday to Friday, then Saturday and Sunday.
+var copyDayOrder = []cube.Weekday{cube.Monday, cube.Tuesday, cube.Wednesday, cube.Thursday, cube.Friday, cube.Saturday, cube.Sunday}
+
+// roomMembers lists the thermostats the metadata places in room, and
+// rf, that the Cube sent a configuration for: radiator thermostats
+// first, then wall thermostats, in the Cube's order.
+func roomMembers(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) (radiators, walls []cube.RFAddress) {
+	in := map[cube.RFAddress]bool{rf: true}
+	if md := snap.Metadata(); md != nil {
+		for _, d := range md.Devices {
+			if d.RoomID == room {
+				in[d.RFAddress] = true
+			}
+		}
+	}
+	for _, dev := range snap.Devices() {
+		c := snap.Config(dev)
+		switch {
+		case !in[dev] || c == nil:
+		case c.Thermostat != nil:
+			radiators = append(radiators, dev)
+		case c.Wall != nil:
+			walls = append(walls, dev)
+		}
+	}
+	return radiators, walls
+}
+
+// roomReference returns the settings of the room's first thermostat
+// other than rf (roomMembers' order), which the copy gives the device,
+// and false when the room has no other thermostat. A wall thermostat
+// does not store the window-open minutes, descaling and valve limits;
+// they then come from RoomRadiator.
+func roomReference(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) (cube.ThermostatConfig, bool) {
+	radiators, walls := roomMembers(snap, room, rf)
+	for _, dev := range append(radiators, walls...) {
+		if dev == rf {
+			continue
+		}
+		c := snap.Config(dev) // read again: a new greeting may have dropped it meanwhile
+		switch {
+		case c == nil || c.Thermostat == nil && c.Wall == nil:
+			continue
+		case c.Thermostat != nil:
+			return *c.Thermostat, true
+		}
+		w := c.Wall
+		t := RoomRadiator(snap, room, rf)
+		t.ComfortTemp, t.EcoTemp, t.MaxSetpoint, t.MinSetpoint = w.ComfortTemp, w.EcoTemp, w.MaxSetpoint, w.MinSetpoint
+		t.WindowOpenTemp, t.BoostMinutes, t.BoostValvePct = w.WindowOpenTemp, w.BoostMinutes, w.BoostValvePct
+		t.WeekProgram = w.WeekProgram
+		return t, true
+	}
+	return cube.ThermostatConfig{}, false
+}
+
+// ownOffset is a thermostat's temperature offset, 0 when its
+// configuration is unknown (a factory-fresh device's).
+func ownOffset(c *cube.DeviceConfig) float64 {
+	switch {
+	case c == nil:
+	case c.Thermostat != nil:
+		return c.Thermostat.TempOffset
+	case c.Wall != nil:
+		return c.Wall.TempOffset
+	}
+	return 0
+}
+
+// ownProgram is a thermostat's week programme, empty when its
+// configuration is unknown.
+func ownProgram(c *cube.DeviceConfig) cube.WeekProgram {
+	switch {
+	case c == nil:
+	case c.Thermostat != nil:
+		return c.Thermostat.WeekProgram
+	case c.Wall != nil:
+		return c.Wall.WeekProgram
+	}
+	return cube.WeekProgram{}
+}
+
+// sameDay reports whether two days have the same switch points.
+func sameDay(a, b cube.DayProgram) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// CopySettings gives a device the settings of the room it was just put
+// into (CopyCommands), after the metadata that lists it there and the
+// re-read of its C line. The commands run in order and the first that
+// fails ends the copy: Copied says what was sent until then, and the
+// result is that of the last command run. The error is set only when
+// the room's settings cannot be encoded.
+func (w Writer) CopySettings(ctx context.Context, rf cube.RFAddress, typ cube.DeviceType, room uint8) (Copied, engine.Result, error) {
+	steps, err := CopyCommands(w.Client.Snapshot(), rf, typ, room)
+	if err != nil {
+		return Copied{}, engine.Result{}, err
+	}
+	var done Copied
+	var res engine.Result
+	for _, st := range steps {
+		if res = w.Do(ctx, st.Command); res.Err != nil {
+			return done, res, nil
+		}
+		done.add(st.Copies)
+	}
+	return done, res, nil
 }
