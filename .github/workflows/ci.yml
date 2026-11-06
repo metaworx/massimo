@@ -55,11 +55,13 @@ jobs:
       - name: Cross build
         run: make cross
 
-  # The web UI in Chromium against the fake Cube: the smoke test, then
+  # The web UI in Chromium against the fake Cube: the pytest suite, then
   # the screenshot set and its slideshow, uploaded as the artifact
   # ui-screenshots (tools/ui-test/README.md). Nothing is compared with
-  # the committed set: the job fails when a check fails or a shot cannot
-  # be taken, not when a picture changed.
+  # the committed set: the job fails when a test fails or a shot cannot
+  # be taken, not when a picture changed. A failed test leaves its trace,
+  # screenshot and video in tools/ui-test/results/, uploaded on failure
+  # as the artifact ui-test-results.
   screenshots:
     name: Screenshots
     runs-on: ubuntu-latest
@@ -84,8 +86,12 @@ jobs:
           pip install -r tools/ui-test/requirements.txt
           python -m playwright install --with-deps chromium
 
+      # UI_TEST_REQUIRED: a missing Playwright fails the job instead of
+      # skipping the suite.
       - name: Smoke test
         run: make ui-test
+        env:
+          UI_TEST_REQUIRED: 1
 
       - name: Screenshots
         run: make ui-screenshots
@@ -101,6 +107,13 @@ jobs:
           name: ui-screenshots
           path: docs/screenshots/
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: ui-test-results
+          path: tools/ui-test/results/
+          if-no-files-found: ignore
 
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.

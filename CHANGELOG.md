@@ -19,6 +19,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The web UI's tests are a pytest suite (tools/ui-test/); CI's
+  Screenshots job fails when they cannot run instead of skipping them,
+  and keeps a failed test's trace, screenshot and video as an artifact.
+
 - The colour-scheme editor takes typed or pasted hex values next to each
   colour, and its contrast badges stand before the colours, which now
   line up (docs/ui.md, "Appearance").

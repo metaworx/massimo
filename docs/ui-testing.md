@@ -467,6 +467,10 @@ the pytest structure moves to it test by test.
 
 ### Steps
 
+Steps 1 and 2 are done (2026-11-06): `tools/ui-test/` is a pytest suite,
+and CI's Screenshots job runs it with `UI_TEST_REQUIRED=1`
+and uploads the traces of a failure, in place of a job of its own.
+
 1. **First pull request, `test(ui-test)`**:
    `tools/ui-test/` as a pytest suite.
    `conftest.py` with the server fixture (what `run.sh` does now,
