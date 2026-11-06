@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Added
+
+- CI runs the guidelines' checks on every push and pull request
+  (generated documents, languages, revision records, headings, line
+  breaks, the changelog against its tags, commit messages on a PR).
+
 ### Changed
 
 - The release workflow reads the update channel from the tag's name

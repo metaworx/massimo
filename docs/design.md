@@ -18,7 +18,7 @@ Device](https://insinuator.net/2016/04/discover-the-unknown-analyzing-an-iot-dev
 inputs/outputs](https://www.loxone.com/enen/kb/virtual-inputs/) (integration targets),
 [dktzde/maxcube](https://github.com/dktzde/maxcube) (Cube reflashed as a radio stick).
 
-## Status (2026-11-05)
+### Status (2026-11-05)
 
 - Language: Go, as recommended below.
   Module `go.metaworx.ch/massimo`, licence AGPL-3.0-or-later.
@@ -41,7 +41,7 @@ inputs/outputs](https://www.loxone.com/enen/kb/virtual-inputs/) (integration tar
   not generated.
   Both can change when the UI grows.
 
-## Target environments
+### Target environments
 
 | Mode | Where it runs | What it does |
 |---|---|---|
