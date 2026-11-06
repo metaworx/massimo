@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """The log: it opens, a state event with changes shows what changed,
-the kind and the device chosen narrow it, and Older pages back."""
+the kind and the device chosen narrow it, Older pages back, and an
+answer that comes late or fails leaves the log as it should be."""
 import json
 import re
 import time
@@ -38,10 +39,14 @@ def test_log_changes(page, case):
     page.locator("#view-tiles").click()
 
 
+def stamp(now, i):
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
+
+
 def test_log_filters(page, case):
     """The kind and the device chosen narrow the log the server answers;
-    back to all, the lines of before; the fake Cube's log is one page, so
-    Older says there is nothing older."""
+    back to all, the lines of before, and Older offered as the page's
+    size says: nothing older after a page shorter than 200."""
     page.locator("#view-log").click()
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= 7", 5), "the log loaded"
     before = page.locator("#log-lines .log-line").count()
@@ -57,10 +62,16 @@ def test_log_filters(page, case):
                             "l.querySelector('.log-rf').textContent === %r)" % (rf, rf), 5), "only the device's events"
     kinds = set(page.evaluate("[...document.querySelectorAll('#log-lines .log-line')].map((l) => [...l.classList].find((c) => c.startsWith('kind-')))"))
     assert kinds <= {"kind-config", "kind-state"}, f"the device's kinds: {kinds}"
-    page.locator("#log-device").select_option("")
+    with page.expect_response(lambda r: "/log?" in r.url) as answer:
+        page.locator("#log-device").select_option("")
+    n = len(answer.value.json())
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= %d" % before, 5), "all again"
+    assert wait_until(page, "!logState.loading", 5), "the page is in"
     older = page.locator("#log-older")
-    assert older.is_disabled() and older.inner_text() == NO_OLDER[case.lang], "one page: nothing older"
+    if n < 200:
+        assert older.is_disabled() and older.inner_text() == NO_OLDER[case.lang], f"a page of {n}: nothing older"
+    else:
+        assert older.is_enabled() and older.inner_text() == OLDER[case.lang], f"a page of {n}: Older offered"
     named_buttons(page, "the log with its choices")
     page.locator("#view-tiles").click()
 
@@ -71,16 +82,13 @@ def test_log_older(page, case):
     server's answers are stubbed: a full page of 200, then two events."""
     now = time.time()
 
-    def stamp(i):
-        return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 3600 + i)) + "Z"
-
     def answer(route):
         q = parse_qs(urlparse(route.request.url).query)
         before = q.get("before", [""])[0]
         if not before:
-            evs = [{"id": i, "kind": "hello", "time": stamp(i)} for i in range(201, 401)]
+            evs = [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in range(201, 401)]
         elif before == "201":
-            evs = [{"id": i, "kind": "hello", "time": stamp(i)} for i in (1, 2)]
+            evs = [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in (1, 2)]
         else:
             evs = []
         route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
@@ -101,4 +109,89 @@ def test_log_older(page, case):
         assert older.inner_text() == NO_OLDER[case.lang], "nothing older"
     finally:
         page.unroute(pattern)
+    page.locator("#view-tiles").click()
+
+
+def test_log_answers(page, case):
+    """What comes back late or fails leaves the log as it should be: an
+    Older answer after Clear is dropped, a Cube switch takes the device
+    chosen back to all, a page fetched with Older stays when a live
+    event comes past 2000 lines, and the error line shows with a kind
+    chosen. The page's api() holds the log's requests, which the test
+    answers in its own time."""
+    now = time.time()
+    page.locator("#view-log").click()
+    assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    page.evaluate("""() => {
+      window.logAnswers = [];
+      const real = api;
+      window.api = (method, path, body) => path.includes("/log")
+        ? new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }))
+        : real(method, path, body);
+    }""")
+
+    def held(n=1):
+        assert wait_until(page, "window.logAnswers.length === %d" % n, 5), f"{n} request(s) of the log held"
+        return page.evaluate("window.logAnswers[0].path")
+
+    def answer(ids):
+        page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)",
+                      [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in ids])
+
+    hellos = "logState.lines.filter((l) => l.kind === 'hello').length"
+    older = page.locator("#log-older")
+
+    page.locator("#log-kind").select_option("hello")
+    held()
+    answer(range(201, 401))
+    assert wait_until(page, hellos + " === 200", 5), "a page of 200"
+    older.click()
+    assert "before=201" in held(), "Older asks before the oldest"
+    page.locator("#log-clear").click()
+    answer(range(1, 201))
+    page.wait_for_timeout(200)
+    assert page.evaluate(hellos) == 0, "the Older answer after Clear is dropped"
+    assert older.is_disabled(), "nothing to page after Clear"
+
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    page.locator("#log-device").select_option(rf)
+    assert "device=" + rf in held(), "the device chosen asked for"
+    answer([])
+    page.evaluate("selectCube(state.serial)")
+    assert "device=" not in held(), "a Cube switch asks for all devices"
+    assert page.evaluate("logState.device === '' && document.getElementById('log-device').value === ''"), \
+        "a Cube switch takes the device chosen back to all"
+    answer([])
+
+    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    held()
+    answer(range(1801, 3801))
+    assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
+    older.click()
+    assert "before=1801" in held(), "Older from the oldest of 2000"
+    answer(range(1601, 1801))
+    assert wait_until(page, hellos + " === 2200", 5), "2200 lines"
+    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    assert wait_until(page, "logState.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
+    assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
+        "a live event keeps the page fetched"
+
+    page.locator("#log-clear").click()
+    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    held()
+    answer(range(1, 2001))
+    assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
+    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    assert wait_until(page, "logState.lines[0].id >= 2 && logState.cursor === String(logState.lines[0].id)", 5), \
+        "past 2000 lines the oldest go, and Older goes on from the oldest kept"
+    assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === logState.lines.filter(logLineMatches).length"), \
+        "the view drops the lines that went"
+
+    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    held()
+    page.evaluate("window.logAnswers.shift().reject(new Error('nope'))")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error').length === 1", 5), \
+        "the error line shows with a kind chosen"
     page.locator("#view-tiles").click()

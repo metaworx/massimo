@@ -143,10 +143,18 @@ what a test stores in the browser goes with its context.
   the log opens, and a state event with changes shows what changed;
   `state` chosen as the kind shows only state events,
   the seven devices' at least, a device chosen shows only its events,
-  all again shows the lines of before, and the fake Cube's log is one page,
-  so Older says there is nothing older; with the server's answers stubbed,
-  Older puts a page above the lines, oldest first,
-  the view staying where it was, until a short page ends the paging.
+  all again shows the lines of before,
+  and Older is offered as the page's size says,
+  nothing older after a page shorter than 200;
+  with the server's answers stubbed, Older puts a page above the lines,
+  oldest first, the view staying where it was,
+  until a short page ends the paging;
+  with the page's `api()` holding the log's requests until the test answers
+  them, an Older answer after Clear is dropped,
+  a Cube switch takes the device chosen back to all,
+  2200 lines stay when a live event comes,
+  past 2000 lines without Older the oldest go from the lines and the view alike,
+  and the error line shows with a kind chosen.
 - `test_appearance.py`, Settings → Appearance:
   a scheme changes the computed `--bg`, the dark mode sets `data-theme`,
   the editor applies a colour live, grades the contrast

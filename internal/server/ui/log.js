@@ -27,7 +27,9 @@ const logState = {
   device: "", // the radio address chosen, "" for all
   cursor: null, // the oldest line's id, else its time as received: where Older pages from
   more: false, // the server may have older events
-  loading: false,
+  loading: false, // a page is on its way
+  gen: 0, // raised by a new log, Clear and a Cube switch: an answer of an older one is dropped
+  room: 0, // the lines live events may grow the log to before the oldest go (LOG_MAX_LINES at least)
   stick: true, // auto-scroll to the bottom unless the user scrolled up
 };
 
@@ -152,6 +154,7 @@ function fmtLogTime(d) {
 }
 
 function logLineMatches(line) {
+  if (line.kind === "error") return true; // the page's own line: the log could not load
   if (logState.kind && line.kind !== logState.kind) return false;
   if (logState.device && line.device !== logState.device) return false;
   const f = logState.filter.trim().toLowerCase();
@@ -219,59 +222,89 @@ function logQuery(before) {
 }
 
 // appendLogEvent adds a live event; the view is updated in place when
-// it is open.
+// it is open. Past the room the oldest lines go: after Older, the room
+// holds the pages fetched and LOG_MAX_LINES more, so that a live event
+// does not take back a page just fetched.
 function appendLogEvent(ev) {
   const line = logLine(ev);
   logState.lines.push(line);
-  if (logState.lines.length > LOG_MAX_LINES) {
-    logState.lines.splice(0, logState.lines.length - LOG_MAX_LINES);
+  const room = Math.max(logState.room, LOG_MAX_LINES);
+  let gone = [];
+  if (logState.lines.length > room) {
+    gone = logState.lines.splice(0, logState.lines.length - room);
     logState.cursor = logCursor(); // Older goes on from the oldest line kept
     logState.more = true;
   }
   if (!logState.open) return;
+  const box = $("log-lines");
+  for (const old of gone) {
+    if (logLineMatches(old) && box.firstChild) box.removeChild(box.firstChild); // the view drops them too
+  }
+  if (gone.length) renderOlder();
   if (logLineMatches(line)) {
-    const box = $("log-lines");
     box.appendChild(renderLogLine(line));
     if (logState.stick) box.scrollTop = box.scrollHeight;
   }
 }
 
 // loadLog replaces the lines with the Cube's newest events of the kind
-// and the device chosen.
+// and the device chosen; Older waits for it. An answer that comes after
+// a Clear, another choice or a Cube switch is dropped.
 async function loadLog() {
   if (!state.serial) return;
+  const gen = ++logState.gen;
+  logState.loading = true;
+  renderOlder();
+  let evs = null;
+  let failed = null;
   try {
-    const evs = (await api("GET", base() + "/log" + logQuery())) || [];
+    evs = (await api("GET", base() + "/log" + logQuery())) || [];
+  } catch (e) {
+    failed = e;
+  }
+  if (gen !== logState.gen) return;
+  logState.loading = false;
+  if (failed) {
+    logState.lines = [{ id: 0, at: "", time: new Date(), kind: "error", device: "", state: null, text: t("log.cannotLoad", { error: failed.message }) }];
+    logState.cursor = null;
+    logState.more = false;
+  } else {
     logState.lines = evs.map(logLine);
     logState.cursor = logCursor();
     logState.more = evs.length >= LOG_PAGE;
-  } catch (e) {
-    logState.lines = [{ id: 0, at: "", time: new Date(), kind: "error", device: "", state: null, text: t("log.cannotLoad", { error: e.message }) }];
-    logState.cursor = null;
-    logState.more = false;
   }
+  logState.room = LOG_MAX_LINES;
   logState.stick = true;
   renderLog();
 }
 
 // loadOlder puts the page before the oldest line above the lines, the
-// view staying where it was.
+// view staying where it was; an answer that comes after a Clear, another
+// choice or a Cube switch is dropped.
 async function loadOlder() {
   if (logState.loading || !logState.more || logState.cursor === null || !state.serial) return;
+  const gen = logState.gen;
   logState.loading = true;
   renderOlder();
   const box = $("log-lines");
   const height = box.scrollHeight;
   const top = box.scrollTop;
+  let evs = null;
+  let failed = null;
   try {
-    const evs = (await api("GET", base() + "/log" + logQuery(logState.cursor))) || [];
+    evs = (await api("GET", base() + "/log" + logQuery(logState.cursor))) || [];
+  } catch (e) {
+    failed = e;
+  }
+  if (gen !== logState.gen) return;
+  logState.loading = false;
+  if (failed) {
+    showMessage(t("log.cannotLoad", { error: failed.message }), false);
+  } else {
     logState.lines = evs.map(logLine).concat(logState.lines);
     logState.more = evs.length >= LOG_PAGE;
     if (evs.length) logState.cursor = logCursor();
-  } catch (e) {
-    showMessage(t("log.cannotLoad", { error: e.message }), false);
-  } finally {
-    logState.loading = false;
+    logState.room = logState.lines.length + LOG_MAX_LINES;
   }
   const stick = logState.stick;
   logState.stick = false;
@@ -281,8 +314,8 @@ async function loadOlder() {
 }
 
 // fillLogSelects fills the choice of kind, every kind the server sends,
-// and of device, the Cube's devices by name; a choice that is gone falls
-// back to all.
+// and of device, the Cube's devices by name; a device chosen that is gone
+// falls back to all, and the answer is true then.
 function fillLogSelects() {
   const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(LOG_KINDS.map((k) => [k, logKind(k)])));
   kinds.value = logState.kind;
@@ -291,8 +324,27 @@ function fillLogSelects() {
   for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
   devs.sort((a, b) => (a.name || a.rf_address).localeCompare(b.name || b.rf_address));
   const sel = fillOptions($("log-device"), [["", t("log.allDevices")]].concat(devs.map((d) => [d.rf_address, d.name ? d.name + " · " + d.rf_address : d.rf_address])));
-  if (!devs.some((d) => d.rf_address === logState.device)) logState.device = "";
+  const gone = logState.device !== "" && !devs.some((d) => d.rf_address === logState.device);
+  if (gone) logState.device = "";
   sel.value = logState.device;
+  return gone;
+}
+
+// logCubeChanged starts the log over for another Cube: the device chosen
+// back to all, the lines and the paging reset, an answer still on its way
+// dropped, and the Cube's log loaded when the view is open.
+function logCubeChanged() {
+  logState.gen++;
+  logState.device = "";
+  logState.lines = [];
+  logState.cursor = null;
+  logState.more = false;
+  logState.loading = false;
+  logState.room = LOG_MAX_LINES;
+  if (!logState.open) return;
+  $("log-device").value = "";
+  renderLog();
+  loadLog();
 }
 
 // showView switches the main area between the three pages: the tiles
@@ -326,9 +378,12 @@ function initLog() {
     renderLog();
   });
   $("log-clear").addEventListener("click", () => {
+    logState.gen++; // a page on its way is dropped
     logState.lines = [];
     logState.cursor = null;
     logState.more = false;
+    logState.loading = false;
+    logState.room = LOG_MAX_LINES;
     renderLog();
   });
   $("log-kind").addEventListener("change", (ev) => {

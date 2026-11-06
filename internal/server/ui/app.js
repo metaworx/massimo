@@ -557,6 +557,7 @@ async function loadRooms() {
   state.rooms = rooms || [];
   state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
   renderRooms();
+  if (logState.open && fillLogSelects()) loadLog(); // the device chosen is gone
 }
 
 async function refresh() {
@@ -659,7 +660,7 @@ function selectCube(serial) {
   state.details = {};
   state.ui = {};
   refresh().then(connectEvents);
-  if (logState.open) loadLog();
+  logCubeChanged();
 }
 
 // --- version ----------------------------------------------------------

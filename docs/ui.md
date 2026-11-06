@@ -145,6 +145,13 @@ its first line since the server started shows the whole state.
 **Older events** above the lines loads the 200 before the oldest shown,
 the view staying where it was,
 until the server has nothing older ("No older events").
+The pages fetched stay while new events come in, with room for 2000 more lines;
+past that the oldest lines go, and Older fetches them again.
+Only a log left open until every fetched line has gone pages on by the time of
+the oldest line, where an event of that same millisecond can be missed.
+A page that cannot load says so in the log, whatever is chosen;
+an answer that comes after **Clear**, another choice or another Cube is dropped,
+and another Cube starts the log over with every device.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
