@@ -29,7 +29,7 @@ def test_language_redraw(page):
         page.locator("#lang-select").select_option(lang)
         assert wait_until(page, "document.documentElement.lang === %s" % json.dumps(lang), 5), f"{lang} chosen in the settings"
         want = PANEL_TEXTS[lang]
-        got = [panel.locator(sel).inner_text().strip() for sel in ("label[for='cube-KEQ0537249-address']", ".cube-hidden-title", "button[type=submit]")]
+        got = [panel.locator(sel).inner_text().strip() for sel in ("label[for='cube-KEQ0537249-address']", ".cube-hidden-title", "form.cube-form button[type=submit]")]
         assert panel.get_attribute("open") is not None and got == want, f"the open Cube panel redrawn in {lang}: {got}"
     page.locator("#lang-select").select_option("auto")
     page.locator("#view-tiles").click()

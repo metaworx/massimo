@@ -110,6 +110,14 @@ Every room has a tile:
   - **Devices**:
     name, room, temperature offset,
     and for a wall thermostat whether its display shows the measured temperature.
+    A device moved to another room gets that room's settings,
+    as when it is put into a room (Settings → Cubes, **Pair a device**).
+    **Remove from the Cube** asks in the row,
+    then deletes the device from the Cube:
+    the Cube resets it to its factory settings,
+    and it has to be paired again to be used again.
+    A device out of range or out of battery stays in the Cube's memory
+    and comes back under the devices without a room.
   - **Week programme**:
     one bar per day.
     - A click on a day selects it together with every day that has the same programme.
@@ -127,7 +135,13 @@ Every room has a tile:
 
 The **House** tile sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time.
-Devices that belong to no room are listed at the end.
+
+**Devices without a room** are listed at the end:
+a device just paired, or one the original software paired through the proxy
+and never put into a room.
+**Put into a room…** opens the form of Settings → Cubes' pairing under the row,
+with name, room and **Copy the room's settings**,
+and **Remove from the Cube** asks in the row, then deletes it from the Cube.
 
 Every change goes to the Cube as a radio command.
 The tile shows the result when it is done: "ok", or what failed.
@@ -197,6 +211,24 @@ without the switches.
   DHCP flag and firmware and **Add**,
   which serves a found Cube at once (also in the list of found Cubes under the header).
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
+
+  **Pair a device**, at the top of the Cube's panel,
+  shows the pairing time (60 seconds, at most 600) and **Start**,
+  which puts the Cube into pairing mode;
+  then the device's pairing button is pressed, as its manual says.
+  A countdown with **Stop** runs while the Cube pairs,
+  and each device that joins is listed with its type and serial and a form:
+  **Name**, **Room** (one of the Cube's rooms),
+  and for a thermostat **Copy the room's settings**, on by default.
+  **Put into a room** links the device with the room's other devices and lists it there;
+  with the copy it also gets the temperatures,
+  valve settings and week programme of the room's other thermostats,
+  as the original software does, which costs up to two thirds of an hour's
+  radio budget for a new thermostat (the **?** says how).
+  The line under the form says how it went, and the end of pairing is said too.
+  A role with the capability `pair` but not `cubes`, the manager's by default,
+  sees the Cubes' panels with the pairing alone;
+  putting a device into a room needs `structure`.
 - **Appearance**:
   **Mode** is light, dark, or as the system,
   which follows the device's setting and changes with it.

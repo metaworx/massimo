@@ -31,6 +31,9 @@ every release is a pre-release on the `alpha` channel (see [Versions](#versions)
   phone and desktop ([docs/ui.md](docs/ui.md)).
 - **A JSON API** with an OpenAPI description, live events and a bearer token
   ([docs/api-v1.md](docs/api-v1.md)).
+- **Pairing** a new device from the web UI or the API,
+  put into a room with the room's settings as the original software does,
+  and a device removed from the Cube again ([docs/ui.md](docs/ui.md)).
 - **Backup and restore** of a Cube's configuration as YAML or JSON,
   from the command line and the API.
 - **The server as a Cube** for other clients, the original software included:

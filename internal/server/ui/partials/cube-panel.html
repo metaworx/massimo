@@ -1,8 +1,8 @@
-<!-- A Cube of Settings → Cubes and its notice of a settings file line that differs, cubes.js. -->
+<!-- A Cube of Settings → Cubes and its notice of a settings file line that differs, cubes.js; the form needs the capability cubes, the pairing (pairing.html) pair. -->
 <template id="tpl-cube-panel">
   <details class="panel cube-panel">
     <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
-    <form class="cube-form">
+    <form class="cube-form needs-cubes">
       <div class="field wide">
         <label data-i18n="cubes.name">Name</label>
         <input type="text" name="name" class="field-control" autocomplete="off" spellcheck="false">
@@ -44,7 +44,7 @@
 </template>
 
 <template id="tpl-cube-differs">
-  <div class="cube-differs">
+  <div class="cube-differs needs-cubes">
     <p class="small"></p>
     <button type="button" class="take-file" data-i18n="cubes.takeFile">Take the file's value</button>
   </div>
