@@ -351,10 +351,12 @@ as in the log above),
 each keeping its own offset, 0x12 to the device,
 and 0x10 only for the days that differ from the device's own,
 then 0x11 to the device; `"copy": false` skips it.
-The order and the payloads are the original software's;
-that a device which was in a room before takes the direct 0x40 is *unverified*,
-since a direct 0x40 to a room member was discarded on 2026-11-04 (below),
-and the first command the Cube discards ends the copy.
+The payloads and the order of steps 4 to 7 are the original software's,
+but Massimo writes the metadata (step 8) before them, with the links.
+That a device which was in a room before takes the direct 0x40 is *unverified*,
+since a direct 0x40 to a room member was discarded on 2026-11-04 (below):
+Massimo sends it without the error reset and the retry,
+and its discard ends nothing but says so in the answer.
 
 Moving a device to another room (same software,
 wall thermostat from room 4 to room 5): wakeup of the old room,

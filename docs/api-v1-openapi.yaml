@@ -865,8 +865,11 @@ paths:
         then gets the room's settings from its first other thermostat:
         0x40 auto, 0x11 to every thermostat of the room, 0x12, and 0x10
         for each day of the programme that differs, then 0x11 again;
-        copy false skips it. The first command that fails ends the copy
-        with its error, the device in the room.
+        hidden devices are left out. The copy needs the capability
+        configure as well (403 without it); copy false skips it. A
+        discarded 0x40 sets mode_not_set and ends nothing; any other
+        command that fails ends the copy with its error, the device in
+        the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -900,6 +903,7 @@ paths:
                         items: {type: string, pattern: "^[0-9a-f]{6}$"}
                       valve: {type: boolean, description: The device got the room's valve settings (0x12).}
                       days: {type: integer, minimum: 0, maximum: 7, description: The days of the week programme sent (0x10).}
+                      mode_not_set: {type: boolean, description: The Cube discarded the 0x40 that sets auto; the device keeps its mode.}
                   budget: {$ref: "#/components/schemas/Budget"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -918,12 +922,15 @@ paths:
       description: >-
         As the original software deletes a device: a device in a room (the
         metadata's, else its C line's) is unlinked from the room's members
-        in both directions after a wakeup (0x21) and its group removed
-        (0x23); then t: with the force flag, which makes the Cube send the
-        device a factory reset; then the metadata without it, where it was
-        listed. The server's copy forgets the device at once. A device that
-        never answers stays in the Cube's memory and comes back, unlisted,
-        with the next full read.
+        in both directions after a wakeup (0x21), hidden devices left out,
+        and its group removed (0x23), which the original software leaves;
+        a device in room 255 by its C line is not unlinked. Then t: with
+        the force flag, which makes the Cube send the device a factory
+        reset; then the metadata without it, where it was listed. A device
+        the metadata lists without a C line loses its entry alone. The
+        server's copy forgets the device at once. A device that never
+        answers stays in the Cube's memory and comes back, unlisted, with
+        the next full read.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":

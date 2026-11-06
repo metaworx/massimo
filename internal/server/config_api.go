@@ -175,10 +175,6 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	room, md, err := s.visibleRoom(rt, r)
-	if err != nil {
-		return err
-	}
 	var req struct {
 		Name *string `json:"name"`
 	}
@@ -188,6 +184,17 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 	if err := checkName(*req.Name); err != nil {
 		return err
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	unlock, err := rt.lockStructure(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	room, md, err := s.visibleRoom(rt, r)
+	if err != nil {
+		return err
+	}
 	cp := *md
 	cp.Rooms = append([]cube.RoomMeta(nil), md.Rooms...)
 	for i := range cp.Rooms {
@@ -195,13 +202,16 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 			cp.Rooms[i].Name = strings.TrimSpace(*req.Name)
 		}
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
 	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	return nil
+}
+
+// thermostat reports whether a device type has settings to copy.
+func thermostat(t cube.DeviceType) bool {
+	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat
 }
 
 // updateDevice handles PUT /devices/{rf} with {"name": "…"} and/or
@@ -210,8 +220,11 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 // set the group, then the metadata. A device that is in no room yet,
 // such as one just paired, needs a room_id and is added to the room the
 // way the original software adds a new device (cubeio.Writer.AddDevice).
-// Either way the device then gets the room's settings
-// (cubeio.Writer.CopySettings), unless the body says "copy": false.
+// Either way a thermostat then gets the room's settings
+// (cubeio.Writer.CopySettings), which needs the capability configure as
+// well, unless the body says "copy": false. The links and the metadata
+// are written under the Cube's structure lock (lockStructure), the copy
+// after it.
 func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -246,6 +259,18 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	unlock, err := rt.lockStructure(ctx)
+	if err != nil {
+		return err
+	}
+	locked := true
+	defer func() {
+		if locked {
+			unlock()
+		}
+	}()
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
 		return fail(http.StatusServiceUnavailable, "cube not connected yet")
@@ -256,59 +281,26 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			idx = i
 		}
 	}
-	withCopy := req.Copy == nil || *req.Copy
+	withCopy := (req.Copy == nil || *req.Copy) && thermostat(c.Type)
+	var room uint8 // the room the device went into, 0 when it stayed
 	if idx < 0 {
-		return s.addDevice(w, r, rt, md, c, req.Name, req.RoomID, withCopy)
+		room, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)
+	} else {
+		room, err = s.moveDevice(ctx, r, rt, md, idx, c, req.Name, req.RoomID, withCopy)
 	}
-	cur := md.Devices[idx]
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer cancel()
-	newRoom := cur.RoomID
-	if req.RoomID != nil {
-		if *req.RoomID < 1 || *req.RoomID > 255 {
-			return fail(http.StatusBadRequest, "room_id must be 1..255")
-		}
-		newRoom = uint8(*req.RoomID)
-		if _, ok := rt.hidden().Room(md, newRoom); !ok {
-			return fail(http.StatusNotFound, "no room %d", newRoom)
-		}
-		if newRoom != cur.RoomID {
-			var members []cube.DeviceMeta
-			for _, d := range md.Devices {
-				if d.RoomID == newRoom {
-					members = append(members, d)
-				}
-			}
-			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members)
-			for _, cmd := range []engine.Command{out, in} {
-				res := rt.enqueue(ctx, cmd).Wait(ctx)
-				if err := s.commandError(rt, res, 0); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	cp := *md
-	cp.Devices = append([]cube.DeviceMeta(nil), md.Devices...)
-	if req.Name != nil {
-		cp.Devices[idx].Name = strings.TrimSpace(*req.Name)
-	}
-	cp.Devices[idx].RoomID = newRoom
-	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
+	if err != nil {
 		return err
 	}
+	unlock()
+	locked = false
 	answer := map[string]any{"ok": true}
-	if newRoom != cur.RoomID {
-		rt.writer().Reread(ctx, rf)
-		rt.afterWrite(rf) // the C line names the new room once the device acknowledged
-		if withCopy {
-			copied, err := s.copySettings(ctx, rt, rf, c.Type, newRoom)
-			if err != nil {
-				return err
-			}
-			if !copied.Empty() {
-				answer["copied"] = copied
-			}
+	if room != 0 && withCopy {
+		copied, err := s.copySettings(ctx, rt, rf, c.Type, room)
+		if err != nil {
+			return err
+		}
+		if !copied.Empty() || copied.ModeNotSet {
+			answer["copied"] = copied
 		}
 	}
 	answer["budget"] = rt.client.Budget()
@@ -316,19 +308,73 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// moveDevice renames a device the metadata lists, md.Devices[idx],
+// and moves it to another room as the original software does; withCopy
+// says that the copy follows, which needs configure. It returns the
+// room it moved the device into, 0 when the room stayed.
+func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, idx int, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, error) {
+	rf, cur := c.RFAddress, md.Devices[idx]
+	newRoom := cur.RoomID
+	if roomID != nil {
+		if *roomID < 1 || *roomID > 255 {
+			return 0, fail(http.StatusBadRequest, "room_id must be 1..255")
+		}
+		newRoom = uint8(*roomID)
+		if _, ok := rt.hidden().Room(md, newRoom); !ok {
+			return 0, fail(http.StatusNotFound, "no room %d", newRoom)
+		}
+		if newRoom != cur.RoomID {
+			if withCopy {
+				if err := s.require(r, "configure"); err != nil {
+					return 0, err
+				}
+			}
+			var members []cube.DeviceMeta
+			for _, d := range md.Devices {
+				if d.RoomID == newRoom {
+					members = append(members, d)
+				}
+			}
+			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members, rt.hidden())
+			for _, cmd := range []engine.Command{out, in} {
+				res := rt.enqueue(ctx, cmd).Wait(ctx)
+				if err := s.commandError(rt, res, 0); err != nil {
+					return 0, err
+				}
+			}
+		}
+	}
+	cp := *md
+	cp.Devices = append([]cube.DeviceMeta(nil), md.Devices...)
+	if name != nil {
+		cp.Devices[idx].Name = strings.TrimSpace(*name)
+	}
+	cp.Devices[idx].RoomID = newRoom
+	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
+		return 0, err
+	}
+	if newRoom == cur.RoomID {
+		return 0, nil
+	}
+	rt.writer().Reread(ctx, rf)
+	rt.afterWrite(rf) // the C line names the new room once the device acknowledged
+	return newRoom, nil
+}
+
 // copySettings gives a device just put into room the room's settings
-// (cubeio.Writer.CopySettings), follows up the C lines it wrote and logs
-// what was sent. Its error says that the device is in the room and why
-// the copy stopped; what was copied until then is returned with it.
+// (cubeio.Writer.CopySettings, the hidden devices left out), follows up
+// the C lines it wrote and logs what was sent. Its error says that the
+// device is in the room and why the copy stopped; what was copied until
+// then is returned with it.
 func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddress, typ cube.DeviceType, room uint8) (cubeio.Copied, error) {
-	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room)
+	copied, res, err := rt.writerOf(ctx).CopySettings(ctx, rf, typ, room, rt.hidden())
 	if err != nil {
 		return copied, fail(http.StatusBadGateway, "device %s is in room %d, but the room's settings cannot be copied: %v", rf, room, err)
 	}
 	rt.afterWrite(copied.Temperatures...) // with none, the budget's follow-up of the 0x40
-	if !copied.Empty() {
+	if !copied.Empty() || copied.ModeNotSet {
 		s.log.Info("settings copied", "cube", rt.serial, "device", rf, "room", room, "temperatures", len(copied.Temperatures),
-			"valve", copied.Valve, "days", copied.Days)
+			"valve", copied.Valve, "days", copied.Days, "mode_not_set", copied.ModeNotSet)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
 		var he *httpError
@@ -341,75 +387,103 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 }
 
 // addDevice puts a device that is not in the metadata, one just paired
-// or paired long ago and never listed, into a room, and with withCopy
-// gives it the room's settings.
-func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) error {
+// or paired long ago and never listed, into a room; withCopy says that
+// the copy follows, which needs configure. It returns the room.
+func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, error) {
 	if roomID == nil {
-		return fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
+		return 0, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
 	}
 	if *roomID < 1 || *roomID > 255 {
-		return fail(http.StatusBadRequest, "room_id must be 1..255")
+		return 0, fail(http.StatusBadRequest, "room_id must be 1..255")
 	}
 	room := uint8(*roomID)
 	if _, ok := rt.hidden().Room(md, room); !ok {
-		return fail(http.StatusNotFound, "no room %d", room)
+		return 0, fail(http.StatusNotFound, "no room %d", room)
 	}
 	if c.Type == cube.DeviceCube {
-		return fail(http.StatusBadRequest, "the cube itself is not in a room")
+		return 0, fail(http.StatusBadRequest, "the cube itself is not in a room")
+	}
+	if withCopy {
+		if err := s.require(r, "configure"); err != nil {
+			return 0, err
+		}
 	}
 	n := ""
 	if name != nil {
 		n = strings.TrimSpace(*name)
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer cancel()
-	res, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room)
+	res, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room, rt.hidden())
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return 0, fail(http.StatusBadRequest, "%v", err)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
-		return err
+		return 0, err
 	}
 	rt.afterWrite(c.RFAddress) // the C line names the room once the device acknowledged
-	answer := map[string]any{"ok": true}
-	if withCopy {
-		copied, err := s.copySettings(ctx, rt, c.RFAddress, c.Type, room)
-		if err != nil {
-			return err
-		}
-		if !copied.Empty() {
-			answer["copied"] = copied
-		}
-	}
-	answer["budget"] = rt.client.Budget()
-	writeJSON(w, http.StatusOK, answer)
-	return nil
+	return room, nil
 }
 
 // removeDevice handles DELETE /devices/{rf}: the device is deleted from
 // the Cube as the original software deletes it
-// (cubeio.Writer.RemoveDevice), unlinked from its room's partners, t:,
-// and the metadata without it. The metadata write's event, or the
-// device_forgotten one of a device in no room, tells the clients.
+// (cubeio.Writer.RemoveDevice, the hidden devices left out), unlinked
+// from its room's partners, t:, and the metadata without it; a device
+// only the metadata lists, without a C line, loses its entry alone. The
+// metadata write's event, or the device_forgotten one of a device in no
+// room, tells the clients. It runs under the Cube's structure lock.
 func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
 	}
-	rf, c, err := s.visibleDevice(rt, r)
+	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
 	if err != nil {
-		return err
-	}
-	if c.Type == cube.DeviceCube {
-		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
-	}
-	md := rt.client.Snapshot().Metadata()
-	if md == nil || !rt.client.Connected() {
-		return fail(http.StatusServiceUnavailable, "cube not connected")
+		return fail(http.StatusBadRequest, "%v", err)
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c)
+	unlock, err := rt.lockStructure(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	snap := rt.client.Snapshot()
+	md := snap.Metadata()
+	hidden := rt.hidden()
+	c := snap.Config(rf)
+	var listed *cube.DeviceMeta
+	if md != nil {
+		for i := range md.Devices {
+			if md.Devices[i].RFAddress == rf {
+				listed = &md.Devices[i]
+			}
+		}
+	}
+	switch {
+	case hidden[rf] || c == nil && listed == nil:
+		return fail(http.StatusNotFound, "no device %s", rf)
+	case c != nil && c.Type == cube.DeviceCube:
+		return fail(http.StatusBadRequest, "%s is the cube itself", rf)
+	case md == nil || !rt.client.Connected():
+		return fail(http.StatusServiceUnavailable, "cube not connected")
+	}
+	if c == nil {
+		// A leftover of the metadata: the Cube holds no device to delete.
+		cp := *md
+		cp.Devices = nil
+		for _, d := range md.Devices {
+			if d.RFAddress != rf {
+				cp.Devices = append(cp.Devices, d)
+			}
+		}
+		if err := s.writeMetadata(ctx, rt, &cp); err != nil {
+			return err
+		}
+		rt.client.ForgetDevice(rf)
+		s.log.Info("device removed", "cube", rt.serial, "device", rf, "type", listed.Type, "from", "metadata", "remote", s.clientIP(r))
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
+		return nil
+	}
+	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c, hidden)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}

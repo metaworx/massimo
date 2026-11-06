@@ -103,7 +103,7 @@ func TestMoveCommands(t *testing.T) {
 		}
 	}
 	c := snap.Config(0x1514b6)
-	out, in := MoveCommands(snap, 0x1514b6, c.Type, 6, 1, members)
+	out, in := MoveCommands(snap, 0x1514b6, c.Type, 6, 1, members, nil)
 	if out.RoomID != 6 || in.RoomID != 1 || !in.Wakeup || len(out.Lines) != 1 || len(in.Lines) != 1+2*len(members) {
 		t.Fatalf("out %+v in %+v", out, in)
 	}
@@ -115,14 +115,14 @@ func TestMoveCommands(t *testing.T) {
 func TestCopyCommands(t *testing.T) {
 	_, w, _ := connect(t)
 	snap := w.Client.Snapshot()
-	steps, err := CopyCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, 6)
+	steps, err := CopyCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, 6, nil)
 	if err != nil || len(steps) != 1 || steps[0].Command.Key != "copy-mode:1514b6" || !steps[0].Copies.Empty() {
 		t.Fatalf("alone in its room: %+v %v", steps, err)
 	}
-	if steps, err := CopyCommands(snap, 0x1514b6, cube.DeviceShutterContact, 1); err != nil || steps != nil {
+	if steps, err := CopyCommands(snap, 0x1514b6, cube.DeviceShutterContact, 1, nil); err != nil || steps != nil {
 		t.Fatalf("a contact: %+v %v", steps, err)
 	}
-	steps, err = CopyCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, 1)
+	steps, err = CopyCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, 1, nil)
 	if err != nil || len(steps) != 4 {
 		t.Fatalf("into room 1: %+v %v", steps, err)
 	}
@@ -151,14 +151,14 @@ func TestCopyCommands(t *testing.T) {
 func TestRemoveCommands(t *testing.T) {
 	_, w, _ := connect(t)
 	snap := w.Client.Snapshot()
-	unlink, del, ok := RemoveCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat)
+	unlink, del, ok := RemoveCommands(snap, 0x1514b6, cube.DeviceRadiatorThermostat, nil)
 	if !ok || !unlink.Wakeup || unlink.RoomID != 6 || len(unlink.Lines) != 1 || unlink.Lines[0].String() != cube.CmdSetGroup(0x1514b6, 6, true).String() {
 		t.Fatalf("unlink %+v %v", unlink, ok)
 	}
 	if len(del.Lines) != 1 || del.Lines[0].String() != "t:01,1,FRS2" || del.Key != "delete:1514b6" {
 		t.Fatalf("del %+v", del)
 	}
-	if _, _, ok := RemoveCommands(snap, 0x0b9573, cube.DeviceCube); ok {
+	if _, _, ok := RemoveCommands(snap, 0x0b9573, cube.DeviceCube, nil); ok {
 		t.Fatal("the Cube's own C line taken for a room")
 	}
 }

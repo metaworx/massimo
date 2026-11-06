@@ -182,7 +182,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
+| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
 | `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
@@ -1028,7 +1028,8 @@ as in a move.
 A thermostat put into a room, by an add or a move,
 then gets the room's settings, as the original software gives them to a device
 it pairs or moves:
-0x40 auto with temperature 0, to the device directly;
+0x40 auto with temperature 0, to the device directly,
+without the error reset and the retry other writes get;
 after a wakeup of the room,
 0x11 to every thermostat of the room, the device included,
 with the room's comfort, eco, maximum, minimum and window-open temperatures
@@ -1039,13 +1040,19 @@ after a wakeup, one 0x10 per day of the room's week programme that differs from
 the device's own, then 0x11 to the device once more.
 The room's settings are those of its first other thermostat,
 radiator thermostats first;
+a hidden device is neither linked with the device nor given anything,
+nor taken for the room's settings;
 where that is a wall thermostat,
 the window-open minutes, descaling and valve limits it does not store are the
 original software's defaults.
 A room without another thermostat has nothing to copy,
 and the device gets 0x40 alone;
 a shutter contact or an eco switch gets nothing.
-`"copy": false` in the body skips the copy, which `name` alone never starts.
+The copy needs the capability `configure` as well as `structure`,
+since its 0x11 changes the room's other thermostats too:
+without it the request is refused with `403` before anything is sent,
+unless the body says `"copy": false`, which skips the copy;
+`name` alone never starts it.
 The copy costs radio budget,
 0x11 and 0x12 about 3 % each and 0x10 about 8 % per day,
 so a factory-fresh thermostat takes about 65 % of an hour's budget with every day sent;
@@ -1057,21 +1064,32 @@ The answer is
 {"ok": true, "copied": {"temperatures": ["14d08e", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
 ```
 
-with `copied` absent when nothing was copied.
-The first command of the copy that fails ends it with its error (`502`,
+with `copied` absent when nothing was copied,
+and `"mode_not_set": true` in it when the Cube discarded the 0x40,
+which leaves the device's mode as it was and ends nothing:
+on 2026-11-04 the Cube discarded a direct 0x40 to a device in a room.
+Any other command of the copy that fails ends it with its error (`502`,
 `409` when superseded), which says that the device is in the room:
 what was sent until then stays sent,
 and `PUT …/rooms/{id}/config` and `PUT …/rooms/{id}/program` complete it.
+The links and the metadata of one change of rooms and devices at a time
+are written per Cube (this route, `DELETE …/devices/{rf}`,
+`DELETE …/rooms/{id}`, `PUT …/rooms/{id}`):
+a second request waits for the first's metadata, up to its time limit,
+and then answers `503`; the copies run side by side afterwards.
 
 ### DELETE /api/v1/cubes/{sn}/devices/{rf}
 
-Removes a device from the Cube, as the original software's "delete device" does,
-with the capability `structure`.
+Removes a device from the Cube, with the capability `structure`,
+as the original software's "delete device" does,
+and also removes the device's group, which the original software leaves.
 A device in a room, the metadata's or else its C line's,
 is unlinked from that room first:
 after a wakeup of the room (`z:1e,G,<room>`),
 one 0x21 remove link partner radiogram per room member it is linked with,
 in each direction (addressed as 0x20 is in an add), then 0x23 remove group.
+Hidden devices are no partners,
+and a device whose C line names room 255 is not unlinked at all.
 Then `t:01,1,<rf>`, delete with the force flag,
 which the Cube answers `A:` and which makes it send the device a factory reset;
 then, for a device the metadata lists, the metadata without it.
@@ -1079,15 +1097,22 @@ The server's copy forgets the device at once:
 it is gone from the devices, the rooms and the counts,
 and the stream reports `metadata` (for a listed device) and `device_forgotten`.
 
+A device the metadata lists without a C line, a leftover,
+loses its entry in the metadata, and nothing is sent by radio.
+
 The answer is `{"ok": true, "budget": {…}}`.
 A hidden device and an unknown address are `404`, the Cube itself `400`,
 a Cube that is not connected `503`;
-a write that fails is `502` with the Cube's answer, and stops the removal there.
+a write that fails is `502` with the Cube's answer, and stops the removal there:
+one that stops after the unlink leaves the device in its room,
+without links or group, and a second `DELETE` finishes it.
 The device is paired again like a new one (Pairing).
 
 The Cube drops a device only when it answers the reset:
 a device out of range or out of battery stays in the Cube's memory,
-and comes back, unlisted, with the server's next full read of the Cube.
+and comes back, unlisted, with the server's next full read of the Cube
+(a reconnect or the periodic refresh);
+the Cube's device lists in between do not bring it back.
 Seen on hardware for devices that never report (portal-protocol.md);
 that one which answers is dropped is expected, not yet seen.
 Such a device is parked in room 255 instead, and hidden (above).

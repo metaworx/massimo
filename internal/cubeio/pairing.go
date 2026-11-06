@@ -5,12 +5,14 @@ package cubeio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // MaxPairingTime is the longest inclusion the API and the proxy ask for;
@@ -81,15 +83,15 @@ func (w Writer) StopPairing(ctx context.Context) error {
 // its C line. A device whose C line names another room (paired long ago,
 // never listed) is first unlinked from that room as in a move. members
 // are the devices the metadata places in room; md is the current
-// metadata.
-func (w Writer) AddDevice(ctx context.Context, md *cube.Metadata, c *cube.DeviceConfig, name string, room uint8) (engine.Result, error) {
+// metadata; the devices in skip, the hidden ones, are no partners.
+func (w Writer) AddDevice(ctx context.Context, md *cube.Metadata, c *cube.DeviceConfig, name string, room uint8, skip view.Hidden) (engine.Result, error) {
 	var members []cube.DeviceMeta
 	for _, d := range md.Devices {
 		if d.RoomID == room {
 			members = append(members, d)
 		}
 	}
-	out, in := MoveCommands(w.Client.Snapshot(), c.RFAddress, c.Type, c.RoomID, room, members)
+	out, in := MoveCommands(w.Client.Snapshot(), c.RFAddress, c.Type, c.RoomID, room, members, skip)
 	cmds := []engine.Command{in}
 	if c.RoomID != 0 {
 		cmds = []engine.Command{out, in}
@@ -110,11 +112,13 @@ func (w Writer) AddDevice(ctx context.Context, md *cube.Metadata, c *cube.Device
 
 // Copied says what a copy of a room's settings sent: the devices that
 // got the room's temperatures (0x11), whether the device got its valve
-// settings (0x12), and how many days of the week programme (0x10).
+// settings (0x12), and how many days of the week programme (0x10);
+// ModeNotSet, that the Cube discarded the 0x40 that sets auto.
 type Copied struct {
 	Temperatures []cube.RFAddress `json:"temperatures"`
 	Valve        bool             `json:"valve"`
 	Days         int              `json:"days"`
+	ModeNotSet   bool             `json:"mode_not_set,omitempty"`
 }
 
 // Empty reports whether nothing of the room's settings was sent.
@@ -127,28 +131,35 @@ func (c *Copied) add(o Copied) {
 }
 
 // CopyStep is one command of a copy of a room's settings and what it
-// copies.
+// copies. Mode marks the 0x40, whose discard ends nothing.
 type CopyStep struct {
 	Command engine.Command
 	Copies  Copied
+	Mode    bool
 }
 
 // CopyCommands builds the commands that give a thermostat put into room
 // the room's settings, in the original software's order after pairing
 // and after a move (docs/portal-protocol.md, "Pairing a device, as the
 // original software does it", steps 4 to 7): 0x40 auto with temperature
-// 0 to the device; after a wakeup of the room, 0x11 with the room's
-// temperatures to every thermostat of the room, the device included,
+// 0 to the device, directly as in the original software's log, without
+// the error reset and the retry, since the Cube discarded such a 0x40
+// to a device in a room on 2026-11-04; after a wakeup of the room, 0x11
+// with the room's temperatures to every thermostat of the room, the
+// device included,
 // each keeping its own temperature offset; after a wakeup, 0x12 with the
 // room's boost, descaling and valve settings to the device; after a
 // wakeup, one 0x10 per day of the room's week programme that differs
 // from the device's own, then 0x11 to the device once more, and no
 // command at all when no day differs. The room's thermostats are those
-// the metadata places in it, and the device, and its settings are those
-// of its first other thermostat (roomReference). A room without another
-// thermostat has nothing to copy, so the device gets 0x40 alone; a
-// shutter contact or an eco switch gets nothing.
-func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8) ([]CopyStep, error) {
+// the metadata places in it, and the device, but not those in skip, the
+// hidden ones; its settings are those of its first other thermostat
+// (roomReference). A room without another thermostat has nothing to
+// copy, so the device gets 0x40 alone; a shutter contact or an eco
+// switch gets nothing. Each command's key names the device, so that
+// the copies of two devices put into one room do not supersede each
+// other.
+func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8, skip view.Hidden) ([]CopyStep, error) {
 	if !isThermostat(typ) {
 		return nil, nil
 	}
@@ -156,8 +167,8 @@ func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 	if err != nil {
 		return nil, err
 	}
-	steps := []CopyStep{{Command: engine.Command{Key: "copy-mode:" + rf.String(), Target: rf, Lines: []cube.Message{mode}}}}
-	ref, ok := roomReference(snap, room, rf)
+	steps := []CopyStep{{Command: engine.Command{Key: "copy-mode:" + rf.String(), Lines: []cube.Message{mode}}, Mode: true}}
+	ref, ok := roomReference(snap, room, rf, skip)
 	if !ok {
 		return steps, nil
 	}
@@ -168,7 +179,7 @@ func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 	}
 	var lines []cube.Message
 	var copied Copied
-	radiators, walls := roomMembers(snap, room, rf)
+	radiators, walls := roomMembers(snap, room, rf, skip)
 	for _, dev := range append(radiators, walls...) {
 		l, err := temps(dev)
 		if err != nil {
@@ -178,7 +189,7 @@ func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 		copied.Temperatures = append(copied.Temperatures, dev)
 	}
 	if len(lines) > 0 {
-		steps = append(steps, CopyStep{Command: engine.Command{Key: fmt.Sprintf("copy-temps:%d", room), RoomID: room, Wakeup: true, Lines: lines}, Copies: copied})
+		steps = append(steps, CopyStep{Command: engine.Command{Key: "copy-temps:" + rf.String(), RoomID: room, Wakeup: true, Lines: lines}, Copies: copied})
 	}
 	valve, err := cube.CmdSetValveConfig(cube.Target{RFAddress: rf}, cube.ValveSettings{BoostMinutes: ref.BoostMinutes, BoostValvePct: ref.BoostValvePct,
 		DecalcDay: ref.DecalcDay, DecalcHour: ref.DecalcHour, MaxValvePct: ref.MaxValvePct, ValveOffsetPct: ref.ValveOffsetPct})
@@ -217,9 +228,10 @@ func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 var copyDayOrder = []cube.Weekday{cube.Monday, cube.Tuesday, cube.Wednesday, cube.Thursday, cube.Friday, cube.Saturday, cube.Sunday}
 
 // roomMembers lists the thermostats the metadata places in room, and
-// rf, that the Cube sent a configuration for: radiator thermostats
-// first, then wall thermostats, in the Cube's order.
-func roomMembers(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) (radiators, walls []cube.RFAddress) {
+// rf, that the Cube sent a configuration for, without those in skip:
+// radiator thermostats first, then wall thermostats, in the Cube's
+// order.
+func roomMembers(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress, skip view.Hidden) (radiators, walls []cube.RFAddress) {
 	in := map[cube.RFAddress]bool{rf: true}
 	if md := snap.Metadata(); md != nil {
 		for _, d := range md.Devices {
@@ -231,7 +243,7 @@ func roomMembers(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) (radiato
 	for _, dev := range snap.Devices() {
 		c := snap.Config(dev)
 		switch {
-		case !in[dev] || c == nil:
+		case !in[dev] || c == nil || skip[dev] && dev != rf:
 		case c.Thermostat != nil:
 			radiators = append(radiators, dev)
 		case c.Wall != nil:
@@ -246,8 +258,8 @@ func roomMembers(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) (radiato
 // and false when the room has no other thermostat. A wall thermostat
 // does not store the window-open minutes, descaling and valve limits;
 // they then come from RoomRadiator.
-func roomReference(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) (cube.ThermostatConfig, bool) {
-	radiators, walls := roomMembers(snap, room, rf)
+func roomReference(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress, skip view.Hidden) (cube.ThermostatConfig, bool) {
+	radiators, walls := roomMembers(snap, room, rf, skip)
 	for _, dev := range append(radiators, walls...) {
 		if dev == rf {
 			continue
@@ -309,20 +321,27 @@ func sameDay(a, b cube.DayProgram) bool {
 }
 
 // CopySettings gives a device the settings of the room it was just put
-// into (CopyCommands), after the metadata that lists it there and the
-// re-read of its C line. The commands run in order and the first that
-// fails ends the copy: Copied says what was sent until then, and the
-// result is that of the last command run. The error is set only when
-// the room's settings cannot be encoded.
-func (w Writer) CopySettings(ctx context.Context, rf cube.RFAddress, typ cube.DeviceType, room uint8) (Copied, engine.Result, error) {
-	steps, err := CopyCommands(w.Client.Snapshot(), rf, typ, room)
+// into (CopyCommands, skip the hidden devices), after the metadata that
+// lists it there and the re-read of its C line. The commands run in
+// order and the first that fails ends the copy, but for a discarded
+// 0x40, which only sets ModeNotSet: Copied says what was sent until
+// then, and the result is that of the last command run. The error is
+// set only when the room's settings cannot be encoded.
+func (w Writer) CopySettings(ctx context.Context, rf cube.RFAddress, typ cube.DeviceType, room uint8, skip view.Hidden) (Copied, engine.Result, error) {
+	steps, err := CopyCommands(w.Client.Snapshot(), rf, typ, room, skip)
 	if err != nil {
 		return Copied{}, engine.Result{}, err
 	}
 	var done Copied
 	var res engine.Result
 	for _, st := range steps {
-		if res = w.Do(ctx, st.Command); res.Err != nil {
+		res = w.Do(ctx, st.Command)
+		if st.Mode && errors.Is(res.Err, engine.ErrDiscarded) {
+			done.ModeNotSet = true
+			res.Err = nil
+			continue
+		}
+		if res.Err != nil {
 			return done, res, nil
 		}
 		done.add(st.Copies)
