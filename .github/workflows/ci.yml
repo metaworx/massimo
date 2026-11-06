@@ -471,3 +471,32 @@ jobs:
             echo "--- $f"; sudo cat "$f" 2>/dev/null || true
           done
           sudo launchctl print system/ch.metaworx.massimo 2>/dev/null || true
+
+  # The guidelines' own checks (GUIDELINES/project/CI.md, "Guideline
+  # Gates"): the generated documents are current, the declared languages
+  # match the tree, every document version has its revision record, the
+  # heading numbers, the line breaks, CHANGELOG.md's form and its released
+  # sections against their tags, and, on a pull request, the commit
+  # messages of the pull request's commits.
+  guidelines:
+    name: Guidelines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+          # The changelog check compares the released sections with the
+          # tags, and the commit-message check reads a range of commits.
+          fetch-depth: 0
+      - name: Tags
+        run: git fetch --quiet --force --tags origin
+      - name: Checks
+        if: github.event_name != 'pull_request'
+        run: GUIDELINES/shared/tools/check
+      # base..head, not ..HEAD: on a pull request HEAD is the merge commit
+      # GitHub makes for the run, whose message is not ours to write; the
+      # merge commits main receives are left out the same way, by running
+      # the commit-message check on pull requests only.
+      - name: Checks, with the pull request's commit messages
+        if: github.event_name == 'pull_request'
+        run: GUIDELINES/shared/tools/check --commit-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
