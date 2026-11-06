@@ -31,8 +31,9 @@ type DiscoveryResponder struct {
 	RFAddress cube.RFAddress
 	Firmware  uint16 // e.g. 0x0113
 
-	pc     net.PacketConn
-	silent atomic.Bool
+	pc       net.PacketConn
+	silent   atomic.Bool
+	noConfig atomic.Bool
 
 	mu sync.Mutex
 	// netConfig is what the c reply carries and a C request replaces:
@@ -118,6 +119,10 @@ func (d *DiscoveryResponder) Addr() string { return d.pc.LocalAddr().String() }
 // the network.
 func (d *DiscoveryResponder) SetSilent(silent bool) { d.silent.Store(silent) }
 
+// SetConfigSilent stops or resumes the answers to c only, as a Cube
+// whose answer gets lost.
+func (d *DiscoveryResponder) SetConfigSilent(silent bool) { d.noConfig.Store(silent) }
+
 // Close stops the responder.
 func (d *DiscoveryResponder) Close() error { return d.pc.Close() }
 
@@ -170,6 +175,9 @@ func (d *DiscoveryResponder) answer(op byte, named bool, p []byte) ([]byte, bool
 		}
 		return append([]byte(nil), d.netConfig[:20]...), true
 	case 'c': // the stored configuration and the flags
+		if d.noConfig.Load() {
+			return nil, false
+		}
 		return append([]byte(nil), d.netConfig[:]...), true
 	case 'C': // a write names its Cube; the payload has the c reply's layout
 		if !named || len(p) < netConfigLen {
