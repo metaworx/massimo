@@ -36,6 +36,10 @@ the next minor, a fix counts the suffix up.
   queue, `Idempotency-Key` answers a retry without a second radio
   command, `GET /api/v1/commands/{id}` shows one (`docs/api-v1.md`).
 
+- `massimo user add|list|passwd|disable|enable|token|revoke`: the users
+  of the store from the box, beside a running `serve` (`README.md`,
+  "Cube variables").
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

@@ -615,6 +615,24 @@ and `store info` prints its schema version, node and row counts;
 for the service run them as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo store info`.
 
+`massimo user` manages the users of the store from the box (docs/api-v1.md,
+"Authentication"):
+`user add <name> -role operator` asks for the password twice (`-no-password` for
+a user with keys only,
+`-password-stdin` to read it from standard input for scripts,
+`-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
+`user disable <name>` and `user enable <name>`,
+`user token <name> -label Loxone` prints a new API key once,
+and `user revoke <name> [<token id>]` revokes one token or every one.
+It opens the store beside a running `serve`;
+for the service run it as its user,
+for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.
+The audit records what it did with the remote `cli`.
+With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
+`owner` with the token as its API key, so the token keeps working;
+without it, the first owner is created with `user add <name> -role owner`
+or with the form the web UI offers on the local network while there are no users.
+
 Every variable has a per-Cube form with the serial in it,
 `MASSIMO_CUBE_<SERIAL>_KEY` for `MASSIMO_CUBE_KEY`, which wins for that Cube;
 the plain form applies to any Cube unless the table says otherwise.
