@@ -1376,6 +1376,6 @@ See [proxy.md](proxy.md).
 
 ## Not in version 1
 
-Removing devices, creating rooms, user accounts and ownership.
+Removing devices, creating rooms, and ownership per Cube.
 Removing needs the original software for now; `massimo restore` or
 `POST …/restore` from an edited backup covers everything else in bulk.

@@ -404,7 +404,19 @@ queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `GET …/restore` for the progress), and `/events` as server-sent events;
 see [docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
 [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml).
-Set `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
+Who may do what: users with roles in the store, each request carrying a
+session from `POST /api/v1/login` or an API key as `Authorization: Bearer`,
+the role granting the capabilities a route needs (setpoints, configuration,
+pairing, users, …) and `GET /api/v1/me` saying which;
+the audit (`GET /api/v1/audit`) records every request that changes something
+and the commands (`GET /api/v1/commands/{id}`) its steps on the Cube's queue,
+with `Idempotency-Key` answering a retry without a second radio command.
+`MASSIMO_API_TOKEN` (or `-token`) becomes the owner's key at the first start,
+and is the one token without a store (`serve -addr`);
+while there are no users the API is open on the default localhost listener,
+and the first owner is created with `massimo user add` or by the web UI from
+the local network.
+See docs/api-v1.md, "Authentication".
 A web UI, plain HTML and JavaScript embedded in the binary,
 is served at http://127.0.0.1:8099/ :
 one tile per room with the measured and the set temperature with a thermometer

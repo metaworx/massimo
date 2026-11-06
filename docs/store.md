@@ -6,7 +6,8 @@ users and roles, the commands, the migration of an installed box,
 the stages of the work and the decisions the owner takes before any code is written.
 It follows section 4 of the proposal of 2026-11-05 and roadmap item 6;
 docs/design.md sections 2, 6 and 7 are the frame.
-Nothing here is implemented;
+Stage (a) shipped in v0.7.0-alpha.1,
+and stage (b) is implemented but its web UI (section 9);
 the owner's decisions are listed at the end. docs/server.md looks further ahead,
 at encryption at rest, the public server and sync,
 and says what version 1 prepares for them.
@@ -550,6 +551,12 @@ Notes on the tables:
 applied in order inside one transaction each,
 with the version and the `min_reader` of each written to `schema_version`.
 The first file is `0001_initial.sql`, the whole schema above.
+`0002_commands_auth.sql` (stage (b)) adds `users.auth_version`,
+the `commands` table of docs/server.md item 7 (a parent row per write request
+and a step row per engine command beneath it, with `parent_id`,
+`idempotency_key`, `state`, `status`, `request` and `result`;
+NOTE StoreUsers v1.0 of the plan: one table, `commands.keep_days` the retention)
+and `audit.command_id`, additively.
 Rules:
 
 - A migration is additive when it only adds tables,
@@ -716,7 +723,8 @@ so the change in app.js is the login form in place of the token prompt (name and
 or a token pasted into a second field for the integration case) and the
 role-dependent hiding.
 No cookies, so no CSRF handling; the token never goes into a URL.
-Sessions last 30 days and are extended on use (`expires_at` moved);
+Sessions last 30 days and are extended on use (`expires_at` moved,
+at most once an hour);
 the owner sees every session and key under Settings → Users and revokes them there.
 Passwords are hashed with argon2id from `golang.org/x/crypto`, pure Go,
 one more module;
@@ -882,13 +890,21 @@ and docs/ui.md for its panels;
 
 ### (b) Users, login, tokens, audit
 
+Implemented on 2026-11-06 but its web UI, which waits for the UI structure
+work (AP StoreUsers v1.0, Block 10).
+
 - Packages and files: `internal/store/users.go`, `roles.go`, `tokens.go`,
-  `audit.go`, `lockout.go`;
+  `audit.go`, `lockout.go`, `commands.go`, `password.go`, `bootstrap.go`,
+  `migrations/0002_commands_auth.sql`; `internal/engine`:
+  an `Observer` of every command with an `ID`;
   `internal/server/auth.go` rewritten around the store (token lookup by hash,
   the capability per route and the effective set per user,
   the limiter on `auth_failures`), `login_api.go` (new), `users_api.go` (new),
-  `roles_api.go` (new), the audit hook in `api()`; `cmd/massimo/user.go` (new);
-  `golang.org/x/crypto` for argon2id; `internal/server/ui`: `login.js` (new),
+  `roles_api.go` (new),
+  `audit.go` and `commands.go` (new) with the hooks in `api()`;
+  `cmd/massimo/user.go` (new);
+  `golang.org/x/crypto` for argon2id and `golang.org/x/term` for the prompt;
+  `internal/server/ui` (Block 10, waiting): `login.js` (new),
   app.js (the token prompt becomes the login form, hiding by capability),
   i18n.js (one `auth.*` block).
 - API: `POST /api/v1/login`, `POST /api/v1/logout`, `GET /api/v1/me`;
@@ -897,8 +913,9 @@ and docs/ui.md for its panels;
   `DELETE /api/v1/users/{name}/tokens/{id}`; `GET`/`POST /api/v1/roles`,
   `PUT`/`DELETE /api/v1/roles/{key}`, `PUT /api/v1/roles/{key}/disabled`;
   `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}`;
-  `GET /api/v1/audit?before=&limit=&user=`.
-  Every existing route gets its capability.
+  `GET /api/v1/audit?before=&limit=&user=`; `GET /api/v1/commands/{id}` and
+  `Idempotency-Key` on every write route.
+  Every existing route gets its capability (`x-capability` in the OpenAPI file).
 - UI: the login page; Settings → Users: the list, add,
   invite a guest with an end date, role, disable, reset password,
   the sessions and keys with revoke; Settings → Roles:
@@ -983,7 +1000,14 @@ the comparison the owner asked for stays below for the record.
 Also decided that day:
 no `tenant_id` in the site store and the provenance columns,
 both in the notes of section 5.
-Stage (a) can start.
+Stage (a) shipped in v0.7.0-alpha.1.
+Stage (b) was built the same day (AP StoreUsers v1.0):
+item 6's seed row confirmed, the engine writing the states of each command's
+steps (item 16), the first owner through `POST /api/v1/users`,
+guests without an invitation flow until the UI needs one,
+`golang.org/x/term` for the password prompt,
+and one `commands` table with `commands.keep_days` rather than a history
+table (NOTE StoreUsers v1.0: commands history); its web UI waits.
 
 1. Taken: SQLite through `modernc.org/sqlite`.
    For it: SQL with indexes and queries for the log,
@@ -1029,7 +1053,7 @@ Stage (a) can start.
    `integration`) as sets of capabilities, adjustable except `owner`,
    with renames, further roles, and capabilities and roles that can be disabled.
    `MASSIMO_API_TOKEN` bootstraps an `owner`.
-   One row of the seed to confirm:
+   Confirmed 2026-11-06:
    moves and deletions (`structure`) with `manager`, not with `operator`.
 7. Taken: UUIDv7 from version 1 on every row that will be replicated
    or exported (docs/server.md says why and what it costs).
@@ -1064,8 +1088,10 @@ From docs/server.md, the later questions:
 15. **The password flow prepared for client-side derivation** with
     `auth_version` (recommended, docs/server.md, "What version 1 prepares",
     item 6).
-16. **`commands` with `Idempotency-Key` in stage (b)** (recommended,
-    docs/server.md, "What version 1 prepares", item 7), or later with the relay.
+16. Taken: `commands` with `Idempotency-Key` in stage (b) (docs/server.md,
+    "What version 1 prepares", item 7),
+    the engine writing the states of each step through an observer,
+    one table with `commands.keep_days` rather than a history table.
 17. **The browser's key derivation when end to end comes**:
     a WebAssembly argon2id module in the no-build UI,
     or PBKDF2 from WebCrypto with a high count.

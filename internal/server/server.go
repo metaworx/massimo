@@ -32,11 +32,23 @@
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	POST /api/v1/login                               a session for a name and a password (login_api.go)
+//	POST /api/v1/logout                              end the session
+//	GET  /api/v1/me                                  who the caller is and what the caller may do
+//	GET|POST /api/v1/users, /users/{name}, /users/{name}/tokens    the users and their tokens (users_api.go)
+//	GET|POST /api/v1/roles, /roles/{key}, /roles/{key}/disabled   the roles and their sets (roles_api.go)
+//	GET|PUT /api/v1/capabilities, /capabilities/{key}              the capabilities, disabled or not
+//	GET  /api/v1/audit                               every request that changed something (audit.go)
+//	GET  /api/v1/commands/{id}                       a write request with its steps on the queue (commands.go)
 //
-// With a token configured, every /api request needs "Authorization: Bearer <token>";
-// the event stream also opens with ?ticket=<ticket> from POST …/events/ticket and,
-// deprecated, ?token=<token>. Repeated failed token checks lock the client's address
-// out for a while (auth.go). A web UI for all of this is served at / (see ui.go).
+// Every route is registered with the capability it needs (auth.go): with users in
+// the store, every /api request carries "Authorization: Bearer <token>", a session or
+// an API key that names a user whose role grants the capabilities; without a store
+// the one token of Options.Token is checked as before. The event stream also opens
+// with ?ticket=<ticket> from POST …/events/ticket and, deprecated, ?token=<token>.
+// Repeated failed checks lock the client's address out for a while. Every request
+// that changes something is an audit row and a command row (audit.go, commands.go).
+// A web UI for all of this is served at / (see ui.go).
 //
 // With proxy listeners configured, the server also answers as a Cube on
 // the LAN (TCP 62910 and UDP discovery), see internal/proxy.
