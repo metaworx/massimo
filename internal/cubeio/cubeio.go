@@ -25,6 +25,9 @@ import (
 type Writer struct {
 	Client *cubelan.Client
 	Queue  *engine.Queue
+	// ID names the request the writes belong to (engine.Command.ID);
+	// a command that has none takes it.
+	ID string
 }
 
 // MetadataCommand builds the command that writes md (rooms, names and
@@ -42,6 +45,9 @@ func MetadataCommand(md *cube.Metadata) (engine.Command, error) {
 // lines) is mirrored into the snapshot, and the configuration of each
 // device in reread is read back from the Cube.
 func (w Writer) Do(ctx context.Context, cmd engine.Command, reread ...cube.RFAddress) engine.Result {
+	if cmd.ID == "" {
+		cmd.ID = w.ID
+	}
 	res := w.Queue.Enqueue(cmd).Wait(ctx)
 	if res.Err != nil {
 		return res

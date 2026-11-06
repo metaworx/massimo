@@ -76,4 +76,8 @@ until curl -sf -H "Authorization: Bearer $token" "${url}api/v1/cubes" 2>/dev/nul
 	sleep 0.2
 done
 
+# An operator with a password, for the sign-in checks: user add opens the
+# store beside the running server.
+printf 'op-pass\n' | env -i PATH="$PATH" HOME="$HOME" ./massimo -data "$work" user add operator -role operator -password-stdin >/dev/null 2>>serve.log
+
 "$py" "$here/$script.py" "$url" "$token"
