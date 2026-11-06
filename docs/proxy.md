@@ -106,6 +106,10 @@ the others in it are deleted,
 and when none is left the proxy answers the client itself without sending anything,
 so a client cannot delete a hidden device (and make the Cube send it a factory reset).
 `serve -show-hidden` switches all of this off.
+Once the Cube answered a client's `t:`,
+the server's copy forgets the devices it deleted,
+as after `DELETE /api/v1/cubes/{sn}/devices/{rf}`,
+so that the original software's deletions show at once.
 
 ## Pairing
 

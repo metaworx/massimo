@@ -255,3 +255,77 @@ func TestClientWaitsForItsAddress(t *testing.T) {
 		t.Fatalf("default port: %q", got)
 	}
 }
+
+// ForgetDevice drops a deleted device from the snapshot, its metadata
+// entry included, and says so once with a device_forgotten event; the
+// other devices stay.
+func TestForgetDevice(t *testing.T) {
+	_, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	waitEvent(t, c, EventConnected)
+	const rf cube.RFAddress = 0x1514b6
+	c.ForgetDevice(rf)
+	if e := waitEvent(t, c, EventForgotten); e.Device != rf || e.Kind.String() != "device_forgotten" {
+		t.Fatalf("event %+v", e)
+	}
+	s := c.Snapshot()
+	if _, ok := s.State(rf); ok || s.Config(rf) != nil {
+		t.Fatal("config or state kept")
+	}
+	for _, d := range s.Devices() {
+		if d == rf {
+			t.Fatal("still among the devices")
+		}
+	}
+	for _, d := range s.Metadata().Devices {
+		if d.RFAddress == rf {
+			t.Fatal("still in the metadata")
+		}
+	}
+	if len(s.Devices()) != 5 || s.Config(0x14d08e) == nil {
+		t.Fatalf("the other devices: %v", s.Devices())
+	}
+	l, ok := s.DeviceListLine()
+	if !ok {
+		t.Fatal("no L line")
+	}
+	states, err := cube.ParseDeviceList(l.Data, map[cube.RFAddress]cube.DeviceType{})
+	if err != nil || len(states) != 5 {
+		t.Fatalf("L line %s: %d entries, %v", l, len(states), err)
+	}
+	for _, st := range states {
+		if st.RFAddress == rf {
+			t.Fatal("still in the L line")
+		}
+	}
+	c.ForgetDevice(rf)
+	select {
+	case e := <-c.Events():
+		if e.Kind == EventForgotten {
+			t.Fatal("a second event for a device already forgotten")
+		}
+	case <-time.After(50 * time.Millisecond):
+	}
+	// The Cube's next device list, which still has it, does not bring it
+	// back; a C line for it does, and its state follows.
+	if _, err := c.Send(ctx, cube.CmdList); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.State(rf); ok {
+		t.Fatal("the device list brought the forgotten device back")
+	}
+	line, err := c.Send(ctx, cube.Message{Type: 'c', Data: rf.String()})
+	if err != nil || line.Type != 'C' {
+		t.Fatalf("c: %s %v", line, err)
+	}
+	c.ApplyLocal(line)
+	if _, err := c.Send(ctx, cube.CmdList); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.State(rf); !ok || s.Config(rf) == nil {
+		t.Fatal("not back after its C line")
+	}
+}

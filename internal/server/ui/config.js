@@ -343,7 +343,8 @@ function renderDevicesTab(room, c) {
 }
 
 // renderDeviceForm is one device's row: name, offset and display mode
-// for thermostats, and a move to another room, with one Send.
+// for thermostats, and a move to another room, with one Send; and
+// Remove from the Cube (capability structure), asked in the row.
 function renderDeviceForm(room, c, d) {
   const e = c.edit.devices[d.rf_address];
   const form = formEl(() => sendDevice(room, c, d), "cfg-form");
@@ -392,8 +393,39 @@ function renderDeviceForm(room, c, d) {
       rerenderRoom(room);
     }));
   }
-  form.appendChild(formFooter({ submit: t("action.send") }));
+  const label = d.name || d.rf_address;
+  const remove = button(t("device.remove"), { cls: "needs-structure remove-device", aria: t("device.removeLabel", { device: label }) }, () => {
+    e.confirmRemove = true;
+    rerenderRoom(room);
+  });
+  if (e.confirmRemove) {
+    form.appendChild(confirmBox(t("device.removeConfirm", { device: label }), { yes: t("device.remove"), no: t("action.keep") }, () => {
+      e.confirmRemove = false;
+      removeDeviceOfRoom(room, c, d);
+    }, () => {
+      e.confirmRemove = false;
+      rerenderRoom(room);
+    }));
+  }
+  form.appendChild(formFooter({ submit: t("action.send"), extra: [remove] }));
   return form;
+}
+
+// removeDeviceOfRoom removes a device of the room from the Cube
+// (removeFromCube, tiles.js) and shows the Devices tab again without it.
+async function removeDeviceOfRoom(room, c, d) {
+  setConfigResult(room, c, t("device.removing", { device: d.name || d.rf_address }), true);
+  const res = await removeFromCube(d);
+  const again = state.rooms.find((r) => r.id === room.id);
+  if (!again || !configUI(again)) {
+    showTileResult(room.id, res.text, res.ok);
+    return;
+  }
+  const cc = configUI(again);
+  cc.edit = freshEdit(again, cc.cfg);
+  cc.tab = "devices";
+  cc.result = { text: res.text, ok: res.ok };
+  rerenderRoom(again);
 }
 
 // sendDevice writes what changed on a device: name and room through
@@ -414,6 +446,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
       return;
     }
     meta.room_id = e.room_id;
+    if (!hasCap("configure")) meta.copy = false; // the copy of the room's settings needs configure
   }
   const cfg = {};
   const loaded = ((c.cfg && c.cfg.devices) || []).find((x) => x.rf_address === d.rf_address) || {};

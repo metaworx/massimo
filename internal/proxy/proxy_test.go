@@ -393,7 +393,7 @@ func TestProxyHidesHiddenDevices(t *testing.T) {
 }
 
 func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
-	fc, p, _, ctx := setup(t)
+	fc, p, c, ctx := setup(t)
 	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
 	other := cube.RFAddress(0x14d08e)
 	p.opts.Hidden = []cube.RFAddress{hidden}
@@ -418,7 +418,11 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	if n := countType(fc, 't'); n != 0 {
 		t.Fatalf("%d t: reached the cube", n)
 	}
-	// A visible and a hidden device: only the visible one is deleted.
+	if c.Snapshot().Config(hidden) == nil {
+		t.Fatal("the hidden device left the server's copy")
+	}
+	// A visible and a hidden device: only the visible one is deleted,
+	// and the server's copy drops it once the Cube answered.
 	conn.Write([]byte(cube.CmdDeleteDevices(true, other, hidden).Wire()))
 	if a := readLine(t, r); a.Type != 'A' {
 		t.Fatalf("t: answered %s", a)
@@ -431,6 +435,14 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].String() != cube.CmdDeleteDevices(true, other).String() {
 		t.Fatalf("cube received %v", got)
+	}
+	if c.Snapshot().Config(other) != nil || c.Snapshot().Config(hidden) == nil {
+		t.Fatal("the server's copy after the client's t:")
+	}
+	for _, d := range c.Snapshot().Devices() {
+		if d == other {
+			t.Fatal("the deleted device is still among the server's devices")
+		}
 	}
 	// With the hidden devices shown, the command goes through unchanged.
 	p.opts.ShowHidden = true

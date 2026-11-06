@@ -4,8 +4,10 @@
 The script:
 
 1. builds massimo;
-2. starts the fake Cube (`massimo fakecube`), which also answers discovery,
-   with `greeting.txt`,
+2. starts the fake Cube (`massimo fakecube`), which also answers discovery
+   and has a device that joins pairing mode (`-pair 1514b6,0abcde,TEQ0000001`:
+   a copy of the radiator thermostat 1514b6, two seconds after `n:`,
+   again after it was removed), with `greeting.txt`,
    which is the protocol fixture from internal/protocol/cube/testdata plus an
    `L:` line with device states (measured temperatures included) and a window contact,
    "Fenster Kind 1", that reports an open window;
@@ -15,7 +17,8 @@ The script:
    which the server seeds into its store,
    `massimo.db` in the temporary directory;
 4. runs the pytest suite in this directory with `pytest-playwright` (Chromium),
-   handing it the page's address in `UI_TEST_URL` and the token in `UI_TEST_TOKEN`.
+   handing it the page's address in `UI_TEST_URL`, the token in `UI_TEST_TOKEN`
+   and the server's log in `UI_TEST_SERVE_LOG`.
 
 Both servers run on loopback ports of their own (62919 and 8119;
 set `UI_TEST_CUBE_PORT` and `UI_TEST_API_PORT` to change them).
@@ -155,6 +158,23 @@ what a test stores in the browser goes with its context.
   2200 lines stay when a live event comes,
   past 2000 lines without Older the oldest go from the lines and the view alike,
   and the error line shows with a kind chosen.
+- `test_pairing.py`, pairing and removal:
+  in Settings → Cubes, Pair a device with 5 seconds,
+  the fake Cube's device joins with its serial,
+  is named and put into the first room with the copy on,
+  the row says so and the end of pairing is said;
+  the server's log has the pairing and the copy;
+  in the room's Devices tab, Remove from the Cube asks and removes it,
+  and the room is as before.
+  A device paired through the API while the page was not looking is listed under
+  Devices without a room, where Remove asks and Keep takes it back,
+  and Put into a room… with the copy off puts it into a room,
+  the log without a copy;
+  another is removed from there.
+  With the body's `no-cubes`, the default manager's,
+  the Cube's panel holds the pairing alone, and with `no-pair` too Settings →
+  Cubes is gone.
+  Each test stops pairing and removes the device at its start and end.
 - `test_appearance.py`, Settings → Appearance:
   a scheme changes the computed `--bg`, the dark mode sets `data-theme`,
   the editor applies a colour live, grades the contrast
@@ -175,8 +195,9 @@ what a test stores in the browser goes with its context.
   `aria-label`, `aria-labelledby` or `title`),
   and the pages have no horizontal scroll where the tests look for one.
 
-Nothing is sent to the fake Cube;
-the Cube changes go to the server's store only.
+Nothing is sent to the fake Cube but by `test_pairing.py`,
+whose pairing, links, copy and removal it answers and forgets again;
+the Cube changes of the other tests go to the server's store only.
 The state events are applied in the page (`updateDevice`, or dispatched on the
 page's `EventSource`), since the fake Cube does not change its states.
 The tests reach the page's `state` through `page.evaluate`:

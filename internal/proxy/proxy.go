@@ -359,6 +359,16 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 			p.log.Debug("proxy: radio command not understood, not followed up", "remote", remote, "command", m.String(), "error", err)
 		}
 	}
+	if m.Type == 't' && len(res.Replies) > 0 && res.Replies[0].Type == 'A' {
+		// The Cube deletes the devices once they answer; the server's
+		// copy drops them now, so that the deletion shows at once.
+		if _, addrs, err := cube.ParseDeleteDevices(lines[0].Data); err == nil {
+			for _, rf := range addrs {
+				p.opts.Client.ForgetDevice(rf)
+			}
+			p.log.Info("proxy: devices deleted by a client", "remote", remote, "devices", len(addrs))
+		}
+	}
 	if m.Type == 'c' {
 		// A device the server did not know yet, such as one just paired.
 		for _, r := range res.Replies {

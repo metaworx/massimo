@@ -53,6 +53,7 @@ var actions = map[string]string{
 	"DELETE /api/v1/cubes/{sn}/rooms/{id}":         "room.delete",
 	"PUT /api/v1/cubes/{sn}/rooms/{id}":            "room.rename",
 	"PUT /api/v1/cubes/{sn}/devices/{rf}":          "device.update",
+	"DELETE /api/v1/cubes/{sn}/devices/{rf}":       "device.remove",
 	"PUT /api/v1/cubes/{sn}/devices/{rf}/lock":     "device.lock",
 	"PUT /api/v1/cubes/{sn}/rooms/{id}/config":     "room.config",
 	"PUT /api/v1/cubes/{sn}/devices/{rf}/config":   "device.config",

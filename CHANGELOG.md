@@ -18,11 +18,26 @@ the next minor, a fix counts the suffix up.
   of event or one device, from the server's log, which reaches back
   across restarts (`docs/ui.md`, "Log").
 
+- The web UI pairs a device in Settings → Cubes and puts it into a room
+  with the room's settings; Devices without a room and the Devices tab
+  remove one from the Cube (`docs/ui.md`).
+
+- `massimo fakecube -pair <template rf>,<rf>,<serial>`: a device that
+  joins pairing mode, and again after it was removed (README.md).
+
+- `DELETE /api/v1/cubes/{sn}/devices/{rf}` removes a device from the Cube
+  as the original software does, under `structure`; a client's `t:`
+  through the proxy drops the devices from the server's copy too.
+
 ### Changed
 
 - `GET …/log` pages back with `before` (an event's `id` or a time) and
   filters by `kind` and `device`, from the store; a `limit` above 1000
   answers 400, and `state` events lack `received` (`docs/api-v1.md`).
+
+- `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
+  room's settings, as the original software does, with `configure`;
+  `"copy": false` skips it (docs/api-v1.md).
 
 ## [0.9.0-alpha.1] - 2026-11-06
 

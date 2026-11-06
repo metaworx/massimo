@@ -17,7 +17,7 @@ const LOG_PAGE = 200;
 // LOG_KINDS are the kinds of event the server sends, in its order
 // (eventKinds in internal/server/log.go, which TestLogKinds compares).
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-  "cube_found", "restore_step", "restore_done"];
+  "device_forgotten", "cube_found", "restore_step", "restore_done"];
 
 const logState = {
   open: false,

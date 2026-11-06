@@ -30,7 +30,7 @@ import (
 // same; TestLogKinds holds the three together.
 var eventKinds = []string{
 	"connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-	"cube_found", "restore_step", "restore_done",
+	"device_forgotten", "cube_found", "restore_step", "restore_done",
 }
 
 // Limits of a page of the log.
