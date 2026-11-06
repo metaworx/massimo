@@ -427,7 +427,19 @@ queue per Cube) and serves a JSON API: `/api/v1/cubes`,
 `GET …/restore` for the progress), and `/events` as server-sent events;
 see [docs/api-v1.md](docs/api-v1.md) and the OpenAPI description in
 [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml).
-Set `MASSIMO_API_TOKEN` (or `-token`) to require `Authorization: Bearer`.
+Who may do what: users with roles in the store, each request carrying a
+session from `POST /api/v1/login` or an API key as `Authorization: Bearer`,
+the role granting the capabilities a route needs (setpoints, configuration,
+pairing, users, …) and `GET /api/v1/me` saying which;
+the audit (`GET /api/v1/audit`) records every request that changes something
+and the commands (`GET /api/v1/commands/{id}`) its steps on the Cube's queue,
+with `Idempotency-Key` answering a retry without a second radio command.
+`MASSIMO_API_TOKEN` (or `-token`) becomes the owner's key at the first start,
+and is the one token without a store (`serve -addr`);
+while there are no users the API is open on the default localhost listener,
+and the first owner is created with `massimo user add` or by the web UI from
+the local network.
+See docs/api-v1.md, "Authentication".
 A web UI, plain HTML and JavaScript embedded in the binary,
 is served at http://127.0.0.1:8099/ :
 one tile per room with the measured and the set temperature with a thermometer
@@ -465,6 +477,8 @@ After a configuration write it reads the device's configuration again for about
 six minutes until the device has taken it,
 and after radio writes it reconnects once for the Cube's budget if radiograms
 were pending, at most every 15 minutes (only while `-refresh` is on).
+Writes that a client of the proxy (below) sends,
+such as the original software's, are followed up the same way.
 The log lists every wakeup and every radio command the Cube accepted,
 with its duty cycle and free slots.
 
@@ -638,6 +652,24 @@ and `store info` prints its schema version, node and row counts;
 for the service run them as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo store info`.
 
+`massimo user` manages the users of the store from the box (docs/api-v1.md,
+"Authentication"):
+`user add <name> -role operator` asks for the password twice (`-no-password` for
+a user with keys only,
+`-password-stdin` to read it from standard input for scripts,
+`-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
+`user disable <name>` and `user enable <name>`,
+`user token <name> -label Loxone` prints a new API key once,
+and `user revoke <name> [<token id>]` revokes one token or every one.
+It opens the store beside a running `serve`;
+for the service run it as its user,
+for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.
+The audit records what it did with the remote `cli`.
+With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
+`owner` with the token as its API key, so the token keeps working;
+without it, the first owner is created with `user add <name> -role owner`
+or with the form the web UI offers on the local network while there are no users.
+
 Every variable has a per-Cube form with the serial in it,
 `MASSIMO_CUBE_<SERIAL>_KEY` for `MASSIMO_CUBE_KEY`, which wins for that Cube;
 the plain form applies to any Cube unless the table says otherwise.
@@ -730,6 +762,21 @@ A new feature or breaking change starts the next minor
 a fix or another round counts the suffix up (`v0.2.0-alpha.2`);
 the suffix names the channel,
 so promoting to a later `beta` branch tags `-beta.N`.
+
+A release is made on `main`, checked out, clean and equal to `origin/main`.
+`make release-alpha` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
+section with `GUIDELINES/shared/tools/changelog.sh`,
+commits it on `main` as `chore(release): vX.Y.Z-alpha.N`, and tags that commit,
+signed, with the section as the tag's message,
+so the tag carries the release notes, and the GitHub release shows them.
+It then pushes `main`, `alpha` and the tag together or not at all.
+It refuses when `alpha` has commits `main` lacks,
+when `main`'s head is released already,
+when `changelog.sh check` finds something,
+and when `[Unreleased]` holds no bullet.
+`make release-alpha DRY=1` shows what it would cut, tag and push,
+and does none of it;
+`ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
 
 Boxes following the update channel `alpha` get each release from `massimo
 update` or the web UI (see [packaging/README.md](packaging/README.md#updating)).

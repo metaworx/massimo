@@ -11,9 +11,9 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +37,19 @@ const (
 	defaultRefresh  = 6 * time.Hour
 	defaultDiscover = 30 * time.Minute
 )
+
+// intSetting describes one whole-number setting, which applies at once.
+type intSetting struct {
+	key      string
+	def      int
+	min, max int
+}
+
+var intSettings = []intSetting{
+	// Finished commands are kept this many days; 0 keeps them (NOTE
+	// StoreUsers v1.0: commands history).
+	{key: store.CommandsKeepDaysKey, def: 0, min: 0, max: 3650},
+}
 
 var durationSettings = []durationSetting{
 	{key: store.StaleAfterKey, def: view.StaleAfter, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
@@ -97,6 +110,16 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 		}
 		out[d.key] = sv
 	}
+	for _, d := range intSettings {
+		v, ok, err := st.SettingInt(r.Context(), d.key)
+		if err != nil {
+			return nil, fail(http.StatusInternalServerError, "%v", err)
+		}
+		if !ok {
+			v = d.def
+		}
+		out[d.key] = settingView{Value: strconv.Itoa(v), Default: strconv.Itoa(d.def), Set: ok, InEffect: strconv.Itoa(v), Applies: "now"}
+	}
 	tenant, err := st.TenantID()
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
@@ -117,15 +140,15 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) error {
 }
 
 // putSettings handles PUT /api/v1/settings: an object of keys and
-// values, a duration as a string ("36h", "0" to switch an interval off)
-// or null to go back to the default. Every value is checked before any
-// is written.
+// values, a duration as a string ("36h", "0" to switch an interval off),
+// a whole number as a number or a string, or null to go back to the
+// default. Every value is checked before any is written.
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.cubeStore()
 	if err != nil {
 		return err
 	}
-	var req map[string]*string
+	var req map[string]json.RawMessage
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad body: %v (want {\"stale_after\": \"36h\", …}, null for the default)", err)
 	}
@@ -133,8 +156,11 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "no setting given")
 	}
 	type write struct {
-		d     durationSetting
-		value *time.Duration
+		key      string
+		duration *time.Duration // a duration setting
+		number   *int           // a whole-number setting
+		clear    bool
+		d        *durationSetting
 	}
 	var writes []write
 	keys := make([]string, 0, len(req))
@@ -146,44 +172,97 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		if k == store.NodeIDKey || k == store.TenantIDKey {
 			return fail(http.StatusBadRequest, "%s cannot be changed", k)
 		}
+		raw := req[k]
+		isNull := len(raw) == 0 || string(raw) == "null"
 		var d *durationSetting
 		for i := range durationSettings {
 			if durationSettings[i].key == k {
 				d = &durationSettings[i]
 			}
 		}
-		if d == nil {
-			return fail(http.StatusBadRequest, "unknown setting %q", k)
-		}
-		if req[k] == nil {
-			writes = append(writes, write{d: *d})
+		if d != nil {
+			if isNull {
+				writes = append(writes, write{key: k, clear: true, d: d})
+				continue
+			}
+			var text string
+			if json.Unmarshal(raw, &text) != nil {
+				return fail(http.StatusBadRequest, "%s: want a duration such as 30m or 24h, as a string", k)
+			}
+			v, err := parseSettingDuration(*d, text)
+			if err != nil {
+				return err
+			}
+			writes = append(writes, write{key: k, duration: &v, d: d})
 			continue
 		}
-		v, err := parseSettingDuration(*d, *req[k])
+		var n *intSetting
+		for i := range intSettings {
+			if intSettings[i].key == k {
+				n = &intSettings[i]
+			}
+		}
+		if n == nil {
+			return fail(http.StatusBadRequest, "unknown setting %q", k)
+		}
+		if isNull {
+			writes = append(writes, write{key: k, clear: true})
+			continue
+		}
+		v, err := parseSettingInt(*n, raw)
 		if err != nil {
 			return err
 		}
-		writes = append(writes, write{d: *d, value: &v})
+		writes = append(writes, write{key: k, number: &v})
 	}
 	for _, wr := range writes {
-		if wr.value == nil {
-			err = st.DeleteSetting(r.Context(), wr.d.key)
-		} else {
-			err = st.SetSetting(r.Context(), wr.d.key, fmtDuration(*wr.value))
+		switch {
+		case wr.clear:
+			err = st.DeleteSetting(r.Context(), wr.key)
+		case wr.duration != nil:
+			err = st.SetSetting(r.Context(), wr.key, fmtDuration(*wr.duration))
+		default:
+			err = st.SetSetting(r.Context(), wr.key, *wr.number)
 		}
 		if err != nil {
 			return fail(http.StatusInternalServerError, "%v", err)
 		}
-		if wr.d.key == store.StaleAfterKey {
-			if wr.value == nil {
+		if wr.key == store.StaleAfterKey {
+			if wr.duration == nil {
 				s.SetStaleAfter(0)
 			} else {
-				s.SetStaleAfter(*wr.value)
+				s.SetStaleAfter(*wr.duration)
 			}
 		}
-		s.log.Info("setting changed", "key", wr.d.key, "value", settingLogValue(wr.value), "remote", r.RemoteAddr)
+		value := "default"
+		switch {
+		case wr.duration != nil:
+			value = fmtDuration(*wr.duration)
+		case wr.number != nil:
+			value = strconv.Itoa(*wr.number)
+		}
+		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", r.RemoteAddr)
 	}
 	return s.getSettings(w, r)
+}
+
+// parseSettingInt reads and checks one whole number, given as a JSON
+// number or as a string of digits.
+func parseSettingInt(d intSetting, raw json.RawMessage) (int, error) {
+	var n int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		var text string
+		if json.Unmarshal(raw, &text) != nil {
+			return 0, fail(http.StatusBadRequest, "%s: want a whole number", d.key)
+		}
+		if n, err = strconv.Atoi(strings.TrimSpace(text)); err != nil {
+			return 0, fail(http.StatusBadRequest, "%s %q: want a whole number", d.key, text)
+		}
+	}
+	if n < d.min || n > d.max {
+		return 0, fail(http.StatusBadRequest, "%s %d: between %d and %d", d.key, n, d.min, d.max)
+	}
+	return n, nil
 }
 
 // parseSettingDuration reads and checks one duration.
@@ -207,11 +286,4 @@ func parseSettingDuration(d durationSetting, text string) (time.Duration, error)
 		return 0, fail(http.StatusBadRequest, "%s %s: between %s and %s%s", d.key, text, fmtDuration(d.min), fmtDuration(d.max), off)
 	}
 	return v, nil
-}
-
-func settingLogValue(v *time.Duration) string {
-	if v == nil {
-		return "default"
-	}
-	return fmt.Sprint(fmtDuration(*v))
 }

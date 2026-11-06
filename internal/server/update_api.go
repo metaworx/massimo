@@ -84,12 +84,12 @@ func (s *Server) latest(ctx context.Context, refresh bool) (*update.Release, tim
 }
 
 // updateBlocked says why an update cannot be started from the API, or "".
-func (s *Server) updateBlocked() string {
+func (s *Server) updateBlocked(ctx context.Context) string {
 	switch {
 	case s.opts.Update.Managed != "":
 		return s.opts.Update.Managed
-	case s.opts.Token == "":
-		return "set MASSIMO_API_TOKEN to start updates from the API"
+	case !s.authenticated(ctx):
+		return "set MASSIMO_API_TOKEN or create a user to start updates from the API"
 	case s.opts.Update.Request == "" && goruntime.GOOS == "windows":
 		return "start updates from the installed service (massimo install)"
 	case s.opts.Update.Request == "":
@@ -120,7 +120,7 @@ type updateView struct {
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 	u := s.opts.Update
-	v := updateView{Current: u.Version, Channel: u.Channel, Blocked: s.updateBlocked()}
+	v := updateView{Current: u.Version, Channel: u.Channel, Blocked: s.updateBlocked(ctx)}
 	if update.ValidChannel(u.Channel) {
 		rel, at, err := s.latest(ctx, refresh)
 		v.CheckedAt = at
@@ -150,7 +150,7 @@ func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	// Replacing the binary is never open to an unauthenticated API, even
 	// where reading and setting temperatures are.
-	if why := s.updateBlocked(); why != "" {
+	if why := s.updateBlocked(r.Context()); why != "" {
 		return fail(http.StatusForbidden, "%s", why)
 	}
 	v := s.updateState(r.Context(), true)

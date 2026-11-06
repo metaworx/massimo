@@ -489,6 +489,9 @@ the pytest structure moves to it test by test.
    and `actions/upload-artifact` of the traces and screenshots on failure.
    GUIDELINES/project/CI.md sections 2 and 3 say why it runs and what it needs;
    the `.github/` change takes a CHANGELOG bullet.
+   Since 2026-11-06 the Screenshots job runs in Microsoft's Playwright image instead,
+   with no `actions/setup-python`, browser cache or `playwright install`
+   (GUIDELINES/project/CI.md section 3), and a job of its own would do the same.
 3. **Third**:
    the four machine-translated languages,
    a short pass at 390 px each (the page loads in its language,

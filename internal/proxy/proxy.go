@@ -64,7 +64,12 @@ type Options struct {
 	HiddenList func() []cube.RFAddress
 	// ShowHidden shows the hidden devices and room 255 instead.
 	ShowHidden bool
-	Logger     *slog.Logger
+	// OnWrite, when set, is called after each radio write (s:) of a
+	// client that the Cube took, not discarded, with the command's
+	// header, so that the server can follow the write up as it does
+	// its own.
+	OnWrite func(cube.RadioCommand)
+	Logger  *slog.Logger
 }
 
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
@@ -347,6 +352,13 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		p.log.Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
 	}
+	if m.Type == 's' && !res.Discarded && p.opts.OnWrite != nil {
+		if rc, err := cube.ParseRadioCommand(m.Data); err == nil {
+			p.opts.OnWrite(rc)
+		} else {
+			p.log.Debug("proxy: radio command not understood, not followed up", "remote", remote, "command", m.String(), "error", err)
+		}
+	}
 	if m.Type == 'c' {
 		// A device the server did not know yet, such as one just paired.
 		for _, r := range res.Replies {
@@ -535,7 +547,7 @@ type Responder struct {
 
 	pc         net.PacketConn
 	serving    chan struct{} // closed once Serve has its socket
-	collectors map[chan cubelan.Discovered]struct{}
+	collectors map[chan discoveryAnswer]struct{}
 }
 
 type responderMember struct {
@@ -548,21 +560,47 @@ func NewResponder(log *slog.Logger) *Responder {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Responder{log: log, serving: make(chan struct{}), collectors: map[chan cubelan.Discovered]struct{}{}}
+	return &Responder{log: log, serving: make(chan struct{}), collectors: map[chan discoveryAnswer]struct{}{}}
 }
+
+// discoveryAnswer is one answer the responder's socket read for a
+// running Discover: an identify reply, or the reply to a c request.
+type discoveryAnswer struct {
+	cube   cubelan.Discovered // for an identify reply
+	from   *net.UDPAddr
+	config bool // a c reply: only cube.Serial and cube.DHCP are set
+}
+
+// parseDiscoveryAnswer decodes an identify or c reply from from.
+func parseDiscoveryAnswer(b []byte, from *net.UDPAddr) (discoveryAnswer, bool) {
+	if d, ok := cubelan.ParseIdentifyReply(b, from.IP); ok {
+		return discoveryAnswer{cube: d, from: from}, true
+	}
+	if serial, dhcp, ok := cubelan.ParseConfigReply(b); ok {
+		return discoveryAnswer{cube: cubelan.Discovered{Serial: serial, DHCP: &dhcp}, from: from, config: true}, true
+	}
+	return discoveryAnswer{}, false
+}
+
+// configWait is how long Discover waits past its wait for the c reply
+// of a Cube that answered late.
+const configWait = time.Second
 
 // Discover sends a discovery request from the responder's socket to each
 // target and returns the answers that arrive within wait, one per serial
-// and address, in the order they came. Answers of this host's own proxies
-// are among them; the caller tells them apart. It waits for Serve to have
-// its socket.
+// and address, in the order they came. Each Cube that answers is asked
+// for its network configuration (c) at once, from the same socket, and
+// its DHCP flag is filled in when it answers in time; a Cube that
+// answered late gets configWait for that. Answers of this host's own
+// proxies are among them, without the flag; the caller tells them apart.
+// It waits for Serve to have its socket.
 func (r *Responder) Discover(ctx context.Context, targets []*net.UDPAddr, wait time.Duration) ([]cubelan.Discovered, error) {
 	select {
 	case <-r.serving:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	ch := make(chan cubelan.Discovered, 64)
+	ch := make(chan discoveryAnswer, 64)
 	r.mu.Lock()
 	pc := r.pc
 	r.collectors[ch] = struct{}{}
@@ -581,20 +619,44 @@ func (r *Responder) Discover(ctx context.Context, targets []*net.UDPAddr, wait t
 	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
-	seen := map[string]bool{}
+	index := map[string]int{}       // serial@ip to its place in out
+	asked := map[string]time.Time{} // serial@ip to when c went out
 	var out []cubelan.Discovered
 	for {
 		select {
 		case <-ctx.Done():
 			return out, ctx.Err()
 		case <-timer.C:
-			return out, nil
-		case d := <-ch:
-			key := d.Serial + "@" + d.IP.String()
-			if !seen[key] {
-				seen[key] = true
-				out = append(out, d)
+			// A Cube asked shortly before the end gets configWait for its
+			// c reply; the others are done.
+			var last time.Time
+			for key, at := range asked {
+				if out[index[key]].DHCP == nil && at.After(last) {
+					last = at
+				}
 			}
+			if more := time.Until(last.Add(configWait)); more > 0 {
+				timer.Reset(more)
+				continue
+			}
+			return out, nil
+		case a := <-ch:
+			key := a.cube.Serial + "@" + a.from.IP.String()
+			i, seen := index[key]
+			if a.config {
+				if seen && out[i].DHCP == nil {
+					out[i].DHCP = a.cube.DHCP
+				}
+				continue
+			}
+			if seen {
+				continue
+			}
+			index[key] = len(out)
+			out = append(out, a.cube)
+			// The Cube answers from the port it takes requests on.
+			pc.WriteTo(cubelan.ConfigRequest(a.cube.Serial), a.from)
+			asked[key] = time.Now()
 		}
 	}
 }
@@ -667,11 +729,11 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 		serial, op, ok := cubelan.ParseUDPRequest(buf[:n])
 		if !ok {
 			if u != nil {
-				if d, ok := cubelan.ParseIdentifyReply(buf[:n], u.IP); ok {
+				if a, ok := parseDiscoveryAnswer(buf[:n], u); ok {
 					r.mu.Lock()
 					for ch := range r.collectors {
 						select {
-						case ch <- d:
+						case ch <- a:
 						default:
 						}
 					}

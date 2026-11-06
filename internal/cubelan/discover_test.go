@@ -35,6 +35,29 @@ func TestUDPIdentifyReply(t *testing.T) {
 	}
 }
 
+func TestConfigRequestAndReply(t *testing.T) {
+	if req := ConfigRequest("KEQ0000000"); string(req) != "eQ3Max*\x00KEQ0000000c" {
+		t.Fatalf("request %q", req)
+	}
+	// The layout of a c reply from a Cube with firmware 1.1.3: the stored
+	// ip, gateway, netmask, dns1, dns2, then the DHCP and encryption flags.
+	cfg := "\xc0\xa8\x00\xde\xc0\xa8\x00\x01\xff\xff\x00\x00\xc0\xa8\x00\x01\x00\x00\x00\x00"
+	for _, tc := range []struct {
+		flags string
+		dhcp  bool
+	}{{"\x01\x01", true}, {"\x00\x01", false}} {
+		serial, dhcp, ok := ParseConfigReply([]byte("eQ3MaxApKEQ0000000>c" + cfg + tc.flags))
+		if !ok || serial != "KEQ0000000" || dhcp != tc.dhcp {
+			t.Fatalf("flags %q: %q %v %v", tc.flags, serial, dhcp, ok)
+		}
+	}
+	for _, b := range []string{"eQ3MaxApKEQ0000000>c" + cfg, "eQ3MaxApKEQ0000000>N" + cfg + "\x01\x01", "eQ3Max*\x00KEQ0000000c"} {
+		if _, _, ok := ParseConfigReply([]byte(b)); ok {
+			t.Fatalf("%q parsed as a c reply", b)
+		}
+	}
+}
+
 func TestQueryConfigReadsTheDHCPFlag(t *testing.T) {
 	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0b9573)
 	if err != nil {

@@ -108,7 +108,6 @@ docs/review-2026-11-05.md has the coding standard they came from.
 - The backup and restore panel in the UI (the API is in),
   and the notice when the server is gone (briefs ready).
 - Settings → Server in the UI (intervals, the stale threshold); the API exists.
-- Writes from proxy clients get no follow-up re-read.
 - The UI could ignore the short `connected: false` during the six-hourly refresh
   and the budget reconnects.
 - Server error texts reach the UI in English; FR, IT,
