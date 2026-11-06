@@ -56,7 +56,7 @@ Editing a generated file is wasted work — change the fragment and re-run
 ---
 
 
-# Massimo — Project Contract (v1.1.0)
+# Massimo — Project Contract (v1.3.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -81,8 +81,8 @@ so that the two cannot drift apart.
 | Language(s)           | declared as `project.languages` in `GUIDELINES/config.ini`, kept honest by `GUIDELINES/shared/tools/detect-languages.sh --check` |
 | Source directories    | `cmd/massimo/` (the command line and `serve`), `internal/` (the packages: `protocol/cube`, `cubelan`, `engine`, `server` with the web UI in `server/ui/`, `proxy`, `backup`, `store`, `update`, `install`, …), `packaging/` (unit files, plists, the installers' assets), `tools/ui-test/` (the Playwright smoke test), `docs/` (the protocol findings, the API, the designs, the handovers) |
 | Shipped-code paths    | declared as `project.shipped` in `GUIDELINES/config.ini` and listed below; kept honest by `GUIDELINES/shared/tools/changelog.sh check` (rule: `GUIDELINES/shared/COMMIT.md` §5) |
-| Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature), which tags `main`'s head and fast-forwards `alpha`; `README.md`, "Versions" |
-| Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `-race` for `internal/server`, `internal/cubelan` and `internal/proxy` is recommended, not required), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (needs the Playwright venv, `tools/ui-test/README.md`) |
+| Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature, `DRY=1` to see it first) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main`, `alpha` and the tag are pushed atomically; `README.md`, "Versions" |
+| Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `-race` for `internal/server`, `internal/cubelan` and `internal/proxy` is recommended, not required), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`) |
 | Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `GUIDELINES/shared/lang/go/LINTING.md` requires per platform; `govulncheck ./...` runs in CI for linux and windows; no other linter |
 | Commit summary        | declared as `[commit]` in `GUIDELINES/config.ini` and shown below; held to it by `GUIDELINES/shared/tools/commit-msg.sh` (rule: `GUIDELINES/shared/COMMIT.md` §3.1) |
 
