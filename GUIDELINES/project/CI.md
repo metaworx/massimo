@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.3.0)
+# Massimo — CI Conventions (v1.3.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -79,6 +79,10 @@ Where CI differs, and why:
   whose Python takes the place of the venv (`UI_TEST_PYTHON`)
   and which has git and curl but no `make`;
   `actions/setup-go` installs Go inside it.
+  The job sets `GOFLAGS=-buildvcs=false`,
+  because git there refuses the checkout,
+  which belongs to another user than the container's root,
+  and the binary under test needs no version stamp.
   The image holds the browsers and their system libraries,
   so the job installs nothing through apt:
   `playwright install --with-deps chromium` on the runner took 60 s on a good run

@@ -81,6 +81,10 @@ jobs:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
     env:
       UI_TEST_PYTHON: python
+      # The checkout belongs to another user than the container's root,
+      # so git refuses it and go build cannot stamp the version from it;
+      # the binary under test needs none.
+      GOFLAGS: -buildvcs=false
     steps:
       - uses: actions/checkout@v5
 
