@@ -95,16 +95,20 @@ func TestResolveAddrPrefersTheProxy(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_ADDRESS", "")
 	t.Setenv("MASSIMO_CUBE_PROXY", "")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
-	if a, err := ResolveAddr("test", "KEQ0000001", false, io.Discard); err != nil || a != "10.0.0.1" {
+	if a, err := ResolveAddr("test", "KEQ0000001", ProxyFallback, io.Discard); err != nil || a != "10.0.0.1" {
 		t.Fatalf("address %q %v", a, err)
 	}
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", ln.Addr().String())
-	for _, direct := range []bool{false, true} {
-		if a, err := ResolveAddr("test", "KEQ0000001", direct, io.Discard); err != nil || a != ln.Addr().String() {
-			t.Fatalf("proxy, direct %v: %q %v", direct, a, err)
+	for _, mode := range []ProxyMode{ProxyFallback, ProxyRequired} {
+		if a, err := ResolveAddr("test", "KEQ0000001", mode, io.Discard); err != nil || a != ln.Addr().String() {
+			t.Fatalf("proxy, mode %d: %q %v", mode, a, err)
 		}
 	}
-	if _, err := ResolveAddr("test", "", false, io.Discard); err == nil || !strings.Contains(err.Error(), "-addr is required") {
+	// -direct: the Cube itself although the proxy answers.
+	if a, err := ResolveAddr("test", "KEQ0000001", ProxySkip, io.Discard); err != nil || a != "10.0.0.1" {
+		t.Fatalf("proxy skipped: %q %v", a, err)
+	}
+	if _, err := ResolveAddr("test", "", ProxyFallback, io.Discard); err == nil || !strings.Contains(err.Error(), "-addr is required") {
 		t.Fatalf("no cube: %v", err)
 	}
 }
@@ -121,22 +125,31 @@ func deadAddr(t *testing.T) string {
 	return a
 }
 
-func TestResolveAddrNoDirectFallbackFromTheProxy(t *testing.T) {
+func TestResolveAddrWhenTheProxyDoesNotAnswer(t *testing.T) {
 	dead := deadAddr(t)
 	t.Setenv("MASSIMO_CUBE_ADDRESS", "")
 	t.Setenv("MASSIMO_CUBE_PROXY", "")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", dead)
-	_, err := ResolveAddr("status", "KEQ0000001", false, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "status: the massimo proxy at "+dead+" does not answer") || !strings.Contains(err.Error(), "-direct") {
-		t.Fatalf("dead proxy without -direct: %v", err)
-	}
+	// Default: the Cube itself, with a warning.
 	var log strings.Builder
-	if a, err := ResolveAddr("status", "KEQ0000001", true, &log); err != nil || a != "10.0.0.1" {
-		t.Fatalf("dead proxy with -direct: %q %v", a, err)
+	if a, err := ResolveAddr("status", "KEQ0000001", ProxyFallback, &log); err != nil || a != "10.0.0.1" {
+		t.Fatalf("fallback: %q %v", a, err)
 	}
-	if !strings.Contains(log.String(), "using the cube directly") {
-		t.Fatalf("log %q", log.String())
+	for _, s := range []string{"warning:", dead + " does not answer", "connecting to the cube directly", "only connection", "-no-direct"} {
+		if !strings.Contains(log.String(), s) {
+			t.Fatalf("warning %q lacks %q", log.String(), s)
+		}
+	}
+	// -no-direct: an error naming -direct and -addr.
+	_, err := ResolveAddr("status", "KEQ0000001", ProxyRequired, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "status: the massimo proxy at "+dead+" does not answer") || !strings.Contains(err.Error(), "-direct") || !strings.Contains(err.Error(), "-addr") {
+		t.Fatalf("-no-direct: %v", err)
+	}
+	// -direct: no probe, no warning.
+	log.Reset()
+	if a, err := ResolveAddr("status", "KEQ0000001", ProxySkip, &log); err != nil || a != "10.0.0.1" || log.Len() != 0 {
+		t.Fatalf("-direct: %q %v log %q", a, err, log.String())
 	}
 }
 
