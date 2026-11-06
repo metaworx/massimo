@@ -530,3 +530,24 @@ the web UI and two proxy listeners:
 - The whole system uses about 110 MB (`free -m`), leaving over 300 MB available;
   the root filesystem needs 2.1 GB.
 - The web UI's page loads in about 0.25 s over the 100 Mbit Ethernet.
+
+## Learnings
+
+From the install days on the Pi and the Mac,
+kept here because they cost time to learn.
+
+- Pi 1: Ethernet only, no networking over USB;
+  the current Pi OS 32-bit still supports it and uses cloud-init user-data;
+  about 9 MB RSS; memory cgroup accounting is off,
+  so `systemctl status` shows no memory line;
+  the first boot takes about 10 minutes.
+- macOS: a signed binary overwritten in place gets SIGKILL,
+  which is why `install` and `update` rename into place. launchd tests without
+  root work in the `gui/<uid>` domain only while that user is logged in at the console;
+  `user/<uid>` fails over SSH with "Bootstrap failed: 5";
+  SIP blocks `launchctl setenv` in the system domain,
+  so a root helper gets its environment only through its plist.
+- GitHub's API allows 60 requests an hour per address without a token,
+  which is what `MASSIMO_GITHUB_TOKEN` is for.
+- For a sudoers line with a command list,
+  check with `sudo -n <allowed command>`, not `sudo -n true`.
