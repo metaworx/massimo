@@ -25,6 +25,10 @@ massimo-backup-*
 
 # Python environment of the web UI smoke test
 /tools/ui-test/.venv/
+# what the suite leaves behind: the traces, screenshots and videos of
+# failed tests, and pytest's cache
+/tools/ui-test/results/
+/tools/ui-test/.pytest_cache/
 
 # serve's store (internal/store): the Cubes, settings and node key
 massimo.db
