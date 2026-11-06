@@ -196,8 +196,9 @@ jobs:
           post_update() {
             rm -f "$data/update-status.json" post.json second.json
             local codes code second
+            # One code per line; curl on Windows writes \r\n for the \n.
             codes="$(curl -sS -o post.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" \
-              --next -sS -o second.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" || true)"
+              --next -sS -o second.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" | tr -d '\r' || true)"
             code="${codes%%$'\n'*}"
             second="${codes#*$'\n'}"
             cat post.json 2>/dev/null || true; echo
