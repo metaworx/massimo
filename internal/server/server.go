@@ -273,6 +273,25 @@ type runtime struct {
 	// restore_api.go.
 	restoreMu sync.Mutex
 	restore   *restoreRun
+
+	// structure is the lock of a change of rooms, devices and their
+	// metadata, see lockStructure.
+	structure chan struct{}
+}
+
+// lockStructure takes the Cube's structure lock, so that one change of
+// rooms and devices at a time reads the metadata, sends its radiograms
+// and writes the metadata: two built from the same reading would lose
+// one of them, the more so as the queue lets a metadata write supersede
+// one still waiting. It waits as long as ctx lets it and returns the
+// function that releases the lock.
+func (rt *runtime) lockStructure(ctx context.Context) (func(), error) {
+	select {
+	case rt.structure <- struct{}{}:
+		return func() { <-rt.structure }, nil
+	case <-ctx.Done():
+		return nil, fail(http.StatusServiceUnavailable, "another change of the cube's rooms and devices is still running")
+	}
 }
 
 // subscribePush returns a channel that gets a signal whenever the Cube
@@ -498,6 +517,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Err != nil {
 				ev.Error = e.Err.Error()
 			}
+			if e.Kind == cubelan.EventForgotten {
+				delete(rt.last, e.Device)
+				rt.follow.forget(e.Device)
+			}
 			if e.Kind == cubelan.EventPaired {
 				// The metadata does not change by pairing; the device's C
 				// line puts it into the device list, as unlisted.
@@ -512,7 +535,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				default: // slow subscriber: drop
 				}
 			}
-			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected {
+			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventForgotten {
 				for ch := range rt.push {
 					select {
 					case ch <- struct{}{}:
@@ -1018,6 +1041,13 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || id < 1 || id > 255 {
 		return fail(http.StatusBadRequest, "bad room id %q", r.PathValue("id"))
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	unlock, err := rt.lockStructure(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	md := rt.client.Snapshot().Metadata()
 	if md == nil {
 		return fail(http.StatusServiceUnavailable, "cube not connected yet")
@@ -1037,8 +1067,6 @@ func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) error {
 			cp.Rooms = append(cp.Rooms, room)
 		}
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
 	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
 		return err
 	}

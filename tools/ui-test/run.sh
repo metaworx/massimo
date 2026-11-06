@@ -9,7 +9,8 @@
 # the token and the stream tickets, and the fake Cube's address and name,
 # which serve seeds into its store, massimo.db in that directory), then
 # runs the pytest suite next to this script (conftest.py, test_*.py) with
-# the page's address in UI_TEST_URL and the token in UI_TEST_TOKEN; the
+# the page's address in UI_TEST_URL, the token in UI_TEST_TOKEN and the
+# server's log in UI_TEST_SERVE_LOG; the
 # arguments after "smoke" go to pytest, as do those in PYTEST_ADDOPTS
 # (PYTEST_ADDOPTS='-k cubes' make ui-test). Of a failed test it keeps
 # the trace, the screenshot and the video under tools/ui-test/results/.
@@ -18,6 +19,10 @@
 # Without Playwright (and, for the suite, pytest and pytest-playwright)
 # it says so and exits 0, so `make ui-test` never fails on a machine that
 # cannot run it; UI_TEST_REQUIRED=1, as CI sets it, makes that exit 1.
+#
+# The fake Cube has a device that joins pairing mode two seconds after
+# n:, a copy of the radiator thermostat 1514b6 as 0abcde (TEQ0000001),
+# and joins again after a t: deleted it, so that every case can pair it.
 #
 # The fake Cube also answers UDP discovery, as a Cube that is not
 # configured (KEQ0000000), on a loopback port the server asks instead of
@@ -67,7 +72,8 @@ trap cleanup EXIT INT TERM
 (cd "$root" && go build -o "$work/massimo" ./cmd/massimo)
 cd "$work"
 env -i PATH="$PATH" HOME="$HOME" ./massimo fakecube -greeting "$here/greeting.txt" \
-	-listen "127.0.0.1:$cube_port" -discovery "127.0.0.1:$discovery_port" > fakecube.log 2>&1 &
+	-listen "127.0.0.1:$cube_port" -discovery "127.0.0.1:$discovery_port" \
+	-pair 1514b6,0abcde,TEQ0000001 > fakecube.log 2>&1 &
 pids="$pids $!"
 env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
 	MASSIMO_CUBE_KEQ0537249_ADDRESS="127.0.0.1:$cube_port" MASSIMO_CUBE_KEQ0537249_NAME="Fake Cube" \
@@ -98,4 +104,4 @@ if [ "$mode" = screenshots ]; then
 	exit
 fi
 cd "$here"
-UI_TEST_URL="$url" UI_TEST_TOKEN="$token" "$py" -m pytest --output "$here/results" "$@"
+UI_TEST_URL="$url" UI_TEST_TOKEN="$token" UI_TEST_SERVE_LOG="$work/serve.log" "$py" -m pytest --output "$here/results" "$@"

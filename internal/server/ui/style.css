@@ -278,6 +278,24 @@ body.expert #clock-plain { display: none; }
 .cubes-msg { margin: 4px 0 0; overflow-wrap: anywhere; }
 .cubes-msg.ok { color: var(--ok); }
 .cubes-msg.bad { color: var(--bad); }
+/* pairing in a Cube's panel (cubes.js), and the form that puts a device
+   into a room, there and under Devices without a room (tiles.js) */
+.cube-pairing { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.no-cubes .cube-pairing { border-bottom: none; padding-bottom: 0; }
+.pairing-form, .pairing-running { margin-top: 2px; }
+.pairing-how { margin: 0 0 4px; }
+.pairing-countdown { margin: 0; font-weight: 600; }
+.pairing-msg, .pair-result { margin: 6px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.pairing-msg.ok, .pair-result.ok, .unlisted-msg.ok { color: var(--ok); }
+.pairing-msg.bad, .pair-result.bad, .unlisted-msg.bad { color: var(--bad); }
+.pair-device { border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; margin-top: 10px; }
+.pair-device-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 6px; overflow-wrap: anywhere; }
+.pair-device-type { font-weight: 600; }
+.pair-device-form .field { margin-bottom: 8px; }
+.pair-device-form input[type="text"], .pair-device-form select { min-width: 0; max-width: 100%; }
+.device .pair-device-form { margin-top: 8px; }
+.device .confirm-box { margin-top: 8px; }
+.unlisted-msg { margin: 0; padding: 0 14px 12px; }
 
 /* appearance: mode and colour scheme (theme.js), the scheme editor */
 .settings .appearance { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
@@ -643,7 +661,7 @@ button.subtle { color: var(--muted); }
   stroke-linejoin: round;
   align-self: center;
 }
-.device-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.device-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .device-main { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .flag {
   font-size: 0.8rem;
@@ -872,12 +890,14 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 
 /* what the signed-in user may not do is hidden: login.js puts a class
    no-<capability> on the body per capability the user lacks, and the
-   markup marks what each one hides with needs-<capability> */
+   markup marks what each one hides with needs-<capability>, and with
+   needs-cubes-or-pair what either of the two shows (Settings → Cubes) */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
-.no-settings .needs-settings, .no-update .needs-update, .no-sync .needs-sync { display: none !important; }
+.no-settings .needs-settings, .no-update .needs-update, .no-sync .needs-sync,
+.no-cubes.no-pair .needs-cubes-or-pair { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, Settings → Users and Roles */

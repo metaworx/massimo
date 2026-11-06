@@ -8,7 +8,11 @@
 // Remove (DELETE); then the Cubes found on the LAN with Add (POST
 // /api/v1/cubes). The list is drawn when the settings open, after every
 // change, and on a poll while no panel is open, so that a poll never
-// throws away what is being typed.
+// throws away what is being typed. Each panel starts with Pair a device
+// (capability pair), the pairing flow: the time, Start, the countdown
+// with Stop, and each device that joins with the form that puts it into
+// a room (pairDeviceForm, which Devices without a room uses too). A role
+// with pair but without cubes sees the panels with the pairing alone.
 "use strict";
 
 const cubesUI = {
@@ -16,6 +20,8 @@ const cubesUI = {
   edits: {}, // per serial: the hidden list being edited
   names: {}, // radio address → device name, from the device lists seen
   devices: {}, // per serial: the Cube's visible devices, for the hide choice
+  rooms: {}, // per serial: the rooms of a Cube that is not the one shown
+  pairing: {}, // per serial: the pairing flow, see pairingOf
   busy: false,
 };
 
@@ -159,11 +165,337 @@ function sameList(a, b) {
   return x === y;
 }
 
+// --- pairing ----------------------------------------------------------
+
+// cubePath is the API path of a Cube.
+function cubePath(serial) {
+  return "api/v1/cubes/" + encodeURIComponent(serial);
+}
+
+// pairingOf is the pairing flow of a Cube's panel, which outlives a
+// redraw: form (the time and Start shown), seconds, active and until
+// (the server's state), paired (the devices that joined while this page
+// watched), msg (the last outcome), edits (per device, what its form
+// holds), tick (the countdown's timer).
+function pairingOf(serial) {
+  return cubesUI.pairing[serial] || (cubesUI.pairing[serial] = { form: false, seconds: 60, active: false, until: 0, paired: [], msg: null, edits: {}, tick: null });
+}
+
+// cubeRooms are the rooms a device of the Cube can be put into: the
+// page's for the Cube shown, else those loadCubeRooms read.
+function cubeRooms(serial) {
+  return serial === state.serial ? state.rooms : cubesUI.rooms[serial] || [];
+}
+
+async function loadCubeRooms(serial) {
+  if (serial === state.serial) return;
+  try {
+    cubesUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms")) || [];
+    redrawPairing(serial);
+  } catch (e) {
+    cubesUI.rooms[serial] = [];
+  }
+}
+
+// applyPairing takes the server's pairing state, the answer of GET, POST
+// and DELETE …/pairing. The devices of a pairing this page did not see
+// running are not shown; the end of one it saw is said in the panel.
+function applyPairing(serial, st) {
+  const p = pairingOf(serial);
+  const was = p.active;
+  p.active = !!(st && st.active);
+  p.until = Date.parse((st && st.until) || "") || 0;
+  if (p.active || was) p.paired = (st && st.paired) || [];
+  if (p.active) p.form = false;
+  if (was && !p.active) p.msg = { text: tn("pairing.ended", p.paired.length), ok: true };
+  if (p.active) startPairingTick(serial);
+  else stopPairingTick(serial);
+  redrawPairing(serial);
+}
+
+// loadPairing asks for a Cube's pairing state. Three failures in a row
+// while it runs end the countdown, which would ask on forever, and say
+// why.
+async function loadPairing(serial) {
+  const p = pairingOf(serial);
+  try {
+    const st = await api("GET", cubePath(serial) + "/pairing");
+    p.failures = 0;
+    applyPairing(serial, st);
+  } catch (e) {
+    p.failures = (p.failures || 0) + 1;
+    if (p.active && p.failures >= 3) {
+      p.active = false;
+      stopPairingTick(serial);
+      p.msg = { text: t("pairing.failed", { error: e.message }), ok: false };
+      redrawPairing(serial);
+    }
+  }
+}
+
+// startPairing sends Start: POST …/pairing with the seconds.
+async function startPairing(serial) {
+  const p = pairingOf(serial);
+  const secs = Number(p.seconds);
+  if (!Number.isInteger(secs) || secs < 1 || secs > 600) {
+    p.msg = { text: t("pairing.secondsBad"), ok: false };
+    redrawPairing(serial);
+    return;
+  }
+  p.msg = null;
+  p.edits = {};
+  p.active = false;
+  try {
+    applyPairing(serial, await api("POST", cubePath(serial) + "/pairing", { seconds: secs }));
+    loadCubeRooms(serial);
+  } catch (e) {
+    p.msg = { text: t("pairing.failed", { error: e.message }), ok: false };
+    redrawPairing(serial);
+  }
+}
+
+// stopPairing sends Stop: DELETE …/pairing.
+async function stopPairing(serial) {
+  try {
+    applyPairing(serial, await api("DELETE", cubePath(serial) + "/pairing"));
+  } catch (e) {
+    pairingOf(serial).msg = { text: t("pairing.failed", { error: e.message }), ok: false };
+    redrawPairing(serial);
+  }
+}
+
+// startPairingTick counts down every second while pairing runs. The
+// stream reports the shown Cube's devices and the end; another Cube's,
+// or the shown one's without a stream or past its time, are asked for.
+function startPairingTick(serial) {
+  const p = pairingOf(serial);
+  if (p.tick) return;
+  let n = 0;
+  p.tick = setInterval(() => {
+    if (!document.querySelector('.cube-panel[data-serial="' + serial + '"]')) {
+      stopPairingTick(serial); // the Cube is no longer served
+      return;
+    }
+    n++;
+    renderCountdown(serial);
+    const watched = serial === state.serial && state.eventsOpen && Date.now() < p.until;
+    if (!watched && n % 3 === 0) loadPairing(serial);
+  }, 1000);
+}
+
+function stopPairingTick(serial) {
+  const p = pairingOf(serial);
+  if (p.tick) clearInterval(p.tick);
+  p.tick = null;
+}
+
+// renderCountdown writes the time left into the panel, in place.
+function renderCountdown(serial) {
+  const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
+  const el = panel && panel.querySelector(".pairing-countdown");
+  if (!el) return;
+  const left = Math.ceil((pairingOf(serial).until - Date.now()) / 1000);
+  el.textContent = left > 0 ? t("pairing.left", { seconds: left }) : t("pairing.ending");
+}
+
+// pairingEvent takes the shown Cube's pairing_started and pairing_ended
+// events (app.js): the state is asked for.
+function pairingEvent(serial) {
+  loadPairing(serial);
+}
+
+// pairingJoined takes a paired event of the shown Cube: the device is
+// listed at once.
+function pairingJoined(serial, dev) {
+  const p = pairingOf(serial);
+  if (!p.active) {
+    loadPairing(serial);
+    return;
+  }
+  if (dev && !p.paired.some((x) => x.rf_address === dev.rf_address)) p.paired.push(dev);
+  redrawPairing(serial);
+}
+
+// redrawPairing draws a panel's pairing again, in place, so that the
+// Cube's form keeps what is typed in it.
+function redrawPairing(serial) {
+  const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
+  const old = panel && panel.querySelector(".cube-pairing");
+  if (old) old.replaceWith(pairingSection(serial));
+}
+
+// pairingSection is a panel's pairing (tpl-pairing): Pair a device; the
+// time and Start; while pairing runs, the countdown and Stop; the last
+// outcome; the devices that joined.
+function pairingSection(serial) {
+  const p = pairingOf(serial);
+  const box = fromTemplate("tpl-pairing");
+  const open = box.querySelector(".pair-open");
+  const form = box.querySelector(".pairing-form");
+  const running = box.querySelector(".pairing-running");
+  open.classList.toggle("hidden", p.form || p.active);
+  form.classList.toggle("hidden", !p.form || p.active);
+  running.classList.toggle("hidden", !p.active);
+  open.addEventListener("click", () => {
+    p.form = true;
+    p.msg = null;
+    redrawPairing(serial);
+    const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
+    if (panel) panel.querySelector(".pairing-form input[name=seconds]").focus();
+  });
+  const secs = form.querySelector("input[name=seconds]");
+  secs.id = "pair-seconds-" + serial;
+  secs.closest(".field").querySelector("label").htmlFor = secs.id;
+  secs.value = String(p.seconds);
+  secs.addEventListener("input", () => {
+    p.seconds = secs.value;
+  });
+  form.querySelector(".pair-cancel").addEventListener("click", () => {
+    p.form = false;
+    redrawPairing(serial);
+  });
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    startPairing(serial);
+  });
+  running.querySelector(".pair-stop").addEventListener("click", () => stopPairing(serial));
+  if (p.msg) showResult(box.querySelector(".pairing-msg"), p.msg.text, p.msg.ok);
+  const list = box.querySelector(".pairing-devices");
+  for (const d of p.paired) list.appendChild(pairedRow(serial, d));
+  if (p.active) {
+    const left = Math.ceil((p.until - Date.now()) / 1000);
+    box.querySelector(".pairing-countdown").textContent = left > 0 ? t("pairing.left", { seconds: left }) : t("pairing.ending");
+  }
+  return box;
+}
+
+// pairedRow is a device that joined: its type, serial and radio address,
+// and the form that puts it into a room, or how that went.
+function pairedRow(serial, d) {
+  const p = pairingOf(serial);
+  const e = p.edits[d.rf_address] || (p.edits[d.rf_address] = {});
+  const row = elem("div", "pair-device",
+    elem("div", "pair-device-head", textEl("span", typeName(d.type), "pair-device-type"), textEl("span", d.serial || "", "mono muted"),
+      textEl("span", d.rf_address, "mono muted expert-only")));
+  row.dataset.rf = d.rf_address;
+  if (e.done) {
+    const done = textEl("p", "", "small pair-result");
+    showResult(done, e.result.text, true);
+    row.appendChild(done);
+  } else {
+    row.appendChild(pairDeviceForm(serial, d, e, { onDone: () => redrawPairing(serial), onFail: () => redrawPairing(serial) }));
+  }
+  return row;
+}
+
+// pairDeviceForm is the form that puts a device that is in no room into
+// one (tpl-pair-device, capability structure): its name (with rename),
+// the room, and for a thermostat the switch that copies the room's
+// settings (with configure, which the copy needs as well), on by
+// default; PUT …/devices/{rf}. e keeps what is typed
+// across redraws, the result, and done once the device is in the room;
+// onDone runs then, onFail after a refusal, and onCancel, when given,
+// is the form's Cancel.
+function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
+  const form = fromTemplate("tpl-pair-device");
+  const id = "pair-" + serial + "-" + dev.rf_address;
+  const name = form.querySelector("input[name=name]");
+  name.id = id + "-name";
+  name.previousElementSibling.htmlFor = name.id;
+  name.value = e.name || "";
+  name.addEventListener("input", () => {
+    e.name = name.value;
+  });
+  const rooms = cubeRooms(serial);
+  const select = form.querySelector("select[name=room]");
+  select.id = id + "-room";
+  select.previousElementSibling.htmlFor = select.id;
+  fillOptions(select, rooms.map((r) => [String(r.id), r.name]));
+  if (!rooms.some((r) => r.id === e.room) && rooms.length) e.room = rooms[0].id;
+  if (e.room !== undefined) select.value = String(e.room);
+  select.addEventListener("change", () => {
+    e.room = Number(select.value);
+  });
+  const copyRow = form.querySelector(".pair-copy");
+  const copy = copyRow.querySelector("input[name=copy]");
+  if (isThermostat(dev)) {
+    copy.checked = e.copy !== false;
+    copy.addEventListener("change", () => {
+      e.copy = copy.checked;
+    });
+    const h = helpParts("pairCopy", t("pairing.copy"));
+    copyRow.append(h.btn, h.text);
+  } else {
+    copyRow.remove();
+  }
+  const result = form.querySelector(".pair-result");
+  const submit = form.querySelector("button[type=submit]");
+  if (e.result) showResult(result, e.result.text, e.result.ok);
+  submit.disabled = !!e.busy; // a redraw while it is being sent
+  if (!rooms.length) {
+    submit.disabled = true;
+    showResult(result, t("pairing.noRooms"), false);
+  }
+  const cancel = form.querySelector(".pair-device-cancel");
+  if (onCancel) cancel.addEventListener("click", onCancel);
+  else cancel.remove();
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (e.busy || !rooms.length) return;
+    const nm = (e.name || "").trim();
+    const label = nm || dev.name || dev.rf_address;
+    const body = { room_id: e.room };
+    if (isThermostat(dev)) body.copy = hasCap("configure") && e.copy !== false;
+    if (nm && hasCap("rename")) {
+      if (byteLength(nm) > NAME_BYTES) {
+        e.result = { text: t("cfg.devNameTooLong", { name: nm, n: NAME_BYTES }), ok: false };
+        showResult(result, e.result.text, false);
+        return;
+      }
+      body.name = nm;
+    }
+    const target = rooms.find((r) => r.id === e.room);
+    const roomName = target ? target.name : String(e.room);
+    e.busy = true;
+    e.result = { text: t("pairing.putting", { device: label, room: roomName }), ok: true };
+    submit.disabled = true;
+    showResult(result, e.result.text, true);
+    let res;
+    try {
+      res = await api("PUT", cubePath(serial) + "/devices/" + dev.rf_address, body);
+    } catch (err) {
+      // A copy that stopped leaves the device in its room: the reload
+      // shows where it is, and onFail says the error where it is seen.
+      e.busy = false;
+      e.result = { text: errorText(label, err), ok: false };
+      showResult(result, e.result.text, false);
+      submit.disabled = false;
+      if (serial === state.serial) await loadRooms().catch(() => {});
+      if (onFail) onFail();
+      return;
+    }
+    let text = t("pairing.done", { device: label, room: roomName });
+    if (res && res.copied) {
+      text += " " + t("pairing.copied", { days: res.copied.days });
+      if (res.copied.mode_not_set) text += " " + t("pairing.modeNotSet");
+    }
+    if (res && res.budget) text = t("result.budget", { text, duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots });
+    e.result = { text, ok: true };
+    e.done = true;
+    e.busy = false;
+    if (serial === state.serial) await loadRooms().catch(() => {});
+    else loadCubeRooms(serial);
+    if (onDone) onDone();
+  });
+  return form;
+}
+
 // cubePanel is one configured Cube, from its template (tpl-cube-panel):
 // the summary with the name, the serial and the badges; a notice per
-// line of the settings file that differs (tpl-cube-differs); the form
-// with the fields, the hidden devices and Remove and Save. A Cube served
-// from serve's command line has a note instead of the form.
+// line of the settings file that differs (tpl-cube-differs); the
+// pairing (pairingSection); the form with the fields, the hidden devices
+// and Remove and Save. A Cube served from serve's command line has a
+// note instead of the form.
 function cubePanel(c) {
   const d = fromTemplate("tpl-cube-panel");
   d.dataset.serial = c.serial;
@@ -179,15 +511,18 @@ function cubePanel(c) {
     if (d.open) {
       cubesUI.open.add(c.serial);
       if (!cubesUI.devices[c.serial]) loadCubeDevices(c.serial).then(() => devicesLoaded(c.serial));
+      loadPairing(c.serial);
+      loadCubeRooms(c.serial);
     } else {
       cubesUI.open.delete(c.serial);
       delete cubesUI.edits[c.serial];
     }
   });
+  sum.after(pairingSection(c.serial));
 
-  const form = d.querySelector("form");
+  const form = d.querySelector("form.cube-form");
   if (c.source === "flag" || !c.source) {
-    form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small"));
+    form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
     return d;
   }
   for (const fd of c.file_differs || []) {
@@ -281,8 +616,8 @@ function renderCubes() {
   if (!state.cubes.length) box.appendChild(textEl("p", t("cubes.none"), "muted small"));
   for (const c of state.cubes) box.appendChild(cubePanel(c));
   if (state.found.length) {
-    box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title"));
-    const ul = elem("ul", "cube-found-list");
+    box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title needs-cubes"));
+    const ul = elem("ul", "cube-found-list needs-cubes");
     for (const c of state.found) {
       const li = foundRow(c);
       li.classList.add("cube-found-row");

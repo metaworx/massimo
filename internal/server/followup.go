@@ -97,6 +97,17 @@ func (rt *runtime) afterWrite(configured ...cube.RFAddress) {
 	}
 }
 
+// forget stops following a device the Cube deleted, whose C line a
+// re-read would not find any more.
+func (f *followUp) forget(rf cube.RFAddress) {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	delete(f.devices, rf)
+	f.mu.Unlock()
+}
+
 // proxyWrote follows up a radio write that a client of the LAN proxy
 // sent, as the API follows up its own: a configuration write (week
 // programme, preset temperatures, valve settings, display mode, room

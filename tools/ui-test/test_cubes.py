@@ -20,7 +20,7 @@ def open_panel(page):
     page.locator("#view-settings").click()
     panel = page.locator(PANEL)
     panel.locator("summary").click()
-    return panel, panel.locator("form")
+    return panel, panel.locator("form.cube-form")
 
 
 def test_name_saved_and_taken_back(page, case):
@@ -28,7 +28,7 @@ def test_name_saved_and_taken_back(page, case):
     panel = page.locator(PANEL)
     assert panel.count() == 1, "the Cube in Settings → Cubes"
     panel.locator("summary").click()
-    form = panel.locator("form")
+    form = panel.locator("form.cube-form")
     assert form.is_visible(), "the Cube's panel opens"
     named_buttons(page, "a Cube's panel")
     form.locator("input[name=name]").fill("Renamed")

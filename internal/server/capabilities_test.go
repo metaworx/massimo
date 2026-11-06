@@ -243,6 +243,29 @@ func TestMoveNeedsStructure(t *testing.T) {
 	}
 }
 
+// The copy of the room's settings after a move needs configure as well:
+// a role with structure alone is refused before anything is sent, and
+// moves without the copy.
+func TestCopyNeedsConfigure(t *testing.T) {
+	fc, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)
+	mover := userToken(t, st, "mover", "mover")
+	path := "/api/v1/cubes/KEQ0537249/devices/1514b6"
+	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); code != 403 || errorOf(text) != `capability "configure" required` {
+		t.Fatalf("a move with the copy and without configure: %d %s", code, text)
+	}
+	if got := fc.Received(); len(got) != 0 {
+		t.Fatalf("sent before the refusal: %v", got)
+	}
+	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1,"copy":false}`); code != 200 || strings.Contains(text, "copied") {
+		t.Fatalf("a move without the copy: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", path, "secret", `{"room_id":2}`); code != 200 || !strings.Contains(text, "copied") {
+		t.Fatalf("the owner's move into room 2, with the copy: %d %s", code, text)
+	}
+}
+
 // A created role, a disabled capability, a disabled role, a disabled or
 // expired user, and a revoked or expired token.
 func TestRoleRules(t *testing.T) {

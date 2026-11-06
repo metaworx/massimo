@@ -14,6 +14,23 @@ the next minor, a fix counts the suffix up.
   batches and pruned daily by `log.keep_days` (30 days; 0 keeps them),
   so that the log survives a restart (`docs/store.md` section 9).
 
+- The web UI pairs a device in Settings → Cubes and puts it into a room
+  with the room's settings; Devices without a room and the Devices tab
+  remove one from the Cube (`docs/ui.md`).
+
+- `massimo fakecube -pair <template rf>,<rf>,<serial>`: a device that
+  joins pairing mode, and again after it was removed (README.md).
+
+- `DELETE /api/v1/cubes/{sn}/devices/{rf}` removes a device from the Cube
+  as the original software does, under `structure`; a client's `t:`
+  through the proxy drops the devices from the server's copy too.
+
+### Changed
+
+- `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
+  room's settings, as the original software does, with `configure`;
+  `"copy": false` skips it (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

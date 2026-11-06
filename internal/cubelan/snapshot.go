@@ -29,6 +29,9 @@ type Snapshot struct {
 	// fresh collects the devices it sent a C line for.
 	greeting bool
 	fresh    map[cube.RFAddress]bool
+	// forgotten are the devices Forget dropped: an L line does not bring
+	// one back, a C line for it or a new greeting does.
+	forgotten map[cube.RFAddress]bool
 }
 
 func newSnapshot() *Snapshot {
@@ -60,6 +63,7 @@ const (
 	EventPairingStarted                  // inclusion mode started
 	EventPaired                          // a device joined during inclusion mode
 	EventPairingEnded                    // inclusion mode ended
+	EventForgotten                       // a device deleted from the Cube was dropped (ForgetDevice)
 )
 
 func (k EventKind) String() string {
@@ -82,6 +86,8 @@ func (k EventKind) String() string {
 		return "paired"
 	case EventPairingEnded:
 		return "pairing_ended"
+	case EventForgotten:
+		return "device_forgotten"
 	}
 	return "unknown"
 }
@@ -94,6 +100,7 @@ func (s *Snapshot) beginGreeting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.greeting, s.fresh = true, map[cube.RFAddress]bool{}
+	s.forgotten = nil // the greeting says what the Cube holds
 	s.mparts = s.mparts[:0]
 }
 
@@ -165,6 +172,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 			return nil, err
 		}
 		s.configs[c.RFAddress] = c
+		delete(s.forgotten, c.RFAddress)
 		if s.greeting {
 			s.fresh[c.RFAddress] = true
 		}
@@ -187,6 +195,9 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		var evs []Event
 		listed := map[cube.RFAddress]bool{}
 		for _, st := range states {
+			if s.forgotten[st.RFAddress] {
+				continue
+			}
 			listed[st.RFAddress] = true
 			s.noteLocked(st.RFAddress)
 			old, had := s.states[st.RFAddress]
@@ -276,6 +287,57 @@ func (s *Snapshot) Devices() []cube.RFAddress {
 		}
 	}
 	return out
+}
+
+// Forget drops a device the Cube deleted (t:): its configuration, its
+// state, its place in the Cube's order and its entry in the metadata,
+// so that Devices no longer names it. The Cube's own metadata keeps the
+// entry until a client writes it without the device, which the original
+// software does right after t:. A device the Cube keeps, one that never
+// answers its reset, stays in the Cube's L lines: they do not bring it
+// back, but a C line for it does, and a new greeting brings back
+// whatever the Cube still holds. It reports whether the snapshot knew
+// the device.
+func (s *Snapshot) Forget(rf cube.RFAddress) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.forgotten == nil {
+		s.forgotten = map[cube.RFAddress]bool{}
+	}
+	s.forgotten[rf] = true
+	_, known := s.configs[rf]
+	if _, ok := s.states[rf]; ok {
+		known = true
+	}
+	delete(s.configs, rf)
+	delete(s.states, rf)
+	delete(s.times, rf)
+	if s.fresh != nil {
+		delete(s.fresh, rf)
+	}
+	kept := s.order[:0]
+	for _, o := range s.order {
+		if o == rf {
+			known = true
+			continue
+		}
+		kept = append(kept, o)
+	}
+	s.order = kept
+	if md := s.metadata; md != nil {
+		for i, d := range md.Devices {
+			if d.RFAddress != rf {
+				continue
+			}
+			// A new value: readers hold the old one.
+			cp := *md
+			cp.Devices = append(append([]cube.DeviceMeta(nil), md.Devices[:i]...), md.Devices[i+1:]...)
+			s.metadata = &cp
+			known = true
+			break
+		}
+	}
+	return known
 }
 
 // Updated is the time of the last message from the Cube.

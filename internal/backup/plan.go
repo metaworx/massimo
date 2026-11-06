@@ -543,7 +543,7 @@ func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name strin
 			members = append(members, cube.DeviceMeta{Type: d.Type, RFAddress: d.RFAddress, RoomID: d.RoomID})
 		}
 	}
-	out, in := cubeio.MoveCommands(snap, rf, typ, oldRoom, want.RoomID, members)
+	out, in := cubeio.MoveCommands(snap, rf, typ, oldRoom, want.RoomID, members, nil)
 	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, len(out.Lines)/2), out)
 	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, len(in.Lines)/2), in)
 }
