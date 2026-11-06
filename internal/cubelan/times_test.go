@@ -85,3 +85,55 @@ func TestStateTimes(t *testing.T) {
 		t.Fatal("times for an unknown device")
 	}
 }
+
+// The greeting's lines arrive one after the other, the L line last; its
+// values still carry exactly the time of the first line, the Cube's
+// observed_since, while a later L line carries its own time.
+func TestFirstDeviceListCarriesObservedSince(t *testing.T) {
+	lines, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
+	s := newSnapshot()
+	s.beginGreeting()
+	at := t0
+	for _, m := range lines {
+		if m.Type == 'L' {
+			// 1514b6, the first entry, as reported, so that it has values.
+			raw, _ := base64.StdEncoding.DecodeString(m.Data)
+			mine, _ := base64.StdEncoding.DecodeString(entry(21, 30, 205).Data)
+			m.Data = base64.StdEncoding.EncodeToString(append(mine, raw[12:]...))
+		}
+		if _, err := s.apply(m, at); err != nil {
+			t.Fatal(err)
+		}
+		at = at.Add(300 * time.Microsecond)
+	}
+	if s.Since() != t0 {
+		t.Fatalf("since %v", s.Since())
+	}
+	withValues := 0
+	for rf := range s.states {
+		tm, ok := s.Times(rf)
+		if !ok || tm.Changed != t0 {
+			t.Errorf("%s changed at %v", rf, tm.Changed)
+		}
+		for k, v := range tm.Fields {
+			if v != t0 {
+				t.Errorf("%s %s at %v", rf, k, v)
+			}
+		}
+		if len(tm.Fields) > 0 {
+			withValues++
+		}
+	}
+	if withValues == 0 {
+		t.Fatal("the fixture has no device with values")
+	}
+	t1 := t0.Add(time.Hour)
+	s.Apply(entry(21, 50, 205), t1)
+	if tm, _ := s.Times(0x1514b6); tm.Changed != t1 || tm.Fields["valve_pct"] != t1 || tm.Fields["setpoint"] != t0 {
+		t.Fatalf("later device list %+v", tm)
+	}
+}
