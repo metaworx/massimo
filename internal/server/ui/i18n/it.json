@@ -302,6 +302,8 @@
   "cubes.found": "Trovati nella rete locale, non configurati",
   "cubes.add": "Aggiungi",
   "cubes.addLabel": "aggiungi {serial}",
+  "cubes.dhcp": "DHCP",
+  "cubes.static": "indirizzo statico",
   "cubes.added": "{serial} aggiunto; il server ora si connette.",
   "cubes.failed": "{serial}: {error}",
   "cubes.remove": "Rimuovi",

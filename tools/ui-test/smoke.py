@@ -16,12 +16,12 @@ state event) greys its values and warns on the tile and in the device
 list, also in expert mode, which shows when the server started. The Cube choice's search entry runs a
 discovery, which the fake Cube answers as a Cube that is not configured,
 shows "searching" until the answer is in, then lists the found Cube as
-not selectable with the env lines to add, and the log has its
+not selectable with its DHCP flag and the env lines to add, and the log has its
 cube_found; a cube_found event adds another one live, and a refused
 search (stubbed 503) shows the server's message. A state event with
 changes shows in the log as what changed. In Settings → Cubes a name
 is saved and taken back from the settings file, hidden devices take
-their room's tile away and back, and a found Cube is added and removed,
+their room's tile away and back, and a found Cube, its DHCP flag shown, is added and removed,
 Remove asking in the panel.
 In Settings → Appearance a
 scheme changes the computed --bg, the dark mode sets data-theme, the
@@ -185,6 +185,8 @@ def discover(page, label, lang):
         check(sel.input_value() == serial, f"{label}: the selected Cube stays")
         check(page.locator("#cube-found").get_attribute("open") is not None, f"{label}: found Cubes opened")
         check("MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1" in page.locator("#cube-found .env-lines").inner_text(), f"{label}: env lines for the found Cube")
+        facts = page.locator("#cube-found [data-serial='KEQ0000000'] .found-facts")
+        check(facts.count() == 1 and " · DHCP · " in facts.inner_text(), f"{label}: the found Cube's DHCP flag")
         check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll with the found Cubes")
         page.locator("#view-log").click()
         check(wait_until(page, "[...document.querySelectorAll('.log-line.kind-cube_found')].some((l) => l.textContent.includes('KEQ0000000'))", 5),
@@ -253,6 +255,7 @@ def cubes(page, label, lang):
     if found.count() == 0:
         print(f"skip  {label}: no found Cube to add (discovery did not answer)")
     else:
+        check(" · DHCP · " in found.locator(".found-facts").inner_text(), f"{label}: the found Cube's DHCP flag in Settings → Cubes")
         found.locator("button").click()
         check(wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), f"{label}: Add serves the found Cube")
         check(page.evaluate("state.serial") == "KEQ0537249", f"{label}: the selected Cube stays")

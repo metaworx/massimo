@@ -610,6 +610,7 @@ then every Cube discovery found on the LAN that is not configured:
     "mac": "00:1a:22:01:02:03",
     "rf_address": "0a0b0c",
     "firmware": "1.1.3",
+    "dhcp": true,
     "found_at": "2026-11-04T14:30:01+01:00",
     "last_seen": "2026-11-04T15:00:02+01:00"
   }
@@ -622,6 +623,12 @@ A configured Cube has the fields below;
 A found Cube has only the fields shown: `address` is the IP it answered from,
 `found_at` when the server first saw it, `last_seen` its latest answer;
 `mac` comes from the host's ARP cache and may be missing.
+`dhcp` says whether the Cube takes its address by DHCP (`true`) or has a static
+one (`false`):
+discovery asks each Cube that answers for its network configuration (the `c` request,
+a read), and the flag is that of its latest answer in this server run;
+it is kept in memory only, so it is missing until the Cube has answered `c`,
+after a restart too.
 To use it, add it with `POST /api/v1/cubes` (below),
 or configure it in the settings file (its address,
 or its serial with `-sn` or a `_NAME`, see the README) and restart serve.
@@ -764,7 +771,7 @@ objects of the found Cubes above:
     {"serial": "JEQ0192422", "configured": true, "address": "192.168.1.9", "mac": "00:1a:22:0a:0b:0c",
      "rf_address": "022839", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"},
     {"serial": "KEQ0000000", "configured": false, "address": "192.168.1.23", "mac": "00:1a:22:01:02:03",
-     "rf_address": "0a0b0c", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"}
+     "rf_address": "0a0b0c", "firmware": "1.1.3", "dhcp": true, "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"}
   ]
 }
 ```
