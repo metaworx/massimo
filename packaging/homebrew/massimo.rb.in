@@ -29,14 +29,16 @@ class @CLASS@ < Formula
     (share/"massimo"/"env.template").write template
   end
 
-  def post_install
-    (etc/"massimo").mkpath
-    (var/"massimo").mkpath
-    (var/"log").mkpath
-    env = etc/"massimo/env"
-    unless env.exist?
-      env.write (share/"massimo/env.template").read
-      env.chmod 0600
+  # Declarative, as brew asks of every tap (post_install is deprecated):
+  # the directories, and the settings file once from the template, which
+  # brew keeps from then on.
+  post_install_steps do
+    mkdir_p "massimo", base: :etc
+    mkdir_p "massimo", base: :var
+    mkdir_p "log", base: :var
+    unless_path_exists "massimo/env", base: :etc do
+      copy "share/massimo/env.template", "massimo/env", source_base: :prefix, target_base: :etc
+      set_permissions "massimo/env", "0600", base: :etc
     end
   end
 
