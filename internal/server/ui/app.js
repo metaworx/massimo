@@ -480,6 +480,7 @@ async function loadCubes() {
   state.cubes = all.filter(isConfigured);
   state.found = all.filter((c) => !isConfigured(c));
   renderFound();
+  cubesPolled(); // cubes.js
   state.lastPoll = new Date();
   if (!state.serial || !state.cubes.some((c) => c.serial === state.serial)) {
     state.serial = state.cubes.length ? state.cubes[0].serial : null;
@@ -577,10 +578,11 @@ function addFound(c) {
 }
 
 // renderFound lists, under the header, the Cubes found on the LAN that
-// the server does not serve, and how to add them: the lines for the
-// server's env file, ready to copy. The address makes serve take the
-// Cube; a name alone would as well, serve then follows the address the
-// Cube answers discovery from.
+// the server does not serve, each with Add (cubes.js), which serves it
+// at once, and the other way to add them: the lines for the server's
+// env file, ready to copy. The address makes serve take the Cube; a
+// name alone would as well, serve then follows the address the Cube
+// answers discovery from.
 function renderFound() {
   const box = $("cube-found");
   const n = state.found.length;
@@ -599,9 +601,13 @@ function renderFound() {
     if (extra.length) li.appendChild(textEl("span", " · " + extra.join(" · "), "mono expert-only"));
     const age = ageEl(c.last_seen, false, true);
     if (age) li.appendChild(age);
+    const add = button(t("cubes.add"), "add-cube", () => addCube(c.serial));
+    add.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
+    li.appendChild(add);
     list.appendChild(li);
   }
   body.appendChild(list);
+  body.appendChild(textEl("p", t("discover.hintAdd")));
   body.appendChild(textEl("p", t("discover.hint")));
   const lines = [];
   for (const c of state.found) {
@@ -867,6 +873,7 @@ function applyLanguage() {
   applyAppearance();
   renderCubeSelect();
   renderFound();
+  renderCubes();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   renderRooms();

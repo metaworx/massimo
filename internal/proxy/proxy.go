@@ -58,6 +58,10 @@ type Options struct {
 	// write a client sends, so the Cube keeps them exactly as they are.
 	// Room 255 is hidden too; other rooms stay visible, empty.
 	Hidden []cube.RFAddress
+	// HiddenList, when set, is asked for the hidden list instead of
+	// Hidden at every use, so that the list can change while the proxy
+	// runs.
+	HiddenList func() []cube.RFAddress
 	// ShowHidden shows the hidden devices and room 255 instead.
 	ShowHidden bool
 	Logger     *slog.Logger
@@ -470,7 +474,11 @@ func (p *Proxy) withHidden(m cube.Message) ([]cube.Message, bool) {
 
 // hidden is the set of devices left out for clients.
 func (p *Proxy) hidden(md *cube.Metadata) view.Hidden {
-	return view.NewHidden(p.opts.Hidden, md, p.opts.ShowHidden)
+	list := p.opts.Hidden
+	if p.opts.HiddenList != nil {
+		list = p.opts.HiddenList()
+	}
+	return view.NewHidden(list, md, p.opts.ShowHidden)
 }
 
 // hiddenRooms lists the rooms left out of the greeting: room 255,
@@ -606,6 +614,23 @@ func (r *Responder) Add(p *Proxy, ip net.IP) error {
 	r.members = append(r.members, m)
 	r.mu.Unlock()
 	return nil
+}
+
+// Remove unregisters a proxy and closes its reply socket.
+func (r *Responder) Remove(p *Proxy) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.members[:0]
+	for _, m := range r.members {
+		if m.p == p {
+			if m.from != nil {
+				m.from.Close()
+			}
+			continue
+		}
+		kept = append(kept, m)
+	}
+	r.members = kept
 }
 
 // Serve answers requests on pc until ctx ends, and hands the Cubes'

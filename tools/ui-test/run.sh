@@ -6,7 +6,9 @@
 # Cube with the greeting next to this script and the server against it,
 # both on loopback ports of their own and in an empty directory (no .env,
 # no MASSIMO_* variables but a test API token, so the page goes through
-# the token and the stream tickets), then runs smoke.py with Playwright.
+# the token and the stream tickets, and the fake Cube's address and name,
+# which serve seeds into its store, massimo.db in that directory), then
+# runs smoke.py with Playwright.
 # Without Playwright it says so and exits 0, so `make ui-test` never
 # fails on a machine that cannot run it.
 #
@@ -49,7 +51,9 @@ cd "$work"
 env -i PATH="$PATH" HOME="$HOME" ./massimo fakecube -greeting "$here/greeting.txt" \
 	-listen "127.0.0.1:$cube_port" -discovery "127.0.0.1:$discovery_port" > fakecube.log 2>&1 &
 pids="$pids $!"
-env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" ./massimo serve -addr "127.0.0.1:$cube_port" -proxy off \
+env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
+	MASSIMO_CUBE_KEQ0537249_ADDRESS="127.0.0.1:$cube_port" MASSIMO_CUBE_KEQ0537249_NAME="Fake Cube" \
+	./massimo serve -proxy off \
 	-listen "127.0.0.1:$api_port" -update-status "$work/no-update-status.json" \
 	-discover-target "127.0.0.1:$discovery_port" -discover-interval 0 > serve.log 2>&1 &
 pids="$pids $!"

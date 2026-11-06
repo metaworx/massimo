@@ -397,7 +397,10 @@ for that Cube: `_ADDRESS`, `_NAME`, `_PROXY`, `_PROXY_SERIAL` and
 `_IGNORE` are read from the store, and a line of the file that differs
 is logged at the start (`settings file differs from the store, the
 store wins`, with both values) and shown on the Cube in `GET
-/api/v1/cubes` (`file_differs`). `massimo config` prints, per Cube,
+/api/v1/cubes` (`file_differs`) and under Settings → Cubes in the web
+UI, which offers the file's value. That page, and `POST /api/v1/cubes`,
+`PUT` and `DELETE /api/v1/cubes/{serial}`, add a Cube, change its name,
+address, proxy and hidden devices, and remove it while `serve` runs. `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs. The
 keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`, the
 update variables and `MASSIMO_CUBE_SN` stay in the file only, and every
@@ -474,7 +477,9 @@ massimo serve -listen 127.0.0.1:8099
 
 keeps every Cube from the environment connected (one connection and one
 command queue per Cube) and serves a JSON API: `/api/v1/cubes`,
-`/api/v1/cubes/{serial}` (with rooms), `/devices`, `/devices/{rf}`,
+`/api/v1/cubes/{serial}` (with rooms; `PUT` and `DELETE` change and
+remove the Cube, `POST /api/v1/cubes` adds one), `/api/v1/settings`
+(the stale threshold and the intervals), `/devices`, `/devices/{rf}`,
 `PUT …/devices/{rf}/setpoint` and `PUT …/rooms/{id}/setpoint` with
 `{"mode":"manual","temp":21.5}`, `{"mode":"auto"}` or
 `{"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}`,

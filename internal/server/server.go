@@ -8,8 +8,13 @@
 //
 //	GET  /healthz
 //	GET  /api/v1/cubes                               every Cube with connection and budget, and the ones found but not configured
+//	POST /api/v1/cubes                               serve a Cube from now on, {"serial":"KEQ0000000"} (cubes_api.go)
 //	POST /api/v1/cubes/discover                      look for Cubes on the LAN now
 //	GET  /api/v1/cubes/{sn}                          hello, budget, rooms, configuration
+//	PUT  /api/v1/cubes/{sn}                          name, address, proxy and hidden list, in the store
+//	DELETE /api/v1/cubes/{sn}                        stop serving the Cube; its row stays
+//	GET  /api/v1/settings                            the server's settings (settings_api.go)
+//	PUT  /api/v1/settings                            change them, {"stale_after":"36h"}
 //	GET  /api/v1/cubes/{sn}/rooms                    rooms with their devices and states
 //	GET  /api/v1/cubes/{sn}/devices                  all devices
 //	GET  /api/v1/cubes/{sn}/devices/{rf}             one device: configuration and state
@@ -43,7 +48,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -79,6 +83,10 @@ type CubeConfig struct {
 	// Source is where the configuration came from, as the store's
 	// cubes.source ("env", "ui", "flag"); "" without a store.
 	Source string
+	// ProxyAddress and ProxySerial are the store's proxy values, shown in
+	// the API; the listeners themselves are Options.Proxy.
+	ProxyAddress string
+	ProxySerial  string
 	// SeedFromFile adds the Cube to the store, as seeded from the
 	// settings file, once it reports its serial: the plain
 	// MASSIMO_CUBE_ADDRESS without a serial.
@@ -143,6 +151,10 @@ type Options struct {
 	FileCubes map[string]store.FileCube
 	// SettingsFile names the settings file, for the log.
 	SettingsFile string
+	// ProxyFixed says the proxy listeners came from the command line
+	// (-proxy): a proxy address changed through the API is stored, and
+	// takes effect at the next start without -proxy.
+	ProxyFixed bool
 	// StaleAfter is the stale threshold of the device views (0:
 	// view.StaleAfter); SetStaleAfter changes it while the server runs.
 	StaleAfter time.Duration
@@ -182,6 +194,12 @@ type Server struct {
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
 
+	// The runtimes' and the proxies' goroutines, see runtimes.go.
+	wg       sync.WaitGroup
+	cubeMu   sync.Mutex    // serialises adding, changing and removing Cubes (cubes_api.go)
+	discWake chan struct{} // wakeDiscovery
+	proxyMu  sync.Mutex
+	proxies  []*proxyRun
 	// staleAfter is the stale threshold in effect, in nanoseconds.
 	staleAfter atomic.Int64
 
@@ -194,7 +212,13 @@ type Server struct {
 }
 
 type runtime struct {
-	cfg        CubeConfig
+	cfgMu sync.RWMutex
+	cfg   CubeConfig // through config and setConfig: the API changes it
+	// runMu guards cancel and done, which stop the runtime's goroutines
+	// (runtimes.go).
+	runMu      sync.Mutex
+	cancel     context.CancelFunc
+	done       chan struct{}
 	client     *cubelan.Client
 	queue      *engine.Queue
 	serial     string
@@ -296,85 +320,44 @@ func New(opts Options) *Server {
 	}
 	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
-		found: map[string]*foundCube{}}
+		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	for _, c := range opts.Cubes {
-		rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]struct{}{}, push: map[chan struct{}]struct{}{},
-			follow: newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
-		rt.client = cubelan.New(cubelan.Options{Addr: c.Addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
-		rt.queue = engine.NewQueue(rt.client, opts.Queue)
-		key := strings.ToLower(c.Serial)
-		if key == "" {
-			key = strings.ToLower(c.Addr)
+		if err := s.register(s.newRuntime(c, c.Addr)); err != nil {
+			s.log.Error("cube not served", "serial", c.Serial, "addr", c.Addr, "error", err)
 		}
-		s.cubes[key] = rt
-		s.order = append(s.order, key)
 	}
 	s.routes()
 	return s
 }
 
-// Run connects every Cube and blocks until ctx ends.
+// Run connects every Cube and blocks until ctx ends. Cubes added
+// through the API while it runs are started the same way (runtimes.go).
 func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.ctx = ctx
 	s.mu.Unlock()
-	var wg sync.WaitGroup
-	for _, key := range s.order {
-		rt := s.cubes[key]
-		wg.Add(3)
-		go func() { defer wg.Done(); rt.client.Run(ctx) }()
-		go func() { defer wg.Done(); rt.queue.Run(ctx) }()
-		go func() { defer wg.Done(); s.pump(ctx, rt) }()
-		wg.Add(1)
-		go func() { defer wg.Done(); s.followUps(ctx, rt) }()
-		if s.opts.RefreshInterval > 0 {
-			wg.Add(1)
-			go func() { defer wg.Done(); s.refresh(ctx, rt) }()
-		}
+	for _, rt := range s.runtimes() {
+		s.startRuntime(rt)
 	}
-	var responder *proxy.Responder
 	for _, pl := range s.opts.Proxy {
-		rt, err := s.proxyRuntime(pl)
-		if err != nil {
-			s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
-			continue
-		}
-		p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, Hidden: rt.cfg.Hidden, ShowHidden: rt.showHidden,
-			MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
 		if pl.Discovery {
-			if responder == nil {
-				responder = proxy.NewResponder(s.log)
-			}
-			host, _, _ := net.SplitHostPort(pl.Addr)
-			if err := responder.Add(p, net.ParseIP(host)); err != nil {
-				s.log.Error("proxy discovery not started", "addr", pl.Addr, "error", err)
-			}
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := p.Run(ctx, pl.Addr); err != nil && ctx.Err() == nil {
-				s.log.Error("proxy listener failed", "addr", pl.Addr, "error", err)
-			}
-		}()
-	}
-	if responder != nil {
-		pc, err := net.ListenPacket("udp4", s.discoveryAddr())
-		if err != nil {
-			s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
-		} else {
-			s.mu.Lock()
-			s.responder = responder
-			s.mu.Unlock()
-			wg.Add(1)
-			go func() { defer wg.Done(); responder.Serve(ctx, pc) }()
+			s.ensureResponder()
+			break
 		}
 	}
-	wg.Add(1)
-	go func() { defer wg.Done(); s.discoveryLoop(ctx) }()
-	wg.Wait()
+	for _, pl := range s.opts.Proxy {
+		s.startProxy(pl)
+	}
+	s.wg.Add(1)
+	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
+	<-ctx.Done()
+	// Once ctx is done nothing new is tracked (track); taking the lock
+	// waits for a track that saw ctx alive, so Wait cannot race an Add.
+	s.mu.Lock()
+	s.mu.Unlock()
+	s.wg.Wait()
 	return ctx.Err()
 }
 
@@ -406,7 +389,7 @@ func (rt *runtime) writer() cubeio.Writer { return cubeio.Writer{Client: rt.clie
 // hidden is the set of devices left out of every view: the configured
 // hidden list plus the devices the Cube places in room 255.
 func (rt *runtime) hidden() view.Hidden {
-	return view.NewHidden(rt.cfg.Hidden, rt.client.Snapshot().Metadata(), rt.showHidden)
+	return view.NewHidden(rt.config().Hidden, rt.client.Snapshot().Metadata(), rt.showHidden)
 }
 
 // proxyRuntime picks the Cube a proxy listener serves.
@@ -592,6 +575,11 @@ func (s *Server) routes() {
 		})
 	}
 	api("GET /api/v1/cubes", s.listCubes)
+	api("POST /api/v1/cubes", s.postCube)
+	api("PUT /api/v1/cubes/{sn}", s.putCube)
+	api("DELETE /api/v1/cubes/{sn}", s.deleteCube)
+	api("GET /api/v1/settings", s.getSettings)
+	api("PUT /api/v1/settings", s.putSettings)
 	api("POST /api/v1/cubes/discover", s.postDiscover)
 	api("GET /api/v1/cubes/{sn}", s.getCube)
 	api("GET /api/v1/cubes/{sn}/rooms", s.getRooms)
@@ -671,6 +659,16 @@ type cubeView struct {
 	// FileDiffers lists the settings file's lines for this Cube whose
 	// values differ from the store's, which wins.
 	FileDiffers []fileDifference `json:"file_differs,omitempty"`
+	// The configuration PUT /api/v1/cubes/{sn} changes: whether the
+	// address follows discovery, the proxy listener's address and the
+	// serial of its discovery replies, and the hidden radio addresses.
+	ConfiguredAddress string   `json:"configured_address"` // "" follows discovery; Address is where it connects now
+	FollowDiscovery   bool     `json:"follow_discovery"`
+	ProxyAddress      string   `json:"proxy_address,omitempty"`
+	ProxySerial       string   `json:"proxy_serial,omitempty"`
+	Hidden            []string `json:"hidden"`
+	// ProxyListening lists the addresses the Cube's proxy listens on now.
+	ProxyListening []string `json:"proxy_listening,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC       string         `json:"mac,omitempty"`
@@ -706,8 +704,11 @@ type deviceDetail struct {
 func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
-	v := cubeView{Serial: rt.serial, Name: rt.cfg.Name, Address: rt.client.Address(), Configured: true, Source: rt.cfg.Source, Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
+	cfg := rt.config()
+	v := cubeView{Serial: rt.serial, Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
+		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.serial)
+	v.ProxyListening = s.proxyListening(rt)
 	if f, ok := s.foundInfo(rt.serial); ok {
 		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
 	}

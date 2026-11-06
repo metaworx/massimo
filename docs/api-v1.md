@@ -235,7 +235,8 @@ below; `mac` and `last_seen` (when it last answered discovery) only
 once discovery has seen it. A found Cube has only the fields shown:
 `address` is the IP it answered from, `found_at` when the server first
 saw it, `last_seen` its latest answer; `mac` comes from the host's ARP
-cache and may be missing. To use it, configure it (its address, or its
+cache and may be missing. To use it, add it with `POST /api/v1/cubes`
+(below), or configure it in the settings file (its address, or its
 serial with `-sn` or a `_NAME`, see the README) and restart serve. The
 answers of serve's own proxies (docs/proxy.md) are not listed. Found
 Cubes are kept in the server's store, so they are listed again after a
@@ -249,6 +250,15 @@ the Cube whose values differ from the store's, with the field as this
 object names it (`name`, `address`, `proxy_address`, `proxy_serial`,
 `hidden`), the variable, and both values (lists for `hidden`); it is
 absent when the file agrees or has no lines for the Cube.
+
+The configuration the routes below change is in the object too:
+`configured_address` (the stored address; empty when the Cube follows
+discovery, while `address` is where it connects now),
+`follow_discovery` (the address follows the Cube's discovery answers;
+always true without an address), `proxy_address` and `proxy_serial`
+as stored (empty: the default), `proxy_listening` (the addresses its
+proxy listens on now) and `hidden` (the radio addresses hidden besides
+room 255).
 
 `budget` is what the Cube last reported: the share of the hourly radio
 budget already used, and the free memory slots (each unacknowledged
@@ -275,6 +285,76 @@ reads the device's configuration again after 15 s, 30 s, 1, 2 and 2
 minutes, until it changed, and the stream sends a `config` event when
 it does. Until then `GET …/devices/{rf}` and the room configuration show
 the old values.
+
+### POST /api/v1/cubes, PUT and DELETE /api/v1/cubes/{sn}
+
+The Cubes the server serves are rows of its store (docs/store.md), and
+these routes change them while the server runs; each needs the store
+and answers 503 without one.
+
+`POST /api/v1/cubes` with `{"serial": "KEQ0000000"}` serves a Cube from
+now on: one discovery found, or one given by serial. Any field of `PUT`
+can come with it. Without an address the Cube follows discovery,
+starting at the address discovery saw last, else after the next
+search. The answer is `201` with the Cube object; a Cube served
+already is `409`.
+
+`PUT /api/v1/cubes/{sn}` with any of
+
+```json
+{"name": "Ground floor", "address": "192.168.1.9", "follow_discovery": false,
+ "proxy_address": "192.168.1.49", "proxy_serial": "LEQ0000000", "hidden": ["0abc12"]}
+```
+
+changes those fields and leaves the others; an unknown field is `400`,
+so a typo is not taken for "no change". The row's `source` becomes
+`ui`, and the change applies at once: a new address reconnects, a new
+proxy address or serial restarts that Cube's proxy listener, a new
+hidden list hides (or shows) the devices in the API, the UI and the
+proxy. An empty `address` makes the Cube follow discovery. An empty
+`proxy_address` means `:62910` when the Cube is the only one and
+nothing else listens, otherwise no proxy. With `-proxy` on serve's
+command line the listeners stay as given there, and a changed proxy
+address applies at the next start without `-proxy`. Taking the
+settings file's value of a `file_differs` entry is a `PUT` of that
+value. The answer is the Cube object.
+
+`DELETE /api/v1/cubes/{sn}` stops serving the Cube: its connection and
+its proxy stop, and its row stays in the store with `configured` off,
+with its history. Discovery lists it as found again, `POST` adds it
+back, and a line in the settings file does not bring it back by
+itself.
+
+A Cube served by serial for this run only (`-sn` without a row)
+is not in the store and answers `409` to `PUT` and `DELETE`; `serve -addr`
+runs without a store, so these routes answer `503` there.
+
+### GET and PUT /api/v1/settings
+
+The server's settings in the store:
+
+```json
+{
+  "stale_after":       {"value": "24h", "default": "24h", "set": false, "in_effect": "24h", "applies": "now"},
+  "poll_interval":     {"value": "1m",  "default": "1m",  "set": false, "in_effect": "1m",  "applies": "restart"},
+  "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
+  "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
+  "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
+  "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
+}
+```
+
+`value` is the store's, or the default when `set` is false;
+`in_effect` is what this run uses, which a serve flag (`-poll`,
+`-refresh`, `-discover-interval`) overrides for one run. `stale_after`
+is when a thermostat that has not changed counts as stale, and applies
+at once; the intervals apply at the next start. `PUT` takes an object
+of keys and durations, `{"stale_after": "36h", "refresh_interval":
+null}`, with `null` for the default and `"0"` to switch the refresh or
+the periodic discovery off. The ranges: `stale_after` 1h to 720h,
+`poll_interval` 10s to 1h, `refresh_interval` 10m to 168h,
+`discover_interval` 1m to 24h. Every value is checked before any is
+written. The answer is that of `GET`.
 
 ### POST /api/v1/cubes/discover
 

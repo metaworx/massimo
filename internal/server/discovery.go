@@ -101,7 +101,7 @@ func (s *Server) runtimes() []*runtime {
 // configured returns the runtime of a serial, or nil.
 func (s *Server) configured(serial string) *runtime {
 	for _, rt := range s.runtimes() {
-		if strings.EqualFold(rt.serial, serial) || strings.EqualFold(rt.cfg.Serial, serial) {
+		if strings.EqualFold(rt.serial, serial) || strings.EqualFold(rt.config().Serial, serial) {
 			return rt
 		}
 	}
@@ -245,9 +245,9 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	if host == cp.Address {
 		return cp
 	}
-	if rt.cfg.Addr != "" && !rt.cfg.FollowDiscovery {
+	if cfg := rt.config(); cfg.Addr != "" && !cfg.FollowDiscovery {
 		if ip := net.ParseIP(host); ip != nil {
-			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", rt.cfg.Addr, "found", cp.Address)
+			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", cfg.Addr, "found", cp.Address)
 		}
 		return cp
 	}
@@ -299,7 +299,8 @@ func (s *Server) foundInfo(serial string) (foundCube, bool) {
 }
 
 // discoveryLoop runs discovery at the start and every DiscoverInterval,
-// and every minute while a Cube configured by serial has no address.
+// every minute while a Cube configured by serial has no address, and
+// when wakeDiscovery asks; it is the only periodic discovery.
 func (s *Server) discoveryLoop(ctx context.Context) {
 	needAddress := func() bool {
 		for _, rt := range s.runtimes() {
@@ -309,27 +310,45 @@ func (s *Server) discoveryLoop(ctx context.Context) {
 		}
 		return false
 	}
-	if s.opts.DiscoverInterval <= 0 && !needAddress() {
-		return
-	}
+	// next < 0 waits for wakeDiscovery only: no periodic discovery and
+	// every Cube has its address.
 	next := time.Duration(0)
+	if s.opts.DiscoverInterval <= 0 && !needAddress() {
+		next = -1
+	}
 	for {
+		var tick <-chan time.Time
+		if next >= 0 {
+			tick = time.After(next)
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(next):
+		case <-tick:
+		case <-s.discWake:
 		}
 		if _, err := s.discover(ctx); err != nil && ctx.Err() == nil {
 			s.log.Warn("discovery failed", "error", err)
 		}
 		switch {
 		case needAddress():
+			// One run a minute for every Cube without an address together.
 			next = addressRetry
 		case s.opts.DiscoverInterval > 0:
 			next = s.opts.DiscoverInterval
 		default:
-			return
+			next = -1
 		}
+	}
+}
+
+// wakeDiscovery runs the discovery loop now, for a Cube added or changed
+// without an address; the loop then repeats every addressRetry until
+// every Cube has one.
+func (s *Server) wakeDiscovery() {
+	select {
+	case s.discWake <- struct{}{}:
+	default: // a run is asked for already
 	}
 }
 

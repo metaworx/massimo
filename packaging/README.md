@@ -227,10 +227,10 @@ wins for a Cube it knows: its `_ADDRESS`, `_NAME`, `_PROXY`,
 `_PROXY_SERIAL` and `_IGNORE` lines only add a Cube the store does not
 know yet, and a line that differs from the store is logged at every
 start. Keys, IVs, the token, the listen address, the log and the update
-variables stay in the file. Until the web UI edits Cubes, a known
-Cube's values change only in the store; to have the file's lines taken
-over again, stop the service, move `massimo.db` away (the found Cubes
-and the node identity go with it) and start it.
+variables stay in the file. A known Cube is changed in the web UI
+under Settings → Cubes (or with `PUT /api/v1/cubes/<SN>`), which applies
+at once, without a restart; where a line of the file differs, the
+Cube's panel says so and offers "Take the file's value".
 
 A Windows service installed before this release runs without `-data`
 until `install` is run again with the new binary; such a service uses
@@ -257,7 +257,8 @@ the store.
   gets an address from the new router. Reserve it there, because a
   configured address is fixed. A Cube configured by serial only follows
   its discovery answers by itself; for one with an address, change it
-  in the store (see "The store") and `sudo systemctl restart massimo`.
+  under Settings → Cubes in the web UI, or empty it there so that the
+  Cube follows its discovery answers.
 - The fixed proxy addresses added with `nmcli` stay on the interface when
   the box moves. On the new network they must be free and outside the
   router's DHCP range: remove them with `-ipv4.addresses` and add new ones
