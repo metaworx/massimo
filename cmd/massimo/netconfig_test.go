@@ -8,6 +8,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 )
@@ -66,16 +67,23 @@ func TestNetconfigAgainstTheFakeCube(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer fake.Close()
+	fake.SetRestartDelay(100 * time.Millisecond)
 
+	// A factory Cube on DHCP: the lease in use, the stored fallback
+	// labelled as such.
 	out, _, err := runNetconfigTest(t, "", "-addr", fake.Addr())
-	if err != nil || !strings.Contains(out, "serial      KEQ0000000\nmode        dhcp\n") {
+	if err != nil || !strings.Contains(out, "serial      KEQ0000000\nmode        dhcp\nencryption  on\n"+
+		"in use      ip 127.0.0.1 gw 127.0.0.1 mask 255.255.255.0 dns 127.0.0.1\n"+
+		"stored      ip 192.168.0.222 gw 192.168.0.1 mask 255.255.0.0 dns 192.168.0.1 (static configuration, the fallback, not in use while DHCP is on)\n") {
 		t.Fatalf("read: %v\n%s", err, out)
 	}
 
 	static := []string{"-addr", fake.Addr(), "-static", "127.0.0.1", "-gateway", "127.0.0.254", "-netmask", "255.0.0.0", "-dns", "127.0.0.53"}
-	// A dry run reads but writes nothing; a "no" sends nothing.
+	// A dry run reads but writes nothing; a "no" sends nothing. The
+	// encryption flag is kept as read.
 	if out, _, err = runNetconfigTest(t, "", append(static, "-dry-run")...); err != nil ||
-		!strings.Contains(out, "new      static ip 127.0.0.1 gw 127.0.0.254 mask 255.0.0.0 dns 127.0.0.53 encryption off") {
+		!strings.Contains(out, "new      static ip 127.0.0.1 gw 127.0.0.254 mask 255.0.0.0 dns 127.0.0.53 encryption on") ||
+		!strings.Contains(out, " 00 01\ndry run: nothing sent") {
 		t.Fatalf("dry run: %v\n%s", err, out)
 	}
 	if _, _, err = runNetconfigTest(t, "n\n", static...); err == nil {
@@ -86,16 +94,24 @@ func TestNetconfigAgainstTheFakeCube(t *testing.T) {
 	}
 
 	out, errOut, err := runNetconfigTest(t, "y\n", static...)
-	if err != nil || !strings.Contains(out, "the cube now reports:\nserial      KEQ0000000\nmode        static\nip          127.0.0.1\n") {
+	if err != nil || !strings.Contains(out, "write    status 1, applied\nrestart  sent R: status 2, the cube restarts\n") ||
+		!strings.Contains(out, "mode        static\n") || !strings.Contains(out, "in use      ip 127.0.0.1 gw 127.0.0.254 mask 255.0.0.0 dns 127.0.0.53\n") {
 		t.Fatalf("static: %v\n%s\n%s", err, out, errOut)
 	}
 	if !strings.Contains(errOut, "netconfig -sn KEQ0000000 -broadcast -dhcp") || !strings.Contains(errOut, "cube KEQ0000000?") {
 		t.Fatalf("warning and question:\n%s", errOut)
 	}
+	if fake.Reboots() != 1 {
+		t.Fatalf("reboots %d", fake.Reboots())
+	}
 
-	if out, _, err = runNetconfigTest(t, "", "-addr", fake.Addr(), "-dhcp", "-yes", "-json"); err != nil ||
-		!strings.Contains(out, `"dhcp": true`) || !strings.Contains(out, `"ip": "127.0.0.1"`) {
+	// A DHCP write: status 2, the Cube restarts by itself, no R.
+	out, errOut, err = runNetconfigTest(t, "", "-addr", fake.Addr(), "-dhcp", "-yes", "-json")
+	if err != nil || !strings.Contains(out, `"dhcp": true`) || !strings.Contains(out, `"stored"`) || !strings.Contains(out, `"current"`) {
 		t.Fatalf("dhcp: %v\n%s", err, out)
+	}
+	if !strings.Contains(errOut, "write    status 2, the cube restarts\n") || strings.Contains(errOut, "sent R") || fake.Reboots() != 1 {
+		t.Fatalf("dhcp progress:\n%s", errOut)
 	}
 	if _, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000001", "-addr", fake.Addr()); err == nil {
 		t.Fatal("a cube with another serial than -sn accepted")

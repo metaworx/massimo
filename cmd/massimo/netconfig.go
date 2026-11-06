@@ -24,16 +24,21 @@ const netconfigHelp = `usage: massimo netconfig -addr <cube-ip> [-json]
        massimo netconfig -addr <cube-ip> -dhcp [-dry-run] [-yes]
        massimo netconfig -sn <serial> -broadcast (-dhcp [-encryption] | -static ...) [-dry-run] [-yes]
 
-Read or write a Cube's network configuration over UDP 23272 (c reads,
-C writes), as the original software's network setup does.
+Read or write a Cube's network configuration over UDP 23272, as the
+original software's network setup does: c reads the stored static
+configuration and the DHCP flag, N the addresses in use (with DHCP on,
+the lease; the stored ones are then only the fallback), C writes.
 
-Without -static or -dhcp it prints the configuration. -static writes a
-static address with DHCP off; without -dns the DNS servers as read are
-kept. -dhcp switches DHCP on and keeps the addresses as read. The
-encryption flag is copied from the read, never changed. The ip and the
-gateway must lie in the netmask's subnet. A write asks first (-yes skips
-that) and re-reads the configuration afterwards; -dry-run prints the C
-frame as hex and sends nothing.
+Without -static or -dhcp it prints both. -static writes a static address
+with DHCP off; without -dns the DNS servers as read are kept. -dhcp
+switches DHCP on and keeps the stored addresses as read. The encryption
+flag is copied from the read, never changed. The ip and the gateway must
+lie in the netmask's subnet. A write asks first (-yes skips that); a
+static write applies at once and is followed by a restart (R) as the
+original software does, a DHCP write makes the Cube restart by itself
+and take a lease. The command then finds the Cube again and re-reads,
+allowing for the restart; -dry-run prints the C frame as hex and sends
+nothing.
 
 A wrong configuration strands the Cube on an address nothing can reach.
 The way back is -sn <serial> -broadcast -dhcp, which sends the write as a
@@ -99,22 +104,23 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 	// The current configuration: read, unless the Cube cannot be reached.
 	var serial, dest string
 	var cur *cubelan.NetConfig
+	var inUse *cubelan.NetAddrs
 	if *broadcast {
 		serial, dest = strings.ToUpper(selectedSN), *addr
 		if dest == "" {
 			dest = net.IPv4bcast.String()
 		}
 	} else {
-		s, c, err := cubelan.QueryNetConfig(ctx, *addr)
+		st, err := cubelan.QueryNetConfig(ctx, *addr)
 		if err != nil {
 			return fmt.Errorf("netconfig: %w (a Cube stranded on a wrong address: netconfig -sn <serial> -broadcast -dhcp)", err)
 		}
-		if snExplicit && !strings.EqualFold(selectedSN, s) {
-			return fmt.Errorf("netconfig: -sn %s given, but the cube at %s is %s", selectedSN, *addr, s)
+		if snExplicit && !strings.EqualFold(selectedSN, st.Serial) {
+			return fmt.Errorf("netconfig: -sn %s given, but the cube at %s is %s", selectedSN, *addr, st.Serial)
 		}
-		serial, dest, cur = s, *addr, &c
+		serial, dest, cur, inUse = st.Serial, *addr, &st.Stored, st.Current
 		if !write {
-			return printNetConfig(stdout, serial, c, *asJSON)
+			return printNetState(stdout, st, *asJSON)
 		}
 	}
 
@@ -145,9 +151,10 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 	}
 	fmt.Fprintf(info, "cube     %s at %s\n", serial, dest)
 	if cur != nil {
-		fmt.Fprintf(info, "current  %s\n", summary(*cur))
+		fmt.Fprintf(info, "stored   %s\n", summary(*cur))
+		fmt.Fprintf(info, "in use   %s\n", addrSummary(inUse))
 	} else {
-		fmt.Fprintln(info, "current  unknown (broadcast, nothing read)")
+		fmt.Fprintln(info, "stored   unknown (broadcast, nothing read)")
 	}
 	fmt.Fprintf(info, "new      %s\n", summary(next))
 	if *dryRun {
@@ -166,8 +173,9 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 	}
 
 	res, err := cubelan.SetNetConfig(ctx, dest, serial, next)
-	if res.Answered {
-		fmt.Fprintln(stderr, "the cube answered the write")
+	fmt.Fprintf(info, "write    %s\n", statusText(res.Status))
+	if res.RebootSent {
+		fmt.Fprintf(info, "restart  sent R: %s\n", statusText(res.RebootStatus))
 	}
 	if err != nil {
 		if errors.Is(err, cubelan.ErrNoReply) {
@@ -177,12 +185,12 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		}
 		return fmt.Errorf("netconfig: %w", err)
 	}
-	fmt.Fprintln(info, "the cube now reports:")
-	if err := printNetConfig(stdout, serial, res.Now, *asJSON); err != nil {
+	fmt.Fprintf(info, "the cube now answers from %s and reports:\n", res.Now.From.IP)
+	if err := printNetState(stdout, res.Now, *asJSON); err != nil {
 		return err
 	}
-	if !sameNetConfig(res.Now, next) {
-		fmt.Fprintln(stderr, "warning: the cube reports a different configuration than the one written; it may apply it only after a restart")
+	if !sameNetConfig(res.Now.Stored, next) {
+		fmt.Fprintln(stderr, "warning: the cube reports a different stored configuration than the one written")
 	}
 	return nil
 }
@@ -286,21 +294,42 @@ func onOff(b bool) string {
 // sameNetConfig compares two configurations by value.
 func sameNetConfig(a, b cubelan.NetConfig) bool { return summary(a) == summary(b) }
 
-// printNetConfig prints a Cube's configuration as text or JSON.
-func printNetConfig(w io.Writer, serial string, c cubelan.NetConfig, asJSON bool) error {
+// statusText explains a status byte of the Cube's answer to C or R.
+func statusText(b byte) string {
+	switch b {
+	case 0:
+		return "no answer"
+	case cubelan.SetStatusOK:
+		return "status 1, applied"
+	case cubelan.SetStatusRestarting:
+		return "status 2, the cube restarts"
+	}
+	return fmt.Sprintf("status %d (unknown)", b)
+}
+
+// addrSummary is a one-line form of the addresses in use.
+func addrSummary(a *cubelan.NetAddrs) string {
+	if a == nil {
+		return "unknown (no answer to N)"
+	}
+	return fmt.Sprintf("ip %s gw %s mask %s dns %s", a.IP, a.Gateway, a.Netmask, dnsList(a.DNS))
+}
+
+// printNetState prints what a read learned, as text or JSON: the
+// addresses in use (N) apart from the stored static configuration (c).
+func printNetState(w io.Writer, st cubelan.NetState, asJSON bool) error {
 	if asJSON {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(struct {
-			Serial string `json:"serial"`
-			cubelan.NetConfig
-		}{serial, c})
+		return enc.Encode(st)
 	}
-	mode := "static"
+	c := st.Stored
+	mode, what := "static", "in use"
 	if c.DHCP {
-		mode = "dhcp"
+		mode, what = "dhcp", "the fallback, not in use while DHCP is on"
 	}
-	fmt.Fprintf(w, "serial      %s\nmode        %s\nip          %s\ngateway     %s\nnetmask     %s\ndns         %s\nencryption  %s\n",
-		serial, mode, c.IP, c.Gateway, c.Netmask, dnsList(c.DNS), onOff(c.Encryption))
+	fmt.Fprintf(w, "serial      %s\nmode        %s\nencryption  %s\n", st.Serial, mode, onOff(c.Encryption))
+	fmt.Fprintf(w, "in use      %s\n", addrSummary(st.Current))
+	fmt.Fprintf(w, "stored      ip %s gw %s mask %s dns %s (static configuration, %s)\n", c.IP, c.Gateway, c.Netmask, dnsList(c.DNS), what)
 	return nil
 }

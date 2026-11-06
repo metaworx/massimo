@@ -13,25 +13,44 @@ import (
 )
 
 // The Cube's network configuration over UDP 23272: c reads it, C writes
-// it. The c reply is confirmed on a Cube with firmware 1.1.3 for the
-// DHCP case (2026-11-06); the C payload mirrors the c reply and is not
-// yet confirmed on hardware, see docs/portal-protocol.md.
+// it, N reports the addresses in use, R restarts the Cube. Confirmed on
+// a Cube with firmware 1.1.3 (2026-11-06) against a capture of the
+// original software, see docs/portal-protocol.md: C has the layout of
+// the c reply and is answered with one status byte, 1 when the new
+// configuration applies at once (sent from the new address), 2 when the
+// Cube restarts by itself (a write that turns DHCP on). The software
+// sends R right after C. c reports the stored static configuration and
+// the flags, not a DHCP lease; N gives the current addresses.
 
 const (
 	udpSetConfig = byte('C')
+	udpReboot    = byte('R')
 	// netConfigLen is the length of the c reply's data and of the C
 	// payload: ip, gateway, netmask, dns1, dns2 (four bytes each), the
 	// DHCP flag and the encryption flag (one byte each).
 	netConfigLen = 5*4 + 2
 )
 
-// The pauses around a write, variables so that tests can shorten them.
+// Status bytes of the Cube's answer to C (and to R).
+const (
+	// SetStatusOK says the configuration applies at once.
+	SetStatusOK byte = 1
+	// SetStatusRestarting says the Cube restarts to apply it.
+	SetStatusRestarting byte = 2
+)
+
+// The waits around a write, variables so that tests can shorten them.
 var (
-	// setReplyWait is how long SetNetConfig waits for an answer to C.
+	// setReplyWait is how long SetNetConfig waits for the answer to C,
+	// and then to R.
 	setReplyWait = time.Second
-	// setSettle is the pause between the C and the c that re-reads.
+	// setSettle is the pause between the write and the first re-read.
 	setSettle = time.Second
-	// askWait is how long one c or I request waits for its answer.
+	// rereadWait is how long the re-read keeps trying, and
+	// restartWait how long when the Cube restarts.
+	rereadWait  = 3 * time.Second
+	restartWait = 20 * time.Second
+	// askWait is how long one request waits for its answer.
 	askWait = time.Second
 )
 
@@ -39,19 +58,41 @@ var (
 var ErrNoReply = errors.New("the cube did not answer")
 
 // NetConfig is a Cube's network configuration as the c reply carries it
-// and the C request writes it.
+// and the C request writes it. With DHCP on, the addresses are the
+// stored static ones (192.168.0.222/16 on a Cube from the factory), not
+// the lease; the addresses in use come from N, see NetState.
 type NetConfig struct {
 	IP      net.IP `json:"ip"`
 	Gateway net.IP `json:"gateway"`
 	Netmask net.IP `json:"netmask"`
 	// DNS holds up to two servers; an all-zero entry is left out.
 	DNS []net.IP `json:"dns"`
-	// DHCP says whether the Cube takes its address by DHCP; the
-	// addresses are then the ones it fell back to or was given.
+	// DHCP says whether the Cube takes its address by DHCP.
 	DHCP bool `json:"dhcp"`
 	// Encryption is the Cube's encryption flag; Massimo never sets it
 	// on its own, a write copies it from a read.
 	Encryption bool `json:"encryption"`
+}
+
+// NetAddrs are the addresses a Cube uses now, from its N reply.
+type NetAddrs struct {
+	IP      net.IP   `json:"ip"`
+	Gateway net.IP   `json:"gateway,omitempty"`
+	Netmask net.IP   `json:"netmask,omitempty"`
+	DNS     []net.IP `json:"dns,omitempty"`
+}
+
+// NetState is what a read of a Cube's network learns.
+type NetState struct {
+	Serial string `json:"serial"`
+	// Stored is the c reply: the stored static configuration and the
+	// flags.
+	Stored NetConfig `json:"stored"`
+	// Current is the N reply, the addresses in use; nil when the Cube
+	// did not answer N.
+	Current *NetAddrs `json:"current,omitempty"`
+	// From is the address the Cube answered from.
+	From *net.UDPAddr `json:"-"`
 }
 
 // parseNetConfig decodes the data of a c reply.
@@ -67,6 +108,28 @@ func parseNetConfig(data []byte) (NetConfig, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// parseNetAddrs decodes the data of an N reply: ip, then, when present,
+// gateway, netmask and two DNS servers (four bytes each).
+func parseNetAddrs(data []byte) (NetAddrs, bool) {
+	var ips []net.IP
+	for off := 0; off+4 <= len(data) && len(ips) < 5; off += 4 {
+		ips = append(ips, net.IPv4(data[off], data[off+1], data[off+2], data[off+3]).To4())
+	}
+	if len(ips) == 0 {
+		return NetAddrs{}, false
+	}
+	a := NetAddrs{IP: ips[0]}
+	if len(ips) >= 3 {
+		a.Gateway, a.Netmask = ips[1], ips[2]
+	}
+	for _, ip := range ips[min(3, len(ips)):] {
+		if !ip.Equal(net.IPv4zero) {
+			a.DNS = append(a.DNS, ip)
+		}
+	}
+	return a, true
 }
 
 // appendIPv4 appends ip as four bytes; nil is 0.0.0.0.
@@ -85,8 +148,8 @@ func appendIPv4(b []byte, ip net.IP, what string) ([]byte, error) {
 // the given serial: "eQ3Max*\0", the serial padded with '*' to ten
 // characters, 'C', then ip, gateway, netmask, dns1, dns2 (four bytes
 // each, missing ones zero), the DHCP flag and the encryption flag (one
-// byte each, 0 or 1): 41 bytes. The payload mirrors the c reply; it is
-// not yet confirmed on hardware.
+// byte each, 0 or 1): 41 bytes, as the original software sends it
+// (confirmed 2026-11-06, firmware 1.1.3).
 func NetConfigFrame(serial string, cfg NetConfig) ([]byte, error) {
 	if serial == "" || len(serial) > 10 {
 		return nil, fmt.Errorf("network configuration: serial %q, want one to ten characters", serial)
@@ -110,6 +173,10 @@ func NetConfigFrame(serial string, cfg NetConfig) ([]byte, error) {
 	}
 	return append(b, boolByte(cfg.DHCP), boolByte(cfg.Encryption)), nil
 }
+
+// RebootFrame builds the R request that restarts the Cube with the
+// given serial: "eQ3Max*\0", the serial padded with '*', 'R'.
+func RebootFrame(serial string) []byte { return udpRequest(serial, udpReboot) }
 
 func boolByte(b bool) byte {
 	if b {
@@ -143,10 +210,17 @@ func listenDiscovery() (net.PacketConn, error) {
 	return pc, nil
 }
 
-// exchange sends req to each target and returns the serial and data of
-// the first reply with opcode op (and the serial, when one is given)
-// that arrives within wait.
-func exchange(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, req []byte, serial string, op byte, wait time.Duration) (string, []byte, bool) {
+// reply is one answer that exchange picked out.
+type reply struct {
+	serial string
+	data   []byte
+	from   *net.UDPAddr
+}
+
+// exchange sends req to each target and returns the first reply with
+// opcode op (and the serial, when one is given) that arrives within
+// wait.
+func exchange(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, req []byte, serial string, op byte, wait time.Duration) (reply, bool) {
 	for _, to := range targets {
 		pc.WriteTo(req, to)
 	}
@@ -157,70 +231,112 @@ func exchange(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, re
 	buf := make([]byte, 1024)
 	pc.SetReadDeadline(deadline)
 	for ctx.Err() == nil {
-		n, _, err := pc.ReadFrom(buf)
+		n, from, err := pc.ReadFrom(buf)
 		if err != nil {
-			return "", nil, false
+			return reply{}, false
 		}
 		s, _, o, data, ok := parseUDPReply(buf[:n])
 		if ok && o == op && (serial == "" || s == serial) {
-			return s, append([]byte(nil), data...), true
+			u, _ := from.(*net.UDPAddr)
+			return reply{serial: s, data: append([]byte(nil), data...), from: u}, true
 		}
 	}
-	return "", nil, false
+	return reply{}, false
 }
 
-// readNetConfig sends c for serial to the targets, twice at most.
-func readNetConfig(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, serial string) (NetConfig, error) {
-	for try := 0; try < 2; try++ {
-		if _, data, ok := exchange(ctx, pc, targets, udpRequest(serial, udpGetConfig), serial, udpGetConfig, askWait); ok {
-			return parseNetConfig(data)
+// readState finds the Cube with serial through N at the targets and
+// reads c from the address it answered from, trying until within has
+// passed (and N at least once, c at least twice). A Cube that answers c
+// but not N is read at the first target.
+func readState(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, serial string, within time.Duration) (NetState, error) {
+	deadline := time.Now().Add(within)
+	st := NetState{Serial: serial, From: targets[0]}
+	for ctx.Err() == nil {
+		if r, ok := exchange(ctx, pc, targets, udpRequest(serial, udpNetConfig), serial, udpNetConfig, askWait); ok {
+			if a, ok := parseNetAddrs(r.data); ok {
+				st.Current = &a
+			}
+			if r.from != nil {
+				st.From = r.from
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			break
 		}
 	}
-	return NetConfig{}, fmt.Errorf("network configuration of %s: %w", serial, ErrNoReply)
+	for try := 0; ; try++ {
+		if r, ok := exchange(ctx, pc, []*net.UDPAddr{st.From}, udpRequest(serial, udpGetConfig), serial, udpGetConfig, askWait); ok {
+			cfg, err := parseNetConfig(r.data)
+			if err != nil {
+				return st, err
+			}
+			st.Stored = cfg
+			if r.from != nil {
+				st.From = r.from
+			}
+			return st, nil
+		}
+		if ctx.Err() != nil {
+			return st, fmt.Errorf("network configuration of %s: %w", serial, ctx.Err())
+		}
+		if try >= 1 && time.Now().After(deadline) {
+			return st, fmt.Errorf("network configuration of %s: %w", serial, ErrNoReply)
+		}
+	}
 }
 
 // QueryNetConfig asks the Cube at addr (host or host:port, port 23272 by
-// default) for its serial with I and then for its network configuration
-// with c.
-func QueryNetConfig(ctx context.Context, addr string) (serial string, cfg NetConfig, err error) {
+// default) for its serial with I, for the addresses in use with N and
+// for its stored configuration with c.
+func QueryNetConfig(ctx context.Context, addr string) (NetState, error) {
 	to, err := udpTarget(addr)
 	if err != nil {
-		return "", NetConfig{}, err
+		return NetState{}, err
 	}
 	pc, err := listenDiscovery()
 	if err != nil {
-		return "", NetConfig{}, err
+		return NetState{}, err
 	}
 	defer pc.Close()
-	targets := []*net.UDPAddr{to}
+	var id reply
 	var ok bool
 	for try := 0; try < 2 && !ok; try++ {
-		serial, _, ok = exchange(ctx, pc, targets, udpRequest("", udpIdentify), "", udpIdentify, askWait)
+		id, ok = exchange(ctx, pc, []*net.UDPAddr{to}, udpRequest("", udpIdentify), "", udpIdentify, askWait)
 	}
 	if !ok {
-		return "", NetConfig{}, fmt.Errorf("identify %s: %w", to, ErrNoReply)
+		return NetState{}, fmt.Errorf("identify %s: %w", to, ErrNoReply)
 	}
-	cfg, err = readNetConfig(ctx, pc, targets, serial)
-	return serial, cfg, err
+	return readState(ctx, pc, []*net.UDPAddr{to}, id.serial, askWait)
 }
 
-// SetResult is what SetNetConfig learned after the write.
+// SetResult is what SetNetConfig learned during and after the write.
 type SetResult struct {
-	// Answered says whether the Cube answered the C itself, and Reply
-	// is the configuration that answer carried, when it carried one.
-	Answered bool
-	Reply    *NetConfig
-	// Now is what the Cube reports to a c read after the write.
-	Now NetConfig
+	// Status is the Cube's answer to C (SetStatusOK, SetStatusRestarting),
+	// 0 when it did not answer.
+	Status byte
+	// RebootSent says whether R followed the C, and RebootStatus is the
+	// Cube's answer to it, 0 when none came.
+	RebootSent   bool
+	RebootStatus byte
+	// Now is what the Cube reports after the write.
+	Now NetState
 }
 
-// SetNetConfig sends the C request for cfg to the Cube with the given
-// serial at addr (host or host:port, port 23272 by default; a broadcast
-// address reaches the one Cube with that serial). Whether a Cube answers
-// C is unknown: it waits briefly for an answer, then pauses and re-reads
-// with c, at addr and, for a static configuration, at the new address
-// too. The error wraps ErrNoReply when the re-read got no answer; the
-// C was sent all the same.
+// Restarting says whether the Cube restarts after the write.
+func (r SetResult) Restarting() bool {
+	return r.Status == SetStatusRestarting || r.RebootStatus == SetStatusRestarting
+}
+
+// SetNetConfig writes cfg to the Cube with the given serial at addr
+// (host or host:port, port 23272 by default; a broadcast address reaches
+// the one Cube with that serial) as the original software does: C, and
+// after a status 1 answer R, whose answer it waits for briefly. Status 2
+// means the Cube restarts by itself, so no R follows. It then re-reads,
+// allowing for the restart: N at addr, at the new address of a static
+// write and, after a DHCP write or to a broadcast address, as a
+// broadcast too, and c from the address that answered. The error wraps
+// ErrNoReply when the re-read got no answer; the C was sent all the same.
 func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetResult, error) {
 	frame, err := NetConfigFrame(serial, cfg)
 	if err != nil {
@@ -236,10 +352,26 @@ func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetR
 	}
 	defer pc.Close()
 	var res SetResult
-	if _, data, ok := exchange(ctx, pc, []*net.UDPAddr{to}, frame, serial, udpSetConfig, setReplyWait); ok {
-		res.Answered = true
-		if c, err := parseNetConfig(data); err == nil {
-			res.Reply = &c
+	targets := []*net.UDPAddr{to}
+	if !cfg.DHCP && cfg.IP != nil && !cfg.IP.Equal(to.IP) {
+		targets = append(targets, &net.UDPAddr{IP: cfg.IP, Port: to.Port})
+	}
+	// R goes to where the Cube answered C from: a static write answers
+	// from the new address.
+	rebootTo := []*net.UDPAddr{to}
+	if r, ok := exchange(ctx, pc, []*net.UDPAddr{to}, frame, serial, udpSetConfig, setReplyWait); ok && len(r.data) > 0 {
+		res.Status = r.data[0]
+		if r.from != nil {
+			rebootTo = []*net.UDPAddr{r.from}
+			if !r.from.IP.Equal(to.IP) && (cfg.IP == nil || !r.from.IP.Equal(cfg.IP)) {
+				targets = append(targets, r.from)
+			}
+		}
+	}
+	if res.Status == SetStatusOK {
+		res.RebootSent = true
+		if r, ok := exchange(ctx, pc, rebootTo, RebootFrame(serial), serial, udpReboot, setReplyWait); ok && len(r.data) > 0 {
+			res.RebootStatus = r.data[0]
 		}
 	}
 	select {
@@ -247,10 +379,16 @@ func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetR
 		return res, fmt.Errorf("network configuration of %s: %w", serial, ctx.Err())
 	case <-time.After(setSettle):
 	}
-	targets := []*net.UDPAddr{to}
-	if !cfg.DHCP && cfg.IP != nil && !cfg.IP.Equal(to.IP) {
-		targets = append(targets, &net.UDPAddr{IP: cfg.IP, Port: to.Port})
+	// After a DHCP write the lease may differ from the old address, so N
+	// goes out as a broadcast too. A loopback target is a fake Cube, with
+	// nothing to look for on the LAN.
+	if (cfg.DHCP || to.IP.Equal(net.IPv4bcast)) && !to.IP.IsLoopback() {
+		targets = append(targets, DiscoveryTargets()...)
 	}
-	res.Now, err = readNetConfig(ctx, pc, targets, serial)
+	within := rereadWait
+	if res.Restarting() || res.RebootSent {
+		within = restartWait
+	}
+	res.Now, err = readState(ctx, pc, targets, serial, within)
 	return res, err
 }
