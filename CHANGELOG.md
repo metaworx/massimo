@@ -8,6 +8,8 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.8.0-alpha.1] - 2026-11-06
+
 ### Added
 
 - Store stage (b) in `internal/store` (`docs/store.md` section 9):
