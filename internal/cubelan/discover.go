@@ -170,8 +170,9 @@ func ask(pc net.PacketConn, to net.Addr, serial string, op byte) ([]byte, bool) 
 
 // queryConfig sends c to one Cube and fills in its DHCP flag. The reply
 // carries ip, gateway, netmask, dns1, dns2 (four bytes each), then the
-// DHCP flag and the encryption flag, one byte each; the order is the PC
-// software's, the byte offsets are not confirmed on the wire.
+// DHCP flag and the encryption flag, one byte each (confirmed on a Cube
+// with firmware 1.1.3); the addresses are the stored static ones, not a
+// DHCP lease, so only the flag is taken here.
 func queryConfig(pc net.PacketConn, to net.Addr, d *Discovered) {
 	data, ok := ask(pc, to, d.Serial, udpGetConfig)
 	if !ok || len(data) < 21 {
@@ -189,17 +190,8 @@ func queryNetwork(pc net.PacketConn, d *Discovered) bool {
 	if !ok {
 		return false
 	}
-	ips := make([]net.IP, 0, 5)
-	for off := 0; off+4 <= len(data) && len(ips) < 5; off += 4 {
-		ips = append(ips, net.IPv4(data[off], data[off+1], data[off+2], data[off+3]))
-	}
-	if len(ips) >= 3 {
-		d.Gateway, d.Netmask = ips[1], ips[2]
-	}
-	for _, ip := range ips[min(3, len(ips)):] {
-		if !ip.Equal(net.IPv4zero) {
-			d.DNS = append(d.DNS, ip)
-		}
+	if a, ok := parseNetAddrs(data); ok {
+		d.Gateway, d.Netmask, d.DNS = a.Gateway, a.Netmask, a.DNS
 	}
 	return true
 }

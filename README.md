@@ -353,6 +353,30 @@ static one) via the UDP broadcast the original software uses; it needs UDP
 port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`
 recovers a Cube's portal IV from one `e:` exchange.
 
+```bash
+massimo netconfig -addr <cube-ip>
+massimo netconfig -addr <cube-ip> -static <ip> -gateway <gw> -netmask <mask> [-dns <a>[,<b>]]
+massimo netconfig -addr <cube-ip> -dhcp
+massimo netconfig -sn <serial> -broadcast -dhcp
+```
+
+`netconfig` reads a Cube's network configuration over UDP 23272 (`-json`
+too): the addresses in use, and the stored static configuration, which
+with DHCP on is only the fallback. It writes a static address with DHCP
+off, or DHCP on. A write shows the current and the new values and asks
+first (`-yes` skips that), checks that the ip and the gateway lie in the
+netmask's subnet, keeps the Cube's encryption flag as read, and re-reads
+the result after the Cube's restart (a static address applies at once
+and is followed by a restart, as the original software does; DHCP makes
+the Cube restart by itself); `-dry-run` prints the frame and sends
+nothing. A wrong configuration strands the Cube on an address nothing
+can reach. The way back is `netconfig -sn <serial> -broadcast -dhcp`,
+broadcasts that only the Cube with that serial takes: it reads the
+stored configuration first and changes only the DHCP flag, or, when the
+read gets no answer, sends zeros for the addresses, which loses the
+stored fallback (192.168.0.222/16 from the factory) without restoring
+it; a Cube that moved networks may need a power cycle.
+
 ### Cube variables
 
 The Cubes are configured in the environment or in `.env` in the current

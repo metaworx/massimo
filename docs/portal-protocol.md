@@ -63,6 +63,10 @@ says so.
   every unacknowledged radiogram holds a memory slot; the Cube also
   spends radio time on its own retries.
 - **Key lock state** is bit 0x20 of the second flags byte of an L entry.
+- **Network configuration over UDP 23272**: `c` reads the stored static
+  configuration and the DHCP flag, `N` the addresses in use, `C` writes
+  (status 1 applied at once, 2 restarting), from a capture of the
+  original software; see the Cube UDP protocol section.
 
 Not yet verified with Massimo on hardware: the configuration endpoints
 of the API and the UI panels on them (test plan in
@@ -489,12 +493,77 @@ Replies: `"eQ3MaxAp"` (application) or `"eQ3MaxBl"` (bootloader), serial,
 zero) and the firmware version (2 bytes), as seen on the wire:
 `eQ3MaxApKEQ0537249>I 00 0b 95 73 01 13`.
 
-For `c`, `massimo discover` (since 2026-11-06) reads the data as ip,
-gateway, netmask, dns1, dns2 (four bytes each) followed by the DHCP
-flag and the encryption flag (one byte each), the order of the PC
-software's fields, and shows byte 20 as the DHCP flag. Not confirmed
-byte for byte on the wire: capture a `c` reply from a Cube with DHCP
-and one with a static address to settle the offsets.
+Network configuration, **confirmed on hardware** (2026-11-06, a Cube
+with firmware 1.1.3, from a Wireshark capture of the original software
+1.4.6 setting a static address and then DHCP again):
+
+- `N` gives the addresses in use: ip, gateway, netmask, dns1, dns2
+  (four bytes each); the original software reads the ip only.
+- `c` gives the **stored static configuration and the flags**, not the
+  DHCP lease: ip, gateway, netmask, dns1, dns2 (four bytes each), the
+  DHCP flag and the encryption flag (one byte each), 22 bytes. With DHCP
+  on, a factory Cube reports 192.168.0.222/16 with gateway and DNS
+  192.168.0.1 and flag 1; the stored addresses are then only the
+  fallback. `massimo discover` takes gateway, netmask and DNS from `N`
+  and only the DHCP flag from `c`; `massimo netconfig` shows both,
+  labelled.
+- `C` writes the configuration; its payload is exactly the `c` reply's
+  layout. The frame as the software sent it and `massimo netconfig`
+  sends it:
+
+      bytes 0..7   "eQ3Max*\0"
+      bytes 8..17  the Cube's serial, padded with '*' (never "**********")
+      byte 18      'C'
+      bytes 19..22 ip
+      bytes 23..26 gateway
+      bytes 27..30 netmask
+      bytes 31..34 dns1 (zero when none)
+      bytes 35..38 dns2 (zero when none)
+      byte 39      DHCP flag, 0 or 1
+      byte 40      encryption flag, 0 or 1
+
+  41 bytes. The static write on the wire carried
+  `c0a801de c0a80101 ffffff00 c0a80101 00000000 00 01` (192.168.1.222/24,
+  gateway and DNS 192.168.1.1, DHCP off, encryption on); the DHCP write
+  afterwards was the same bytes with the DHCP flag `01`. The encryption
+  flag (1 on that Cube) was copied unchanged; Massimo copies it from a
+  `c` read too.
+- The Cube answers `C` with one status byte: `01` after a static write,
+  sent **from the new address** within 30 ms, so the address applies at
+  once; `02` after a write that turns DHCP on, after which the Cube
+  restarts by itself and takes a lease (2 = restart, as in the firmware
+  update replies).
+- The software sends `R` (reboot, with the serial) right after `C`.
+  After the static write the Cube answered `R` with `02` from the new
+  address; after the DHCP write the `R`s went unanswered because the
+  Cube was already restarting. `massimo netconfig` sends `R` after a
+  status `01` only, waits a second for its answer and goes on without
+  one.
+- After the move, the original software's own network dialogue failed
+  to look the Cube up again although the `I` replies arrived, so it
+  could not set DHCP back in the same run; a restart of the software
+  did. `massimo netconfig` finds the Cube again with `N` (at the old
+  address, at the new one and, after a DHCP write, as a broadcast with
+  the serial) and reads `c` from the address that answered, allowing a
+  few seconds for the restart.
+
+Run of `massimo netconfig` against the same Cube (2026-11-06, firmware
+1.1.3): a static write got status `01`, the `R` after it status `02`, and
+the re-read after the restart answered at once at the same address with
+mode static. A DHCP write got status `02` and the Cube restarted; it
+answered pings again about 30 to 40 s after the write and then reported
+DHCP at its lease, with the static values written before as the stored
+fallback. `netconfig` therefore waits up to 60 s after a DHCP write or a
+status `02`, sending `N` every 2.5 s (unicast to the old and new
+addresses, broadcast with the serial).
+
+Because the serial selects the Cube, `C` also works as a broadcast,
+the way back for a Cube on a wrong address (`netconfig -sn <serial>
+-broadcast -dhcp`). It first sends `c` the same way and, when the Cube
+answers, writes its stored addresses and encryption flag back with only
+the DHCP flag changed; without an answer it sends zeros for the
+addresses, which then replace the stored fallback. Not tried on
+hardware.
 
 Firmware update: `N`, `I`, `B` (then wait for the bootloader to answer
 `N`), `U`, then one `W` per frame (`index16, length16, data`, reply

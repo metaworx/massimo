@@ -57,6 +57,8 @@ func main() {
 		err = runFakeCube(rest)
 	case "discover":
 		err = runDiscover(rest)
+	case "netconfig":
+		err = runNetconfig(rest)
 	case "config":
 		err = runConfig(rest)
 	case "serve":
@@ -120,6 +122,7 @@ commands:
   restore         write a backup back to the Cube (only the differences)
   fakecube        serve a recorded greeting as if it were a Cube, for tests
   discover        list the Cubes on the local network (UDP broadcast)
+  netconfig       show or set a Cube's network configuration (static or DHCP; see its -h)
   config          show the settings in effect, with keys and IVs redacted
   serve           keep the Cubes connected, serve the JSON API and act as a Cube on the LAN
   legacy          run the original MAX! software with filtered output
