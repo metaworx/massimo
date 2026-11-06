@@ -105,7 +105,7 @@ IP address and radio address, the duty cycle, free slots,
 queued and pending commands and the Cube clock,
 and the tiles show radio addresses and device types),
 whether the Cube clock is shown in the browser's time zone or the Cube's own,
-and "forget token".
+and Log out.
 In the tiles a thermometer marks the measured temperature (IS) and a target the
 setpoint (SET);
 AUTO and MANU close an open holiday panel and drop a pending stepper value.
@@ -122,7 +122,9 @@ The selected Cube and the settings are kept in the browser.
 Results of every action appear in the tile,
 including the devices to nudge when the Cube discarded a room command.
 The page follows the event stream.
-With a token configured, the page asks for it once and keeps it in the browser;
+With users, the page asks for a name and a password (or an API key) once and
+keeps the session in the browser, hides what the role may not do, and offers
+Settings → Users and Roles to those who may;
 every route needs the header except the event stream,
 which browsers open without headers and which takes a ticket (see Authentication):
 the page gets a new one for every connection and, after an error,

@@ -890,8 +890,8 @@ and docs/ui.md for its panels;
 
 ### (b) Users, login, tokens, audit
 
-Implemented on 2026-11-06 but its web UI, which waits for the UI structure
-work (AP StoreUsers v1.0, Block 10).
+Implemented on 2026-11-06, the web UI on the components of the UI structure
+work (AP StoreUsers v1.0).
 
 - Packages and files: `internal/store/users.go`, `roles.go`, `tokens.go`,
   `audit.go`, `lockout.go`, `commands.go`, `password.go`, `bootstrap.go`,
@@ -904,7 +904,7 @@ work (AP StoreUsers v1.0, Block 10).
   `audit.go` and `commands.go` (new) with the hooks in `api()`;
   `cmd/massimo/user.go` (new);
   `golang.org/x/crypto` for argon2id and `golang.org/x/term` for the prompt;
-  `internal/server/ui` (Block 10, waiting): `login.js` (new),
+  `internal/server/ui`: `login.js`, `users.js`, `roles.js` (new),
   app.js (the token prompt becomes the login form, hiding by capability),
   i18n.js (one `auth.*` block).
 - API: `POST /api/v1/login`, `POST /api/v1/logout`, `GET /api/v1/me`;
@@ -1007,7 +1007,7 @@ steps (item 16), the first owner through `POST /api/v1/users`,
 guests without an invitation flow until the UI needs one,
 `golang.org/x/term` for the password prompt,
 and one `commands` table with `commands.keep_days` rather than a history
-table (NOTE StoreUsers v1.0: commands history); its web UI waits.
+table (NOTE StoreUsers v1.0: commands history).
 
 1. Taken: SQLite through `modernc.org/sqlite`.
    For it: SQL with indexes and queries for the log,

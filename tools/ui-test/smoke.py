@@ -33,7 +33,9 @@ Export downloads the scheme document (a blob: link under the page's
 Content-Security-Policy), Import reads it back with a missing token
 filled from the default and an unknown one dropped, and a file that
 is not a scheme shows a message. Update asks in the page, and Cancel
-sends nothing. A language chosen in the settings redraws the open Cube
+sends nothing. Settings → Users and Roles list the users and the roles for
+the owner; a fresh browser signs in as the operator the runner created and
+sees neither. A language chosen in the settings redraws the open Cube
 panel, which is cloned from a template, in that language. On every page
 it opens, every button
 has an accessible name (text, aria-label or title). Any console error, page error or horizontal scroll fails the
@@ -461,6 +463,65 @@ def run(page, label, lang):
     check(page.locator(".room").first.is_visible(), f"{label}: back to the tiles")
 
 
+def users_admin(page, label, lang):
+    """Settings → Users and Roles as the owner: the operator the runner
+    created is listed with the owner, the roles with the six default
+    ones, every button has a name, and nothing overflows."""
+    width = page.viewport_size["width"]
+    page.locator("#view-settings").click()
+    users = page.locator(".users-settings")
+    check(users.is_visible(), f"{label}: Settings → Users shown to the owner")
+    check(wait_until(page, "document.querySelectorAll('.user-panel').length >= 2", 5), f"{label}: the users are listed")
+    check(page.locator(".user-panel[data-name='operator']").count() == 1, f"{label}: the operator is listed")
+    page.locator(".user-panel[data-name='operator'] summary").click()
+    check(wait_until(page, "document.querySelectorAll(\".user-panel[data-name='operator'] .user-tokens li\").length >= 1", 5),
+          f"{label}: the operator's tokens are listed")
+    named_buttons(page, label, "Settings → Users")
+    roles = page.locator(".roles-settings")
+    check(roles.is_visible() and wait_until(page, "document.querySelectorAll('.role-panel').length >= 6", 5), f"{label}: the roles are listed")
+    page.locator(".role-panel[data-key='operator'] summary").click()
+    check(page.locator(".role-panel[data-key='operator'] .cap-grid input:checked").count() == 6, f"{label}: the operator's six capabilities are on")
+    named_buttons(page, label, "Settings → Roles")
+    check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll in Settings → Users and Roles")
+    page.locator("#view-tiles").click()
+
+
+def login(browser, label, lang, width, locale):
+    """A fresh browser without the stored token gets the sign-in dialog;
+    a wrong password is refused there; the operator the runner created
+    signs in, sees the tiles and no Settings → Users or Roles; Log out
+    forgets the token and brings the dialog back."""
+    ctx = browser.new_context(viewport={"width": width, "height": 900}, locale=locale)
+    page = ctx.new_page()
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e, label=label: check(False, f"{label}: page error: {e}"))
+    page.goto(url)
+    check(wait_until(page, "document.getElementById('login-dialog').open", 5), f"{label}: the sign-in dialog opens without a token")
+    named_buttons(page, label, "the sign-in dialog")
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("wrong")
+    page.locator("#login-form button[type=submit]").click()
+    check(wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), f"{label}: a wrong password is refused in the dialog")
+    check(page.evaluate("document.getElementById('login-dialog').open"), f"{label}: the dialog stays open")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    check(page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", f"{label}: signed in as the operator")
+    check(page.evaluate("document.body.classList.contains('no-users-admin') && document.body.classList.contains('no-rename')"), f"{label}: the missing capabilities are on the body")
+    check(page.locator(".room .tile-cog").first.is_visible() and not page.locator(".room .menu-delete").first.is_visible(),
+          f"{label}: an operator configures but does not delete rooms")
+    page.locator("#view-settings").click()
+    check(not page.locator(".users-settings").is_visible(), f"{label}: no Settings → Users for an operator")
+    check(not page.locator(".roles-settings").is_visible(), f"{label}: no Settings → Roles for an operator")
+    check(not page.locator(".cubes-settings.needs-cubes").is_visible(), f"{label}: no Settings → Cubes for an operator")
+    check("operator" in page.locator("#me-line").inner_text(), f"{label}: the settings say who is signed in")
+    named_buttons(page, label, "the settings as an operator")
+    page.locator("#logout-btn").click()
+    check(wait_until(page, "document.getElementById('login-dialog').open", 5), f"{label}: Log out brings the dialog back")
+    check(page.evaluate("localStorage.getItem('massimo.token')") is None, f"{label}: the token is forgotten")
+    ctx.close()
+
+
 def update_json(state, to, available):
     return ('{"current": "v0.0.0-test", "channel": "alpha", "latest": "%s", "available": %s, "can_update": %s, '
             '"helper": {"state": "%s", "to": "%s", "time": "2026-01-01T00:00:00Z"}}'
@@ -552,9 +613,14 @@ with sync_playwright() as pw, tempfile.TemporaryDirectory() as tmpdir:
                 language_redraw(page, label)
                 log_changes(page, label, lang)
                 appearance(page, label, lang, tmp)
+                users_admin(page, label, lang)
             except Exception as e:  # a timeout or a missing element
                 check(False, f"{label}: {e}")
             ctx.close()
+            try:
+                login(browser, label, lang, width, locale)
+            except Exception as e:  # a timeout or a missing element
+                check(False, f"{label}: login: {e}")
     browser.close()
 
 if failures:

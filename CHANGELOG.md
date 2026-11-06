@@ -36,6 +36,10 @@ the next minor, a fix counts the suffix up.
   queue, `Idempotency-Key` answers a retry without a second radio
   command, `GET /api/v1/commands/{id}` shows one (`docs/api-v1.md`).
 
+- The web UI signs in with a name and a password or an API key, hides
+  what the role may not do, creates the first owner from the local
+  network, and manages users and roles in Settings (`docs/ui.md`).
+
 - `massimo user add|list|passwd|disable|enable|token|revoke`: the users
   of the store from the box, beside a running `serve` (`README.md`,
   "Cube variables").

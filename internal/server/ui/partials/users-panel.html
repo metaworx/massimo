@@ -1,0 +1,85 @@
+<!-- A user of Settings → Users, the form that adds one, and a session or key row, users.js. -->
+<template id="tpl-user-panel">
+  <details class="panel user-panel">
+    <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
+    <form class="user-form">
+      <div class="field wide">
+        <label data-i18n="users.displayName">Display name</label>
+        <input type="text" name="display_name" class="field-control" autocomplete="off" spellcheck="false" maxlength="64">
+      </div>
+      <div class="field wide admin-only">
+        <label data-i18n="users.role">Role</label>
+        <select name="role" class="field-control"></select>
+      </div>
+      <div class="field admin-only">
+        <label class="switch">
+          <input type="checkbox" name="disabled">
+          <span class="slider" aria-hidden="true"></span>
+          <span class="switch-label" data-i18n="users.disabled">Disabled</span>
+        </label>
+      </div>
+      <div class="field wide admin-only">
+        <label data-i18n="users.expires">End (guests)</label>
+        <input type="datetime-local" name="expires" class="field-control" step="60">
+        <p class="muted small field-hint" data-i18n="users.expiresHint">Empty: no end. From then on the user is refused everything.</p>
+      </div>
+      <div class="field wide">
+        <label data-i18n="users.password">New password</label>
+        <input type="password" name="password" class="field-control" autocomplete="new-password" placeholder="empty: unchanged" data-i18n-attr="placeholder:users.passwordHint">
+      </div>
+      <div class="field wide field-current">
+        <label data-i18n="users.currentPassword">Current password</label>
+        <input type="password" name="current_password" class="field-control" autocomplete="current-password">
+      </div>
+      <div class="actions">
+        <span class="actions-left"><button type="button" class="remove-user" data-i18n="users.remove">Remove</button></span>
+        <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
+      </div>
+    </form>
+    <div class="user-tokens-box">
+      <span class="muted small" data-i18n="users.tokens">Sessions and keys</span>
+      <ul class="user-tokens"></ul>
+      <div class="user-key-box hidden">
+        <p class="small" data-i18n="users.keyShown">The new key, shown once; send it as Authorization: Bearer &lt;key&gt;:</p>
+        <p class="mono user-key"></p>
+      </div>
+      <div class="field wide">
+        <label data-i18n="users.newKey">New API key</label>
+        <input type="text" name="label" class="field-control" autocomplete="off" spellcheck="false" maxlength="64" placeholder="what the key is for" data-i18n-attr="placeholder:users.keyLabel">
+      </div>
+      <div class="actions"><span class="actions-right"><button type="button" class="create-key" data-i18n="users.createKey">Create key</button></span></div>
+    </div>
+  </details>
+</template>
+
+<template id="tpl-user-new">
+  <form class="panel user-new">
+    <div class="field wide">
+      <label data-i18n="users.name">Name</label>
+      <input type="text" name="name" class="field-control" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required placeholder="letters, digits, . _ - @" data-i18n-attr="placeholder:users.nameHint">
+    </div>
+    <div class="field wide">
+      <label data-i18n="users.displayName">Display name</label>
+      <input type="text" name="display_name" class="field-control" autocomplete="off" maxlength="64">
+    </div>
+    <div class="field wide">
+      <label data-i18n="users.role">Role</label>
+      <select name="role" class="field-control"></select>
+    </div>
+    <div class="field wide">
+      <label data-i18n="login.password">Password</label>
+      <input type="password" name="password" class="field-control" autocomplete="new-password" placeholder="empty: a user with keys only" data-i18n-attr="placeholder:users.noPasswordHint">
+    </div>
+    <div class="field wide">
+      <label data-i18n="users.expires">End (guests)</label>
+      <input type="datetime-local" name="expires" class="field-control" step="60">
+    </div>
+    <div class="actions">
+      <span class="actions-right"><button type="button" class="cancel-user" data-i18n="action.cancel">Cancel</button><button type="submit" class="primary" data-i18n="users.create">Create</button></span>
+    </div>
+  </form>
+</template>
+
+<template id="tpl-token-row">
+  <li><span class="flag mode token-kind"></span><span class="token-label"></span><span class="muted small token-used"></span><button type="button" class="revoke-token" data-i18n="users.revoke">Revoke</button></li>
+</template>
