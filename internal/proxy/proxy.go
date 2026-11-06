@@ -64,7 +64,12 @@ type Options struct {
 	HiddenList func() []cube.RFAddress
 	// ShowHidden shows the hidden devices and room 255 instead.
 	ShowHidden bool
-	Logger     *slog.Logger
+	// OnWrite, when set, is called after each radio write (s:) of a
+	// client that the Cube took, not discarded, with the command's
+	// header, so that the server can follow the write up as it does
+	// its own.
+	OnWrite func(cube.RadioCommand)
+	Logger  *slog.Logger
 }
 
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
@@ -346,6 +351,13 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 	if res.Err != nil {
 		p.log.Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
+	}
+	if m.Type == 's' && !res.Discarded && p.opts.OnWrite != nil {
+		if rc, err := cube.ParseRadioCommand(m.Data); err == nil {
+			p.opts.OnWrite(rc)
+		} else {
+			p.log.Debug("proxy: radio command not understood, not followed up", "remote", remote, "command", m.String(), "error", err)
+		}
 	}
 	if m.Type == 'c' {
 		// A device the server did not know yet, such as one just paired.

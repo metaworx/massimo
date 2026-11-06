@@ -191,6 +191,27 @@ func (t Target) header(cmd byte) []byte {
 
 func send(payload []byte) Message { return Message{Type: 's', Data: b64.EncodeToString(payload)} }
 
+// RadioCommand is the header of an s: command: the radio command code
+// (RFSetTemperature and the others) and whom it addresses.
+type RadioCommand struct {
+	Command byte
+	Target  Target
+}
+
+// ParseRadioCommand decodes the header of an s: command's data, as a
+// client of the LAN proxy sends it; the payload after the header is
+// not looked at.
+func ParseRadioCommand(data string) (RadioCommand, error) {
+	raw, err := b64.DecodeString(strings.TrimSpace(data))
+	if err != nil {
+		return RadioCommand{}, fmt.Errorf("s: %w", err)
+	}
+	if len(raw) < 10 {
+		return RadioCommand{}, fmt.Errorf("s: %d bytes, want a header of 10", len(raw))
+	}
+	return RadioCommand{Command: raw[2], Target: Target{RFAddress: RFAddressFromBytes(raw[6:9]), RoomID: raw[9], Room: raw[1]&0x04 != 0}}, nil
+}
+
 // CmdSetTemperature sets setpoint and mode. For ModeVacation, until must be
 // set; for ModeAuto a zero temperature lets the device follow its week program.
 //
