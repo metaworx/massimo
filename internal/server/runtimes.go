@@ -11,11 +11,11 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
@@ -57,16 +57,18 @@ func hiddenStrings(list []cube.RFAddress) []string {
 	return out
 }
 
-// config returns a copy of the runtime's configuration.
+// config returns the runtime's configuration. Its Hidden slice is
+// shared and never changed in place: setConfig installs a new one, so
+// the views and the proxy, which ask for it per event and per message,
+// get it without a copy.
 func (rt *runtime) config() CubeConfig {
 	rt.cfgMu.RLock()
 	defer rt.cfgMu.RUnlock()
-	c := rt.cfg
-	c.Hidden = append([]cube.RFAddress(nil), rt.cfg.Hidden...)
-	return c
+	return rt.cfg
 }
 
-// setConfig changes the runtime's configuration.
+// setConfig changes the runtime's configuration; a new hidden list is
+// a new slice, never a change of the old one (see config).
 func (rt *runtime) setConfig(change func(*CubeConfig)) {
 	rt.cfgMu.Lock()
 	defer rt.cfgMu.Unlock()
@@ -85,16 +87,40 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 }
 
 // register adds a runtime to the Cubes the server serves, by serial,
-// or by address while the serial is not known.
-func (s *Server) register(rt *runtime) {
+// or by address while the serial is not known; a key that is taken
+// already is refused, so that no runtime runs unreferenced.
+func (s *Server) register(rt *runtime) error {
 	key := strings.ToLower(rt.serial)
 	if key == "" {
 		key = strings.ToLower(rt.config().Addr)
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, taken := s.cubes[key]; taken {
+		return fmt.Errorf("cube %s is served already", key)
+	}
 	s.cubes[key] = rt
 	s.order = append(s.order, key)
-	s.mu.Unlock()
+	return nil
+}
+
+// track counts a goroutine of the server in s.wg, unless Run has not
+// started or its context is done: Run waits for s.wg after the end, and
+// an Add then would race with that Wait. It returns Run's context, or
+// nil when nothing may start.
+func (s *Server) track() context.Context {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.trackLocked()
+}
+
+// trackLocked is track with s.mu held.
+func (s *Server) trackLocked() context.Context {
+	if s.ctx == nil || s.ctx.Err() != nil {
+		return nil
+	}
+	s.wg.Add(1)
+	return s.ctx
 }
 
 // unregister removes a runtime under every key it has.
@@ -118,9 +144,7 @@ func (s *Server) unregister(rt *runtime) {
 // startRuntime starts a runtime's connection, queue and loops under
 // Run's context; before Run it does nothing, and Run starts it.
 func (s *Server) startRuntime(rt *runtime) {
-	s.mu.RLock()
-	parent := s.ctx
-	s.mu.RUnlock()
+	parent := s.track()
 	if parent == nil {
 		return
 	}
@@ -141,7 +165,6 @@ func (s *Server) startRuntime(rt *runtime) {
 	if s.opts.RefreshInterval > 0 {
 		run(func() { s.refresh(ctx, rt) })
 	}
-	s.wg.Add(1)
 	go func() { defer s.wg.Done(); wg.Wait(); close(done) }()
 }
 
@@ -161,7 +184,7 @@ func (s *Server) stopRuntime(rt *runtime) {
 func (s *Server) ensureResponder() *proxy.Responder {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.responder != nil || s.ctx == nil {
+	if s.responder != nil || s.ctx == nil || s.ctx.Err() != nil {
 		return s.responder
 	}
 	pc, err := net.ListenPacket("udp4", s.discoveryAddr())
@@ -171,32 +194,40 @@ func (s *Server) ensureResponder() *proxy.Responder {
 	}
 	r := proxy.NewResponder(s.log)
 	s.responder = r
-	ctx := s.ctx
-	s.wg.Add(1)
+	ctx := s.trackLocked()
 	go func() { defer s.wg.Done(); r.Serve(ctx, pc) }()
 	return r
 }
 
-// startProxy starts one proxy listener.
-func (s *Server) startProxy(pl ProxyListener) {
+// startProxy starts one proxy listener and reports whether it listens.
+// The port is bound here, so that a port in use is an error now, and
+// only a listener that listens is in s.proxies and in the discovery
+// replies; one that fails later is taken out of both.
+func (s *Server) startProxy(pl ProxyListener) bool {
 	rt, err := s.proxyRuntime(pl)
 	if err != nil {
 		s.log.Error("proxy listener not started", "addr", pl.Addr, "error", err)
-		return
+		return false
 	}
-	s.mu.RLock()
-	parent := s.ctx
-	s.mu.RUnlock()
+	ln, err := net.Listen("tcp", pl.Addr)
+	if err != nil {
+		s.log.Error("proxy listener not started", "addr", pl.Addr, "serial", rt.serial, "error", err)
+		return false
+	}
+	parent := s.track()
 	if parent == nil {
-		return
+		ln.Close()
+		return false
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
 		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, Logger: s.log})
+	var r *proxy.Responder
 	if pl.Discovery {
-		if r := s.ensureResponder(); r != nil {
+		if r = s.ensureResponder(); r != nil {
 			host, _, _ := net.SplitHostPort(pl.Addr)
 			if err := r.Add(p, net.ParseIP(host)); err != nil {
 				s.log.Error("proxy discovery not started", "addr", pl.Addr, "error", err)
+				r = nil
 			}
 		}
 	}
@@ -205,14 +236,37 @@ func (s *Server) startProxy(pl ProxyListener) {
 	s.proxyMu.Lock()
 	s.proxies = append(s.proxies, pr)
 	s.proxyMu.Unlock()
-	s.wg.Add(1)
+	s.log.Info("cube proxy listening", "addr", pl.Addr, "serial", rt.serial, "discovery", pl.Discovery && r != nil, "discovery_serial", pl.DiscoverySerial)
 	go func() {
 		defer s.wg.Done()
 		defer close(pr.done)
-		if err := p.Run(ctx, pl.Addr); err != nil && ctx.Err() == nil {
+		if err := p.ServeTCP(ctx, ln); err != nil && ctx.Err() == nil {
 			s.log.Error("proxy listener failed", "addr", pl.Addr, "error", err)
+			s.dropProxy(pr)
 		}
 	}()
+	return true
+}
+
+// dropProxy takes a listener that failed out of s.proxies and out of
+// the discovery replies.
+func (s *Server) dropProxy(pr *proxyRun) {
+	s.proxyMu.Lock()
+	kept := s.proxies[:0]
+	for _, x := range s.proxies {
+		if x != pr {
+			kept = append(kept, x)
+		}
+	}
+	s.proxies = kept
+	s.proxyMu.Unlock()
+	s.mu.RLock()
+	r := s.responder
+	s.mu.RUnlock()
+	if r != nil {
+		r.Remove(pr.p)
+	}
+	pr.cancel()
 }
 
 // stopProxies stops the proxy listeners of a runtime and waits until
@@ -274,6 +328,7 @@ func (s *Server) startCubeProxy(rt *runtime) {
 		others := len(s.proxies)
 		s.proxyMu.Unlock()
 		if others > 0 || len(s.runtimes()) != 1 {
+			s.log.Warn("cube served without a proxy: other cubes are served and this one has no proxy address", "serial", rt.serial)
 			return
 		}
 		addr = ":" + strconv.Itoa(cubelan.CubePort)
@@ -282,7 +337,6 @@ func (s *Server) startCubeProxy(rt *runtime) {
 	_, port, _ := net.SplitHostPort(addr)
 	pl := ProxyListener{Serial: rt.serial, Addr: addr, Discovery: port == strconv.Itoa(cubelan.CubePort), DiscoverySerial: cfg.ProxySerial}
 	s.startProxy(pl)
-	s.log.Info("cube proxy listening", "addr", pl.Addr, "serial", pl.Serial, "discovery", pl.Discovery, "discovery_serial", pl.DiscoverySerial)
 }
 
 // withCubePort adds the Cube's port to an address that has none.
@@ -307,11 +361,13 @@ func (s *Server) addCube(row store.Cube) (*runtime, error) {
 		}
 	}
 	rt := s.newRuntime(cfg, addr)
-	s.register(rt)
+	if err := s.register(rt); err != nil {
+		return nil, err
+	}
 	s.startRuntime(rt)
 	s.startCubeProxy(rt)
 	if addr == "" {
-		go s.awaitAddress(rt)
+		s.wakeDiscovery()
 	}
 	return rt, nil
 }
@@ -329,33 +385,4 @@ func (s *Server) cubePort() int {
 		return s.opts.CubePort
 	}
 	return cubelan.CubePort
-}
-
-// awaitAddress runs discovery every addressRetry until a Cube added
-// without an address has one, or is removed.
-func (s *Server) awaitAddress(rt *runtime) {
-	rt.runMu.Lock()
-	done := rt.done
-	rt.runMu.Unlock()
-	if done == nil {
-		return
-	}
-	for rt.client.Address() == "" {
-		s.mu.RLock()
-		ctx := s.ctx
-		s.mu.RUnlock()
-		if _, err := s.discover(ctx); err != nil && ctx.Err() == nil {
-			s.log.Warn("discovery failed", "error", err)
-		}
-		if rt.client.Address() != "" {
-			return
-		}
-		select {
-		case <-done:
-			return
-		case <-ctx.Done():
-			return
-		case <-time.After(addressRetry):
-		}
-	}
 }

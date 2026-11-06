@@ -195,9 +195,11 @@ type Server struct {
 	found     map[string]*foundCube // by serial, upper case
 
 	// The runtimes' and the proxies' goroutines, see runtimes.go.
-	wg      sync.WaitGroup
-	proxyMu sync.Mutex
-	proxies []*proxyRun
+	wg       sync.WaitGroup
+	cubeMu   sync.Mutex    // serialises adding, changing and removing Cubes (cubes_api.go)
+	discWake chan struct{} // wakeDiscovery
+	proxyMu  sync.Mutex
+	proxies  []*proxyRun
 	// staleAfter is the stale threshold in effect, in nanoseconds.
 	staleAfter atomic.Int64
 
@@ -318,11 +320,13 @@ func New(opts Options) *Server {
 	}
 	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
 		limiter: newAuthLimiter(opts.AuthFailures, opts.AuthWindow, opts.AuthLockout, nil), tickets: newTicketStore(nil),
-		found: map[string]*foundCube{}}
+		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	for _, c := range opts.Cubes {
-		s.register(s.newRuntime(c, c.Addr))
+		if err := s.register(s.newRuntime(c, c.Addr)); err != nil {
+			s.log.Error("cube not served", "serial", c.Serial, "addr", c.Addr, "error", err)
+		}
 	}
 	s.routes()
 	return s
@@ -349,6 +353,10 @@ func (s *Server) Run(ctx context.Context) error {
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
 	<-ctx.Done()
+	// Once ctx is done nothing new is tracked (track); taking the lock
+	// waits for a track that saw ctx alive, so Wait cannot race an Add.
+	s.mu.Lock()
+	s.mu.Unlock()
 	s.wg.Wait()
 	return ctx.Err()
 }

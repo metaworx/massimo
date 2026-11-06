@@ -55,7 +55,7 @@ func (s *Server) loadFound() {
 // it has reported its serial, with the file's values (FileCubes[""]),
 // and remembers which serial the plain lines belong to.
 func (s *Server) seedLearned(ctx context.Context, rt *runtime) {
-	if !rt.cfg.SeedFromFile || s.opts.Store == nil {
+	if !rt.config().SeedFromFile || s.opts.Store == nil {
 		return
 	}
 	s.fileMu.Lock()

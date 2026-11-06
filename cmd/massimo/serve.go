@@ -133,9 +133,6 @@ func runServe(args []string) error {
 	} else {
 		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "store", "none (-addr)")
 	}
-	for _, pl := range setup.listeners {
-		logger.Info("cube proxy listening", "addr", pl.Addr, "serial", pl.Serial, "discovery", pl.Discovery, "discovery_serial", pl.DiscoverySerial)
-	}
 	hs := &http.Server{Handler: srv.Handler()}
 	go func() {
 		<-ctx.Done()

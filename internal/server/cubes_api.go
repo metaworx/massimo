@@ -146,6 +146,8 @@ func storeFail(err error) error {
 // one given by serial, from now on. The body is {"serial": …} with any
 // of the fields of PUT; without an address the Cube follows discovery.
 func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
+	s.cubeMu.Lock() // one add, change or remove at a time: check, write and start together
+	defer s.cubeMu.Unlock()
 	st, err := s.cubeStore()
 	if err != nil {
 		return err
@@ -186,7 +188,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	s.noteRow(row)
 	rt, err := s.addCube(row)
 	if err != nil {
-		return fail(http.StatusInternalServerError, "%v", err)
+		return fail(http.StatusConflict, "%v", err)
 	}
 	s.log.Info("cube added", "serial", serial, "address", row.Address, "follow_discovery", row.FollowDiscovery, "remote", r.RemoteAddr)
 	writeJSON(w, http.StatusCreated, s.summary(rt))
@@ -220,6 +222,8 @@ func (s *Server) storedCube(r *http.Request) (*runtime, *store.Store, error) {
 // putCube handles PUT /api/v1/cubes/{sn}: any of name, address,
 // follow_discovery, proxy_address, proxy_serial and hidden.
 func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
+	s.cubeMu.Lock() // one add, change or remove at a time: check, write and start together
+	defer s.cubeMu.Unlock()
 	rt, st, err := s.storedCube(r)
 	if err != nil {
 		return err
@@ -271,7 +275,7 @@ func (s *Server) applyCube(rt *runtime, row store.Cube) error {
 		}
 	}
 	if addr == "" && !had {
-		go s.awaitAddress(rt)
+		s.wakeDiscovery()
 	}
 	if !s.opts.ProxyFixed && (old.ProxyAddress != cfg.ProxyAddress || old.ProxySerial != cfg.ProxySerial) {
 		s.stopProxies(rt)
@@ -285,6 +289,8 @@ func (s *Server) applyCube(rt *runtime, row store.Cube) error {
 // the Cube; its row stays with configured = 0 (and its history with it),
 // and it is listed as found once discovery sees it.
 func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
+	s.cubeMu.Lock() // one add, change or remove at a time: check, write and start together
+	defer s.cubeMu.Unlock()
 	rt, st, err := s.storedCube(r)
 	if err != nil {
 		return err
