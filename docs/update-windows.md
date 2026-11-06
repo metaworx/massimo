@@ -2,9 +2,23 @@
 
 The design for starting a software update of the Windows service from
 the web UI (Settings → Software, the Update button) and from the API
-(`POST /api/v1/update`), the way it works on Linux and macOS. It is a
-document only: nothing in it is implemented. Written on 2026-11-06 from
-the code on `main` after v0.5.0-alpha.1 (internal/update,
+(`POST /api/v1/update`), the way it works on Linux and macOS.
+
+Status: implemented on 2026-11-06 as option A with the nine positions
+of section 9 (cmd/massimo/update_helper_windows.go, the CI job's stages
+1 and 2); the test on a real PC (section 7, docs/testing-windows.md
+step 7b) is still to do. Where the implementation goes beyond the text
+below: the helper's environment keeps the test-only
+`MASSIMO_UPDATE_API` besides `MASSIMO_GITHUB_TOKEN` (stage 2 needs it in
+the helper), and the client sends no GitHub token to an API base set
+that way; a job object that would kill the helper reaches `blocked`
+through `UpdateOptions.Blocked`; a 409 from the starter's own guard
+leaves the request file alone (the running helper may not have taken
+it yet); the stage 2 stand-in's rollback is checked for event 7000,
+7009 or 7034, since a process that exits at once may not end in 7009.
+
+The text below is the design as written before it. Written on
+2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/update,
 internal/install, cmd/massimo, internal/server/update_api.go,
 internal/server/ui/update.js, .github/workflows/ci.yml) and from the
 test of the Windows service on a real PC

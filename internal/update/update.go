@@ -156,10 +156,22 @@ type Client struct {
 // key.
 const TokenVar = "MASSIMO_GITHUB_TOKEN"
 
+// APIVar names the API base to use instead of https://api.github.com,
+// for tests only: the CI job serves its own releases there, signed with
+// a test key compiled into the binaries it builds. A release still has
+// to verify against the compiled-in key, so pointing it elsewhere
+// installs nothing a release binary would not; the token is not sent
+// there.
+const APIVar = "MASSIMO_UPDATE_API"
+
 // NewClient returns a client for Repo with the compiled-in key and the
 // token from TokenVar, if set.
 func NewClient() *Client {
-	return &Client{API: "https://api.github.com", Repo: Repo, HTTP: &http.Client{Timeout: 2 * time.Minute}, Key: ReleaseKey(), Token: os.Getenv(TokenVar)}
+	c := &Client{API: "https://api.github.com", Repo: Repo, HTTP: &http.Client{Timeout: 2 * time.Minute}, Key: ReleaseKey(), Token: os.Getenv(TokenVar)}
+	if api := strings.TrimRight(os.Getenv(APIVar), "/"); api != "" {
+		c.API, c.Token = api, ""
+	}
+	return c
 }
 
 type ghRelease struct {

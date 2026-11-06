@@ -40,6 +40,17 @@ func listenDropIns(addr string) (serve, health string, err error) {
 	return serve, health, nil
 }
 
+// HealthURL is the server's /healthz for a listen address (host:port or
+// :port) by the rule of the drop-ins and the macOS plist; serve uses it
+// on Windows for the helper it starts.
+func HealthURL(listen string) (string, error) {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return "", fmt.Errorf("-listen %q: %v (want host:port or :port)", listen, err)
+	}
+	return healthURL(host, port), nil
+}
+
 // healthURL is the server's /healthz for a listen address, asked from
 // the box itself: an address on every interface is asked on the
 // loopback, a specific one on itself.

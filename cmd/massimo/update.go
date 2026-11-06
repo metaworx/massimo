@@ -50,7 +50,7 @@ func runUpdate(args []string) (err error) {
 	yes := fs.Bool("yes", false, "do not ask before installing")
 	force := fs.Bool("force", false, "also replace a development or modified build")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update on Linux and macOS.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
