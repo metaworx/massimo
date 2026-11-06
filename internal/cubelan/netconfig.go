@@ -47,9 +47,12 @@ var (
 	// setSettle is the pause between the write and the first re-read.
 	setSettle = time.Second
 	// rereadWait is how long the re-read keeps trying, and
-	// restartWait how long when the Cube restarts.
+	// restartWait how long when the Cube restarts: after a DHCP write a
+	// Cube with firmware 1.1.3 was back on its lease after 30 to 40 s.
 	rereadWait  = 3 * time.Second
-	restartWait = 20 * time.Second
+	restartWait = 60 * time.Second
+	// probeEvery is how often N goes out while the re-read waits.
+	probeEvery = 2500 * time.Millisecond
 	// askWait is how long one request waits for its answer.
 	askWait = time.Second
 )
@@ -244,15 +247,20 @@ func exchange(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, re
 	return reply{}, false
 }
 
-// readState finds the Cube with serial through N at the targets and
-// reads c from the address it answered from, trying until within has
-// passed (and N at least once, c at least twice). A Cube that answers c
-// but not N is read at the first target.
+// readState finds the Cube with serial through N at the targets, sent
+// again every probeEvery (or askWait, when within is shorter), and reads
+// c from the address it answered from, trying until within has passed
+// (and N at least once, c at least twice). A Cube that answers c but not
+// N is read at the first target.
 func readState(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, serial string, within time.Duration) (NetState, error) {
 	deadline := time.Now().Add(within)
 	st := NetState{Serial: serial, From: targets[0]}
+	probe := askWait
+	if within > probeEvery {
+		probe = probeEvery
+	}
 	for ctx.Err() == nil {
-		if r, ok := exchange(ctx, pc, targets, udpRequest(serial, udpNetConfig), serial, udpNetConfig, askWait); ok {
+		if r, ok := exchange(ctx, pc, targets, udpRequest(serial, udpNetConfig), serial, udpNetConfig, probe); ok {
 			if a, ok := parseNetAddrs(r.data); ok {
 				st.Current = &a
 			}
@@ -408,8 +416,10 @@ func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetR
 	if (cfg.DHCP || to.IP.Equal(net.IPv4bcast)) && !to.IP.IsLoopback() {
 		targets = append(targets, DiscoveryTargets()...)
 	}
+	// A restart, announced (status 2, R) or likely (any DHCP write,
+	// also an unanswered broadcast one), gets the long wait.
 	within := rereadWait
-	if res.Restarting() || res.RebootSent {
+	if res.Restarting() || res.RebootSent || cfg.DHCP {
 		within = restartWait
 	}
 	res.Now, err = readState(ctx, pc, targets, serial, within)

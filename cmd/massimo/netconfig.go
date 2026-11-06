@@ -202,8 +202,8 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 	}
 	if err != nil {
 		if errors.Is(err, cubelan.ErrNoReply) {
-			fmt.Fprintf(stderr, "the write was sent, but the cube did not answer the read after it. It may be applying the change or "+
-				"may have moved: wait a minute and try massimo discover, or massimo netconfig -addr <new ip>; a power cycle can help. "+
+			fmt.Fprintf(stderr, "the write was sent, but the cube did not answer the read after it. A restart takes the cube 30 to 40 s and "+
+				"a DHCP lease may be a new address: wait a minute, then try massimo discover or massimo netconfig -addr <new ip>; a power cycle can help. "+
 				"If it stays away: massimo netconfig -sn %s -broadcast -dhcp.\n", serial)
 		}
 		return fmt.Errorf("netconfig: %w", err)

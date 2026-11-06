@@ -104,9 +104,9 @@ func TestNetAddrsFromN(t *testing.T) {
 // The fake listens on the loopback, so the write sends no broadcast.
 func shortWaits(t *testing.T, fake *fakecube.DiscoveryResponder) {
 	t.Helper()
-	a, b, c, d, e := setReplyWait, setSettle, rereadWait, restartWait, askWait
-	t.Cleanup(func() { setReplyWait, setSettle, rereadWait, restartWait, askWait = a, b, c, d, e })
-	setReplyWait, setSettle, rereadWait, restartWait, askWait = 300*time.Millisecond, 10*time.Millisecond, time.Second, 3*time.Second, 200*time.Millisecond
+	a, b, c, d, e, f := setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery
+	t.Cleanup(func() { setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery = a, b, c, d, e, f })
+	setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery = 300*time.Millisecond, 10*time.Millisecond, time.Second, 3*time.Second, 200*time.Millisecond, 250*time.Millisecond
 	fake.SetRestartDelay(100 * time.Millisecond)
 }
 
@@ -152,7 +152,9 @@ func TestNetConfigRoundTrip(t *testing.T) {
 		t.Fatalf("reboots %d", fake.Reboots())
 	}
 
-	// A DHCP write: status 2, the Cube restarts by itself, no R.
+	// A DHCP write: status 2, the Cube restarts by itself, no R. The
+	// restart outlasts several N probes, which keep going until it ends.
+	fake.SetRestartDelay(time.Second)
 	dhcp := static
 	dhcp.DHCP = true
 	if res, err = SetNetConfig(ctx, fake.Addr(), st.Serial, dhcp); err != nil {

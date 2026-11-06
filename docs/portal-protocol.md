@@ -547,6 +547,16 @@ with firmware 1.1.3, from a Wireshark capture of the original software
   the serial) and reads `c` from the address that answered, allowing a
   few seconds for the restart.
 
+Run of `massimo netconfig` against the same Cube (2026-11-06, firmware
+1.1.3): a static write got status `01`, the `R` after it status `02`, and
+the re-read after the restart answered at once at the same address with
+mode static. A DHCP write got status `02` and the Cube restarted; it
+answered pings again about 30 to 40 s after the write and then reported
+DHCP at its lease, with the static values written before as the stored
+fallback. `netconfig` therefore waits up to 60 s after a DHCP write or a
+status `02`, sending `N` every 2.5 s (unicast to the old and new
+addresses, broadcast with the serial).
+
 Because the serial selects the Cube, `C` also works as a broadcast,
 the way back for a Cube on a wrong address (`netconfig -sn <serial>
 -broadcast -dhcp`). It first sends `c` the same way and, when the Cube
