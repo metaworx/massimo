@@ -303,6 +303,8 @@
   "cubes.found": "Found on the LAN, not configured",
   "cubes.add": "Add",
   "cubes.addLabel": "add {serial}",
+  "cubes.dhcp": "DHCP",
+  "cubes.static": "static address",
   "cubes.added": "{serial} added; the server connects to it now.",
   "cubes.failed": "{serial}: {error}",
   "cubes.remove": "Remove",

@@ -304,6 +304,8 @@
   "cubes.found": "Gevonden op het lokale netwerk, niet ingesteld",
   "cubes.add": "Toevoegen",
   "cubes.addLabel": "{serial} toevoegen",
+  "cubes.dhcp": "DHCP",
+  "cubes.static": "vast adres",
   "cubes.added": "{serial} toegevoegd; de server maakt nu verbinding.",
   "cubes.failed": "{serial}: {error}",
   "cubes.remove": "Verwijderen",

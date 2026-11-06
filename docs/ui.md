@@ -27,9 +27,11 @@ so the session never appears in a URL.
   the server also looks every 30 minutes by itself).
   Cubes it finds but does not serve are listed in the choice under "Found,
   not configured" and cannot be chosen;
-  a line under the header counts them and opens to their address and firmware
-  and the lines to put into the server's env file (`/etc/massimo/env` for a
-  server installed with `massimo install`, otherwise `.env`).
+  a line under the header counts them and opens to their address,
+  whether they take it by DHCP or have a static one ("DHCP" or "static address"),
+  their firmware and the lines to put into the server's env file
+  (`/etc/massimo/env` for a server installed with `massimo install`,
+  otherwise `.env`).
   The server serves a Cube once its `MASSIMO_CUBE_<SERIAL>_ADDRESS`,
   or only a `_NAME`, is there and the server has been restarted;
   with a name alone it takes the address from discovery and follows it.
@@ -175,7 +177,8 @@ The filter matches any part of a line (time, kind, device, text).
   a notice names the line and **Take the file's value** takes it.
   **Remove** stops serving the Cube;
   it keeps its settings and history in the store and is listed under **Found on
-  the LAN** once discovery sees it, with **Add**,
+  the LAN** once discovery sees it, with its address,
+  DHCP flag and firmware and **Add**,
   which serves a found Cube at once (also in the list of found Cubes under the header).
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 - **Appearance**:
