@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.2.0)
+# Massimo — CI Conventions (v1.3.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -25,7 +25,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (every push and pull request), `.github/workflows/release.yml` (tags `v*`) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, a pull request), `.github/workflows/release.yml` (tags `v*`) |
 
 There is no second pipeline.
 
@@ -33,12 +33,27 @@ There is no second pipeline.
 
 | Trigger | Jobs |
 |---------|------|
-| push to any branch, pull request | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI smoke test, then the screenshot set and its slideshow, uploaded as the artifact `ui-screenshots`); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner); Screenshots (the web UI smoke test, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only); Guidelines (section 4) |
+| push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release |
+
+Each commit runs the workflow once:
+a push to a pull request's branch runs it as the pull request's,
+not a second time as a push,
+and the commits `main` receives run it as pushes to `main`.
+The release branches receive only commits already on `main`,
+so a push to one runs nothing.
+Runs share a concurrency group per ref:
+a new push to a pull request cancels the run it supersedes,
+while a run of `main` is never cancelled,
+so every commit of `main` keeps its result.
 
 The web UI smoke test (`make ui-test`) and the screenshot set
 (`make ui-screenshots`) run in the Screenshots job,
-on Chromium that Playwright installs on the runner.
+on the Chromium of Microsoft's Playwright image (section 3).
+The slideshow (`tools/ui-test/slideshow.sh`) is built where the set is taken
+and committed with it, not in CI,
+which would need ImageMagick from apt.
 The UI changes are still verified with the smoke test on the developer's
 machine before a pull request (the contract's test gate),
 and the set committed under `docs/screenshots/` is the one taken there:
@@ -50,8 +65,7 @@ the Windows and macOS jobs run against the fake Cube.
 
 ## 3. The Commands Are the Project's Commands
 
-CI runs the commands of the contract's facts table
-(`GUIDELINES/project/_CONTRACT.md`):
+CI runs the commands of the contract's facts table (`GUIDELINES/project/_CONTRACT.md`):
 `gofmt -l .`, `go vet ./...` for linux, windows and darwin,
 `go test ./...` and `make cross`.
 Where CI differs, and why:
@@ -59,14 +73,26 @@ Where CI differs, and why:
 - `govulncheck ./...` runs in CI only, per platform with code of its own,
   because a known vulnerability is a reason to fail a build but not a tool
   every developer installs.
-- The Screenshots job runs `make ui-test` and `make ui-screenshots` as a developer does,
-  with Playwright from `tools/ui-test/requirements.txt` in the runner's Python
-  instead of the venv (`UI_TEST_PYTHON`).
+- The Screenshots job runs what `make ui-test` and `make ui-screenshots` run,
+  `tools/ui-test/run.sh` and `run.sh screenshots`,
+  in the container `mcr.microsoft.com/playwright/python:v<version>-noble`,
+  whose Python takes the place of the venv (`UI_TEST_PYTHON`)
+  and which has git and curl but no `make`;
+  `actions/setup-go` installs Go inside it.
+  The image holds the browsers and their system libraries,
+  so the job installs nothing through apt:
+  `playwright install --with-deps chromium` on the runner took 60 s on a good run
+  and 672 s on a slow one,
+  the ImageMagick install for the slideshow up to 246 s,
+  the job 2 to 24 minutes.
+  The job pins `playwright==<version>` in its pip install,
+  on top of `tools/ui-test/requirements.txt`, which keeps its minimum versions,
+  because the browsers in the image fit that Playwright version only:
+  the image's tag and the pin move together.
   The smoke test runs in the same job, before the captures,
-  because Playwright and Chromium are installed there anyway;
-  it is not a job of its own, and not part of the test gate's job,
-  because installing Chromium with its system libraries takes longer than the
-  rest of that job.
+  because Playwright and Chromium are there anyway;
+  it is not part of the test gate's job,
+  which would then need the image as well.
 - The Windows and macOS jobs install the real service on the runner,
   which a developer cannot do on another operating system.
   They use the alpha channel's newest release for the update by hand and a
@@ -75,25 +101,23 @@ Where CI differs, and why:
 ## 4. Guideline Gates
 
 The Guidelines job runs `GUIDELINES/shared/tools/check`,
-which runs every check the guidelines have and names them with
-`check --list`:
+which runs every check the guidelines have and names them with `check --list`:
 the generated documents are current (`sync-docs.sh --check`),
 the declared languages match the tree (`detect-languages.sh --check`),
 every document version has its revision record (`check-versions.sh`),
 the heading numbers, the line breaks (`reflow.sh --check`),
-`CHANGELOG.md`'s form and its released sections against their tags
-(`changelog.sh check`), the vendored files, and the commit messages.
+`CHANGELOG.md`'s form and its released sections against their tags (`changelog.sh check`),
+the vendored files, and the commit messages.
 
 The job checks out with the submodule and the full history with the tags,
-because the changelog check compares the released sections with the tag
-messages.
+because the changelog check compares the released sections with the tag messages.
 
 The commit-message check reads a range,
 and the job gives it one on pull requests only:
 `base..head` of the pull request, not `..HEAD`,
-because on a pull request HEAD is the merge commit GitHub makes for the
-run, whose message is not the project's to write.
-On a push to a branch the check runs without a range and reads nothing:
+because on a pull request HEAD is the merge commit GitHub makes for the run,
+whose message is not the project's to write.
+On a push to `main` the check runs without a range and reads nothing:
 the merge commits `main` receives from GitHub do not follow COMMIT.md,
 and the pull request's own commits were checked when it was open.
 The history before the guidelines were adopted (2026-11-06) does not
@@ -140,9 +164,9 @@ nothing in CI touches them.
 - The Windows job's update by hand needs the alpha channel to hold a
   release the runner can download;
   the stubbed release covers the rollback without the network.
-- The service manager on Windows gives a binary that never connects
-  30 s (error 1053) before the job's own two-minute health timeout
-  matters; a stand-in that exits at once fails in two seconds.
+- The service manager on Windows gives a binary that never connects 30 s
+  (error 1053) before the job's own two-minute health timeout matters;
+  a stand-in that exits at once fails in two seconds.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
 - `ubuntu-latest` moves to a newer Ubuntu on GitHub's schedule;
@@ -150,5 +174,4 @@ nothing in CI touches them.
 
 ## 8. Document Governance
 
-- This document follows the shared governance rules in
-  `GUIDELINES/shared/GOVERNANCE.md`.
+- This document follows the shared governance rules in `GUIDELINES/shared/GOVERNANCE.md`.

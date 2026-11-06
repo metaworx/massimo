@@ -8,6 +8,11 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Changed
+
+- CI runs once per commit (a push to `main` or a pull request), and the
+  Screenshots job runs in the Playwright image, without apt.
+
 ## [0.8.0-alpha.1] - 2026-11-06
 
 ### Added
