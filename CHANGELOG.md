@@ -32,6 +32,10 @@ the next minor, a fix counts the suffix up.
   with who, from where, what and how it went, read with
   `GET /api/v1/audit` (`docs/api-v1.md`).
 
+- Commands: every write request is a row with its steps on the Cube's
+  queue, `Idempotency-Key` answers a retry without a second radio
+  command, `GET /api/v1/commands/{id}` shows one (`docs/api-v1.md`).
+
 - CI runs the guidelines' checks on every push and pull request
   (generated documents, languages, revision records, headings, line
   breaks, the changelog against its tags, commit messages on a PR).

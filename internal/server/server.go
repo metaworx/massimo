@@ -332,6 +332,11 @@ func New(opts Options) *Server {
 		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
 			s.log.Error("store: bootstrap failed", "error", err)
 		}
+		if n, err := opts.Store.DropUnfinished(context.Background(), "server restarted"); err != nil {
+			s.log.Error("store: unfinished commands not dropped", "error", err)
+		} else if n > 0 {
+			s.log.Info("unfinished commands dropped", "count", n)
+		}
 	}
 	for _, c := range opts.Cubes {
 		if err := s.register(s.newRuntime(c, c.Addr)); err != nil {
@@ -586,6 +591,9 @@ func (s *Server) routes() {
 			if !ok {
 				return
 			}
+			if au != nil && action != "login" && action != "logout" && s.beginCommand(w, r, au) {
+				return
+			}
 			r = withPrincipal(r, p)
 			if err := h(w, r); err != nil {
 				var he *httpError
@@ -609,6 +617,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/logout", "any", s.logout)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
+	api("GET /api/v1/commands/{id}", "read", s.getCommand)
 	api("GET /api/v1/users", "users", s.listUsers)
 	api("POST /api/v1/users", "users", s.postUser)
 	api("GET /api/v1/users/{name}", "users", s.getUser)
@@ -932,7 +941,7 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	m := cube.CmdLockControls(cube.Target{RFAddress: rf}, *req.Locked)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "lock:" + rf.String(), Priority: engine.PriorityHigh, Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: []cube.Message{m}}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Key: "lock:" + rf.String(), Priority: engine.PriorityHigh, Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: []cube.Message{m}}).Wait(ctx)
 	if res.Err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(res.Err, engine.ErrSuperseded) {
@@ -1029,7 +1038,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: "setpoint:" + key, Priority: engine.PriorityHigh, Target: target, Lines: []cube.Message{m}}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Key: "setpoint:" + key, Priority: engine.PriorityHigh, Target: target, Lines: []cube.Message{m}}).Wait(ctx)
 	var roomCmd uint8
 	if t.Room {
 		roomCmd = t.RoomID

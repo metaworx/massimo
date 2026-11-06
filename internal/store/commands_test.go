@@ -139,3 +139,33 @@ func TestCommands(t *testing.T) {
 		}
 	}
 }
+
+// A final row stays final when sent comes late, taking the status only;
+// a status below zero keeps the one the row has.
+func TestCommandStateOrder(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	p, _ := s.AddCommand(ctx, Command{Action: "restore.start"})
+	// The run ends before the answer is recorded.
+	if err := s.SetCommandState(ctx, p.ID, StateAcknowledged, -1, json.RawMessage(`{"sent":0}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCommandState(ctx, p.ID, StateSent, 202, json.RawMessage(`{"id":"x"}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, _, _ := s.Command(ctx, p.ID)
+	if got.State != StateAcknowledged || got.Status != 202 || string(got.Result) != `{"sent":0}` || got.FinishedAt.IsZero() {
+		t.Fatalf("late sent: %+v", got)
+	}
+	// The other order: the answer first, then the run.
+	q, _ := s.AddCommand(ctx, Command{Action: "restore.start"})
+	s.SetCommandState(ctx, q.ID, StateSent, 202, json.RawMessage(`{"id":"y"}`))
+	s.SetCommandState(ctx, q.ID, StateFailed, -1, json.RawMessage(`{"error":"step 2"}`))
+	got, _, _ = s.Command(ctx, q.ID)
+	if got.State != StateFailed || got.Status != 202 || string(got.Result) != `{"error":"step 2"}` {
+		t.Fatalf("run after the answer: %+v", got)
+	}
+	if err := s.SetCommandState(ctx, 9999, StateSent, 0, nil); !errors.Is(err, ErrNoCommand) {
+		t.Fatalf("sent for nothing: %v", err)
+	}
+}

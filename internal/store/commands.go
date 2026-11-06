@@ -189,8 +189,11 @@ func (s *Store) AddStep(ctx context.Context, parentID int64, c Command) (Command
 }
 
 // SetCommandState moves a command to a state with the status answered
-// (0 for a step) and the result; a final state sets finished_at. A step
-// going sent takes its parent from queued to sent.
+// (0 for a step, below 0 to keep the one it has) and the result; a final
+// state sets finished_at. A step going sent takes its parent from
+// queued to sent. A row that is final stays so when sent comes late,
+// as a restore's answer may after its run; it then takes the status
+// only.
 func (s *Store) SetCommandState(ctx context.Context, id int64, state string, status int, result json.RawMessage) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -208,17 +211,32 @@ func (s *Store) SetCommandState(ctx context.Context, id int64, state string, sta
 	}
 	defer tx.Rollback()
 	now := s.nowText()
+	var cur string
+	var curStatus int
+	switch err := tx.QueryRowContext(ctx, `SELECT state, status FROM commands WHERE id = ?`, id).Scan(&cur, &curStatus); {
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("%w: %d", ErrNoCommand, id)
+	case err != nil:
+		return fmt.Errorf("store: command %d: %w", id, err)
+	}
+	if status < 0 {
+		status = curStatus
+	}
+	if state == StateSent && Final(cur) {
+		if status != curStatus {
+			if _, err := tx.ExecContext(ctx, `UPDATE commands SET status = ?, updated_at = ?, version = version + 1 WHERE id = ?`, status, now, id); err != nil {
+				return fmt.Errorf("store: command %d: %w", id, err)
+			}
+		}
+		return tx.Commit()
+	}
 	var finished any
 	if Final(state) {
 		finished = now
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE commands SET state = ?, status = ?, result = ?, updated_at = ?, finished_at = coalesce(?, finished_at), origin = ?, version = version + 1 WHERE id = ?`,
-		state, status, text, now, finished, s.nodeID, id)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE commands SET state = ?, status = ?, result = ?, updated_at = ?, finished_at = coalesce(?, finished_at), origin = ?, version = version + 1 WHERE id = ?`,
+		state, status, text, now, finished, s.nodeID, id); err != nil {
 		return fmt.Errorf("store: command %d: %w", id, err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("%w: %d", ErrNoCommand, id)
 	}
 	if state == StateSent {
 		if _, err := tx.ExecContext(ctx, `UPDATE commands SET state = ?, updated_at = ?, version = version + 1 WHERE id = (SELECT parent_id FROM commands WHERE id = ?) AND state = ?`,

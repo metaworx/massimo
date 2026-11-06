@@ -92,8 +92,12 @@ type auditInfo struct {
 	started time.Time
 	p       *principal
 	w       *statusWriter
-	// commandID is the command the request is (commands.go), 0 for none.
-	commandID int64
+	// commandID and commandUUID are the command the request is
+	// (commands.go), 0 for none; skip says the request was answered
+	// from an earlier command and leaves no row.
+	commandID   int64
+	commandUUID string
+	skip        bool
 }
 
 const auditKey ctxKey = iota + 1
@@ -125,6 +129,9 @@ type statusWriter struct {
 	http.ResponseWriter
 	status int
 	answer bytes.Buffer
+	// keep records the whole answer (up to maxAnswerKept) rather than
+	// the start of an error, for a command row.
+	keep bool
 }
 
 func (w *statusWriter) WriteHeader(status int) {
@@ -138,8 +145,12 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	if w.status >= 400 && w.answer.Len() < maxAuditAnswer {
-		w.answer.Write(b[:min(len(b), maxAuditAnswer-w.answer.Len())])
+	limit := maxAuditAnswer
+	if w.keep {
+		limit = maxAnswerKept
+	}
+	if (w.keep || w.status >= 400) && w.answer.Len() < limit {
+		w.answer.Write(b[:min(len(b), limit-w.answer.Len())])
 	}
 	return w.ResponseWriter.Write(b)
 }
@@ -219,6 +230,9 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 	if st == nil {
 		return
 	}
+	if a.skip {
+		return
+	}
 	status := a.w.status
 	if status == 0 {
 		status = http.StatusOK
@@ -255,6 +269,9 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 	// The request's context may be over; the row is written anyway.
 	if _, err := st.Audit(context.WithoutCancel(ctx), e); err != nil {
 		s.log.Error("api: audit row not written", "action", a.action, "error", err)
+	}
+	if a.commandID != 0 {
+		s.endCommand(ctx, a, status)
 	}
 }
 

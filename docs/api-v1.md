@@ -499,6 +499,71 @@ Nothing in a row is a secret.
 `limit` is 100 by default and at most 1000; `user` filters by login name.
 The rows are append-only; a later stage prunes them by age.
 
+### Commands and Idempotency-Key: GET /api/v1/commands/{id}
+
+Every request that changes something is a **command** in the store
+(docs/store.md section 5; docs/server.md, "What version 1 prepares", item 7):
+a row with who asked, the Cube,
+the action and the target as the audit names them, the request, and a state;
+and every protocol command the request puts on the Cube's queue is a **step** beneath it,
+written by the queue as it goes.
+The audit row of the request names the command in `command_id`.
+
+The states are those of docs/design.md section 5:
+`queued` while the request runs and nothing has gone to the Cube,
+`sent` once a step went to the Cube, or the request was answered `202`
+and its run goes on (a restore, an update),
+`acknowledged` when the request was answered `2xx` (a step:
+the Cube accepted it),
+`failed` for a `5xx` (a step: the send failed),
+`dropped` for a `4xx` or `503`, nothing sent (a step: superseded by a newer
+command with its key, discarded by the Cube, or the server stopped);
+at a start of the server every command still `queued` or `sent` is `dropped`,
+since the queue it was in is gone.
+A restore's command is `sent` with its `202` and takes `acknowledged` or
+`failed` from its run, with the run's id, state and counts as its result.
+
+`GET /api/v1/commands/{id}` is one command with its steps:
+
+```json
+{
+  "id": "01a1b0c2-5a3e-7b1c-9d4e-0f1a2b3c4d5e",
+  "action": "device.update",
+  "target": "device:1514b6",
+  "cube": "KEQ0000000",
+  "user": "anna",
+  "state": "acknowledged",
+  "status": 200,
+  "request": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/devices/1514b6", "query": "", "hash": "…"},
+  "result": {"ok": true, "budget": {…}},
+  "created_at": "…", "updated_at": "…", "finished_at": "…",
+  "steps": [
+    {"id": "…", "target": "device:1514b6", "state": "acknowledged", "request": {"key": "", "priority": 1, "lines": 2, "radio": 2, "wakeup": true, "room": 6, "reconnect": false}, "result": {"discarded": false, "budget": {…}}, "created_at": "…", "finished_at": "…"},
+    {"id": "…", "target": "device:1514b6", "state": "acknowledged", "request": {…}, "result": {…}, "created_at": "…", "finished_at": "…"},
+    {"id": "…", "state": "acknowledged", "request": {"key": "metadata", "priority": 2, "lines": 1, "radio": 0, …}, "result": {…}, "created_at": "…", "finished_at": "…"}
+  ]
+}
+```
+
+Needs `read`; a user without `audit` sees its own commands only,
+and another's is `404`.
+
+**`Idempotency-Key`**:
+a write route takes the header with a key of the client's choice,
+at most 128 characters, kept per user for 24 hours.
+A retry with the same key answers what the first request answered,
+status and body, with the header `Idempotent-Replayed: true`,
+and sends nothing to the Cube; the same key with another request (the method,
+the path, the query or the body differ) is `422`,
+and one whose request is still running `409`.
+A page that lost the connection while a setpoint was on its way retries
+with the key and learns the outcome without a second radio command.
+The login, the logout and the stream ticket take no key.
+
+Finished commands are kept for `commands.keep_days` (`GET`/`PUT /api/v1/settings`),
+0 for ever, the default;
+the key is forgotten after 24 hours whatever the setting.
+
 ### GET /api/v1/cubes
 
 Every configured Cube,
@@ -665,9 +730,12 @@ The server's settings in the store:
 `-discover-interval`) overrides for one run.
 `stale_after` is when a thermostat that has not changed counts as stale,
 and applies at once; the intervals apply at the next start.
+`commands.keep_days` is how many days finished commands are kept (see Commands),
+a number, 0 for ever, and applies at once.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
+A number setting takes a JSON number, or the number as a string.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.

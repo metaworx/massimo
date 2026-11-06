@@ -109,7 +109,7 @@ func roomThermostats(rt *runtime, room uint8) (radiators, walls []cube.RFAddress
 func (s *Server) run(w http.ResponseWriter, r *http.Request, rt *runtime, cmd engine.Command, roomCmd uint8) error {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(cmd).Wait(ctx)
+	res := rt.enqueue(ctx, cmd).Wait(ctx)
 	if err := s.commandError(rt, res, roomCmd); err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (s *Server) commandError(rt *runtime, res engine.Result, roomCmd uint8) err
 // writeMetadata sends the metadata to the Cube and mirrors it into the
 // snapshot, which the Cube does not echo.
 func (s *Server) writeMetadata(ctx context.Context, rt *runtime, md *cube.Metadata) error {
-	res, err := rt.writer().WriteMetadata(ctx, md)
+	res, err := rt.writerOf(ctx).WriteMetadata(ctx, md)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
@@ -276,7 +276,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			}
 			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members)
 			for _, cmd := range []engine.Command{out, in} {
-				res := rt.queue.Enqueue(cmd).Wait(ctx)
+				res := rt.enqueue(ctx, cmd).Wait(ctx)
 				if err := s.commandError(rt, res, 0); err != nil {
 					return err
 				}
@@ -322,7 +322,7 @@ func (s *Server) addDevice(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := rt.writer().AddDevice(ctx, md, c, n, room)
+	res, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
@@ -517,7 +517,7 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	res := rt.writer().Do(ctx, engine.Command{Key: "config:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
+	res := rt.writerOf(ctx).Do(ctx, engine.Command{Key: "config:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
@@ -592,7 +592,7 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.queue.Enqueue(engine.Command{Key: fmt.Sprintf("config:room:%d", room.ID), Target: per[0], RoomID: room.ID, Wakeup: true, Lines: lines}).Wait(ctx)
+	res := rt.enqueue(ctx, engine.Command{Key: fmt.Sprintf("config:room:%d", room.ID), Target: per[0], RoomID: room.ID, Wakeup: true, Lines: lines}).Wait(ctx)
 	// One result per device, from the reply to each of its lines.
 	results := map[cube.RFAddress]*deviceResult{}
 	var order []cube.RFAddress
@@ -772,7 +772,7 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.writer().Do(ctx, engine.Command{Key: "program:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
+	res := rt.writerOf(ctx).Do(ctx, engine.Command{Key: "program:" + rf.String(), Target: rf, RoomID: c.RoomID, Wakeup: c.RoomID != 0, Lines: lines}, rf)
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
@@ -811,7 +811,7 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	res := rt.writer().Do(ctx, engine.Command{Key: fmt.Sprintf("program:room:%d", room.ID), RoomID: room.ID, Wakeup: true, Lines: lines}, append(radiators, walls...)...)
+	res := rt.writerOf(ctx).Do(ctx, engine.Command{Key: fmt.Sprintf("program:room:%d", room.ID), RoomID: room.ID, Wakeup: true, Lines: lines}, append(radiators, walls...)...)
 	if err := s.commandError(rt, res, room.ID); err != nil {
 		return err
 	}

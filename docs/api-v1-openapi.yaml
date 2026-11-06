@@ -107,6 +107,43 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/commands/{id}:
+    get:
+      summary: A command by its id, with its steps
+      x-capability: read
+      description: |
+        Every request that changes something is a command (its id is in
+        the audit's command_id), and every engine command it put on a
+        Cube's queue is a step beneath it. A user without audit sees its
+        own commands only; others are 404.
+      parameters:
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        A key of the client's choice, at most 128 characters, kept per user
+        for 24 hours: a retry with the same key answers what the first
+        request answered, with the header Idempotent-Replayed: true, and
+        sends nothing to the Cube; the same key with another request is
+        422, and one whose request is still running 409.
+      schema: {type: string, maxLength: 128}
+        - {name: id, in: path, required: true, description: The command's id, a UUID, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: The command
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Command"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such command, or not the caller's
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/audit:
     get:
       summary: The audit, newest first
@@ -157,6 +194,7 @@ paths:
         server without users, the first owner: open to a caller on the
         local network (loopback, a private range, link-local), the role
         owner and a password required, refused from anywhere else.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -203,7 +241,7 @@ paths:
         role, disabled and expires_at need users (guests for a guest). A
         password set by someone else ends the user's sessions. The last
         enabled owner cannot be disabled or demoted (409).
-      parameters: [{$ref: "#/components/parameters/name"}]
+      parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -230,7 +268,7 @@ paths:
       summary: Remove a user
       x-capability: users
       description: The user's tokens are revoked; its row stays for the audit. The last enabled owner stays (409).
-      parameters: [{$ref: "#/components/parameters/name"}]
+      parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Removed
@@ -273,7 +311,7 @@ paths:
       summary: Create an API key for the user
       x-capability: users
       description: The key is shown once, in token; the store keeps its hash. It never expires.
-      parameters: [{$ref: "#/components/parameters/name"}]
+      parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -307,6 +345,7 @@ paths:
       summary: Revoke a session or an API key
       x-capability: users
       parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
     name:
       name: name
       in: path
@@ -366,6 +405,7 @@ paths:
     post:
       summary: Create a role
       x-capability: roles
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -392,7 +432,7 @@ paths:
       summary: Rename a role or change its set
       x-capability: roles
       description: Absent fields stay. owner cannot be changed (403).
-      parameters: [{$ref: "#/components/parameters/roleKey"}]
+      parameters: [{$ref: "#/components/parameters/roleKey"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -414,7 +454,7 @@ paths:
       summary: Remove a created role no user has
       x-capability: roles
       description: A default role cannot be removed (403); one with users is 409.
-      parameters: [{$ref: "#/components/parameters/roleKey"}]
+      parameters: [{$ref: "#/components/parameters/roleKey"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Removed
@@ -440,7 +480,7 @@ paths:
       summary: Disable or enable a role
       x-capability: roles.disable
       description: A disabled role's users keep their login and are refused every route. owner cannot be disabled (403).
-      parameters: [{$ref: "#/components/parameters/roleKey"}]
+      parameters: [{$ref: "#/components/parameters/roleKey"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -480,6 +520,7 @@ paths:
       x-capability: capabilities
       description: A disabled capability is denied to every role but owner, whatever the role's set says.
       parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
         - {name: key, in: path, required: true, description: The capability, schema: {type: string, example: pair}}
       requestBody:
         required: true
@@ -532,6 +573,7 @@ paths:
         or on :62910 when it is the only Cube and nothing else listens;
         with -proxy on serve's command line the listeners stay as they
         are. Needs the store.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -573,6 +615,7 @@ paths:
         and every -discover-interval (30 minutes). A Cube that is not
         configured is announced once as a cube_found event on every
         Cube's stream.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Every Cube that answered, configured or not
@@ -618,7 +661,7 @@ paths:
         that Cube's listener (not with -proxy on serve's command line),
         a new hidden list hides at once. An empty address makes the Cube
         follow discovery.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -653,7 +696,7 @@ paths:
         in the store with configured = 0, with its history; discovery
         lists it as found again, and POST /api/v1/cubes adds it back. A
         line for it in the settings file does not bring it back.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Removed
@@ -739,7 +782,7 @@ paths:
         with the room's members (0x20 both ways, after a wakeup), given
         the room's group (0x22) and listed under name; without room_id it
         answers 409.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -780,7 +823,7 @@ paths:
         that room takes the setpoint. A device outside any room is
         addressed directly. The request waits for the Cube's answer, up
         to two minutes when the radio budget is exhausted.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Setpoint"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
@@ -799,7 +842,7 @@ paths:
         The key lock ("LoC" on the display, `panel_locked` in the state).
         Radiogram 0x80, sent directly to the device after a wakeup of its
         room.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -822,7 +865,7 @@ paths:
     put:
       summary: Rename a room
       x-capability: rename
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -851,7 +894,7 @@ paths:
       summary: Remove an empty room
       x-capability: structure
       description: Writes the Cube's metadata without the room. A room that still has devices, hidden ones included, is refused with 409.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Removed
@@ -876,7 +919,7 @@ paths:
     put:
       summary: Set mode and setpoint of a whole room
       x-capability: setpoint
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Setpoint"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
@@ -907,7 +950,7 @@ paths:
       summary: Write settings to every thermostat of the room
       x-capability: configure
       description: Temperatures to radiator and wall thermostats, boost to both, descaling and valve limits to radiator thermostats, after one wakeup of the room. temp_offset and display_actual are per device.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Config"}
       responses:
         "200":
@@ -953,7 +996,7 @@ paths:
       summary: Write the week programme of the whole room
       x-capability: configure
       description: Any subset of days; one group radiogram 0x10 per day, which every thermostat of the room takes.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -973,7 +1016,7 @@ paths:
       summary: Write a thermostat's settings
       x-capability: configure
       description: Every field optional, merged into the current configuration; 0x11 for temperatures, 0x12 for boost, descaling and valve limits, 0x82 for display_actual (wall thermostats), after a wakeup of the room.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody: {$ref: "#/components/requestBodies/Config"}
       responses:
         "200": {$ref: "#/components/responses/CommandResult"}
@@ -988,7 +1031,7 @@ paths:
     put:
       summary: Write the week programme of one thermostat
       x-capability: configure
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -1039,6 +1082,7 @@ paths:
         clock group reads the Cube's NTP servers first; hidden devices
         are neither compared nor written.
       parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
         - {$ref: "#/components/parameters/restorePortal"}
         - {$ref: "#/components/parameters/restoreState"}
@@ -1076,6 +1120,7 @@ paths:
         plan, and radio commands while the duty cycle is above 80 %
         answer 409.
       parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
         - {name: plan, in: query, required: true, description: The hash from POST …/restore/plan, schema: {type: string}}
         - {$ref: "#/components/parameters/restorePortal"}
@@ -1131,7 +1176,7 @@ paths:
         "paired" events on the stream and in the state, and appear in the
         device list as unlisted; PUT /devices/{rf} with room_id puts one
         into a room. The Cube may end the mode earlier on its own.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: false
         content:
@@ -1176,7 +1221,7 @@ paths:
       summary: Stop pairing
       x-capability: pair
       description: Sends x:, also when the server counts the mode as over already.
-      parameters: [{$ref: "#/components/parameters/sn"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
           description: Pairing stopped
@@ -1282,6 +1327,7 @@ paths:
                 additionalProperties: {$ref: "#/components/schemas/Setting"}
               example:
                 stale_after: {value: 24h, default: 24h, set: false, in_effect: 24h, applies: now}
+                commands.keep_days: {value: "0", default: "0", set: false, in_effect: "0", applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1302,6 +1348,7 @@ paths:
         only on request), the intervals at the next start; null goes
         back to the default. Every value is checked before any is
         written. The answer is that of GET.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
         content:
@@ -1350,6 +1397,7 @@ paths:
         The helper (massimo-update.service, root) verifies the release
         signature and checksum, replaces the binary, restarts the server and
         rolls back if the new version does not come up.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "202":
           description: Requested; follow the progress with GET
@@ -1553,6 +1601,45 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    CommandState:
+      type: string
+      enum: [queued, sent, acknowledged, failed, dropped]
+      description: >-
+        queued, the request is running and nothing went to the Cube yet;
+        sent, a step went to the Cube, or the request was answered 202
+        and its run goes on; acknowledged, answered 2xx (a step: the Cube
+        accepted it); failed, answered 5xx (a step: the send failed);
+        dropped, answered 4xx or 503, nothing sent (a step: superseded,
+        discarded by the Cube, or the server stopped).
+    Command:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string, description: As the audit names it}
+        target: {type: string}
+        cube: {type: string, description: The Cube's serial}
+        user: {type: string, description: The login name of who asked}
+        state: {$ref: "#/components/schemas/CommandState"}
+        status: {type: integer, description: The HTTP status answered; absent while running}
+        request: {type: object, description: The method, the path, the query and a hash of the body}
+        result: {type: object, description: The answer's body; for a restore, the run's id, state and counts}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        steps:
+          type: array
+          description: The engine commands of the request, in order
+          items: {$ref: "#/components/schemas/CommandStep"}
+    CommandStep:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        target: {type: string, description: "device:1514b6 or room:6"}
+        state: {$ref: "#/components/schemas/CommandState"}
+        request: {type: object, description: The queue key, the priority, the number of lines and of radio lines, the wakeup, the room}
+        result: {type: object, description: discarded, the budget the Cube reported, and the error}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
     AuditEntry:
       type: object
       properties:
