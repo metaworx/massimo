@@ -228,15 +228,18 @@ func TestListenDropIns(t *testing.T) {
 	for _, c := range []struct {
 		addr, listen, health string
 		tls, cap             bool
+		http                 string
 	}{
-		{":80", "MASSIMO_LISTEN=:80", "http://127.0.0.1:80/healthz", false, true},
-		{"0.0.0.0:8080", "MASSIMO_LISTEN=0.0.0.0:8080", "http://127.0.0.1:8080/healthz", false, false},
-		{"192.168.1.200:80", "MASSIMO_LISTEN=192.168.1.200:80", "http://192.168.1.200:80/healthz", false, true},
-		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "http://[::1]:443/healthz", false, true},
-		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "https://[::1]:443/healthz", true, true},
-		{"192.168.1.200:8443", "MASSIMO_LISTEN=192.168.1.200:8443", "https://192.168.1.200:8443/healthz", true, false},
+		{":80", "MASSIMO_LISTEN=:80", "http://127.0.0.1:80/healthz", false, true, ""},
+		{"0.0.0.0:8080", "MASSIMO_LISTEN=0.0.0.0:8080", "http://127.0.0.1:8080/healthz", false, false, ""},
+		{"192.168.1.200:80", "MASSIMO_LISTEN=192.168.1.200:80", "http://192.168.1.200:80/healthz", false, true, ""},
+		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "http://[::1]:443/healthz", false, true, ""},
+		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "https://[::1]:443/healthz", true, true, ""},
+		{"192.168.1.200:8443", "MASSIMO_LISTEN=192.168.1.200:8443", "https://192.168.1.200:8443/healthz", true, false, ""},
+		{":8099", "MASSIMO_LISTEN=:8099", "https://127.0.0.1:8099/healthz", true, true, ":80"},
+		{":8099", "MASSIMO_LISTEN=:8099", "https://127.0.0.1:8099/healthz", true, false, ":8080"},
 	} {
-		serve, health, err := listenDropIns(c.addr, c.tls)
+		serve, health, err := listenDropIns(c.addr, c.tls, c.http)
 		if err != nil || !strings.Contains(serve, c.listen) || !strings.Contains(health, c.health) || strings.Contains(serve, "CAP_NET_BIND_SERVICE") != c.cap {
 			t.Errorf("%s: %v\n%s\n%s", c.addr, err, serve, health)
 		}
@@ -245,7 +248,7 @@ func TestListenDropIns(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"80", ":http", ":0", ":70000", "host"} {
-		if _, _, err := listenDropIns(bad, false); err == nil {
+		if _, _, err := listenDropIns(bad, false, ""); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
@@ -343,8 +346,30 @@ func TestInstallTLSFiles(t *testing.T) {
 		t.Fatal("the helper does not check https for self-signed")
 	}
 
-	// Refused: a missing file, -tls off with files, a mode not there yet.
-	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed", TLSCert: cert, TLSKey: key}, {TLS: "acme"}, {TLS: "yes"}} {
+	// -tls acme with its names, the contact and the port-80 helper, which
+	// needs the capability although the listener does not.
+	if err := Install(Options{Root: root, Binary: bin, TLS: "acme", TLSNames: "massimo.example.net", ACMEEmail: "owner@example.net", TLSHTTP: ":80", Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	env = read(t, filepath.Join(root, EnvPath))
+	for _, want := range []string{"MASSIMO_TLS=acme\n", "MASSIMO_TLS_NAMES=massimo.example.net\n", "MASSIMO_ACME_EMAIL=owner@example.net\n", "MASSIMO_TLS_HTTP=:80\n"} {
+		if strings.Count(env, want) != 1 {
+			t.Errorf("settings after -tls acme lack %q:\n%s", want, env)
+		}
+	}
+	if l := read(t, filepath.Join(root, ListenDropIn)); !strings.Contains(l, "MASSIMO_LISTEN=:443") || !strings.Contains(l, "CAP_NET_BIND_SERVICE") {
+		t.Fatalf("listen drop-in after -tls acme:\n%s", l)
+	}
+	// A later install keeps the helper address and the capability.
+	if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, ListenDropIn)), "CAP_NET_BIND_SERVICE") {
+		t.Fatal("capability lost")
+	}
+
+	// Refused: a missing file, -tls off with files, acme without names.
+	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed", TLSCert: cert, TLSKey: key}, {TLS: "acme"}, {TLS: "acme", TLSNames: "a.example.net", TLSHTTP: "80"}, {TLS: "yes"}} {
 		o.Root, o.Binary, o.Out, o.Run = root, bin, &bytes.Buffer{}, rec.run
 		if err := Install(o); err == nil {
 			t.Errorf("%+v accepted", o)

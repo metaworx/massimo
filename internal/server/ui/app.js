@@ -572,7 +572,10 @@ function renderStarted(iso) {
 // renderTLS shows the certificate the server serves, from /healthz's
 // tls: in expert mode its source, names and expiry, and under the header
 // a notice with the fingerprint while it is self-signed, so the owner
-// can compare it with the server's log after the browser's warning.
+// can compare it with the server's log after the browser's warning, and
+// a warning while the certificate ends within two weeks (or has none
+// yet), computed here from not_after so that it speaks the page's
+// language.
 function renderTLS(tls) {
   const dd = $("tls-cert");
   const notice = $("tls-notice");
@@ -585,13 +588,18 @@ function renderTLS(tls) {
   const parts = [tls.source, (tls.names || []).join(", ")];
   if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
   dd.textContent = parts.filter(Boolean).join(" · ");
-  if (tls.self_signed) {
-    $("tls-notice-text").textContent = t("header.selfSigned");
-    $("tls-fingerprint").textContent = tls.fingerprint || "";
-    notice.classList.remove("hidden");
+  const texts = [];
+  if (tls.self_signed) texts.push(t("header.selfSigned"));
+  if (isNaN(until)) {
+    if (tls.warning) texts.push(t("header.certMissing"));
   } else {
-    notice.classList.add("hidden");
+    const days = Math.floor((until - Date.now()) / 86400000);
+    if (days < 0) texts.push(t("header.certExpired"));
+    else if (days < 14) texts.push(tn("header.certExpires", days));
   }
+  $("tls-notice-text").textContent = texts.join(" ");
+  $("tls-fingerprint").textContent = tls.self_signed ? tls.fingerprint || "" : "";
+  notice.classList.toggle("hidden", texts.length === 0);
 }
 
 async function checkVersion() {

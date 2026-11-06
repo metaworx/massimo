@@ -35,7 +35,8 @@ filled from the default and an unknown one dropped, and a file that
 is not a scheme shows a message. Update asks in the page, and Cancel
 sends nothing. A self-signed certificate reported by /healthz (stubbed)
 shows its fingerprint under the header and the certificate in the
-expert details, and nothing without one. Settings → Users and Roles list
+expert details, one that ends within two weeks a warning in the page's
+language, and nothing without one. Settings → Users and Roles list
 the users and the roles for the owner; a fresh browser signs in as the
 operator the runner created and sees neither. A language chosen in the
 settings redraws the open Cube
@@ -462,7 +463,7 @@ def run(page, label, lang):
     check(page.evaluate("document.documentElement.scrollWidth") <= width, f"{label}: no horizontal scroll on the settings")
     update_busy(page, label)
     update_confirm(page, label)
-    tls_notice(page, label)
+    tls_notice(page, label, lang)
     page.locator("#view-tiles").click()
     check(page.locator(".room").first.is_visible(), f"{label}: back to the tiles")
 
@@ -550,11 +551,15 @@ def update_busy(page, label):
     page.unroute("**/api/v1/update*")
 
 
-def tls_notice(page, label):
+EXPIRES = {"en": "expires in 5 days", "de": "läuft in 5 Tagen ab"}
+
+
+def tls_notice(page, label, lang):
     """The header shows a self-signed certificate's fingerprint, from
-    /healthz's tls, and the expert details the certificate; nothing of
-    either without TLS. /healthz is stubbed with the page's own version,
-    so the page does not reload."""
+    /healthz's tls, and the expert details the certificate; a certificate
+    that ends within two weeks shows a warning in the page's language;
+    nothing of either without TLS. /healthz is stubbed with the page's
+    own version, so the page does not reload."""
     check(page.locator("#tls-notice").is_hidden() and page.evaluate("document.getElementById('tls-cert').textContent") == "–",
           f"{label}: no certificate notice without TLS")
     version = page.evaluate("state.version")
@@ -567,6 +572,14 @@ def tls_notice(page, label):
           f"{label}: self-signed notice with the fingerprint")
     cert = page.evaluate("document.getElementById('tls-cert').textContent")
     check(cert.startswith("self-signed · massimo.example.net, 192.0.2.10 · "), f"{label}: certificate in the expert details ({cert})")
+    page.unroute("**/healthz")
+    soon = dict(health, tls={"source": "acme", "names": ["massimo.example.net"], "fingerprint": "SHA256:AB:CD:EF:02", "self_signed": False,
+                             "not_after": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 5 * 86400 + 3600)),
+                             "warning": "the certificate expires in 5 days"})
+    page.route("**/healthz", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(soon)))
+    page.locator("#refresh-btn").click()
+    check(wait_until(page, "!document.getElementById('tls-notice').classList.contains('hidden') && document.getElementById('tls-fingerprint').textContent === ''", 5)
+          and EXPIRES[lang] in page.locator("#tls-notice-text").inner_text(), f"{label}: expiry warning in {lang}")
     page.unroute("**/healthz")
     page.locator("#refresh-btn").click()
     check(wait_until(page, "document.getElementById('tls-notice').classList.contains('hidden')", 5), f"{label}: notice gone without TLS")

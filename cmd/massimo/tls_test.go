@@ -55,6 +55,19 @@ func TestTLSCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "tls:           self-signed ("+filepath.Join(data, "tls")) || !strings.Contains(out.String(), st.Fingerprint) {
 		t.Fatalf("config: %q", out.String())
 	}
+	t.Setenv(tlsVar, "acme")
+	t.Setenv(tlsNamesVar, "massimo.example.net")
+	out.Reset()
+	if err := tlsCommand([]string{"show"}, &out); err != nil || !strings.Contains(out.String(), "source:        acme") || !strings.Contains(out.String(), "massimo.example.net: no certificate yet") {
+		t.Fatalf("show acme: %v %q", err, out.String())
+	}
+	out.Reset()
+	printTLS(&out)
+	if !strings.Contains(out.String(), "tls:           acme") || !strings.Contains(out.String(), "no certificate yet") {
+		t.Fatalf("config acme: %q", out.String())
+	}
+	t.Setenv(tlsVar, "self-signed")
+	t.Setenv(tlsNamesVar, "")
 	for _, bad := range [][]string{nil, {"what"}, {"self-signed", "-x"}} {
 		if err := tlsCommand(bad, &out); err == nil {
 			t.Errorf("%q accepted", bad)

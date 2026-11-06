@@ -149,6 +149,9 @@ func InstallDarwin(o Options) error {
 		listen = DefaultListen
 	}
 	in.checkDarwinListen(listen)
+	if o.TLSHTTP != "" {
+		in.checkDarwinListen(o.TLSHTTP)
+	}
 
 	if err := in.binary(); err != nil {
 		return err

@@ -70,7 +70,11 @@ func TestTLSSource(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(data, "tls", "self-signed.key")); err != nil {
 		t.Fatal("no pair in the data directory")
 	}
-	for _, c := range []tlsOptions{{mode: "files"}, {mode: "files", certPath: certPath}, {certPath: certPath}, {mode: "acme"}, {mode: "yes"}, {mode: "files", certPath: certPath, keyPath: filepath.Join(t.TempDir(), "none.pem")}} {
+	acme, err := tlsSource(tlsOptions{mode: "acme", names: "massimo.example.net", dataDir: t.TempDir(), directory: "http://127.0.0.1:1/directory", email: "owner@example.net"}, quietLog())
+	if err != nil || acme.Status().Source != "acme" || !strings.Contains(acme.Status().Warning, "no certificate yet") {
+		t.Fatalf("acme: %v %+v", err, acme)
+	}
+	for _, c := range []tlsOptions{{mode: "files"}, {mode: "files", certPath: certPath}, {certPath: certPath}, {mode: "acme"}, {mode: "acme", names: "192.0.2.10"}, {mode: "yes"}, {mode: "files", certPath: certPath, keyPath: filepath.Join(t.TempDir(), "none.pem")}, {mode: "files", certPath: certPath, keyPath: keyPath, httpAddr: ":0"}} {
 		if _, err := tlsSource(c, quietLog()); err == nil {
 			t.Errorf("%+v accepted", c)
 		}
@@ -144,7 +148,7 @@ func TestServeTLS(t *testing.T) {
 }
 
 func TestServeTLSVariablesAreKnown(t *testing.T) {
-	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar} {
+	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar, acmeEmailVar, acmeDirectoryVar, tlsHTTPVar} {
 		if !env.Known(k) {
 			t.Errorf("%s unknown to massimo config", k)
 		}

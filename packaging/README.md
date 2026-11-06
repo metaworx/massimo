@@ -147,6 +147,15 @@ with `-data /var/lib/massimo`); browsers warn once per device.
 After a move to another address,
 `sudo -u massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
 served at the next connection.
+`-tls acme -tls-names <name> [-acme-email <address>] [-tls-http :80]` sets
+`MASSIMO_TLS=acme` with the name, the contact and the helper address:
+the server orders the certificate from Let's Encrypt at its start,
+into `/var/lib/massimo/tls/acme/`, and renews it by itself.
+The name must resolve to the box's public address and the router forward
+port 443 to the service's port (`-listen :443` with the capability,
+or the forward to `:8099`);
+with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
+`massimo tls show` (as `massimo`) prints what was issued.
 `-tls off` switches it off again;
 run the service once with `-hsts 0` over TLS first,
 since a browser that saw the server's HSTS header refuses `http://` to it

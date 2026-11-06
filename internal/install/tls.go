@@ -21,6 +21,8 @@ const (
 	tlsCertVar  = "MASSIMO_TLS_CERT"
 	tlsKeyVar   = "MASSIMO_TLS_KEY"
 	tlsNamesVar = "MASSIMO_TLS_NAMES"
+	acmeEmail   = "MASSIMO_ACME_EMAIL"
+	tlsHTTPVar  = "MASSIMO_TLS_HTTP"
 	// The owner's files beside the settings.
 	certName = "cert.pem"
 	keyName  = "key.pem"
@@ -61,9 +63,20 @@ func (o Options) checkTLS() error {
 		}
 		return nil
 	case "acme":
-		return fmt.Errorf("-tls %s is not in this version yet; use -tls self-signed, or -tls-cert and -tls-key", o.TLS)
+		if o.TLSCert != "" || o.TLSKey != "" {
+			return errors.New("-tls acme and -tls-cert or -tls-key exclude each other")
+		}
+		if o.TLSNames == "" {
+			return errors.New("-tls acme needs -tls-names, the DNS name the certificate is for")
+		}
+		if o.TLSHTTP != "" {
+			if _, _, err := splitListen(o.TLSHTTP); err != nil {
+				return fmt.Errorf("-tls-http: %v", err)
+			}
+		}
+		return nil
 	default:
-		return fmt.Errorf("-tls %q: want off, files or self-signed", o.TLS)
+		return fmt.Errorf("-tls %q: want off, files, self-signed or acme", o.TLS)
 	}
 }
 
@@ -83,6 +96,17 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 		vars := [][2]string{{tlsVar, "self-signed"}}
 		if in.TLSNames != "" {
 			vars = append(vars, [2]string{tlsNamesVar, in.TLSNames})
+		}
+		return in.setSettings(env, chown, vars)
+	case "acme":
+		// The server orders the certificate at its start, into the data
+		// directory's tls/acme/.
+		vars := [][2]string{{tlsVar, "acme"}, {tlsNamesVar, in.TLSNames}}
+		if in.ACMEEmail != "" {
+			vars = append(vars, [2]string{acmeEmail, in.ACMEEmail})
+		}
+		if in.TLSHTTP != "" {
+			vars = append(vars, [2]string{tlsHTTPVar, in.TLSHTTP})
 		}
 		return in.setSettings(env, chown, vars)
 	}
@@ -169,28 +193,45 @@ func tlsOn(vars map[string]string) bool {
 	return false
 }
 
+// settingsVars reads the settings file env (a path under Root), or the
+// one being copied in a dry run; nothing when there is neither.
+func (in *installer) settingsVars(env string) map[string]string {
+	if _, err := os.Stat(env); err != nil {
+		env = in.Settings
+	}
+	if env == "" {
+		return nil
+	}
+	vars, err := readEnv(env)
+	if err != nil {
+		return nil
+	}
+	return vars
+}
+
 // tlsEffective says whether the installed service has TLS: by this
-// run's options, else by the settings file env (a path under Root), or
-// the one being copied in a dry run.
+// run's options, else by the settings file.
 func (in *installer) tlsEffective(env string) bool {
 	switch in.tlsMode() {
 	case "off":
 		return false
 	case "":
-	default:
-		return true
+		return tlsOn(in.settingsVars(env))
 	}
-	if _, err := os.Stat(env); err != nil {
-		env = in.Settings
+	return true
+}
+
+// tlsHTTPEffective is the plain helper address of the installed
+// service, from this run's options, else the settings file; "" without
+// TLS.
+func (in *installer) tlsHTTPEffective(env string) string {
+	if in.TLSHTTP != "" {
+		return in.TLSHTTP
 	}
-	if env == "" {
-		return false
+	if in.tlsMode() != "" && in.tlsMode() != "acme" || !in.tlsEffective(env) {
+		return ""
 	}
-	vars, err := readEnv(env)
-	if err != nil {
-		return false
-	}
-	return tlsOn(vars)
+	return in.settingsVars(env)[tlsHTTPVar]
 }
 
 // checkTLSSettings warns when the settings name TLS files serve cannot

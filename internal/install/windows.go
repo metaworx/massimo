@@ -47,7 +47,7 @@ func connect() (*mgr.Mgr, error) {
 // InstallWindows installs or updates massimo serve as a Windows service.
 func InstallWindows(o Options) error {
 	if o.Listen != "" {
-		if _, _, err := listenDropIns(o.Listen, false); err != nil { // the same validation as on Linux
+		if _, _, err := listenDropIns(o.Listen, false, ""); err != nil { // the same validation as on Linux
 			return err
 		}
 	}

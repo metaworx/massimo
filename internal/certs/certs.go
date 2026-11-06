@@ -36,13 +36,14 @@ type Checker interface {
 	Check(now time.Time)
 }
 
-// Watch runs src's Check every interval until ctx is done, for a source
-// that is a Checker; the others need none.
+// Watch runs src's Check once now and then every interval until ctx is
+// done, for a source that is a Checker; the others need none.
 func Watch(ctx context.Context, src Source, every time.Duration) {
 	c, ok := src.(Checker)
 	if !ok {
 		return
 	}
+	c.Check(time.Now())
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -57,8 +58,8 @@ func Watch(ctx context.Context, src Source, every time.Duration) {
 
 // Status describes the certificate a source serves.
 type Status struct {
-	// Source is where the certificate comes from: "files", or
-	// "self-signed" for the pair the server made.
+	// Source is where the certificate comes from: "files",
+	// "self-signed" for the pair the server made, or "acme".
 	Source string `json:"source"`
 	// Names are the certificate's subject alternative names, DNS names
 	// and addresses, else its common name.
@@ -76,13 +77,18 @@ type Status struct {
 }
 
 // Config is the server's one tls.Config: TLS 1.2 at least, HTTP/2 and
-// HTTP/1.1, the certificate from src at every handshake.
+// HTTP/1.1 (and a source's own protocol, the ACME challenge's), the
+// certificate from src at every handshake.
 func Config(src Source) *tls.Config {
-	return &tls.Config{
+	cfg := &tls.Config{
 		MinVersion:     tls.VersionTLS12,
 		NextProtos:     []string{"h2", "http/1.1"},
 		GetCertificate: src.GetCertificate,
 	}
+	if p, ok := src.(interface{ NextProtos() []string }); ok {
+		cfg.NextProtos = append(cfg.NextProtos, p.NextProtos()...)
+	}
+	return cfg
 }
 
 // Fingerprint is the SHA-256 of a certificate in DER form, as browsers

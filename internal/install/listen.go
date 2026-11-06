@@ -36,20 +36,36 @@ func splitListen(addr string) (host, port string, err error) {
 
 // listenDropIns returns the two drop-ins for a listen address: the
 // address for serve (with the capability to bind a port below 1024,
-// which the user massimo lacks) and the matching /healthz URL for the
-// update helper, https:// when the service has TLS.
-func listenDropIns(addr string, tls bool) (serve, health string, err error) {
+// which the user massimo lacks, for it or for the plain helper address
+// httpAddr of -tls-http) and the matching /healthz URL for the update
+// helper, https:// when the service has TLS.
+func listenDropIns(addr string, tls bool, httpAddr string) (serve, health string, err error) {
 	host, port, err := splitListen(addr)
 	if err != nil {
 		return "", "", err
 	}
 	head := "# Written by `massimo install` (-listen, -tls), kept by later installs. Delete\n# this file (and its pair) and run `systemctl daemon-reload` to go back to\n# http://:8099.\n[Service]\n"
 	serve = head + "Environment=MASSIMO_LISTEN=" + addr + "\n"
-	if n, _ := strconv.Atoi(port); n < 1024 {
+	if portBelow1024(port) || httpAddr != "" && portBelow1024(hostPort(httpAddr)) {
 		serve += "AmbientCapabilities=CAP_NET_BIND_SERVICE\n"
 	}
 	health = head + "Environment=MASSIMO_HEALTH=" + healthURL(host, port, tls) + "\n"
 	return serve, health, nil
+}
+
+// portBelow1024 says whether a port needs the capability.
+func portBelow1024(port string) bool {
+	n, err := strconv.Atoi(port)
+	return err == nil && n < 1024
+}
+
+// hostPort is the port of a listen address, "" for a bad one.
+func hostPort(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	return port
 }
 
 // listenFromDropIn reads the address a listen drop-in sets, "" when it
@@ -95,31 +111,34 @@ func healthURL(host, port string, tls bool) string {
 
 // listen writes the drop-ins: the address for Options.Listen, which
 // later installs keep, and the helper's health URL, which follows the
-// address and the scheme (tls: the settings say the server has TLS).
-// The health drop-in is written whenever the address or the scheme is
-// not the unit's own, and rewritten when a kept one would be wrong.
-func (in *installer) listen(tls bool) error {
-	listen := in.Listen
+// address and the scheme (tls: the settings say the server has TLS;
+// httpAddr: the plain helper of -tls-http, whose port below 1024 needs
+// the capability too). The health drop-in is written whenever the
+// address or the scheme is not the unit's own, and rewritten when a
+// kept one would be wrong.
+func (in *installer) listen(tls bool, httpAddr string) error {
+	listen, kept := in.Listen, false
 	if listen == "" {
 		if b, err := os.ReadFile(in.path(ListenDropIn)); err == nil {
-			listen = listenFromDropIn(b)
+			listen, kept = listenFromDropIn(b), true
 			fmt.Fprintf(in.Out, "%s kept (%d bytes); change it with -listen\n", ListenDropIn, len(b))
 		}
 	}
 	_, healthErr := os.Stat(in.path(HealthDropIn))
-	if listen == "" && !tls && healthErr != nil {
+	needCap := httpAddr != "" && portBelow1024(hostPort(httpAddr))
+	if listen == "" && !tls && !needCap && healthErr != nil {
 		return nil // the units' own values hold
 	}
 	addr := listen
 	if addr == "" {
 		addr = DefaultListen
 	}
-	serve, health, err := listenDropIns(addr, tls)
+	serve, health, err := listenDropIns(addr, tls, httpAddr)
 	if err != nil {
 		return err
 	}
 	var files [][3]string // path, content, what
-	if in.Listen != "" {
+	if in.Listen != "" || kept || needCap {
 		files = append(files, [3]string{ListenDropIn, serve, "listen on " + addr})
 	}
 	if !in.NoUpdateHelper {

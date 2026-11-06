@@ -460,6 +460,20 @@ and the fingerprint to compare is in the log, in `massimo config`,
 in `massimo tls show`, in `/healthz` and under the page's header.
 A box whose address changed gets a new one with `massimo tls self-signed`,
 which a running server takes up at once.
+`-tls acme -tls-names <name>` gets a certificate from Let's Encrypt for a
+DNS name that resolves to the box, and renews it by itself:
+the validation reaches the box on port 443 (a router forwards its public
+443 to the server's port; the name's record is the public address,
+dynamic DNS where it changes), by TLS-ALPN-01 on the listener itself,
+or with `-tls-http :80` by HTTP-01 on a plain port 80 as well,
+which then redirects to `https://`.
+`-acme-email` gives the account a contact address;
+the account key and the certificates live in the data directory's `tls/acme/`.
+Let's Encrypt allows five failed orders an hour per name,
+so experiments use its staging directory
+(`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`).
+A certificate that ends within two weeks, or an order that has not succeeded,
+is a warning in the log, in `/healthz` and under the page's header.
 With TLS the server tells browsers to use `https://` for its host for a year
 (`-hsts <days>`);
 a browser that saw that refuses `http://` until the days are up,

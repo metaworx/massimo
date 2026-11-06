@@ -18,6 +18,10 @@ the next minor, a fix counts the suffix up.
   the box's names, renewed 30 days before it expires; `massimo tls show`
   and the web UI's header show its fingerprint (README.md, "Server").
 
+- `massimo serve -tls acme -tls-names <name>`: a Let's Encrypt
+  certificate by TLS-ALPN-01, renewed by itself (`-tls-http :80` adds
+  HTTP-01 and the redirect); the UI warns two weeks before an expiry.
+
 - Store stage (b) in `internal/store` (`docs/store.md` section 9):
   migration 0002 (`commands`, `users.auth_version`, `audit.command_id`),
   users with argon2id passwords, roles, tokens, the bootstrap, the audit,
