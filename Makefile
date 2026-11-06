@@ -24,15 +24,29 @@ BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-l
 # starts the next minor (make release-alpha BUMP=minor: v0.2.0-alpha.1),
 # a fix or iteration counts the suffix up (v0.2.0-alpha.2); the suffix
 # names the channel, so promoting to a beta branch would tag -beta.N.
-# release-alpha fast-forwards alpha on GitHub to main's head and tags it as
-# that version with "channel: alpha" in the (signed) tag message, both
-# pushed atomically; .github/workflows/release.yml then
-# builds, signs and publishes the release. Push main first. It refuses when
-# alpha has commits main lacks (alpha is only ever fast-forwarded) and when
-# main's head is released already.
+# release-alpha runs on main, checked out, clean and equal to origin/main.
+# changelog.sh cuts CHANGELOG.md's [Unreleased] into the release's section,
+# makes the chore(release) commit on main and the signed tag at it with that
+# section as its message; main, alpha fast-forwarded to that commit and the
+# tag are then pushed atomically, all or nothing, and
+# .github/workflows/release.yml builds, signs and publishes the release.
+# It refuses when alpha has commits main lacks (alpha is only ever
+# fast-forwarded), when main's head is released already, when changelog.sh
+# check finds something and when [Unreleased] holds no bullet. DRY=1 runs
+# every step as a dry run: changelog.sh says what it would cut and tag, and
+# the push is printed, not made. ASSISTED_BY=agent:model gives the release
+# commit an agent's Assisted-by trailer (COMMIT.md 3.3); the owner's own
+# release needs none.
+CHANGELOG_SH = GUIDELINES/shared/tools/changelog.sh
 release-alpha:
 	@git fetch --quiet --tags origin main alpha && \
 	sha=$$(git rev-parse origin/main) && \
+	if [ "$$(git symbolic-ref --quiet --short HEAD)" != main ]; then \
+		echo "release-alpha: check out main first; the release commit is made on it" >&2; exit 1; fi; \
+	if [ -n "$$(git status --porcelain --untracked-files=no)" ]; then \
+		echo "release-alpha: main has uncommitted changes" >&2; exit 1; fi; \
+	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
+		echo "release-alpha: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
 	if ! git merge-base --is-ancestor origin/alpha $$sha; then \
 		echo "release-alpha: alpha has commits that main lacks; bring them into main first" >&2; exit 1; fi; \
 	if done=$$(git describe --tags --exact-match $$sha 2>/dev/null); then \
@@ -44,9 +58,23 @@ release-alpha:
 		"") next=v0.$$minor.0-alpha.$$((n+1)) ;; \
 		*) echo "release-alpha: BUMP is minor or empty" >&2; exit 1 ;; \
 	esac; \
-	git tag -a $$next -m "$$next" -m "channel: alpha" $$sha && \
-	git push --atomic origin $$sha:refs/heads/alpha refs/tags/$$next && \
-	echo "released $$next ($$sha) on alpha; follow it at https://github.com/metaworx/massimo/actions"
+	cut="cut $${next#v} --commit --tag create$(if $(ASSISTED_BY), --assisted-by $(ASSISTED_BY))"; \
+	$(CHANGELOG_SH) -q check || { \
+		echo "release-alpha: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
+	if [ -n "$(DRY)" ]; then \
+		$(CHANGELOG_SH) $$cut || exit 1; \
+		echo "release-alpha: would run: git push --atomic origin main <the release commit>:refs/heads/alpha refs/tags/$$next"; \
+		exit 0; fi; \
+	$(CHANGELOG_SH) -q $$cut || { \
+		echo "release-alpha: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
+	$(CHANGELOG_SH) $$cut --force || { \
+		echo "release-alpha: the cut stopped half-way; nothing pushed, see git status and git log -1" >&2; exit 1; }; \
+	rel=$$(git rev-parse HEAD) && \
+	if [ "$$(git rev-parse $$rel^)" != "$$sha" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
+		echo "release-alpha: the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
+	git push --atomic origin main $$rel:refs/heads/alpha refs/tags/$$next || { \
+		echo "release-alpha: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
+	echo "released $$next ($$rel) on alpha; follow it at https://github.com/metaworx/massimo/actions"
 
 all: test build
 

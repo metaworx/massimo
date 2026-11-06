@@ -77,6 +77,13 @@ the next minor, a fix counts the suffix up.
   (`v0.7.0-alpha.1` is on `alpha`) before the tag message's `channel:`
   line, so a message rewritten with the changelog keeps its channel.
 
+- `make release-alpha` cuts the changelog's `[Unreleased]` into the
+  release's section on `main` and tags with that section; `DRY=1`
+  shows what it would cut, tag and push (README.md, "Versions").
+
+- A GitHub release's notes are its tag's changelog section, then the
+  sentence on the channel and how to install and verify a download.
+
 ### Fixed
 
 - Writes from LAN proxy clients, such as the original software, get
