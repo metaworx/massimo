@@ -104,7 +104,7 @@ function renderRooms() {
 }
 
 function renderRoom(room) {
-  const el = $("room-template").content.firstElementChild.cloneNode(true);
+  const el = fromTemplate("room-template");
   const ui = roomUI(room);
   el.dataset.id = room.id;
   el.querySelector(".room-name").textContent = room.name;
@@ -284,6 +284,8 @@ function renderMenu(el, room) {
       closeMenu(el);
       roomUI(room).confirm = true;
       rerenderRoom(room);
+      const no = document.querySelector('.room[data-id="' + room.id + '"] .room-confirm .confirm-no');
+      if (no) no.focus();
     });
   } else {
     del.classList.add("hidden");
@@ -396,19 +398,18 @@ function closeVacation(room) {
   rerenderRoom(room);
 }
 
-// renderDeleteConfirm wires the one-line confirmation of a room deletion.
+// renderDeleteConfirm asks, while the room's deletion is asked for,
+// whether to delete it (confirmBox): Keep or Delete.
 function renderDeleteConfirm(el, room) {
   const ui = roomUI(room);
-  const box = el.querySelector(".delete-confirm");
-  box.classList.toggle("hidden", !ui.confirm);
-  box.querySelector(".delete-no").addEventListener("click", () => {
-    ui.confirm = false;
-    rerenderRoom(room);
-  });
-  box.querySelector(".delete-yes").addEventListener("click", () => {
+  if (!ui.confirm) return;
+  el.querySelector(".room-confirm").appendChild(confirmBox(t("room.deleteConfirm"), { yes: t("action.delete"), no: t("action.keep") }, () => {
     ui.confirm = false;
     deleteRoom(room);
-  });
+  }, () => {
+    ui.confirm = false;
+    rerenderRoom(room);
+  }));
 }
 
 // --- devices ----------------------------------------------------------
@@ -491,7 +492,7 @@ function deviceValues(grid, d, offset) {
 }
 
 function renderDevice(d) {
-  const el = $("device-template").content.firstElementChild.cloneNode(true);
+  const el = fromTemplate("device-template");
   el.dataset.rf = d.rf_address;
   // Type and radio address are for expert mode (.device-sub); a device
   // without a name keeps its address, the only way to tell it apart.
@@ -614,6 +615,8 @@ function typeName(type) {
   return s === key ? type.replace(/_/g, " ") : s;
 }
 
+// showTileResult says how an action went on the room's tile (or the
+// page's message line when the tile is gone); a success fades.
 function showTileResult(roomId, text, ok) {
   const tile = document.querySelector('.room[data-id="' + roomId + '"]');
   if (!tile) {
@@ -621,8 +624,7 @@ function showTileResult(roomId, text, ok) {
     return;
   }
   const p = tile.querySelector(".tile-result");
-  p.textContent = text;
-  p.className = "tile-result " + (ok ? "ok" : "bad");
+  showResult(p, text, ok);
   if (ok) {
     setTimeout(() => {
       if (p.textContent === text) p.classList.add("hidden");
@@ -721,38 +723,39 @@ function houseDuration() {
   return checked ? checked.value : "permanent";
 }
 
-// renderHouseRooms fills the room checkboxes of the House panel.
+// houseRoomRow is a checkbox of the House panel with its label, from
+// its template (tpl-house-room); label.control is the checkbox.
+function houseRoomRow(label, checked, onChange) {
+  const row = fromTemplate("tpl-house-room");
+  const cb = row.control;
+  cb.checked = !!checked;
+  cb.addEventListener("change", () => onChange(cb.checked));
+  row.append(" " + label);
+  return row;
+}
+
+// renderHouseRooms fills the room checkboxes of the House panel: All
+// rooms, then a room with a thermostat each.
 function renderHouseRooms() {
   const box = $("house-rooms");
   const wasChecked = {};
   for (const cb of box.querySelectorAll("input[data-room]")) wasChecked[cb.dataset.room] = cb.checked;
   clear(box);
-  const all = document.createElement("label");
-  const allCb = document.createElement("input");
-  allCb.type = "checkbox";
-  allCb.id = "house-all";
-  allCb.checked = true;
-  all.appendChild(allCb);
-  all.appendChild(document.createTextNode(" " + t("house.allRooms")));
+  const rooms = () => [...box.querySelectorAll("input[data-room]")];
+  const all = houseRoomRow(t("house.allRooms"), true, (on) => {
+    for (const cb of rooms()) cb.checked = on;
+  });
+  all.control.id = "house-all";
   box.appendChild(all);
   for (const room of state.rooms) {
     if (!roomThermostat(room)) continue;
-    const label = document.createElement("label");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.dataset.room = String(room.id);
-    cb.checked = wasChecked[room.id] === undefined ? true : wasChecked[room.id];
-    cb.addEventListener("change", () => {
-      allCb.checked = [...box.querySelectorAll("input[data-room]")].every((x) => x.checked);
+    const row = houseRoomRow(room.name, wasChecked[room.id] === undefined ? true : wasChecked[room.id], () => {
+      all.control.checked = rooms().every((x) => x.checked);
     });
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(" " + room.name));
-    box.appendChild(label);
+    row.control.dataset.room = String(room.id);
+    box.appendChild(row);
   }
-  allCb.checked = [...box.querySelectorAll("input[data-room]")].every((x) => x.checked);
-  allCb.addEventListener("change", () => {
-    for (const cb of box.querySelectorAll("input[data-room]")) cb.checked = allCb.checked;
-  });
+  all.control.checked = rooms().every((x) => x.checked);
 }
 
 // updateHousePanel shows or hides the parts that depend on the mode.
@@ -789,13 +792,11 @@ async function sendHouse() {
   const manualTemp = clampTemp(parseFloat($("house-temp").value) || DEFAULT_TEMP);
   const ids = [...document.querySelectorAll("#house-rooms input[data-room]:checked")].map((cb) => Number(cb.dataset.room));
   const out = $("house-result");
-  out.classList.remove("hidden");
-  out.className = "tile-result ok";
   if (ids.length === 0) {
-    out.textContent = t("house.noRoom");
+    showResult(out, t("house.noRoom"), true);
     return;
   }
-  out.textContent = t("house.sending");
+  showResult(out, t("house.sending"), true);
   const results = [];
   let failed = false;
   for (const room of state.rooms.filter((r) => ids.includes(r.id))) {
@@ -819,9 +820,9 @@ async function sendHouse() {
       results.push(t("house.roomError", { room: room.name, error: e.message }));
       failed = true;
     }
-    out.textContent = results.join("\n");
+    showResult(out, results.join("\n"), true);
   }
-  out.className = "tile-result " + (failed ? "bad" : "ok");
+  showResult(out, out.textContent, !failed);
   loadCubes().catch(() => {});
 }
 

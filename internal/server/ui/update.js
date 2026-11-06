@@ -95,10 +95,30 @@ function followUpdate() {
   }, 3000);
 }
 
-async function startUpdate() {
+// startUpdate asks in the Software section, in place of its buttons,
+// whether to install the update; Cancel puts the buttons back.
+function startUpdate() {
   const u = updState.info;
   if (!u || !u.latest) return;
-  if (!confirm(t("update.confirm", { version: u.latest }))) return;
+  const actions = $("update-btn").parentElement;
+  const back = () => {
+    box.remove();
+    actions.classList.remove("hidden");
+  };
+  const box = confirmBox(t("update.confirm", { version: u.latest }), { yes: t("update.to", { version: u.latest }), no: t("action.cancel") }, () => {
+    back();
+    runUpdate(u);
+  }, () => {
+    back();
+    $("update-btn").focus();
+  });
+  actions.classList.add("hidden");
+  actions.after(box);
+  box.focusFirst();
+}
+
+// runUpdate asks the server's update helper to install u.latest.
+async function runUpdate(u) {
   setUpdateBusy(true);
   try {
     await api("POST", "/api/v1/update", {});

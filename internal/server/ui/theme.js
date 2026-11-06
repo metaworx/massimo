@@ -285,25 +285,11 @@ function chooseScheme(id) {
 // renderSchemeSelect fills the scheme choice: the built-in schemes by
 // their translated names, then the user's own under a group.
 function renderSchemeSelect() {
-  const sel = $("scheme-select");
-  clear(sel);
-  for (const id of Object.keys(BUILTIN_SCHEMES)) {
-    const o = document.createElement("option");
-    o.value = id;
-    o.textContent = t("appearance.scheme." + id);
-    sel.appendChild(o);
-  }
+  const options = Object.keys(BUILTIN_SCHEMES).map((id) => [id, t("appearance.scheme." + id)]);
   if (themeState.custom.length) {
-    const group = document.createElement("optgroup");
-    group.label = t("appearance.customGroup");
-    for (const c of themeState.custom) {
-      const o = document.createElement("option");
-      o.value = CUSTOM_PREFIX + c.name;
-      o.textContent = c.name;
-      group.appendChild(o);
-    }
-    sel.appendChild(group);
+    options.push({ group: t("appearance.customGroup"), options: themeState.custom.map((c) => [CUSTOM_PREFIX + c.name, c.name]) });
   }
+  const sel = fillOptions($("scheme-select"), options);
   sel.value = state.settings.scheme;
 }
 
@@ -319,9 +305,7 @@ function applyAppearance() {
 // schemeMessage shows the result of a save, delete or import under the
 // buttons; empty clears it.
 function schemeMessage(text, ok) {
-  const p = $("scheme-msg");
-  p.textContent = text;
-  p.className = "small scheme-msg" + (text ? (ok ? " ok" : " bad") : " hidden");
+  showResult($("scheme-msg"), text, ok);
 }
 
 function initAppearance() {
@@ -336,12 +320,12 @@ function initAppearance() {
     else openSchemeEditor();
   });
   $("scheme-export").addEventListener("click", exportScheme);
-  $("scheme-import").addEventListener("click", () => $("scheme-file").click());
-  $("scheme-file").addEventListener("change", (ev) => {
-    const file = ev.target.files && ev.target.files[0];
-    ev.target.value = "";
-    if (file) importSchemeFile(file);
-  });
+  const picker = filePicker("application/json,.json", importSchemeFile);
+  picker.id = "scheme-file";
+  picker.setAttribute("aria-label", t("appearance.importFile"));
+  picker.dataset.i18nAttr = "aria-label:appearance.importFile"; // for a change of language
+  $("scheme-import").after(picker);
+  $("scheme-import").addEventListener("click", () => picker.click());
   if (darkQuery) darkQuery.addEventListener("change", reapplyTheme);
 }
 
@@ -430,8 +414,7 @@ function hexMessage(field) {
   const p = $("scheme-hex-msg");
   if (!p) return;
   const bad = field || $("scheme-editor").querySelector(".scheme-hex[aria-invalid=true]");
-  p.textContent = bad ? t("appearance.hexBad", { token: bad.dataset.token, value: bad.dataset.refused }) : "";
-  p.classList.toggle("hidden", !bad);
+  showResult(p, bad ? t("appearance.hexBad", { token: bad.dataset.token, value: bad.dataset.refused }) : "", false);
 }
 
 // markHex marks a hex field as refused (the text it holds) or as good.
@@ -448,42 +431,32 @@ function markHex(field, refused) {
   hexMessage(refused === null ? null : field);
 }
 
-// renderSchemeSet builds the inputs of one set (light or dark) of the
-// draft: a row per token with its name, the contrast badge for a
+// renderSchemeSet fills the fieldset of one set (light or dark) of the
+// draft: a row per token (tpl-scheme-row) with its name, the contrast badge for a
 // background of CONTRAST_PAIRS (an empty placeholder of the same width
 // on the other rows, so the colours and the hex fields line up), the
 // colour input and the hex field. The hex field takes a typed or pasted
 // value: a colour applies as it is typed and is written as #rrggbb once
 // the field is left; anything else is refused, the field marked
 // invalid, and the colour stays.
-function renderSchemeSet(mode) {
+function renderSchemeSet(fs, mode) {
   const d = themeState.draft;
-  const fs = document.createElement("fieldset");
-  fs.className = "scheme-set";
-  fs.appendChild(textEl("legend", t("appearance." + mode)));
   const badges = {};
   const refresh = () => {
     for (const [k, b] of Object.entries(badges)) fillContrast(b, d[mode], k);
   };
   for (const k of THEME_TOKENS) {
-    const row = document.createElement("div");
-    row.className = "scheme-row";
-    const input = document.createElement("input");
-    input.type = "color";
+    const row = fromTemplate("tpl-scheme-row");
+    const input = row.querySelector("input[type=color]");
     input.id = "scheme-" + mode + "-" + k;
     input.value = d[mode][k];
     input.title = "--" + k;
-    const label = textEl("label", tokenLabel(k));
+    const label = row.querySelector("label");
+    label.textContent = tokenLabel(k);
     label.htmlFor = input.id;
-    const hex = document.createElement("input");
-    hex.type = "text";
+    const hex = row.querySelector(".scheme-hex");
     hex.id = "scheme-" + mode + "-" + k + "-hex";
-    hex.className = "scheme-hex mono";
     hex.value = d[mode][k];
-    hex.size = 7;
-    hex.spellcheck = false;
-    hex.autocomplete = "off";
-    hex.setAttribute("autocapitalize", "off");
     hex.setAttribute("aria-label", t("appearance.hex", { token: tokenLabel(k) }));
     hex.dataset.token = tokenLabel(k);
     const take = (c) => {
@@ -521,53 +494,30 @@ function renderSchemeSet(mode) {
         markHex(hex, null);
       }
     });
-    row.appendChild(label);
+    const badge = label.nextElementSibling;
     if (CONTRAST_PAIRS[k]) {
-      const b = document.createElement("span");
-      b.setAttribute("role", "img"); // so the label is read out
-      badges[k] = b;
-      row.appendChild(b);
+      badge.setAttribute("role", "img"); // so the label is read out
+      badges[k] = badge;
     } else {
-      const gap = document.createElement("span");
-      gap.className = "contrast none";
-      gap.setAttribute("aria-hidden", "true");
-      row.appendChild(gap);
+      badge.className = "contrast none";
+      badge.setAttribute("aria-hidden", "true");
     }
-    row.appendChild(input);
-    row.appendChild(hex);
     fs.appendChild(row);
   }
   refresh();
-  return fs;
 }
 
-// renderSchemeEditor draws the editor for the draft: the two sets, the
-// contrast note, the name with Save as, then Reset, Delete and Close.
+// renderSchemeEditor draws the editor for the draft from its template
+// (tpl-scheme-editor): the two sets, the contrast note, the name with
+// Save as, then Reset, Delete and Close.
 function renderSchemeEditor() {
   const d = themeState.draft;
   const base = schemeById(themeState.base);
   const ed = $("scheme-editor");
   clear(ed);
-  const title = textEl("h3", t("appearance.editorTitle"));
-  title.id = "scheme-editor-title";
-  ed.appendChild(title);
-  const sets = document.createElement("div");
-  sets.className = "scheme-sets";
-  sets.appendChild(renderSchemeSet("light"));
-  sets.appendChild(renderSchemeSet("dark"));
-  ed.appendChild(sets);
-  const hexMsg = textEl("p", "", "small scheme-msg bad hidden");
-  hexMsg.id = "scheme-hex-msg";
-  hexMsg.setAttribute("role", "status");
-  ed.appendChild(hexMsg);
-  ed.appendChild(textEl("p", t("appearance.contrastNote"), "muted small"));
-  const nameRow = document.createElement("div");
-  nameRow.className = "scheme-name";
-  const nameLabel = textEl("label", t("appearance.name"), "muted");
-  nameLabel.htmlFor = "scheme-name";
-  const name = document.createElement("input");
-  name.type = "text";
-  name.id = "scheme-name";
+  const frame = fragmentFromTemplate("tpl-scheme-editor");
+  for (const fs of frame.querySelectorAll(".scheme-set")) renderSchemeSet(fs, fs.dataset.mode);
+  const name = frame.querySelector("#scheme-name");
   name.maxLength = SCHEME_NAME_MAX;
   name.value = d.name;
   name.addEventListener("keydown", (ev) => {
@@ -576,25 +526,13 @@ function renderSchemeEditor() {
       saveSchemeDraft();
     }
   });
-  nameRow.appendChild(nameLabel);
-  nameRow.appendChild(name);
-  nameRow.appendChild(button(t("appearance.saveAs"), "primary", saveSchemeDraft));
-  ed.appendChild(nameRow);
-  const actions = document.createElement("div");
-  actions.className = "actions";
-  const left = document.createElement("span");
-  left.className = "actions-left";
-  left.appendChild(button(t("appearance.reset"), "", resetSchemeDraft));
-  const del = button(t("action.delete"), "", deleteSchemeDraft);
-  del.id = "scheme-delete";
+  name.nextElementSibling.addEventListener("click", saveSchemeDraft);
+  frame.querySelector(".scheme-reset").addEventListener("click", resetSchemeDraft);
+  const del = frame.querySelector("#scheme-delete");
   del.disabled = !base || base.builtin;
-  left.appendChild(del);
-  const right = document.createElement("span");
-  right.className = "actions-right";
-  right.appendChild(button(t("action.close"), "", closeSchemeEditor));
-  actions.appendChild(left);
-  actions.appendChild(right);
-  ed.appendChild(actions);
+  del.addEventListener("click", deleteSchemeDraft);
+  frame.querySelector(".scheme-close").addEventListener("click", closeSchemeEditor);
+  ed.appendChild(frame);
 }
 
 // --- export and import ------------------------------------------------
@@ -605,20 +543,11 @@ function fileSlug(name) {
 }
 
 // exportScheme downloads the draft, or else the chosen scheme, as a
-// file: a blob: link with the download attribute, which the page's
-// Content-Security-Policy allows.
+// file (downloadBlob).
 function exportScheme() {
   const s = themeState.draft || schemeById(state.settings.scheme) || schemeById(DEFAULT_SCHEME);
   const doc = schemeDoc(s);
-  const blob = new Blob([JSON.stringify(doc, null, 1) + "\n"], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "massimo-scheme-" + fileSlug(doc.name) + ".json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob("massimo-scheme-" + fileSlug(doc.name) + ".json", new Blob([JSON.stringify(doc, null, 1) + "\n"], { type: "application/json" }));
 }
 
 // importSchemeFile reads a scheme file, keeps it under its name and

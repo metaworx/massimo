@@ -1,0 +1,27 @@
+<!-- The colour-scheme editor and its row per token, theme.js. -->
+<template id="tpl-scheme-editor">
+  <h3 id="scheme-editor-title" data-i18n="appearance.editorTitle">Customise the scheme</h3>
+  <div class="scheme-sets">
+    <fieldset class="scheme-set" data-mode="light"><legend data-i18n="appearance.light">Light</legend></fieldset>
+    <fieldset class="scheme-set" data-mode="dark"><legend data-i18n="appearance.dark">Dark</legend></fieldset>
+  </div>
+  <p id="scheme-hex-msg" class="small scheme-msg bad hidden" role="status"></p>
+  <p class="muted small" data-i18n="appearance.contrastNote">The number next to a background is the contrast of the text on it: from 4.5 it reads well (WCAG AA), under 3 badly.</p>
+  <div class="field wide scheme-name">
+    <label for="scheme-name" data-i18n="appearance.name">Name</label>
+    <span class="inline field-control"><input type="text" id="scheme-name"><button type="button" class="primary" data-i18n="appearance.saveAs">Save as</button></span>
+  </div>
+  <div class="actions">
+    <span class="actions-left"><button type="button" class="scheme-reset" data-i18n="appearance.reset">Reset</button><button type="button" id="scheme-delete" data-i18n="action.delete">Delete</button></span>
+    <span class="actions-right"><button type="button" class="scheme-close" data-i18n="action.close">Close</button></span>
+  </div>
+</template>
+
+<template id="tpl-scheme-row">
+  <div class="scheme-row">
+    <label></label>
+    <span></span>
+    <input type="color">
+    <input type="text" class="scheme-hex mono" size="7" spellcheck="false" autocomplete="off" autocapitalize="off">
+  </div>
+</template>

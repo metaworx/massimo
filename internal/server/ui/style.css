@@ -232,7 +232,7 @@ body.expert #clock-plain { display: none; }
 .message.ok { border-color: var(--ok); }
 .message.bad { border-color: var(--bad); }
 
-/* inline panels: settings, house, vacation, delete confirm */
+/* inline panels: settings, house, vacation, a confirmation (confirmBox) */
 .panel {
   width: 100%;
   background: var(--card);
@@ -243,11 +243,7 @@ body.expert #clock-plain { display: none; }
 }
 .settings { max-width: 520px; margin-bottom: 16px; }
 .settings-body { padding: 12px 14px 4px; }
-.setting { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-bottom: 12px; }
-.setting .setting-control { flex-basis: 100%; }
-.setting > .switch { flex: 1 1 0; min-width: 0; }
-.setting select.setting-control { flex-basis: auto; max-width: 100%; }
-.setting > select.setting-control { width: 100%; }
+.settings .field { margin-bottom: 12px; }
 .settings input[type="number"] { width: 6em; }
 .settings .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 4px 0 10px; }
 .lang-note { flex-basis: 100%; margin: 2px 0 0; }
@@ -264,14 +260,12 @@ body.expert #clock-plain { display: none; }
 .cube-panel { margin-bottom: 8px; padding: 8px 12px; }
 .cube-panel summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; overflow-wrap: anywhere; }
 .cube-panel[open] summary { margin-bottom: 10px; }
-.cube-panel-name { font-weight: 600; }
-.cube-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
 .cube-listening { margin: -6px 0 12px; overflow-wrap: anywhere; }
-.cube-hidden { align-items: flex-start; }
-.cube-hidden-title { flex-basis: 100%; }
+.cube-hidden { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 6px; margin-bottom: 12px; }
+.cube-hidden-title { flex-basis: 100%; color: var(--muted); }
 .cube-hidden-list { list-style: none; margin: 0; padding: 0; flex-basis: 100%; }
 .cube-hidden-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
 .cube-hide-add { flex-wrap: wrap; }
@@ -319,9 +313,13 @@ body.expert #clock-plain { display: none; }
 .contrast.warn { color: var(--warn); border-color: var(--warn); }
 .contrast.bad { color: var(--bad); border-color: var(--bad); }
 .contrast.none { border-color: transparent; cursor: default; }
-.scheme-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 8px; }
+.scheme-name { margin: 12px 0 8px; }
+.scheme-name .inline { flex-wrap: wrap; }
 .scheme-name input[type="text"] { flex: 1 1 10em; min-width: 0; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+/* the summary of a details panel (components.js detailsPanel, the Cube panel's template) */
+.panel-name { font-weight: 600; }
+.panel-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .panel-row {
   display: flex;
   flex-wrap: wrap;
@@ -355,8 +353,9 @@ input[type="datetime-local"] { max-width: 100%; }
 button.subtle { color: var(--muted); }
 .house .panel { margin: 0 14px 14px; width: auto; }
 .room .panel { margin: 8px 14px 6px; width: auto; }
-.delete-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.delete-confirm .actions { margin: 0; }
+.confirm-box { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.confirm-box .actions { margin: 0; }
+.room-confirm:empty { display: none; }
 
 /* tiles */
 .tiles {
@@ -719,16 +718,18 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .config-tabs .tab.close { margin-left: auto; font-weight: 400; }
 .config-body h4 { margin: 12px 0 6px; font-size: 0.95rem; }
 .cfg-form { display: flex; flex-direction: column; gap: 8px; }
-.cfg-field {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 12px;
-}
-.cfg-label { color: var(--muted); }
-.cfg-field > .inline, .cfg-field > input, .cfg-field > select { margin-left: auto; }
-.cfg-field .inline > .muted { min-width: 2.2em; }
+/* a row of a label and its control (components.js fieldRow, and the
+   rows of the settings): the label at the left, the control at the
+   right on the same line, wrapping under the label where there is no
+   room; .wide puts the control on a line of its own at full width */
+.field { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.field > label:not(.switch) { color: var(--muted); }
+.field > .field-control { margin-left: auto; max-width: 100%; }
+.field > .switch { flex: 1 1 0; min-width: 0; }
+.field .inline > .muted { min-width: 2.2em; }
+.field input[type="number"] { text-align: right; }
+.field.wide > .field-control { flex: 1 1 100%; margin-left: 0; min-width: 0; width: 100%; }
+.field-hint { flex-basis: 100%; margin: 0; }
 .cfg-form input[type="number"] { text-align: right; width: 4.8em; }
 .cfg-form input[type="text"] { width: min(100%, 18em); }
 .cfg-form .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
@@ -867,5 +868,3 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
   font-size: 0.85rem;
   color: var(--fg);
 }
-.cfg-head { display: inline-flex; align-items: center; gap: 2px; }
-.cfg-field.with-help { justify-content: flex-start; gap: 4px 6px; }

@@ -437,7 +437,7 @@ copy of rooms' settings to other rooms), a help button next to every setting,
 and a log view of the Cube's events.
 The page speaks English, German, French, Italian,
 Dutch and Polish (from the browser, or chosen in the settings),
-from the translation table in `internal/server/ui/i18n.js`.
+from the translation files in `internal/server/ui/i18n/`, one per language.
 [docs/ui.md](docs/ui.md) describes how to use it.
 It is meant for the LAN.
 The listener defaults to localhost;
