@@ -94,53 +94,267 @@ jobs:
           check-latest: true
 
       - name: Unit tests
-        run: go test ./internal/update/... ./internal/install/... ./cmd/...
+        shell: bash
+        run: |
+          go test ./internal/update/... ./internal/install/... ./cmd/...
+          go test -run Update ./internal/server/
 
-      - name: Install, run, update and remove the service
+      # The service against the fake Cube, with the update from the web
+      # UI's request (docs/update-windows.md, section 6): the server
+      # starts the helper itself, which must outlive the service it stops.
+      # The shell functions are shared by the steps below.
+      - name: Install and run the service
+        shell: bash
+        # Without a token GitHub allows 60 API requests an hour per
+        # address, which the shared runners use up; it only lifts that
+        # limit. It goes into the settings, so that the server's release
+        # check and the helper it starts have it.
+        env:
+          MASSIMO_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > ci-lib.sh <<'EOF'
+          health=http://127.0.0.1:18099/healthz
+          api=http://127.0.0.1:18099/api/v1/update
+          bin="C:/Program Files/Massimo/massimo.exe"
+          data=C:/ProgramData/Massimo
+          up() { for i in $(seq 30); do curl -fsS "$health" && echo && return; sleep 2; done; return 1; }
+          # As the web UI does it: POST, a second POST in the same moment
+          # must be refused, then the helper's states until the last one,
+          # left in $st.
+          post_update() {
+            rm -f "$data/update-status.json"
+            local code second
+            code="$(curl -sS -o post.json -w '%{http_code}' -X POST -H 'Authorization: Bearer ci' "$api" || true)"
+            cat post.json; echo
+            if [ "$code" != 202 ]; then
+              echo "::error::POST /api/v1/update answered $code"
+              curl -sS -H 'Authorization: Bearer ci' "$api" || true
+              return 1
+            fi
+            second="$(curl -sS -o second.json -w '%{http_code}' -X POST -H 'Authorization: Bearer ci' "$api" || true)"
+            cat second.json; echo
+            if [ "$second" != 409 ]; then echo "::error::the second POST answered $second, want 409"; return 1; fi
+            st=""
+            for i in $(seq 90); do
+              st="$(cat "$data/update-status.json" 2>/dev/null || true)"
+              echo "$st" | grep -Eq '"state": "(done|rolled-back|failed|up-to-date)"' && break
+              sleep 2
+            done
+            echo "$st"
+            echo "--- update.log"; cat "$data/update.log" || true
+            up
+          }
+          EOF
+          . ./ci-lib.sh
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
+          ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
+          # The fake Cube reports the fixture's serial.
+          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
+
+          ./massimo.exe install -settings ci.env -listen 127.0.0.1:18099
+          sc.exe query massimo
+          sc.exe qc massimo | tee qc.txt
+          grep -q -- '-update-request C:\\ProgramData\\Massimo\\update-request -update-status C:\\ProgramData\\Massimo\\update-status.json' qc.txt
+          up
+          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+
+          # Installing again keeps the address and restarts the service.
+          ./massimo.exe install
+          up
+          curl -fsS -H 'Authorization: Bearer ci' "$api"; echo
+
+      # Stage 1: the newest alpha on GitHub, as on a real PC. It either
+      # installs (the helper outlived the service, the new server came up
+      # on the same port), or rolls back when that release cannot run as a
+      # service.
+      - name: Update from the API against the alpha channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          . ./ci-lib.sh
+          post_update
+          now="$(curl -fsS "$health")"
+          if echo "$st" | grep -q '"state": "done"'; then
+            echo "$now" | grep -vq 'v0.0.0-ci.1'
+            test -f "$bin.prev"
+            # Back by hand, with the binary that is installed.
+            "$bin" update -rollback -restart massimo
+            up
+            curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          else
+            echo "$st" | grep -q '"state": "rolled-back"'
+            echo "$now" | grep -q 'v0.0.0-ci.1'
+            test -f "$bin.failed"
+          fi
+          test ! -e "$data/update-request"
+          grep -q 'update helper started' "$data/serve.log"
+          test "$(tasklist //FI "IMAGENAME eq massimo.exe" //NH | grep -c '^massimo.exe')" -le 2 # the service and the fake Cube
+
+      # The update by hand from an administrator prompt, with the real key
+      # and the real API.
+      - name: Update by hand against the alpha channel
         shell: bash
         env:
           MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
-          ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
-          # The fake Cube reports the fixture's serial.
-          printf 'MASSIMO_CUBE_KEQ0537249_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\n' > ci.env
-          health=http://127.0.0.1:18099/healthz
-          bin="C:/Program Files/Massimo/massimo.exe"
-
-          ./massimo.exe install -settings ci.env -listen 127.0.0.1:18099
-          sc.exe query massimo
-          for i in $(seq 30); do curl -fsS "$health" && break; sleep 2; done
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
-
-          # Installing again keeps the address and restarts the service.
-          ./massimo.exe install
-          for i in $(seq 30); do curl -fsS "$health" && break; sleep 2; done
-
+          . ./ci-lib.sh
           status=0
           "$bin" update -yes -restart massimo -health "$health" -health-timeout 90s || status=$?
-          for i in $(seq 30); do curl -fsS "$health" && break; sleep 2; done
+          up
           now="$(curl -fsS "$health")"
           echo "update exit $status, server: $now"
           if [ "$status" = 0 ]; then
             echo "$now" | grep -vq 'v0.0.0-ci.1'
           else
             echo "$now" | grep -q 'v0.0.0-ci.1'   # rolled back
-            test -f "C:/Program Files/Massimo/massimo.exe.failed"
+            test -f "$bin.failed"
           fi
 
+      # Stage 2: releases served here and signed with a test key compiled
+      # into the binaries built in this step (MASSIMO_UPDATE_API), so that
+      # both outcomes run every time: v0.0.0-ci.2 comes up, v0.0.0-ci.3
+      # passes the smoke test but cannot be a service and is rolled back
+      # through the API. Nothing built here is published.
+      - name: Update and roll back from the API with a stubbed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          . ./ci-lib.sh
+          mkdir -p ci-tools/sign ci-tools/standin ci-stub/repos/metaworx/massimo
+          cat > ci-tools/sign/main.go <<'EOF'
+          // The CI job's test key: "key <seed> <public.pem>" makes one,
+          // "sign <seed> <file>" prints the file's signature in base64.
+          package main
+
+          import (
+          	"crypto/ed25519"
+          	"crypto/x509"
+          	"encoding/base64"
+          	"encoding/pem"
+          	"fmt"
+          	"os"
+          )
+
+          func main() {
+          	if err := run(os.Args[1:]); err != nil {
+          		fmt.Fprintln(os.Stderr, err)
+          		os.Exit(1)
+          	}
+          }
+
+          func run(a []string) error {
+          	switch {
+          	case len(a) == 3 && a[0] == "key":
+          		pub, priv, err := ed25519.GenerateKey(nil)
+          		if err != nil {
+          			return err
+          		}
+          		der, err := x509.MarshalPKIXPublicKey(pub)
+          		if err != nil {
+          			return err
+          		}
+          		if err := os.WriteFile(a[1], priv.Seed(), 0o600); err != nil {
+          			return err
+          		}
+          		return os.WriteFile(a[2], pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), 0o644)
+          	case len(a) == 3 && a[0] == "sign":
+          		seed, err := os.ReadFile(a[1])
+          		if err != nil {
+          			return err
+          		}
+          		msg, err := os.ReadFile(a[2])
+          		if err != nil {
+          			return err
+          		}
+          		fmt.Println(base64.StdEncoding.EncodeToString(ed25519.Sign(ed25519.NewKeyFromSeed(seed), msg)))
+          		return nil
+          	}
+          	return fmt.Errorf("usage: sign key <seed> <public.pem> | sign sign <seed> <file>")
+          }
+          EOF
+          cat > ci-tools/standin/main.go <<'EOF'
+          // A release that passes the smoke test and cannot run as a service.
+          package main
+
+          import (
+          	"fmt"
+          	"os"
+          )
+
+          func main() {
+          	if len(os.Args) > 1 && os.Args[1] == "version" {
+          		fmt.Println("massimo v0.0.0-ci.3 (ci)")
+          		return
+          	}
+          	os.Exit(1)
+          }
+          EOF
+          (cd ci-tools/sign && go mod init citools/sign && go build -o ../sign.exe .)
+          (cd ci-tools/standin && go mod init citools/standin && go build -o standin.exe .)
+          ci-tools/sign.exe key ci-tools/ci-key internal/update/release-key.pem
+
+          asset=massimo-windows-amd64.exe
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o ci1.exe ./cmd/massimo
+          mkdir -p ci-stub/dl/v0.0.0-ci.2 ci-stub/dl/v0.0.0-ci.3
+          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.channel=alpha" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
+          cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
+          for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
+            d="ci-stub/dl/$tag"
+            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -channel alpha -dir "$d" "$asset" > "$d/massimo-release.json"
+            ci-tools/sign.exe sign ci-tools/ci-key "$d/massimo-release.json" > "$d/massimo-release.json.sig"
+          done
+          # The release list in GitHub's shape, one release at a time.
+          list() {
+            local u="http://127.0.0.1:8123/dl/$1"
+            printf '[{"tag_name":"%s","html_url":"%s","draft":false,"prerelease":true,"assets":[{"name":"%s","browser_download_url":"%s/%s"},{"name":"massimo-release.json","browser_download_url":"%s/massimo-release.json"},{"name":"massimo-release.json.sig","browser_download_url":"%s/massimo-release.json.sig"}]}]\n' \
+              "$1" "$u" "$asset" "$u" "$asset" "$u" "$u" > ci-stub/repos/metaworx/massimo/releases
+          }
+          list v0.0.0-ci.2
+          python -m http.server 8123 --bind 127.0.0.1 --directory ci-stub > stub.log 2>&1 &
+          for i in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8123/repos/metaworx/massimo/releases && break; sleep 1; done
+
+          # The test-key binary as the service, its settings pointing at the
+          # stub (the server's check and, through it, the helper).
+          printf 'MASSIMO_UPDATE_API=http://127.0.0.1:8123\n' >> "$data/env"
+          ./ci1.exe install
+          up
+          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          # A failure kept from earlier goes with the next successful update.
+          echo stale > "$bin.failed"
+
+          post_update
+          echo "$st" | grep -q '"state": "done"'
+          curl -fsS "$health" | grep -q 'v0.0.0-ci.2'
+          test -f "$bin.prev"
+          test ! -e "$bin.failed"
+
+          list v0.0.0-ci.3
+          start=$(date +%s)
+          post_update
+          echo "rolled back after $(( $(date +%s) - start )) s"
+          echo "$st" | grep -q '"state": "rolled-back"'
+          curl -fsS "$health" | grep -q 'v0.0.0-ci.2'
+          cmp "$bin.failed" "ci-stub/dl/v0.0.0-ci.3/$asset"
+          powershell -NoProfile -Command "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 20 | Where-Object { \$_.Id -in 7000,7009,7031,7034 } | Format-List TimeCreated,Id,Message" | tee events.txt
+          grep -Eq 'Id +: (7000|7009|7034)' events.txt
+
+      - name: Remove the service
+        shell: bash
+        run: |
+          set -euo pipefail
           ./massimo.exe install -remove -purge
           if sc.exe query massimo; then echo "::error::service still there"; exit 1; fi
           test ! -e "C:/Program Files/Massimo"
-          test ! -e "C:/ProgramData/Massimo"
+          test ! -e "C:/ProgramData/Massimo" # the settings, the logs, update.log, update-status.json and update-request
 
       - name: Logs
         if: always()
         shell: bash
         run: |
-          cat fakecube.log || true
-          for f in service.log serve.log; do
+          cat fakecube.log stub.log || true
+          for f in service.log serve.log update.log update-status.json; do
             echo "--- $f"; cat "C:/ProgramData/Massimo/$f" 2>/dev/null || true
           done
 

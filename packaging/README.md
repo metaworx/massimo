@@ -299,7 +299,8 @@ against the manifest, runs `<new binary> version` to make sure it starts
 here, keeps the old binary as `/usr/local/bin/massimo.prev` and renames
 the new one into place. With `-restart` it restarts the unit, with
 `-health` it waits until `/healthz` reports the new version and otherwise
-puts the old binary back (the failed one stays as `massimo.failed`).
+puts the old binary back (the failed one stays as `massimo.failed` until
+the next update succeeds).
 
 Back to the previous binary (once more goes forward again):
 
@@ -338,7 +339,8 @@ to `serve`, which enables the button under Settings → Software. The
 helper's log is in `journalctl -u massimo-update`, its last result in
 `/var/lib/massimo-update/status.json` and in the UI. On macOS the same
 request starts the LaunchDaemon `ch.metaworx.massimo-update` instead
-(see "macOS").
+(see "macOS"); on Windows the server starts the helper itself (see
+"Windows").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`, a secret of
 the repository's `signing` environment that only `v*` tags can use; its
@@ -380,9 +382,33 @@ Updates from an administrator prompt:
 Windows lets a running `.exe` be renamed but not replaced, so the update
 renames `massimo.exe` to `massimo.exe.prev` and puts the new one in its
 place, then restarts the service through the service manager; `-rollback`
-works as on Linux. The web UI cannot start updates on Windows yet: that
-needs a helper like the systemd path unit, and the server's update
-endpoint still refuses on Windows.
+works as on Linux. With `-health`, a release that cannot run as a
+service is given up after about 35 s (the service manager's 30 s for a
+process to answer it, error 1053); one that runs but never reports the
+new version on `/healthz` after `-health-timeout`, two minutes.
+
+The web UI starts updates too (Settings → Software, or `POST
+/api/v1/update` with the API token). Nothing on Windows watches a
+file, and the service already runs as LocalSystem, so the server starts
+the helper itself: it writes the channel into
+`C:\ProgramData\Massimo\update-request` and runs the installed
+`massimo.exe update -request … -status
+C:\ProgramData\Massimo\update-status.json -restart massimo -health
+http://127.0.0.1:8099/healthz` as a detached process, which outlives the
+service it stops and does exactly the update above (the `-health` URL
+follows the service's `-listen`). The helper gets the server's
+environment without the settings (no Cube keys, no API token; only
+`MASSIMO_GITHUB_TOKEN`), and writes its output to
+`C:\ProgramData\Massimo\update.log`, which is not rotated; its last
+result is in `update-status.json` and in the UI, the server's `update
+requested` and `update helper started pid=…` lines in `serve.log`, and
+the stop and start in `service.log` and the System event log. The
+three files are in the data folder only SYSTEM and the Administrators
+can write, and `-purge` removes them with it. `install` passes
+`-update-request` and `-update-status` to `serve`; `install
+-no-update-helper` leaves them out, which hides the button. Should the
+helper die between stopping and starting the service, the service stays
+stopped: `sc.exe start massimo` brings it back.
 
 ## macOS
 

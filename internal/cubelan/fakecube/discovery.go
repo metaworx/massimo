@@ -24,6 +24,18 @@ type DiscoveryResponder struct {
 
 	pc     net.PacketConn
 	silent atomic.Bool
+	static atomic.Bool
+}
+
+// SetStatic makes the c reply say the Cube has a static address instead
+// of DHCP, the factory default.
+func (d *DiscoveryResponder) SetStatic(static bool) { d.static.Store(static) }
+
+func boolByte(b bool) byte {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // StartDiscovery listens on addr ("127.0.0.1:0" for a random port).
@@ -55,20 +67,27 @@ func (d *DiscoveryResponder) serve() {
 			return
 		}
 		// Request: "eQ3Max*\0", ten characters of serial ('*' padded, all
-		// '*' for any Cube), opcode. The fake answers I only.
+		// '*' for any Cube), opcode. The fake answers I and c.
 		b := buf[:n]
-		if n < 19 || !bytes.Equal(b[:8], []byte("eQ3Max*\x00")) || b[18] != 'I' || d.silent.Load() {
+		if n < 19 || !bytes.Equal(b[:8], []byte("eQ3Max*\x00")) || (b[18] != 'I' && b[18] != 'c') || d.silent.Load() {
 			continue
 		}
 		if want := strings.TrimRight(string(b[8:18]), "*"); want != "" && want != d.Serial {
 			continue
 		}
-		// Reply: "eQ3MaxAp", serial, '>', 'I', radio address (4 bytes),
-		// firmware (2 bytes), big endian.
+		// Reply: "eQ3MaxAp", serial, '>', opcode, data. For I the radio
+		// address (4 bytes) and the firmware (2 bytes), big endian; for c
+		// ip, gateway, netmask, dns1, dns2 (4 bytes each, zero here), the
+		// DHCP flag and the encryption flag (one byte each).
 		reply := append([]byte("eQ3MaxAp"), fmt.Sprintf("%-10.10s", d.Serial)...)
-		reply = append(reply, '>', 'I')
-		reply = binary.BigEndian.AppendUint32(reply, uint32(d.RFAddress))
-		reply = binary.BigEndian.AppendUint16(reply, d.Firmware)
+		reply = append(reply, '>', b[18])
+		if b[18] == 'I' {
+			reply = binary.BigEndian.AppendUint32(reply, uint32(d.RFAddress))
+			reply = binary.BigEndian.AppendUint16(reply, d.Firmware)
+		} else {
+			reply = append(reply, make([]byte, 20)...)
+			reply = append(reply, boolByte(!d.static.Load()), 0)
+		}
 		d.pc.WriteTo(reply, from)
 	}
 }

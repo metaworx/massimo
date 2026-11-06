@@ -6,11 +6,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
 	"strings"
 	"testing"
 
@@ -32,8 +32,13 @@ func (f *fakeFinder) Latest(ctx context.Context, channel string) (*update.Releas
 }
 
 func updateServer(t *testing.T, token, request string, f *fakeFinder) (*httptest.Server, string) {
+	return updateServerWith(t, token, UpdateOptions{Request: request, Finder: f})
+}
+
+func updateServerWith(t *testing.T, token string, o UpdateOptions) (*httptest.Server, string) {
 	status := filepath.Join(t.TempDir(), "status.json")
-	s := New(Options{Token: token, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Request: request, Status: status, Finder: f}})
+	o.Version, o.Channel, o.Status = "v0.1.0-alpha.9", "alpha", status
+	s := New(Options{Token: token, Update: o})
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts, status
@@ -56,9 +61,6 @@ func call(t *testing.T, ts *httptest.Server, method, token string) (int, map[str
 }
 
 func TestUpdateEndpoints(t *testing.T) {
-	if goruntime.GOOS == "windows" {
-		t.Skip("updates are refused on Windows")
-	}
 	req := filepath.Join(t.TempDir(), "update-request")
 	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
 	ts, status := updateServer(t, "secret", req, f)
@@ -119,5 +121,56 @@ func TestUpdateNeedsTokenAndHelper(t *testing.T) {
 	ts, _ = updateServer(t, "secret", "", &fakeFinder{tag: "v0.1.0-alpha.10"})
 	if code, _ := call(t, ts, "POST", "secret"); code != 403 {
 		t.Fatalf("POST without a helper: %d", code)
+	}
+	// A helper that cannot be started here.
+	ts, _ = updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Start: func() error { return nil }, Blocked: "in a job"})
+	if code, out := call(t, ts, "GET", "secret"); code != 200 || out["can_update"] != false || out["blocked"] != "in a job" {
+		t.Fatalf("GET blocked: %d %v", code, out)
+	}
+	if code, _ := call(t, ts, "POST", "secret"); code != 403 {
+		t.Fatalf("POST blocked: %d", code)
+	}
+}
+
+// Where the server starts the helper itself (Windows): once per accepted
+// request; a failed start removes the request, a running one is a 409.
+func TestUpdateStartsHelper(t *testing.T) {
+	req := filepath.Join(t.TempDir(), "update-request")
+	var starts int
+	var startErr error
+	start := func() error {
+		starts++
+		if _, err := os.Stat(req); err != nil {
+			t.Errorf("started before the request was written: %v", err)
+		}
+		return startErr
+	}
+	ts, status := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Start: start})
+
+	if code, out := call(t, ts, "POST", "secret"); code != 202 || starts != 1 {
+		t.Fatalf("POST: %d %v, %d starts", code, out, starts)
+	}
+	// The helper took the request and works: refused from the status file
+	// without a start.
+	os.Remove(req)
+	update.WriteStatus(status, update.Status{State: "checking"})
+	if code, _ := call(t, ts, "POST", "secret"); code != 409 || starts != 1 {
+		t.Fatalf("POST while running: %d, %d starts", code, starts)
+	}
+	update.WriteStatus(status, update.Status{State: "failed", Message: "boom"})
+
+	// Before the helper's first status: the starter's own guard.
+	startErr = update.ErrHelperRunning
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || starts != 2 || !strings.Contains(out["error"].(string), "already running") {
+		t.Fatalf("POST while starting: %d %v, %d starts", code, out, starts)
+	}
+	os.Remove(req)
+
+	startErr = errors.New("no such file")
+	if code, out := call(t, ts, "POST", "secret"); code != 500 || starts != 3 || !strings.Contains(out["error"].(string), "no such file") {
+		t.Fatalf("POST with a failing start: %d %v", code, out)
+	}
+	if _, err := os.Stat(req); !os.IsNotExist(err) {
+		t.Fatalf("request left after a failed start: %v", err)
 	}
 }

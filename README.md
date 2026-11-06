@@ -228,9 +228,12 @@ any error that ended `serve`), and, for the service manager's view, in
 `Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 10`.
 Running `install` again from a newer downloaded binary also replaces
 the binary and keeps the settings. The Update button under Settings →
-Software does not work on Windows yet; it will once
-[docs/update-windows.md](docs/update-windows.md), the design for it, is
-implemented. Details: [Windows](packaging/README.md#windows) and
+Software works as on Linux (with `MASSIMO_API_TOKEN` set): the server
+starts the same `update` in the background, which stops and starts the
+service, rolls back when the new version does not come up, and logs to
+`C:\ProgramData\Massimo\update.log`
+([docs/update-windows.md](docs/update-windows.md)). Details:
+[Windows](packaging/README.md#windows) and
 [Updating](packaging/README.md#updating) in packaging/README.md.
 
 ### macOS
@@ -345,7 +348,8 @@ variants, one `name=text` per line with `\r\n` escapes and the
 placeholders `{i}`, `{s}`, `{shex}`, `{r}`, `{serial}`, `{rf}`, `{fw}`.
 
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address,
-firmware) via the UDP broadcast the original software uses; it needs UDP
+firmware, and whether the Cube takes its address by DHCP or has a
+static one) via the UDP broadcast the original software uses; it needs UDP
 port 23272 and a real LAN interface (not WSL 2). `portal-crypto iv`
 recovers a Cube's portal IV from one `e:` exchange.
 
@@ -393,7 +397,7 @@ otherwise.
 | `MASSIMO_CUBE_<SERIAL>_ADDRESS` | The Cube's address, host[:port]. `serve` serves every Cube that has one. |
 | `MASSIMO_CUBE_<SERIAL>_KEY` | The Cube's key from its QR code (`k` and 32 hex digits), for the portal commands. |
 | `MASSIMO_CUBE_<SERIAL>_IV` | The Cube's portal IV, recovered with `portal-crypto iv`. `portal` serves every Cube that has a key and an IV. |
-| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` tries it first, with a two-second timeout, and falls back to the Cube's own address, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. The plain form only with a single Cube. |
+| `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. The plain form only with a single Cube. |
 | `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). The plain form only with a single Cube. |
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
 | `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. The plain form only with a single Cube. |

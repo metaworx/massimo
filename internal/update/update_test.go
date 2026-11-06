@@ -314,6 +314,49 @@ func TestSwapRollbackSmoke(t *testing.T) {
 	}
 }
 
+func TestSwapRemovesFailedAndRollbackWithoutTarget(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "massimo.exe")
+	read := func(p string) string { b, _ := os.ReadFile(p); return string(b) }
+	os.WriteFile(target, []byte("v1"), 0o755)
+	os.WriteFile(FailedPath(target), []byte("v0-failed"), 0o755)
+	f, err := Stage(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Write([]byte("v2"))
+	f.Close()
+	if err := Swap(target); err != nil {
+		t.Fatal(err)
+	}
+	if read(target) != "v2" || read(PrevPath(target)) != "v1" {
+		t.Fatalf("target %q prev %q", read(target), read(PrevPath(target)))
+	}
+	if _, err := os.Stat(FailedPath(target)); !os.IsNotExist(err) {
+		t.Fatalf(".failed still there: %v", err)
+	}
+	// The new binary vanished after the swap: the old one goes back.
+	os.Remove(target)
+	if err := Rollback(target, FailedPath(target)); err != nil || read(target) != "v1" {
+		t.Fatalf("rollback without target: %v, target %q", err, read(target))
+	}
+	if _, err := os.Stat(PrevPath(target)); !os.IsNotExist(err) {
+		t.Fatalf(".prev still there: %v", err)
+	}
+}
+
+func TestAPIOverride(t *testing.T) {
+	t.Setenv(TokenVar, "t0k")
+	t.Setenv(APIVar, "")
+	if c := NewClient(); c.API != "https://api.github.com" || c.Token != "t0k" {
+		t.Fatalf("%s %q", c.API, c.Token)
+	}
+	t.Setenv(APIVar, "http://127.0.0.1:8123/")
+	if c := NewClient(); c.API != "http://127.0.0.1:8123" || c.Token != "" {
+		t.Fatalf("%s %q", c.API, c.Token)
+	}
+}
+
 func TestWindowsNamesAndRenamingSwap(t *testing.T) {
 	if got := stagedPath(`dir/massimo.exe`); got != filepath.Join("dir", ".massimo.new.exe") {
 		t.Fatalf("staged %s", got)
