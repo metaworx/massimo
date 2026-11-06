@@ -1,6 +1,9 @@
 # Massimo HTTP API, version 1
 
-The API is served by `massimo serve` (default `127.0.0.1:8099`).
+The API is served by `massimo serve` (default `127.0.0.1:8099`),
+plain HTTP, or TLS with `-tls` (README.md, "Server");
+with TLS every response carries `Strict-Transport-Security`,
+a year by default (`-hsts <days>`, `0` clears it).
 Every response is JSON unless stated otherwise.
 The machine-readable description is in [api-v1-openapi.yaml](api-v1-openapi.yaml).
 
@@ -276,6 +279,11 @@ a new time with the same version means the server was restarted.
 `node_id` is the box's identifier from its store (`node.id`,
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
+`tls`, with TLS, describes the certificate served:
+`{"source": "files", "names": ["massimo.example.net"], "not_after": "2027-02-01T00:00:00Z", "fingerprint": "SHA256:…", "self_signed": false}`;
+`source` is `files` (the owner's files, re-read when they change),
+the fingerprint is the SHA-256 of the certificate as browsers show it,
+and `warning` is set while something needs the owner.
 
 ### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
 

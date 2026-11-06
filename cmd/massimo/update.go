@@ -6,11 +6,14 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -227,10 +230,31 @@ func restartService(name string) error {
 	return nil
 }
 
+// healthClient is the client for a -health URL. An https:// URL on a
+// loopback host is not verified: the server's certificate may be
+// self-signed, and the peer is this box, whose version is no secret;
+// any other host is verified as usual.
+func healthClient(rawURL string) *http.Client {
+	c := &http.Client{Timeout: 5 * time.Second}
+	if u, err := url.Parse(rawURL); err == nil && u.Scheme == "https" && loopbackHost(u.Hostname()) {
+		c.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	}
+	return c
+}
+
+// loopbackHost says whether a URL's host is this box's loopback.
+func loopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // waitHealthy polls the server's /healthz until it reports tag.
 func waitHealthy(ctx context.Context, url, tag string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := healthClient(url)
 	last := "no answer"
 	for time.Now().Before(deadline) {
 		if v, err := healthVersion(ctx, client, url); err != nil {

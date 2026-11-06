@@ -126,6 +126,23 @@ where the update helper checks the restarted server.
 Deleting both files (and `systemctl daemon-reload`,
 `systemctl restart massimo`) goes back to `:8099`.
 
+`-tls-cert <pem> -tls-key <pem>` makes the service serve `https://`:
+the files are copied to `/etc/massimo/cert.pem` and `key.pem`,
+owned by `massimo` and mode 0600, and `MASSIMO_TLS=files`,
+`MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` are set in `/etc/massimo/env`,
+which later installs keep.
+The server re-reads the files when they change, so a renewal needs no restart:
+certbot keeps its files under `/etc/letsencrypt/live/<name>/`,
+readable by root only, so a deploy hook copies them over
+(`--deploy-hook 'cp "$RENEWED_LINEAGE"/fullchain.pem /etc/massimo/cert.pem; cp "$RENEWED_LINEAGE"/privkey.pem /etc/massimo/key.pem; chown massimo:massimo /etc/massimo/*.pem'`).
+The update helper then checks `https://127.0.0.1:8099/healthz`
+(`massimo-update.service.d/listen.conf`),
+without verifying the certificate of a loopback address.
+`-tls off` switches it off again;
+run the service once with `-hsts 0` over TLS first,
+since a browser that saw the server's HSTS header refuses `http://` to it
+for a year otherwise.
+
 `massimo install -remove` stops and removes the service,
 its units and the binary; `-purge` also removes the settings, the state,
 the logs and the user.
@@ -320,6 +337,8 @@ With `-restart` it restarts the unit,
 with `-health` it waits until `/healthz` reports the new version and otherwise
 puts the old binary back (the failed one stays as `massimo.failed` until the
 next update succeeds).
+Where the service has TLS the URL is `https://…`;
+the helper does not verify the certificate of a loopback address.
 
 Back to the previous binary (once more goes forward again):
 
@@ -393,6 +412,10 @@ running `massimo -env C:\ProgramData\Massimo\env serve -listen :8099 -log …`;
 and a firewall rule for the program on private and domain networks (not public ones),
 which covers the API, the Cube proxy and discovery.
 `-listen <addr>` changes the address, and installing again keeps it.
+`-tls-cert <pem> -tls-key <pem>` copies the files into `C:\ProgramData\Massimo\`
+and sets `MASSIMO_TLS`,
+`MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` in the settings, as on Linux;
+the helper's `-health` URL follows (`https://`).
 `sc start massimo`, `sc stop massimo` and `sc query massimo` control it;
 `install -remove` deletes the service, the rule and the program folder,
 `-purge` the settings and the log too.
@@ -484,8 +507,11 @@ and in the update helper are the same everywhere:
 
 `-listen <addr>` changes the address,
 and installing again keeps it (it is read back from the installed property list);
-the helper's health check follows it. macOS lets a user other than root listen
-on a port below 1024 only on every address,
+the helper's health check follows it.
+`-tls-cert` and `-tls-key` work as on Linux,
+the files beside the settings owned by `_massimo`,
+and the helper's health check follows (`https://`). macOS lets a user other than
+root listen on a port below 1024 only on every address,
 so `-listen :80` works and `-listen 192.168.1.5:80` does not (install warns).
 With the application firewall on,
 install allows incoming connections for the binary;

@@ -8,8 +8,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // route is one registered /api route: the method, the path pattern and
@@ -62,6 +65,32 @@ func TestOpenAPICoversRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The description parses, and every reference into components
+	// resolves: a parameter pasted into the wrong place breaks both.
+	var doc map[string]any
+	if err := yaml.Unmarshal(spec, &doc); err != nil {
+		t.Fatalf("docs/api-v1-openapi.yaml does not parse: %v", err)
+	}
+	var walk func(path string, v any)
+	walk = func(path string, v any) {
+		switch v := v.(type) {
+		case map[string]any:
+			for k, e := range v {
+				if k == "$ref" {
+					if ref, ok := e.(string); ok && !resolves(doc, ref) {
+						t.Errorf("%s: %s does not resolve", path, ref)
+					}
+					continue
+				}
+				walk(path+"/"+k, e)
+			}
+		case []any:
+			for i, e := range v {
+				walk(path+"/"+strconv.Itoa(i), e)
+			}
+		}
+	}
+	walk("", doc)
 	documented := map[string]string{} // "METHOD /path" to x-capability
 	seen := map[string]bool{}
 	path, op := "", ""
@@ -102,4 +131,24 @@ func TestOpenAPICoversRoutes(t *testing.T) {
 			t.Errorf("documented operation %s has no route", r)
 		}
 	}
+}
+
+// resolves says whether a "#/components/..." reference names something
+// in the document.
+func resolves(doc map[string]any, ref string) bool {
+	path, ok := strings.CutPrefix(ref, "#/")
+	if !ok {
+		return false
+	}
+	var cur any = doc
+	for _, part := range strings.Split(path, "/") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return false
+		}
+		if cur, ok = m[part]; !ok {
+			return false
+		}
+	}
+	return true
 }

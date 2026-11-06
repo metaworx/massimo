@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Added
+
+- `massimo serve -tls files -tls-cert … -tls-key …`: TLS from certificate
+  files, re-read when they change, with HSTS for a year (`-hsts <days>`);
+  `massimo install -tls-cert … -tls-key …` installs them (README.md).
+
 ### Changed
 
 - CI runs once per commit (a push to `main` or a pull request), and the

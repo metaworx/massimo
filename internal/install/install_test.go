@@ -227,22 +227,145 @@ MASSIMO_CUBE_KEQ0000003_PROXY=:62910
 func TestListenDropIns(t *testing.T) {
 	for _, c := range []struct {
 		addr, listen, health string
-		cap                  bool
+		tls, cap             bool
 	}{
-		{":80", "MASSIMO_LISTEN=:80", "http://127.0.0.1:80/healthz", true},
-		{"0.0.0.0:8080", "MASSIMO_LISTEN=0.0.0.0:8080", "http://127.0.0.1:8080/healthz", false},
-		{"192.168.1.200:80", "MASSIMO_LISTEN=192.168.1.200:80", "http://192.168.1.200:80/healthz", true},
-		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "http://[::1]:443/healthz", true},
+		{":80", "MASSIMO_LISTEN=:80", "http://127.0.0.1:80/healthz", false, true},
+		{"0.0.0.0:8080", "MASSIMO_LISTEN=0.0.0.0:8080", "http://127.0.0.1:8080/healthz", false, false},
+		{"192.168.1.200:80", "MASSIMO_LISTEN=192.168.1.200:80", "http://192.168.1.200:80/healthz", false, true},
+		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "http://[::1]:443/healthz", false, true},
+		{"[::]:443", "MASSIMO_LISTEN=[::]:443", "https://[::1]:443/healthz", true, true},
+		{"192.168.1.200:8443", "MASSIMO_LISTEN=192.168.1.200:8443", "https://192.168.1.200:8443/healthz", true, false},
 	} {
-		serve, health, err := listenDropIns(c.addr)
+		serve, health, err := listenDropIns(c.addr, c.tls)
 		if err != nil || !strings.Contains(serve, c.listen) || !strings.Contains(health, c.health) || strings.Contains(serve, "CAP_NET_BIND_SERVICE") != c.cap {
 			t.Errorf("%s: %v\n%s\n%s", c.addr, err, serve, health)
 		}
+		if listenFromDropIn([]byte(serve)) != c.addr {
+			t.Errorf("%s: read back %q", c.addr, listenFromDropIn([]byte(serve)))
+		}
 	}
 	for _, bad := range []string{"80", ":http", ":0", ":70000", "host"} {
-		if _, _, err := listenDropIns(bad); err == nil {
+		if _, _, err := listenDropIns(bad, false); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+func TestSetEnvLines(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(p, []byte("# settings\nexport MASSIMO_TLS=off\nMASSIMO_API_TOKEN=t\n"), 0o640)
+	if err := setEnvLines(p, [][2]string{{"MASSIMO_TLS", "files"}, {"MASSIMO_TLS_CERT", "/etc/massimo/cert.pem"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); got != "# settings\nMASSIMO_TLS=files\nMASSIMO_API_TOKEN=t\nMASSIMO_TLS_CERT=/etc/massimo/cert.pem\n" {
+		t.Fatalf("%q", got)
+	}
+	if fi, _ := os.Stat(p); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o640 {
+		t.Fatalf("mode %v", fi.Mode())
+	}
+	missing := filepath.Join(t.TempDir(), "new")
+	if err := setEnvLines(missing, [][2]string{{"A", "1"}}); err != nil || read(t, missing) != "A=1\n" {
+		t.Fatalf("new file: %v %q", err, read(t, missing))
+	}
+}
+
+func TestInstallTLSFiles(t *testing.T) {
+	root, bin := setup(t)
+	src := t.TempDir()
+	cert, key := filepath.Join(src, "fullchain.pem"), filepath.Join(src, "privkey.pem")
+	os.WriteFile(cert, []byte("CERT"), 0o644)
+	os.WriteFile(key, []byte("KEY"), 0o600)
+	rec := &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, TLSCert: cert, TLSKey: key, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	certDst, keyDst := filepath.Join(root, EnvDir, certName), filepath.Join(root, EnvDir, keyName)
+	if read(t, certDst) != "CERT" || read(t, keyDst) != "KEY" {
+		t.Fatal("files not copied")
+	}
+	if fi, _ := os.Stat(keyDst); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("key mode %v", fi.Mode())
+	}
+	if !rec.has("chown massimo:massimo "+certDst) || !rec.has("chown massimo:massimo "+filepath.Join(root, EnvPath)) {
+		t.Fatalf("not owned by the service user: %q", rec.cmds)
+	}
+	env := read(t, filepath.Join(root, EnvPath))
+	for _, want := range []string{"MASSIMO_TLS=files\n", "MASSIMO_TLS_CERT=/etc/massimo/cert.pem\n", "MASSIMO_TLS_KEY=/etc/massimo/key.pem\n"} {
+		if strings.Count(env, want) != 1 {
+			t.Errorf("settings lack %q:\n%s", want, env)
+		}
+	}
+	if !strings.HasPrefix(env, "# Settings of massimo serve") {
+		t.Error("template lost")
+	}
+	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "MASSIMO_HEALTH=https://127.0.0.1:8099/healthz") {
+		t.Fatal("the helper does not check https")
+	}
+	if _, err := os.Stat(filepath.Join(root, ListenDropIn)); err == nil {
+		t.Fatal("a listen drop-in without -listen")
+	}
+
+	// A later install with -listen keeps TLS from the settings.
+	out.Reset()
+	if err := Install(Options{Root: root, Binary: bin, Listen: ":443", Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, ListenDropIn)), "CAP_NET_BIND_SERVICE") ||
+		!strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "https://127.0.0.1:443/healthz") {
+		t.Fatalf("drop-ins after -listen:\n%s", out.String())
+	}
+	if read(t, certDst) != "CERT" || strings.Count(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") != 1 {
+		t.Fatal("TLS not kept")
+	}
+
+	// -tls off: the settings say so, the helper goes back to http.
+	if err := Install(Options{Root: root, Binary: bin, TLS: "off", Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	env = read(t, filepath.Join(root, EnvPath))
+	if strings.Count(env, "MASSIMO_TLS=off\n") != 1 || strings.Contains(env, "MASSIMO_TLS=files") || !strings.Contains(env, "MASSIMO_TLS_CERT=/etc/massimo/cert.pem") {
+		t.Fatalf("settings after -tls off:\n%s", env)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "http://127.0.0.1:443/healthz") {
+		t.Fatal("the helper still checks https")
+	}
+
+	// Refused: a missing file, -tls off with files, a mode not there yet.
+	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed"}, {TLS: "yes"}} {
+		o.Root, o.Binary, o.Out, o.Run = root, bin, &bytes.Buffer{}, rec.run
+		if err := Install(o); err == nil {
+			t.Errorf("%+v accepted", o)
+		}
+	}
+
+	// A dry run says what it would do and writes nothing.
+	root2, bin2 := setup(t)
+	out.Reset()
+	if err := Install(Options{Root: root2, Binary: bin2, TLSCert: cert, TLSKey: key, DryRun: true, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "would copy "+cert) || !strings.Contains(out.String(), "would set MASSIMO_TLS=files") {
+		t.Fatalf("dry run:\n%s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(root2, EnvDir, certName)); err == nil {
+		t.Fatal("dry run copied")
+	}
+}
+
+func TestTLSSettingsWarnings(t *testing.T) {
+	root, bin := setup(t)
+	settings := filepath.Join(t.TempDir(), ".env")
+	os.WriteFile(settings, []byte("MASSIMO_API_TOKEN=t\nMASSIMO_TLS=files\nMASSIMO_TLS_CERT=/etc/massimo/cert.pem\n"), 0o600)
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, Settings: settings, Out: &out, Run: (&recorder{}).run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "warning: MASSIMO_TLS_CERT=/etc/massimo/cert.pem") || !strings.Contains(out.String(), "warning: no MASSIMO_TLS_KEY") {
+		t.Fatalf("no warning about the TLS files:\n%s", out.String())
+	}
+	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "https://") {
+		t.Fatal("the settings' TLS not seen by the helper")
 	}
 }
 

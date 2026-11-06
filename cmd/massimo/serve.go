@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -60,9 +61,13 @@ func runServe(args []string) error {
 	proxySerial := fs.String("proxy-serial", "", "serial to use in UDP discovery replies instead of the Cube's, for this run (default the store's proxy serial; the original software keeps one answer per serial)")
 	updateRequest := fs.String("update-request", os.Getenv("MASSIMO_UPDATE_REQUEST"), "with the update helper installed: the request file that asks it for an update, such as "+update.DefaultRequestPath+"; on Windows the server then starts the helper itself (default MASSIMO_UPDATE_REQUEST; empty = updates cannot be started from the API)")
 	updateStatus := fs.String("update-status", defaultUpdateStatus(), "the update helper's status file (on Windows install passes it, and the helper's update.log goes next to it)")
+	tlsFlag := fs.String("tls", os.Getenv(tlsVar), "serve over TLS: off, or files for the certificate of -tls-cert and -tls-key (default "+tlsVar+", else off; files when -tls-cert is given)")
+	tlsCert := fs.String("tls-cert", os.Getenv(tlsCertVar), "the certificate for -tls files, PEM, the chain after the server's certificate; re-read when it changes (default "+tlsCertVar+")")
+	tlsKey := fs.String("tls-key", os.Getenv(tlsKeyVar), "the certificate's private key, PEM (default "+tlsKeyVar+")")
+	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-tls files -tls-cert <pem> -tls-key <pem>]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; browsers are then told to use https:// for a year (-hsts). Without\nit the listener is plain HTTP, for localhost or behind a reverse proxy.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -78,6 +83,14 @@ func runServe(args []string) error {
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
 	logger := slog.New(slog.NewTextHandler(logOut, nil))
+	hsts, err := hstsDays(*hstsFlag)
+	if err != nil {
+		return err
+	}
+	src, err := tlsSource(*tlsFlag, *tlsCert, *tlsKey, logger)
+	if err != nil {
+		return err
+	}
 
 	st, err := openServeStore(*addr, logger)
 	if err != nil {
@@ -115,12 +128,12 @@ func runServe(args []string) error {
 	}
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
-		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, *updateRequest, *updateStatus); err != nil {
+		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, src != nil, *updateRequest, *updateStatus); err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
 	}
 	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
-		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd})
+		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd, TLS: src, HSTSDays: hsts})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -128,23 +141,25 @@ func runServe(args []string) error {
 	for _, c := range setup.cubes {
 		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
 	}
+	auth := any(*token != "")
 	if st != nil {
-		logger.Info("api listening", "addr", ln.Addr().String(), "auth", srv.AuthMode(), "data", st.Dir(), "node", st.NodeID())
-	} else {
-		logger.Info("api listening", "addr", ln.Addr().String(), "auth", *token != "", "store", "none (-addr)")
+		auth = srv.AuthMode()
 	}
+	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "tls", "off"}
 	hs := &http.Server{Handler: srv.Handler()}
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		hs.Shutdown(shutdown)
-	}()
-	go srv.Run(ctx)
-	if err := hs.Serve(ln); err != nil && err != http.ErrServerClosed {
-		return err
+	if src != nil {
+		hs.TLSConfig = certs.Config(src)
+		cs := src.Status()
+		attrs = append(attrs[:len(attrs)-1], cs.Source, "names", strings.Join(cs.Names, ","), "expires", cs.NotAfter.Format(time.RFC3339), "fingerprint", cs.Fingerprint, "hsts_days", hsts)
 	}
-	return nil
+	if st != nil {
+		attrs = append(attrs, "data", st.Dir(), "node", st.NodeID())
+	} else {
+		attrs = append(attrs, "store", "none (-addr)")
+	}
+	logger.Info("api listening", attrs...)
+	go srv.Run(ctx)
+	return serveHTTP(ctx, hs, ln)
 }
 
 // defaultUpdateStatus is the helper's status file where install puts it:
@@ -158,13 +173,14 @@ func defaultUpdateStatus() string {
 
 // serveUpdateHelper prepares the start of the update helper by the
 // server itself (Windows): this binary in its helper mode, with the
-// /healthz of the listen address and update.log next to the status file.
-func serveUpdateHelper(log *slog.Logger, listen, request, status string) (func() error, string, error) {
+// /healthz of the listen address, https:// when this server has TLS,
+// and update.log next to the status file.
+func serveUpdateHelper(log *slog.Logger, listen string, tls bool, request, status string) (func() error, string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, "", err
 	}
-	health, err := install.HealthURL(listen)
+	health, err := install.HealthURL(listen, tls)
 	if err != nil {
 		return nil, "", err
 	}

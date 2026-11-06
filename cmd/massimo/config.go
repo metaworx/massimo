@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -55,6 +56,7 @@ func runConfig(args []string) error {
 	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(env.Proxy)))
 	fmt.Printf("proxy serial:  %s\n", orNone(cubeEnv(env.ProxySerial)))
 	fmt.Printf("name:          %s\n", orNone(cubeEnv(env.Name)))
+	printTLS(os.Stdout)
 
 	var names []string
 	for _, kv := range os.Environ() {
@@ -204,6 +206,36 @@ func printStore(w io.Writer) {
 	}
 	if len(rows) == 0 && len(file) == 0 && plain == nil {
 		fmt.Fprintln(w, "  (none)")
+	}
+}
+
+// printTLS says how serve serves: plain, or over TLS from which files,
+// with the certificate's names, expiry and fingerprint when the files
+// can be read here (they belong to the service user).
+func printTLS(w io.Writer) {
+	certPath, keyPath := os.Getenv(tlsCertVar), os.Getenv(tlsKeyVar)
+	mode := tlsMode(os.Getenv(tlsVar), certPath, keyPath)
+	if mode == "off" {
+		fmt.Fprintf(w, "tls:           off\n")
+		return
+	}
+	days, err := hstsDays(os.Getenv(hstsVar))
+	hsts := fmt.Sprintf("%d days", days)
+	if err != nil {
+		hsts = "invalid: " + os.Getenv(hstsVar)
+	}
+	fmt.Fprintf(w, "tls:           %s (cert %s, key %s; hsts %s)\n", mode, orNone(certPath), orNone(keyPath), hsts)
+	if mode != "files" || certPath == "" || keyPath == "" {
+		return
+	}
+	_, st, err := certs.Load(mode, certPath, keyPath)
+	if err != nil {
+		fmt.Fprintf(w, "               cannot read the certificate here: %v\n", err)
+		return
+	}
+	fmt.Fprintf(w, "               names %s; expires %s; fingerprint %s\n", strings.Join(st.Names, ", "), st.NotAfter.Format("2006-01-02"), st.Fingerprint)
+	if st.SelfSigned {
+		fmt.Fprintf(w, "               self-signed: browsers warn once per device; compare this fingerprint there\n")
 	}
 }
 

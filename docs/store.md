@@ -219,6 +219,7 @@ Stays in `.env`, because it is needed before the store is open, or is a secret:
 | Variable | Why it stays |
 |---|---|
 | `MASSIMO_LISTEN`, `-listen` | the API's address, needed to start; changing it is a restart anyway |
+| `MASSIMO_TLS`, `MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_HSTS`, `-tls`, `-tls-cert`, `-tls-key`, `-hsts` | the listener's TLS, needed to start; `massimo install -tls-cert …` writes them, and the owner's files live beside this one |
 | `MASSIMO_LOG`, `-log` | opened before anything else, and the place errors of the store itself go |
 | `MASSIMO_API_TOKEN`, `-token` | a secret; becomes the owner's API key (section 6) and keeps working as today |
 | `MASSIMO_CUBE_<SN>_KEY`, `_IV` | secrets; stay in the file in version 1 (open decision 2) |

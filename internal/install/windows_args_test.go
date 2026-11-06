@@ -24,13 +24,16 @@ func TestWindowsLayout(t *testing.T) {
 	if strings.Join(args, " ") != `-env D:\Data\Massimo\env -data D:\Data\Massimo serve -listen 127.0.0.1:18099 -log D:\Data\Massimo\serve.log` {
 		t.Fatalf("without the helper: %q", args)
 	}
-	if u, err := HealthURL(":8099"); err != nil || u != "http://127.0.0.1:8099/healthz" {
+	if u, err := HealthURL(":8099", false); err != nil || u != "http://127.0.0.1:8099/healthz" {
 		t.Fatalf("health %q %v", u, err)
 	}
-	if u, err := HealthURL("192.168.1.5:8099"); err != nil || u != "http://192.168.1.5:8099/healthz" {
+	if u, err := HealthURL("192.168.1.5:8099", false); err != nil || u != "http://192.168.1.5:8099/healthz" {
 		t.Fatalf("health %q %v", u, err)
 	}
-	if _, err := HealthURL("8099"); err == nil {
+	if u, err := HealthURL("[::]:443", true); err != nil || u != "https://[::1]:443/healthz" {
+		t.Fatalf("health over TLS %q %v", u, err)
+	}
+	if _, err := HealthURL("8099", false); err == nil {
 		t.Fatal("health of a bare port")
 	}
 	cmdline := `"C:\Program Files\Massimo\massimo.exe" -env "C:\ProgramData\Massimo\env" serve -listen 192.168.1.200:80 -log x`
