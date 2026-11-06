@@ -5,17 +5,22 @@ package server
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
 
-// TestOpenAPICoversRoutes checks that every /api route registered in
-// server.go and config_api.go has a path entry in docs/api-v1-openapi.yaml
+// TestOpenAPICoversRoutes checks that every /api route registered in the
+// package (the api( calls of its files) has a path entry in docs/api-v1-openapi.yaml
 // and the other way round, so the two cannot drift apart.
 func TestOpenAPICoversRoutes(t *testing.T) {
 	code := ""
-	for _, f := range []string{"server.go", "config_api.go"} {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

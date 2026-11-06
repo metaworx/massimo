@@ -215,7 +215,7 @@ func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *run
 	if !strings.EqualFold(f.Cube.Serial, h.Serial) {
 		return restorePlan{}, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup is from cube %s, this is cube %s", f.Cube.Serial, h.Serial)
 	}
-	opts.Hidden, opts.ShowHidden = rt.cfg.Hidden, rt.showHidden
+	opts.Hidden, opts.ShowHidden = rt.config().Hidden, rt.showHidden
 	cur := backup.Current{Snapshot: snap}
 	var ntpErr error
 	if !opts.SkipClock {

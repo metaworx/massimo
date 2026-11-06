@@ -101,7 +101,7 @@ func (s *Server) runtimes() []*runtime {
 // configured returns the runtime of a serial, or nil.
 func (s *Server) configured(serial string) *runtime {
 	for _, rt := range s.runtimes() {
-		if strings.EqualFold(rt.serial, serial) || strings.EqualFold(rt.cfg.Serial, serial) {
+		if strings.EqualFold(rt.serial, serial) || strings.EqualFold(rt.config().Serial, serial) {
 			return rt
 		}
 	}
@@ -245,9 +245,9 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	if host == cp.Address {
 		return cp
 	}
-	if rt.cfg.Addr != "" && !rt.cfg.FollowDiscovery {
+	if cfg := rt.config(); cfg.Addr != "" && !cfg.FollowDiscovery {
 		if ip := net.ParseIP(host); ip != nil {
-			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", rt.cfg.Addr, "found", cp.Address)
+			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", cfg.Addr, "found", cp.Address)
 		}
 		return cp
 	}

@@ -48,6 +48,46 @@ paths:
                     - {$ref: "#/components/schemas/FoundCube"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
+    post:
+      summary: Serve a Cube from now on
+      description: |
+        Adds a Cube to the store and starts serving it at once: one
+        discovery found (its row becomes configured), or one given by
+        serial. Without an address it follows discovery, starting at the
+        address discovery saw last. Its proxy listens on proxy_address,
+        or on :62910 when it is the only Cube and nothing else listens;
+        with -proxy on serve's command line the listeners stay as they
+        are. Needs the store.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: "#/components/schemas/CubeChange"}
+                - type: object
+                  required: [serial]
+                  properties:
+                    serial: {type: string, example: KEQ0000000}
+      responses:
+        "201":
+          description: The Cube, now served
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Cube"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "409":
+          description: The Cube is served already
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/cubes/discover:
     post:
       summary: Look for Cubes on the LAN now
@@ -89,6 +129,72 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      summary: Change a Cube's configuration
+      description: |
+        Any of the fields; absent ones stay, unknown ones are refused.
+        Written to the store (source becomes ui) and applied at once: a
+        new address reconnects, a new proxy address or serial restarts
+        that Cube's listener (not with -proxy on serve's command line),
+        a new hidden list hides at once. An empty address makes the Cube
+        follow discovery.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CubeChange"}
+      responses:
+        "200":
+          description: The Cube as changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Cube"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The Cube is served for this run only (-addr or -sn) or has not reported its serial yet
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+    delete:
+      summary: Stop serving a Cube
+      description: |
+        The server stops the Cube's connection and proxy. Its row stays
+        in the store with configured = 0, with its history; discovery
+        lists it as found again, and POST /api/v1/cubes adds it back. A
+        line for it in the settings file does not bring it back.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  serial: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The Cube is served for this run only (-addr or -sn)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/cubes/{sn}/rooms:
     get:
       summary: Rooms with their devices and states
@@ -624,6 +730,66 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/settings:
+    get:
+      summary: The server's settings
+      description: |
+        Every setting with the store's value (or the default), the
+        default, whether the store holds one, the value this run uses
+        (a serve flag wins for one run) and when a change applies;
+        node.id and tenant.id are read-only.
+      responses:
+        "200":
+          description: The settings by key
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {$ref: "#/components/schemas/Setting"}
+              example:
+                stale_after: {value: 24h, default: 24h, set: false, in_effect: 24h, applies: now}
+                poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
+                node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+    put:
+      summary: Change settings
+      description: |
+        An object of keys and values: stale_after (1h to 720h, applies
+        at once), poll_interval (10s to 1h), refresh_interval (10m to
+        168h, or 0 for off) and discover_interval (1m to 24h, or 0 for
+        only on request), the intervals at the next start; null goes
+        back to the default. Every value is checked before any is
+        written. The answer is that of GET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {type: string, nullable: true}
+            example: {stale_after: 36h, refresh_interval: null}
+      responses:
+        "200":
+          description: The settings by key, as GET
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {$ref: "#/components/schemas/Setting"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/update:
     get:
       summary: The newest signed release on the update channel
@@ -944,6 +1110,17 @@ components:
           type: array
           description: The settings file's lines for this Cube whose values differ from the store's, which wins
           items: {$ref: "#/components/schemas/FileDifference"}
+        follow_discovery: {type: boolean}
+        proxy_address: {type: string, description: "The configured proxy address; empty: the default"}
+        proxy_serial: {type: string}
+        proxy_listening:
+          type: array
+          description: The addresses the Cube's proxy listens on now
+          items: {type: string}
+        hidden:
+          type: array
+          description: The hidden list (radio addresses), besides room 255
+          items: {type: string}
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
@@ -956,6 +1133,28 @@ components:
         devices: {type: integer}
         queued: {type: integer, description: Commands waiting in the queue}
         cube_time: {type: string, example: "2026-11-04 15:28"}
+    CubeChange:
+      type: object
+      description: The fields of a Cube's configuration that PUT and POST change
+      properties:
+        name: {type: string, maxLength: 64}
+        address: {type: string, description: "host or host:port; empty: from discovery", example: 192.168.1.10}
+        follow_discovery: {type: boolean, description: The address follows the Cube's discovery answers}
+        proxy_address: {type: string, description: "The server's listener for this Cube, host[:port]; empty: :62910 with a single Cube"}
+        proxy_serial: {type: string, description: "The serial in discovery replies; empty: the Cube's"}
+        hidden:
+          type: array
+          description: Radio addresses of devices to hide, besides those in room 255
+          items: {type: string, example: 0abc12}
+    Setting:
+      type: object
+      properties:
+        value: {type: string, description: "The store's value, or the default; durations as 30m, 24h, 0 for off"}
+        default: {type: string}
+        set: {type: boolean, description: The store holds a value}
+        in_effect: {type: string, description: What this run uses; a serve flag wins for one run}
+        applies: {type: string, enum: [now, restart]}
+        read_only: {type: boolean}
     FileDifference:
       type: object
       properties:

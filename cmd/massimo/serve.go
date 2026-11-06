@@ -121,7 +121,7 @@ func runServe(args []string) error {
 		}
 	}
 	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
-		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), Update: upd})
+		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), ProxyFixed: len(proxies) > 0, Update: upd})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -265,7 +265,10 @@ func serveSetup(ctx context.Context, st *store.Store, addr string, proxies []str
 		}
 	}
 	if len(targets) == 0 {
-		return setup{}, fmt.Errorf("serve: no cube configured (set MASSIMO_CUBE_<SN>_ADDRESS, use -addr, or give the serial with -sn to find the Cube on the LAN)")
+		// Nothing to serve yet: the web UI adds a Cube (Settings →
+		// Cubes), as does the settings file at the next start.
+		logger.Warn("no cube configured yet: add one under Settings → Cubes in the web UI, set MASSIMO_CUBE_<SN>_ADDRESS, use -addr, or give the serial with -sn")
+		return out, nil
 	}
 	sort.SliceStable(targets, func(i, j int) bool { return targets[i].cfg.Serial < targets[j].cfg.Serial })
 	single := len(targets) == 1
@@ -326,13 +329,11 @@ func serveSetup(ctx context.Context, st *store.Store, addr string, proxies []str
 
 // rowTarget is the target of a configured row of the store.
 func rowTarget(row store.Cube) (target, error) {
-	t := target{cfg: server.CubeConfig{Serial: row.Serial, Name: row.Name, Addr: row.Address, FollowDiscovery: row.FollowDiscovery, Source: row.Source},
-		proxy: row.ProxyAddress, proxySerial: row.ProxySerial}
-	var err error
-	if t.cfg.Hidden, err = parseHidden(row.Hidden); err != nil {
-		return target{}, fmt.Errorf("serve: cube %s: %w", row.Serial, err)
+	cfg, err := server.CubeFromRow(row)
+	if err != nil {
+		return target{}, fmt.Errorf("serve: cube %s: hidden: %w", row.Serial, err)
 	}
-	return t, nil
+	return target{cfg: cfg, proxy: row.ProxyAddress, proxySerial: row.ProxySerial}, nil
 }
 
 // parseHidden reads a hidden list of radio addresses.
