@@ -616,6 +616,9 @@ See [docs/proxy.md](docs/proxy.md).
   code review with findings, extraction proposals and the coding standard
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
+- [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
+  the smoke test, Cypress and Playwright compared, screenshots,
+  the recommendation
 
 ## Versions
 
