@@ -312,6 +312,109 @@
   </div>
 </template>
 
+<template id="tpl-house-room">
+  <label class="check"><input type="checkbox"></label>
+</template>
+
+<template id="tpl-config-tabs">
+  <div class="config-tabs">
+    <span class="config-tablist" role="tablist" aria-label="configuration sections" data-i18n-attr="aria-label:cfg.sections">
+      <button type="button" class="tab" role="tab" data-tab="room" data-i18n="cfg.tab.room">Room</button>
+      <button type="button" class="tab" role="tab" data-tab="temps" data-i18n="cfg.tab.temps">Temperatures</button>
+      <button type="button" class="tab" role="tab" data-tab="devices" data-i18n="cfg.tab.devices">Devices</button>
+      <button type="button" class="tab" role="tab" data-tab="program" data-i18n="cfg.tab.program">Week programme</button>
+      <button type="button" class="tab" role="tab" data-tab="copy" data-i18n="cfg.tab.copy">Copy</button>
+    </span>
+    <button type="button" class="tab close" aria-label="close configuration" title="Close the configuration" data-i18n-attr="aria-label:cfg.close title:cfg.closeTitle">×</button>
+  </div>
+</template>
+
+<template id="tpl-cube-panel">
+  <details class="panel cube-panel">
+    <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
+    <form class="cube-form">
+      <div class="field wide">
+        <label data-i18n="cubes.name">Name</label>
+        <input type="text" name="name" class="field-control" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field wide">
+        <label data-i18n="cubes.address">Address</label>
+        <input type="text" name="address" class="field-control" autocomplete="off" spellcheck="false" placeholder="host or host:port; empty: from discovery" data-i18n-attr="placeholder:cubes.addressHint">
+      </div>
+      <div class="field">
+        <label class="switch">
+          <input type="checkbox" name="follow">
+          <span class="slider" aria-hidden="true"></span>
+          <span class="switch-label" data-i18n="cubes.follow">Follow the address the Cube answers discovery from</span>
+        </label>
+      </div>
+      <div class="field wide">
+        <label data-i18n="cubes.proxy">Proxy address</label>
+        <input type="text" name="proxy" class="field-control" autocomplete="off" spellcheck="false" placeholder="an address of this server, host[:port]; empty: :62910 with a single Cube" data-i18n-attr="placeholder:cubes.proxyHint">
+      </div>
+      <div class="field wide">
+        <label data-i18n="cubes.proxySerial">Serial in discovery replies</label>
+        <input type="text" name="proxy_serial" class="field-control" autocomplete="off" spellcheck="false" placeholder="empty: the Cube's own" data-i18n-attr="placeholder:cubes.proxySerialHint">
+      </div>
+      <div class="cube-hidden">
+        <span class="cube-hidden-title" data-i18n="cubes.hidden">Hidden devices</span>
+        <ul class="cube-hidden-list"></ul>
+        <div class="inline cube-hide-add">
+          <input type="text" name="hide" class="mono" autocomplete="off" spellcheck="false" placeholder="0abc12" aria-label="radio address of the device to hide" data-i18n-attr="aria-label:cubes.hideLabel">
+          <datalist></datalist>
+          <button type="button" data-i18n="cubes.hide">Hide</button>
+        </div>
+      </div>
+      <div class="actions">
+        <span class="actions-left"><button type="button" class="remove-cube" data-i18n="cubes.remove">Remove</button></span>
+        <span class="actions-right"><button type="submit" class="primary" data-i18n="cubes.save">Save</button></span>
+      </div>
+    </form>
+  </details>
+</template>
+
+<template id="tpl-cube-differs">
+  <div class="cube-differs">
+    <p class="small"></p>
+    <button type="button" class="take-file" data-i18n="cubes.takeFile">Take the file's value</button>
+  </div>
+</template>
+
+<template id="tpl-found-row">
+  <li><span class="mono found-serial"></span><span class="found-facts"></span><span class="mono expert-only found-extra"></span><button type="button" class="add-cube" data-i18n="cubes.add">Add</button></li>
+</template>
+
+<template id="tpl-scheme-editor">
+  <h3 id="scheme-editor-title" data-i18n="appearance.editorTitle">Customise the scheme</h3>
+  <div class="scheme-sets">
+    <fieldset class="scheme-set" data-mode="light"><legend data-i18n="appearance.light">Light</legend></fieldset>
+    <fieldset class="scheme-set" data-mode="dark"><legend data-i18n="appearance.dark">Dark</legend></fieldset>
+  </div>
+  <p id="scheme-hex-msg" class="small scheme-msg bad hidden" role="status"></p>
+  <p class="muted small" data-i18n="appearance.contrastNote">The number next to a background is the contrast of the text on it: from 4.5 it reads well (WCAG AA), under 3 badly.</p>
+  <div class="field wide scheme-name">
+    <label for="scheme-name" data-i18n="appearance.name">Name</label>
+    <span class="inline field-control"><input type="text" id="scheme-name"><button type="button" class="primary" data-i18n="appearance.saveAs">Save as</button></span>
+  </div>
+  <div class="actions">
+    <span class="actions-left"><button type="button" class="scheme-reset" data-i18n="appearance.reset">Reset</button><button type="button" id="scheme-delete" data-i18n="action.delete">Delete</button></span>
+    <span class="actions-right"><button type="button" class="scheme-close" data-i18n="action.close">Close</button></span>
+  </div>
+</template>
+
+<template id="tpl-scheme-row">
+  <div class="scheme-row">
+    <label></label>
+    <span></span>
+    <input type="color">
+    <input type="text" class="scheme-hex mono" size="7" spellcheck="false" autocomplete="off" autocapitalize="off">
+  </div>
+</template>
+
+<template id="tpl-log-line">
+  <div class="log-line"><span class="log-time mono"></span><span class="log-kind"></span><span class="log-device"></span><span class="mono expert-only log-rf"></span><span class="log-text"></span></div>
+</template>
+
 <script src="/ui/i18n.js"></script>
 <script src="/ui/components.js"></script>
 <script src="/ui/app.js"></script>

@@ -141,16 +141,24 @@ function logLineMatches(line) {
   return hay.includes(f);
 }
 
+// renderLogLine is one line of the log, from its template
+// (tpl-log-line): the time, the kind, the device by name and radio
+// address when the line has one, and the text.
 function renderLogLine(line) {
-  const row = document.createElement("div");
-  row.className = "log-line kind-" + line.kind;
-  row.appendChild(textEl("span", fmtLogTime(line.time), "log-time mono"));
-  row.appendChild(textEl("span", logKind(line.kind), "log-kind"));
+  const row = fromTemplate("tpl-log-line");
+  row.className += " kind-" + line.kind;
+  row.querySelector(".log-time").textContent = fmtLogTime(line.time);
+  row.querySelector(".log-kind").textContent = logKind(line.kind);
+  const dev = row.querySelector(".log-device");
+  const rf = row.querySelector(".log-rf");
   if (line.device) {
-    row.appendChild(textEl("span", logDeviceName(line.device), "log-device"));
-    row.appendChild(textEl("span", line.device, "mono expert-only"));
+    dev.textContent = logDeviceName(line.device);
+    rf.textContent = line.device;
+  } else {
+    dev.remove();
+    rf.remove();
   }
-  row.appendChild(textEl("span", logText(line), "log-text"));
+  row.querySelector(".log-text").textContent = logText(line);
   return row;
 }
 
