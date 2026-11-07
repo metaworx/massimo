@@ -31,7 +31,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet ui-test ui-screenshots windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
+.PHONY: all build test vet fuzz ui-test ui-screenshots windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
 
 # Development happens on main; a release promotes main to a release
 # branch, which is also the update channel boxes follow (internal/update).
@@ -102,6 +102,22 @@ test:
 
 vet:
 	go vet ./...
+
+# The fuzz targets (Fuzz* in the packages that parse untrusted bytes:
+# the Cube's and LAN clients' lines, uploaded backups, stored hashes),
+# each for FUZZTIME; go test -fuzz takes one target at a time. A crash
+# leaves its input under the package's testdata/fuzz/, which go test
+# then replays as a seed.
+FUZZTIME ?= 10s
+FUZZPKGS = ./internal/protocol/cube ./internal/backup ./internal/store
+
+fuzz:
+	@set -e; for pkg in $(FUZZPKGS); do \
+		for t in $$(go test -list '^Fuzz' $$pkg | grep '^Fuzz'); do \
+			echo "fuzz $$pkg $$t ($(FUZZTIME))"; \
+			MASSIMO_ENV_FILE=/dev/null go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $$pkg; \
+		done; \
+	done
 
 # Web UI smoke test with Playwright against the fake Cube; skipped when
 # Playwright for Python is not installed (tools/ui-test/README.md).

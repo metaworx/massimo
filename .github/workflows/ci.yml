@@ -66,6 +66,33 @@ jobs:
       - name: Cross build
         run: make cross
 
+  # The fuzz targets (make fuzz, GUIDELINES/project/CI.md, section 2), on
+  # a push to main only, 10 s a target: a pull request runs their seeds
+  # in Vet and test. A crash's input is kept as the artifact fuzz-crash,
+  # to be committed as a seed with its fix.
+  fuzz:
+    name: Fuzz
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: make fuzz
+        run: make fuzz
+
+      - name: Keep a crash's input
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fuzz-crash
+          path: internal/**/testdata/fuzz/
+          if-no-files-found: ignore
+
   # What a pull request changes, for the Screenshots job: ui is true when
   # it touches the web UI, its suite or this file (GUIDELINES/project/CI.md,
   # section 2). The run checks out the pull request's merge commit, whose

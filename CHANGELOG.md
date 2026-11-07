@@ -82,6 +82,10 @@ the next minor, a fix counts the suffix up.
   level the commands log at, `info` by default; a change in `serve`'s
   settings file waits for its restart (`README.md`, "Server").
 
+- Fuzz targets for the parsers of untrusted bytes, their seeds run by
+  `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
+  (`GUIDELINES/project/CI.md`, section 2).
+
 ### Changed
 
 - Passwords are hashed with argon2id at 19 MiB and two passes, about
