@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The store keeps each Cube's backups, gzip, pruned by reason and age
+  with the newest of a Cube kept (migration 0005; `docs/store.md`
+  section 9).
+
 - The store keeps the Cubes' events (migration 0004), written in
   batches and pruned daily by `log.keep_days` in `/api/v1/settings`
   (30 days; 0 keeps them), so that the log survives a restart.
