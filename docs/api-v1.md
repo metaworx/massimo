@@ -97,7 +97,7 @@ with a filter box and a clear that only empties the view;
 the tiles keep their state meanwhile.
 The short server version stands next to the brand;
 the Cube selector shows the Cube's name when one is configured.
-The settings page has the poll interval (10 s by default;
+My settings, under the header's 👤 menu, has the poll interval (10 s by default;
 the header is refreshed on it,
 and the rooms as well while the event stream is down;
 the ↻ button in the header runs the same refresh at once, rooms included,
@@ -107,8 +107,8 @@ a second header line shows the server version, the Cube's firmware,
 IP address and radio address, the duty cycle, free slots,
 queued and pending commands and the Cube clock,
 and the tiles show radio addresses and device types),
-whether the Cube clock is shown in the browser's time zone or the Cube's own,
-and Log out.
+and whether the Cube clock is shown in the browser's time zone or the Cube's own;
+the header's 👤 menu says who is signed in and signs out.
 In the tiles a thermometer marks the measured temperature (IS) and a target the
 setpoint (SET);
 AUTO and MANU close an open holiday panel and drop a pending stepper value.
@@ -127,7 +127,7 @@ including the devices to nudge when the Cube discarded a room command.
 The page follows the event stream.
 With users, the page asks for a name and a password (or an API key) once and
 keeps the session in the browser, hides what the role may not do, and offers
-Settings → Users and Roles to those who may;
+System settings → Users and Roles to those who may;
 every route needs the header except the event stream,
 which browsers open without headers and which takes a ticket (see Authentication):
 the page gets a new one for every connection and, after an error,

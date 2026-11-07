@@ -38,6 +38,20 @@ function canManageUsers() {
   return hasCap("users") || hasCap("guests");
 }
 
+// hasSystem reports whether the signed-in user sees System settings: one
+// of the capabilities of its panels, Cubes, backups, users, roles, and
+// the software's update and the server's restart.
+function hasSystem() {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "update", "restart"].some(hasCap) || canManageUsers();
+}
+
+// hasProfile reports whether the page is signed in as a user, who has My
+// profile; an open server and the server's token have none.
+function hasProfile() {
+  const me = state.me;
+  return !!(me && me.mode === "users" && me.user);
+}
+
 // isSelf reports whether a user is the signed-in one.
 function isSelf(name) {
   return !!(state.me && state.me.user && state.me.user.name === name);
@@ -85,9 +99,11 @@ function applyCaps() {
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
+  body.classList.toggle("no-system", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderOpenBanner();
   renderMe();
+  if (!mayShow(currentView)) showView("tiles", "replace"); // log.js: a page the user signed in now may not open
 }
 
 // renderOpenBanner warns under the header while the server asks for no
@@ -100,7 +116,10 @@ function renderOpenBanner() {
   if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
-// renderMe says in the settings who is signed in, and what Log out does.
+// renderMe says in the 👤 menu who is signed in, and what Sign out
+// does: a session ends, an API key or the token is only forgotten (Forget
+// key), and an open server or one without authentication has nothing to
+// end and no profile, so the menu offers My settings alone.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -111,22 +130,23 @@ function renderMe() {
     text = t("me.signedIn", { name: me.user.display_name || me.user.name, role: roleLabel(me.role.key, me.role.name) });
     if (me.token && me.token.kind === "api") {
       text = t("me.withKey", { name: me.user.name, label: me.token.label || "" });
-      label = t("settings.forgetKey");
+      label = t("me.forgetKey");
     } else {
-      label = t("settings.logout");
+      label = t("me.signOut");
     }
   } else if (me && me.mode === "open") {
     text = t("me.open");
   } else if (me && me.mode === "token") {
     text = t("me.token");
-    label = t("settings.forgetKey");
+    label = t("me.forgetKey");
   } else if (me) {
     text = t("me.none");
   }
   line.textContent = text;
   line.classList.toggle("hidden", !text);
-  btn.textContent = label || t("settings.logout");
+  btn.textContent = label || t("me.signOut");
   btn.classList.toggle("hidden", !label);
+  $("menu-profile").classList.toggle("hidden", !hasProfile());
   $("me-password").classList.toggle("hidden", !(me && me.mode === "users" && me.user && me.user.has_password));
 }
 
@@ -165,6 +185,7 @@ function askLogin() {
     $("login-token").value = "";
     $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
+    const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {
       form.onsubmit = null;
       dlg.onclose = null;
@@ -181,21 +202,25 @@ function askLogin() {
         if (!startWaits) afterLogin();
         return;
       }
+      if (isBusy(submit)) return; // a second Enter while it signs in
       const user = $("login-user").value.trim();
       const password = $("login-password").value;
       if (!user || !password) {
         showResult(error, t("login.missing"), false);
         return;
       }
+      showResult(error, "", false);
+      let session;
       try {
-        const session = await signIn(user, password);
-        setToken(session.token);
-        done(true);
-        if (!startWaits) afterLogin();
+        session = await whileBusy(submit, () => signIn(user, password));
       } catch (e) {
         showResult(error, t("login.failed", { error: e.message }), false);
         $("login-password").focus();
+        return;
       }
+      setToken(session.token);
+      done(true);
+      if (!startWaits) afterLogin();
     };
     dlg.onclose = () => done(false);
     dlg.showModal();
@@ -245,7 +270,7 @@ async function logout() {
   state.me = null;
   if (synced) await forgetUserSettings(); // app.js
   closeEvents();
-  showView("tiles");
+  showView("tiles", "replace");
   await loadMeAndPreferences();
   refresh().then(connectEvents);
 }
@@ -351,12 +376,14 @@ async function loadPreferences() {
 async function changeOwnPassword(ev) {
   ev.preventDefault();
   const msg = $("me-password-msg");
+  const submit = $("me-password-form").querySelector("button[type=submit]");
+  if (isBusy(submit)) return;
   const current = $("me-current").value;
   const password = $("me-new").value;
   if (password !== $("me-again").value) return showResult(msg, t("setup.mismatch"), false);
   if (!password) return showResult(msg, t("login.missing"), false);
   try {
-    await api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current });
+    await whileBusy(submit, () => api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current }));
     showResult(msg, t("me.passwordChanged"), true);
     $("me-current").value = "";
     $("me-new").value = "";
@@ -369,24 +396,38 @@ async function changeOwnPassword(ev) {
 // --- the first owner --------------------------------------------------
 
 // createOwner handles the form of a server without users: the owner is
-// created and signed in at once.
+// created and signed in at once, the button busy through both.
 async function createOwner(ev) {
   ev.preventDefault();
   const msg = $("setup-msg");
+  const submit = $("setup-form").querySelector("button[type=submit]");
+  if (isBusy(submit)) return;
+  if (!checkOwnerName()) {
+    $("setup-user").focus();
+    return;
+  }
   const name = $("setup-user").value.trim();
   const password = $("setup-password").value;
   if (!name || !password) return showResult(msg, t("login.missing"), false);
   if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
   try {
-    await api("POST", "api/v1/users", { name, password, role: "owner" });
-    const session = await signIn(name, password);
+    const session = await whileBusy(submit, async () => {
+      await api("POST", "api/v1/users", { name, password, role: "owner" });
+      return signIn(name, password);
+    });
     setToken(session.token);
     showResult(msg, t("setup.done", { name }), true);
     afterLogin();
   } catch (e) {
-    showResult(msg, t("setup.failed", { error: e.message }), false);
+    const worded = wordNameError(e, name); // users.js
+    if (worded) checkOwnerName.say(worded);
+    showResult(msg, t("setup.failed", { error: worded || e.message }), false);
   }
 }
+
+// checkOwnerName checks the first owner's name as it is typed
+// (watchName, users.js); set by initLogin.
+let checkOwnerName = () => true;
 
 function initLogin() {
   window.addEventListener("pagehide", flushPreferences);
@@ -395,6 +436,7 @@ function initLogin() {
   });
   $("logout-btn").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
+  checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
   $("me-password-form").addEventListener("submit", changeOwnPassword);
 }
 

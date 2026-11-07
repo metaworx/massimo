@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, Settings → Software: which release runs and
+// The Massimo web UI, System settings → Software: which release runs and
 // whether a newer one is out on the update channel, the request to the
 // server's update helper to install it (POST /api/v1/update), and the
 // server's restart (POST /api/v1/restart), after which the page follows
@@ -17,12 +17,12 @@ function updateBusy(h) {
   return !!h && ["checking", "installing", "restarting"].includes(h.state);
 }
 
-// setUpdateBusy greys out both buttons of the Software section while an
+// setUpdateBusy turns the update button and greys out Check while an
 // update runs: a check or a second request in the middle of an install
 // would only confuse, and the server goes away for the restart anyway.
 function setUpdateBusy(busy) {
-  $("update-btn").disabled = busy;
-  $("update-check").disabled = busy;
+  setBusy($("update-btn"), busy);
+  setOff($("update-check"), busy);
 }
 
 // helperText is the helper's last state; unknown states are shown as
@@ -246,9 +246,9 @@ function followRestart(before, until) {
 
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
-  $("update-check").addEventListener("click", () => loadUpdate(true));
+  $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
   $("restart-btn").addEventListener("click", startRestart);
-  $("view-settings").addEventListener("click", () => {
+  onView("system", () => {
     loadUpdate(false);
     loadRestart();
   });

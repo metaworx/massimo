@@ -472,7 +472,7 @@ From then on the store wins for a Cube it knows: its `_ADDRESS`, `_NAME`,
 and a line that differs from the store is logged at every start.
 Keys, IVs, the token, the listen address,
 the log and the update variables stay in the file.
-A known Cube is changed in the web UI under Settings → Cubes (or with
+A known Cube is changed in the web UI under System settings → Cubes (or with
 `PUT /api/v1/cubes/<SN>`), which applies at once, without a restart;
 where a line of the file differs,
 the Cube's panel says so and offers "Take the file's value".
@@ -502,7 +502,7 @@ it then names the copy `massimo.db.before-<version>` it made before.
   so a Cube gets an address from the new router.
   Reserve it there, because a configured address is fixed.
   A Cube configured by serial only follows its discovery answers by itself;
-  for one with an address, change it under Settings → Cubes in the web UI,
+  for one with an address, change it under System settings → Cubes in the web UI,
   or empty it there so that the Cube follows its discovery answers.
 - The fixed proxy addresses added with `nmcli` stay on the interface when the box moves.
   On the new network they must be free and outside the router's DHCP range:
@@ -599,7 +599,7 @@ sudo systemctl enable --now massimo-update.path
 ```
 
 `massimo.service` passes `-update-request /var/lib/massimo/update-request` to `serve`,
-which enables the button under Settings → Software.
+which enables the button under System settings → Software.
 The helper's log is in `journalctl -u massimo-update`,
 its last result in `/var/lib/massimo-update/status.json` and in the UI.
 On macOS the same request starts the LaunchDaemon `ch.metaworx.massimo-update`
@@ -660,7 +660,7 @@ With `-health`, a release that cannot run as a service is given up after about
 one that runs but never reports the new version on `/healthz` after `-health-timeout`,
 two minutes.
 
-The web UI starts updates too (Settings → Software,
+The web UI starts updates too (System settings → Software,
 or `POST /api/v1/update` with the API token).
 Nothing on Windows watches a file, and the service already runs as LocalSystem,
 so the server starts the helper itself:

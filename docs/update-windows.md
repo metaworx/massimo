@@ -1,7 +1,7 @@
 # Updates from the web UI on Windows
 
 The design for starting a software update of the Windows service from
-the web UI (Settings → Software, the Update button) and from the API
+the web UI (System settings → Software, the Update button) and from the API
 (`POST /api/v1/update`), the way it works on Linux and macOS.
 
 Status: implemented on 2026-11-06 as option A with the nine positions of section
@@ -822,7 +822,7 @@ the command line shown by `sc.exe qc` ends in
 Note the time.
 
 Then, in a browser on this machine, http://127.0.0.1:8099/ with the token,
-Settings → Software:
+System settings → Software:
 
 1. "Check for updates": the text names the newest release as out and the button
    "Update to v…" is there.

@@ -5,14 +5,14 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import URL
-from helpers import named_buttons, wait_until
+from helpers import named_buttons, open_user_menu, show_view, sign_out, wait_until
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
     """The sign-in dialog opens without a token and refuses a wrong
-    password; the operator signs in, sees the tiles and no Settings →
-    Users, Roles or Cubes; Log out forgets the token and brings the
-    dialog back."""
+    password; the operator signs in, sees the tiles and no System settings →
+    Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
+    forgets the token and brings the dialog back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
     page = ctx.new_page()
     guard.page = page
@@ -34,16 +34,21 @@ def test_sign_in_and_out(new_context, case, watch, guard):
         "the missing capabilities are on the body"
     assert page.locator(".room .tile-cog").first.is_visible() and not page.locator(".room .menu-delete").first.is_visible(), \
         "an operator configures but does not delete rooms"
-    page.locator("#view-settings").click()
-    assert not page.locator(".users-settings").is_visible(), "no Settings → Users for an operator"
-    assert not page.locator(".roles-settings").is_visible(), "no Settings → Roles for an operator"
-    assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no Settings → Cubes for an operator"
+    show_view(page, "system")
+    assert not page.locator(".users-settings").is_visible(), "no System settings → Users for an operator"
+    assert not page.locator(".roles-settings").is_visible(), "no System settings → Roles for an operator"
+    assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no System settings → Cubes for an operator"
     assert not page.locator(".restart.needs-restart").is_visible(), "no restart for an operator"
-    assert "operator" in page.locator("#me-line").inner_text(), "the settings say who is signed in"
     named_buttons(page, "the settings as an operator")
+    open_user_menu(page)
+    assert "operator" in page.locator("#me-line").inner_text(), "the 👤 menu says who is signed in"
+    assert page.locator("#logout-btn").inner_text() == SIGN_OUT[case.lang], "a session is signed out"
     page.locator("#logout-btn").click()
-    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Log out brings the dialog back"
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "the token is forgotten"
+
+
+SIGN_OUT = {"en": "Sign out", "de": "Abmelden"}
 
 
 def sign_in(page, user, password):
@@ -72,10 +77,47 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     page.goto(URL)
     sign_in(page, "operator", "op-pass")
     assert (len(tickets), len(mes)) == (1, 1), f"one start after the sign-in at the page's start: {len(tickets)} ticket(s), {len(mes)} /me"
-    page.locator("#view-settings").click()
-    page.locator("#logout-btn").click()
+    sign_out(page)
     sign_in(page, "operator", "op-pass")
     assert (len(tickets), len(mes)) == (2, 2), f"one start after the sign-in after Log out: {len(tickets)} ticket(s), {len(mes)} /me"
-    page.locator("#view-settings").click()
-    page.locator("#logout-btn").click()
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
+    """Sign in is off with a spinner from its click until the server
+    answers (6 s on the Pi 1), and a second Enter sends nothing. The test
+    holds the login POST, then lets it go."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    held, posts = [], []
+
+    def handle(route):
+        posts.append(route.request.url)
+        held.append(route)
+
+    page.route("**/api/v1/login", handle)
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "document.querySelector('#login-form button[type=submit]').classList.contains('busy')", 5), "Sign in turns"
+    state = page.evaluate("(() => { const b = document.querySelector('#login-form button[type=submit]'); "
+                          "return [b.disabled, b.getAttribute('aria-busy')]; })()")
+    assert state == [True, "true"], f"Sign in is off and aria-busy while the request runs: {state}"
+    page.locator("#login-password").press("Enter")
+    page.wait_for_timeout(300)
+    assert len(posts) == 1, f"one login POST while the first is unanswered: {len(posts)}"
+    for route in held:
+        route.continue_()
+    page.unroute("**/api/v1/login")
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "signed in as the operator"
+    assert not page.evaluate("document.querySelector('#login-form button[type=submit]').classList.contains('busy')"), \
+        "Sign in stops turning once the answer is in"
+    sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
