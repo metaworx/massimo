@@ -56,6 +56,9 @@ the next minor, a fix counts the suffix up.
 - The apt repository's setup names the `github-pages` environment's rule
   for the tags `v*`, without which every deploy is refused.
 
+- Settings → Users shows a key just created, lists each token once, and
+  one click on Create key makes one key.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
