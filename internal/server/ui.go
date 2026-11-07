@@ -21,7 +21,7 @@ import (
 // start) and /ui/ (the files, the translations under /ui/i18n/) and
 // talks to the API.
 //
-//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/roles.js ui/theme.js ui/style.css ui/i18n/*.json ui/partials/*.html
+//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/backup.js ui/roles.js ui/theme.js ui/style.css ui/i18n/*.json ui/partials/*.html
 var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per
@@ -33,8 +33,8 @@ var uiPartials = []struct {
 	marker string
 	files  []string
 }{
-	{"settings", []string{"cubes.html", "users.html", "roles.html", "appearance.html", "page.html", "software.html"}},
-	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "roles-panel.html"}},
+	{"settings", []string{"cubes.html", "backup.html", "users.html", "roles.html", "appearance.html", "page.html", "software.html"}},
+	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "roles-panel.html", "backups-panel.html"}},
 }
 
 // uiPage assembles the page: index.html, the skeleton, with each marker

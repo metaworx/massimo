@@ -249,6 +249,25 @@ without the switches.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
+- **Backup and restore** (with `backup`):
+  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
+  The server keeps the Cube's backups in its store,
+  listed newest first with why each was taken (after a change, by hand,
+  before a restore, or the file a restore was sent), its size and who asked:
+  one follows by itself an hour after the Cube's configuration last changed,
+  at the latest two hours after the first change (the settings `backups.*`,
+  docs/api-v1.md, "Backups"), and a line says when while one is pending.
+  **Take a backup now** keeps one by hand.
+  Each row has **Download**, **Compare with the one before**,
+  which lists what changed as the restore would send it,
+  and, with `restore`, **Restore…** and **Delete**, which asks first.
+  **Restore from file…** (with `restore`) takes a backup file instead.
+  A restore first shows its plan, the steps with the radio ones marked,
+  the notes and what the radio commands cost of the hourly budget,
+  and sends nothing until **Send N commands**;
+  then each step is marked as the Cube took it, and the end is said.
+  A Cube that is not in the server's store (a run with `-addr`) has no list;
+  its download and the restore from a file work as before.
 - **Appearance**:
   **Mode** is light, dark, or as the system,
   which follows the device's setting and changes with it.
