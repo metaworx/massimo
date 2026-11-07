@@ -39,11 +39,12 @@ type Client struct {
 	ready chan struct{} // closed when the first greeting is complete
 	once  sync.Once
 
-	mu      sync.Mutex
-	conn    net.Conn
-	pending *pendingReply
-	writeMu sync.Mutex
-	budget  budgetTracker
+	mu       sync.Mutex
+	conn     net.Conn
+	connAddr string // the address conn was dialled at
+	pending  *pendingReply
+	writeMu  sync.Mutex
+	budget   budgetTracker
 	// greeted is closed, and replaced, whenever a greeting is complete.
 	greeted chan struct{}
 	// reconnecting marks a connection closed on purpose by Reconnect.
@@ -195,18 +196,19 @@ func (c *Client) session(ctx context.Context) (bool, error) {
 	case <-c.wake:
 	default:
 	}
-	conn, err := c.opts.Dialer(ctx, c.Address())
+	addr := c.Address()
+	conn, err := c.opts.Dialer(ctx, addr)
 	if err != nil {
 		return false, err
 	}
 	defer conn.Close()
 	c.mu.Lock()
-	c.conn = conn
+	c.conn, c.connAddr = conn, addr
 	c.mu.Unlock()
 	defer func() {
 		c.online.Store(false)
 		c.mu.Lock()
-		c.conn = nil
+		c.conn, c.connAddr = nil, ""
 		if c.pending != nil {
 			close(c.pending.ch)
 			c.pending = nil
@@ -437,9 +439,23 @@ func (c *Client) clearPending(p *pendingReply) {
 // reply fails with ErrNotConnected, so callers run it through the
 // command queue (engine.Command.Reconnect). Between connections it
 // dials at once and waits for the greeting.
-func (c *Client) Reconnect(ctx context.Context) error {
+func (c *Client) Reconnect(ctx context.Context) error { return c.reconnect(ctx, false) }
+
+// ReconnectIfMoved is Reconnect for a Cube found at a new address
+// (SetAddress): it drops only a connection to another address than the
+// client's now. A client between connections dials the new address at
+// once, and one connected to it has done so since, so nothing is
+// dropped then: that would make a second connection to the Cube.
+func (c *Client) ReconnectIfMoved(ctx context.Context) error { return c.reconnect(ctx, true) }
+
+func (c *Client) reconnect(ctx context.Context, onlyMoved bool) error {
+	addr := c.Address()
 	c.mu.Lock()
 	conn, greeted := c.conn, c.greeted
+	if onlyMoved && (conn == nil || c.connAddr == addr) {
+		c.mu.Unlock()
+		return nil
+	}
 	c.mu.Unlock()
 	if conn == nil {
 		c.wakeDial()

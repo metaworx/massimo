@@ -270,7 +270,7 @@ func (s *Server) applyCube(rt *runtime, row store.Cube) error {
 			ctx := s.ctx
 			s.mu.RUnlock()
 			if ctx != nil {
-				go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true}).Wait(ctx)
+				go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true, Moved: true}).Wait(ctx)
 			}
 		}
 	}

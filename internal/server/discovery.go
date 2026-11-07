@@ -268,7 +268,7 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 		s.log.Info("cube address from discovery", "serial", serial, "ip", cp.Address, "was", host)
 		if had {
 			// Connected, or trying, to the old address: reconnect now.
-			go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true}).Wait(ctx)
+			go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true, Moved: true}).Wait(ctx)
 		}
 	}
 	return cp

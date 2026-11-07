@@ -204,8 +204,9 @@ the next minor, a fix counts the suffix up.
   the next command no longer takes a late one as its reply
   (docs/proxy.md).
 
-- A Cube's new address from discovery is dialled at once, no longer after
-  the minute of backoff the old address built up.
+- A Cube's new address from discovery is dialled at once, with one
+  connection, no longer after the minute of backoff the old address
+  built up.
 
 - A device whose greeting C line answered a re-read sent during the
   greeting no longer drops out of the server's copy.
