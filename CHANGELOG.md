@@ -112,6 +112,9 @@ the next minor, a fix counts the suffix up.
 - `massimo user tokens <name>` lists a user's sessions and keys with the
   ids `user revoke` takes, so one key can be revoked alone (README.md).
 
+- The TLS variables are named once for `massimo install`, `serve` and
+  `massimo config`, which can no longer read different names.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

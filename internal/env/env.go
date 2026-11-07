@@ -51,6 +51,24 @@ const (
 	DataVar = "MASSIMO_DATA"
 )
 
+// The TLS of massimo serve (internal/certs) and its HSTS days, the
+// trusted proxies: the settings massimo install writes and serve reads,
+// named here once for both and for Known.
+const (
+	TLS           = "MASSIMO_TLS"
+	TLSCert       = "MASSIMO_TLS_CERT"
+	TLSKey        = "MASSIMO_TLS_KEY"
+	TLSNames      = "MASSIMO_TLS_NAMES"
+	HSTS          = "MASSIMO_HSTS"
+	ACMEEmail     = "MASSIMO_ACME_EMAIL"
+	ACMEDirectory = "MASSIMO_ACME_DIRECTORY"
+	TLSHTTP       = "MASSIMO_TLS_HTTP"
+	ACMEDNSHook   = "MASSIMO_ACME_DNS_HOOK"
+	// TrustedProxies are the reverse proxies whose headers name the
+	// client.
+	TrustedProxies = "MASSIMO_TRUSTED_PROXIES"
+)
+
 // Moved lists the per-Cube variables whose values serve keeps in its
 // store after the first start (docs/store.md section 4): for serve the
 // file's lines are seeds and fallbacks, for the other commands they are
@@ -145,10 +163,7 @@ func Known(k string) bool {
 	switch k {
 	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST",
-		// massimo serve's TLS (internal/certs) and its HSTS days.
-		"MASSIMO_TLS", "MASSIMO_TLS_CERT", "MASSIMO_TLS_KEY", "MASSIMO_TLS_NAMES", "MASSIMO_HSTS",
-		"MASSIMO_ACME_EMAIL", "MASSIMO_ACME_DIRECTORY", "MASSIMO_TLS_HTTP", "MASSIMO_ACME_DNS_HOOK",
-		"MASSIMO_TRUSTED_PROXIES",
+		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies,
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.
 		"MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN":

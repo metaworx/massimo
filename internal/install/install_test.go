@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 type recorder struct{ cmds []string }
@@ -569,6 +571,16 @@ func TestInstallSwitchesTLSMode(t *testing.T) {
 		}
 		if vars["MASSIMO_API_TOKEN"] != "kept" {
 			t.Fatalf("-tls %q: the owner's line went", c.o.tlsMode())
+		}
+	}
+}
+
+// Every TLS variable install writes is one serve reads, as massimo
+// config knows them.
+func TestTLSVariablesAreKnown(t *testing.T) {
+	for _, k := range modeVars {
+		if !env.Known(k) {
+			t.Errorf("%s is not a variable serve knows", k)
 		}
 	}
 }

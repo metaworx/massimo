@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 // The TLS of the installed service: -tls-cert and -tls-key are copied
@@ -19,13 +21,14 @@ import (
 // as they keep -listen. The update helper's health URL follows: https://
 // where the settings say the server has TLS.
 const (
-	tlsVar      = "MASSIMO_TLS"
-	tlsCertVar  = "MASSIMO_TLS_CERT"
-	tlsKeyVar   = "MASSIMO_TLS_KEY"
-	tlsNamesVar = "MASSIMO_TLS_NAMES"
-	acmeEmail   = "MASSIMO_ACME_EMAIL"
-	tlsHTTPVar  = "MASSIMO_TLS_HTTP"
-	acmeDNSHook = "MASSIMO_ACME_DNS_HOOK"
+	// The variables serve reads, named once in internal/env.
+	tlsVar      = env.TLS
+	tlsCertVar  = env.TLSCert
+	tlsKeyVar   = env.TLSKey
+	tlsNamesVar = env.TLSNames
+	acmeEmail   = env.ACMEEmail
+	tlsHTTPVar  = env.TLSHTTP
+	acmeDNSHook = env.ACMEDNSHook
 	// The owner's files beside the settings.
 	certName = "cert.pem"
 	keyName  = "key.pem"
