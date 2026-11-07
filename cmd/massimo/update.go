@@ -64,17 +64,19 @@ func runUpdate(args []string) (err error) {
 		return err
 	}
 	ctx := context.Background()
+	last := "" // the state this run last wrote to the status file
 	status := func(s update.Status) {
+		last = s.State
 		if err := update.WriteStatus(*statusPath, s); err != nil {
 			fmt.Fprintln(os.Stderr, "update: status:", err)
 		}
 	}
 
 	if *request != "" {
-		c, ok, err := update.TakeRequest(*request)
-		if err != nil {
-			status(update.Status{State: "failed", Message: err.Error()})
-			return err
+		c, ok, terr := update.TakeRequest(*request)
+		if terr != nil {
+			status(update.Status{State: "failed", Message: terr.Error()})
+			return terr
 		}
 		if !ok {
 			return nil // the path unit fired for a request already taken
@@ -83,6 +85,15 @@ func runUpdate(args []string) (err error) {
 			*ch = c
 		}
 		*yes = true
+		// The request is taken: an error that returns without a status of
+		// its own (a development build, no channel, the binary not found)
+		// is the run's outcome too, so that the UI does not show the
+		// previous run's.
+		defer func() {
+			if err != nil && last != "failed" && last != "rolled-back" {
+				status(update.Status{State: "failed", From: version, Channel: *ch, Message: err.Error()})
+			}
+		}()
 	}
 
 	// A package manager that owns the binary keeps owning it: -check still
