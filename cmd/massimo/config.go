@@ -217,7 +217,7 @@ func printTLS(w io.Writer) {
 	certPath, keyPath := os.Getenv(tlsCertVar), os.Getenv(tlsKeyVar)
 	mode := tlsMode(os.Getenv(tlsVar), certPath, keyPath)
 	if mode == "off" {
-		fmt.Fprintf(w, "tls:           off\n")
+		fmt.Fprintf(w, "tls:           off (serve has no TLS)\n")
 		return
 	}
 	days, err := hstsDays(os.Getenv(hstsVar))
@@ -235,6 +235,10 @@ func printTLS(w io.Writer) {
 		fmt.Fprintf(w, "tls:           self-signed (%s; hsts %s)\n", filepath.Dir(certPath), hsts)
 		if names := os.Getenv(tlsNamesVar); names != "" {
 			fmt.Fprintf(w, "               names given: %s\n", names)
+		}
+		if _, err := os.Stat(certPath); err != nil {
+			fmt.Fprintf(w, "               no certificate in %s yet: serve makes one at its start, or make it now with: massimo tls self-signed\n", filepath.Dir(certPath))
+			return
 		}
 		printCertificate(w, mode, certPath, keyPath)
 		return

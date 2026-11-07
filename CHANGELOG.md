@@ -106,6 +106,9 @@ the next minor, a fix counts the suffix up.
 - `massimo update` downloads a binary for as long as a slow line needs,
   no longer cut off after two minutes; a stall ends it after one.
 
+- `massimo tls show` prints what `massimo config` prints of the TLS,
+  the HSTS days and the names given included.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
