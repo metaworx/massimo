@@ -28,6 +28,12 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+### Security
+
+- The server refuses a write that another site's page sent, which an
+  open server served: such a page could create the first owner
+  (`docs/api-v1.md`, "Authentication").
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added
