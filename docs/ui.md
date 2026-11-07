@@ -12,13 +12,22 @@ which is open from the start once the page has seen the server ask for no key
 (the owner made from `MASSIMO_API_TOKEN` has no password),
 and keeps the session in the browser for 30 days from its last use;
 👤 → Sign out ends it.
+The password stays in the browser:
+the page signs in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE"),
+running argon2id itself while the button turns,
+a fraction of a second on a laptop, more on an old phone.
+A user whose password the server still hashes (`auth_version` 1) is signed in
+with the password after the OPAQUE attempt, while the server takes that,
+and the page registers the password by OPAQUE at once:
+it is the last time that password goes to the server.
 A server without users shows the form that creates the first owner to a
 browser on the local network; until then everything is open,
 and a warning under the header's rule says so and what closes it:
 the first owner, or `MASSIMO_API_TOKEN` in the server's settings file
 (`-token` for a server without a store).
 It cannot be dismissed, and goes once the server asks who is there.
-The first owner's name is checked as a new user's is (System settings → Users).
+The first owner's name is checked as a new user's is (System settings → Users),
+and its password is registered by OPAQUE, as every password the page sets.
 What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
@@ -245,7 +254,9 @@ nor with the server's API token):
 - **Display name**, the name the 👤 menu and the users list show,
   with **Save**, off while it is the one stored.
 - **Change password**, for a user with a password:
-  the own password, with the current one.
+  the own password, with the current one,
+  which a sign-in by OPAQUE proves without sending it;
+  the new one is registered by OPAQUE, as every password the page sets.
 - **Sessions and keys**: the own sessions and API keys,
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
@@ -390,7 +401,9 @@ a role with none of them (the viewer's, a guest's) has no cog.
   its download and the restore from a file work as before.
 - **Users** (with `users`, or `guests` for the guests alone):
   every user in a panel with its display name, role, whether it is disabled,
-  a guest's end, and a new password, which ends the user's sessions;
+  a guest's end, and a new password, which ends the user's sessions and,
+  as every password the page sets,
+  is registered by OPAQUE in the browser and never sent;
   **Save**, off while nothing differs from the user;
   **Remove**; the user's sessions and API keys with **Revoke**,
   and **Create key**, which shows the new key once.
@@ -399,8 +412,13 @@ a role with none of them (the viewer's, a guest's) has no cog.
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
   at most 64 characters, capitals taken as lower case, and not a name in use.
   **Create** sends nothing while the name is wrong,
-  and turns until the server has hashed the password,
-  which takes seconds on a Raspberry Pi 1.
+  and turns until the browser has registered the password and the server has
+  added the user.
+  With `settings`, **Password sign-in** switches off the sign-in that sends a
+  password to the server,
+  which the page uses for users whose password the server still hashes;
+  the line under it says how many those are,
+  and they cannot sign in once it is off until a password is set for them here.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Save**, off while nothing differs from the role,
@@ -466,3 +484,12 @@ Every URL the page and the scripts use is relative to the page (`ui/style.css`,
 `api/v1/cubes`, `healthz`),
 so that a reverse proxy may serve the UI under a path prefix it strips
 (docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.
+
+One file is not the project's: `ui/vendor/opaque.js`,
+`@serenity-kit/opaque` as published, the OPAQUE client in WebAssembly,
+which the sign-in needs and which the browser does not offer
+(`ui/vendor/README.md` says which version, its licence and how to update it).
+`login.js` imports it when a sign-in first needs it, not with the page,
+and the page's `Content-Security-Policy` allows WebAssembly to compile
+(`'wasm-unsafe-eval'`) for it;
+`go test ./internal/server` checks the file's SHA-256.

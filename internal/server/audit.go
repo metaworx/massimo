@@ -48,6 +48,8 @@ const (
 // an empty action means the route is not audited.
 var actions = map[string]string{
 	"POST /api/v1/login":                           "login",
+	"POST /api/v1/login/start":                     "login.start",
+	"POST /api/v1/login/finish":                    "login",
 	"POST /api/v1/logout":                          "logout",
 	"POST /api/v1/cubes":                           "cube.add",
 	"PUT /api/v1/cubes/{sn}":                       "cube.update",
@@ -78,6 +80,7 @@ var actions = map[string]string{
 	"PUT /api/v1/users/{name}":                     "user.update",
 	"DELETE /api/v1/users/{name}":                  "user.remove",
 	"POST /api/v1/users/{name}/tokens":             "token.add",
+	"POST /api/v1/users/{name}/register":           "", // nothing is kept
 	"DELETE /api/v1/users/{name}/tokens/{id}":      "token.revoke",
 	"POST /api/v1/roles":                           "role.add",
 	"PUT /api/v1/roles/{key}":                      "role.update",
@@ -90,10 +93,10 @@ var actions = map[string]string{
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
-var noCommand = map[string]bool{"login": true, "logout": true, "preference.set": true, "preference.delete": true}
+var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true}
 
 // secretFields are the body fields an audit row never keeps.
-var secretFields = []string{"password", "current_password", "token"}
+var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3"}
 
 // auditInfo is one audited request on its way through the wrapper.
 type auditInfo struct {

@@ -440,7 +440,9 @@ installer passes with `-data`:
 | Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |
 
 Next to `massimo.db` (mode 0600) live `massimo.db-wal` and `massimo.db-shm`
-while the server runs, and `node.key` (0600), the box's Ed25519 key;
+while the server runs, `node.key` (0600), the box's Ed25519 key,
+and `opaque.key` (0600), the server's OPAQUE keys,
+without which no password of `auth_version` 2 signs in;
 a copy of the database belongs with all of them,
 or is made with `massimo store backup <file>`,
 which is consistent while the server runs.

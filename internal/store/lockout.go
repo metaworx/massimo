@@ -108,6 +108,17 @@ func (l *Lockout) Succeed(ctx context.Context, key string) error {
 	return nil
 }
 
+// Forgive forgets the failures of a key, and its lockout too.
+func (l *Lockout) Forgive(ctx context.Context, key string) error {
+	if err := l.s.writable(); err != nil {
+		return err
+	}
+	if _, err := l.s.db.ExecContext(ctx, `DELETE FROM auth_failures WHERE key = ?`, key); err != nil {
+		return fmt.Errorf("store: lockout: %w", err)
+	}
+	return nil
+}
+
 // Keys lists the keys that have failures or a lockout.
 func (l *Lockout) Keys(ctx context.Context) ([]string, error) {
 	rows, err := l.s.db.QueryContext(ctx, `SELECT key FROM auth_failures ORDER BY key`)

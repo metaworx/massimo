@@ -203,7 +203,14 @@ func (u userCmd) add(args []string) error {
 			return fmt.Errorf("user add: %w", err)
 		}
 	}
-	created, err := u.st.AddUser(u.ctx, nu, password, 0)
+	created := store.User{}
+	if password != "" {
+		// A password of version 2: the browser signs in by OPAQUE and
+		// the server never sees it (docs/store.md section 6).
+		created, err = u.st.AddUserOpaque(u.ctx, nu, password, 0)
+	} else {
+		created, err = u.st.AddUser(u.ctx, nu, "", 0)
+	}
 	u.audit("user.add", "user:"+store.NormalName(names[0]), map[string]any{"role": *role, "password": password != ""}, err)
 	if err != nil {
 		return fmt.Errorf("user add: %w", err)
@@ -273,7 +280,7 @@ func (u userCmd) passwd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("user passwd: %w", err)
 	}
-	err = u.st.SetPassword(u.ctx, us.Name, password, 0)
+	err = u.st.SetPasswordOpaque(u.ctx, us.Name, password, 0)
 	if err == nil {
 		err = u.st.RevokeSessions(u.ctx, us.ID)
 	}

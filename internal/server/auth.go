@@ -351,6 +351,10 @@ type failureLimiter interface {
 	lockedFor(ctx context.Context, key string) time.Duration
 	fail(ctx context.Context, key string) bool
 	succeed(ctx context.Context, key string)
+	// forgive forgets the failures of a key and its lockout too: for a
+	// sign-in by OPAQUE whose own start locked the key and that then
+	// proved the password (opaque_api.go).
+	forgive(ctx context.Context, key string)
 }
 
 // authLimiter counts failed checks per key in a fixed window and locks
@@ -432,6 +436,12 @@ func (l *authLimiter) succeed(_ context.Context, key string) {
 	}
 }
 
+func (l *authLimiter) forgive(_ context.Context, key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.addrs, key)
+}
+
 // pruneLocked keeps the map bounded: entries whose window and lockout
 // are over go first; if that is not enough, the oldest window goes.
 func (l *authLimiter) pruneLocked(now time.Time) {
@@ -502,6 +512,16 @@ func (l *storeLimiter) succeed(ctx context.Context, key string) {
 	}
 	if err := l.l.Succeed(ctx, key); err != nil {
 		l.log.Error("api: failures not forgotten", "error", err)
+		return
+	}
+	l.mu.Lock()
+	delete(l.failed, key)
+	l.mu.Unlock()
+}
+
+func (l *storeLimiter) forgive(ctx context.Context, key string) {
+	if err := l.l.Forgive(ctx, key); err != nil {
+		l.log.Error("api: lockout not lifted", "error", err)
 		return
 	}
 	l.mu.Lock()
@@ -759,16 +779,19 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		}
 		return &principal{mode: mode}, true
 	}
+	if capability == capNone {
+		// The sign-ins: nobody yet. Each checks the address's lockout
+		// itself (lockedOut), since one that goes on with a sign-in by
+		// OPAQUE started was checked and counted at the start, and a
+		// lockout that start set is its own to lift (opaque_api.go).
+		return &principal{mode: mode}, true
+	}
 	ip := s.clientIP(r)
 	key := store.LockoutAddr(ip)
 	if d := s.limiter.lockedFor(ctx, key); d > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
 		writeError(w, http.StatusTooManyRequests, "too many failed token checks from this address; try again later")
 		return nil, false
-	}
-	if capability == capNone {
-		// The login: nobody yet, but a locked-out address stays out.
-		return &principal{mode: mode}, true
 	}
 	var p *principal
 	var why error
@@ -809,6 +832,21 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		return p, false // the audit names who was refused
 	}
 	return p, true
+}
+
+// lockedOut answers a sign-in from an address or for a name that is
+// locked out: 429 with Retry-After, nil when neither is.
+func (s *Server) lockedOut(w http.ResponseWriter, ctx context.Context, addrKey, userKey string) error {
+	for _, k := range []struct{ key, msg string }{
+		{addrKey, "too many failed token checks from this address; try again later"},
+		{userKey, "too many failed logins for this user; try again later"},
+	} {
+		if d := s.limiter.lockedFor(ctx, k.key); d > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
+			return fail(http.StatusTooManyRequests, "%s", k.msg)
+		}
+	}
+	return nil
 }
 
 // issueTicket handles POST /cubes/{sn}/events/ticket: a single-use

@@ -188,6 +188,55 @@ address as `remote`, not 127.0.0.1.
 The Cubes' LAN proxy (port 62910 and discovery) does not go through nginx:
 `MASSIMO_CUBE_<SN>_PROXY` names an address of the box as before.
 
+### The box's own web console beside it
+
+A second name with its own certificate on the same nginx can carry the box's
+web console, Debian's Cockpit (`sudo apt install cockpit`):
+system state, the journal, services such as `massimo` and `nginx`,
+updates, a terminal, and a clean reboot or shutdown.
+Cockpit keeps listening on its own port 9090 on every interface with its own
+TLS, which stays usable while nginx is down or restarting,
+and nginx serves the same at the name without a port:
+
+- The certificate for the second name comes from acme.sh as above;
+  its reload command copies it into Cockpit as well,
+  `/usr/bin/install -m 0644 <fullchain> /etc/cockpit/ws-certs.d/<name>.crt &&
+  /usr/bin/install -m 0600 <key> /etc/cockpit/ws-certs.d/<name>.key &&
+  systemctl reload nginx && systemctl try-restart cockpit.service`.
+  The full path matters: inside a reload command acme.sh's own shell
+  function `install` shadows the system tool and fails ("Reload error").
+- `/etc/cockpit/cockpit.conf`:
+
+  ```ini
+  [WebService]
+  Origins = https://pi.example.net https://pi.example.net:9090
+  ProtocolHeader = X-Forwarded-Proto
+  ForwardedForHeader = X-Forwarded-For
+  ```
+
+- The nginx site is the one above with the second name,
+  without `default_server`, and this `location`, since Cockpit speaks TLS on
+  9090 and needs its WebSocket:
+
+  ```nginx
+  location / {
+      proxy_pass https://127.0.0.1:9090;
+      proxy_http_version 1.1;
+      proxy_buffering off;
+      gzip off;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+  }
+  ```
+
+A WebSocket handshake to `/cockpit/socket` answers `101` with the console's own
+origin and `403` with another, through nginx and on 9090 alike.
+Cockpit logs in with the box's accounts, so a sudo user there is root in
+the browser: keep it to the LAN, with a strong password.
+
 ## Caddy
 
 ```caddyfile

@@ -49,8 +49,12 @@ paths:
         Answers a session token, good for 30 days from its last use,
         which the client sends as the bearer header. A wrong pair counts
         against the address and the user name (429 after ten in a
-        minute). 409 on a server without users (create the first owner
-        with POST /api/v1/users) or without a store (the API token).
+        minute). An address signs in once at a time: a login while
+        another from the same address is checked is 429 with
+        Retry-After 1, not counted as a failure. 409 on a server without
+        users (create the first owner with POST /api/v1/users) or
+        without a store (the API token). 403 while auth.password_login
+        is off in /api/v1/settings: the users sign in by OPAQUE alone.
       security: []
       requestBody:
         required: true
@@ -75,7 +79,104 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
-        "429": {$ref: "#/components/responses/LockedOut"}
+        "429":
+          description: >-
+            The address or the user name is locked out (ten failed logins
+            within a minute), or a sign-in from this address is running
+          headers:
+            Retry-After:
+              description: Seconds until the lockout ends, or 1
+              schema: {type: integer}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/Busy"}
+  /api/v1/login/start:
+    post:
+      summary: Start a sign-in by OPAQUE
+      x-capability: none
+      description: |
+        The first half of a sign-in of auth_version 2 (RFC 9807,
+        ristretto255-SHA512, the messages base64url without padding):
+        the client's KE1 for a name is answered with KE2, the key
+        stretching the client is to run for the record, and a login to
+        finish under within a minute. No password crosses. A name
+        without a record of version 2 is answered from a fake record of
+        the same shape, and its finish fails. A start is a guess, since
+        the client can tell from KE2 whether its password was right: it
+        counts as a failed login against the address and the name at
+        once, which a finished sign-in clears. The address is held until
+        the finish or the minute's end; a start or a login from it
+        meanwhile is 429 with Retry-After 1. v1 says whether the box
+        still takes POST /api/v1/login, for a client whose finish fails.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoginStart"}
+      responses:
+        "200":
+          description: KE2 and the login to finish under
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/LoginStarted"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429":
+          description: >-
+            The address or the user name is locked out (ten failed logins
+            within a minute), or a sign-in from this address is running
+          headers:
+            Retry-After:
+              description: Seconds until the lockout ends, or 1
+              schema: {type: integer}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/Busy"}
+  /api/v1/login/finish:
+    post:
+      summary: Finish a sign-in by OPAQUE
+      x-capability: none
+      description: |
+        The client's KE3 for a login started. A match answers the session
+        of POST /api/v1/login, or with the purpose proof a proof of the
+        password, good once for five minutes, for one's own password
+        change. Anything else is 401 and counts no more failures than the
+        start did. A login is finished once.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/LoginFinish"}
+      responses:
+        "200":
+          description: The session, or the proof
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: "#/components/schemas/Session"}
+                  - {$ref: "#/components/schemas/Proof"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401":
+          description: Wrong user or password, or no login started under the identifier, or it took too long
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/Busy"}
   /api/v1/logout:
     post:
       summary: End the session that makes the call
@@ -307,7 +408,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
-        "503": {$ref: "#/components/responses/NoStore"}
+        "503": {$ref: "#/components/responses/NoStoreOrBusy"}
   /api/v1/users/{name}:
     get:
       summary: One user
@@ -355,7 +456,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
-        "503": {$ref: "#/components/responses/NoStore"}
+        "503": {$ref: "#/components/responses/NoStoreOrBusy"}
     delete:
       summary: Remove a user
       x-capability: users
@@ -379,6 +480,37 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/register:
+    post:
+      summary: Start a registration by OPAQUE
+      x-capability: users
+      description: |
+        The first step of a password of auth_version 2: the client's
+        registration request for the name is answered with the server's
+        response and the key stretching to run. Nothing is kept; the
+        client finishes with the password and sends the record to POST
+        /api/v1/users or PUT /api/v1/users/{name} as record and ksf.
+        Allowed to whoever may set the user's password, or, for a name
+        that has no user, add one: the first owner from the local network
+        on a server without users.
+      parameters: [{$ref: "#/components/parameters/name"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Register"}
+      responses:
+        "200":
+          description: The server's response
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Registered"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/users/{name}/tokens:
@@ -1652,6 +1784,7 @@ paths:
                 backups.keep_days_auto: {value: "90", default: "90", set: false, in_effect: "90", applies: now}
                 backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
+                auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1669,9 +1802,11 @@ paths:
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h), refresh_interval (10m to
         168h, or 0 for off) and discover_interval (1m to 24h, or 0 for
-        only on request), the intervals at the next start; null goes
-        back to the default. Every value is checked before any is
-        written. The answer is that of GET.
+        only on request), the intervals at the next start; the whole
+        numbers; auth.password_login, true or false, whether POST
+        /api/v1/login takes a password (off, the users sign in by OPAQUE
+        alone); null goes back to the default. Every value is checked
+        before any is written. The answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -1679,7 +1814,12 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: {type: string, nullable: true}
+              additionalProperties:
+                nullable: true
+                oneOf:
+                  - {type: string}
+                  - {type: integer}
+                  - {type: boolean}
             example: {stale_after: 36h, refresh_interval: null}
       responses:
         "200":
@@ -1975,6 +2115,28 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
+    Busy:
+      description: >-
+        Too many password checks at once (one a core, at most four, and
+        eight waiting); try again after Retry-After.
+      headers:
+        Retry-After:
+          description: Seconds to wait before trying again
+          schema: {type: integer}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoStoreOrBusy:
+      description: >-
+        The server has no store (serve -addr), so no users; or it is
+        checking too many passwords at once, with Retry-After.
+      headers:
+        Retry-After:
+          description: Seconds to wait before trying again, when busy
+          schema: {type: integer}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
     NoUser:
       description: No such user
       content:
@@ -2101,7 +2263,7 @@ components:
           type: object
           description: >-
             The method, the path, the status, the milliseconds, the body's size and, when JSON and short, the body
-            with password, current_password and token removed, and the error of a failed answer. A request refused
+            with password, current_password, token, record, proof, login, ke1 and ke3 removed, and the error of a failed answer. A request refused
             for a known user keeps no body. Requests refused before anyone is known are one row per address and
             minute, without their bodies: the first one's method, path and status, the count of requests within
             the minute, the count of each status in statuses, and the time of the last.
@@ -2114,7 +2276,9 @@ components:
         name: {type: string, description: "The login name: 1 to 64 of letters, digits, '.', '_', '-' and '@', case does not matter", example: anna}
         display_name: {type: string, maxLength: 64}
         role: {type: string, description: A role's key; viewer when absent, owner for the first owner}
-        password: {type: string, description: Absent for a user with keys only; required for the first owner}
+        password: {type: string, description: Absent for a user with keys only; this or record for the first owner}
+        record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url (POST /api/v1/users/{name}/register)"}
+        ksf: {type: string, description: "The record's key stretching, as the registration answered it: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
         disabled: {type: boolean}
         expires_at: {type: string, format: date-time, description: "Guests: disabled from then on"}
     UserChange:
@@ -2125,7 +2289,10 @@ components:
         disabled: {type: boolean}
         expires_at: {type: string, format: date-time, nullable: true, description: null clears the end date}
         password: {type: string, description: Empty removes the password}
-        current_password: {type: string, description: Required when a user sets its own password}
+        current_password: {type: string, description: Required when a user sets its own password, unless proof is given}
+        record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url"}
+        ksf: {type: string, description: "The record's key stretching: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
+        proof: {type: string, description: "A proof of the current password from POST /api/v1/login/finish with the purpose proof, in place of current_password"}
     Role:
       type: object
       properties:
@@ -2174,6 +2341,49 @@ components:
         user: {type: string, description: The login name; case does not matter}
         password: {type: string}
         label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+        login:
+          type: string
+          description: >-
+            A sign-in by OPAQUE for the name, started from this address, that the client could not finish:
+            this request takes it over, so that the attempt counts once, and answers upgrade for a user still of
+            auth_version 1
+    LoginStart:
+      type: object
+      required: [user, ke1]
+      properties:
+        user: {type: string, description: The login name; case does not matter}
+        ke1: {type: string, description: "The client's KE1, 96 bytes, base64url without padding"}
+        purpose: {type: string, enum: [proof], description: A proof of the password in place of a session}
+    LoginStarted:
+      type: object
+      properties:
+        login: {type: string, description: The identifier to finish under}
+        ke2: {type: string, description: "The server's KE2, 320 bytes, base64url without padding"}
+        ksf: {type: string, description: "The key stretching to run: argon2id m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
+        v1: {type: boolean, description: The box takes POST /api/v1/login as well}
+        expires_at: {type: string, format: date-time, description: A minute from now}
+    LoginFinish:
+      type: object
+      required: [login, ke3]
+      properties:
+        login: {type: string}
+        ke3: {type: string, description: "The client's KE3, 64 bytes, base64url without padding"}
+        label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+    Proof:
+      type: object
+      properties:
+        proof: {type: string, description: "Good once, for PUT /api/v1/users/{name} of one's own password"}
+        expires_at: {type: string, format: date-time, description: Five minutes from now}
+    Register:
+      type: object
+      required: [request]
+      properties:
+        request: {type: string, description: "The client's registration request, 32 bytes, base64url without padding"}
+    Registered:
+      type: object
+      properties:
+        response: {type: string, description: "The server's registration response, 64 bytes, base64url without padding"}
+        ksf: {type: string, description: "The key stretching to run and to send with the record", example: "m=19456,t=2,p=1"}
     Session:
       type: object
       properties:
@@ -2185,6 +2395,11 @@ components:
           type: array
           description: The effective set
           items: {type: string}
+        upgrade:
+          type: string
+          description: >-
+            With login, for a user of auth_version 1: a proof, good once for five minutes, to set the user's own
+            record with in PUT /api/v1/users/{name} without the password
     User:
       type: object
       properties:
@@ -2195,7 +2410,7 @@ components:
         has_password: {type: boolean, description: False for a user with keys only}
         expires_at: {type: string, format: date-time, description: "Guests: disabled from then on"}
         invited_by: {type: string, description: The user that created this one}
-        auth_version: {type: integer, description: "1: the server hashes the password"}
+        auth_version: {type: integer, description: "1: the server hashes the password; 2: OPAQUE, the server keeps a record and never sees the password"}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time}

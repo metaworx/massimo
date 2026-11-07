@@ -10,7 +10,8 @@ from helpers import named_buttons, open_user_menu, show_view, sign_out, wait_unt
 
 def test_sign_in_and_out(new_context, case, watch, guard):
     """The sign-in dialog opens without a token and refuses a wrong
-    password; the operator signs in, sees the tiles and no System settings →
+    password, and two submits send one sign-in; the operator signs in,
+    sees the tiles and no System settings →
     Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
     forgets the token and brings the dialog back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
@@ -26,6 +27,14 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused in the dialog"
     assert page.evaluate("document.getElementById('login-dialog').open"), "the dialog stays open"
+    logins = []
+    page.on("request", lambda r: logins.append(r.url) if r.method == "POST" and r.url.endswith(("/api/v1/login", "/api/v1/login/start")) else None)
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/login")):
+        page.evaluate("() => { const f = document.getElementById('login-form'); f.requestSubmit(); f.requestSubmit(); }")
+    page.wait_for_timeout(300)
+    # A wrong password: a start by OPAQUE that it does not open, then the
+    # password sign-in, while the server takes that.
+    assert len(logins) == 2, f"two submits send one sign-in, not {logins}"
     page.locator("#login-password").fill("op-pass")
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
@@ -85,9 +94,9 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
 
 
 def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
-    """Sign in is off with a spinner from its click until the server
-    answers (6 s on the Pi 1), and a second Enter sends nothing. The test
-    holds the login POST, then lets it go."""
+    """Sign in is off with a spinner from its click until the sign-in is
+    done, and a second Enter sends nothing. The test holds the sign-in's
+    first request, the start by OPAQUE, then lets it go."""
     ctx = new_context()
     page = ctx.new_page()
     guard.page = page
@@ -99,7 +108,7 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
         posts.append(route.request.url)
         held.append(route)
 
-    page.route("**/api/v1/login", handle)
+    page.route("**/api/v1/login/start", handle)
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
     page.locator("#login-user").fill("operator")
@@ -111,10 +120,10 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
     assert state == [True, "true"], f"Sign in is off and aria-busy while the request runs: {state}"
     page.locator("#login-password").press("Enter")
     page.wait_for_timeout(300)
-    assert len(posts) == 1, f"one login POST while the first is unanswered: {len(posts)}"
+    assert len(posts) == 1, f"one sign-in started while the first is unanswered: {len(posts)}"
     for route in held:
         route.continue_()
-    page.unroute("**/api/v1/login")
+    page.unroute("**/api/v1/login/start")
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "signed in as the operator"
     assert not page.evaluate("document.querySelector('#login-form button[type=submit]').classList.contains('busy')"), \
