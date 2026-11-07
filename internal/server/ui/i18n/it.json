@@ -658,6 +658,7 @@
   "cap.cubes": "aggiungere, configurare e rimuovere Cube",
   "cap.settings": "le impostazioni del server",
   "cap.update": "avviare un aggiornamento del software",
+  "cap.restart": "riavviare il server",
   "cap.audit": "leggere l'audit",
   "help.users": "Chi accede ha un ruolo, che dice cosa può fare. Un ospite ha una data di fine; un utente senza password accede solo con chiavi. Una password impostata qui termina le sessioni dell'utente.",
   "help.roles": "Un ruolo è un insieme di capacità, ognuna a guardia di una parte di ciò che fanno la pagina e l'API. I sei ruoli predefiniti si possono rinominare e rimodellare, tranne il proprietario; se ne possono creare altri. Un ruolo disattivato tiene fuori i suoi utenti.",

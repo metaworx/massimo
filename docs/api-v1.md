@@ -209,11 +209,13 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
 | `update` | start a software update | `POST /api/v1/update` |
+| `restart` | restart the server through the service manager that runs it | `GET`/`POST /api/v1/restart` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
-`manager` is `operator` plus guests, pairing, names, structure and restore,
+`manager` is `operator` plus guests, pairing, names, structure, restore
+and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, `integration` reads, sets and locks.

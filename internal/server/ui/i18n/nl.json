@@ -657,6 +657,7 @@
   "cap.cubes": "Cubes toevoegen, instellen en verwijderen",
   "cap.settings": "de instellingen van de server",
   "cap.update": "een software-update starten",
+  "cap.restart": "de server herstarten",
   "cap.audit": "de audit lezen",
   "help.users": "Wie zich aanmeldt heeft één rol, die zegt wat hij mag. Een gast heeft een einddatum; een gebruiker zonder wachtwoord meldt zich alleen met sleutels aan. Een hier gezet wachtwoord beëindigt de sessies van de gebruiker.",
   "help.roles": "Een rol is een verzameling bevoegdheden, die elk een deel bewaken van wat de pagina en de API doen. De zes standaardrollen kunnen worden hernoemd en aangepast, behalve de eigenaar; meer kunnen worden aangemaakt. Een uitgeschakelde rol houdt zijn gebruikers buiten.",

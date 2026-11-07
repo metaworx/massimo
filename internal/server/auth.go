@@ -64,7 +64,7 @@ const (
 // rows of the store.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit",
+	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit",
 }
 
 // Two more values a route may be registered with, which no role holds:
