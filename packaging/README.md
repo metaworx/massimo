@@ -148,7 +148,9 @@ readable by root only, so a deploy hook copies them over
 (`--deploy-hook 'cp "$RENEWED_LINEAGE"/fullchain.pem /etc/massimo/cert.pem; cp "$RENEWED_LINEAGE"/privkey.pem /etc/massimo/key.pem; chown massimo:massimo /etc/massimo/*.pem'`).
 The update helper then checks `https://127.0.0.1:8099/healthz`
 (`massimo-update.service.d/listen.conf`),
-without verifying the certificate of a loopback address.
+without verifying the certificate of a loopback address,
+nor of one of the box's own addresses (a specific `-listen`),
+which a connection to never leaves the box.
 `-tls self-signed [-tls-names <list>]` sets `MASSIMO_TLS=self-signed` instead:
 the server makes a certificate for the box's names at its first start into
 `/var/lib/massimo/tls/`, renews it 30 days before it expires,
@@ -527,7 +529,9 @@ with `-health` it waits until `/healthz` reports the new version and otherwise
 puts the old binary back (the failed one stays as `massimo.failed` until the
 next update succeeds).
 Where the service has TLS the URL is `https://…`;
-the helper does not verify the certificate of a loopback address.
+the helper does not verify the certificate of a loopback address,
+nor of an address one of the box's interfaces has when the check starts;
+any other host is verified.
 
 Back to the previous binary (once more goes forward again):
 

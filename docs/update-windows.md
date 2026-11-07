@@ -211,6 +211,10 @@ Linux drop-in and the macOS plist (`healthURL` in internal/install/listen.go:
 `192.168.1.5:8099` gives `http://192.168.1.5:8099/healthz`);
 `serve` computes it from its `-listen` flag,
 so `install -listen` needs no further change.
+With TLS the URL is `https://…`,
+and the helper verifies its certificate unless the host is the loopback
+or an address one of the box's interfaces has when the check starts,
+since the certificate may be self-signed or for a name.
 Request, status and the helper's log live next to the settings in
 `C:\ProgramData\Massimo`, readable by SYSTEM and the Administrators only.
 

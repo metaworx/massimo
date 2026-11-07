@@ -82,6 +82,9 @@ the next minor, a fix counts the suffix up.
 - `massimo install` with another `-tls` mode removes the variables of
   the one before, so serve no longer refuses to start after a switch.
 
+- The update helper's health check over TLS on one of the box's own
+  addresses (a specific `-listen`) no longer fails on its certificate.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

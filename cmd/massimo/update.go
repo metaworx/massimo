@@ -245,15 +245,50 @@ func restartService(name string) error {
 }
 
 // healthClient is the client for a -health URL. An https:// URL on a
-// loopback host is not verified: the server's certificate may be
-// self-signed, and the peer is this box, whose version is no secret;
-// any other host is verified as usual.
+// host of this box, its loopback or an address one of its interfaces
+// has when the check starts (install writes a specific -listen address
+// into the URL), is not verified: the server's certificate may be
+// self-signed or for a name, a connection to the box's own address
+// never leaves it, and the peer's version is no secret; any other host
+// is verified as usual.
 func healthClient(rawURL string) *http.Client {
 	c := &http.Client{Timeout: 5 * time.Second}
-	if u, err := url.Parse(rawURL); err == nil && u.Scheme == "https" && loopbackHost(u.Hostname()) {
+	if u, err := url.Parse(rawURL); err == nil && u.Scheme == "https" && ownHost(u.Hostname()) {
 		c.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 	return c
+}
+
+// interfaceAddrs lists the box's addresses; a variable for the test.
+var interfaceAddrs = net.InterfaceAddrs
+
+// ownHost says whether a URL's host is this box: its loopback, or an
+// address of one of its interfaces. A name is not looked up.
+func ownHost(host string) bool {
+	if loopbackHost(host) {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	addrs, err := interfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		var own net.IP
+		switch v := a.(type) {
+		case *net.IPNet:
+			own = v.IP
+		case *net.IPAddr:
+			own = v.IP
+		}
+		if own != nil && own.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // loopbackHost says whether a URL's host is this box's loopback.

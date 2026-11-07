@@ -317,6 +317,8 @@ and otherwise puts `massimo.exe.prev` back and keeps the failed binary as
 a binary that cannot run as a service is given up by the service manager after 30 s,
 so that case ends after about 35 s.
 With another `-listen` address give it in `-health`;
+over `https://` the certificate is verified unless the host is the loopback
+or one of the box's own addresses.
 `-version <tag>` installs a given release, older ones too.
 
 ```powershell
