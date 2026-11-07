@@ -34,10 +34,15 @@ func (w Writer) StartPairing(ctx context.Context, timeout time.Duration) (<-chan
 		return nil, nil, err
 	}
 	lines, stop := w.Client.WatchInclusion()
-	res := w.Do(ctx, engine.Command{Key: "pairing", Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdInclusion(timeout)}})
+	res, withdrawn := w.run(ctx, engine.Command{Key: "pairing", Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdInclusion(timeout)}})
 	if res.Err != nil {
 		stop()
-		w.Client.EndInclusion()
+		// Ended in the client only where the n: does not reach the Cube:
+		// taken out of the queue, or failed. One that was sent by the time
+		// the caller gave up keeps the inclusion, which its timer ends.
+		if withdrawn || ctx.Err() == nil {
+			w.Client.EndInclusion()
+		}
 		return nil, nil, res.Err
 	}
 	return lines, stop, nil

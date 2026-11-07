@@ -232,6 +232,24 @@ func (q *Queue) Enqueue(cmd Command) *Ticket {
 	return t
 }
 
+// Withdraw takes a command that is still waiting out of the queue and
+// resolves its ticket with err, as Finished tells the observer; it
+// reports whether the command was waiting. A command that runs or ran is
+// left alone, and its ticket gets its result.
+func (q *Queue) Withdraw(t *Ticket, err error) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i, e := range q.items {
+		if e.ticket == t {
+			q.items = append(q.items[:i], q.items[i+1:]...)
+			e.ticket.done <- Result{Err: err}
+			q.observe(e.cmd, func(o Observer) { o.Finished(e.cmd, Result{Err: err}) })
+			return true
+		}
+	}
+	return false
+}
+
 // Len returns the number of waiting commands.
 func (q *Queue) Len() int {
 	q.mu.Lock()
