@@ -252,7 +252,8 @@ body.expert #clock-plain { display: none; }
 .lang-note span + span { margin-top: 4px; font-style: italic; }
 .settings .settings-note { margin: 4px 0 8px; }
 .settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
-.settings .update p { margin: 4px 0; overflow-wrap: anywhere; }
+.settings .update p, .settings .restart p { margin: 4px 0; overflow-wrap: anywhere; }
+.settings .restart { padding-top: 6px; }
 
 /* Settings → Cubes (cubes.js) */
 .settings .cubes-settings { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
@@ -910,7 +911,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
-.no-settings .needs-settings, .no-update .needs-update, .no-sync .needs-sync,
+.no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-sync .needs-sync,
 .no-cubes.no-pair .needs-cubes-or-pair { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 

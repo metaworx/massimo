@@ -1748,6 +1748,56 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/restart:
+    get:
+      summary: Whether the server can be restarted from here, and who starts it again
+      x-capability: restart
+      responses:
+        "200":
+          description: The restart's state for this caller
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RestartInfo"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+    post:
+      summary: Restart the server through the service manager that runs it
+      x-capability: restart
+      description: |
+        The server stops as on SIGTERM once the answer is written, and its
+        service manager starts it again: systemd, launchd or Homebrew on the
+        exit status 75, the Windows service manager through massimo restart.
+        GET /healthz then reports a new started_at. An open server (no users,
+        or no token without a store) takes it only from the box itself.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "202":
+          description: The restart has begun
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  by: {type: string, enum: [systemd, launchd, windows, exit]}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "403":
+          description: The caller's role lacks restart, another site's page sent it, or an open server was asked from elsewhere than the box
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: No service manager would start the server again, the restart is switched off, one is under way, or an update is running
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "500":
+          description: The restart could not be started, such as the Windows helper
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
 components:
   securitySchemes:
     bearer:
@@ -2242,6 +2292,17 @@ components:
         error: {type: string}
         state: {type: string, enum: [done, failed], description: restore_done only}
         sent: {type: integer, description: Steps the Cube accepted; restore_done only}
+    RestartInfo:
+      type: object
+      required: [available]
+      properties:
+        available: {type: boolean, description: Whether this caller's POST would restart the server now}
+        by: {type: string, enum: [systemd, launchd, windows, exit], description: Who starts the server again; absent when nobody would}
+        blocked: {type: string, description: Why the restart is not available}
+        pending:
+          type: array
+          items: {type: string}
+          description: The settings file's variables that changed since the start and apply only at the next one; names, never values
     UpdateInfo:
       type: object
       properties:

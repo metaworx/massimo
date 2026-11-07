@@ -21,6 +21,9 @@ and the CI test's second POST, which must be refused,
 goes on the first's connection from the same curl,
 since in stage 2 the helper stops the service before a second curl process
 is up (GUIDELINES/project/CI.md, "Runner Constraints").
+Since 2026-11-07 the restart from the API (`POST /api/v1/restart`)
+uses the same starter for `massimo restart -service massimo`, detached,
+its output in `service.log`.
 
 The text below is the design as written before it.
 Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/update,

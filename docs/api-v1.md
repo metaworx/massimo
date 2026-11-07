@@ -162,16 +162,29 @@ The server authenticates in one of three ways, by what it has:
 The errors say which: `401` is a missing, wrong, revoked or expired token,
 `403` a token whose user may not do this.
 
+A write that another site's page sent is refused in every mode,
+before the token is looked at,
+with `403` and `{"error": "cross-origin request refused"}`:
+a request whose `Sec-Fetch-Site` is `cross-site` or `same-site`,
+or, without that header, whose `Origin` names another host than its `Host`.
+A browser sends a `POST` with a plain-text body from any page without asking
+the server first, and an open server would serve it.
+`GET`, `HEAD` and `OPTIONS` pass,
+and so does a client that sends neither header, such as curl or a script.
+Behind a reverse proxy see [reverse-proxy.md](reverse-proxy.md),
+"The `Host` header".
+
 `MASSIMO_API_TOKEN` and the store:
 at the first start with the variable set and no user,
 the server creates the user `owner` with the role `owner`,
 no password and the token as its API key (label `MASSIMO_API_TOKEN`),
 so every client that sends the token keeps working with full rights.
-At every later start, a token in the file that the store does not know is
-added to an enabled owner's keys,
+At every later start, and whenever the server reads the file again while it runs
+(it looks every five seconds, and on SIGHUP; see README.md, "Server"),
+a token in the file that the store does not know is added to an enabled owner's keys,
 and a key with that label whose secret is not the file's any more is revoked.
 The file stays the way to recover an owner who lost the password:
-put a token into it, restart, log in with it, set a password.
+put a token into it, log in with it, set a password; no restart is needed.
 
 The capabilities, what each allows and the routes it guards;
 the OpenAPI file carries each operation's as `x-capability`:
@@ -197,11 +210,13 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
 | `update` | start a software update | `POST /api/v1/update` |
+| `restart` | restart the server through the service manager that runs it | `GET`/`POST /api/v1/restart` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
-`manager` is `operator` plus guests, pairing, names, structure and restore,
+`manager` is `operator` plus guests, pairing, names, structure,
+restore and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, `integration` reads, sets and locks.
@@ -1649,6 +1664,13 @@ for example its window-open temperature after the contact.
 
 With a token configured the stream needs `?ticket=<ticket>` (below) or the bearer header;
 `?token=<token>` still works, deprecated.
+At each keep-alive, every 30 seconds,
+the server asks whether the stream's caller would be let in now,
+and ends the stream when not:
+a key revoked or expired, a user or role disabled,
+a server that was open when the stream opened and has a user since,
+or, without a store, another token.
+The client's next ticket then asks it to sign in.
 
 ### POST /api/v1/cubes/{sn}/events/ticket
 
@@ -1714,6 +1736,44 @@ when the channel has no release or while an update is running (on Windows also
 in the moment between the start of the helper and its first status);
 `500` on Windows when the helper could not be started (the request is withdrawn);
 `502` when GitHub could not be asked.
+
+### GET /api/v1/restart, POST /api/v1/restart
+
+`GET` says whether this caller's `POST` would restart the server now,
+and who starts it again:
+`{"available": true, "by": "systemd"}`,
+or `{"available": false, "blocked": "<why>"}`;
+`pending`, where there is any,
+names the settings of the settings file that changed since the start
+and apply only at the next one,
+such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values.
+`by` is `systemd`, `launchd` (also Homebrew's job), `windows`
+(the Windows service manager) or `exit` (`serve -restart exit`:
+whatever runs the server, told by the exit status).
+
+`POST` restarts the server.
+It stops as on SIGTERM once this request is answered and its audit row written,
+and exits with status 75,
+which systemd, launchd and Homebrew answer with a start;
+a Windows service runs `massimo restart` instead,
+which stops and starts the service through the service manager.
+Answers `202` with `{"ok": true, "by": "systemd"}`;
+`GET /healthz` then reports a new `started_at` once the server is back.
+Sends nothing to a Cube, and a retry with the same `Idempotency-Key`
+is answered with the first `202` rather than restarting again.
+
+An open server, with no users or without a token (see "Authentication"),
+takes the `POST` only from the box itself:
+a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
+so that nobody on the LAN, and no client of a reverse proxy on the box,
+can restart it;
+anyone else gets `403` with the reason.
+`403` also without the capability `restart`;
+`409` when no service manager would start the server again (`serve` in a terminal,
+or `-restart off`),
+while a restart is under way,
+or while an update runs, which restarts the server itself;
+`500` when the restart could not be started (on Windows, the helper).
 
 ## The LAN proxy
 

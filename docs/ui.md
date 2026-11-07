@@ -8,6 +8,8 @@ and follows the system's light or dark mode.
 
 The page asks who you are: a name and a password,
 or an API key pasted into the second field,
+which is open from the start once the page has seen the server ask for no key
+(the owner made from `MASSIMO_API_TOKEN` has no password),
 and keeps the session in the browser for 30 days from its last use;
 Settings → Log out ends it.
 A server without users shows the form that creates the first owner to a
@@ -327,6 +329,17 @@ without the switches.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
+  **Restart the server**, with the capability `restart`,
+  asks in the section and restarts the server through its service manager
+  (`docs/api-v1.md`, "POST /api/v1/restart");
+  the page then asks `/healthz` every two seconds until the server reports a new start,
+  reads the data again and says when it started,
+  or says after two minutes that it has not come back.
+  Where the server cannot be restarted from this page the button is missing
+  and the server's reason is shown,
+  such as a server in a terminal or an open server asked from elsewhere than the box.
+  The settings of the settings file that changed since the start and apply only
+  at the next one are listed under it, by name.
 
 The settings are kept in the browser, per browser, except the Cubes,
 which are the server's.

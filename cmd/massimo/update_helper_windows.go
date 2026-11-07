@@ -63,7 +63,43 @@ func updateHelperStarter(log *slog.Logger, exe, request, status, health, logPath
 	return h.start, ""
 }
 
+// restartHelperStarter returns the function that starts massimo restart
+// for the service, detached as the update helper is and with its output
+// appended to service.log: it stops the service through the service
+// manager, which stops this server as every stop does, and starts it
+// again. Or, when this process cannot start one that would outlive it,
+// nil and the reason.
+func restartHelperStarter(log *slog.Logger, exe string) (start func() error, blocked string) {
+	h, blocked := newRestartHelper(log, exe)
+	if h == nil {
+		return nil, blocked
+	}
+	return h.start, ""
+}
+
+// newRestartHelper is restartHelperStarter's starter, unstarted.
+func newRestartHelper(log *slog.Logger, exe string) (*helperStarter, string) {
+	logPath := serviceLogPath()
+	flags, blocked, err := jobFlags()
+	if err != nil {
+		log.Warn("restart helper: cannot check the job object", "error", err)
+	}
+	if blocked != "" {
+		return nil, "the server runs in a job object that would end massimo restart with it; restart the service from an administrator prompt (massimo restart)"
+	}
+	return &helperStarter{
+		name:    "restart helper",
+		log:     log,
+		exe:     exe,
+		args:    []string{"restart", "-service", install.ServiceName},
+		dir:     filepath.Dir(logPath),
+		logPath: logPath,
+		flags:   windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP | flags,
+	}, ""
+}
+
 type helperStarter struct {
+	name    string // for the log; "" is the update helper
 	log     *slog.Logger
 	exe     string
 	args    []string
@@ -97,7 +133,11 @@ func (h *helperStarter) start() error {
 		return fmt.Errorf("start %s: %w", h.exe, err)
 	}
 	h.running = true
-	h.log.Info("update helper started", "pid", cmd.Process.Pid, "log", h.logPath)
+	name := h.name
+	if name == "" {
+		name = "update helper"
+	}
+	h.log.Info(name+" started", "pid", cmd.Process.Pid, "log", h.logPath)
 	go func() {
 		// Usually never seen: the helper stops this server first.
 		err := cmd.Wait()
@@ -105,9 +145,9 @@ func (h *helperStarter) start() error {
 		h.running = false
 		h.mu.Unlock()
 		if err != nil {
-			h.log.Warn("update helper exited", "pid", cmd.Process.Pid, "error", err)
+			h.log.Warn(name+" exited", "pid", cmd.Process.Pid, "error", err)
 		} else {
-			h.log.Info("update helper exited", "pid", cmd.Process.Pid)
+			h.log.Info(name+" exited", "pid", cmd.Process.Pid)
 		}
 	}()
 	return nil

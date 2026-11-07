@@ -13,7 +13,7 @@
 // "Authentication"); each hides, as a class needs-<capability> in the
 // markup, what it alone allows.
 const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-  "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"];
+  "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice
 // that cannot read the roles.
@@ -57,6 +57,11 @@ function setToken(token) {
   store("massimo.token", token);
 }
 
+// sawOpen is set once the page has seen the server ask for no key: the
+// sign-in dialog then opens its API-key part, since the owner made from
+// MASSIMO_API_TOKEN has no password.
+let sawOpen = false;
+
 // loadMe reads who the page is signed in as and applies it; a server
 // that refuses opens the sign-in dialog through api().
 async function loadMe() {
@@ -65,6 +70,7 @@ async function loadMe() {
   } catch (e) {
     state.me = null;
   }
+  if (state.me && (state.me.mode === "open" || state.me.mode === "none")) sawOpen = true;
   applyCaps();
   return state.me;
 }
@@ -146,6 +152,7 @@ function askLogin() {
     $("login-user").value = "";
     $("login-password").value = "";
     $("login-token").value = "";
+    $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
     const done = (ok) => {
       form.onsubmit = null;
