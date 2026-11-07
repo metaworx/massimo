@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Added
+
+- The store keeps each Cube's backups, gzip, pruned by reason and age
+  with the newest of a Cube kept (migration 0005; `docs/store.md`
+  section 9).
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added
