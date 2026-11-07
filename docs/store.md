@@ -584,6 +584,10 @@ and a step row per engine command beneath it, with `parent_id`,
 `idempotency_key`, `state`, `status`, `request` and `result`;
 NOTE StoreUsers v1.0 of the plan: one table, `commands.keep_days` the retention)
 and `audit.command_id`, additively.
+`0006_opaque.sql` adds `users.opaque_record` and `users.opaque_ksf`,
+the record of a password of `auth_version` 2 and its key stretching (section 6,
+"The sign-in by OPAQUE"), additively:
+a binary of before reads such a user as one with keys only.
 Rules:
 
 - A migration is additive when it only adds tables,
@@ -1315,18 +1319,20 @@ From docs/server.md, the later questions:
 14. **Tombstones, `version`,
     `origin` and the node identity from version 1** (recommended,
     docs/server.md, "What version 1 prepares", items 2 and 3).
-15. **The password flow prepared for client-side derivation** with
-    `auth_version` (recommended, docs/server.md, "What version 1 prepares",
+15. Taken: the password flow moved to the client with `auth_version` 2,
+    the sign-in by OPAQUE (section 6; docs/server.md, "What version 1 prepares",
     item 6).
 16. Taken: `commands` with `Idempotency-Key` in stage (b) (docs/server.md,
     "What version 1 prepares", item 7),
     the engine writing the states of each step through an observer,
     one table with `commands.keep_days` rather than a history table.
-17. **The browser's key derivation when end to end comes**:
-    a WebAssembly argon2id module in the no-build UI,
-    or PBKDF2 from WebCrypto with a high count.
-    Not needed until then;
-    noted so that the UI's "no dependencies" rule is bent knowingly, if it is.
+17. Taken: the browser's key derivation is a WebAssembly module in the no-build UI,
+    `@serenity-kit/opaque` vendored as `ui/vendor/opaque.js`,
+    with OPAQUE's argon2id in it,
+    the UI's "no dependencies" rule bent knowingly for it (docs/ui.md,
+    "How the page is built"); PBKDF2 from WebCrypto fits neither OPAQUE library.
+    Its export key is the wrapping key's source when end to end comes (docs/server.md,
+    "The key scheme").
 18. **The trust anchor for the page** (docs/server.md, "Trusting the code"):
     the web app installed from the edge on the LAN with the service worker as
     the verifier, the app shells, or both.
