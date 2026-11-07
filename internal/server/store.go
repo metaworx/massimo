@@ -53,7 +53,10 @@ func (s *Server) loadFound() {
 
 // seedLearned adds the plain MASSIMO_CUBE_ADDRESS Cube to the store once
 // it has reported its serial, with the file's values (FileCubes[""]),
-// and remembers which serial the plain lines belong to.
+// and remembers which serial the plain lines belong to. That comes
+// first: a stop before the row leaves the setting, by which the next
+// start seeds the row from the file itself, while a row without it
+// would be served beside the plain lines, as several Cubes.
 func (s *Server) seedLearned(ctx context.Context, rt *runtime) {
 	if !rt.config().SeedFromFile || s.opts.Store == nil {
 		return
@@ -69,15 +72,16 @@ func (s *Server) seedLearned(ctx context.Context, rt *runtime) {
 	if !ok {
 		return
 	}
+	if err := s.opts.Store.SetSetting(ctx, store.PlainSerialKey, fc.Serial); err != nil {
+		s.log.Warn("store: cube not added", "serial", fc.Serial, "error", err)
+		return
+	}
 	if _, err := s.opts.Store.Seed(ctx, s.opts.SettingsFile, []store.FileCube{fc}); err != nil {
 		s.log.Warn("store: cube not added", "serial", fc.Serial, "error", err)
 		return
 	}
 	if row, ok, err := s.opts.Store.Cube(ctx, fc.Serial); err == nil && ok {
 		s.noteRow(row)
-	}
-	if err := s.opts.Store.SetSetting(ctx, store.PlainSerialKey, fc.Serial); err != nil {
-		s.log.Warn("store: cube not added", "serial", fc.Serial, "error", err)
 	}
 }
 

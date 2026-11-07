@@ -41,6 +41,10 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- A stop of `serve` just after the Cube of the plain
+  `MASSIMO_CUBE_ADDRESS` reported its serial no longer leaves the next
+  start refusing "several cubes configured".
+
 - A second update started on Windows while the helper reads the first
   answers 409, no longer 500 from the request file the helper holds.
 
