@@ -643,6 +643,8 @@ status and body, with the header `Idempotent-Replayed: true`,
 and sends nothing to the Cube; the same key with another request (the method,
 the path, the query or the body differ) is `422`,
 and one whose request is still running `409`.
+A key whose request was running when the server stopped is `503`
+with the row's `{"error": "server restarted"}`, since it got no answer.
 A page that lost the connection while a setpoint was on its way retries
 with the key and learns the outcome without a second radio command.
 A command keeps its answer without `password`, `current_password` and `token`,

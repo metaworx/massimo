@@ -121,6 +121,9 @@ the next minor, a fix counts the suffix up.
 - A radio command no longer waits for the store to record its step,
   which a busy SD card could delay by up to five seconds.
 
+- A retry with the `Idempotency-Key` of a request the server's restart
+  cut off answers 503, instead of closing the connection (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

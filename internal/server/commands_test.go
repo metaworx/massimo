@@ -325,3 +325,33 @@ func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
 	}
 	t.Fatalf("steps after the lock: %+v", c.Steps)
 }
+
+// A retry whose first request was in flight when the server stopped,
+// its row dropped at the start with no status answered, gets 503 with
+// what the row says, not a panic.
+func TestReplayOfADroppedCommand(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	owner, _, _ := st.User(t.Context(), store.BootstrapUser)
+	path, body := "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", `{"mode":"auto"}`
+	fp := fingerprint(&auditInfo{method: "PUT", path: path, body: []byte(body)}, "")
+	req, _ := json.Marshal(map[string]any{"method": "PUT", "path": path, "query": "", "hash": fp})
+	if _, err := st.AddCommand(t.Context(), store.Command{UserID: owner.ID, Key: "key-1", Action: "setpoint", Request: req}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := st.DropUnfinished(t.Context(), "server restarted"); err != nil || n != 1 {
+		t.Fatalf("dropped %d: %v", n, err)
+	}
+	req2, _ := http.NewRequest("PUT", ts.URL+path, strings.NewReader(body))
+	req2.Header.Set("Authorization", "Bearer secret")
+	req2.Header.Set("Idempotency-Key", "key-1")
+	resp, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("the replay: %v", err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 503 || resp.Header.Get("Idempotent-Replayed") != "true" || !strings.Contains(string(b), "server restarted") {
+		t.Fatalf("the replay: %d %q %s", resp.StatusCode, resp.Header.Get("Idempotent-Replayed"), b)
+	}
+}

@@ -256,9 +256,15 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 		case had.Hash != fp:
 			writeError(w, http.StatusUnprocessableEntity, "Idempotency-Key reused for another request")
 		default:
+			// A row that got no answer, dropped at a start of the server
+			// while its request ran, replays as 503 with why.
+			status := row.Status
+			if status == 0 {
+				status = http.StatusServiceUnavailable
+			}
 			w.Header().Set("Idempotent-Replayed", "true")
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(row.Status)
+			w.WriteHeader(status)
 			w.Write(row.Result)
 		}
 		return true
