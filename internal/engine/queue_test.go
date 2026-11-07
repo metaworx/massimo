@@ -99,15 +99,15 @@ func received(srv *fakecube.Server) []string {
 }
 
 func TestQueueResetsErrorStateAndSendsCommand(t *testing.T) {
-	srv, q, _ := setup(t, Options{}, func(g []cube.Message) []cube.Message { return withError(t, g, 0x1514b6) })
+	srv, q, _ := setup(t, Options{}, func(g []cube.Message) []cube.Message { return withError(t, g, 0x0a010d) })
 	// The thermostat is in error state, so an r: must precede the s:.
-	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x1514b6, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
-	res := q.Enqueue(Command{Target: 0x1514b6, Lines: []cube.Message{m}}).Wait(context.Background())
+	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
+	res := q.Enqueue(Command{Target: 0x0a010d, Lines: []cube.Message{m}}).Wait(context.Background())
 	if res.Err != nil || res.Discarded {
 		t.Fatalf("result %+v", res)
 	}
 	got := received(srv)
-	if len(got) != 2 || got[0] != "r:01,FRS2" || got[1] != m.String() {
+	if len(got) != 2 || got[0] != "r:01,CgEN" || got[1] != m.String() {
 		t.Fatalf("sent %v", got)
 	}
 	if res.Budget.FreeMemorySlots != 0x31 {
@@ -116,9 +116,9 @@ func TestQueueResetsErrorStateAndSendsCommand(t *testing.T) {
 }
 
 func TestQueueWakeupAndOrdering(t *testing.T) {
-	srv, q, _ := setup(t, Options{Gap: 20 * time.Millisecond}, func(g []cube.Message) []cube.Message { return withError(t, g, 0x14ce3d) })
-	prog, _ := cube.CmdSetDayProgram(cube.Target{RFAddress: 0x14ce3d, RoomID: 3, Room: true}, cube.Monday, cube.DayProgram{{Temp: 17, Until: 360}, {Temp: 21, Until: 1440}})
-	low := q.Enqueue(Command{Priority: PriorityLow, Target: 0x14ce3d, RoomID: 3, Wakeup: true, Lines: prog})
+	srv, q, _ := setup(t, Options{Gap: 20 * time.Millisecond}, func(g []cube.Message) []cube.Message { return withError(t, g, 0x0a0108) })
+	prog, _ := cube.CmdSetDayProgram(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, cube.Monday, cube.DayProgram{{Temp: 17, Until: 360}, {Temp: 21, Until: 1440}})
+	low := q.Enqueue(Command{Priority: PriorityLow, Target: 0x0a0108, RoomID: 3, Wakeup: true, Lines: prog})
 	waitFor(t, srv, 'z') // low is in flight before high arrives
 	high := q.Enqueue(Command{Priority: PriorityHigh, Lines: []cube.Message{cube.CmdGetNTP}})
 	ctx := context.Background()
@@ -131,7 +131,7 @@ func TestQueueWakeupAndOrdering(t *testing.T) {
 	got := received(srv)
 	// The low-priority command is in flight when the high-priority one
 	// arrives, so order is: wakeup, r:, s:, then f:.
-	want := []string{"z:1e,G,03", "r:01,FM49", prog[0].String(), "f:"}
+	want := []string{"z:1e,G,03", "r:01,CgEI", prog[0].String(), "f:"}
 	if len(got) != len(want) {
 		t.Fatalf("sent %v", got)
 	}
@@ -164,7 +164,7 @@ func TestQueueWaitsForDutyCycleReset(t *testing.T) {
 	srv, q, _ := setup(t, Options{ResetAt: resetAt})
 	srv.Duty = 0x64 // 100 %
 	// First radio command learns the budget (100 %), second one must wait.
-	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x14ce3d, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
+	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
 	q.Enqueue(Command{Lines: []cube.Message{m}}).Wait(context.Background())
 	srv.Duty = 0
 	start := time.Now()
@@ -180,13 +180,13 @@ func TestQueueWaitsForDutyCycleReset(t *testing.T) {
 func TestQueueRetriesAfterDiscard(t *testing.T) {
 	srv, q, _ := setup(t, Options{})
 	srv.Discard = true
-	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x14ce3d, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
-	res := q.Enqueue(Command{Target: 0x14ce3d, Lines: []cube.Message{m}}).Wait(context.Background())
+	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
+	res := q.Enqueue(Command{Target: 0x0a0108, Lines: []cube.Message{m}}).Wait(context.Background())
 	if res.Err != ErrDiscarded || !res.Discarded {
 		t.Fatalf("result %+v", res)
 	}
 	// s: discarded, then r: and a second s:, discarded again.
-	want := []string{m.String(), "r:01,FM49", m.String()}
+	want := []string{m.String(), "r:01,CgEI", m.String()}
 	got := received(srv)
 	if len(got) != len(want) {
 		t.Fatalf("sent %v", got)
@@ -230,14 +230,14 @@ func (s *syncBuffer) String() string {
 func TestQueueLogsAcceptedCommands(t *testing.T) {
 	var log syncBuffer
 	_, q, _ := setup(t, Options{Logger: slog.New(slog.NewTextHandler(&log, nil))})
-	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x14ce3d, RoomID: 3, Room: true}, 21, cube.ModeManual, cube.Until{})
-	if r := q.Enqueue(Command{Target: 0x14ce3d, RoomID: 3, Wakeup: true, Lines: []cube.Message{m}}).Wait(context.Background()); r.Err != nil {
+	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 21, cube.ModeManual, cube.Until{})
+	if r := q.Enqueue(Command{Target: 0x0a0108, RoomID: 3, Wakeup: true, Lines: []cube.Message{m}}).Wait(context.Background()); r.Err != nil {
 		t.Fatal(r.Err)
 	}
 	out := log.String()
 	for _, want := range []string{
 		`msg="room woken up" room=3 command=z:1e,G,03 reply=A:`,
-		`msg="command accepted by the cube" target=14ce3d command="` + m.String() + `" duty_pct=0 free_slots=49`,
+		`msg="command accepted by the cube" target=0a0108 command="` + m.String() + `" duty_pct=0 free_slots=49`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("log lacks %q:\n%s", want, out)
@@ -276,7 +276,7 @@ func (r *recorder) list() []string {
 func TestQueueObserver(t *testing.T) {
 	rec := &recorder{}
 	_, q, cancel := setup(t, Options{Gap: 50 * time.Millisecond, Observer: rec})
-	line := cube.Message{Type: 's', Data: "AARAAAAAFRS2Bms="}
+	line := cube.Message{Type: 's', Data: "AARAAAAACgENBms="}
 	// The first command holds the queue for a gap while the next two,
 	// with one key, are enqueued: the first of them is superseded.
 	first := q.Enqueue(Command{ID: "a", Lines: []cube.Message{line}})
@@ -336,7 +336,7 @@ func (r *gatedRecorder) Enqueued(c Command) {
 func TestQueueObserverHearsEnqueuedFirst(t *testing.T) {
 	rec := &gatedRecorder{gate: "b", release: make(chan struct{})}
 	_, q, _ := setup(t, Options{Gap: 20 * time.Millisecond, Observer: rec})
-	line := cube.Message{Type: 's', Data: "AARAAAAAFRS2Bms="}
+	line := cube.Message{Type: 's', Data: "AARAAAAACgENBms="}
 	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	first := q.Enqueue(Command{ID: "a", Lines: []cube.Message{line}})

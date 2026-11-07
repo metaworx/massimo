@@ -10,7 +10,7 @@ import (
 )
 
 func hello(slots int) []cube.Message {
-	return []cube.Message{{Type: 'H', Data: "KEQ0000100,0b9573,0113,00000000,53c00ada,00," + hexByte(slots) + ",1a0b04,091e,03,0000"}}
+	return []cube.Message{{Type: 'H', Data: "KEQ0000100,0a0107,0113,00000000,53c00ada,00," + hexByte(slots) + ",1a0b04,091e,03,0000"}}
 }
 
 func hexByte(n int) string {

@@ -140,21 +140,21 @@ func TestLogFromStore(t *testing.T) {
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
-	copy(raw, []byte{0x0b, 0x15, 0x14, 0xb6, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	raw[7] = 55
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	eventually(t, "the change in the log", func() bool {
-		_, page := logOf(t, ts, "?kind=state&device=1514b6&limit=1")
+		_, page := logOf(t, ts, "?kind=state&device=0a010d&limit=1")
 		return len(page) == 1 && page[0].Changes["valve_pct"].To == 55.0
 	})
 	// The device view has its received times; the stored copy not.
 	var dev map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/1514b6", &dev)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", &dev)
 	if dev["received"] == nil {
 		t.Fatalf("the device view without received: %v", dev)
 	}
-	for _, e := range rawLog(t, ts, "?kind=state&device=1514b6&limit=1000") {
+	for _, e := range rawLog(t, ts, "?kind=state&device=0a010d&limit=1000") {
 		st, _ := e["state"].(map[string]any)
 		if _, has := st["received"]; has {
 			t.Fatalf("a stored state event with received: %v", e)

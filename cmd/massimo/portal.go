@@ -36,7 +36,7 @@ func runPortal(args []string) error {
 	dir := fs.String("dir", ".", "directory for portal-capture.jsonl")
 	deviceURL := fs.String("device-url", "", "URL returned by /lookup (default: http://<this host>:<port>/cube)")
 	probe := fs.String("probe", "", "probe mode: 'default' or a file with name=text lines; each poll gets the next reply variant and the Cube's free slots tell whether it queued the radio command")
-	probeTarget := fs.String("probe-target", "", "device for the probe's s: command, <rf>[:<room>] (e.g. 1514b6:6)")
+	probeTarget := fs.String("probe-target", "", "device for the probe's s: command, <rf>[:<room>] (e.g. 0a010d:6)")
 	probeTemp := fs.Float64("probe-temp", 20, "setpoint of the probe's s: command (manual mode)")
 	probeCube := fs.String("probe-cube", "", "Cube LAN address: after each probe reply send i: there so the next poll comes quickly")
 	probeDelay := fs.Duration("probe-delay", 15*time.Second, "pause before that i: trigger")

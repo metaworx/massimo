@@ -5,8 +5,8 @@ The script:
 
 1. builds massimo;
 2. starts the fake Cube (`massimo fakecube`), which also answers discovery
-   and has a device that joins pairing mode (`-pair 1514b6,0abcde,TEQ0000001`:
-   a copy of the radiator thermostat 1514b6, two seconds after `n:`,
+   and has a device that joins pairing mode (`-pair 0a010d,0abcde,TEQ0000001`:
+   a copy of the radiator thermostat 0a010d, two seconds after `n:`,
    again after it was removed), with `greeting.txt`,
    which is the protocol fixture from internal/protocol/cube/testdata plus an
    `L:` line with device states (measured temperatures included) and a window contact,

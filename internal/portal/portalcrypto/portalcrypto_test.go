@@ -61,7 +61,7 @@ func TestPad(t *testing.T) {
 
 func TestRoundTripAndIVRecovery(t *testing.T) {
 	key, iv := randBytes(t, 16), randBytes(t, 16)
-	plain := []byte("H:KMD1016788,099c3e,0113\r\nB:FOOBAR1,5a8a4a5d3c1bd612b8bf1e2fecf609f7,1,SuperSecret")
+	plain := []byte("H:KMD0000505,0a0106,0113\r\nB:FOOBAR1,5a8a4a5d3c1bd612b8bf1e2fecf609f7,1,SuperSecret")
 	ct, err := Encrypt(key, iv, plain)
 	if err != nil {
 		t.Fatal(err)

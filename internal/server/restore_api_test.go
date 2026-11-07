@@ -22,9 +22,9 @@ import (
 
 const restoreBase = "/api/v1/cubes/KEQ0000100/restore"
 
-// ecoLine is the 0x11 radiogram that sets 1514b6 (room 6 of the fixture)
+// ecoLine is the 0x11 radiogram that sets 0a010d (room 6 of the fixture)
 // to its fixture temperatures with eco 17.0 instead of 16.5.
-const ecoLine = "s:AAARAAAAFRS2BisiPQkHGAM="
+const ecoLine = "s:AAARAAAACgENBisiPQkHGAM="
 
 // startRestoreCube starts a server over fc, a fake Cube not started yet
 // (with the fixture's greeting unless it has one), with the given queue
@@ -73,10 +73,10 @@ func backupOf(t *testing.T, ts *httptest.Server) *backup.File {
 	return f
 }
 
-// backupWithEco sets the eco temperature of 1514b6 in the backup.
+// backupWithEco sets the eco temperature of 0a010d in the backup.
 func backupWithEco(f *backup.File, eco float64) *backup.File {
 	for i := range f.Devices {
-		if f.Devices[i].RFAddress == 0x1514b6 {
+		if f.Devices[i].RFAddress == 0x0a010d {
 			f.Devices[i].Thermostat.EcoTemp = eco
 		}
 	}
@@ -170,8 +170,8 @@ func TestRestorePlan(t *testing.T) {
 	}
 	st := steps[0].(map[string]any)
 	what, _ := st["what"].(string)
-	if !strings.HasPrefix(what, `1514b6 "`) || !strings.Contains(what, "temperatures") || !strings.Contains(what, "eco 17.0") ||
-		st["radio"] != true || st["device"] != "1514b6" || st["room"] != 6.0 || st["result"] != nil {
+	if !strings.HasPrefix(what, `0a010d "`) || !strings.Contains(what, "temperatures") || !strings.Contains(what, "eco 17.0") ||
+		st["radio"] != true || st["device"] != "0a010d" || st["room"] != 6.0 || st["result"] != nil {
 		t.Fatalf("step %v", st)
 	}
 	changed := p["plan"].(string)
@@ -289,7 +289,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 			}
 			switch ev.Kind {
 			case "restore_step":
-				if ev.Restore.Step != 1 || ev.Device != "1514b6" || !strings.Contains(ev.Restore.What, "eco 17.0") {
+				if ev.Restore.Step != 1 || ev.Device != "0a010d" || !strings.Contains(ev.Restore.What, "eco 17.0") {
 					t.Fatalf("step event %+v %+v", ev, ev.Restore)
 				}
 			case "restore_done":

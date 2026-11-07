@@ -249,9 +249,9 @@ Steps 4 to 8 were not repeated.
   ACLs, firewall rule, start type,
   LocalSystem and failure actions identical to the first run.
 - The proxy serves the learned identity:
-  a TCP client on 62910 gets `H:KEQ0000100,0b9573,0113,…` as its first line,
+  a TCP client on 62910 gets `H:KEQ0000100,0a0107,0113,…` as its first line,
   and `massimo discover -addr 127.0.0.1` (unicast to loopback only,
-  nothing sent to the LAN) returns `serial KEQ0000100, rf_address 0b9573, firmware 1.1.3`.
+  nothing sent to the LAN) returns `serial KEQ0000100, rf_address 0a0107, firmware 1.1.3`.
   A raw UDP probe to 23272 gets `eQ3MaxApKEQ0000100>I…` back.
 - Step 9: identical to the first run: `-remove` deletes service,
   program folder and firewall rule, keeps the settings folder;

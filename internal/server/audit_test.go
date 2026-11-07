@@ -125,7 +125,7 @@ func TestAuditDetails(t *testing.T) {
 	st := s.opts.Store
 	viewer := userToken(t, st, "vi", store.RoleViewer)
 	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`)
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/1514B6/lock", "secret", `{"locked":false}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0A010D/lock", "secret", `{"locked":false}`)
 	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", viewer, `{"mode":"auto"}`)
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"Zed","password":"pw","role":"viewer"}`)
 	callAPI(t, ts, "POST", "/api/v1/roles", "secret", `{"key":"night"}`)
@@ -145,7 +145,7 @@ func TestAuditDetails(t *testing.T) {
 		{"role.add", store.BootstrapUser, "role:night", store.ResultOK},
 		{"user.add", store.BootstrapUser, "user:zed", store.ResultOK},
 		{"setpoint", "vi", "room:6", store.ResultRefused},
-		{"device.lock", store.BootstrapUser, "device:1514b6", store.ResultOK},
+		{"device.lock", store.BootstrapUser, "device:0a010d", store.ResultOK},
 		{"setpoint", store.BootstrapUser, "room:6", store.ResultOK},
 	} {
 		r := rows[i]

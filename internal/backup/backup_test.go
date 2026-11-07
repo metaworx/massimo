@@ -73,7 +73,7 @@ func TestTakeMatchesFixture(t *testing.T) {
 	if len(f.Rooms) != 6 || len(f.Devices) != 6 || f.CubeConfig == nil {
 		t.Fatalf("rooms %d devices %d cube config %v", len(f.Rooms), len(f.Devices), f.CubeConfig != nil)
 	}
-	d, ok := f.Device(0x1514b6)
+	d, ok := f.Device(0x0a010d)
 	if !ok || d.Name != "Radiator Schlafzimmer" || d.RoomID != 6 || d.Thermostat == nil || d.Thermostat.ComfortTemp != 21.5 {
 		t.Fatalf("device %+v", d)
 	}
@@ -114,7 +114,7 @@ func TestPlanAndRestore(t *testing.T) {
 	f.CubeConfig.Summer = cube.TimeZoneRule{Name: "CEST", Month: 3, Weekday: 0, Hour: 2, OffsetSeconds: 7200}
 	f.CubeConfig.PortalURL = "http://example.invalid/cube"
 	for i := range f.Devices {
-		if f.Devices[i].RFAddress == 0x1514b6 {
+		if f.Devices[i].RFAddress == 0x0a010d {
 			f.Devices[i].Name = "Heizung Schlafzimmer"
 			f.Devices[i].Thermostat.ComfortTemp = 20
 			f.Devices[i].Thermostat.BoostMinutes = 10
@@ -166,7 +166,7 @@ func TestPlanAndRestore(t *testing.T) {
 			got = append(got, m.String())
 		}
 	}
-	want := []string{"f:pool.ntp.org", "v:", "m:00,", "z:1e,G,06", "s:AARAAAAAFRS2BmY=", "s:"}
+	want := []string{"f:pool.ntp.org", "v:", "m:00,", "z:1e,G,06", "s:AARAAAAACgENBmY=", "s:"}
 	if len(got) != 7 {
 		t.Fatalf("received %v", got)
 	}
@@ -175,12 +175,12 @@ func TestPlanAndRestore(t *testing.T) {
 			t.Fatalf("received %v, want prefixes %v", got, want)
 		}
 	}
-	// Temperatures (0x11): 00 00 11 000000 1514b6 06, then 28 21 3d 09 07 0a 03.
-	if got[4] != "s:AAARAAAAFRS2BighPQkHGAM=" {
+	// Temperatures (0x11): 00 00 11 000000 0a010d 06, then 28 21 3d 09 07 0a 03.
+	if got[4] != "s:AAARAAAACgENBighPQkHGAM=" {
 		t.Fatalf("temperature command %s", got[4])
 	}
 	// Valve (0x12): boost 10 min (2<<5) | 80 %/5 = 0x50, decalc sat 12:00 = 0x0c, max 0xff, offset 0.
-	if got[5] != "s:AAASAAAAFRS2BlAM/wA=" {
+	if got[5] != "s:AAASAAAACgENBlAM/wA=" {
 		t.Fatalf("valve command %s", got[5])
 	}
 }
@@ -247,13 +247,13 @@ func TestPlanKeepsEmptyRooms(t *testing.T) {
 func withUnlistedDevice(greeting []cube.Message) []cube.Message {
 	out := append([]cube.Message(nil), greeting...)
 	for _, m := range greeting {
-		if m.Type == 'C' && strings.HasPrefix(m.Data, "1514b6,") {
+		if m.Type == 'C' && strings.HasPrefix(m.Data, "0a010d,") {
 			// Same configuration, different address and serial.
-			raw, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(m.Data, "1514b6,"))
+			raw, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(m.Data, "0a010d,"))
 			raw = append([]byte(nil), raw...)
-			raw[1], raw[2], raw[3] = 0x00, 0x18, 0x67
-			copy(raw[8:18], "IEQ0158740")
-			out = append(out, cube.Message{Type: 'C', Data: "001867," + base64.StdEncoding.EncodeToString(raw)})
+			raw[1], raw[2], raw[3] = 0x0a, 0x01, 0x01
+			copy(raw[8:18], "IEQ0000501")
+			out = append(out, cube.Message{Type: 'C', Data: "0a0101," + base64.StdEncoding.EncodeToString(raw)})
 		}
 	}
 	// Keep L last.
@@ -284,8 +284,8 @@ func TestPlanLeavesUnlistedDevicesAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, ok := f.Device(0x001867)
-	if !ok || !d.Unlisted || d.Name != "" || d.Serial != "IEQ0158740" {
+	d, ok := f.Device(0x0a0101)
+	if !ok || !d.Unlisted || d.Name != "" || d.Serial != "IEQ0000501" {
 		t.Fatalf("unlisted device %+v ok=%v", d, ok)
 	}
 	p, err := NewPlan(f, Current{Snapshot: c2.Snapshot()}, PlanOptions{})
@@ -297,12 +297,12 @@ func TestPlanLeavesUnlistedDevicesAlone(t *testing.T) {
 	}
 	// Naming it in the backup lists it.
 	for i := range f.Devices {
-		if f.Devices[i].RFAddress == 0x001867 {
+		if f.Devices[i].RFAddress == 0x0a0101 {
 			f.Devices[i].Name, f.Devices[i].RoomID = "Neu", 6
 		}
 	}
 	p, _ = NewPlan(f, Current{Snapshot: c2.Snapshot()}, PlanOptions{})
-	if len(p.Steps) != 1 || !strings.Contains(p.Steps[0].What, `001867: add to the list as "Neu" in room 6`) {
+	if len(p.Steps) != 1 || !strings.Contains(p.Steps[0].What, `0a0101: add to the list as "Neu" in room 6`) {
 		t.Fatalf("steps %+v", p.Steps)
 	}
 }
@@ -333,7 +333,7 @@ func withLiveState(t *testing.T, greeting []cube.Message, rf cube.RFAddress, set
 
 func TestBackupStateAndRestoreState(t *testing.T) {
 	greeting, _ := fakecube.LoadGreeting(fixture)
-	srv := &fakecube.Server{Greeting: withLiveState(t, greeting, 0x1514b6, 20)}
+	srv := &fakecube.Server{Greeting: withLiveState(t, greeting, 0x0a010d, 20)}
 	addr, err := srv.Start("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -347,7 +347,7 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, _ := f.Device(0x1514b6)
+	d, _ := f.Device(0x0a010d)
 	if d.State == nil || d.State.Mode != cube.ModeManual || d.State.Setpoint == nil || *d.State.Setpoint != 20 {
 		t.Fatalf("state %+v", d.State)
 	}
@@ -364,7 +364,7 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 		t.Fatalf("plan %+v", p.Steps)
 	}
 	for i := range f.Devices {
-		if f.Devices[i].RFAddress == 0x1514b6 {
+		if f.Devices[i].RFAddress == 0x0a010d {
 			v := 21.5
 			f.Devices[i].State.Setpoint = &v
 		}
@@ -373,8 +373,8 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 	if len(p.Steps) != 1 || !strings.Contains(p.Steps[0].What, "manual 21.5°C (now manual 20.0°C)") || p.Steps[0].Command.Wakeup {
 		t.Fatalf("plan %+v", p.Steps)
 	}
-	// 00 04 40 000000 1514b6 06 6b: set temperature, manual (0x40) | 21.5 °C (43), addressed as room 6.
-	if got := p.Steps[0].Command.Lines[0].String(); got != "s:AARAAAAAFRS2Bms=" {
+	// 00 04 40 000000 0a010d 06 6b: set temperature, manual (0x40) | 21.5 °C (43), addressed as room 6.
+	if got := p.Steps[0].Command.Lines[0].String(); got != "s:AARAAAAACgENBms=" {
 		t.Fatalf("command %s", got)
 	}
 	// Without -state the plan ignores the state section.
@@ -387,9 +387,9 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 func TestPlanMovesDeviceBetweenRooms(t *testing.T) {
 	_, c, _, f := take(t)
 	// Move the Schlafzimmer thermostat (room 6, alone) into Küche (room 3,
-	// with radiator thermostat 14ce3d).
+	// with radiator thermostat 0a0108).
 	for i := range f.Devices {
-		if f.Devices[i].RFAddress == 0x1514b6 {
+		if f.Devices[i].RFAddress == 0x0a010d {
 			f.Devices[i].RoomID = 3
 		}
 	}
@@ -405,17 +405,17 @@ func TestPlanMovesDeviceBetweenRooms(t *testing.T) {
 		t.Fatalf("steps %v", whats)
 	}
 	out := p.Steps[1].Command
-	if out.RoomID != 6 || !out.Wakeup || len(out.Lines) != 1 || out.Lines[0].String() != "s:AAAjAAAAFRS2AAY=" {
+	if out.RoomID != 6 || !out.Wakeup || len(out.Lines) != 1 || out.Lines[0].String() != "s:AAAjAAAACgENAAY=" {
 		t.Fatalf("leave %+v", out)
 	}
 	in := p.Steps[2].Command
 	if in.RoomID != 3 || !in.Wakeup || len(in.Lines) != 3 {
 		t.Fatalf("join %+v", in)
 	}
-	// 00 04 20 000000 14ce3d 03 1514b6 01: tell the room's radiator thermostat (room flag) about the new partner.
-	// 00 00 20 000000 1514b6 00 14ce3d 01: tell the moved device about it.
-	// 00 00 22 000000 1514b6 00 03: set the group.
-	want := []string{"s:AAQgAAAAFM49AxUUtgE=", "s:AAAgAAAAFRS2ABTOPQE=", "s:AAAiAAAAFRS2AAM="}
+	// 00 04 20 000000 0a0108 03 0a010d 01: tell the room's radiator thermostat (room flag) about the new partner.
+	// 00 00 20 000000 0a010d 00 0a0108 01: tell the moved device about it.
+	// 00 00 22 000000 0a010d 00 03: set the group.
+	want := []string{"s:AAQgAAAACgEIAwoBDQE=", "s:AAAgAAAACgENAAoBCAE=", "s:AAAiAAAACgENAAM="}
 	for i, w := range want {
 		if in.Lines[i].String() != w {
 			t.Fatalf("join line %d: %s, want %s", i, in.Lines[i].String(), w)

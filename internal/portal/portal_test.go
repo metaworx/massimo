@@ -25,7 +25,7 @@ func TestCodecRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := []cube.Message{{Type: 'H', Data: "KMD1016788,099c3e,0113"}, {Type: 'B', Data: "u,h,1,p"}}
+	in := []cube.Message{{Type: 'H', Data: "KMD0000505,0a0106,0113"}, {Type: 'B', Data: "u,h,1,p"}}
 	ct, err := c.Encode(in)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestCodecRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) != 2 || out[1].String() != "B:u,h,1,p" || text != "H:KMD1016788,099c3e,0113\r\nB:u,h,1,p\r\n" {
+	if len(out) != 2 || out[1].String() != "B:u,h,1,p" || text != "H:KMD0000505,0a0106,0113\r\nB:u,h,1,p\r\n" {
 		t.Fatalf("got %v %q", out, text)
 	}
 }
@@ -46,7 +46,7 @@ func TestCaptureLoginExchange(t *testing.T) {
 	dir := t.TempDir()
 	codec, _ := NewCodec(testKey, testIV)
 	cap := &Capture{
-		Codecs: map[string]*Codec{"KMD1016788": codec},
+		Codecs: map[string]*Codec{"KMD0000505": codec},
 		Reply:  DefaultReplier("000051b1,00000000,ffffffff", nil),
 		Dir:    dir,
 	}
@@ -54,11 +54,11 @@ func TestCaptureLoginExchange(t *testing.T) {
 	defer srv.Close()
 
 	body, _ := codec.Encode([]cube.Message{
-		{Type: 'H', Data: "KMD1016788,099c3e,0113"},
+		{Type: 'H', Data: "KMD0000505,0a0106,0113"},
 		{Type: 'B', Data: "FOOBAR1,5a8a4a5d3c1bd612b8bf1e2fecf609f7,1,SuperSecret"},
 	})
 	req, _ := http.NewRequest("POST", srv.URL+"/cube", bytes.NewReader(body))
-	req.Header.Set("MAX-Serial", "KMD1016788")
+	req.Header.Set("MAX-Serial", "KMD0000505")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -98,14 +98,14 @@ func TestCaptureLoginExchange(t *testing.T) {
 	if err := json.Unmarshal(lines[0], &ex); err != nil {
 		t.Fatal(err)
 	}
-	if ex.Lines[1][:2] != "B:" || ex.ReplyLines[1] != "b:OK" || ex.Headers["Max-Serial"] != "KMD1016788" {
+	if ex.Lines[1][:2] != "B:" || ex.ReplyLines[1] != "b:OK" || ex.Headers["Max-Serial"] != "KMD0000505" {
 		t.Fatalf("record: %+v", ex)
 	}
 }
 
 func TestReplierConnPlaceholder(t *testing.T) {
 	r := DefaultReplier("{conn},00000000,ffffffff", nil)
-	req := []cube.Message{{Type: 'H', Data: "KEQ0000100,0b9573,0113,00000000,4470fa70,44,32,1a0b03,1602,03,0000"}}
+	req := []cube.Message{{Type: 'H', Data: "KEQ0000100,0a0107,0113,00000000,4470fa70,44,32,1a0b03,1602,03,0000"}}
 	got := r("KEQ0000100", req)
 	if len(got) != 1 || got[0].String() != "i:4470fa70,00000000,ffffffff" {
 		t.Fatalf("got %v", got)
@@ -127,7 +127,7 @@ func TestExpandNowPlaceholder(t *testing.T) {
 
 func TestAccountRepliesAndLookup(t *testing.T) {
 	r := DefaultReplier("", nil)
-	login := []cube.Message{{Type: 'H', Data: "KEQ0000100,0b9573,0113"}, {Type: 'B', Data: "alice,hash,1,pw"}}
+	login := []cube.Message{{Type: 'H', Data: "KEQ0000100,0a0107,0113"}, {Type: 'B', Data: "alice,hash,1,pw"}}
 	if got := r("KEQ0000100", login); len(got) != 1 || got[0].String() != "b:OK" {
 		t.Fatalf("login reply %v", got)
 	}

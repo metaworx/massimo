@@ -12,13 +12,14 @@ import (
 )
 
 func TestUDPIdentifyReply(t *testing.T) {
-	// Captured on the wire from a Cube with firmware 1.1.3.
-	pkt := []byte("eQ3MaxApKEQ0000100>I\x00\x0b\x95\x73\x01\x13")
+	// Captured on the wire from a Cube with firmware 1.1.3, the serial and
+	// the radio address replaced by placeholders.
+	pkt := []byte("eQ3MaxApKEQ0000100>I\x00\x0a\x01\x07\x01\x13")
 	serial, boot, op, data, ok := parseUDPReply(pkt)
 	if !ok || boot || op != 'I' || serial != "KEQ0000100" {
 		t.Fatalf("parse: %q %v %c %v", serial, boot, op, ok)
 	}
-	if rf := binary.BigEndian.Uint32(data[0:4]); rf != 0x0b9573 {
+	if rf := binary.BigEndian.Uint32(data[0:4]); rf != 0x0a0107 {
 		t.Fatalf("rf %06x", rf)
 	}
 	if fw := firmwareString(binary.BigEndian.Uint16(data[4:6])); fw != "1.1.3" {
@@ -59,7 +60,7 @@ func TestConfigRequestAndReply(t *testing.T) {
 }
 
 func TestQueryConfigReadsTheDHCPFlag(t *testing.T) {
-	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0b9573)
+	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
 	}

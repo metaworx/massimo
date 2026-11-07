@@ -252,7 +252,7 @@ func TestBackupDiff(t *testing.T) {
 	a := int64(out["id"].(float64))
 	f := withRoomName(backupWithEco(backupOf(t, ts), 17.5), "Edited")
 	for i := range f.Devices {
-		if f.Devices[i].RFAddress == 0x1514b6 {
+		if f.Devices[i].RFAddress == 0x0a010d {
 			f.Devices[i].Thermostat.WeekProgram[0][0].Temp += 1
 		}
 	}

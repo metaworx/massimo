@@ -24,18 +24,18 @@ func TestCommands(t *testing.T) {
 	ctx := context.Background()
 	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
 	cube, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
-	p, err := s.AddCommand(ctx, Command{CubeID: cube.ID, UserID: anna.ID, Key: "k1", Action: "device.update", Target: "device:1514b6", Request: json.RawMessage(`{"method":"PUT"}`)})
+	p, err := s.AddCommand(ctx, Command{CubeID: cube.ID, UserID: anna.ID, Key: "k1", Action: "device.update", Target: "device:0a010d", Request: json.RawMessage(`{"method":"PUT"}`)})
 	if err != nil || p.State != StateQueued || p.UUID == "" || p.Key != "k1" || p.CubeID != cube.ID || len(p.Steps) != 0 {
 		t.Fatalf("parent %+v %v", p, err)
 	}
 	if _, err := s.AddCommand(ctx, Command{Request: json.RawMessage(`nope`)}); err == nil {
 		t.Fatal("bad request accepted")
 	}
-	s1, err := s.AddStep(ctx, p.ID, Command{Target: "device:1514b6", Request: json.RawMessage(`{"key":"move:out"}`)})
+	s1, err := s.AddStep(ctx, p.ID, Command{Target: "device:0a010d", Request: json.RawMessage(`{"key":"move:out"}`)})
 	if err != nil || s1.ParentID != p.ID || s1.Action != ActionStep || s1.CubeID != cube.ID || s1.UserID != anna.ID || s1.State != StateQueued {
 		t.Fatalf("step %+v %v", s1, err)
 	}
-	s2, _ := s.AddStep(ctx, p.ID, Command{Target: "device:1514b6"})
+	s2, _ := s.AddStep(ctx, p.ID, Command{Target: "device:0a010d"})
 	if _, err := s.AddStep(ctx, 9999, Command{}); !errors.Is(err, ErrNoCommand) {
 		t.Fatalf("step of nothing: %v", err)
 	}

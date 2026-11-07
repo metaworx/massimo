@@ -270,12 +270,12 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 		t.Skipf("cannot listen on 127.0.0.3: %v", err)
 	}
 	defer second.Close()
-	at2, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0b9573)
+	at2, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Skip(err)
 	}
 	defer at2.Close()
-	at3, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0b9573)
+	at3, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Skip(err)
 	}

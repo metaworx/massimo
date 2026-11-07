@@ -117,7 +117,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		}
 	}
 	var d deviceDetail
-	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/1514b6", &d) != 200 || d.Thermostat == nil || d.Thermostat.ComfortTemp != 21.5 || d.RoomID != 6 {
+	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", &d) != 200 || d.Thermostat == nil || d.Thermostat.ComfortTemp != 21.5 || d.RoomID != 6 {
 		t.Fatalf("device %+v", d)
 	}
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/abcdef", nil) != 404 {
@@ -125,8 +125,8 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	}
 	// Setpoint on a device, then on a room.
 	for _, c := range []struct{ path, body, want string }{
-		{"/api/v1/cubes/KEQ0000100/devices/1514b6/setpoint", `{"mode":"manual","temp":21.5}`, "s:AARAAAAAFRS2Bms="},
-		{"/api/v1/cubes/KEQ0000100/rooms/6/setpoint", `{"mode":"auto"}`, "s:AARAAAAAFRS2BgA="},
+		{"/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", `{"mode":"manual","temp":21.5}`, "s:AARAAAAACgENBms="},
+		{"/api/v1/cubes/KEQ0000100/rooms/6/setpoint", `{"mode":"auto"}`, "s:AARAAAAACgENBgA="},
 	} {
 		req, _ := http.NewRequest("PUT", ts.URL+c.path, strings.NewReader(c.body))
 		resp, err := http.DefaultClient.Do(req)
@@ -150,7 +150,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		}
 	}
 	// Key lock: wakeup of the room, then radiogram 0x80 to the device.
-	req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/1514b6/lock", strings.NewReader(`{"locked":false}`))
+	req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/0a010d/lock", strings.NewReader(`{"locked":false}`))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	for _, m := range fc.Received() {
 		lines = append(lines, m.String())
 	}
-	if n := len(lines); n < 2 || lines[n-1] != "s:AACAAAAAFRS2AAA=" || !strings.HasPrefix(lines[n-2], "z:1e,G,06") {
+	if n := len(lines); n < 2 || lines[n-1] != "s:AACAAAAACgENAAA=" || !strings.HasPrefix(lines[n-2], "z:1e,G,06") {
 		t.Fatalf("lock sent %v", lines)
 	}
 	// Deleting rooms: occupied ones are refused, unknown ones are 404,
@@ -193,7 +193,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		t.Fatalf("DELETE empty room: %d, m lines %d→%d, rooms %d", resp.StatusCode, before, countType(fc, 'm'), len(rt.client.Snapshot().Metadata().Rooms))
 	}
 	// Bad requests.
-	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/1514b6/setpoint", strings.NewReader(`{"mode":"boost"}`))
+	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", strings.NewReader(`{"mode":"boost"}`))
 	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != 400 {
@@ -265,10 +265,10 @@ func TestDeviceValueTimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 1514b6 reports in the greeting: manual, 21 °C, valve 30 %.
+	// 0a010d reports in the greeting: manual, 21 °C, valve 30 %.
 	l := &greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
-	copy(raw, []byte{0x0b, 0x15, 0x14, 0xb6, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	l.Data = base64.StdEncoding.EncodeToString(raw)
 	fc := &fakecube.Server{Greeting: greeting}
 	addr, err := fc.Start("127.0.0.1:0")
@@ -289,14 +289,14 @@ func TestDeviceValueTimes(t *testing.T) {
 		t.Fatalf("cube %+v", c)
 	}
 	var d map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/1514b6", &d)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", &d)
 	rec, _ := d["received"].(map[string]any)
 	if d["last_seen"] == nil || rec["setpoint"] == nil || rec["valve_pct"] == nil || d["stale"] != nil {
 		t.Fatalf("device %v", d)
 	}
 	var u map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/14d08e", &u)
-	if _, ok := u["last_seen"]; ok || u["rf_address"] != "14d08e" {
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010a", &u)
+	if _, ok := u["last_seen"]; ok || u["rf_address"] != "0a010a" {
 		t.Fatalf("unreported device has times: %v", u)
 	}
 }

@@ -43,8 +43,8 @@ Free memory slots: 50 before and after.
 
 ## Step 7: moving the window contact
 
-Room 2's window contact 183962 was moved to room 1 and back with
-`PUT …/devices/183962 {"room_id": …}`,
+Room 2's window contact 0a010f was moved to room 1 and back with
+`PUT …/devices/0a010f {"room_id": …}`,
 the window opened and closed after each move.
 Duty cycle 4 % before.
 

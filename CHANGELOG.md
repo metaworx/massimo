@@ -103,9 +103,9 @@ the next minor, a fix counts the suffix up.
 - The web UI's log reads newest first, new events coming in on top and
   Older events at the bottom (`docs/ui.md`, "Log").
 
-- The recorded greeting that the tests and CI's fake Cube load, and its
-  UI-test copy, carry placeholder serials
-  (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
+- The tests' fixtures and the recorded greeting carry placeholder
+  serials and radio addresses, which `tools/identifiers` checks in every
+  `go test` (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
 - CI runs the web UI's suite on a pull request only when it changes the
   UI, the suite or `ci.yml`, and then on two of its four cases; a push to

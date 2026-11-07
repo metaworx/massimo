@@ -13,7 +13,7 @@ import time
 
 OPEN = {"en": "Open", "de": "Offen"}
 USED = "0" * 48
-FOUND2 = {"serial": "LEQ0654321", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",
+FOUND2 = {"serial": "LEQ0000506", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",
           "firmware": "1.1.3", "found_at": "2026-11-05T18:40:00+01:00", "last_seen": "2026-11-05T18:40:00+01:00"}
 CHANGES = {"en": "window opened, set 18.0 → 5.0", "de": "Fenster geöffnet, Soll 18,0 → 5,0"}
 SEARCHING = {"en": "Searching…", "de": "Suche läuft…"}

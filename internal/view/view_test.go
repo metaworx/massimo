@@ -17,11 +17,11 @@ const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
 
 // silentDevice is the only device of room 6 in the fixture. The fixture
 // was recorded right after a Cube restart: no device has reported yet.
-const silentDevice cube.RFAddress = 0x1514b6
+const silentDevice cube.RFAddress = 0x0a010d
 
 // reportedLine is an L line in which silentDevice reports: manual,
 // 21 °C, valve 0 %.
-var reportedLine = cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString([]byte{0x0b, 0x15, 0x14, 0xb6, 0x09, 0x12, 0x01, 0x00, 42, 0, 0, 0})}
+var reportedLine = cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString([]byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 0x00, 42, 0, 0, 0})}
 
 func snapshot(t *testing.T, extra ...cube.Message) *cubelan.Snapshot {
 	t.Helper()
@@ -152,7 +152,7 @@ func TestAgesAndStale(t *testing.T) {
 		t.Fatalf("device %+v", d)
 	}
 	// Devices without state have no times.
-	if d := DeviceOf(snap, 0x14d08e, 0); d.LastSeen != nil || d.Received != nil || d.Stale {
+	if d := DeviceOf(snap, 0x0a010a, 0); d.LastSeen != nil || d.Received != nil || d.Stale {
 		t.Fatalf("unreported device %+v", d)
 	}
 	now = func() time.Time { return t0.Add(StaleAfter + time.Minute) }

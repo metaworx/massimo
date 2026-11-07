@@ -21,7 +21,7 @@
 # cannot run it; UI_TEST_REQUIRED=1, as CI sets it, makes that exit 1.
 #
 # The fake Cube has a device that joins pairing mode two seconds after
-# n:, a copy of the radiator thermostat 1514b6 as 0abcde (TEQ0000001),
+# n:, a copy of the radiator thermostat 0a010d as 0abcde (TEQ0000001),
 # and joins again after a t: deleted it, so that every case can pair it.
 #
 # The fake Cube also answers UDP discovery, as a Cube that is not
@@ -80,7 +80,7 @@ trap cleanup EXIT INT TERM
 cd "$work"
 env -i PATH="$PATH" HOME="$HOME" ./massimo fakecube -greeting "$here/greeting.txt" \
 	-listen "127.0.0.1:$cube_port" -discovery "127.0.0.1:$discovery_port" \
-	-pair 1514b6,0abcde,TEQ0000001 > fakecube.log 2>&1 &
+	-pair 0a010d,0abcde,TEQ0000001 > fakecube.log 2>&1 &
 pids="$pids $!"
 env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
 	MASSIMO_CUBE_KEQ0000100_ADDRESS="127.0.0.1:$cube_port" MASSIMO_CUBE_KEQ0000100_NAME="Fake Cube" \

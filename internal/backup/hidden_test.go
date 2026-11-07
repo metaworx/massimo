@@ -16,12 +16,12 @@ import (
 
 func TestHiddenDevicesAreHiddenButKept(t *testing.T) {
 	_, c, _ := connect(t)
-	// 1514b6 is the only device of room 6 in the fixture.
-	f, err := Take(c.Snapshot(), nil, "test", time.Now(), view.Set([]cube.RFAddress{0x1514b6}))
+	// 0a010d is the only device of room 6 in the fixture.
+	f, err := Take(c.Snapshot(), nil, "test", time.Now(), view.Set([]cube.RFAddress{0x0a010d}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := f.Device(0x1514b6); ok {
+	if _, ok := f.Device(0x0a010d); ok {
 		t.Fatal("hidden device in the backup")
 	}
 	if len(f.Rooms) != 5 || hasRoom(f.Rooms, 6) {
@@ -38,7 +38,7 @@ func TestHiddenDevicesAreHiddenButKept(t *testing.T) {
 	}
 	// A restore from that file must leave the device and its room on the
 	// Cube: the plan is empty and does not mention the device.
-	p, err := NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{Hidden: []cube.RFAddress{0x1514b6}})
+	p, err := NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{Hidden: []cube.RFAddress{0x0a010d}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,14 +46,14 @@ func TestHiddenDevicesAreHiddenButKept(t *testing.T) {
 		t.Fatalf("plan not empty: %+v", p.Steps)
 	}
 	for _, n := range p.Notes {
-		if strings.Contains(n, "1514b6") {
+		if strings.Contains(n, "0a010d") {
 			t.Fatalf("note about the hidden device: %s", n)
 		}
 	}
 	// Even a renamed room elsewhere keeps the hidden room and device in
 	// the metadata the plan writes.
 	f.Rooms[0].Name = "Renamed"
-	p, err = NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{Hidden: []cube.RFAddress{0x1514b6}})
+	p, err = NewPlan(f, Current{Snapshot: c.Snapshot()}, PlanOptions{Hidden: []cube.RFAddress{0x0a010d}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestHiddenDevicesAreHiddenButKept(t *testing.T) {
 	}
 	found := false
 	for _, d := range md.Devices {
-		if d.RFAddress == 0x1514b6 && d.RoomID == 6 {
+		if d.RFAddress == 0x0a010d && d.RoomID == 6 {
 			found = true
 		}
 	}
@@ -92,12 +92,12 @@ func TestHiddenDevicesAreHiddenButKept(t *testing.T) {
 	// An old backup that still lists the device does not touch it either.
 	f2, _ := Take(c.Snapshot(), nil, "test", time.Now(), nil)
 	for i := range f2.Devices {
-		if f2.Devices[i].RFAddress == 0x1514b6 {
+		if f2.Devices[i].RFAddress == 0x0a010d {
 			f2.Devices[i].Name, f2.Devices[i].RoomID = "Moved", 1
 			f2.Devices[i].Thermostat.ComfortTemp = 25
 		}
 	}
-	p, _ = NewPlan(f2, Current{Snapshot: c.Snapshot()}, PlanOptions{Hidden: []cube.RFAddress{0x1514b6}})
+	p, _ = NewPlan(f2, Current{Snapshot: c.Snapshot()}, PlanOptions{Hidden: []cube.RFAddress{0x0a010d}})
 	if !p.Empty() {
 		t.Fatalf("plan touches the hidden device: %+v", p.Steps)
 	}
