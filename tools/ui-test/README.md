@@ -140,7 +140,9 @@ what a test stores in the browser goes with its context.
   and the six default roles with the operator's seven capabilities;
   in the operator's open panel, Create key shows the new key,
   lists every token once and sends one POST per click,
-  and the test revokes its keys again.
+  and the test revokes its keys again;
+  a guest made with an end date that has seconds is saved without the end date
+  when its display name alone changes, and Save without a change sends nothing.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,

@@ -81,6 +81,9 @@ the next minor, a fix counts the suffix up.
 
 - The log keeps the live events that come while it loads a page.
 
+- Saving a user with an end date no longer sends the end date again,
+  cut to the minute, when it did not change.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

@@ -68,3 +68,40 @@ def test_new_key_shown_once(page, case):
     finally:
         revoke_keys(prefix)
     page.locator("#view-tiles").click()
+
+
+def remove_user(name):
+    """A user the test made, gone again; none is fine."""
+    try:
+        api_call("DELETE", "api/v1/users/" + name)
+    except Exception:  # noqa: BLE001 - absent already
+        pass
+
+
+def test_an_unchanged_end_date_is_not_sent(page, case):
+    """A user with an end date whose display name alone changes is saved
+    without the end date: the form's minute and the server's time with
+    its seconds and offset are the same end; Save without a change says
+    so and sends nothing. The test makes the guest and removes it."""
+    name = f"end-{case.width}-{case.lang}"
+    remove_user(name)
+    api_call("POST", "api/v1/users", {"name": name, "role": "guest", "password": "end-pass", "expires_at": "2099-01-02T10:20:30+01:00"})
+    puts = []
+    page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/users/" + name) else None)
+    try:
+        page.locator("#view-settings").click()
+        panel = page.locator(".user-panel[data-name='%s']" % name)
+        panel.wait_for()
+        panel.locator("summary").click()
+        panel.locator("form button[type=submit]").click()
+        assert wait_until(page, "!document.getElementById('users-msg').classList.contains('hidden')", 5), "Save says how it went"
+        page.wait_for_timeout(300)
+        assert not puts, f"Save without a change sends nothing: {puts}"
+        panel.locator("input[name=display_name]").fill("Guest with an end")
+        panel.locator("form button[type=submit]").click()
+        assert wait_until(page, "document.querySelector(\".user-panel[data-name='%s'] .panel-name\").textContent === 'Guest with an end'" % name, 5), \
+            "the display name is saved"
+        assert puts == [{"display_name": "Guest with an end"}], f"the display name alone is sent: {puts}"
+    finally:
+        remove_user(name)
+    page.locator("#view-tiles").click()

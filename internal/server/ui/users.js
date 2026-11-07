@@ -92,6 +92,16 @@ function isoOf(local) {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// sameMinute reports whether two API times, or none, are the same end
+// to the minute, all that the form's datetime-local holds: the server's
+// time carries seconds and an offset.
+function sameMinute(a, b) {
+  const x = Date.parse(a || "");
+  const y = Date.parse(b || "");
+  if (isNaN(x) || isNaN(y)) return isNaN(x) && isNaN(y);
+  return Math.floor(x / 60000) === Math.floor(y / 60000);
+}
+
 function userBadges(u) {
   const out = [badgeEl(roleLabel(u.role), "mode")];
   if (u.disabled) out.push(badgeEl(t("users.state.disabled"), "bad"));
@@ -233,7 +243,7 @@ function userPanel(u) {
       if (field("role").value !== u.role) body.role = field("role").value;
       if (field("disabled").checked !== !!u.disabled) body.disabled = field("disabled").checked;
       const end = isoOf(field("expires").value);
-      if ((end || null) !== (u.expires_at || null) && !(end === null && !u.expires_at)) body.expires_at = end;
+      if (!sameMinute(end, u.expires_at)) body.expires_at = end;
     }
     const password = field("password").value;
     if (password) {
