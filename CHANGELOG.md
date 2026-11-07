@@ -58,6 +58,9 @@ the next minor, a fix counts the suffix up.
 - The Infomaniak hook hands its token to curl on standard input, not on
   the command line, and gives each call 30 seconds (packaging/README.md).
 
+- A DNS-01 hook whose child keeps its output open no longer holds the
+  order past the hook's two minutes; the child ends with the hook.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

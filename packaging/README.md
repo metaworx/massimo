@@ -172,7 +172,8 @@ and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
 The name may point at the box's LAN address,
 and wildcards work (`-tls-names '*.example.net,example.net'`).
 The script runs as `massimo` with the server's environment less the `MASSIMO_` variables,
-so its own secret comes from a file.
+so its own secret comes from a file;
+a run ends after two minutes, with every process it started.
 `packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
 Infomaniak (its name servers, not merely registered there):
 it needs `curl` and `jq`,

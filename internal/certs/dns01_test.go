@@ -17,11 +17,13 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -384,4 +386,38 @@ func TestDNS01(t *testing.T) {
 		t.Fatalf("hook env %v", env)
 	}
 	fmt.Fprint(os.Stderr, "")
+}
+
+// A hook whose child keeps the output open does not hold the order past
+// the hook's time: runHook returns once the time is up, and the child
+// goes with the hook.
+func TestHookTimeoutEndsTheChildren(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hook is a shell script")
+	}
+	dir := t.TempDir()
+	hook := filepath.Join(dir, "hook.sh")
+	pidFile := filepath.Join(dir, "child.pid")
+	os.WriteFile(hook, []byte("#!/bin/sh\nsleep 20 &\necho $! > \""+pidFile+"\"\nwait\n"), 0o755)
+	d := &DNS01{hook: hook, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := d.runHook(ctx, "set", "_acme-challenge.example.net", "value")
+	if took := time.Since(start); err == nil || took > 3*time.Second {
+		t.Fatalf("runHook returned %v after %s, want an error within the time", err, took)
+	}
+	b, _ := os.ReadFile(pidFile)
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	if pid == 0 {
+		t.Fatal("the hook wrote no pid")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for exec.Command("kill", "-0", strconv.Itoa(pid)).Run() == nil {
+		if time.Now().After(deadline) {
+			exec.Command("kill", strconv.Itoa(pid)).Run()
+			t.Fatal("the hook's child outlived the hook's time")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
