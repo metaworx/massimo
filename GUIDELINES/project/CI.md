@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.8.0)
+# Massimo — CI Conventions (v1.9.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -188,7 +188,10 @@ A release also carries a Debian package per architecture,
 and once the apt key is set the `apt-build` job rebuilds the apt repository from
 the newest ten releases of every channel (`packaging/apt/publish.sh`,
 one suite per channel) and `apt-deploy` puts it on the project's GitHub Pages,
-whose source must be set to GitHub Actions;
+whose source must be set to GitHub Actions,
+and whose `github-pages` environment must allow the tags `v*`:
+GitHub makes it allowing the default branch only,
+and the deploy runs for the release's tag;
 a box following a suite takes the release through `apt upgrade`.
 
 ## 7. Runner Constraints

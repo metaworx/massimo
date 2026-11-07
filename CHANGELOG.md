@@ -53,6 +53,9 @@ the next minor, a fix counts the suffix up.
 - The release workflow pushes the Homebrew formula to the tap itself:
   the release it creates never started publish.yml (CI.md, section 6).
 
+- The apt repository's setup names the `github-pages` environment's rule
+  for the tags `v*`, without which every deploy is refused.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

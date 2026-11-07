@@ -229,8 +229,12 @@ jobs:
         with:
           path: site
 
-  # Pages deploys from the artifact; the repository's Pages source must
-  # be "GitHub Actions" (a setting of the owner's).
+  # Pages deploys from the artifact. Two settings of the owner's
+  # (packaging/README.md, "The apt repository"): the repository's Pages
+  # source is "GitHub Actions", and the github-pages environment GitHub
+  # then makes, which deploys from the default branch only, also allows
+  # the tags v* (Settings → Environments → github-pages → Deployment
+  # branches and tags), since this job runs for a tag; else it is refused.
   apt-deploy:
     name: Deploy the apt repository
     needs: apt-build

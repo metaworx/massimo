@@ -321,6 +321,11 @@ The owner's steps, once:
   of the `signing` environment and the passphrase into `MASSIMO_APT_KEY_PASSPHRASE`
   (GUIDELINES/project/CI.md, section 5).
 - In the repository's settings, Pages → Source: GitHub Actions.
+- Then Environments → `github-pages` → Deployment branches and tags:
+  add a rule for the tags `v*`.
+  The environment GitHub makes for Pages deploys from the default branch only,
+  and the deploy runs for a release's tag,
+  so without the rule every deploy is refused.
 - Before the key expires,
   `gpg --quick-set-expire <fpr> 2y` and the secret again;
   the next release publishes the renewed key and a newer keyring package.
