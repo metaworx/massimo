@@ -25,6 +25,21 @@ the next minor, a fix counts the suffix up.
 - The web UI warns under its header while the server is open, and says
   what closes it (`docs/ui.md`).
 
+- `POST /api/v1/restart` restarts the server for the capability
+  `restart` of owner and manager (migration 0006), an open server only
+  from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
+
+- Settings → Software restarts the server, follows it until it is back,
+  and lists the settings that wait for a restart (`docs/ui.md`).
+
+- `serve` reads its settings file again when it changes and on SIGHUP
+  (`-sighup`), so `MASSIMO_API_TOKEN` applies without a restart
+  (`README.md`, "Server").
+
+- `serve -restart` (`MASSIMO_RESTART`) says when the server restarts
+  for the API, stopping and exiting 75 for its service manager; `massimo
+  restart` restarts the installed server (`README.md`, "Server").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its
@@ -49,6 +64,10 @@ the next minor, a fix counts the suffix up.
 - A server that asks for no key answers only its local network, a
   reverse proxy's clients only with `-trusted-proxies`
   (`docs/api-v1.md`, "Authentication").
+
+- An event stream ends within 30 s once its caller would not be let in
+  any more, such as a revoked key or an open server's first user
+  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
 
 - The server refuses a write that another site's page sent, which an
   open server served: such a page could create the first owner

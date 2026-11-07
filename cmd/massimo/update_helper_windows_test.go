@@ -11,11 +11,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/windows"
 
+	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -75,5 +77,26 @@ func TestHelperStarterGuard(t *testing.T) {
 			t.Fatal("the helper did not exit")
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// The restart helper is this binary's massimo restart for the service,
+// detached, writing to service.log in the data directory. It is never
+// started here: on the owner's box that would restart the real service.
+func TestRestartHelper(t *testing.T) {
+	t.Setenv("ProgramData", t.TempDir()) // service.log is the real service's otherwise
+	exe := `C:\Program Files\Massimo\massimo.exe`
+	h, blocked := newRestartHelper(slog.New(slog.NewTextHandler(io.Discard, nil)), exe)
+	if h == nil {
+		t.Fatalf("blocked: %s", blocked)
+	}
+	if h.exe != exe || strings.Join(h.args, " ") != "restart -service "+install.ServiceName || h.logPath != serviceLogPath() || h.dir != filepath.Dir(serviceLogPath()) || h.name != "restart helper" {
+		t.Fatalf("helper %+v", h)
+	}
+	if !strings.HasPrefix(h.logPath, os.Getenv("ProgramData")) {
+		t.Fatalf("log %s outside the test's ProgramData", h.logPath)
+	}
+	if h.flags&windows.DETACHED_PROCESS == 0 {
+		t.Fatal("not detached")
 	}
 }
