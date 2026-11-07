@@ -73,6 +73,9 @@ the next minor, a fix counts the suffix up.
 - An authenticated request writes the store's lockout only where its
   address or user name had failed checks, no longer on every request.
 
+- `-tls acme` serves the first name's certificate to a client that names
+  no host, so the update helper's health check no longer rolls back.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

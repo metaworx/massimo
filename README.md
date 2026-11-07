@@ -501,6 +501,9 @@ or with `-tls-http :80` by HTTP-01 on a plain port 80 as well,
 which then redirects to `https://`.
 `-acme-email` gives the account a contact address;
 the account key and the certificates live in the data directory's `tls/acme/`.
+A client that names no host, as one does for an address (`https://127.0.0.1`,
+the update helper's health check among them),
+gets the certificate of the first name.
 Let's Encrypt allows five failed orders an hour per name,
 so experiments use its staging directory
 (`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`).

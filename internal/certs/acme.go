@@ -102,8 +102,17 @@ func OpenACME(dataDir string, names []string, email, directory string, log *slog
 func (a *ACME) NextProtos() []string { return []string{acme.ALPNProto} }
 
 // GetCertificate serves the name's certificate, ordering or renewing it
-// when needed, and answers the TLS-ALPN-01 challenge.
+// when needed, and answers the TLS-ALPN-01 challenge. A handshake
+// without a server name, as clients make to an address (the update
+// helper's https://127.0.0.1 health check, a browser at https://<ip>),
+// gets the first name's: a copy of the hello names it, since autocert
+// refuses a hello without one.
 func (a *ACME) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if hello.ServerName == "" {
+		named := *hello
+		named.ServerName = a.names[0]
+		hello = &named
+	}
 	cert, err := a.m.GetCertificate(hello)
 	if err != nil {
 		a.logError(hello.ServerName, err)

@@ -126,3 +126,55 @@ func TestFilesWarnBeforeExpiry(t *testing.T) {
 	cancel()
 	Watch(ctx, f, time.Hour)
 }
+
+// cachedACME is an ACME source whose cache holds an ECDSA certificate for
+// the name, as autocert writes it, and whose directory answers nothing,
+// so that every certificate it serves comes from the cache.
+func cachedACME(t *testing.T, name string) (a *ACME, fingerprint string, logs *bytes.Buffer) {
+	t.Helper()
+	dir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }))
+	t.Cleanup(dir.Close)
+	data := t.TempDir()
+	logs = &bytes.Buffer{}
+	a, err := OpenACME(data, []string{name}, "", dir.URL+"/directory", slog.New(slog.NewTextHandler(logs, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPath, keyPath, fp := writePair(t, t.TempDir(), []string{name}, time.Now().Add(80*24*time.Hour), time.Now())
+	keyPEM, _ := os.ReadFile(keyPath)
+	certPEM, _ := os.ReadFile(certPath)
+	os.MkdirAll(filepath.Join(data, "tls", "acme"), 0o700)
+	if err := os.WriteFile(filepath.Join(data, "tls", "acme", name), append(keyPEM, certPEM...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return a, fp, logs
+}
+
+// A handshake without a server name, as Go makes to an address (the
+// update helper's https://127.0.0.1 health check, a browser at
+// https://<ip>), gets the certificate of the first name.
+func TestACMEWithoutServerName(t *testing.T) {
+	a, fp, logs := cachedACME(t, "massimo.example.net")
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", Config(a))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() { c.(*tls.Conn).Handshake(); c.Close() }()
+		}
+	}()
+	conn, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{InsecureSkipVerify: true})
+	if err != nil {
+		t.Fatalf("a handshake without SNI: %v\n%s", err, logs.String())
+	}
+	defer conn.Close()
+	if got := Fingerprint(conn.ConnectionState().PeerCertificates[0].Raw); got != fp {
+		t.Fatalf("served %s, want the first name's %s", got, fp)
+	}
+}
