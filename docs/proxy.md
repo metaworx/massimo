@@ -13,7 +13,7 @@ so the duty cycle and the memory slots are accounted for once.
 massimo serve                       # proxy on :62910, discovery on UDP 23272
 massimo serve -proxy 192.168.1.5    # one interface
 massimo serve -proxy off            # API only
-massimo serve -proxy JEQ0192422=:62910 -proxy KEQ0537249=:62911
+massimo serve -proxy KEQ0000200=:62910 -proxy KEQ0000100=:62911
 ```
 
 Without `-proxy`, each Cube listens on its `MASSIMO_CUBE_<SERIAL>_PROXY` address,
@@ -34,8 +34,8 @@ on Linux for example `ip addr add 192.168.1.47/24 dev eth0` (or the equivalent
 in NetworkManager so it survives a reboot), and set
 
 ```bash
-MASSIMO_CUBE_JEQ0192422_PROXY=192.168.1.44
-MASSIMO_CUBE_KEQ0537249_PROXY=192.168.1.47
+MASSIMO_CUBE_KEQ0000200_PROXY=192.168.1.44
+MASSIMO_CUBE_KEQ0000100_PROXY=192.168.1.47
 ```
 
 The server then listens on each address and answers discovery for each
@@ -164,10 +164,10 @@ give the server a different serial for discovery replies,
 for example the real one with the first letter changed:
 
 ```bash
-massimo serve -proxy-serial XEQ0192422
+massimo serve -proxy-serial XEQ0000200
 ```
 
-or, in `.env`, `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL=XEQ0192422`.
+or, in `.env`, `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL=XEQ0000200`.
 The TCP greeting always carries the real serial.
 Alternatively block the Cube's UDP answers on the PC's firewall.
 If port 23272 is in use on the server's host, for example by `massimo discover`,

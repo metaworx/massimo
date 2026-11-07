@@ -552,8 +552,9 @@ netmask, dns1, dns2, dhcp flag, encryption flag),
 Replies: `"eQ3MaxAp"` (application) or `"eQ3MaxBl"` (bootloader), serial, `>`,
 opcode, data.
 For `I` the data is the RF address (4 bytes,
-leading zero) and the firmware version (2 bytes), as seen on the wire:
-`eQ3MaxApKEQ0537249>I 00 0b 95 73 01 13`.
+leading zero) and the firmware version (2 bytes), as seen on the wire,
+the serial replaced by a placeholder:
+`eQ3MaxApKEQ0000100>I 00 0b 95 73 01 13`.
 
 Network configuration, **confirmed on hardware** (2026-11-06,
 a Cube with firmware 1.1.3,

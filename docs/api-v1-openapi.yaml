@@ -1620,7 +1620,7 @@ components:
       in: path
       required: true
       description: Cube serial number, case-insensitive
-      schema: {type: string, example: JEQ0192422}
+      schema: {type: string, example: KEQ0000200}
     rf:
       name: rf
       in: path

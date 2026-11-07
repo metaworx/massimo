@@ -1,7 +1,7 @@
 # Write test on hardware, 2026-11-05
 
 Steps 1 to 6 of [handover-write-test.md](handover-write-test.md) were run
-against the live house Cube JEQ0192422 (firmware 1.1.3).
+against the live house Cube (firmware 1.1.3).
 They used room 2 and its only radiator thermostat 05cdc6 (firmware 22),
 not room 1, because room 1's thermostat has its keys locked,
 so its eco and boost buttons cannot be pressed to check a value.
@@ -22,7 +22,7 @@ and two measured temperatures, and every room is ready.
   the Cube's proxy on a separate address of the Pi;
   nothing else connected to the Cube.
 - Writes with curl against the Pi's API, Bearer token from the env file.
-  Backups with `massimo -show-ghosts backup -sn JEQ0192422` through the proxy.
+  Backups with `massimo -show-ghosts backup -sn <serial>` through the proxy.
 
 ## Steps
 

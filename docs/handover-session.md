@@ -44,7 +44,7 @@ then this file.
 ## Where things run
 
 - **The house Cube**
-  (JEQ0192422) is on the M7 network (`Altocumulus`) at .118 by DHCP, not reserved.
+  (its serial in the Pi's `/etc/massimo/env`) is on the M7 network (`Altocumulus`) at .118 by DHCP, not reserved.
 - **The Raspberry Pi 1**
   (Raspberry Pi OS Lite 32-bit) runs `massimo serve` as a systemd service on the
   alpha channel: **.200** is the API and web UI on port 80,
@@ -53,7 +53,7 @@ then this file.
   its DHCP address is not reserved either (the M7 range is 20–199).
   It serves plain HTTP until `-tls` is set (README.md, "Server").
 - **The spare Cube**
-  (KEQ0537249) is on jaguar's network at .46 by DHCP,
+  (its serial in the checkout's `.env`) is on jaguar's network at .46 by DHCP,
   served by a Massimo Windows service on jaguar (.45: proxy on 62910,
   web UI on 8099).
   It is the Cube for hardware tests from jaguar and for the firmware dump.
@@ -66,7 +66,7 @@ then this file.
   and use Windows networking;
   elevation goes through `gsudo` with the owner's UAC confirmation.
   The checkout's `.env` selects the spare Cube through the service's proxy;
-  the house Cube is reached with `-sn JEQ0192422` through .201.
+  the house Cube is reached with `-sn` and its serial through .201.
 - **The Mac** (192.168.1.25) had the LaunchDaemon test install, purged.
 - **The Mint box** (192.168.1.56) is available upon request.
 

@@ -242,16 +242,17 @@ Steps 4 to 8 were not repeated.
   Service RUNNING, `/healthz` on the first try:
   `{"ok": true, "started_at": "2026-11-05T19:37:58…", "version": "massimo v0.5.0-alpha.1 …"}`.
   `GET /api/v1/cubes` reports
-  `serial=KEQ0537249 address=127.0.0.1:62999 configured=True connected=True firmware=1.1.3 rooms=6 devices=6`: the serial came from the greeting.
+  `serial=KEQ0000100 address=127.0.0.1:62999 configured=True connected=True firmware=1.1.3 rooms=6 devices=6`: the serial came from the greeting
+  (shown as the greeting's placeholder since 2026-11-07, here and below).
   Listeners: TCP 8099 and 62910 on `::`, UDP 23272 on 0.0.0.0,
   all the service's PID.
   ACLs, firewall rule, start type,
   LocalSystem and failure actions identical to the first run.
 - The proxy serves the learned identity:
-  a TCP client on 62910 gets `H:KEQ0537249,0b9573,0113,…` as its first line,
+  a TCP client on 62910 gets `H:KEQ0000100,0b9573,0113,…` as its first line,
   and `massimo discover -addr 127.0.0.1` (unicast to loopback only,
-  nothing sent to the LAN) returns `serial KEQ0537249, rf_address 0b9573, firmware 1.1.3`.
-  A raw UDP probe to 23272 gets `eQ3MaxApKEQ0537249>I…` back.
+  nothing sent to the LAN) returns `serial KEQ0000100, rf_address 0b9573, firmware 1.1.3`.
+  A raw UDP probe to 23272 gets `eQ3MaxApKEQ0000100>I…` back.
 - Step 9: identical to the first run: `-remove` deletes service,
   program folder and firewall rule, keeps the settings folder;
   `-purge` removes the settings folder and the registry key.
