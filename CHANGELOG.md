@@ -148,6 +148,9 @@ the next minor, a fix counts the suffix up.
 - A pairing given up while its `n:` still waits in the queue is taken
   out of it, so the Cube no longer starts an inclusion nobody watches.
 
+- The re-read after a configuration write is a step of its command in
+  `GET /api/v1/commands/{id}`, so a failed one shows there.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

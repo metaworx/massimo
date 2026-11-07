@@ -5,6 +5,7 @@ package cubeio
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -160,5 +161,52 @@ func TestRemoveCommands(t *testing.T) {
 	}
 	if _, _, ok := RemoveCommands(snap, 0x0b9573, cube.DeviceCube, nil); ok {
 		t.Fatal("the Cube's own C line taken for a room")
+	}
+}
+
+// observed keeps the IDs of the commands the queue started.
+type observed struct {
+	mu  sync.Mutex
+	ids []string
+}
+
+func (o *observed) Enqueued(engine.Command) {}
+func (o *observed) Started(c engine.Command) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.ids = append(o.ids, c.ID+":"+string(c.Lines[0].Type))
+}
+func (o *observed) Finished(engine.Command, engine.Result) {}
+
+// The re-read after a write is a step of the writer's request, as every
+// command of the writer is, so that a failed re-read shows there.
+func TestRereadIsAStepOfTheRequest(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakecube.Server{Greeting: greeting}
+	addr, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	obs := &observed{}
+	c := cubelan.New(cubelan.Options{Addr: addr})
+	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond, Observer: obs})
+	go c.Run(ctx)
+	go q.Run(ctx)
+	<-c.Ready()
+	w := Writer{Client: c, Queue: q, ID: "request-1"}
+	rf := cube.RFAddress(0x1514b6)
+	if res := w.Do(ctx, engine.Command{Lines: []cube.Message{{Type: 's', Data: "AARAAAAAFRS2Bms="}}}, rf); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	obs.mu.Lock()
+	defer obs.mu.Unlock()
+	if len(obs.ids) != 2 || obs.ids[0] != "request-1:s" || obs.ids[1] != "request-1:c" {
+		t.Fatalf("the request's steps %v, want the write and its re-read", obs.ids)
 	}
 }

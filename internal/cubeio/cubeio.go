@@ -98,11 +98,11 @@ func (w Writer) WriteMetadata(ctx context.Context, md *cube.Metadata) (engine.Re
 }
 
 // Reread asks the Cube for a device's C line, usually after a
-// configuration write, and applies the answer to the snapshot. Failures
-// are ignored: the write itself succeeded, and the copy catches up on
-// the next connection.
+// configuration write, and applies the answer to the snapshot, as a
+// step of the writer's request (ID). Failures are ignored: the write
+// itself succeeded, and the copy catches up on the next connection.
 func (w Writer) Reread(ctx context.Context, rf cube.RFAddress) {
-	res := w.Queue.Enqueue(engine.Command{Lines: []cube.Message{{Type: 'c', Data: rf.String()}}}).Wait(ctx)
+	res := w.Queue.Enqueue(engine.Command{ID: w.ID, Lines: []cube.Message{{Type: 'c', Data: rf.String()}}}).Wait(ctx)
 	if res.Err == nil && len(res.Replies) == 1 && res.Replies[0].Type == 'C' {
 		w.Client.ApplyLocal(res.Replies[0])
 	}
