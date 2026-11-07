@@ -321,6 +321,10 @@ A wrong name or password is `401` and counts against the address and the name
 (ten in a minute lock either for five minutes, `429`);
 a disabled user or a guest past its end date is `403`;
 a user whose role is disabled logs in and is then refused every route.
+The server hashes at most one password a core at once, four at the most,
+with eight more waiting;
+a login beyond them is `503` with `Retry-After`, and so is a user add or a
+password change (`docs/store.md` section 6, "The lockout").
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
@@ -373,7 +377,8 @@ kept in lower case; `role` is a role's key, `viewer` when absent;
 `disabled` and, for a guest, `expires_at` (RFC 3339) as well.
 A `guests` holder creates guests only (`403` otherwise).
 The answer is `201` with the user; a name in use is `409`, a bad name,
-an unknown role or an unknown field `400`.
+an unknown role or an unknown field `400`,
+too many password checks at once `503` with `Retry-After`, as for the login.
 The name of a removed user can be used again;
 the new user takes over the old one's row,
 so the audit's history of the name reads on,

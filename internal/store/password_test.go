@@ -4,9 +4,16 @@
 package store
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"runtime"
+	"runtime/metrics"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // The parameters of the first releases, 64 MiB and one pass on four
@@ -79,4 +86,137 @@ func BenchmarkPassword(b *testing.B) {
 			}
 		})
 	}
+}
+
+// The gate hands out its slots, queues as many callers as it has room
+// for, refuses the next with ErrBusy, and lets a waiter go when its
+// context ends.
+func TestHashGate(t *testing.T) {
+	g := newHashGate(1, 1)
+	ctx := t.Context()
+	leave, err := g.enter(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan error, 1)
+	go func() {
+		l, err := g.enter(ctx)
+		if err == nil {
+			l()
+		}
+		got <- err
+	}()
+	for g.waiting.Load() != 1 {
+		time.Sleep(time.Millisecond)
+	}
+	if _, err := g.enter(ctx); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a full queue: %v, want ErrBusy", err)
+	}
+	leave()
+	if err := <-got; err != nil {
+		t.Fatalf("the waiter: %v", err)
+	}
+
+	leave, _ = g.enter(ctx)
+	defer leave()
+	ended, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := g.enter(ended); !errors.Is(err, context.Canceled) {
+		t.Fatalf("an ended context: %v", err)
+	}
+	if n := g.waiting.Load(); n != 0 {
+		t.Fatalf("%d still waiting", n)
+	}
+}
+
+// Eight password checks at once on a store whose gate has two slots
+// compute at most two hashes at a time, and all of them succeed.
+func TestPasswordChecksBounded(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := t.Context()
+	if _, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "correct horse", 0); err != nil {
+		t.Fatal(err)
+	}
+	s.hashes = newHashGate(2, 16)
+	var running, most atomic.Int32
+	real := argonKey
+	argonKey = func(password, salt []byte, time, memory uint32, threads uint8, keyLen uint32) []byte {
+		n := running.Add(1)
+		defer running.Add(-1)
+		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
+		}
+		return real(password, salt, time, memory, threads, keyLen)
+	}
+	t.Cleanup(func() { argonKey = real })
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for range 8 {
+		wg.Go(func() { errs <- s.CheckPassword(ctx, "anna", "correct horse") })
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if m := most.Load(); m < 1 || m > 2 {
+		t.Fatalf("%d hashes at once, want at most 2", m)
+	}
+}
+
+// The peak heap of eight password checks sent at once, with as many
+// slots as the gate of a store on one core, on four cores, and none
+// to speak of (eight).
+func BenchmarkPasswordChecksAtOnce(b *testing.B) {
+	for _, slots := range []int{1, 4, 8} {
+		b.Run(fmt.Sprintf("slots=%d", slots), func(b *testing.B) {
+			s, err := Open(b.TempDir(), Options{Version: "test", Logger: quiet()})
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer s.Close()
+			ctx := context.Background()
+			s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "correct horse", 0)
+			s.hashes = newHashGate(slots, 8)
+			var peak uint64
+			for b.Loop() {
+				runtime.GC()
+				base := heapObjects()
+				stop := make(chan struct{})
+				sampled := make(chan uint64)
+				go func() {
+					var most uint64
+					for {
+						if h := heapObjects(); h > most {
+							most = h
+						}
+						select {
+						case <-stop:
+							sampled <- most
+							return
+						case <-time.After(time.Millisecond):
+						}
+					}
+				}()
+				var wg sync.WaitGroup
+				for range 8 {
+					wg.Go(func() { s.CheckPassword(ctx, "anna", "correct horse") })
+				}
+				wg.Wait()
+				close(stop)
+				if most := <-sampled; most > base && most-base > peak {
+					peak = most - base
+				}
+			}
+			b.ReportMetric(float64(peak)/(1<<20), "peak-MiB")
+		})
+	}
+}
+
+// heapObjects is the bytes of live and unswept heap objects.
+func heapObjects() uint64 {
+	m := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	metrics.Read(m)
+	return m[0].Value.Uint64()
 }

@@ -8,14 +8,17 @@ package store
 // can change them and verify the old hashes meanwhile.
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -41,6 +44,75 @@ const (
 	maxArgonThreads = 16
 )
 
+// How many hashes run at once: one a core, at most maxHashSlots, so
+// that a box holds at most that many times argonMemory for passwords,
+// whatever arrives; hashQueue more wait for a slot, and any beyond
+// them are ErrBusy.
+const (
+	maxHashSlots = 4
+	hashQueue    = 8
+)
+
+// ErrBusy is the error of a password check or hash that found every
+// slot taken and the queue full; the caller asks to try again shortly.
+var ErrBusy = errors.New("store: too many password checks at once")
+
+// argonKey computes an argon2id key; the tests replace it to count and
+// slow the calls.
+var argonKey = argon2.IDKey
+
+// hashGate bounds the argon2id computations running at once, and the
+// callers waiting for one.
+type hashGate struct {
+	slots   chan struct{}
+	queue   int32
+	waiting atomic.Int32
+}
+
+func newHashGate(slots, queue int) *hashGate {
+	return &hashGate{slots: make(chan struct{}, slots), queue: int32(queue)}
+}
+
+// defaultHashGate is the gate of a store: a slot a core, at most
+// maxHashSlots, and hashQueue waiting.
+func defaultHashGate() *hashGate {
+	return newHashGate(min(runtime.GOMAXPROCS(0), maxHashSlots), hashQueue)
+}
+
+// enter takes a slot, waiting for one while the queue has room, and
+// returns the function that gives it back: ErrBusy when the queue is
+// full, the context's error when it ends first.
+func (g *hashGate) enter(ctx context.Context) (func(), error) {
+	select {
+	case g.slots <- struct{}{}:
+		return g.leave, nil
+	default:
+	}
+	if g.waiting.Add(1) > g.queue {
+		g.waiting.Add(-1)
+		return nil, ErrBusy
+	}
+	defer g.waiting.Add(-1)
+	select {
+	case g.slots <- struct{}{}:
+		return g.leave, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("store: password check: %w", ctx.Err())
+	}
+}
+
+func (g *hashGate) leave() { <-g.slots }
+
+// hashPassword hashes a password in a slot of the store's gate.
+func (s *Store) hashPassword(ctx context.Context, password string) (string, error) {
+	leave, err := s.hashes.enter(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer leave()
+	return HashPassword(password)
+}
+
 // HashPassword returns the argon2id hash of password as a PHC string.
 func HashPassword(password string) (string, error) {
 	return hashWith(password, argonTime, argonMemory, argonThreads)
@@ -53,7 +125,7 @@ func hashWith(password string, time, memory uint32, threads uint8) (string, erro
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("store: salt: %w", err)
 	}
-	key := argon2.IDKey([]byte(password), salt, time, memory, threads, argonKeyLen)
+	key := argonKey([]byte(password), salt, time, memory, threads, argonKeyLen)
 	enc := base64.RawStdEncoding
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, memory, time, threads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
 }
@@ -115,7 +187,7 @@ func VerifyPassword(hash, password string) bool {
 	if !ok {
 		return false
 	}
-	got := argon2.IDKey([]byte(password), h.salt, h.time, h.memory, h.threads, uint32(len(h.key)))
+	got := argonKey([]byte(password), h.salt, h.time, h.memory, h.threads, uint32(len(h.key)))
 	return subtle.ConstantTimeCompare(got, h.key) == 1
 }
 

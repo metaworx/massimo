@@ -32,6 +32,12 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+### Security
+
+- Password hashes run at most one a core at once, four at the most, and
+  eight wait; a sign-in, user add or password change beyond them is
+  `503` with `Retry-After` (`docs/store.md` section 6, "The lockout").
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added

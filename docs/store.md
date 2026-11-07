@@ -788,6 +788,18 @@ ten in a minute lock for five minutes with `429` and `Retry-After`.
 The counters survive a restart,
 which closes the loophole where a restart cleared them.
 
+The counters see a failure only once its hash is done,
+so attempts sent together all pass them;
+the hashes are bounded besides.
+At most one a core, four at the most, run at once, and eight more wait;
+a check, a user add or a password change beyond them
+is answered `503` with `Retry-After: 5`.
+So a box holds at most that many 19 MiB blocks for passwords in use at once,
+and about as many again freed but not yet collected:
+eight checks sent together peak at 38 MiB of heap with one slot,
+152 MiB without the bound, and eight times 64 MiB with the parameters
+of the first releases (`BenchmarkPasswordChecksAtOnce` in `internal/store`).
+
 ### Later: ownership per Cube
 
 Roadmap 6 names owner arbitration per Cube.

@@ -182,7 +182,7 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	hash := ""
 	if password != "" {
 		var err error
-		if hash, err = HashPassword(password); err != nil {
+		if hash, err = s.hashPassword(ctx, password); err != nil {
 			return User{}, err
 		}
 	}
@@ -297,7 +297,7 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 	hash := ""
 	if password != "" {
 		var err error
-		if hash, err = HashPassword(password); err != nil {
+		if hash, err = s.hashPassword(ctx, password); err != nil {
 			return err
 		}
 	}
@@ -313,10 +313,16 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 }
 
 // CheckPassword verifies a user's password; ErrBadPassword when it is
-// wrong or the user has none. The check costs the same time either way.
+// wrong or the user has none. The check costs the same time either way,
+// in a slot of the store's gate (ErrBusy when there is none).
 func (s *Store) CheckPassword(ctx context.Context, name, password string) error {
+	leave, err := s.hashes.enter(ctx)
+	if err != nil {
+		return err
+	}
+	defer leave()
 	var hash string
-	err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&hash)
+	err = s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&hash)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && hash == "" {
 		DummyVerify(password)
 		return ErrBadPassword

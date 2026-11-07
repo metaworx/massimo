@@ -11,6 +11,7 @@ package server
 // POST /api/v1/users from the local network creates the first owner.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -77,6 +78,8 @@ func userFail(err error) error {
 	switch {
 	case errors.As(err, &he):
 		return err
+	case passwordBusy(err) != nil:
+		return passwordBusy(err)
 	case errors.Is(err, store.ErrNoUser), errors.Is(err, store.ErrNoRole), errors.Is(err, store.ErrNoToken):
 		return fail(http.StatusNotFound, "%v", err)
 	case errors.Is(err, store.ErrUserExists), errors.Is(err, store.ErrRoleExists), errors.Is(err, store.ErrLastOwner), errors.Is(err, store.ErrRoleInUse):
@@ -87,6 +90,20 @@ func userFail(err error) error {
 		return fail(http.StatusForbidden, "%v", err)
 	}
 	return fail(http.StatusInternalServerError, "%v", err)
+}
+
+// busyRetry is the Retry-After, in seconds, of a password check or
+// hash refused because the store runs as many as it takes at once.
+const busyRetry = 5
+
+// passwordBusy is the answer to a password check or hash that the
+// store refused for the load (store.ErrBusy), or that waited until the
+// client went away; nil for any other error.
+func passwordBusy(err error) error {
+	if errors.Is(err, store.ErrBusy) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return &httpError{status: http.StatusServiceUnavailable, msg: "too many password checks at once; try again in a few seconds", retryAfter: busyRetry}
+	}
+	return nil
 }
 
 // userStore is the store, or the error of a server without one.

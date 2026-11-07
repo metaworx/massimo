@@ -124,6 +124,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusTooManyRequests, "too many failed logins for this user; try again later")
 	}
 	if err := st.CheckPassword(ctx, name, req.Password); err != nil {
+		if busy := passwordBusy(err); busy != nil {
+			return busy
+		}
 		if !errors.Is(err, store.ErrBadPassword) {
 			return fail(http.StatusInternalServerError, "%v", err)
 		}

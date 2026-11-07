@@ -76,6 +76,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/Busy"}
   /api/v1/logout:
     post:
       summary: End the session that makes the call
@@ -307,7 +308,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
-        "503": {$ref: "#/components/responses/NoStore"}
+        "503": {$ref: "#/components/responses/NoStoreOrBusy"}
   /api/v1/users/{name}:
     get:
       summary: One user
@@ -355,7 +356,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
-        "503": {$ref: "#/components/responses/NoStore"}
+        "503": {$ref: "#/components/responses/NoStoreOrBusy"}
     delete:
       summary: Remove a user
       x-capability: users
@@ -1920,6 +1921,28 @@ components:
           schema: {$ref: "#/components/schemas/Error"}
     NoStore:
       description: The server has no store (serve -addr), so no users
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Busy:
+      description: >-
+        Too many password checks at once (one a core, at most four, and
+        eight waiting); try again after Retry-After.
+      headers:
+        Retry-After:
+          description: Seconds to wait before trying again
+          schema: {type: integer}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NoStoreOrBusy:
+      description: >-
+        The server has no store (serve -addr), so no users; or it is
+        checking too many passwords at once, with Retry-After.
+      headers:
+        Retry-After:
+          description: Seconds to wait before trying again, when busy
+          schema: {type: integer}
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
