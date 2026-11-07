@@ -56,6 +56,9 @@ type Client struct {
 	addrMu sync.Mutex
 	addr   string        // host:port; "" until known, see SetAddress
 	hasAdr chan struct{} // closed once addr is set
+	// wake cuts Run's wait between two dials short: a new address, or
+	// a Reconnect while disconnected.
+	wake chan struct{}
 }
 
 type pendingReply struct {
@@ -83,7 +86,7 @@ func New(opts Options) *Client {
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
 	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
-		hasAdr: make(chan struct{})}
+		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1)}
 	if opts.Addr != "" {
 		c.SetAddress(opts.Addr)
 	}
@@ -107,7 +110,8 @@ func (c *Client) Address() string {
 
 // SetAddress sets the Cube's address, for a Cube found by discovery,
 // and reports whether it changed. A client created without an address
-// waits for it before it connects; a change takes effect with the next
+// waits for it before it connects; a client between connections dials
+// the new one at once; a connected one takes it with the next
 // connection, so a caller that wants it now reconnects (through the
 // queue, engine.Command.Reconnect).
 func (c *Client) SetAddress(addr string) bool {
@@ -122,7 +126,16 @@ func (c *Client) SetAddress(addr string) bool {
 	if first {
 		close(c.hasAdr)
 	}
+	c.wakeDial()
 	return true
+}
+
+// wakeDial ends Run's wait before its next dial.
+func (c *Client) wakeDial() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
 }
 
 // Snapshot returns the client's view of the Cube.
@@ -167,6 +180,7 @@ func (c *Client) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff):
+		case <-c.wake:
 		}
 		if backoff < time.Minute {
 			backoff *= 2
@@ -177,6 +191,10 @@ func (c *Client) Run(ctx context.Context) error {
 // session runs one connection until it fails and reports whether the
 // greeting arrived.
 func (c *Client) session(ctx context.Context) (bool, error) {
+	select { // a wake from before this dial is spent
+	case <-c.wake:
+	default:
+	}
 	conn, err := c.opts.Dialer(ctx, c.Address())
 	if err != nil {
 		return false, err
@@ -414,13 +432,20 @@ func (c *Client) clearPending(p *pendingReply) {
 // snapshot with what the Cube holds now: a full refresh, in case a write
 // the Cube acknowledged did not take effect. A command waiting for its
 // reply fails with ErrNotConnected, so callers run it through the
-// command queue (engine.Command.Reconnect).
+// command queue (engine.Command.Reconnect). Between connections it
+// dials at once and waits for the greeting.
 func (c *Client) Reconnect(ctx context.Context) error {
 	c.mu.Lock()
 	conn, greeted := c.conn, c.greeted
 	c.mu.Unlock()
 	if conn == nil {
-		return ErrNotConnected
+		c.wakeDial()
+		select {
+		case <-greeted:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	c.reconnecting.Store(true)
 	c.write(cube.CmdQuit)

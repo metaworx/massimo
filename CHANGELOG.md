@@ -139,6 +139,9 @@ the next minor, a fix counts the suffix up.
 - A `t:` deleting several devices waits for the Cube's `A:` of each, so
   the next command no longer takes a late one as its reply (docs/proxy.md).
 
+- A Cube's new address from discovery is dialled at once, no longer after
+  the minute of backoff the old address built up.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

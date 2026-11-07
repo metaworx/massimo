@@ -358,3 +358,63 @@ func TestSendWaitsForEveryAOfADelete(t *testing.T) {
 		t.Fatalf("Send of a t: for three devices returned after %s, before the Cube's third A", took)
 	}
 }
+
+// freeAddr is an address nothing listens on.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().String()
+}
+
+// A new address, as discovery finds it after a DHCP lease, is dialled at
+// once, not after the backoff the failed dials to the old one built up.
+func TestSetAddressCutsTheBackoffShort(t *testing.T) {
+	_, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: freeAddr(t)})
+	go c.Run(ctx)
+	time.Sleep(1300 * time.Millisecond) // two failed dials: the client waits 2 s now
+	start := time.Now()
+	c.SetAddress(addr)
+	select {
+	case <-c.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("never connected")
+	}
+	if took := time.Since(start); took > 700*time.Millisecond {
+		t.Fatalf("connected %s after the new address", took)
+	}
+}
+
+// Reconnect while the client is between connections dials at once and
+// waits for the greeting, rather than failing with ErrNotConnected.
+func TestReconnectWhileDisconnected(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := freeAddr(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	time.Sleep(1300 * time.Millisecond)
+	srv := &fakecube.Server{Greeting: greeting}
+	if _, err := srv.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	rctx, stop := context.WithTimeout(ctx, 700*time.Millisecond)
+	defer stop()
+	if err := c.Reconnect(rctx); err != nil {
+		t.Fatalf("Reconnect while disconnected: %v", err)
+	}
+	if !c.Connected() {
+		t.Fatal("not connected after Reconnect")
+	}
+}
