@@ -115,7 +115,9 @@ To build instead, with Go 1.26 or later installed:
 one at a time with `make linux`, `make linux-arm64`, `make linux-armv7`,
 `make linux-armv6`, `make darwin` (both Mac architectures) and `make windows`;
 `make release` adds `SHA256SUMS` and the release manifest; `make vet`,
-`make test` and `make clean` do what they say.
+`make test` and `make clean` do what they say;
+`make race` runs the race detector on the packages whose goroutines meet,
+and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
 A build from `main` follows the channel `main`, which has no releases,
 unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
 see [packaging/README.md](packaging/README.md#updating).
