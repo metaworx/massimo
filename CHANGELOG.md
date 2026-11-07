@@ -22,6 +22,9 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- The web UI warns under its header while the server is open, and says
+  what closes it (`docs/ui.md`).
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its
@@ -40,6 +43,16 @@ the next minor, a fix counts the suffix up.
 - A lost Cube is logged and stored as `disconnected` once, not at
   every retry, and its return logged with how long it was down
   (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+
+### Security
+
+- A server that asks for no key answers only its local network, a
+  reverse proxy's clients only with `-trusted-proxies`
+  (`docs/api-v1.md`, "Authentication").
+
+- The server refuses a write that another site's page sent, which an
+  open server served: such a page could create the first owner
+  (`docs/api-v1.md`, "Authentication").
 
 ## [0.10.0-alpha.1] - 2026-11-07
 
