@@ -44,6 +44,10 @@ the next minor, a fix counts the suffix up.
 - A new API key is no longer kept in its command's result, nor given
   out again by a replay of its `Idempotency-Key` (docs/api-v1.md).
 
+- Behind a trusted proxy, a client's `X-Real-IP` no longer wins over an
+  `X-Forwarded-For` entry that is not an address, nor a second
+  `X-Forwarded-For` line over the proxy's (docs/reverse-proxy.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

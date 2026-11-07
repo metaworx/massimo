@@ -221,7 +221,9 @@ With a store the counters survive a restart.
 The address is the TCP peer's, or,
 with `-trusted-proxies` naming the proxy's address,
 the client the proxy passes in `X-Forwarded-For`
-(the rightmost entry that is not a trusted proxy) or `X-Real-IP`;
+(the rightmost entry that is not a trusted proxy;
+an entry that is not an address makes it the proxy),
+or `X-Real-IP` when there is no `X-Forwarded-For`;
 without it the headers are ignored, since anyone can set them,
 and behind a reverse proxy the limit then applies to the proxy as a whole
 (docs/reverse-proxy.md).

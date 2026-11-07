@@ -209,15 +209,28 @@ func TestClientIP(t *testing.T) {
 		{trusting, "127.0.0.1:1234", "192.0.2.10", "", "192.0.2.10"},
 		{trusting, "127.0.0.1:1234", "192.0.2.10, 10.1.2.3", "", "192.0.2.10"},     // a chain through two trusted proxies
 		{trusting, "127.0.0.1:1234", "198.51.100.1, 192.0.2.10", "", "192.0.2.10"}, // the rightmost client
-		{trusting, "127.0.0.1:1234", "10.1.2.3", "192.0.2.12", "192.0.2.12"},       // every hop trusted: X-Real-IP
+		{trusting, "127.0.0.1:1234", "10.1.2.3", "192.0.2.12", "10.1.2.3"},         // every hop trusted: the leftmost, never X-Real-IP
 		{trusting, "127.0.0.1:1234", "", "192.0.2.12", "192.0.2.12"},
 		{trusting, "127.0.0.1:1234", "", "", "127.0.0.1"},
 		{trusting, "127.0.0.1:1234", "garbage", "", "127.0.0.1"},
+		// An entry that does not parse is the peer, whatever X-Real-IP
+		// the client set; X-Real-IP counts only without X-Forwarded-For.
+		{trusting, "127.0.0.1:1234", "unknown", "192.0.2.13", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "192.0.2.10:5555", "192.0.2.13", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "192.0.2.10, unknown", "192.0.2.13", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "198.51.100.7", "192.0.2.13", "198.51.100.7"},
 		{trusting, "[::1]:1234", "2001:db8::10", "", "2001:db8::10"},
 		{trusting, "[::ffff:127.0.0.1]:1234", "192.0.2.10", "", "192.0.2.10"},
 	} {
 		if got := c.s.clientIP(req(c.remote, c.xff, c.real)); got != c.want {
 			t.Errorf("%s xff=%q real=%q: %q, want %q", c.remote, c.xff, c.real, got, c.want)
 		}
+	}
+	// A proxy that adds a header line of its own after the client's: the
+	// lines are one list, the proxy's entry the rightmost.
+	r := req("127.0.0.1:1234", "192.0.2.66", "")
+	r.Header.Add("X-Forwarded-For", "192.0.2.10")
+	if got := trusting.clientIP(r); got != "192.0.2.10" {
+		t.Errorf("two X-Forwarded-For lines: %q, want the proxy's 192.0.2.10", got)
 	}
 }

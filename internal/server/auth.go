@@ -194,26 +194,32 @@ func tokenMatches(want, got string) bool {
 // clientIP is the address a request came from, without the port: the
 // TCP peer's, or, when the peer is one of Options.TrustedProxies, the
 // client that proxy names in X-Forwarded-For (the rightmost entry that
-// is not a trusted proxy itself) or X-Real-IP. Without trusted proxies
-// the headers are ignored: anyone can set them. One address serves the
-// lockout, the local-network check of the first owner, the audit and
-// the log.
+// is not a trusted proxy itself, the leftmost when every one is), its
+// header lines read as one list, or, only when no X-Forwarded-For came
+// at all, X-Real-IP. An entry that does not parse is the peer: what a
+// client can set never wins over what the proxy appended. Without
+// trusted proxies the headers are ignored: anyone can set them. One
+// address serves the lockout, the local-network check of the first
+// owner, the audit and the log.
 func (s *Server) clientIP(r *http.Request) string {
 	peer := peerIP(r.RemoteAddr)
 	if len(s.opts.TrustedProxies) == 0 || !s.trustedProxy(peer) {
 		return peer
 	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
+	if lines := r.Header.Values("X-Forwarded-For"); len(lines) > 0 {
+		parts := strings.Split(strings.Join(lines, ","), ",")
+		client := peer
 		for i := len(parts) - 1; i >= 0; i-- {
 			a, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
 			if err != nil {
-				break // a proxy would not write this; the peer it is
+				return peer // a proxy would not write this
 			}
-			if !s.trustedProxy(a.Unmap().String()) {
-				return a.Unmap().String()
+			client = a.Unmap().String()
+			if !s.trustedProxy(client) {
+				return client
 			}
 		}
+		return client
 	}
 	if a, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil {
 		return a.Unmap().String()
