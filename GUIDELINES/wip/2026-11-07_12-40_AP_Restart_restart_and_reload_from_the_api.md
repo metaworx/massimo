@@ -1,4 +1,4 @@
-# AP Restart v1.0: Restart and reload from the API
+# AP Restart v1.1: Restart and reload from the API
 
 ## TL;DR
 
@@ -15,8 +15,10 @@ so a new `MASSIMO_API_TOKEN` applies without a restart.
   `-restart auto|exit|off`, `MASSIMO_RESTART` for Docker or a custom unit
 - open server → a restart only from the box itself (D3-B), once AP OpenMode
   Block 1 refuses cross-origin writes
-- settings file → watched (D4), SIGHUP on Unix (`-sighup auto|reload|stop`,
-  `MASSIMO_SIGHUP`); the token applies live, the rest "at the next restart"
+- settings file → `stat` every 5 s (D4-A), SIGHUP on Unix
+  (`-sighup auto|reload|stop`, `MASSIMO_SIGHUP`); the token applies live,
+  the rest is listed "at the next restart"; a SIGHUP also checkpoints the
+  store (`Store.Checkpoint`, AP CleanStop, on `main` since pull request 84)
 - event streams → checked again at each keep-alive, closed once the caller
   would not be let in
 - sign-in dialog → its API-key part opens by itself when the page saw the
@@ -24,7 +26,7 @@ so a new `MASSIMO_API_TOKEN` applies without a restart.
 
 ### Blocks
 
-Pull request 1, the restart:
+Pull request 1, the restart (metaworx/massimo#85, Blocks 1 to 4 done):
 
 1. Capability `restart`: the server's and the UI's lists, migration 0006
    for manager, its label in six languages, the documents
@@ -35,7 +37,7 @@ Pull request 1, the restart:
 4. The UI: Settings → Software restarts the server, follows `/healthz`
    until it is back; Playwright at 1100 and 390 px
 
-Pull request 2, the reload:
+Pull request 2, the reload, stacked on pull request 1 with `main` merged:
 
 5. The settings-file reload: the watch (D4), SIGHUP and `-sighup` (D8),
    the token live, the "applies at the next restart" list
@@ -46,7 +48,8 @@ Pull request 2, the reload:
 ## Discussion
 
 Settled at the TL;DR gate and the two EVAL answers that followed,
-the owner's `PLAN++` taking the recommended options except where he named one.
+the owner's `PLAN++` taking the recommended options except where the owner
+named one; D4 at the owner's `PLAN++ Restart` of v1.0's completion gate.
 
 ### D1. How the server restarts itself: A
 
@@ -82,12 +85,12 @@ the owner's `PLAN++` taking the recommended options except where he named one.
   browser opens on the box could send the `POST`.
   This plan's pull request 1 is therefore stacked on that plan's.
 
-### D4. The settings file without a restart: open
+### D4. The settings file without a restart: A
 
 The owner asked whether the kernel's file notification could do it where
-there is one. To be settled at Block 5's gate, in pull request 2.
+there is one; settled as recommended.
 
-- **A (recommended).** `stat` every 5 s, applied once size and time held
+- **A (chosen).** `stat` every 5 s, applied once size and time held
   for one more check, a parse error or a missing file keeping what runs:
   no dependency, every file system (a network share, WSL's `/mnt`),
   about 17,000 calls a day of microseconds each; SIGHUP on Unix for "now".
@@ -131,6 +134,13 @@ Blocks 1 to 4, then 5 to 7.
 
 Today an unhandled SIGHUP stops `serve`, and systemd counts that as a clean
 exit, so `Restart=on-failure` does not start it again.
+
+The owner wants a SIGHUP to bring the WAL into `massimo.db` too.
+AP CleanStop, which another session ran, leaves the signal to this plan and
+added `Store.Checkpoint(ctx)` (`{WALBytes int64; Busy bool}`), now on `main`:
+a reloading SIGHUP calls it and logs `store checkpointed` with `wal_bytes`,
+or a busy store or an error as a warning. A stopping SIGHUP needs nothing,
+since `Store.Close` checkpoints.
 
 ### D9. The cross-origin hole: A, a plan of its own first
 
@@ -234,39 +244,60 @@ windows and darwin, and `-race` for `internal/server`.
 
 **Verification:** `make ui-test`, then as Block 2.
 
-Blocks 5 to 7 are pull request 2; their steps are filled in at the gate
-that opens it, once D4 is settled.
+Blocks 5 to 7 are pull request 2, on a branch from pull request 1's that
+merges `main` first, for `Store.Checkpoint`.
 
 ### Block 5: The settings-file reload
 
-1. `internal/env`: read the file again into what the process environment
-   did not set before it (`env.Source`).
-2. `cmd/massimo`: the watch (D4) and, on Unix, SIGHUP with
-   `-sighup auto|reload|stop` (`MASSIMO_SIGHUP`, D8); a reload applies
-   `MASSIMO_API_TOKEN` unless `-token` was given (`Store.Bootstrap`, or the
-   legacy token), and lists by name what else changed.
-3. `GET /api/v1/restart` says what applies at the next restart;
-   `packaging/systemd/massimo.service` gains `ExecReload`.
-4. Tests with a temporary settings file; README, `docs/api-v1.md`,
+1. `internal/env`, `ReloadFile`: the file parsed whole, then applied: a
+   variable the file set takes its new value or goes when the file drops
+   it, one it now names and the environment had not set is set, one the
+   environment set before the file stays (`env.Source`). A parse error or
+   a missing file changes nothing and is an error; the names that changed
+   come back, sorted.
+2. `cmd/massimo/reload.go`: `watchSettings`, size and modification time
+   every 5 s, a change applied once it held for one more look (an editor's
+   half-written file is not read); the reloader, one at a time, which
+   applies `MASSIMO_API_TOKEN` through `Server.SetToken` unless `-token`
+   was given, and lists the known variables that differ from the start,
+   not those a flag fixed and not the Cube keys, which serve does not use.
+3. `cmd/massimo/sighup.go`: `-sighup auto|reload|stop` (`MASSIMO_SIGHUP`):
+   `auto` reloads where a service manager runs serve or SIGHUP was ignored
+   at the start, and stops otherwise; `stop` stops as SIGTERM does; a reload
+   also calls `Store.Checkpoint`. Not on Windows, which has no SIGHUP.
+4. `internal/server`: `SetToken` (`Store.Bootstrap`, or the legacy token,
+   read through one accessor), `SetPendingRestart`, and `pending` in
+   `GET /api/v1/restart`.
+5. `packaging/systemd/massimo.service`: `ExecReload=/bin/kill -HUP $MAINPID`.
+6. Tests: `ReloadFile`; the watch with a short interval; the reloader's
+   token and list; the SIGHUP modes; and, end to end with the built binary,
+   a settings file that gains `MASSIMO_API_TOKEN` and a SIGHUP after which
+   the API asks for it and the store is checkpointed.
+7. README, `docs/api-v1.md`, `docs/store.md` section 6, OpenAPI,
    `packaging/README.md`; the CHANGELOG bullet.
 
 **Verification:** as Block 2.
 
 ### Block 6: Event streams checked again
 
-1. `server.go`, `events`: at each keep-alive, the caller resolved again
-   as `authorize` would; the stream ends when it would be refused now.
+1. `server.go`, `events`: at each keep-alive, `stillAdmitted` asks again:
+   an open server still open, a legacy token unchanged, a user's token by
+   its id not revoked or expired, its user and role still allowed and
+   holding `read`; the stream ends otherwise. The keep-alive's interval
+   is a server field, so that tests can shorten it.
 2. Tests: a stream opened on an open server ends once a user exists; one
-   opened with a key ends when the key is revoked.
-3. `docs/api-v1.md`, the event stream; the CHANGELOG bullet.
+   opened with a key ends when the key is revoked; one whose caller is
+   still allowed stays.
+3. `docs/api-v1.md`, the event stream; the CHANGELOG bullet under
+   Security.
 
 **Verification:** as Block 2.
 
 ### Block 7: The UI for the reload
 
 1. Settings → Software lists what applies at the next restart beside the
-   button; the sign-in dialog opens its API-key part when the page had
-   seen the server open (D6).
+   button (`pending`); the sign-in dialog opens its API-key part when the
+   page had seen the server open (D6), remembered in `loadMe`.
 2. Texts in six languages; Playwright at 1100 and 390 px; `docs/ui.md`;
    the CHANGELOG bullet.
 
@@ -288,9 +319,25 @@ Assisted-by: claude-code:claude-opus-5-5
 
 The blocks' messages follow the form of AP OpenMode's: a `feat` each,
 `feat(store)`, `feat(serve)`, `feat(api)`, `feat(ui)`, citing
-`AP Restart v1.0, Block <n>`.
+`AP Restart v1.0, Block <n>`; Blocks 5 to 7 cite v1.1, Block 6 as
+`fix(security:api)`.
+
+Revision 1.1:
+
+```
+chore(aps): +Restart v1.1
+
+Blocks 5 to 7 are written out: D4 is settled for the stat every 5 s, a reloading SIGHUP also checkpoints the store with AP CleanStop's Store.Checkpoint, and pull request 2 merges main for it.
+
+File-revision-v1: GUIDELINES/wip/2026-11-07_12-40_AP_Restart_restart_and_reload_from_the_api.md::v1.1::2026-11-07::TL;DR, Discussion, Implementation Plan, Proposed commit message, Change History::D4 settled, Blocks 5 to 7 written out, the checkpoint on SIGHUP
+Assisted-by: claude-code:claude-opus-5-5
+```
 
 ## Change History
 
 - v1.0 (2026-11-07): the first revision, from the TL;DR gate and its two
   EVAL answers; D3-B and the two switches at the owner's word, D4 open.
+- v1.1 (2026-11-07): Blocks 1 to 4 done in pull request 85 (NOTE Restart
+  v1.0, how the run went); D4 settled as A at the owner's `PLAN++
+  Restart`; Blocks 5 to 7 written out, with AP CleanStop's
+  `Store.Checkpoint` on a reloading SIGHUP, at that session's request.
