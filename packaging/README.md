@@ -520,7 +520,8 @@ sudo massimo update -restart massimo.service -health http://127.0.0.1:8099/healt
 
 It downloads the release's manifest and checks its signature against the public
 key compiled into the running massimo,
-downloads the binary for this machine (`massimo-linux-armv6` on a Pi 1)
+downloads the binary for this machine (`massimo-linux-armv6` on a Pi 1),
+for as long as the line needs but given up after a minute without data,
 and checks its SHA-256 against the manifest,
 runs `<new binary> version` to make sure it starts here,
 keeps the old binary as `/usr/local/bin/massimo.prev` and renames the new one into place.

@@ -146,7 +146,15 @@ type Client struct {
 	HTTP  *http.Client
 	Key   ed25519.PublicKey
 	Token string // optional, for the API only: see TokenVar
+	// Idle is the longest pause in a download's data, DownloadIdle
+	// when 0; the download itself has no time limit of the client's.
+	Idle time.Duration
 }
+
+// DownloadIdle is how long a download may go without data: a Pi 1 on a
+// slow line takes minutes for a binary, which the API's two minutes
+// would cut off, while a stalled one should not wait for ever.
+const DownloadIdle = time.Minute
 
 // TokenVar names an optional GitHub token for the release list. Without
 // one GitHub allows 60 API requests an hour per address, which a shared
@@ -351,22 +359,43 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 	if url == "" {
 		return fmt.Errorf("release %s lists %s in its manifest but has no such file", r.Tag, name)
 	}
+	// Bounded by ctx and by a pause in the data, not by the client's
+	// Timeout, which counts the whole body.
+	idle := c.Idle
+	if idle <= 0 {
+		idle = DownloadIdle
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stall := time.AfterFunc(idle, func() { cancel(fmt.Errorf("GET %s: no data for %s", url, idle)) })
+	defer stall.Stop()
+	stalled := func(err error) error {
+		if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+			return cause
+		}
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.HTTP.Do(req)
+	var hc http.Client
+	if c.HTTP != nil {
+		hc = *c.HTTP
+	}
+	hc.Timeout = 0
+	resp, err := hc.Do(req)
 	if err != nil {
-		return err
+		return stalled(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
 	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(resp.Body, MaxBinarySize+1))
+	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(idleReader{resp.Body, stall, idle}, MaxBinarySize+1))
 	if err != nil {
-		return err
+		return stalled(err)
 	}
 	if n > MaxBinarySize {
 		return fmt.Errorf("%s is larger than %d bytes", name, MaxBinarySize)
@@ -375,4 +404,20 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 		return fmt.Errorf("%s: SHA-256 %s, the signed manifest says %s", name, got, want)
 	}
 	return nil
+}
+
+// idleReader moves a download's stall timer on with every read that
+// brings data.
+type idleReader struct {
+	r     io.Reader
+	stall *time.Timer
+	idle  time.Duration
+}
+
+func (r idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.stall.Reset(r.idle)
+	}
+	return n, err
 }

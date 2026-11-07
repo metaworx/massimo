@@ -103,6 +103,9 @@ the next minor, a fix counts the suffix up.
 - `massimo update -check` and the web UI say that a channel has no
   signed release, no longer that an old release has no manifest.
 
+- `massimo update` downloads a binary for as long as a slow line needs,
+  no longer cut off after two minutes; a stall ends it after one.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
