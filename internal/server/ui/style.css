@@ -705,6 +705,27 @@ button:hover { border-color: var(--accent); }
 .menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: default; }
+/* A button whose request is running (setBusy, components.js): off, less
+   faded than a button with nothing to do, a ring turning after its text
+   in the button's own colour, so in either theme. */
+button.busy:disabled { opacity: 0.75; cursor: progress; }
+button.busy::after {
+  content: "";
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.45em;
+  vertical-align: -0.1em;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: busy-turn 0.8s linear infinite;
+}
+@keyframes busy-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  button.busy::after { animation-duration: 2.4s; }
+}
 
 dialog {
   background: var(--card);

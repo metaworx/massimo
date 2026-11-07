@@ -308,9 +308,12 @@ without the switches.
 - **Users** (with `users`, or `guests` for the guests alone):
   every user in a panel with its display name, role, whether it is disabled,
   a guest's end, and a new password, which ends the user's sessions;
+  **Save**, off while nothing differs from the user;
   **Remove**; the user's sessions and API keys with **Revoke**,
   and **Create key**, which shows the new key once.
-  **Add a user** opens the form for one.
+  **Add a user** opens the form for one;
+  **Create** turns until the server has hashed the password,
+  which takes seconds on a Raspberry Pi 1.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Disable** (with `roles.disable`), **Remove** for a created role nobody has,
@@ -351,6 +354,12 @@ is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
+A button that sends a request is busy from its click until the answer:
+off, with a turning ring after its text, and `aria-busy`
+(`setBusy` and `whileBusy`),
+so that a second click or Enter sends nothing;
+a form that knows what it last sent keeps its Send or Save off
+while nothing differs (`sendWhenChanged`).
 The texts are in `ui/i18n/<lang>.json`, one flat table per language,
 English the base: markup takes them with `data-i18n` and `data-i18n-attr`,
 scripts with `t()` and `tn()`, and a change of language fills the page and

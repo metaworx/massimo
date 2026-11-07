@@ -147,6 +147,7 @@ function askLogin() {
     $("login-password").value = "";
     $("login-token").value = "";
     showResult(error, "", false);
+    const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {
       form.onsubmit = null;
       dlg.onclose = null;
@@ -163,21 +164,25 @@ function askLogin() {
         if (!startWaits) afterLogin();
         return;
       }
+      if (isBusy(submit)) return; // a second Enter while it signs in
       const user = $("login-user").value.trim();
       const password = $("login-password").value;
       if (!user || !password) {
         showResult(error, t("login.missing"), false);
         return;
       }
+      showResult(error, "", false);
+      let session;
       try {
-        const session = await signIn(user, password);
-        setToken(session.token);
-        done(true);
-        if (!startWaits) afterLogin();
+        session = await whileBusy(submit, () => signIn(user, password));
       } catch (e) {
         showResult(error, t("login.failed", { error: e.message }), false);
         $("login-password").focus();
+        return;
       }
+      setToken(session.token);
+      done(true);
+      if (!startWaits) afterLogin();
     };
     dlg.onclose = () => done(false);
     dlg.showModal();
@@ -333,12 +338,14 @@ async function loadPreferences() {
 async function changeOwnPassword(ev) {
   ev.preventDefault();
   const msg = $("me-password-msg");
+  const submit = $("me-password-form").querySelector("button[type=submit]");
+  if (isBusy(submit)) return;
   const current = $("me-current").value;
   const password = $("me-new").value;
   if (password !== $("me-again").value) return showResult(msg, t("setup.mismatch"), false);
   if (!password) return showResult(msg, t("login.missing"), false);
   try {
-    await api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current });
+    await whileBusy(submit, () => api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current }));
     showResult(msg, t("me.passwordChanged"), true);
     $("me-current").value = "";
     $("me-new").value = "";
@@ -351,17 +358,21 @@ async function changeOwnPassword(ev) {
 // --- the first owner --------------------------------------------------
 
 // createOwner handles the form of a server without users: the owner is
-// created and signed in at once.
+// created and signed in at once, the button busy through both.
 async function createOwner(ev) {
   ev.preventDefault();
   const msg = $("setup-msg");
+  const submit = $("setup-form").querySelector("button[type=submit]");
+  if (isBusy(submit)) return;
   const name = $("setup-user").value.trim();
   const password = $("setup-password").value;
   if (!name || !password) return showResult(msg, t("login.missing"), false);
   if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
   try {
-    await api("POST", "api/v1/users", { name, password, role: "owner" });
-    const session = await signIn(name, password);
+    const session = await whileBusy(submit, async () => {
+      await api("POST", "api/v1/users", { name, password, role: "owner" });
+      return signIn(name, password);
+    });
     setToken(session.token);
     showResult(msg, t("setup.done", { name }), true);
     afterLogin();

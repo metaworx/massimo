@@ -81,8 +81,8 @@ def remove_user(name):
 def test_an_unchanged_end_date_is_not_sent(page, case):
     """A user with an end date whose display name alone changes is saved
     without the end date: the form's minute and the server's time with
-    its seconds and offset are the same end; Save without a change says
-    so and sends nothing. The test makes the guest and removes it."""
+    its seconds and offset are the same end; Save is off while nothing
+    differs, so nothing is sent. The test makes the guest and removes it."""
     name = f"end-{case.width}-{case.lang}"
     remove_user(name)
     api_call("POST", "api/v1/users", {"name": name, "role": "guest", "password": "end-pass", "expires_at": "2099-01-02T10:20:30+01:00"})
@@ -93,12 +93,16 @@ def test_an_unchanged_end_date_is_not_sent(page, case):
         panel = page.locator(".user-panel[data-name='%s']" % name)
         panel.wait_for()
         panel.locator("summary").click()
-        panel.locator("form button[type=submit]").click()
-        assert wait_until(page, "!document.getElementById('users-msg').classList.contains('hidden')", 5), "Save says how it went"
+        save = panel.locator("form button[type=submit]")
+        assert save.is_disabled(), "Save is off while nothing differs from the user"
+        panel.locator("input[name=display_name]").fill("Guest")
+        assert save.is_enabled(), "a change turns Save on"
+        panel.locator("input[name=display_name]").fill("")
+        assert save.is_disabled(), "Save is off again once the change is undone"
         page.wait_for_timeout(300)
-        assert not puts, f"Save without a change sends nothing: {puts}"
+        assert not puts, f"nothing is sent without a change: {puts}"
         panel.locator("input[name=display_name]").fill("Guest with an end")
-        panel.locator("form button[type=submit]").click()
+        save.click()
         assert wait_until(page, "document.querySelector(\".user-panel[data-name='%s'] .panel-name\").textContent === 'Guest with an end'" % name, 5), \
             "the display name is saved"
         assert puts == [{"display_name": "Guest with an end"}], f"the display name alone is sent: {puts}"
@@ -136,5 +140,67 @@ def test_a_double_click_on_yes_removes_once(page, case):
         assert len(deletes) == 1, f"one DELETE for a double click: {len(deletes)}"
         assert "ok" in page.locator("#users-msg").get_attribute("class"), "the message says it worked"
     finally:
+        remove_user(name)
+    page.locator("#view-tiles").click()
+
+
+def held_posts(page, pattern, held, posts):
+    """Holds the POSTs to pattern until the test lets them go, and counts
+    them; other methods go through."""
+    def handle(route):
+        if route.request.method == "POST":
+            posts.append(route.request.url)
+            held.append(route)
+        else:
+            route.continue_()
+    page.route(pattern, handle)
+
+
+def wait_held(page, held, seconds=5):
+    """Waits until a held request has reached the route."""
+    end = seconds * 1000
+    while not held and end > 0:
+        page.wait_for_timeout(100)
+        end -= 100
+    return bool(held)
+
+
+def assert_busy(page, selector, what):
+    """The button is off, turns (class busy) and is aria-busy."""
+    state = page.evaluate("(() => { const b = document.querySelector(%r); return b && [b.disabled, b.classList.contains('busy'), "
+                          "b.getAttribute('aria-busy')]; })()" % selector)
+    assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
+
+
+def test_create_is_busy_until_answered(page, case):
+    """Create is off with a spinner from its click until the server
+    answers, so that a second click or Enter sends nothing: on the Pi 1
+    the hashing took 4.6 s and a second click was refused as "user
+    exists". The test holds the POST, then lets it go."""
+    name = f"busy-{case.width}-{case.lang}"
+    remove_user(name)
+    held, posts = [], []
+    held_posts(page, "**/api/v1/users", held, posts)
+    try:
+        page.locator("#view-settings").click()
+        page.locator("#user-add").click()
+        form = page.locator("#user-new form")
+        form.locator("input[name=name]").fill(name)
+        form.locator("input[name=password]").fill("busy-pass")
+        form.locator("button[type=submit]").click()
+        assert wait_held(page, held), "the POST is sent"
+        assert_busy(page, "#user-new button[type=submit]", "Create")
+        form.locator("button[type=submit]").click(force=True)
+        form.locator("input[name=name]").press("Enter")
+        page.wait_for_timeout(300)
+        assert len(posts) == 1, f"one POST while the first is unanswered: {len(posts)}"
+        for route in held:
+            route.continue_()
+        assert wait_until(page, "!document.querySelector('#user-new form') && document.getElementById('users-msg').classList.contains('ok')", 5), \
+            "the user is created and the form closed"
+        assert page.locator(".user-panel[data-name='%s']" % name).count() == 1, "the user is listed once"
+        assert len(posts) == 1, f"one POST in all: {len(posts)}"
+    finally:
+        page.unroute("**/api/v1/users")
         remove_user(name)
     page.locator("#view-tiles").click()

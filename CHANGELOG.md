@@ -30,6 +30,10 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- The web UI keeps a button that sends off, with a spinner, until the
+  answer, so a second click sends nothing: the users forms, the sign-in
+  and the first owner (`docs/ui.md`, "How the page is built").
+
 - A request still being answered when `serve` stops is finished, and
   its audit row written, before the store closes (`cmd/massimo`).
 

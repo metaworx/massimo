@@ -15,7 +15,6 @@ const usersUI = {
   roles: null, // the roles, when they may be read, for the role choice
   open: new Set(), // names of the open panels
   keys: {}, // per name: the key just created, shown once
-  busy: false,
 };
 
 function usersMsg(text, ok) {
@@ -62,21 +61,22 @@ function roleOptions(current) {
   });
 }
 
-// userAction runs a change, redraws the list and says how it went.
-async function userAction(fn, okText, name) {
-  usersUI.busy = true;
-  try {
-    await fn();
-    await loadUsers();
-    renderUsers();
-    usersMsg(okText, true);
-    return true;
-  } catch (e) {
-    usersMsg(t("users.failed", { name, error: e.message }), false);
-    return false;
-  } finally {
-    usersUI.busy = false;
-  }
+// userAction runs a change, redraws the list and says how it went;
+// btn, the button it runs for, is busy until then (whileBusy), and a
+// click while it is runs nothing and returns undefined.
+function userAction(fn, okText, name, btn) {
+  return whileBusy(btn, async () => {
+    try {
+      await fn();
+      await loadUsers();
+      renderUsers();
+      usersMsg(okText, true);
+      return true;
+    } catch (e) {
+      usersMsg(t("users.failed", { name, error: e.message }), false);
+      return false;
+    }
+  });
 }
 
 // localDateTimeOf is an API time as a datetime-local value, "" for none.
@@ -138,7 +138,7 @@ function tokenRow(u, tk) {
   const revoke = li.querySelector(".revoke-token");
   revoke.setAttribute("aria-label", t("users.revokeLabel", { label: tk.label || t("users.kind." + tk.kind) }));
   revoke.addEventListener("click", () => {
-    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name);
+    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name, revoke);
   });
   return li;
 }
@@ -171,7 +171,8 @@ function wireNewKey(u, box) {
   const input = box.querySelector("input[name=label]");
   input.id = "user-key-label-" + u.name;
   input.previousElementSibling.htmlFor = input.id;
-  box.querySelector(".create-key").addEventListener("click", () => {
+  const create = box.querySelector(".create-key");
+  create.addEventListener("click", () => {
     const label = input.value.trim();
     if (!label) {
       usersMsg(t("users.keyLabelNeeded"), false);
@@ -180,7 +181,7 @@ function wireNewKey(u, box) {
     userAction(async () => {
       const res = await api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens", { label });
       usersUI.keys[u.name] = res.token;
-    }, t("users.keyCreated", { label }), u.name);
+    }, t("users.keyCreated", { label }), u.name, create);
   });
 }
 
@@ -229,8 +230,8 @@ function userPanel(u) {
   const remove = actions.querySelector(".remove-user");
   remove.classList.toggle("hidden", !manage);
   remove.addEventListener("click", () => removeUser(u, actions));
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
+  // changes is what Save sends: the fields that differ from the user.
+  const changes = () => {
     const body = {};
     const display = field("display_name").value.trim();
     if (display !== (u.display_name || "")) body.display_name = display;
@@ -245,11 +246,18 @@ function userPanel(u) {
       body.password = password;
       if (!manage || self) body.current_password = field("current_password").value;
     }
+    return body;
+  };
+  const save = form.querySelector("button[type=submit]");
+  sendWhenChanged(form, () => Object.keys(changes()).length > 0, { btn: save });
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const body = changes();
     if (!Object.keys(body).length) {
       usersMsg(t("users.unchanged"), true);
       return;
     }
-    userAction(() => api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body), t("users.saved", { name: u.name }), u.name).then((ok) => {
+    userAction(() => api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body), t("users.saved", { name: u.name }), u.name, save).then((ok) => {
       if (ok && self && body.password) loadMe();
     });
   });
@@ -280,7 +288,7 @@ function newUserForm() {
     if (password) body.password = password;
     const end = isoOf(field("expires").value);
     if (end) body.expires_at = end;
-    userAction(() => api("POST", "api/v1/users", body), t("users.created", { name: body.name }), body.name).then((ok) => {
+    userAction(() => api("POST", "api/v1/users", body), t("users.created", { name: body.name }), body.name, form.querySelector("button[type=submit]")).then((ok) => {
       if (ok) {
         clear($("user-new"));
         $("user-add").classList.remove("hidden");

@@ -78,3 +78,43 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     page.locator("#view-settings").click()
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
+    """Sign in is off with a spinner from its click until the server
+    answers (6 s on the Pi 1), and a second Enter sends nothing. The test
+    holds the login POST, then lets it go."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    held, posts = [], []
+
+    def handle(route):
+        posts.append(route.request.url)
+        held.append(route)
+
+    page.route("**/api/v1/login", handle)
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "document.querySelector('#login-form button[type=submit]').classList.contains('busy')", 5), "Sign in turns"
+    state = page.evaluate("(() => { const b = document.querySelector('#login-form button[type=submit]'); "
+                          "return [b.disabled, b.getAttribute('aria-busy')]; })()")
+    assert state == [True, "true"], f"Sign in is off and aria-busy while the request runs: {state}"
+    page.locator("#login-password").press("Enter")
+    page.wait_for_timeout(300)
+    assert len(posts) == 1, f"one login POST while the first is unanswered: {len(posts)}"
+    for route in held:
+        route.continue_()
+    page.unroute("**/api/v1/login")
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "signed in as the operator"
+    assert not page.evaluate("document.querySelector('#login-form button[type=submit]').classList.contains('busy')"), \
+        "Sign in stops turning once the answer is in"
+    page.locator("#view-settings").click()
+    page.locator("#logout-btn").click()
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
