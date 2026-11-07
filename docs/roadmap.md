@@ -64,32 +64,27 @@ docs/handover-session.md is the context a session needs to work here.
    SignPath Foundation first, Certum as fallback), rpm, the MSI and winget,
    the UI's update button upgrading through apt or brew, a container image,
    the LoxBerry plugin, a notarized `.pkg` with a cask.
-4. **The store, stage (e)** (docs/store.md section 9): the backup history,
-   after the backup and restore panel;
-   then ownership per Cube, `-server` for the commands, secrets in the store,
+4. **The store, after stage (e)** (docs/store.md section 9):
+   ownership per Cube, `-server` for the commands, secrets in the store,
    the export and import of design.md section 7, the PostgreSQL driver.
-   The next migration is 0005.
-5. **Backup and restore in the web UI**:
-   the API is in (plan, send, progress); the Settings panel,
-   written from the UI's components (docs/ui.md, "How the page is built");
-   a session brief is ready.
-6. **The UI when the server is gone**:
+   The next migration is 0006.
+5. **The UI when the server is gone**:
    a prominent notice, edits blocked, polling until it is back; brief ready.
-7. **Settings → Server** in the UI:
+6. **Settings → Server** in the UI:
    the intervals and the stale threshold, the certificate's details
    (in the header's expert list for now) and `log.keep_days`,
    which the settings API already takes.
-8. **TLS, later**, each a plan of its own: UPnP, a local CA,
+7. **TLS, later**, each a plan of its own: UPnP, a local CA,
    a Pebble job in CI so that a test reaches an ACME server.
-9. **Translations**:
+8. **Translations**:
    a native speaker's review of FR, IT, NL and PL;
    the server's error texts in the UI's language.
-10. **Release engineering**:
-    macOS notarization; log rotation through SIGHUP; the `edge` mode.
-11. **Firmware dump** of the spare Cube once the FT232H is in
+9. **Release engineering**:
+   macOS notarization; log rotation through SIGHUP; the `edge` mode.
+10. **Firmware dump** of the spare Cube once the FT232H is in
     (docs/firmware-extraction.md),
     then the DataFlash and the portal reply format.
-12. **Decisions for the owner**:
+11. **Decisions for the owner**:
     the final set of built-in colour schemes (Massimo,
     High contrast and Graphite ship);
     real Cube serials and room names in the documents,
@@ -97,13 +92,13 @@ docs/handover-session.md is the context a session needs to work here.
     would take them out of the set);
     the items of docs/store.md section 10 marked open,
     and docs/server.md's once the server mode starts.
-13. **Small ones**:
+12. **Small ones**:
     the stale threshold once real data shows what fits;
     the UI ignoring the short `connected: false` of the six-hourly refresh and
     the budget reconnects; `serve -log` writing twice under a supervisor that
     keeps stderr; `detailsPanel` and `stepper` in components.js, written and
     without a caller; a UI test for each new panel in tools/ui-test/.
-14. **Housekeeping**:
+13. **Housekeeping**:
     the `.env` copies and the release key in the Mint box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;
     `/etc/sudoers.d/massimo-test` on the Mac; on the Pi `~/massimo-alpha12.*`,
@@ -113,6 +108,6 @@ docs/handover-session.md is the context a session needs to work here.
     `claude/ci-update-race`, `claude/heuristic-noether-90a440`,
     `claude/store-c` and `claude/store-d*`,
     and the worktree `xenodochial-pasteur-c0e0c8` once its session is gone.
-15. **Later**:
+14. **Later**:
     the server mode with encryption at rest and sync (docs/server.md),
     Loxone (design.md section 4), a radio-stick driver without a Cube.
