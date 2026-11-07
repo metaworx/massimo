@@ -533,6 +533,12 @@ and the page works under a path prefix such as `/massimo/`
 ([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
+`-log-level debug` (or `MASSIMO_LOG_LEVEL`; `info`, the default,
+`warn` and `error`) adds the Debug lines,
+such as every command the proxy passes on to the Cube;
+the level is read at the start, so a service takes a new one at its restart.
+Every other command takes `-log-level` before its name,
+`massimo -log-level debug watch`.
 Every six hours (`-refresh`,
 `0` to switch it off) `serve` reconnects to each Cube,
 in turn with the queued commands, and re-reads everything the Cube holds,
@@ -706,7 +712,8 @@ add a Cube, change its name, address, proxy and hidden devices,
 and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
-The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`,
+The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
+`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`,
 the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;

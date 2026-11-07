@@ -51,6 +51,7 @@ func runServe(args []string) error {
 	})
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
 	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr (default MASSIMO_LOG)")
+	logLevelFlag(fs)
 	var proxies []string
 	fs.Func("proxy", "answer as a Cube on this address, for this run (repeatable; default the store's proxy address per Cube, else :62910 with a single Cube; \"off\" disables; with several Cubes give <serial>=<addr>)", func(v string) error {
 		proxies = append(proxies, v)
@@ -74,7 +75,7 @@ func runServe(args []string) error {
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-log-level debug] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -89,7 +90,10 @@ func runServe(args []string) error {
 		defer f.Close()
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
-	logger := slog.New(slog.NewTextHandler(logOut, nil))
+	logger, err := newLogger(logOut)
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
 	hsts, err := hstsDays(*hstsFlag)
 	if err != nil {
 		return err

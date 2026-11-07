@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- `-log-level debug|info|warn|error` or `MASSIMO_LOG_LEVEL` sets the
+  level the commands log at, `info` by default; `serve` takes the flag
+  after its name too (`README.md`, "Server").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

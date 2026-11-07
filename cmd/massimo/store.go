@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"sort"
 
@@ -54,7 +53,11 @@ for the service run it as its user, for example
 		}
 		fmt.Printf("wrote %s\n", args[1])
 	case "migrate":
-		st, err := store.Open(dir, store.Options{Version: versionString(), Logger: slog.New(slog.NewTextHandler(os.Stderr, nil))})
+		logger, err := newLogger(os.Stderr)
+		if err != nil {
+			return err
+		}
+		st, err := store.Open(dir, store.Options{Version: versionString(), Logger: logger})
 		if err != nil {
 			return err
 		}

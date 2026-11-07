@@ -101,7 +101,10 @@ func runPortal(args []string) error {
 	if *iLine == "none" {
 		*iLine = ""
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger, err := newLogger(os.Stderr)
+	if err != nil {
+		return err
+	}
 	cap := &portal.Capture{
 		Codecs:     codecs,
 		Reply:      portal.DefaultReplier(*iLine, extraMsgs),
