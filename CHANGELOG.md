@@ -154,6 +154,9 @@ the next minor, a fix counts the suffix up.
 - `massimo fakecube -pair`: the device no longer joins after `x:` or
   twice after two `n:`, nor once the connection is closed.
 
+- A write no longer scans the commands table for its `Idempotency-Key`
+  and for the retention: the key's index serves it, the prune is hourly.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
