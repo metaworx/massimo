@@ -1281,9 +1281,14 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	fl.Flush()
 	keep := time.NewTicker(30 * time.Second)
 	defer keep.Stop()
+	// The stream ends with the server's run too, so that a stop does not
+	// wait out the HTTP server's grace for a client that stays.
+	stopped := s.runContext().Done()
 	for {
 		select {
 		case <-r.Context().Done():
+			return nil
+		case <-stopped:
 			return nil
 		case ev := <-ch:
 			writeEvent(w, ev)

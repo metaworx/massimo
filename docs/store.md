@@ -168,6 +168,16 @@ they belong to the database and are copied with it or not at all (a copy of the
 `.db` alone while the server runs can miss the last transactions;
 `massimo store backup <file>`, stage (a),
 uses SQLite's online backup to write a consistent copy).
+A clean stop of `serve` brings the WAL into `massimo.db` before it closes the
+store (`PRAGMA wal_checkpoint(TRUNCATE)`, which also runs while another program
+has the file open, where SQLite's own checkpoint at the last close does not)
+and logs `store closed`, or why the file alone is behind;
+`Store.Checkpoint` does the same for the running server.
+A process that is killed leaves the WAL beside the file, its data safe,
+and the next open reads it:
+binaries before v0.10.0-alpha.1 ended so on SIGTERM and at a Windows service stop,
+which is why a box updated from them kept `massimo.db` at the size it was created
+with until its first clean stop.
 
 | Where | Data directory | Who | Mode |
 |---|---|---|---|

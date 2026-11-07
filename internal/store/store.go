@@ -196,8 +196,51 @@ func (s *Store) open(readOnly bool) error {
 	return nil
 }
 
-// Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+// Close brings the WAL into massimo.db (Checkpoint) and closes the
+// database. SQLite checkpoints at the last close by itself, but not
+// while another program has the file open, such as massimo config or
+// sqlite3; then massimo.db alone would stay behind the WAL. A checkpoint
+// that cannot finish is an error, and the database is closed anyway:
+// the WAL keeps what it holds, and the next open reads it.
+func (s *Store) Close() error {
+	var cerr error
+	if ck, err := s.Checkpoint(context.Background()); err != nil {
+		cerr = err
+	} else if ck.Busy {
+		cerr = fmt.Errorf("store: checkpoint at the close: %s is being read; massimo.db-wal keeps the latest changes", s.path)
+	}
+	return errors.Join(cerr, s.db.Close())
+}
+
+// Checkpoint is what Checkpoint did.
+type Checkpoint struct {
+	// WALBytes is the -wal file's size before the checkpoint.
+	WALBytes int64
+	// Busy reports a checkpoint that a reader kept from copying the
+	// whole WAL into massimo.db within the busy timeout.
+	Busy bool
+}
+
+// Checkpoint copies the WAL into massimo.db and empties it, so that the
+// file alone holds everything committed; the running server can ask for
+// one at any time. A store opened read-only checkpoints nothing.
+func (s *Store) Checkpoint(ctx context.Context) (Checkpoint, error) {
+	if s.readOnly {
+		return Checkpoint{}, nil
+	}
+	var ck Checkpoint
+	if fi, err := os.Stat(s.path + "-wal"); err == nil {
+		ck.WALBytes = fi.Size()
+	}
+	// TRUNCATE answers 0|0|0 once it has copied and emptied the WAL; its
+	// first column is 1 when it could not.
+	var busy, frames, done int
+	if err := s.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &frames, &done); err != nil {
+		return ck, fmt.Errorf("store: checkpoint: %w", err)
+	}
+	ck.Busy = busy != 0
+	return ck, nil
+}
 
 // Dir returns the data directory.
 func (s *Store) Dir() string { return s.dir }
