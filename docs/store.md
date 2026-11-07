@@ -762,9 +762,26 @@ Sessions last 30 days and are extended on use (`expires_at` moved,
 at most once an hour);
 the owner sees every session and key under Settings → Users and revokes them there.
 Passwords are hashed with argon2id from `golang.org/x/crypto`, pure Go,
-one more module;
-the parameters are the library's recommended ones and are stored in the PHC
-string so they can rise later.
+one more module,
+with OWASP's parameters on every box:
+19 MiB, two passes, one lane (`m=19456,t=2,p=1`),
+so that a hash costs the same wherever the store goes.
+The first releases used the library's 64 MiB and one pass on four lanes,
+which took 4.5 s a hash and 64 MiB an attempt on a Raspberry Pi 1 (one core,
+426 MB, measured on 2026-11-07);
+the new ones take about 55 % of that time and 30 % of that memory
+(`BenchmarkPassword` in `internal/store`, on one core).
+The PHC string carries the parameters, so an old hash still verifies,
+and a sign-in that matches one hashes the password again with these:
+an old hash goes at its user's next sign-in, at the cost of one hash more then.
+Only `password_hash` is written, as `last_login_at` is,
+and only where it is still the old one;
+the row keeps its version and update time, since the password is the same.
+A stored string that asks for more than 256 MiB, 16 passes or 16 lanes
+is refused rather than allocated.
+A hash is the cost of the call, so the answers that need none come first:
+a user add finds a taken name or an unknown role,
+and a password change a user that is not there, before it hashes.
 
 ### The commands
 
@@ -788,6 +805,23 @@ for a login, against the user name;
 ten in a minute lock for five minutes with `429` and `Retry-After`.
 The counters survive a restart,
 which closes the loophole where a restart cleared them.
+
+The counters see a failure only once its hash is done,
+so attempts sent together would all pass them.
+An address therefore signs in once at a time:
+a login from an address whose sign-in is still being checked is `429`
+with `Retry-After: 1`, which counts as no failure,
+so that the lockout counts each attempt before the next one starts;
+the web UI's dialog sends one at a time.
+And the hashes are bounded besides.
+At most one a core, four at the most, run at once, and eight more wait;
+a check, a user add or a password change beyond them
+is answered `503` with `Retry-After: 5`.
+So a box holds at most that many 19 MiB blocks for passwords in use at once,
+and about as many again freed but not yet collected:
+eight checks sent together peak at 38 MiB of heap with one slot,
+152 MiB without the bound, and eight times 64 MiB with the parameters
+of the first releases (`BenchmarkPasswordChecksAtOnce` in `internal/store`).
 
 ### Later: ownership per Cube
 

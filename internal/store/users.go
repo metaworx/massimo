@@ -181,8 +181,20 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	}
 	hash := ""
 	if password != "" {
+		// A hash is the cost of the call: the answers that need none
+		// come first, and the transaction checks again for a race.
+		if _, err := s.roleID(ctx, s.db, u.Role); err != nil {
+			return User{}, err
+		}
+		var deleted sql.NullString
+		switch err := s.db.QueryRowContext(ctx, `SELECT deleted_at FROM users WHERE name = ?`, u.Name).Scan(&deleted); {
+		case err == nil && !deleted.Valid:
+			return User{}, fmt.Errorf("%w: %s", ErrUserExists, u.Name)
+		case err != nil && !errors.Is(err, sql.ErrNoRows):
+			return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
+		}
 		var err error
-		if hash, err = HashPassword(password); err != nil {
+		if hash, err = s.hashPassword(ctx, password); err != nil {
 			return User{}, err
 		}
 	}
@@ -296,8 +308,16 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 	}
 	hash := ""
 	if password != "" {
+		// No hash for a user that is not there.
+		var live int
+		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&live); err != nil {
+			return fmt.Errorf("store: user %s: %w", name, err)
+		}
+		if live == 0 {
+			return fmt.Errorf("%w: %s", ErrNoUser, NormalName(name))
+		}
 		var err error
-		if hash, err = HashPassword(password); err != nil {
+		if hash, err = s.hashPassword(ctx, password); err != nil {
 			return err
 		}
 	}
@@ -313,10 +333,18 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 }
 
 // CheckPassword verifies a user's password; ErrBadPassword when it is
-// wrong or the user has none. The check costs the same time either way.
+// wrong or the user has none. The check costs the same time either way,
+// in a slot of the store's gate (ErrBusy when there is none). A match
+// against a stale hash rehashes the password (rehash).
 func (s *Store) CheckPassword(ctx context.Context, name, password string) error {
+	leave, err := s.hashes.enter(ctx)
+	if err != nil {
+		return err
+	}
+	defer leave()
+	var id int64
 	var hash string
-	err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&hash)
+	err = s.db.QueryRowContext(ctx, `SELECT id, password_hash FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&id, &hash)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && hash == "" {
 		DummyVerify(password)
 		return ErrBadPassword
@@ -327,7 +355,32 @@ func (s *Store) CheckPassword(ctx context.Context, name, password string) error 
 	if !VerifyPassword(hash, password) {
 		return ErrBadPassword
 	}
+	s.rehash(ctx, id, hash, password)
 	return nil
+}
+
+// rehash replaces a stale hash, whose password has just matched, by one
+// of the current parameters, in the caller's slot. Only the hash is
+// written, as the last login is: the password is the same, so the row
+// keeps its version and update time. A hash changed meanwhile is left
+// alone, and so is the hash of a read-only store; a failure is logged,
+// since the old hash still verifies.
+func (s *Store) rehash(ctx context.Context, id int64, old, password string) {
+	if !stale(old) || s.writable() != nil {
+		return
+	}
+	fresh, err := HashPassword(password)
+	var res sql.Result
+	if err == nil {
+		res, err = s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`, fresh, id, old)
+	}
+	if err != nil {
+		s.log.Warn("store: password not rehashed", "user", id, "error", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 1 {
+		s.log.Info("store: password rehashed with the current parameters", "user", id)
+	}
 }
 
 // NoteLogin records a login at now.

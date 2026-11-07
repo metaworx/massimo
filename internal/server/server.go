@@ -229,6 +229,7 @@ type Server struct {
 
 	limiter     failureLimiter
 	authLockout time.Duration // the lockout in effect, for the log
+	signIns     signIns       // the addresses with a login running
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).
@@ -758,6 +759,9 @@ func (s *Server) routes() {
 			if err := h(w, r); err != nil {
 				var he *httpError
 				if errors.As(err, &he) {
+					if he.retryAfter > 0 {
+						w.Header().Set("Retry-After", strconv.Itoa(he.retryAfter))
+					}
 					if len(he.noState) > 0 {
 						writeJSON(w, he.status, map[string]any{"error": he.msg, "no_state": he.noState})
 						return
@@ -851,6 +855,8 @@ type httpError struct {
 	// noState lists room members the Cube holds no state for when a
 	// room command was discarded for that reason.
 	noState []string
+	// retryAfter is the Retry-After header's seconds, none when 0.
+	retryAfter int
 }
 
 func (e *httpError) Error() string { return e.msg }

@@ -10,6 +10,8 @@ The page asks who you are: a name and a password,
 or an API key pasted into the second field,
 and keeps the session in the browser for 30 days from its last use;
 Settings → Log out ends it.
+The dialog sends one sign-in at a time;
+a submit while the server checks the password does nothing.
 A server without users shows the form that creates the first owner to a
 browser on the local network; until then everything is open.
 What the signed-in role may not do is not shown (docs/api-v1.md,

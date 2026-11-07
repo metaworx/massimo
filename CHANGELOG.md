@@ -24,6 +24,14 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- Passwords are hashed with argon2id at 19 MiB and two passes, about
+  55 % of the time and 30 % of the memory of the 64 MiB before; an old
+  hash is replaced at the next sign-in (`docs/store.md` section 6).
+
+- A user add of a taken name or an unknown role, and a password set for
+  a user that is not there, answer at once rather than after a hash
+  (`docs/store.md` section 6).
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
@@ -36,6 +44,16 @@ the next minor, a fix counts the suffix up.
 - A stop of `serve` brings `massimo.db-wal` into `massimo.db`, also
   while another program has it open, and logs `store closed`
   (`docs/store.md` section 3).
+
+### Security
+
+- Password hashes run at most one a core at once, four at the most, and
+  eight wait; a sign-in, user add or password change beyond them is
+  `503` with `Retry-After` (`docs/store.md` section 6, "The lockout").
+
+- An address signs in once at a time: a login while its previous one
+  is checked is `429` with `Retry-After: 1`, and the web UI's dialog
+  sends one sign-in at a time (`docs/api-v1.md`, "POST /api/v1/login").
 
 ## [0.10.0-alpha.1] - 2026-11-07
 

@@ -72,6 +72,7 @@ type Store struct {
 	now      func() time.Time
 	version  string
 	readOnly bool
+	hashes   *hashGate // the password hashes at once
 
 	schema    int // the file's schema version after Open
 	minReader int
@@ -153,7 +154,7 @@ func OpenReadOnly(dir string, o Options) (*Store, error) {
 }
 
 func newStore(dir string, o Options) *Store {
-	s := &Store{dir: dir, path: Path(dir), log: o.Logger, now: o.Now, version: o.Version, seenWritten: map[string]bool{}}
+	s := &Store{dir: dir, path: Path(dir), log: o.Logger, now: o.Now, version: o.Version, hashes: defaultHashGate(), seenWritten: map[string]bool{}}
 	s.ev.init()
 	if s.log == nil {
 		s.log = slog.Default()
