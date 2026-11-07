@@ -97,6 +97,9 @@ the next minor, a fix counts the suffix up.
 - A serial in lower case in a variable's name, such as
   `MASSIMO_CUBE_keq0000000_ADDRESS`, is that Cube's again on Linux.
 
+- The self-signed certificate's renewal keeps a name added with
+  `massimo tls self-signed -names` (README.md, "Server").
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

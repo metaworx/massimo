@@ -488,7 +488,7 @@ see [packaging/README.md](packaging/README.md)).
 the server makes one at its first start for the box's names (its hostname,
 `<hostname>.local`, `localhost`, its addresses,
 and `-tls-names` for a name you gave it) into the data directory's `tls/`,
-valid 825 days and renewed 30 days before the end;
+valid 825 days and renewed 30 days before the end with the names it has;
 every browser warns once per device,
 and the fingerprint to compare is in the log, in `massimo config`,
 in `massimo tls show`, in `/healthz` and under the page's header.
