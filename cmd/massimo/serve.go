@@ -114,7 +114,7 @@ func runServe(args []string) error {
 		return err
 	}
 	if st != nil {
-		defer st.Close()
+		defer closeStore(st, logger)
 	}
 	// SIGINT from a terminal, SIGTERM from systemd, launchd and kill, and
 	// the Windows service manager's stop: each stops the server, which
@@ -229,6 +229,7 @@ func runServe(args []string) error {
 		select {
 		case <-runDone:
 		case <-time.After(10 * time.Second):
+			logger.Warn("the server did not stop within 10s: the store closes under it, and what it writes from now on is lost")
 		}
 	}
 	if rs.asked.Load() {
@@ -264,6 +265,16 @@ func serveUpdateHelper(log *slog.Logger, listen string, tls bool, request, statu
 		log.Warn("updates cannot be started from the API", "reason", blocked)
 	}
 	return start, blocked, nil
+}
+
+// closeStore closes serve's store and says so, or says why massimo.db
+// alone is behind: Close brings the WAL into the file first.
+func closeStore(st *store.Store, logger *slog.Logger) {
+	if err := st.Close(); err != nil {
+		logger.Error("store not closed cleanly", "path", st.File(), "error", err)
+		return
+	}
+	logger.Info("store closed", "path", st.File())
 }
 
 // openServeStore opens the store of the data directory, or, with -addr,
