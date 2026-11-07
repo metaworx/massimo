@@ -522,8 +522,15 @@ unless `MASSIMO_UPDATE_CHANNEL=alpha` is set (`massimo update -check` shows the 
 A release is installed only when it is newer than the running version,
 so switching the channel never goes back in version;
 `-version <tag>` installs a given release,
-older ones too. v0.1.0-alpha.10 and .11 were made before the branch was renamed
-and follow `phase-0`; on those, set `MASSIMO_UPDATE_CHANNEL=alpha`.
+older ones too.
+A check fetches the signed manifests of its channel's releases alone,
+known by the tag's label (`-alpha.N` is on `alpha`),
+or, for a tag without one, by the release's target,
+which release.yml sets to the channel.
+v0.1.0-alpha.10 and .11 were made before the branch was renamed
+and are signed for `phase-0` under alpha's label,
+so a check on `phase-0` finds no release;
+on those, set `MASSIMO_UPDATE_CHANNEL=alpha`.
 
 By hand, as root:
 

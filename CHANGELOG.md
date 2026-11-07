@@ -161,6 +161,9 @@ the next minor, a fix counts the suffix up.
 - `massimo update` downloads a binary for as long as a slow line needs,
   no longer cut off after two minutes; a stall ends it after one.
 
+- An update check fetches no manifest of another channel's release, so
+  a build from `main` no longer verifies thirty alpha releases each time.
+
 - `massimo tls show` prints what `massimo config` prints of the TLS,
   the HSTS days and the names given included.
 

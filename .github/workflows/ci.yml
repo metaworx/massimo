@@ -414,14 +414,16 @@ jobs:
           (cd ci-tools/standin && go mod init citools/standin && go build -o standin.exe .)
           ci-tools/sign.exe key ci-tools/ci-key internal/update/release-key.pem
 
+          # On the channel ci, which the stub's tags name, as release.yml's
+          # do theirs (internal/update, hintedChannel).
           asset=massimo-windows-amd64.exe
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o ci1.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=ci" -o ci1.exe ./cmd/massimo
           mkdir -p ci-stub/dl/v0.0.0-ci.2 ci-stub/dl/v0.0.0-ci.3
-          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.channel=alpha" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.channel=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
           cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
           for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
             d="ci-stub/dl/$tag"
-            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -channel alpha -dir "$d" "$asset" > "$d/massimo-release.json"
+            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -channel ci -dir "$d" "$asset" > "$d/massimo-release.json"
             ci-tools/sign.exe sign ci-tools/ci-key "$d/massimo-release.json" > "$d/massimo-release.json.sig"
           done
           # The release list in GitHub's shape, one release at a time.

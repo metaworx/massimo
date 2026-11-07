@@ -759,11 +759,13 @@ so a stub needs no second variable), and in the job:
    `http://127.0.0.1:8123/dl/<tag>/…`;
    the `?per_page=100` is dropped by the server) and under `dl/<tag>/` the binary,
    `massimo-release.json` from
-   `go run ./internal/update/mkmanifest -tag <tag> -commit ci -channel alpha -dir … massimo-windows-amd64.exe`, and `massimo-release.json.sig` made as release.yml makes it (`openssl pkeyutl -sign -inkey ci-key.pem -rawin -in massimo-release.json | base64 -w0`): `v0.0.0-ci.2`, the same source built with `-X main.version=v0.0.0-ci.2`, which comes up healthy; and `v0.0.0-ci.3`, a stand-in of a few lines built in the job (prints `massimo v0.0.0-ci.3 (ci)` for `version`, exits 1 otherwise), which passes the smoke test, cannot be a service and must be rolled back.
+   `go run ./internal/update/mkmanifest -tag <tag> -commit ci -channel ci -dir … massimo-windows-amd64.exe`, and `massimo-release.json.sig` made as release.yml makes it (`openssl pkeyutl -sign -inkey ci-key.pem -rawin -in massimo-release.json | base64 -w0`): `v0.0.0-ci.2`, the same source built with `-X main.version=v0.0.0-ci.2`, which comes up healthy; and `v0.0.0-ci.3`, a stand-in of a few lines built in the job (prints `massimo v0.0.0-ci.3 (ci)` for `version`, exits 1 otherwise), which passes the smoke test, cannot be a service and must be rolled back.
    The list holds one of them at a time:
    the file is rewritten between the two runs.
-3. `install` again from the test-key `v0.0.0-ci.1` binary with
-   `MASSIMO_UPDATE_API=http://127.0.0.1:8123` in `ci.env`;
+3. `install` again from the test-key `v0.0.0-ci.1` binary,
+   built with `-X main.channel=ci` as the stub's `v0.0.0-ci.2` is,
+   since a check leaves out unfetched a release whose tag names another channel,
+   with `MASSIMO_UPDATE_API=http://127.0.0.1:8123` in `ci.env`;
    then the block of stage 1 twice:
    with `v0.0.0-ci.2` listed it must end in `done` and `/healthz` on `v0.0.0-ci.2`,
    `massimo.exe.prev` present and no `massimo.exe.failed` (the by-hand rollback
