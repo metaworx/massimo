@@ -714,7 +714,8 @@ and every command other than `serve` keeps reading all of its lines as before.
 found Cubes are not kept).
 `massimo store backup <file>` writes a consistent copy of the store,
 also while `serve` runs (copying `massimo.db` alone can miss the last writes,
-which are in `massimo.db-wal` until a checkpoint),
+which are in `massimo.db-wal` until a checkpoint,
+at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
 and `store info` prints its schema version, node and row counts;
 for the service run them as its user,
