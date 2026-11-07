@@ -26,8 +26,8 @@ the next minor, a fix counts the suffix up.
   `restart` of owner and manager (migration 0006), an open server only
   from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
 
-- Settings → Software restarts the server and follows it until it is
-  back (`docs/ui.md`, "Settings").
+- Settings → Software restarts the server, follows it until it is back,
+  and lists the settings that wait for a restart (`docs/ui.md`).
 
 - `serve` reads its settings file again when it changes and on SIGHUP
   (`-sighup`), so `MASSIMO_API_TOKEN` applies without a restart

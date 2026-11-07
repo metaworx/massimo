@@ -149,10 +149,14 @@ function showRestartText(text) {
 }
 
 // renderRestart shows the button while GET /api/v1/restart says this
-// page may restart the server, and otherwise why not.
+// page may restart the server, and otherwise why not; and the settings
+// that changed in the settings file and wait for the next start.
 function renderRestart(v) {
   $("restart-btn").classList.toggle("hidden", !(v && v.available));
-  showRestartText(v && !v.available && v.blocked ? t("restart.unavailable", { reason: v.blocked }) : "");
+  const parts = [];
+  if (v && v.pending && v.pending.length) parts.push(t("restart.pending", { names: v.pending.join(", ") }));
+  if (v && !v.available && v.blocked) parts.push(t("restart.unavailable", { reason: v.blocked }));
+  showRestartText(parts.join(" "));
 }
 
 // loadRestart asks whether the server can be restarted from here, for a

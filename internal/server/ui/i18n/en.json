@@ -165,6 +165,7 @@
   "restart.back": "The server is back, started {time}.",
   "restart.notBack": "The server has not come back within two minutes; look at its service on the box.",
   "restart.failed": "Not restarted: {error}",
+  "restart.pending": "Applies at the next restart: {names}.",
   "restart.unavailable": "No restart from here: {reason}.",
   "restart.cannotAsk": "Cannot ask the server about the restart: {error}",
 

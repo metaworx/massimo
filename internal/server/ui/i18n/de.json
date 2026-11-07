@@ -165,6 +165,7 @@
   "restart.back": "Der Server ist wieder da, gestartet {time}.",
   "restart.notBack": "Der Server ist nach zwei Minuten nicht zurück; den Dienst auf dem Gerät prüfen.",
   "restart.failed": "Nicht neu gestartet: {error}",
+  "restart.pending": "Gilt ab dem nächsten Neustart: {names}.",
   "restart.unavailable": "Von hier aus ist kein Neustart möglich: {reason}.",
   "restart.cannotAsk": "Der Server kann nicht nach dem Neustart gefragt werden: {error}",
 

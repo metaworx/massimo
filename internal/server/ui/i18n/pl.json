@@ -168,6 +168,7 @@
   "restart.back": "Serwer znów działa, uruchomiony {time}.",
   "restart.notBack": "Serwer nie wrócił w ciągu dwóch minut; sprawdź jego usługę na urządzeniu.",
   "restart.failed": "Nie uruchomiono ponownie: {error}",
+  "restart.pending": "Obowiązuje od następnego ponownego uruchomienia: {names}.",
   "restart.unavailable": "Ponowne uruchomienie stąd nie jest możliwe: {reason}.",
   "restart.cannotAsk": "Nie można zapytać serwera o ponowne uruchomienie: {error}",
 

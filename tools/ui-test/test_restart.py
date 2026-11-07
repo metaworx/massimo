@@ -83,3 +83,34 @@ def test_restart_follows_the_server_back(page):
     assert len(posts) == 1 and calls["after"] >= 2 and not btn.is_disabled(), "one request, the button usable again"
     page.unroute("**/healthz")
     page.unroute("**/api/v1/restart")
+
+
+def test_restart_lists_what_waits(page):
+    """The settings of the settings file that wait for the next start are
+    listed under the button, by name."""
+    posts = []
+    stub_restart(page, '{"available": true, "by": "systemd", "pending": ["MASSIMO_LISTEN", "MASSIMO_TLS"]}', posts)
+    open_settings(page)
+    page.locator("#restart-btn").wait_for(state="visible")
+    want = page.evaluate("t('restart.pending', {names: 'MASSIMO_LISTEN, MASSIMO_TLS'})")
+    assert wait_until(page, f"document.getElementById('restart-text').textContent === {json.dumps(want)}", 5), \
+        "what applies at the next restart"
+    page.unroute("**/api/v1/restart")
+
+
+def test_sign_in_offers_the_key_after_an_open_server(page):
+    """The sign-in dialog opens its API-key part once the page has seen
+    the server open, since the owner made from MASSIMO_API_TOKEN has no
+    password; before that it stays folded."""
+    page.evaluate("askLogin(); null")
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens"
+    assert not page.evaluate("document.getElementById('login-token').closest('details').open"), "folded on a server that always asked"
+    page.evaluate("document.getElementById('login-dialog').close()")
+    body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": False})
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+    page.evaluate("loadMe()")
+    page.unroute("**/api/v1/me")
+    page.evaluate("askLogin(); null")
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens again"
+    assert page.evaluate("document.getElementById('login-token').closest('details').open"), "the API-key part is open"
+    page.evaluate("document.getElementById('login-dialog').close()")

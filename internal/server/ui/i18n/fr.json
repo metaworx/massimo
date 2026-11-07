@@ -167,6 +167,7 @@
   "restart.back": "Le serveur est de retour, démarré {time}.",
   "restart.notBack": "Le serveur n’est pas revenu en deux minutes ; vérifiez son service sur la machine.",
   "restart.failed": "Non redémarré : {error}",
+  "restart.pending": "S’applique au prochain redémarrage : {names}.",
   "restart.unavailable": "Le redémarrage depuis cette page est impossible : {reason}.",
   "restart.cannotAsk": "Impossible d’interroger le serveur sur le redémarrage : {error}",
 

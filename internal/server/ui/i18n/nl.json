@@ -166,6 +166,7 @@
   "restart.back": "De server is terug, gestart {time}.",
   "restart.notBack": "De server is na twee minuten niet terug; controleer zijn dienst op het apparaat.",
   "restart.failed": "Niet opnieuw gestart: {error}",
+  "restart.pending": "Geldt vanaf de volgende herstart: {names}.",
   "restart.unavailable": "Opnieuw starten vanaf hier is niet mogelijk: {reason}.",
   "restart.cannotAsk": "Kan de server niet naar het opnieuw starten vragen: {error}",
 

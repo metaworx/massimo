@@ -167,6 +167,7 @@
   "restart.back": "Il server è di nuovo attivo, avviato {time}.",
   "restart.notBack": "Il server non è tornato entro due minuti; controlla il suo servizio sulla macchina.",
   "restart.failed": "Non riavviato: {error}",
+  "restart.pending": "Vale dal prossimo riavvio: {names}.",
   "restart.unavailable": "Non è possibile riavviare da qui: {reason}.",
   "restart.cannotAsk": "Impossibile chiedere al server del riavvio: {error}",
 
