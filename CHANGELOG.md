@@ -8,6 +8,11 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Fixed
+
+- The backup list no longer shows a pending change next to the backup
+  that has just covered it (`docs/api-v1.md`, "GET …/backups").
+
 ## [0.11.0-alpha.1] - 2026-11-08
 
 ### Added
