@@ -73,7 +73,7 @@ function received(d, field) {
 }
 
 function roomUI(room) {
-  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false };
+  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false, sending: null };
   return state.ui[room.id];
 }
 
@@ -247,6 +247,7 @@ function renderRoom(room) {
     devs.classList.remove("hidden");
     fillDevices(devs, room);
   }
+  markSending(el, room);
   return el;
 }
 
@@ -311,15 +312,10 @@ function renderSetpoint(el, room) {
     modeGroup.classList.add("hidden");
     return;
   }
-  const big = el.querySelector(".setpoint-big");
   const current = s && s.setpoint !== undefined ? s.setpoint : null;
-  const shown = ui.pending !== null ? ui.pending : current;
-  big.textContent = fmtTemp(shown, "°");
-  big.classList.toggle("pending", ui.pending !== null);
+  drawSetpoint(el, room);
   el.querySelector(".step-minus").addEventListener("click", () => stepSetpoint(room, -STEP));
   el.querySelector(".step-plus").addEventListener("click", () => stepSetpoint(room, STEP));
-  const pendingRow = el.querySelector(".pending-row");
-  pendingRow.classList.toggle("hidden", ui.pending === null);
   el.querySelector(".pending-save").addEventListener("click", () => flushSetpoint(room));
   el.querySelector(".pending-cancel").addEventListener("click", () => cancelSetpoint(room));
 
@@ -352,7 +348,7 @@ function renderSetpoint(el, room) {
   holidayBtn.addEventListener("click", () => openVacation(room, el));
   autoBtn.addEventListener("click", () => {
     leaveEditing(room);
-    sendRoomSetpoint(room, { mode: "auto" }, t("label.auto"));
+    sendRoomSetpoint(room, { mode: "auto" }, t("label.auto"), "auto");
   });
   manuBtn.addEventListener("click", () => {
     // Manual keeps the room's current setpoint; a pending stepper value
@@ -363,7 +359,7 @@ function renderSetpoint(el, room) {
       showTileResult(room.id, t("room.noSetpoint"), false);
       return;
     }
-    sendRoomSetpoint(room, { mode: "manual", temp: current }, t("label.manual", { temp: fmtNum(current, 1) }));
+    sendRoomSetpoint(room, { mode: "manual", temp: current }, t("label.manual", { temp: fmtNum(current, 1) }), "manual");
   });
   const vac = el.querySelector(".mode-vacation");
   if (mode === "vacation") {
@@ -373,6 +369,73 @@ function renderSetpoint(el, room) {
     vac.appendChild(document.createTextNode(" " + t("room.until", { until })));
     vac.title = t("room.holidayUntil", { until });
     vac.classList.remove("hidden");
+  }
+}
+
+// drawSetpoint shows the tile's setpoint, or the stepper's value that
+// waits to be sent (pending), with Save and Cancel for it.
+function drawSetpoint(el, room) {
+  const ui = roomUI(room);
+  const s = roomState(room);
+  const current = s && s.setpoint !== undefined ? s.setpoint : null;
+  const big = el.querySelector(".setpoint-big");
+  big.textContent = fmtTemp(ui.pending !== null ? ui.pending : current, "°");
+  big.classList.toggle("pending", ui.pending !== null);
+  el.querySelector(".pending-row").classList.toggle("hidden", ui.pending === null);
+}
+
+// SENDING_BUTTON is, per write of a tile (roomUI(room).sending), the
+// button that turns while it runs; "device:<rf>" is a device's Lock.
+const SENDING_BUTTON = { auto: ".mode-auto", manual: ".mode-manual", vacation: ".mode-holiday", setpoint: ".pending-save", lock: ".menu-lock", unlock: ".menu-unlock" };
+
+// WRITE_BUTTONS are the buttons of a tile that send, or change what is
+// to be sent: all off while one of the tile's writes runs.
+const WRITE_BUTTONS = ".mode-group button, .stepper button, .pending-row button, .vacation-panel button[type=submit], .menu-lock, .menu-unlock, .device-lock";
+
+function sendingSelector(key) {
+  if (key && key.startsWith("device:")) return '.device[data-rf="' + key.slice(7) + '"] .device-lock';
+  return SENDING_BUTTON[key] || "";
+}
+
+// markSending draws the tile's write buttons off while one of its writes
+// runs, the one sent turning (setBusy). renderRoom calls it, and
+// tileWrite on the tile in place at the start and the end of a write,
+// so that the tile's result line stays.
+function markSending(el, room) {
+  const key = roomUI(room).sending;
+  const sel = sendingSelector(key);
+  for (const b of el.querySelectorAll(WRITE_BUTTONS)) {
+    if (key && sel && b.matches(sel)) {
+      setBusy(b, true);
+    } else {
+      setBusy(b, false);
+      b.disabled = !!key;
+    }
+  }
+}
+
+// redrawSending applies the tile's write state to its tile in place.
+function redrawSending(room) {
+  const el = document.querySelector('.room[data-id="' + room.id + '"]');
+  if (!el) return;
+  drawSetpoint(el, room);
+  markSending(el, room);
+}
+
+// tileWrite runs fn, a write of the room's tile, as key: the tile's
+// write buttons are off meanwhile (markSending), so that a double click
+// sends one radio command; a write asked for while one runs sends
+// nothing and returns null.
+async function tileWrite(room, key, fn) {
+  const ui = roomUI(room);
+  if (ui.sending) return null;
+  ui.sending = key;
+  redrawSending(room);
+  try {
+    return await fn();
+  } finally {
+    ui.sending = null;
+    redrawSending(room);
   }
 }
 
@@ -476,7 +539,7 @@ function renderVacation(el, room) {
     const u = apiUntil(until.value);
     if (!u) return;
     closeVacation(room);
-    sendRoomSetpoint(room, { mode: "vacation", temp: v, until: u }, t("label.vacation", { temp: fmtNum(v, 1), until: u }));
+    sendRoomSetpoint(room, { mode: "vacation", temp: v, until: u }, t("label.vacation", { temp: fmtNum(v, 1), until: u }), "vacation");
   });
 }
 
@@ -639,7 +702,8 @@ function renderDevice(d) {
   const actions = el.querySelector(".device-actions");
   if (isThermostat(d)) {
     const locked = !!(d.state && d.state.panel_locked);
-    actions.appendChild(button(t(locked ? "device.unlock" : "device.lock"), "needs-lock", () => setLock(d, !locked)));
+    const lock = button(t(locked ? "device.unlock" : "device.lock"), "needs-lock device-lock", () => lockDevice(d, !locked, lock));
+    actions.appendChild(lock);
   }
   return el;
 }
@@ -779,18 +843,35 @@ function cancelSetpoint(room) {
   rerenderRoom(room);
 }
 
+// flushSetpoint sends the stepper's value, which stays shown, with Save
+// turning, until the answer; a value whose time comes while another
+// write of the tile runs waits for that one's answer.
 async function flushSetpoint(room) {
   const ui = roomUI(room);
   if (ui.timer) clearTimeout(ui.timer);
   ui.timer = null;
   if (ui.pending === null) return;
+  if (ui.sending) {
+    ui.timer = setTimeout(() => flushSetpoint(room), SEND_DELAY_MS);
+    return;
+  }
   const temp = ui.pending;
-  ui.pending = null;
-  rerenderRoom(room);
-  await sendRoomSetpoint(room, { mode: "manual", temp }, t("label.manual", { temp: fmtNum(temp, 1) }));
+  await tileWrite(room, "setpoint", async () => {
+    try {
+      return await setpointRequest(room, { mode: "manual", temp }, t("label.manual", { temp: fmtNum(temp, 1) }));
+    } finally {
+      ui.pending = null;
+    }
+  });
 }
 
-async function sendRoomSetpoint(room, body, label) {
+// sendRoomSetpoint sends a mode or a setpoint of the tile as the write
+// key (tileWrite).
+function sendRoomSetpoint(room, body, label, key) {
+  return tileWrite(room, key, () => setpointRequest(room, body, label));
+}
+
+async function setpointRequest(room, body, label) {
   showTileResult(room.id, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
@@ -819,9 +900,19 @@ async function setLock(d, locked) {
 
 async function lockRoom(room, locked, el) {
   closeMenu(el);
-  for (const d of room.devices.filter(isThermostat)) {
-    await setLock(d, locked);
-  }
+  await tileWrite(room, locked ? "lock" : "unlock", async () => {
+    for (const d of room.devices.filter(isThermostat)) {
+      await setLock(d, locked);
+    }
+  });
+}
+
+// lockDevice locks or unlocks one device from its row, as a write of
+// its room's tile, or with its button busy for a device in no room.
+function lockDevice(d, locked, btn) {
+  const room = state.rooms.find((r) => r.id === d.room_id);
+  if (room) return tileWrite(room, "device:" + d.rf_address, () => setLock(d, locked));
+  return whileBusy(btn, () => setLock(d, locked));
 }
 
 async function deleteRoom(room) {
@@ -883,7 +974,12 @@ function renderHouseRooms() {
     box.appendChild(row);
   }
   all.control.checked = rooms().every((x) => x.checked);
+  if (houseSendCheck) houseSendCheck();
 }
+
+// houseSendCheck keeps the House panel's Send off while no room is
+// ticked (sendWhenChanged), set by initTiles.
+let houseSendCheck = null;
 
 // updateHousePanel shows or hides the parts that depend on the mode.
 function updateHousePanel() {
@@ -914,6 +1010,11 @@ function closeHouse() {
 // sendHouse applies the panel: one room command after another, with the
 // per-room results in the panel.
 async function sendHouse() {
+  const submit = housePanel().querySelector("button[type=submit]");
+  await whileBusy(submit, houseRequests);
+}
+
+async function houseRequests() {
   const mode = houseMode();
   const until = houseDuration() === "until" && mode !== "auto" ? apiUntil($("house-until").value) : "";
   const manualTemp = clampTemp(parseFloat($("house-temp").value) || DEFAULT_TEMP);
@@ -984,6 +1085,7 @@ function initTiles() {
     sendHouse();
   });
   housePanel().addEventListener("change", updateHousePanel);
+  houseSendCheck = sendWhenChanged(housePanel(), () => !!document.querySelector("#house-rooms input[data-room]:checked"));
   $("house-temp-minus").addEventListener("click", () => {
     $("house-temp").value = clampTemp(parseFloat($("house-temp").value) - STEP);
   });

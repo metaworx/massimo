@@ -4,7 +4,7 @@
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
 from conftest import api_call
-from helpers import named_buttons, scroll_width, wait_until
+from helpers import assert_busy, hold, named_buttons, scroll_width, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -144,34 +144,6 @@ def test_a_double_click_on_yes_removes_once(page, case):
     page.locator("#view-tiles").click()
 
 
-def held_posts(page, pattern, held, posts):
-    """Holds the POSTs to pattern until the test lets them go, and counts
-    them; other methods go through."""
-    def handle(route):
-        if route.request.method == "POST":
-            posts.append(route.request.url)
-            held.append(route)
-        else:
-            route.continue_()
-    page.route(pattern, handle)
-
-
-def wait_held(page, held, seconds=5):
-    """Waits until a held request has reached the route."""
-    end = seconds * 1000
-    while not held and end > 0:
-        page.wait_for_timeout(100)
-        end -= 100
-    return bool(held)
-
-
-def assert_busy(page, selector, what):
-    """The button is off, turns (class busy) and is aria-busy."""
-    state = page.evaluate("(() => { const b = document.querySelector(%r); return b && [b.disabled, b.classList.contains('busy'), "
-                          "b.getAttribute('aria-busy')]; })()" % selector)
-    assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
-
-
 def test_create_is_busy_until_answered(page, case):
     """Create is off with a spinner from its click until the server
     answers, so that a second click or Enter sends nothing: on the Pi 1
@@ -180,7 +152,7 @@ def test_create_is_busy_until_answered(page, case):
     name = f"busy-{case.width}-{case.lang}"
     remove_user(name)
     held, posts = [], []
-    held_posts(page, "**/api/v1/users", held, posts)
+    hold(page, "**/api/v1/users", "POST", held, posts)
     try:
         page.locator("#view-settings").click()
         page.locator("#user-add").click()

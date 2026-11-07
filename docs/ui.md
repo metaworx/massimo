@@ -133,11 +133,14 @@ Every room has a tile:
     copies this room's stored settings (temperatures, week programme,
     radiator settings) to other rooms.
     It copies what is stored, not changes that haven't been sent yet.
+  - **Send** is off while nothing differs from what the Cube has,
+    or on the Copy tab while no room is ticked.
 - Each setting has a **?** button that explains it, with the factory values
   from the eQ-3 manuals.
 
 The **House** tile sets several rooms at once: ECO, AUTO,
-COMFORT or MANU with a temperature, permanently or until a date and time.
+COMFORT or MANU with a temperature, permanently or until a date and time;
+its **Send** is off while no room is ticked.
 
 **Devices without a room** are listed at the end:
 a device just paired, or one the original software paired through the proxy
@@ -147,6 +150,9 @@ with name, room and **Copy the room's settings**,
 and **Remove from the Cube** asks in the row, then deletes it from the Cube.
 
 Every change goes to the Cube as a radio command.
+While it is sent, the tile's buttons that send are off,
+the one clicked turning, so that a second click sends nothing;
+a value of the chevrons stays shown, with **Save** turning, until the answer.
 The tile shows the result when it is done: "ok", or what failed.
 While radio commands wait for the devices' acknowledgement,
 the header says how many are pending.

@@ -84,6 +84,42 @@ def used_ticket_first(refused):
     return handle
 
 
+def hold(page, pattern, method, held, sent):
+    """Holds the requests of a method to pattern until the test lets them
+    go (route.continue_() or route.fulfill()), as a slow server would,
+    and counts them in sent; other methods go through."""
+
+    def handle(route):
+        if route.request.method == method:
+            sent.append(route.request.post_data_json if route.request.post_data else route.request.url)
+            held.append(route)
+        else:
+            route.continue_()
+
+    page.route(pattern, handle)
+
+
+def wait_held(page, held, seconds=5):
+    """Waits until a held request has reached its route."""
+    end = time.time() + seconds
+    while not held and time.time() < end:
+        page.wait_for_timeout(100)
+    return bool(held)
+
+
+def busy_state(page, selector):
+    """A button's [disabled, turning (class busy), aria-busy]."""
+    return page.evaluate("(() => { const b = document.querySelector(%r); return b && [b.disabled, b.classList.contains('busy'), "
+                         "b.getAttribute('aria-busy')]; })()" % selector)
+
+
+def assert_busy(page, selector, what):
+    """The button is off, turns (class busy) and is aria-busy, as setBusy
+    makes a button whose request runs."""
+    state = busy_state(page, selector)
+    assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
+
+
 def open_settings(page):
     """The settings page, opened with the cog in the header."""
     page.locator("#view-settings").click()
