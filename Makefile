@@ -19,8 +19,9 @@ BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-l
 # the binaries above with nfpm at a pinned version through `go run`;
 # NFPM=nfpm uses an installed one. Their version is the tag without its
 # v and with ~ for -, so that 0.7.0~alpha.1 sorts before 0.7.0 as dpkg
-# compares versions. armhf holds the armv6 binary, which runs on every
-# 32-bit Raspberry Pi OS, the Pi 1 included.
+# compares versions; nfpm is given that version, not the tag, so that the
+# control Version and the file name agree. armhf holds the armv6 binary,
+# which runs on every 32-bit Raspberry Pi OS, the Pi 1 included.
 NFPM_VERSION = v2.48.0
 NFPM    ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
 DEBVER   = $(shell echo '$(VERSION)' | sed 's/^v//; s/-/~/g')
@@ -148,9 +149,9 @@ deb-unit:
 
 # One Debian package per architecture, from the binaries of `make cross`.
 packages: linux linux-arm64 linux-armv6 deb-unit
-	VERSION=$(VERSION) NFPM_ARCH=amd64 BINARY=$(OUT)/massimo-linux-amd64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_amd64.deb
-	VERSION=$(VERSION) NFPM_ARCH=arm64 BINARY=$(OUT)/massimo-linux-arm64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_arm64.deb
-	VERSION=$(VERSION) NFPM_ARCH=arm6 BINARY=$(OUT)/massimo-linux-armv6 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_armhf.deb
+	VERSION=$(DEBVER) NFPM_ARCH=amd64 BINARY=$(OUT)/massimo-linux-amd64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_amd64.deb
+	VERSION=$(DEBVER) NFPM_ARCH=arm64 BINARY=$(OUT)/massimo-linux-arm64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_arm64.deb
+	VERSION=$(DEBVER) NFPM_ARCH=arm6 BINARY=$(OUT)/massimo-linux-armv6 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_armhf.deb
 
 # The amd64 package installed, checked and purged in a Debian container
 # (packaging/deb/test.sh); DEB_IMAGE picks the release.
