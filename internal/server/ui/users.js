@@ -298,16 +298,54 @@ function newUserForm() {
   return form;
 }
 
+// --- the password sign-in (auth.password_login) ------------------------
+
+// loadPasswordLogin reads whether the server takes the password sign-in,
+// for a holder of settings, who alone sees the switch.
+async function loadPasswordLogin() {
+  if (!hasCap("settings")) return;
+  try {
+    const all = (await api("GET", "api/v1/settings")) || {};
+    const v = all["auth.password_login"];
+    $("password-login").checked = !v || v.value !== "false";
+  } catch (e) {
+    // the switch stays as it was
+  }
+}
+
+// renderPasswordLoginHint says how many users still have a password the
+// server checks (auth_version 1): with the switch off they cannot sign
+// in until a password is set for them here, by OPAQUE.
+function renderPasswordLoginHint() {
+  const left = usersUI.users.filter((u) => u.has_password && u.auth_version === 1).length;
+  $("password-login-hint").textContent = left ? tn("users.passwordLoginHint", left) : t("users.passwordLoginNone");
+}
+
+// setPasswordLogin turns the password sign-in on or off.
+async function setPasswordLogin() {
+  const box = $("password-login");
+  const on = box.checked;
+  try {
+    await api("PUT", "api/v1/settings", { "auth.password_login": on });
+    usersMsg(t(on ? "users.passwordLoginOn" : "users.passwordLoginOff"), true);
+  } catch (e) {
+    box.checked = !on;
+    usersMsg(t("users.failed", { name: "", error: e.message }), false);
+  }
+}
+
 // renderUsers draws Settings → Users from usersUI.users.
 function renderUsers() {
   const box = $("users-list");
   if (!box || !canManageUsers()) return;
+  renderPasswordLoginHint();
   clear(box);
   if (!usersUI.users.length) box.appendChild(textEl("p", t("users.none"), "muted small"));
   for (const u of usersUI.users) box.appendChild(userPanel(u));
 }
 
 function initUsers() {
+  $("password-login").addEventListener("change", setPasswordLogin);
   $("user-add").addEventListener("click", () => {
     $("user-add").classList.add("hidden");
     const box = $("user-new");
@@ -319,7 +357,10 @@ function initUsers() {
   $("view-settings").addEventListener("click", () => {
     usersMsg("");
     if (!canManageUsers()) return;
-    loadUsers().then(renderUsers).catch((e) => usersMsg(t("users.failed", { name: "", error: e.message }), false));
+    loadUsers()
+      .then(renderUsers)
+      .then(loadPasswordLogin)
+      .catch((e) => usersMsg(t("users.failed", { name: "", error: e.message }), false));
   });
 }
 

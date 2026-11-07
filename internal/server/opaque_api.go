@@ -233,7 +233,7 @@ func (s *Server) loginStart(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.signIns.hold(addrKey, end)
 	held = true
-	writeJSON(w, http.StatusOK, map[string]any{"login": id, "ke2": opaqueB64.EncodeToString(start.KE2), "ksf": start.KSF, "v1": true, "expires_at": end})
+	writeJSON(w, http.StatusOK, map[string]any{"login": id, "ke2": opaqueB64.EncodeToString(start.KE2), "ksf": start.KSF, "v1": st.PasswordLogin(ctx), "expires_at": end})
 	return nil
 }
 

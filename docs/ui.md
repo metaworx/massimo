@@ -323,6 +323,11 @@ without the switches.
   the user's sessions and API keys with **Revoke**, and **Create key**,
   which shows the new key once.
   **Add a user** opens the form for one.
+  With `settings`, **Password sign-in** switches off the sign-in that sends a
+  password to the server,
+  which the page uses for users whose password the server still hashes;
+  the line under it says how many those are,
+  and they cannot sign in once it is off until a password is set for them here.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Disable** (with `roles.disable`), **Remove** for a created role nobody has,

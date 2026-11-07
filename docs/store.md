@@ -838,6 +838,12 @@ That is the one time an existing password crosses;
 the other is a mistyped password of a user of version 2,
 which the browser cannot tell from one of version 1 while the box takes the
 password sign-in.
+The setting `auth.password_login` (true by default) ends both:
+off, `POST /api/v1/login` answers `403`, the start says so,
+and every user signs in by OPAQUE alone.
+Settings → Users shows the switch to a holder of `settings`,
+with how many users still have a hash,
+who cannot sign in once it is off until a password is set for them.
 
 ### The commands
 

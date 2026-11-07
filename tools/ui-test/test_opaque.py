@@ -192,3 +192,29 @@ def test_a_user_of_version_1_is_upgraded(new_context, case, guard):
     finally:
         ctx.close()
         api_call("DELETE", f"api/v1/users/{name}")
+
+
+def test_the_password_sign_in_switched_off(page, case, new_context):
+    """Settings → Users has the switch of the password sign-in and says
+    how many users still have a password the server checks; off, such a
+    user is refused in the dialog and one of version 2 signs in."""
+    name = f"v1-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "v1-pass"})
+    try:
+        page.locator("#view-settings").click()
+        box = page.locator("#password-login")
+        assert wait_until(page, "document.getElementById('password-login').checked", 5), "the password sign-in is on by default"
+        assert wait_until(page, "/\\d/.test(document.getElementById('password-login-hint').textContent)", 5), "the hint counts the users of version 1"
+        box.uncheck(force=True)
+        assert wait_until(page, "document.getElementById('users-msg').classList.contains('ok')", 5), "the switch is saved"
+        assert api_call("GET", "api/v1/settings")["auth.password_login"]["value"] == "false", "the server's setting is off"
+        ctx = new_context()
+        probe = ctx.new_page()
+        probe.goto(URL)
+        refused = probe.evaluate("async ([n, p]) => { try { await signIn(n, p); return false; } catch (e) { return true; } }", [name, "v1-pass"])
+        assert refused, "a user of version 1 is refused with the switch off"
+        assert sign_in_in(probe, "operator", "op-pass"), "a user of version 2 signs in"
+        ctx.close()
+    finally:
+        api_call("PUT", "api/v1/settings", {"auth.password_login": None})
+        api_call("DELETE", f"api/v1/users/{name}")

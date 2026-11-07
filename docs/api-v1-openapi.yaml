@@ -53,7 +53,8 @@ paths:
         another from the same address is checked is 429 with
         Retry-After 1, not counted as a failure. 409 on a server without
         users (create the first owner with POST /api/v1/users) or
-        without a store (the API token).
+        without a store (the API token). 403 while auth.password_login
+        is off in /api/v1/settings: the users sign in by OPAQUE alone.
       security: []
       requestBody:
         required: true
@@ -1781,6 +1782,7 @@ paths:
                 backups.keep_days_auto: {value: "90", default: "90", set: false, in_effect: "90", applies: now}
                 backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
+                auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1798,9 +1800,11 @@ paths:
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h), refresh_interval (10m to
         168h, or 0 for off) and discover_interval (1m to 24h, or 0 for
-        only on request), the intervals at the next start; null goes
-        back to the default. Every value is checked before any is
-        written. The answer is that of GET.
+        only on request), the intervals at the next start; the whole
+        numbers; auth.password_login, true or false, whether POST
+        /api/v1/login takes a password (off, the users sign in by OPAQUE
+        alone); null goes back to the default. Every value is checked
+        before any is written. The answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -1808,7 +1812,12 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: {type: string, nullable: true}
+              additionalProperties:
+                nullable: true
+                oneOf:
+                  - {type: string}
+                  - {type: integer}
+                  - {type: boolean}
             example: {stale_after: 36h, refresh_interval: null}
       responses:
         "200":

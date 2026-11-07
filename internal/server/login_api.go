@@ -188,6 +188,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	name := store.NormalName(req.User)
 	ip := s.clientIP(r)
 	auditTarget(r, "user:"+name)
+	if !st.PasswordLogin(ctx) {
+		return fail(http.StatusForbidden, "the password sign-in is off on this server; sign in from the web UI, or with an API key")
+	}
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
 	var started *pendingLogin
 	if req.Login != "" {

@@ -30,6 +30,10 @@ the next minor, a fix counts the suffix up.
   `@serenity-kit/opaque` 1.1.0 in `ui/vendor/`; a user of version 1 is
   signed in with the password after it (`docs/ui.md`).
 
+- `auth.password_login` in `/api/v1/settings`, a switch in Settings →
+  Users: off, `POST /api/v1/login` is `403` and every user signs in by
+  OPAQUE alone (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
+
 ### Changed
 
 - Passwords are hashed with argon2id at 19 MiB and two passes, about

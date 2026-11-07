@@ -322,7 +322,9 @@ A wrong name or password is `401` and counts against the address and the name
 an address signs in once at a time,
 so a login while another from the same address is being checked
 is `429` with `Retry-After: 1`, and counts as no failure;
-a disabled user or a guest past its end date is `403`;
+a disabled user or a guest past its end date is `403`,
+and so is every password sign-in while `auth.password_login` is off
+(`GET and PUT /api/v1/settings`);
 a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,
 with eight more waiting;
@@ -927,10 +929,18 @@ the days the others are kept (365), 0 for ever and at most 3650,
 and `backups.keep_newest`,
 how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
 a change of the last three prunes at once.
+`auth.password_login`, true by default, says whether `POST /api/v1/login`
+takes a password, and applies at once:
+off, it answers `403`, the start of a sign-in by OPAQUE says `"v1": false`,
+and the users sign in by OPAQUE alone, so that no password crosses;
+the API keys are not touched.
+A user still of `auth_version` 1 cannot sign in then,
+until someone with `users` sets a password for it.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
-A number setting takes a JSON number, or the number as a string.
+A number setting takes a JSON number, or the number as a string,
+and `auth.password_login` `true` or `false`.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.

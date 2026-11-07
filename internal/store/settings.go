@@ -145,3 +145,32 @@ func (s *Store) SettingInt(ctx context.Context, key string) (int, bool, error) {
 	}
 	return n, true, nil
 }
+
+// SettingBool returns a setting that holds a JSON boolean, and whether
+// it is set.
+func (s *Store) SettingBool(ctx context.Context, key string) (bool, bool, error) {
+	v, ok, err := s.Setting(ctx, key)
+	if err != nil || !ok {
+		return false, false, err
+	}
+	var b bool
+	if err := json.Unmarshal(v, &b); err != nil {
+		return false, false, fmt.Errorf("store: setting %s: %w", key, err)
+	}
+	return b, true, nil
+}
+
+// PasswordLoginKey says whether the server takes the password sign-in,
+// POST /api/v1/login (true by default): off, every user signs in by
+// OPAQUE, and no password crosses (docs/store.md section 6).
+const PasswordLoginKey = "auth.password_login"
+
+// PasswordLogin reports whether the server takes the password sign-in;
+// a setting that cannot be read counts as the default, on.
+func (s *Store) PasswordLogin(ctx context.Context) bool {
+	on, ok, err := s.SettingBool(ctx, PasswordLoginKey)
+	if err != nil {
+		s.log.Warn("store: the password sign-in setting not read; it stays on", "error", err)
+	}
+	return !ok || on
+}
