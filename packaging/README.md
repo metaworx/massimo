@@ -14,8 +14,8 @@ on a Mac LaunchDaemons (see "macOS").
   listens on port 8099 on every interface (API and web UI;
   `install -listen` changes it),
   logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure
-  and after a restart from the API, which exits with 75
-  (`RestartForceExitStatus`, not counted as a failure).
+  and after a restart from the API,
+  which exits with 75 (`RestartForceExitStatus`, not counted as a failure).
 - `systemd/massimo-update.path` and `systemd/massimo-update.service`:
   the update helper,
   which installs a new release when the web UI or the API asks for one (see Updating).

@@ -540,7 +540,8 @@ a Windows service runs `massimo restart` instead,
 which stops and starts the service through the service manager.
 `-restart` (or `MASSIMO_RESTART`) says when it is offered:
 `auto` where a service manager starts the server again, so not in a terminal;
-`exit` always, exiting 75 for whatever runs `serve`, such as Docker's `--restart`;
+`exit` always, exiting 75 for whatever runs `serve`,
+such as Docker's `--restart`;
 `off` never.
 `sudo massimo restart` restarts the installed server from a prompt as well.
 Every six hours (`-refresh`,

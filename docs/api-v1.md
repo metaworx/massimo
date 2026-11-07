@@ -214,8 +214,8 @@ the OpenAPI file carries each operation's as `x-capability`:
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
-`manager` is `operator` plus guests, pairing, names, structure, restore
-and the restart,
+`manager` is `operator` plus guests, pairing, names, structure,
+restore and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, `integration` reads, sets and locks.
@@ -1741,7 +1741,8 @@ whatever runs the server, told by the exit status).
 
 `POST` restarts the server.
 It stops as on SIGTERM once this request is answered and its audit row written,
-and exits with status 75, which systemd, launchd and Homebrew answer with a start;
+and exits with status 75,
+which systemd, launchd and Homebrew answer with a start;
 a Windows service runs `massimo restart` instead,
 which stops and starts the service through the service manager.
 Answers `202` with `{"ok": true, "by": "systemd"}`;
@@ -1756,8 +1757,8 @@ so that nobody on the LAN, and no client of a reverse proxy on the box,
 can restart it;
 anyone else gets `403` with the reason.
 `403` also without the capability `restart`;
-`409` when no service manager would start the server again
-(`serve` in a terminal, or `-restart off`),
+`409` when no service manager would start the server again (`serve` in a terminal,
+or `-restart off`),
 while a restart is under way,
 or while an update runs, which restarts the server itself;
 `500` when the restart could not be started (on Windows, the helper).
