@@ -459,7 +459,9 @@ func fileCubes() (cubes []store.FileCube, plain *store.FileCube, err error) {
 	}
 	single := len(serials) == 1
 	for _, sn := range serials {
-		fc, err := fileCube(sn, single, false)
+		// The plain address is the one Cube's when MASSIMO_CUBE_SN (or
+		// -sn) names it, as env.Get reads it for the other commands.
+		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selectedSN))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -469,8 +471,9 @@ func fileCubes() (cubes []store.FileCube, plain *store.FileCube, err error) {
 }
 
 // fileCube reads one Cube's lines; sn "" is the plain forms only. The
-// plain MASSIMO_CUBE_ADDRESS counts only for plainCube, the Cube served
-// when no Cube has lines of its own.
+// plain MASSIMO_CUBE_ADDRESS counts only for plainCube: the Cube served
+// when no Cube has lines of its own, or the one Cube that has some when
+// MASSIMO_CUBE_SN names it.
 func fileCube(sn string, single, plainCube bool) (store.FileCube, error) {
 	fc := store.FileCube{Serial: sn, Values: map[string]store.FileValue{}}
 	line := func(field, name string, plainToo bool) {

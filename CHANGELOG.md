@@ -91,6 +91,9 @@ the next minor, a fix counts the suffix up.
 - The update helper reports "failed" for every error after it took the
   request, so the web UI no longer shows the previous run's result.
 
+- `massimo serve` takes the plain `MASSIMO_CUBE_ADDRESS` for the one Cube
+  `MASSIMO_CUBE_SN` names, also beside a variable of its own (README.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

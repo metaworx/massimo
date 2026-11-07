@@ -770,6 +770,9 @@ and reconnected when that changes.
 A key alone does not make `serve` take a Cube.
 A lone `MASSIMO_CUBE_ADDRESS` without a serial is served from the file until the
 Cube reports its serial, and then added to the store.
+Beside the variables of one Cube, such as its `_PROXY`,
+the plain `MASSIMO_CUBE_ADDRESS` is that Cube's when `MASSIMO_CUBE_SN` names it,
+as for the other commands.
 `serve` runs discovery at the start and every 30 minutes (`-discover-interval`,
 `0` for only on request through the API,
 `-discover-target <host>` to ask given addresses instead of broadcasting),
