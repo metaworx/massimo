@@ -2,11 +2,12 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, login: who the page is signed in as (GET
-// /api/v1/me), the sign-in dialog in place of the token prompt (POST
-// /api/v1/login with a name and a password, or an API key pasted), Log
-// out, hiding what the role may not do, the own password, and the form
-// that creates the first owner on a server without users. Loaded after
-// app.js; api() calls askLogin on a 401.
+// /api/v1/me), the sign-in dialog in place of the token prompt (a name
+// and a password, signed in by OPAQUE so that the password stays in the
+// browser, or an API key pasted), Log out, hiding what the role may not
+// do, the own password, and the form that creates the first owner on a
+// server without users. Loaded after app.js; api() calls askLogin on a
+// 401.
 "use strict";
 
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
@@ -36,6 +37,20 @@ function hasCap(c) {
 // canManageUsers: the users routes, with users or with guests.
 function canManageUsers() {
   return hasCap("users") || hasCap("guests");
+}
+
+// hasSystem reports whether the signed-in user sees System settings: one
+// of the capabilities of its panels, Cubes, backups, users, roles, and
+// the software's update and the server's restart.
+function hasSystem() {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "update", "restart"].some(hasCap) || canManageUsers();
+}
+
+// hasProfile reports whether the page is signed in as a user, who has My
+// profile; an open server and the server's token have none.
+function hasProfile() {
+  const me = state.me;
+  return !!(me && me.mode === "users" && me.user);
 }
 
 // isSelf reports whether a user is the signed-in one.
@@ -85,9 +100,11 @@ function applyCaps() {
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
+  body.classList.toggle("no-system", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderOpenBanner();
   renderMe();
+  if (!mayShow(currentView)) showView("tiles", "replace"); // log.js: a page the user signed in now may not open
 }
 
 // renderOpenBanner warns under the header while the server asks for no
@@ -100,7 +117,10 @@ function renderOpenBanner() {
   if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
-// renderMe says in the settings who is signed in, and what Log out does.
+// renderMe says in the 👤 menu who is signed in, and what Sign out
+// does: a session ends, an API key or the token is only forgotten (Forget
+// key), and an open server or one without authentication has nothing to
+// end and no profile, so the menu offers My settings alone.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -111,22 +131,23 @@ function renderMe() {
     text = t("me.signedIn", { name: me.user.display_name || me.user.name, role: roleLabel(me.role.key, me.role.name) });
     if (me.token && me.token.kind === "api") {
       text = t("me.withKey", { name: me.user.name, label: me.token.label || "" });
-      label = t("settings.forgetKey");
+      label = t("me.forgetKey");
     } else {
-      label = t("settings.logout");
+      label = t("me.signOut");
     }
   } else if (me && me.mode === "open") {
     text = t("me.open");
   } else if (me && me.mode === "token") {
     text = t("me.token");
-    label = t("settings.forgetKey");
+    label = t("me.forgetKey");
   } else if (me) {
     text = t("me.none");
   }
   line.textContent = text;
   line.classList.toggle("hidden", !text);
-  btn.textContent = label || t("settings.logout");
+  btn.textContent = label || t("me.signOut");
   btn.classList.toggle("hidden", !label);
+  $("menu-profile").classList.toggle("hidden", !hasProfile());
   $("me-password").classList.toggle("hidden", !(me && me.mode === "users" && me.user && me.user.has_password));
 }
 
@@ -165,6 +186,7 @@ function askLogin() {
     $("login-token").value = "";
     $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
+    const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {
       form.onsubmit = null;
       dlg.onclose = null;
@@ -181,21 +203,25 @@ function askLogin() {
         if (!startWaits) afterLogin();
         return;
       }
+      if (isBusy(submit)) return; // a second Enter while it signs in
       const user = $("login-user").value.trim();
       const password = $("login-password").value;
       if (!user || !password) {
         showResult(error, t("login.missing"), false);
         return;
       }
+      showResult(error, "", false);
+      let session;
       try {
-        const session = await signIn(user, password);
-        setToken(session.token);
-        done(true);
-        if (!startWaits) afterLogin();
+        session = await whileBusy(submit, () => signIn(user, password));
       } catch (e) {
         showResult(error, t("login.failed", { error: e.message }), false);
         $("login-password").focus();
+        return;
       }
+      setToken(session.token);
+      done(true);
+      if (!startWaits) afterLogin();
     };
     dlg.onclose = () => done(false);
     dlg.showModal();
@@ -204,10 +230,109 @@ function askLogin() {
   return loginPromise;
 }
 
-// signIn posts the login, without a token and without the dialog's
-// retry, and returns the session; the answer's error is thrown.
-function signIn(user, password) {
-  return apiRequest("POST", "api/v1/login", { user, password }, { auth: false });
+// --- the sign-in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE") ----
+
+// opaqueLoad is the vendored OPAQUE client (ui/vendor/opaque.js,
+// @serenity-kit/opaque), imported when a sign-in or a password first
+// needs it rather than with the page.
+let opaqueLoad = null;
+
+function opaqueModule() {
+  if (!opaqueLoad) {
+    opaqueLoad = import("./vendor/opaque.js").then(async (m) => {
+      await m.ready;
+      return m;
+    });
+    opaqueLoad.catch(() => {
+      opaqueLoad = null;
+    });
+  }
+  return opaqueLoad;
+}
+
+// keyStretching is the argon2id a record asks for, "m=19456,t=2,p=1" as
+// the server sends it, in the client's terms.
+function keyStretching(ksf) {
+  const m = /^m=(\d+),t=(\d+),p=(\d+)$/.exec(ksf || "");
+  if (!m) throw new Error("the server's key stretching " + JSON.stringify(ksf));
+  return { "argon2id-custom": { memory: Number(m[1]), iterations: Number(m[2]), parallelism: Number(m[3]) } };
+}
+
+// NO_KE3 ends a sign-in whose answer the password did not open: a KE3 the
+// server refuses as a wrong password, so that it lets the address go at
+// once rather than after the start's minute.
+const NO_KE3 = "A".repeat(86);
+
+// signIn signs in, without a token and without the dialog's retry, and
+// returns the session, or with the purpose "proof" a proof of the
+// password; the answer's error is thrown. The password stays in the
+// browser: the client runs OPAQUE and the server sees none of it. Where
+// it does not open the server's answer and the server still takes the
+// password sign-in, that follows, for a user still of version 1.
+async function signIn(user, password, purpose) {
+  const opaque = await opaqueModule();
+  const start = opaque.client.startLogin({ password });
+  const started = await apiRequest("POST", "api/v1/login/start", { user, ke1: start.startLoginRequest, purpose }, { auth: false });
+  const done = opaque.client.finishLogin({
+    clientLoginState: start.clientLoginState,
+    loginResponse: started.ke2,
+    password,
+    keyStretching: keyStretching(started.ksf),
+  });
+  if (done) return apiRequest("POST", "api/v1/login/finish", { login: started.login, ke3: done.finishLoginRequest }, { auth: false });
+  if (!started.v1 || purpose) {
+    return apiRequest("POST", "api/v1/login/finish", { login: started.login, ke3: NO_KE3 }, { auth: false });
+  }
+  // The password sign-in takes the start over, so that the attempt counts
+  // once; a user still of version 1 is upgraded at once.
+  const session = await apiRequest("POST", "api/v1/login", { user, password, login: started.login }, { auth: false });
+  if (session.upgrade) await upgradePassword(session, password);
+  return session;
+}
+
+// upgradePassword moves a user of version 1 to version 2 right after its
+// password sign-in: the password registered by OPAQUE in the browser and
+// set with the one-time proof the sign-in answered, so that it crosses
+// no more. A failure leaves the user of version 1, and the next sign-in
+// tries again.
+async function upgradePassword(session, password) {
+  const name = session.user.name;
+  try {
+    const body = await registerPassword(name, password, session.token);
+    body.proof = session.upgrade;
+    await apiRequest("PUT", "api/v1/users/" + encodeURIComponent(name), body, { token: session.token });
+    session.user.auth_version = 2;
+  } catch (e) {
+    // still of version 1
+  }
+}
+
+// registerPassword makes a password of version 2 for a name, the password
+// kept in the browser: the server answers the client's registration
+// request, and the client's record comes back as the fields that set it,
+// {record, ksf}, for POST /api/v1/users or PUT /api/v1/users/{name}. A
+// token given is the one asked with, else the page's.
+async function registerPassword(name, password, token) {
+  const opaque = await opaqueModule();
+  const reg = opaque.client.startRegistration({ password });
+  const path = "api/v1/users/" + encodeURIComponent(name) + "/register";
+  const request = { request: reg.registrationRequest };
+  const answer = token ? await apiRequest("POST", path, request, { token }) : await api("POST", path, request);
+  const done = opaque.client.finishRegistration({
+    clientRegistrationState: reg.clientRegistrationState,
+    registrationResponse: answer.response,
+    password,
+    keyStretching: keyStretching(answer.ksf),
+  });
+  return { record: done.registrationRecord, ksf: answer.ksf };
+}
+
+// currentPassword proves the current password for one's own change: for a
+// user of version 2 a proof from a sign-in by OPAQUE, which keeps it in
+// the browser, for one still of version 1 the password itself.
+async function currentPassword(user, password) {
+  if (user.auth_version === 2) return { proof: (await signIn(user.name, password, "proof")).proof };
+  return { current_password: password };
 }
 
 // afterLogin reads who is in, and starts the stream and the data again,
@@ -245,7 +370,7 @@ async function logout() {
   state.me = null;
   if (synced) await forgetUserSettings(); // app.js
   closeEvents();
-  showView("tiles");
+  showView("tiles", "replace");
   await loadMeAndPreferences();
   refresh().then(connectEvents);
 }
@@ -351,16 +476,24 @@ async function loadPreferences() {
 async function changeOwnPassword(ev) {
   ev.preventDefault();
   const msg = $("me-password-msg");
+  const submit = $("me-password-form").querySelector("button[type=submit]");
+  if (isBusy(submit)) return;
   const current = $("me-current").value;
   const password = $("me-new").value;
   if (password !== $("me-again").value) return showResult(msg, t("setup.mismatch"), false);
   if (!password) return showResult(msg, t("login.missing"), false);
   try {
-    await api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current });
+    const me = state.me.user;
+    await whileBusy(submit, async () => {
+      const body = await currentPassword(me, current);
+      Object.assign(body, await registerPassword(me.name, password));
+      return api("PUT", "api/v1/users/" + encodeURIComponent(me.name), body);
+    });
     showResult(msg, t("me.passwordChanged"), true);
     $("me-current").value = "";
     $("me-new").value = "";
     $("me-again").value = "";
+    loadMe();
   } catch (e) {
     showResult(msg, t("users.failed", { name: state.me.user.name, error: e.message }), false);
   }
@@ -369,24 +502,39 @@ async function changeOwnPassword(ev) {
 // --- the first owner --------------------------------------------------
 
 // createOwner handles the form of a server without users: the owner is
-// created and signed in at once.
+// created with a password of version 2 and signed in at once, the button
+// busy through both.
 async function createOwner(ev) {
   ev.preventDefault();
   const msg = $("setup-msg");
+  const submit = $("setup-form").querySelector("button[type=submit]");
+  if (isBusy(submit)) return;
+  if (!checkOwnerName()) {
+    $("setup-user").focus();
+    return;
+  }
   const name = $("setup-user").value.trim();
   const password = $("setup-password").value;
   if (!name || !password) return showResult(msg, t("login.missing"), false);
   if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
   try {
-    await api("POST", "api/v1/users", { name, password, role: "owner" });
-    const session = await signIn(name, password);
+    const session = await whileBusy(submit, async () => {
+      await api("POST", "api/v1/users", { name, role: "owner", ...(await registerPassword(name, password)) });
+      return signIn(name, password);
+    });
     setToken(session.token);
     showResult(msg, t("setup.done", { name }), true);
     afterLogin();
   } catch (e) {
-    showResult(msg, t("setup.failed", { error: e.message }), false);
+    const worded = wordNameError(e, name); // users.js
+    if (worded) checkOwnerName.say(worded);
+    showResult(msg, t("setup.failed", { error: worded || e.message }), false);
   }
 }
+
+// checkOwnerName checks the first owner's name as it is typed
+// (watchName, users.js); set by initLogin.
+let checkOwnerName = () => true;
 
 function initLogin() {
   window.addEventListener("pagehide", flushPreferences);
@@ -395,6 +543,7 @@ function initLogin() {
   });
   $("logout-btn").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
+  checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
   $("me-password-form").addEventListener("submit", changeOwnPassword);
 }
 

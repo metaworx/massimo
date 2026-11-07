@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Pairing and removal: in Settings → Cubes a device is paired, named,
+"""Pairing and removal: in System settings → Cubes a device is paired, named,
 put into a room with the room's settings and removed from the Cube again
 in the room's Devices tab; a device paired while the page was not
 looking is put into a room from Devices without a room, and another
@@ -18,7 +18,7 @@ import urllib.request
 
 import pytest
 
-from helpers import named_buttons, scroll_width, wait_until
+from helpers import named_buttons, scroll_width, show_view, wait_until
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/").rstrip("/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -86,7 +86,7 @@ def first_room(page):
 def test_pair_put_into_a_room_and_remove(page, case, clean):
     room = first_room(page)
     before = serve_log()
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     panel = page.locator(PANEL)
     panel.locator("summary").click()
     pairing = panel.locator(".cube-pairing")
@@ -116,7 +116,7 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
         new = serve_log()[len(before):]
         assert "device paired" in new and "settings copied" in new and "device=0abcde" in new, "the server paired, put and copied"
 
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
     tile = page.locator(".room[data-id='%d']" % room["id"])
     tile.locator(".tile-cog").click()
     tile.locator(".config-tabs [data-tab=devices]").click()
@@ -174,9 +174,9 @@ def test_remove_from_devices_without_a_room(page, case, clean):
 def test_pairing_without_the_capability_cubes(page, case):
     """A role with pair but without cubes, the default manager's, as
     login.js marks it on the body: the Cube's panel holds the pairing
-    alone; without pair either, Settings → Cubes is gone."""
+    alone; without pair either, System settings → Cubes is gone."""
     page.evaluate("document.body.classList.add('no-cubes')")
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     panel = page.locator(PANEL)
     assert panel.is_visible(), "the Cube's panel with pair alone"
     panel.locator("summary").click()
@@ -184,6 +184,6 @@ def test_pairing_without_the_capability_cubes(page, case):
     assert panel.locator("form.cube-form").is_hidden(), "not the Cube's settings"
     assert page.locator(".cube-found-list").count() == 0 or page.locator(".cube-found-list").is_hidden(), "not the found Cubes"
     page.evaluate("document.body.classList.add('no-pair')")
-    assert page.locator("#settings .cubes-settings").is_hidden(), "no Settings → Cubes without either"
+    assert page.locator("#system .cubes-settings").is_hidden(), "no System settings → Cubes without either"
     page.evaluate("document.body.classList.remove('no-cubes', 'no-pair')")
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")

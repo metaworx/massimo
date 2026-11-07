@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Settings → Software: the buttons while the update helper works, and
+"""System settings → Software: the buttons while the update helper works, and
 Update asking in the page. GET /api/v1/update is stubbed; nothing is
 installed."""
-from helpers import open_settings, update_json, wait_until
+from helpers import show_view, update_json, wait_until
 
 
 def test_busy_while_the_helper_installs(page):
@@ -11,7 +11,7 @@ def test_busy_while_the_helper_installs(page):
     are greyed out, also when the page only learns it from GET
     /api/v1/update (a reload during an update, or an update started from
     another browser), and come back once the helper reports done."""
-    open_settings(page)
+    show_view(page, "system")
     page.route("**/api/v1/update*", lambda route: route.fulfill(
         status=200, content_type="application/json", body=update_json("installing", "v0.0.1-test", True)))
     page.locator("#update-check").click()
@@ -28,7 +28,7 @@ def test_busy_while_the_helper_installs(page):
 def test_update_asks_in_the_page(page):
     """Update asks in the Software section, not in a browser dialog, and
     Cancel takes the question back without a request."""
-    open_settings(page)
+    show_view(page, "system")
     posts = []
     page.route("**/api/v1/update*", lambda route: posts.append(1) if route.request.method == "POST" else route.fulfill(
         status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True)))

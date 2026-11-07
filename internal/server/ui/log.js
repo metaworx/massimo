@@ -357,32 +357,100 @@ function logCubeChanged() {
   loadLog();
 }
 
-// showView switches the main area between the three pages: the tiles
-// ("tiles"), the log ("log") and the settings ("settings"). The tiles
-// keep their state while hidden. The page is kept in memory only.
-function showView(view) {
+// The pages of the main area: Rooms ("tiles"), the log ("log"), My
+// profile ("profile"), My settings ("prefs") and System settings
+// ("system"), each with its section and, where it has one, its button in
+// the header; My profile and My settings open from the 👤 menu, which is
+// highlighted while one of them is shown, as ☰ is for Log and System
+// settings, which it holds on a narrow screen. The tiles keep their state
+// while hidden. The page shown is in the address (VIEW_HASH), Rooms
+// without one, so that a reload opens it again and the browser's back
+// and forward move between the pages.
+const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", system: "system" };
+const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", system: "view-settings" };
+const VIEW_HASH = { tiles: "", log: "#log", profile: "#profile", prefs: "#prefs", system: "#system" };
+let currentView = "tiles";
+
+// viewOfHash is the page an address names, Rooms for none or another.
+function viewOfHash(hash) {
+  return Object.keys(VIEW_HASH).find((v) => VIEW_HASH[v] && VIEW_HASH[v] === hash) || "tiles";
+}
+
+// setAddress puts a page's hash into the address: as a new entry of the
+// browser's history ("push"), in place of the current one ("replace"),
+// or not at all ("none", for a page shown from the address).
+function setAddress(hash, how) {
+  if (how === "none" || location.hash === hash) return;
+  const url = location.pathname + location.search + hash;
+  if (how === "replace") history.replaceState(null, "", url);
+  else history.pushState(null, "", url);
+}
+
+// mayShow reports whether the signed-in user may open a page: System
+// settings with one of its capabilities, My profile as a user.
+function mayShow(view) {
+  if (view === "system") return hasSystem(); // login.js
+  if (view === "profile") return hasProfile();
+  return view in VIEW_BUTTON || view in VIEW_SECTION;
+}
+
+// isShown reports whether a page is the one shown.
+function isShown(view) {
+  return currentView === view;
+}
+
+// showView shows a page, Rooms in place of one the user may not open,
+// puts it into the address as address says (setAddress, a new entry by
+// default; Rooms in place of a page refused), and tells the scripts that
+// load what it shows (onView).
+function showView(view, address = "push") {
+  if (!mayShow(view)) {
+    view = "tiles";
+    address = "replace";
+  }
+  setAddress(VIEW_HASH[view], address);
+  currentView = view;
   logState.open = view === "log";
-  for (const id of ["house", "rooms", "unlisted"]) {
+  for (const id of ["home-notice", "house", "rooms", "unlisted"]) {
     $(id).classList.toggle("view-hidden", view !== "tiles");
   }
-  $("logview").classList.toggle("hidden", view !== "log");
-  $("settings").classList.toggle("hidden", view !== "settings");
-  const buttons = { tiles: "view-tiles", log: "view-log", settings: "view-settings" };
-  for (const [name, id] of Object.entries(buttons)) {
+  for (const [name, id] of Object.entries(VIEW_SECTION)) {
+    $(id).classList.toggle("hidden", view !== name);
+  }
+  for (const [name, id] of Object.entries(VIEW_BUTTON)) {
     $(id).classList.toggle("active", view === name);
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
+  $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs");
+  $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
   if (view === "log") {
     fillLogSelects();
     loadLog();
   }
+  document.dispatchEvent(new CustomEvent("viewshown", { detail: view }));
+}
+
+// onView runs fn each time a page is shown, for a script that loads
+// what the page shows.
+function onView(view, fn) {
+  document.addEventListener("viewshown", (ev) => {
+    if (ev.detail === view) fn();
+  });
 }
 
 function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   $("view-log").addEventListener("click", () => showView("log"));
-  $("view-settings").addEventListener("click", () => showView("settings"));
+  $("view-settings").addEventListener("click", () => showView("system"));
+  $("menu-profile").addEventListener("click", () => showView("profile"));
+  $("menu-prefs").addEventListener("click", () => showView("prefs"));
+  $("menu-log").addEventListener("click", () => showView("log"));
+  $("menu-system").addEventListener("click", () => showView("system"));
+  dropdown($("nav-menu"));
+  // back and forward, and a page named in the address bar
+  window.addEventListener("popstate", () => showView(viewOfHash(location.hash), "none"));
+  dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
     renderLog();

@@ -169,7 +169,7 @@ the command line shown by `sc.exe qc` ends in
 Note the time.
 
 Then, in a browser on this machine, http://127.0.0.1:8099/ with the token,
-Settings → Software:
+System settings → Software:
 
 1. "Check for updates": the text names the newest release as out and the button
    "Update to v…" is there.

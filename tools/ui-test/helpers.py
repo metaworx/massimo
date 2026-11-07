@@ -25,6 +25,9 @@ HEX_LABEL = {"en": "Lines, hex", "de": "Linien, Hex"}
 HEX_BAD = {"en": "Lines: “nope” is not a colour. Write it as #rrggbb or #rgb, the # may be left out; Escape puts the colour back.",
            "de": "Linien: „nope“ ist keine Farbe. Als #rrggbb oder #rgb schreiben, das # darf fehlen; Escape stellt die Farbe wieder her."}
 PANEL_TEXTS = {"en": ["Address", "Hidden devices", "Save"], "de": ["Adresse", "Ausgeblendete Geräte", "Speichern"]}
+NAME_BAD = {"en": "Only the letters a to z, digits and . _ - @, without spaces, starting with a letter or a digit; at most 64 characters.",
+            "de": "Nur die Buchstaben a bis z, Ziffern und . _ - @, ohne Leerzeichen, am Anfang ein Buchstabe oder eine Ziffer; höchstens 64 Zeichen."}
+NAME_TAKEN = {"en": "There is already a user named {name}.", "de": "Es gibt schon einen Benutzer {name}."}
 NOT_A_SCHEME = {"en": "Not a Massimo colour scheme: unknown format", "de": "Kein Massimo-Farbschema: unbekanntes Format"}
 
 
@@ -84,7 +87,89 @@ def used_ticket_first(refused):
     return handle
 
 
-def open_settings(page):
-    """The settings page, opened with the cog in the header."""
-    page.locator("#view-settings").click()
-    page.locator("#settings").wait_for(state="visible")
+def hold(page, pattern, method, held, sent):
+    """Holds the requests of a method to pattern until the test lets them
+    go (route.continue_() or route.fulfill()), as a slow server would,
+    and counts them in sent; other methods go through."""
+
+    def handle(route):
+        if route.request.method == method:
+            sent.append(route.request.post_data_json if route.request.post_data else route.request.url)
+            held.append(route)
+        else:
+            route.continue_()
+
+    page.route(pattern, handle)
+
+
+def wait_held(page, held, seconds=5):
+    """Waits until a held request has reached its route."""
+    end = time.time() + seconds
+    while not held and time.time() < end:
+        page.wait_for_timeout(100)
+    return bool(held)
+
+
+def busy_state(page, selector):
+    """A button's [disabled, turning (class busy), aria-busy]."""
+    return page.evaluate("(() => { const b = document.querySelector(%r); return b && [b.disabled, b.classList.contains('busy'), "
+                         "b.getAttribute('aria-busy')]; })()" % selector)
+
+
+def assert_busy(page, selector, what):
+    """The button is off, turns (class busy) and is aria-busy, as setBusy
+    makes a button whose request runs."""
+    state = busy_state(page, selector)
+    assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
+
+
+def css_hidden(page, selector):
+    """Whether the page's style hides an element (display none), shown or
+    not where it sits: an item of a closed menu is not."""
+    return page.locator(selector).evaluate("(e) => getComputedStyle(e).display === 'none'")
+
+
+def open_user_menu(page):
+    """The 👤 menu in the header, open."""
+    menu = page.locator("#user-menu")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    page.locator("#user-menu .menu-items").wait_for(state="visible")
+
+
+def sign_out(page):
+    """Sign out (or Forget key) from the 👤 menu."""
+    open_user_menu(page)
+    page.locator("#logout-btn").click()
+
+
+# /me of a viewer signed in, for a test that stubs it: no capability of
+# System settings.
+VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_password": True},
+          "role": {"key": "viewer"}, "capabilities": ["read", "preferences"], "token": {"kind": "session"}}
+
+
+# The pages of the main area: how a user opens each, and the section it
+# shows.
+VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}
+VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs"}
+VIEW_FOLDED = {"log": "#menu-log", "system": "#menu-system"}  # in ☰ below 600 px
+VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "system": "#system"}
+
+
+def show_view(page, view):
+    """A page of the main area, opened as a user opens it: Rooms, the log
+    and System settings with their button in the header, or on a narrow
+    screen the log and System settings from ☰, My profile and My settings
+    from the 👤 menu."""
+    if view in VIEW_MENU:
+        open_user_menu(page)
+        page.locator(VIEW_MENU[view]).click()
+    elif view in VIEW_FOLDED and page.locator("#nav-menu").is_visible():
+        menu = page.locator("#nav-menu")
+        if menu.get_attribute("open") is None:
+            menu.locator("summary").click()
+        page.locator(VIEW_FOLDED[view]).click()
+    else:
+        page.locator(VIEW_BUTTON[view]).click()
+    page.locator(VIEW_SECTION[view]).wait_for(state="visible")

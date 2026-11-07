@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Settings → Software: the server's restart. GET and POST
+"""System settings → Software: the server's restart. GET and POST
 /api/v1/restart are stubbed, and /healthz once the restart is asked for,
 so the test server never restarts."""
 import json
 
 from conftest import api_call
-from helpers import open_settings, wait_until
+from helpers import show_view, wait_until
 
 AVAILABLE = '{"available": true, "by": "systemd"}'
 BLOCKED = '{"available": false, "blocked": "no service manager would start this server again"}'
@@ -29,7 +29,7 @@ def test_restart_not_offered(page):
     and the reason is shown."""
     posts = []
     stub_restart(page, BLOCKED, posts)
-    open_settings(page)
+    show_view(page, "system")
     assert wait_until(page, "!document.getElementById('restart-text').classList.contains('hidden')", 5), "the reason is shown"
     assert "no service manager" in page.locator("#restart-text").inner_text(), "the server's reason"
     assert page.locator("#restart-btn").is_hidden(), "no button"
@@ -41,7 +41,7 @@ def test_restart_asks_in_the_page(page):
     question back without a request."""
     posts = []
     stub_restart(page, AVAILABLE, posts)
-    open_settings(page)
+    show_view(page, "system")
     btn = page.locator("#restart-btn")
     btn.wait_for(state="visible")
     assert page.locator("#restart-text").is_hidden(), "nothing to explain"
@@ -69,7 +69,7 @@ def test_restart_follows_the_server_back(page):
         body = later if calls["after"] > 1 else health
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     page.route("**/healthz", healthz)
-    open_settings(page)
+    show_view(page, "system")
     btn = page.locator("#restart-btn")
     btn.wait_for(state="visible")
     btn.click()
@@ -90,7 +90,7 @@ def test_restart_lists_what_waits(page):
     listed under the button, by name."""
     posts = []
     stub_restart(page, '{"available": true, "by": "systemd", "pending": ["MASSIMO_LISTEN", "MASSIMO_TLS"]}', posts)
-    open_settings(page)
+    show_view(page, "system")
     page.locator("#restart-btn").wait_for(state="visible")
     want = page.evaluate("t('restart.pending', {names: 'MASSIMO_LISTEN, MASSIMO_TLS'})")
     assert wait_until(page, f"document.getElementById('restart-text').textContent === {json.dumps(want)}", 5), \

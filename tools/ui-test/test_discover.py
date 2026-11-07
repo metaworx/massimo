@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from helpers import FOUND2, SEARCHING, found_text, scroll_width, wait_until
+from helpers import FOUND2, SEARCHING, found_text, scroll_width, show_view, wait_until
 
 
 def test_search_held_then_answered(page, case):
@@ -44,10 +44,10 @@ def test_search_held_then_answered(page, case):
     facts = page.locator("#cube-found [data-serial='KEQ0000000'] .found-facts")
     assert facts.count() == 1 and " · DHCP · " in facts.inner_text(), "the found Cube's DHCP flag"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes"
-    page.locator("#view-log").click()
+    show_view(page, "log")
     assert wait_until(page, "[...document.querySelectorAll('.log-line.kind-cube_found')].some((l) => l.textContent.includes('KEQ0000000'))", 5), \
         "cube_found in the log"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_cube_found_live(page, case):
