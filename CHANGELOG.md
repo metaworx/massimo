@@ -94,6 +94,9 @@ the next minor, a fix counts the suffix up.
 - `massimo serve` takes the plain `MASSIMO_CUBE_ADDRESS` for the one Cube
   `MASSIMO_CUBE_SN` names, also beside a variable of its own (README.md).
 
+- A serial in lower case in a variable's name, such as
+  `MASSIMO_CUBE_keq0000000_ADDRESS`, is that Cube's again on Linux.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

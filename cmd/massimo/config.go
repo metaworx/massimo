@@ -85,7 +85,7 @@ func runConfig(args []string) error {
 		for _, sn := range sns {
 			missing := []string{}
 			for _, v := range []string{env.IV, env.Address} {
-				if os.Getenv(env.PerCube(v, sn)) == "" {
+				if _, set := env.PerCubeValue(v, sn); set == "" {
 					missing = append(missing, strings.TrimPrefix(v, env.Prefix))
 				}
 			}

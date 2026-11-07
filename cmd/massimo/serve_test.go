@@ -361,3 +361,17 @@ func TestServePlainAddressOfTheNamedCube(t *testing.T) {
 	}
 	selectedSN, snExplicit = "", false
 }
+
+// A Cube whose serial a variable's name has in lower case is served with
+// that variable's address.
+func TestServeLowerCaseSerial(t *testing.T) {
+	clearCubeEnv(t)
+	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
+	su, err := serveSetup(context.Background(), testStore(t, ""), "", nil, "", quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(su.cubes) != 1 || su.cubes[0].Serial != "KEQ0000000" || su.cubes[0].Addr != "192.0.2.5" {
+		t.Fatalf("cubes %+v", su.cubes)
+	}
+}

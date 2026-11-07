@@ -478,8 +478,8 @@ func fileCube(sn string, single, plainCube bool) (store.FileCube, error) {
 	fc := store.FileCube{Serial: sn, Values: map[string]store.FileValue{}}
 	line := func(field, name string, plainToo bool) {
 		if sn != "" {
-			if v := os.Getenv(env.PerCube(name, sn)); v != "" {
-				fc.Values[field] = store.FileValue{Variable: env.PerCube(name, sn), Value: v}
+			if variable, v := env.PerCubeValue(name, sn); v != "" {
+				fc.Values[field] = store.FileValue{Variable: variable, Value: v}
 				return
 			}
 		}

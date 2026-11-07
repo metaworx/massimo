@@ -72,11 +72,28 @@ func PerCube(name, sn string) string {
 	return Prefix + strings.ToUpper(sn) + "_" + strings.TrimPrefix(name, Prefix)
 }
 
+// PerCubeValue returns the per-Cube variable of name for the Cube sn as
+// it is set, and its value: the serial in the name in any case, since
+// Linux keeps the case a settings file gives it; the upper-case name and
+// "" when none is set.
+func PerCubeValue(name, sn string) (variable, value string) {
+	want := PerCube(name, sn)
+	if v := os.Getenv(want); v != "" {
+		return want, v
+	}
+	for _, kv := range os.Environ() {
+		if k, v, _ := strings.Cut(kv, "="); v != "" && strings.EqualFold(k, want) {
+			return k, v
+		}
+	}
+	return want, ""
+}
+
 // Get returns the value of name for the Cube sn: the per-Cube variable
 // if set, else the plain one. With sn empty it is the plain one.
 func Get(name, sn string) string {
 	if sn != "" {
-		if v := os.Getenv(PerCube(name, sn)); v != "" {
+		if _, v := PerCubeValue(name, sn); v != "" {
 			return v
 		}
 	}
@@ -89,15 +106,16 @@ func Get(name, sn string) string {
 // listen address or a name.
 func Own(name, sn string, single bool) string {
 	if sn != "" {
-		if v := os.Getenv(PerCube(name, sn)); v != "" || !single {
+		if _, v := PerCubeValue(name, sn); v != "" || !single {
 			return v
 		}
 	}
 	return os.Getenv(name)
 }
 
-// Serials lists, sorted, the serial numbers that have the per-Cube form
-// of name set to a non-empty value, with those values.
+// Serials lists, sorted and in upper case, the serial numbers that have
+// the per-Cube form of name set to a non-empty value, with those values;
+// a serial written in lower case in the name is the same Cube.
 func Serials(name string) (serials []string, values map[string]string) {
 	suffix := "_" + strings.TrimPrefix(name, Prefix)
 	values = map[string]string{}
@@ -109,8 +127,13 @@ func Serials(name string) (serials []string, values map[string]string) {
 		}
 		// A serial never contains "_".
 		if sn, ok := strings.CutSuffix(mid, suffix); ok && sn != "" && !strings.Contains(sn, "_") {
-			serials = append(serials, sn)
-			values[sn] = v
+			sn = strings.ToUpper(sn)
+			if _, seen := values[sn]; !seen {
+				serials = append(serials, sn)
+			}
+			if _, set := values[sn]; !set || k == PerCube(name, sn) {
+				values[sn] = v // the upper-case name wins over another spelling
+			}
 		}
 	}
 	sort.Strings(serials)
@@ -160,11 +183,12 @@ func ParseList(name, value string) ([]cube.RFAddress, error) {
 // HiddenList returns the devices listed as hidden for the Cube sn in
 // MASSIMO_CUBE_<SN>_IGNORE, else MASSIMO_CUBE_IGNORE.
 func HiddenList(sn string) ([]cube.RFAddress, error) {
-	name := Ignore
-	if sn != "" && os.Getenv(PerCube(Ignore, sn)) != "" {
-		name = PerCube(Ignore, sn)
+	if sn != "" {
+		if name, v := PerCubeValue(Ignore, sn); v != "" {
+			return ParseList(name, v)
+		}
 	}
-	return ParseList(name, os.Getenv(name))
+	return ParseList(Ignore, os.Getenv(Ignore))
 }
 
 // HiddenSet is the set of devices to leave out for the Cube sn: its
