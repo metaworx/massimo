@@ -206,15 +206,15 @@ func (s *Server) storedCube(r *http.Request) (*runtime, *store.Store, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if rt.serial == "" {
+	if rt.cubeSerial() == "" {
 		return nil, nil, fail(http.StatusConflict, "the cube has not reported its serial yet")
 	}
-	row, ok, err := st.Cube(r.Context(), rt.serial)
+	row, ok, err := st.Cube(r.Context(), rt.cubeSerial())
 	if err != nil {
 		return nil, nil, storeFail(err)
 	}
 	if !ok || !row.Configured || rt.config().Source == store.SourceFlag {
-		return nil, nil, fail(http.StatusConflict, "cube %s is served for this run only (-addr or -sn), not from the store", rt.serial)
+		return nil, nil, fail(http.StatusConflict, "cube %s is served for this run only (-addr or -sn), not from the store", rt.cubeSerial())
 	}
 	return rt, st, nil
 }
@@ -235,7 +235,7 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 	if req.Serial != "" {
 		return fail(http.StatusBadRequest, "the serial is the path's")
 	}
-	row, err := st.UpdateCube(r.Context(), rt.serial, req.apply)
+	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), req.apply)
 	if err != nil {
 		return storeFail(err)
 	}
@@ -243,7 +243,7 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 	if err := s.applyCube(rt, row); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
-	s.log.Info("cube changed", "serial", rt.serial, "remote", s.clientIP(r))
+	s.log.Info("cube changed", "serial", rt.cubeSerial(), "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, s.summary(rt))
 	return nil
 }
@@ -258,13 +258,13 @@ func (s *Server) applyCube(rt *runtime, row store.Cube) error {
 	rt.setConfig(func(c *CubeConfig) { *c = cfg })
 	addr := cfg.Addr
 	if addr == "" {
-		if f, ok := s.foundInfo(rt.serial); ok && f.Address != "" {
+		if f, ok := s.foundInfo(rt.cubeSerial()); ok && f.Address != "" {
 			addr = net.JoinHostPort(f.Address, strconv.Itoa(s.cubePort()))
 		}
 	}
 	had := rt.client.Address() != ""
 	if addr != "" && rt.client.SetAddress(addr) {
-		s.log.Info("cube address changed", "serial", rt.serial, "address", addr)
+		s.log.Info("cube address changed", "serial", rt.cubeSerial(), "address", addr)
 		if had {
 			s.mu.RLock()
 			ctx := s.ctx
@@ -295,7 +295,7 @@ func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	row, err := st.UpdateCube(r.Context(), rt.serial, func(c *store.Cube) error {
+	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), func(c *store.Cube) error {
 		c.Configured, c.Source = false, store.SourceUI
 		return nil
 	})
@@ -304,7 +304,7 @@ func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.noteRow(row)
 	s.removeCube(rt)
-	s.log.Info("cube removed", "serial", rt.serial, "remote", s.clientIP(r))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "serial": rt.serial})
+	s.log.Info("cube removed", "serial", rt.cubeSerial(), "remote", s.clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "serial": rt.cubeSerial()})
 	return nil
 }

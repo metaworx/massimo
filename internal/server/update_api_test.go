@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -191,5 +192,32 @@ func TestUpdateManaged(t *testing.T) {
 	}
 	if _, err := os.Stat(req); err == nil {
 		t.Fatal("a request was written")
+	}
+}
+
+// An update request's 202 has no run that reports back to its command:
+// the command is acknowledged with the answer, and a retry with its
+// Idempotency-Key gets the 202 again instead of "still running".
+func TestUpdateCommandIsAcknowledged(t *testing.T) {
+	dir := t.TempDir()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Update = UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"),
+		Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}}
+	_, ts, s := startWith(t, opts)
+	stores[ts] = s.opts.Store
+	headers := map[string]string{"Idempotency-Key": "update-1"}
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", headers); resp.StatusCode != 202 {
+		t.Fatalf("update: %d %s", resp.StatusCode, text)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if c := commandOfRow(t, ts, "secret", rows[0]); c.Action != "update.start" || c.State != store.StateAcknowledged || c.Status != 202 || c.FinishedAt == nil {
+		t.Fatalf("the update's command %+v", c)
+	}
+	os.Remove(opts.Update.Request)
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", headers); resp.StatusCode != 202 || resp.Header.Get("Idempotent-Replayed") != "true" {
+		t.Fatalf("the retry: %d %s", resp.StatusCode, text)
+	}
+	if _, err := os.Stat(opts.Update.Request); err == nil {
+		t.Fatal("the retry asked the helper again")
 	}
 }

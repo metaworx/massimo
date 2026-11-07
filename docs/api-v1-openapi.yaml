@@ -1659,7 +1659,8 @@ components:
         for 24 hours: a retry with the same key answers what the first
         request answered, with the header Idempotent-Replayed: true, and
         sends nothing to the Cube; the same key with another request is
-        422, and one whose request is still running 409.
+        422, one whose request is still running 409, and one whose request
+        the server's restart cut off 503.
       schema: {type: string, maxLength: 128}
     name:
       name: name

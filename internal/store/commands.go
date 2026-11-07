@@ -41,6 +41,18 @@ const CommandsKeepDaysKey = "commands.keep_days"
 // keyKeep is how long an idempotency key answers a retry.
 const keyKeep = 24 * time.Hour
 
+// commandsPruneEvery is how often a write prunes the commands: the retention
+// counts in days, and a prune on every write would scan the table each
+// time.
+const commandsPruneEvery = time.Hour
+
+// commandByKey finds the parent a user's Idempotency-Key names within
+// its keyKeep: user_id IS ? lets the index on (user_id,
+// idempotency_key) serve it, NULL standing for no user; the arguments
+// are the user id (nil for none), the key and the oldest created_at.
+const commandByKey = `SELECT ` + commandColumns + ` FROM commands c
+	WHERE c.user_id IS ? AND c.idempotency_key = ? AND c.parent_id IS NULL AND c.created_at >= ? ORDER BY c.id DESC LIMIT 1`
+
 // Errors of the commands.
 var (
 	ErrNoCommand = errors.New("store: no such command")
@@ -131,11 +143,14 @@ func (s *Store) AddCommand(ctx context.Context, c Command) (Command, error) {
 	}
 	defer tx.Rollback()
 	now := s.now()
-	if err := s.pruneCommands(ctx, tx, now); err != nil {
-		return Command{}, err
+	if last := s.commandsPruned.Load(); last == 0 || now.Sub(time.Unix(0, last)) >= commandsPruneEvery {
+		if err := s.pruneCommands(ctx, tx, now); err != nil {
+			return Command{}, err
+		}
+		s.commandsPruned.Store(now.UnixNano())
 	}
 	if c.Key != "" {
-		have, err := scanCommand(tx.QueryRowContext(ctx, `SELECT `+commandColumns+` FROM commands c WHERE coalesce(c.user_id, 0) = ? AND c.idempotency_key = ? AND c.parent_id IS NULL ORDER BY c.id DESC LIMIT 1`, c.UserID, c.Key))
+		have, err := scanCommand(tx.QueryRowContext(ctx, commandByKey, nullID(c.UserID), c.Key, formatTime(now.Add(-keyKeep))))
 		if err == nil {
 			tx.Rollback()
 			out, _, err := s.Command(ctx, have.ID)

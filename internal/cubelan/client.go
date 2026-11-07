@@ -56,10 +56,14 @@ type Client struct {
 	addrMu sync.Mutex
 	addr   string        // host:port; "" until known, see SetAddress
 	hasAdr chan struct{} // closed once addr is set
+	// wake cuts Run's wait between two dials short: a new address, or
+	// a Reconnect while disconnected.
+	wake chan struct{}
 }
 
 type pendingReply struct {
 	want byte
+	left int // replies still due: one, or one A per device of a t:
 	ch   chan cube.Message
 }
 
@@ -82,7 +86,7 @@ func New(opts Options) *Client {
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
 	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
-		hasAdr: make(chan struct{})}
+		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1)}
 	if opts.Addr != "" {
 		c.SetAddress(opts.Addr)
 	}
@@ -106,7 +110,8 @@ func (c *Client) Address() string {
 
 // SetAddress sets the Cube's address, for a Cube found by discovery,
 // and reports whether it changed. A client created without an address
-// waits for it before it connects; a change takes effect with the next
+// waits for it before it connects; a client between connections dials
+// the new one at once; a connected one takes it with the next
 // connection, so a caller that wants it now reconnects (through the
 // queue, engine.Command.Reconnect).
 func (c *Client) SetAddress(addr string) bool {
@@ -121,7 +126,16 @@ func (c *Client) SetAddress(addr string) bool {
 	if first {
 		close(c.hasAdr)
 	}
+	c.wakeDial()
 	return true
+}
+
+// wakeDial ends Run's wait before its next dial.
+func (c *Client) wakeDial() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
 }
 
 // Snapshot returns the client's view of the Cube.
@@ -166,6 +180,7 @@ func (c *Client) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff):
+		case <-c.wake:
 		}
 		if backoff < time.Minute {
 			backoff *= 2
@@ -176,6 +191,10 @@ func (c *Client) Run(ctx context.Context) error {
 // session runs one connection until it fails and reports whether the
 // greeting arrived.
 func (c *Client) session(ctx context.Context) (bool, error) {
+	select { // a wake from before this dial is spent
+	case <-c.wake:
+	default:
+	}
 	conn, err := c.opts.Dialer(ctx, c.Address())
 	if err != nil {
 		return false, err
@@ -268,12 +287,21 @@ func (c *Client) handle(m cube.Message) {
 	}
 	c.mu.Lock()
 	p := c.pending
+	if p != nil && m.Type == p.want && p.left > 1 {
+		// An A of a t: for several devices; the last answers the Send.
+		p.left--
+		c.mu.Unlock()
+		return
+	}
 	if p != nil && m.Type == p.want {
 		c.pending = nil
 		c.mu.Unlock()
 		p.ch <- m
-		// L replies also carry state; fall through to apply them.
-		if m.Type != 'L' {
+		// L and C replies also carry state; fall through to apply them.
+		// A C line of the greeting may answer a re-read sent while the
+		// greeting still comes, and the device it describes must not
+		// drop out of the snapshot at the greeting's end.
+		if m.Type != 'L' && m.Type != 'C' {
 			return
 		}
 	} else {
@@ -343,14 +371,26 @@ func replyType(cmd byte) byte {
 	return 0
 }
 
-// Send writes a command and waits for its reply. Only one command can be
-// in flight at a time, which matches how the Cube behaves.
+// replies is how many lines answer a command: one, or for a t: one A
+// for each device it deletes, as the Cube answered on hardware.
+func replies(m cube.Message) int {
+	if m.Type == 't' {
+		if _, addrs, err := cube.ParseDeleteDevices(m.Data); err == nil && len(addrs) > 1 {
+			return len(addrs)
+		}
+	}
+	return 1
+}
+
+// Send writes a command and waits for its reply, the last of them for a
+// t: that deletes several devices. Only one command can be in flight at
+// a time, which matches how the Cube behaves.
 func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error) {
 	want := replyType(m.Type)
 	if want == 0 {
 		return cube.Message{}, c.write(m)
 	}
-	p := &pendingReply{want: want, ch: make(chan cube.Message, 1)}
+	p := &pendingReply{want: want, left: replies(m), ch: make(chan cube.Message, 1)}
 	c.mu.Lock()
 	if c.conn == nil {
 		c.mu.Unlock()
@@ -395,13 +435,20 @@ func (c *Client) clearPending(p *pendingReply) {
 // snapshot with what the Cube holds now: a full refresh, in case a write
 // the Cube acknowledged did not take effect. A command waiting for its
 // reply fails with ErrNotConnected, so callers run it through the
-// command queue (engine.Command.Reconnect).
+// command queue (engine.Command.Reconnect). Between connections it
+// dials at once and waits for the greeting.
 func (c *Client) Reconnect(ctx context.Context) error {
 	c.mu.Lock()
 	conn, greeted := c.conn, c.greeted
 	c.mu.Unlock()
 	if conn == nil {
-		return ErrNotConnected
+		c.wakeDial()
+		select {
+		case <-greeted:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	c.reconnecting.Store(true)
 	c.write(cube.CmdQuit)

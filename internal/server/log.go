@@ -55,10 +55,10 @@ func storedEvent(cubeID int64, ev event) store.Event {
 // run that discovery has noted.
 func (s *Server) learnStoreID(ctx context.Context, rt *runtime) {
 	st := s.opts.Store
-	if st == nil || rt.storeID.Load() != 0 || rt.serial == "" {
+	if st == nil || rt.storeID.Load() != 0 || rt.cubeSerial() == "" {
 		return
 	}
-	row, ok, err := st.Cube(ctx, rt.serial)
+	row, ok, err := st.Cube(ctx, rt.cubeSerial())
 	if err != nil || !ok {
 		return
 	}

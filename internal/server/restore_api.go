@@ -162,7 +162,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 	if !rt.startRestore(run) {
 		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running")
 	}
-	s.log.Info("restore started", "cube", rt.serial, "id", run.ID, "steps", len(p.Steps), "radio_commands", v.RadioCommands, "duty_pct", v.Budget.DutyCyclePct)
+	s.log.Info("restore started", "cube", rt.cubeSerial(), "id", run.ID, "steps", len(p.Steps), "radio_commands", v.RadioCommands, "duty_pct", v.Budget.DutyCyclePct)
 	// Counted in s.wg while Run runs, so that Run waits for the restore's
 	// restore_done; before Run (the tests), on the background context.
 	ctx := s.track()
@@ -176,8 +176,14 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		}
 		s.runRestore(ctx, rt, run, p, commandOf(r.Context()))
 	}()
-	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "steps": len(p.Steps)})
+	writeJSON(w, http.StatusAccepted, restoreAnswer(run.ID, len(p.Steps)))
 	return nil
+}
+
+// restoreAnswer is the 202 a restore's start answers, which its command
+// keeps for a replay.
+func restoreAnswer(id string, steps int) map[string]any {
+	return map[string]any{"id": id, "steps": steps}
 }
 
 // getRestore handles GET …/restore: the last restore of the Cube, or
@@ -199,7 +205,7 @@ func (s *Server) getRestore(w http.ResponseWriter, r *http.Request) error {
 // refuseRestore logs a refused restore and returns its error.
 func (s *Server) refuseRestore(rt *runtime, status int, format string, args ...any) error {
 	err := fail(status, format, args...)
-	s.log.Warn("restore refused", "cube", rt.serial, "reason", err.Error())
+	s.log.Warn("restore refused", "cube", rt.cubeSerial(), "reason", err.Error())
 	return err
 }
 
@@ -474,7 +480,7 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 			}
 		}
 		if r.Discarded {
-			s.log.Warn("restore step discarded by the cube", "cube", rt.serial, "id", run.ID, "step", i+1, "what", st.What,
+			s.log.Warn("restore step discarded by the cube", "cube", rt.cubeSerial(), "id", run.ID, "step", i+1, "what", st.What,
 				"duty_pct", r.Budget.DutyCyclePct, "free_slots", r.Budget.FreeMemorySlots)
 		}
 	})
@@ -491,10 +497,11 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	done := restoreProgress{ID: run.ID, Steps: len(run.Steps), OK: err == nil, Error: run.Error, State: run.State, Sent: run.Sent}
 	rt.restoreMu.Unlock()
 	rt.emit(event{Kind: "restore_done", Error: done.Error, Time: finished, Restore: &done})
-	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error})
+	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error},
+		restoreAnswer(run.ID, len(p.Steps)))
 	if err != nil {
-		s.log.Warn("restore failed", "cube", rt.serial, "id", run.ID, "sent", done.Sent, "steps", done.Steps, "error", err)
+		s.log.Warn("restore failed", "cube", rt.cubeSerial(), "id", run.ID, "sent", done.Sent, "steps", done.Steps, "error", err)
 		return
 	}
-	s.log.Info("restore done", "cube", rt.serial, "id", run.ID, "sent", done.Sent, "steps", done.Steps)
+	s.log.Info("restore done", "cube", rt.cubeSerial(), "id", run.ID, "sent", done.Sent, "steps", done.Steps)
 }

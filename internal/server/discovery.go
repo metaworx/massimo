@@ -105,7 +105,7 @@ func (s *Server) runtimes() []*runtime {
 // configured returns the runtime of a serial, or nil.
 func (s *Server) configured(serial string) *runtime {
 	for _, rt := range s.runtimes() {
-		if strings.EqualFold(rt.serial, serial) || strings.EqualFold(rt.config().Serial, serial) {
+		if strings.EqualFold(rt.cubeSerial(), serial) || strings.EqualFold(rt.config().Serial, serial) {
 			return rt
 		}
 	}

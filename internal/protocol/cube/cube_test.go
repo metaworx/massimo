@@ -660,3 +660,13 @@ func TestParseDeleteDevices(t *testing.T) {
 		}
 	}
 }
+
+// The thermostats are the radiator thermostats and the wall thermostat.
+func TestIsThermostat(t *testing.T) {
+	for typ, want := range map[DeviceType]bool{DeviceCube: false, DeviceRadiatorThermostat: true, DeviceRadiatorThermostatPlus: true,
+		DeviceWallThermostat: true, DeviceShutterContact: false, DeviceEcoSwitch: false} {
+		if got := typ.IsThermostat(); got != want {
+			t.Errorf("%v: %v, want %v", typ, got, want)
+		}
+	}
+}

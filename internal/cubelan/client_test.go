@@ -6,6 +6,7 @@ package cubelan
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net"
 	"sync"
 	"testing"
@@ -327,5 +328,172 @@ func TestForgetDevice(t *testing.T) {
 	}
 	if _, ok := s.State(rf); !ok || s.Config(rf) == nil {
 		t.Fatal("not back after its C line")
+	}
+}
+
+// A t: naming several devices is answered with an A line for each, and
+// Send returns only after the last, so that the next command's reply is
+// its own and not a late A of the deletion.
+func TestSendWaitsForEveryAOfADelete(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakecube.Server{Greeting: greeting, ReplyGap: 100 * time.Millisecond}
+	addr, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	<-c.Ready()
+	del := cube.CmdDeleteDevices(true, 0x14ce3d, 0x14ce58, 0x151486)
+	start := time.Now()
+	if _, err := c.Send(ctx, del); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took < 180*time.Millisecond {
+		t.Fatalf("Send of a t: for three devices returned after %s, before the Cube's third A", took)
+	}
+}
+
+// freeAddr is an address nothing listens on.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().String()
+}
+
+// A new address, as discovery finds it after a DHCP lease, is dialled at
+// once, not after the backoff the failed dials to the old one built up.
+func TestSetAddressCutsTheBackoffShort(t *testing.T) {
+	_, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: freeAddr(t)})
+	go c.Run(ctx)
+	time.Sleep(1300 * time.Millisecond) // two failed dials: the client waits 2 s now
+	start := time.Now()
+	c.SetAddress(addr)
+	select {
+	case <-c.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("never connected")
+	}
+	if took := time.Since(start); took > 700*time.Millisecond {
+		t.Fatalf("connected %s after the new address", took)
+	}
+}
+
+// Reconnect while the client is between connections dials at once and
+// waits for the greeting, rather than failing with ErrNotConnected.
+func TestReconnectWhileDisconnected(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := freeAddr(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	time.Sleep(1300 * time.Millisecond)
+	srv := &fakecube.Server{Greeting: greeting}
+	if _, err := srv.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	rctx, stop := context.WithTimeout(ctx, 700*time.Millisecond)
+	defer stop()
+	if err := c.Reconnect(rctx); err != nil {
+		t.Fatalf("Reconnect while disconnected: %v", err)
+	}
+	if !c.Connected() {
+		t.Fatal("not connected after Reconnect")
+	}
+}
+
+// A re-read c: sent while the greeting is still coming takes one of its
+// C lines as its reply; that line is applied all the same, so the
+// device it describes is still there when the greeting ends.
+func TestGreetingCLineAnsweringASend(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, client := net.Pipe()
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: "192.0.2.10:62910", Dialer: func(context.Context, string) (net.Conn, error) { return client, nil }})
+	go c.Run(ctx)
+	var first cube.RFAddress
+	for _, m := range greeting {
+		if m.Type == 'C' && first == 0 {
+			cfg, err := cube.ParseConfig(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			first = cfg.RFAddress
+		}
+	}
+	go func() {
+		for _, m := range greeting {
+			if m.Type != 'C' && m.Type != 'L' {
+				server.Write([]byte(m.Wire()))
+			}
+		}
+	}()
+	// The re-read goes out mid-greeting and the Cube's first C answers it.
+	replied := make(chan error, 1)
+	go func() {
+		for {
+			_, err := c.Send(ctx, cube.Message{Type: 'c', Data: first.String()})
+			if !errors.Is(err, ErrNotConnected) {
+				replied <- err
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	r := cube.NewReader(server)
+	for {
+		m, err := r.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Type == 'c' {
+			break
+		}
+	}
+	go func() {
+		for _, m := range greeting {
+			if m.Type == 'C' || m.Type == 'L' {
+				server.Write([]byte(m.Wire()))
+			}
+		}
+		for { // the rest the client sends
+			if _, err := r.Read(); err != nil {
+				return
+			}
+		}
+	}()
+	if err := <-replied; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-c.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("no greeting")
+	}
+	if c.Snapshot().Config(first) == nil {
+		t.Fatalf("device %s dropped at the end of the greeting", first)
 	}
 }

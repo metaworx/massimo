@@ -75,6 +75,9 @@ type Command struct {
 // joined the queue, that the queue began sending it, and its result,
 // also when it was superseded by a newer command with its Key or
 // drained at the end. The server writes the commands table with it.
+// Enqueued, and Finished for a command it supersedes, are called with
+// the queue's lock held, before the command can run, so that they come
+// before its Started: they must return at once and not call the queue.
 type Observer interface {
 	Enqueued(cmd Command)
 	Started(cmd Command)
@@ -202,14 +205,13 @@ func NewQueue(gw Gateway, opts Options) *Queue {
 // the same Key is replaced and resolved with ErrSuperseded.
 func (q *Queue) Enqueue(cmd Command) *Ticket {
 	t := &Ticket{done: make(chan Result, 1)}
-	var superseded []Command
 	q.mu.Lock()
 	if cmd.Key != "" {
 		kept := q.items[:0]
 		for _, e := range q.items {
 			if e.cmd.Key == cmd.Key {
 				e.ticket.done <- Result{Err: ErrSuperseded}
-				superseded = append(superseded, e.cmd)
+				q.observe(e.cmd, func(o Observer) { o.Finished(e.cmd, Result{Err: ErrSuperseded}) })
 				continue
 			}
 			kept = append(kept, e)
@@ -218,17 +220,34 @@ func (q *Queue) Enqueue(cmd Command) *Ticket {
 	}
 	q.seq++
 	cmd.Seq = q.seq
+	// Told before Run can take the command, so that the observer has
+	// recorded it when Started and Finished come.
+	q.observe(cmd, func(o Observer) { o.Enqueued(cmd) })
 	q.items = append(q.items, &entry{cmd: cmd, ticket: t, seq: q.seq})
 	q.mu.Unlock()
-	for _, c := range superseded {
-		q.observe(c, func(o Observer) { o.Finished(c, Result{Err: ErrSuperseded}) })
-	}
-	q.observe(cmd, func(o Observer) { o.Enqueued(cmd) })
 	select {
 	case q.wake <- struct{}{}:
 	default:
 	}
 	return t
+}
+
+// Withdraw takes a command that is still waiting out of the queue and
+// resolves its ticket with err, as Finished tells the observer; it
+// reports whether the command was waiting. A command that runs or ran is
+// left alone, and its ticket gets its result.
+func (q *Queue) Withdraw(t *Ticket, err error) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i, e := range q.items {
+		if e.ticket == t {
+			q.items = append(q.items[:i], q.items[i+1:]...)
+			e.ticket.done <- Result{Err: err}
+			q.observe(e.cmd, func(o Observer) { o.Finished(e.cmd, Result{Err: err}) })
+			return true
+		}
+	}
+	return false
 }
 
 // Len returns the number of waiting commands.
@@ -295,8 +314,7 @@ func (q *Queue) drain(err error) {
 	}
 }
 
-// observe tells the Observer about a command with an ID, outside the
-// queue's lock.
+// observe tells the Observer about a command with an ID.
 func (q *Queue) observe(cmd Command, call func(Observer)) {
 	if cmd.ID != "" && q.opts.Observer != nil {
 		call(q.opts.Observer)

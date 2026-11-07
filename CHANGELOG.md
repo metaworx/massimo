@@ -173,6 +173,52 @@ the next minor, a fix counts the suffix up.
 - The TLS variables are named once for `massimo install`, `serve` and
   `massimo config`, which can no longer read different names.
 
+- A command's step in `GET /api/v1/commands/{id}` no longer stays
+  `queued` when the queue ran it at once (docs/api-v1.md).
+
+- A radio command no longer waits for the store to record its step,
+  which a busy SD card could delay by up to five seconds.
+
+- A retry with the `Idempotency-Key` of a request the server's restart
+  cut off answers 503, not a closed connection (docs/api-v1.md).
+
+- A replay of a restore's `Idempotency-Key` answers the first `202`, no
+  longer the run's outcome (docs/api-v1.md).
+
+- `POST /api/v1/update`'s command is acknowledged with its 202, no
+  longer `sent` until a restart, and its key replays (docs/api-v1.md).
+
+- A Cube served by its address alone learns its serial without a data
+  race with the handlers and discovery that read it.
+
+- A Cube served by its address that reports the serial of a Cube added
+  meanwhile stops, instead of taking its place beside it.
+
+- A `t:` deleting several devices waits for the Cube's `A:` of each, so
+  the next command no longer takes a late one as its reply
+  (docs/proxy.md).
+
+- A Cube's new address from discovery is dialled at once, no longer after
+  the minute of backoff the old address built up.
+
+- A device whose greeting C line answered a re-read sent during the
+  greeting no longer drops out of the server's copy.
+
+- A pairing given up while its `n:` still waits in the queue is taken
+  out of it, so the Cube no longer starts an inclusion nobody watches.
+
+- The re-read after a configuration write is a step of its command in
+  `GET /api/v1/commands/{id}`, so a failed one shows there.
+
+- `massimo fakecube -pair`: the device no longer joins after `x:` or
+  twice after two `n:`, nor once the connection is closed.
+
+- A write no longer scans the commands table for its `Idempotency-Key`
+  and for the retention: the key's index serves it, the prune is hourly.
+
+- What counts as a thermostat is decided in one place, so the copy of a
+  room's settings, the stale rule and the log can no longer disagree.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

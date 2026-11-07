@@ -222,7 +222,9 @@ type Server struct {
 	authLockout time.Duration // the lockout in effect, for the log
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
-	updates     updateCheck
+	// steps writes the queues' step rows in order (commands.go).
+	steps   serialWorker
+	updates updateCheck
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -264,7 +266,8 @@ type runtime struct {
 	done       chan struct{}
 	client     *cubelan.Client
 	queue      *engine.Queue
-	serial     string
+	serialMu   sync.Mutex
+	serial     string // through cubeSerial and learnSerial: the pump learns it
 	showHidden bool
 	follow     *followUp // re-reads after writes, see followup.go
 
@@ -455,6 +458,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.mu.Unlock()
 	s.wg.Wait()
+	s.steps.flush(5 * time.Second) // the drained commands' steps, before the store closes
 	s.refusals.close()
 	stopWriter()
 	<-writerDone
@@ -475,11 +479,31 @@ func (s *Server) refresh(ctx context.Context, rt *runtime) {
 		}
 		res := rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityLow, Reconnect: true}).Wait(ctx)
 		if res.Err != nil && ctx.Err() == nil {
-			s.log.Warn("periodic refresh failed", "cube", rt.serial, "error", res.Err)
+			s.log.Warn("periodic refresh failed", "cube", rt.cubeSerial(), "error", res.Err)
 			continue
 		}
-		s.log.Info("snapshot refreshed", "cube", rt.serial)
+		s.log.Info("snapshot refreshed", "cube", rt.cubeSerial())
 	}
+}
+
+// cubeSerial is the Cube's serial, "" while a Cube served by its
+// address has not reported it.
+func (rt *runtime) cubeSerial() string {
+	rt.serialMu.Lock()
+	defer rt.serialMu.Unlock()
+	return rt.serial
+}
+
+// learnSerial sets the serial the Cube reported, and reports whether
+// the runtime did not know it yet.
+func (rt *runtime) learnSerial(sn string) bool {
+	rt.serialMu.Lock()
+	defer rt.serialMu.Unlock()
+	if rt.serial != "" || sn == "" {
+		return false
+	}
+	rt.serial = sn
+	return true
 }
 
 // writer sends commands to the runtime's Cube and keeps its snapshot in
@@ -517,11 +541,23 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			return
 		case e := <-rt.client.Events():
 			if e.Kind == cubelan.EventConnected {
-				if h := rt.client.Snapshot().Hello(); h != nil && rt.serial == "" {
-					rt.serial = h.Serial
+				if h := rt.client.Snapshot().Hello(); h != nil && rt.learnSerial(h.Serial) {
+					key := strings.ToLower(h.Serial)
 					s.mu.Lock()
-					s.cubes[strings.ToLower(h.Serial)] = rt
+					other, taken := s.cubes[key]
+					if !taken {
+						s.cubes[key] = rt
+					}
 					s.mu.Unlock()
+					if taken && other != rt {
+						// Another runtime serves the serial, one added by
+						// serial meanwhile: two clients would compete for a
+						// one-client Cube, so this one stops, as register
+						// refuses a second runtime for a serial.
+						s.log.Error("cube served twice: its serial is served already, the connection by address stops", "serial", h.Serial, "addr", rt.client.Address())
+						go s.removeCube(rt)
+						return
+					}
 					s.seedLearned(ctx, rt)
 				}
 				s.learnStoreID(ctx, rt)
@@ -540,7 +576,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 							ev.Changes = view.Changes(prev, dv.State)
 						}
 						rt.last[e.Device] = dv.State
-						attrs := stateAttrs(rt.serial, dv)
+						attrs := stateAttrs(rt.cubeSerial(), dv)
 						if len(ev.Changes) > 0 {
 							attrs = append(attrs, "changed", changedNames(ev.Changes))
 						}
@@ -600,7 +636,7 @@ func stateAttrs(serial string, d view.Device) []any {
 		return append(attrs, "reported", false)
 	}
 	st := d.State
-	if d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat {
+	if d.Type.IsThermostat() {
 		attrs = append(attrs, "mode", st.Mode.String())
 	}
 	if st.Setpoint != nil {
@@ -882,11 +918,11 @@ func (s *Server) summary(rt *runtime) cubeView {
 	snap := rt.client.Snapshot()
 	b := rt.client.Budget()
 	cfg := rt.config()
-	v := cubeView{Serial: rt.serial, Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
+	v := cubeView{Serial: rt.cubeSerial(), Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
-	v.FileDiffers = s.fileDiffers(rt.serial)
+	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
 	v.ProxyListening = s.proxyListening(rt)
-	if f, ok := s.foundInfo(rt.serial); ok {
+	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
 		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
 	}
 	if h := snap.Hello(); h != nil {
