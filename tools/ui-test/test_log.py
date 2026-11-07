@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""The log: it opens, a state event with changes shows what changed,
-the kind and the device chosen narrow it, Clear sets them back, Older
-pages back, and an answer that comes late or fails leaves the log as it
-should be."""
+"""The log: it opens, newest first, a state event with changes shows what
+changed, the kind and the device chosen narrow it, Clear sets them back,
+the range limits it by count or by time, Older pages back, and an answer
+that comes late or fails leaves the log as it should be."""
 import json
 import re
 import time
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from helpers import CHANGES, named_buttons, show_view, wait_until
@@ -44,11 +45,18 @@ def stamp(now, i):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
 
 
+def all_events(page):
+    """The range chosen: all events, the log loaded again."""
+    page.locator("#log-range").select_option("all")
+    assert wait_until(page, "logState.range === 'all' && !logState.loading", 5), "all events"
+
+
 def test_log_filters(page, case):
     """The kind and the device chosen narrow the log the server answers;
     back to all, the lines of before, and Older offered as the page's
-    size says: nothing older after a page shorter than 200."""
+    size says: nothing older after a page shorter than 200 (all events)."""
     show_view(page, "log")
+    all_events(page)
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= 7", 5), "the log loaded"
     before = page.locator("#log-lines .log-line").count()
     page.locator("#log-kind").select_option("state")
@@ -96,9 +104,10 @@ def test_log_older(page, case):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
 
     pattern = re.compile(r"/api/v1/cubes/[^/]+/log\?")
+    show_view(page, "log")
     page.route(pattern, answer)
     try:
-        show_view(page, "log")
+        all_events(page)
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 200", 5), "a page of 200"
         older = page.locator("#log-older")
         assert older.is_enabled() and older.inner_text() == OLDER[case.lang], "Older offered"
@@ -129,7 +138,7 @@ def test_log_answers(page, case):
     answers in its own time."""
     now = time.time()
     show_view(page, "log")
-    assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    all_events(page)
     page.evaluate("""() => {
       window.logAnswers = [];
       const real = api;
@@ -273,9 +282,10 @@ def test_log_reads_newest_first(page, case):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
 
     pattern = re.compile(r"/api/v1/cubes/[^/]+/log\?")
+    show_view(page, "log")
     page.route(pattern, answer)
     try:
-        show_view(page, "log")
+        all_events(page)
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 60", 5), "the page is in"
     finally:
         page.unroute(pattern)
@@ -297,4 +307,89 @@ def test_log_reads_newest_first(page, case):
     still = page.evaluate("(() => { const b = document.getElementById('log-lines'); const r = b.getBoundingClientRect(); "
                           "return document.elementFromPoint(r.left + 40, r.top + 20).closest('.log-line').textContent; })()")
     assert still == shown, "a view scrolled down keeps its place"
+    show_view(page, "tiles")
+
+
+LOG_ROUTE = re.compile(r"/api/v1/cubes/[^/]+/log\?")
+
+
+def iso(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+
+def test_log_range_is_the_last_20_by_default(page, case):
+    """The range is the last 20 events at first: the page asks for 20 and
+    no time, has no Older, and keeps the newest 20 as live events come."""
+    now = time.time()
+    asked = []
+
+    def answer(route):
+        asked.append(parse_qs(urlparse(route.request.url).query))
+        evs = [{"id": i, "kind": "hello", "time": iso(now - 100 + i)} for i in range(1, 21)]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
+
+    page.route(LOG_ROUTE, answer)
+    try:
+        show_view(page, "log")
+        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 20", 5), "the 20 are in"
+    finally:
+        page.unroute(LOG_ROUTE)
+    assert page.locator("#log-range").input_value() == "20", "the last 20 events"
+    assert asked[-1].get("limit") == ["20"] and "since" not in asked[-1], f"20 asked for, no time: {asked[-1]}"
+    assert page.locator("#log-older").is_hidden(), "no Older"
+    page.wait_for_timeout(1600)  # after the stream's first burst, which the log leaves out
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    for _ in range(3):
+        page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+          kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .kind-config').length === 3", 5), "the live events"
+    assert page.locator("#log-lines .log-line").count() == 20, "the newest 20 kept"
+    assert page.evaluate("logState.lines.length") == 20 and page.locator("#log-lines .kind-hello").count() == 17, \
+        "the three oldest gone"
+    show_view(page, "tiles")
+
+
+def test_log_range_by_time(page, case):
+    """The last hour asks for the events since an hour ago and pages back
+    within it; a line that falls out of the hour goes at the minute's
+    check; with all events, a line of another day shows its date."""
+    now = time.time()
+    asked = []
+
+    def answer(route):
+        q = parse_qs(urlparse(route.request.url).query)
+        asked.append(q)
+        if "since" not in q:
+            evs = [{"id": 1, "kind": "hello", "time": iso(now - 2 * 86400)}, {"id": 2, "kind": "hello", "time": iso(now - 10)}]
+        elif "before" not in q:
+            evs = [{"id": 100 + i, "kind": "hello", "time": iso(now - 3500 + i * 15)} for i in range(200)]
+        else:
+            evs = [{"id": 90 + i, "kind": "hello", "time": iso(now - 3550 + i * 5)} for i in range(5)]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
+
+    show_view(page, "log")
+    page.route(LOG_ROUTE, answer)
+    try:
+        page.locator("#log-range").select_option("1h")
+        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 200", 5), "a page of the hour"
+        since = datetime.fromisoformat(asked[-1]["since"][0].replace("Z", "+00:00")).timestamp()
+        assert abs(since - (now - 3600)) < 120 and asked[-1].get("limit") == ["200"], f"since an hour ago: {asked[-1]}"
+        older = page.locator("#log-older")
+        assert older.is_visible() and older.is_enabled(), "Older offered within the hour"
+        older.click()
+        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 205", 5), "the page before"
+        assert "since" in asked[-1] and asked[-1].get("before") == ["100"], f"Older within the hour: {asked[-1]}"
+        assert wait_until(page, "document.getElementById('log-older').disabled", 5), "a short page ends it"
+        start = page.evaluate("(() => { const later = new Date(Date.now() + 10 * 60000); pruneLogRange(later); "
+                              "return logRangeStart('1h', later).getTime() / 1000; })()")
+        kept = page.evaluate("logState.lines.map((l) => l.time.getTime() / 1000)")
+        want = len([i for i in range(200) if int(now - 3500 + i * 15) >= start])
+        assert kept and min(kept) >= start and abs(len(kept) - want) <= 1, f"the lines out of the hour gone: {len(kept)}, want {want}"
+        assert page.locator("#log-lines .log-line").count() == len(kept), "and from the view"
+        all_events(page)
+        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 2", 5), "all events"
+    finally:
+        page.unroute(LOG_ROUTE)
+    times = page.evaluate("[...document.querySelectorAll('#log-lines .log-time')].map((e) => e.textContent)")
+    assert len(times[0]) == 8 and len(times[1]) > 8, f"today's time alone, another day's with its date: {times}"
     show_view(page, "tiles")

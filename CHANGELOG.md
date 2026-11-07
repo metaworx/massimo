@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The web UI's log has a choice of how far back: the last 20 events by
+  default, 10 minutes, an hour, today, this week, this month or all
+  (`docs/ui.md`, "Log").
+
 - The store keeps each Cube's backups, gzip, pruned by reason and age
   as the `backups.*` settings say (migration 0005; `docs/store.md`
   section 9).

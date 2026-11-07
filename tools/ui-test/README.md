@@ -213,9 +213,9 @@ what a test stores in the browser goes with its context.
   the seven devices' at least, a device chosen shows only its events,
   all again shows the lines of before,
   and Older is offered as the page's size says,
-  nothing older after a page shorter than 200;
-  with the server's answers stubbed, Older puts a page above the lines,
-  oldest first, the view staying where it was,
+  nothing older after a page shorter than 200 (with all events);
+  with the server's answers stubbed, Older, under the lines, puts a page
+  at the bottom, the view staying where it was,
   until a short page ends the paging;
   with the page's `api()` holding the log's requests until the test answers
   them, an Older answer after Clear is dropped,
@@ -224,7 +224,16 @@ what a test stores in the browser goes with its context.
   past 2000 lines without Older the oldest go from the lines and the view alike,
   and the error line shows with a kind chosen;
   a live event that comes while a page is held follows the page,
-  once, also when the page holds it already.
+  once, also when the page holds it already;
+  Clear is off with nothing chosen, and after a kind and a text sets them
+  back and asks for every kind and device;
+  the lines read newest first, a live event comes in on top,
+  and a view scrolled down keeps its place;
+  the last 20 events are the range at first, asked for without a time,
+  without Older, and keep the newest 20 as live events come;
+  the last hour asks since an hour ago and pages back within it,
+  a line out of the hour goes at the minute's check,
+  and with all events a line of another day shows its date.
 - `test_pairing.py`, pairing and removal:
   in System settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,
