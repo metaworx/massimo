@@ -421,3 +421,38 @@ func TestHookTimeoutEndsTheChildren(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// An order whose time runs out while it waits for the TXT record still
+// clears the record, on a context of its own, and a clear that fails is
+// logged whatever became of the order.
+func TestDNS01ClearsAfterItsTime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hook is a shell script")
+	}
+	ca := newFakeCA(t)
+	hookDir := t.TempDir()
+	hook := filepath.Join(hookDir, "hook.sh")
+	calls := filepath.Join(hookDir, "calls.txt")
+	// The hook records its calls; its clear fails.
+	os.WriteFile(hook, []byte("#!/bin/sh\necho \"$1 $2 $3\" >> \""+calls+"\"\n[ \"$1\" = set ]\n"), 0o755)
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	d, err := OpenDNS01(t.TempDir(), []string{"example.net"}, "", ca.url("/directory"), hook, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.lookupTXT = func(context.Context, string) ([]string, error) { return nil, nil } // the record never shows
+	d.dnsEvery = 10 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if err := d.order(ctx, time.Now()); err == nil {
+		t.Fatal("an order without its record succeeded")
+	}
+	_, callLines := hookCalls(calls)
+	if len(callLines) != 2 || !strings.HasPrefix(callLines[0], "set _acme-challenge.example.net ") || !strings.HasPrefix(callLines[1], "clear _acme-challenge.example.net ") {
+		t.Fatalf("hook calls %q", callLines)
+	}
+	if !strings.Contains(buf.String(), "could not clear") {
+		t.Fatalf("the failed clear is not logged:\n%s", buf.String())
+	}
+}

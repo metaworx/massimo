@@ -290,7 +290,10 @@ func (d *DNS01) authorize(ctx context.Context, client *acme.Client, url string) 
 			_, err = client.WaitAuthorization(ctx, z.URI)
 		}
 	}
-	if cerr := d.runHook(ctx, "clear", record, txt); cerr != nil && err == nil {
+	// The clear runs on a context of its own: the order's may be over
+	// (its 30 minutes, or the wait for the record), and a record left
+	// behind would pile up with every retry.
+	if cerr := d.runHook(context.WithoutCancel(ctx), "clear", record, txt); cerr != nil {
 		d.log.Warn("tls: the dns hook could not clear the record", "record", record, "error", cerr)
 	}
 	if err != nil {

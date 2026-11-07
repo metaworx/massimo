@@ -67,6 +67,9 @@ the next minor, a fix counts the suffix up.
 - An owner with an end date no longer counts as the owner left, so the
   last one without an end date keeps the box reachable (docs/api-v1.md).
 
+- A DNS-01 order that ran out of time still clears its TXT record, and
+  a clear that fails is always logged.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
