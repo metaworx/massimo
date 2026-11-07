@@ -866,10 +866,14 @@ async function connectEvents() {
     if (data.state) updateDevice(data.state);
     if (!initial) appendLogEvent(data);
   });
+  // A handler's load that fails, as when the server is briefly gone, is
+  // left to the next poll or event: its rejection is caught here, as the
+  // other call sites catch theirs.
   const logged = (handler) => (ev) => {
     const data = JSON.parse(ev.data);
     appendLogEvent(data);
-    handler(data);
+    const done = handler(data);
+    if (done && typeof done.catch === "function") done.catch(() => {});
   };
   es.addEventListener("hello", logged(() => loadCubes()));
   es.addEventListener("metadata", logged(() => loadRooms()));

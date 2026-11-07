@@ -102,7 +102,8 @@ what a test stores in the browser goes with its context.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
-  which the server answers with 401) the page opens it again with a new ticket.
+  which the server answers with 401) the page opens it again with a new ticket;
+  the events that make the page load again leave no failed load uncaught.
 - `test_discover.py`:
   the Cube choice's "Search for new Cubes…" shows "Searching…" until the server answers,
   then lists the Cube the fake Cube announces in discovery (KEQ0000000,

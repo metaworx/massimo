@@ -90,6 +90,9 @@ the next minor, a fix counts the suffix up.
 - A language load that a newer choice has superseded no longer shows
   its error on the page in the newer language.
 
+- An event that makes the page load again no longer leaves a failed
+  load as an uncaught error in the browser's console.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
