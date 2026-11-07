@@ -95,8 +95,10 @@ what a test stores in the browser goes with its context.
   and the device list shows the stale badge and the values' ages,
   with the type, the radio address, the exact times
   and the server's start time in expert mode;
-  a state event while a device's name is typed in the configuration keeps
-  every key, and the tile is drawn with the new state once the focus leaves.
+  a state event while a device's name is typed in the configuration keeps every key,
+  and the tile is drawn with the new state once the focus leaves;
+  a switch point's time typed part by part keeps the focus,
+  marks the day as changed, and Send right after it sends the time (stubbed).
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

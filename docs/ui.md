@@ -125,6 +125,8 @@ Every room has a tile:
     - With **Only {day}** on, changes apply to that day alone.
       Off, they apply to all selected days.
     - **Copy {day} to …** copies the day to the days you choose.
+    - A switch point's time is typed in full, hours and minutes;
+      the rows take the order of their times at the next change or at **Send**.
     - **Reset day** and **Reset all** go back to what the Cube has.
     - **Send** writes only the days that changed.
   - **Copy**:

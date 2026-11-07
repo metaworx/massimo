@@ -505,25 +505,21 @@ function clockOf(minutes) {
 // click edits that day and selects every day with the same programme),
 // the "Only {day}" switch, the day as a bar and as rows of switch
 // points, the copy section, and the resets left of Cancel and Send.
+// The rows are drawn in the order of their times; a time typed into one
+// is marked in place (markProgram), not drawn again.
 function renderProgramTab(room, c) {
   const p = c.prog;
+  sortPoints(p.days[p.day]);
   const form = formEl(() => sendProgram(room, c), "cfg-form");
-  const dirty = new Set(dirtyDays(p));
-  const days = elem("div", "day-bar week");
+  const days = elem("div", "day-bar week prog-days");
   days.setAttribute("role", "group");
   days.setAttribute("aria-label", t("prog.dayToEdit"));
   for (const day of DAYS) {
-    const editing = p.day === day;
-    const sel = p.selected.has(day);
-    let name = dayLong(day);
-    if (sel && !editing) name = t("prog.editedTogether", { day: name });
-    if (dirty.has(day)) name = t("prog.changed", { day: name });
-    const cls = "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : "");
-    const b = button(dayShort(day), { cls, aria: name, title: t("prog.dayTitle", { day: dayLong(day) }) }, () => {
+    const b = button(dayShort(day), { title: t("prog.dayTitle", { day: dayLong(day) }) }, () => {
       selectDay(p, day);
       rerenderRoom(room);
     });
-    b.setAttribute("aria-pressed", editing ? "true" : "false");
+    b.dataset.day = day;
     days.appendChild(b);
   }
   form.appendChild(days);
@@ -539,27 +535,52 @@ function renderProgramTab(room, c) {
     : t("prog.appliesTogether", { days: dayList(together) });
   form.appendChild(textEl("p", scope, "muted small"));
   form.appendChild(renderDayBar(p.days[p.day]));
-  form.appendChild(renderPoints(room, c, p.day));
+  form.appendChild(renderPoints(room, c, p.day, () => markProgram(form, p)));
   form.appendChild(renderDayCopy(room, p));
   const src = p.source;
   const dev = src && c.cfg && c.cfg.devices.find((d) => d.rf_address === src);
-  const note = dirty.size ? t("prog.sendNoteDays", { days: dayList([...dirty]) }) : t("prog.sendNote");
-  form.appendChild(textEl("p", (src ? t("prog.storedOn", { device: dev && dev.name ? dev.name : src }) + " " : "") + note, "muted small"));
-  const resetDay = button(t("prog.resetDay"), { title: t("prog.resetDayTitle", { day: dayLong(p.day) }) }, () => {
+  const note = textEl("p", "", "muted small prog-note");
+  note.dataset.stored = src ? t("prog.storedOn", { device: dev && dev.name ? dev.name : src }) + " " : "";
+  form.appendChild(note);
+  const resetDay = button(t("prog.resetDay"), { cls: "prog-reset-day", title: t("prog.resetDayTitle", { day: dayLong(p.day) }) }, () => {
     p.days[p.day] = copyPoints(p.orig[p.day]);
     selectDay(p, p.day);
     rerenderRoom(room);
   });
-  resetDay.disabled = !dirty.has(p.day);
-  const resetAll = button(t("prog.resetAll"), { title: t("prog.resetAllTitle") }, () => {
+  const resetAll = button(t("prog.resetAll"), { cls: "prog-reset-all", title: t("prog.resetAllTitle") }, () => {
     p.days = copyDays(p.orig);
     p.copyTo = new Set();
     selectDay(p, p.day);
     rerenderRoom(room);
   });
-  resetAll.disabled = dirty.size === 0;
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send"), extra: [resetDay, resetAll] }));
+  markProgram(form, p);
   return form;
+}
+
+// markProgram shows in the programme editor which days differ from the
+// Cube's programme (on the day buttons, in the note, on the resets) and
+// which are edited together, and draws the edited day's bar.
+function markProgram(form, p) {
+  const dirty = new Set(dirtyDays(p));
+  for (const b of form.querySelectorAll(".prog-days button")) {
+    const day = b.dataset.day;
+    const editing = p.day === day;
+    const sel = p.selected.has(day);
+    let name = dayLong(day);
+    if (sel && !editing) name = t("prog.editedTogether", { day: name });
+    if (dirty.has(day)) name = t("prog.changed", { day: name });
+    b.className = "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : "");
+    b.setAttribute("aria-label", name);
+    b.setAttribute("aria-pressed", editing ? "true" : "false");
+  }
+  const sorted = copyPoints(p.days[p.day]);
+  sortPoints(sorted);
+  form.querySelector(".prog-bar").replaceWith(renderDayBar(sorted));
+  const note = form.querySelector(".prog-note");
+  note.textContent = note.dataset.stored + (dirty.size ? t("prog.sendNoteDays", { days: dayList([...dirty]) }) : t("prog.sendNote"));
+  form.querySelector(".prog-reset-day").disabled = !dirty.has(p.day);
+  form.querySelector(".prog-reset-all").disabled = dirty.size === 0;
 }
 
 // renderDayCopy is the copy section: every day as a toggle, the days
@@ -623,8 +644,8 @@ function renderDayBar(points) {
 }
 
 // renderPoints lists the switch points of a day as editable rows; every
-// change goes through programEdited.
-function renderPoints(room, c, day) {
+// change goes through programEdited, and a time typed calls onTyped.
+function renderPoints(room, c, day, onTyped) {
   const p = c.prog;
   const pts = p.days[day];
   const edited = () => {
@@ -644,11 +665,16 @@ function renderPoints(room, c, day) {
       time.value = pt.until;
       time.required = true;
       time.setAttribute("aria-label", t("prog.pointUntil", { n: i + 1 }));
+      // Chrome fires change at each part of a time typed: the value is
+      // kept and marked in place (onTyped), without a redraw, which would
+      // replace the input in the middle of the time, or, once it is left,
+      // the button being clicked; the rows take the order of their times
+      // at the next draw, and Send sorts them (sendProgram).
       time.addEventListener("change", () => {
         if (!time.value) return;
         pt.until = time.value;
-        pts.sort((a, b) => minutesOf(a.until) - minutesOf(b.until));
-        edited();
+        programEdited(p);
+        onTyped();
       });
       row.appendChild(time);
     }
@@ -681,6 +707,11 @@ function renderPoints(room, c, day) {
   return list;
 }
 
+// sortPoints puts a day's switch points in the order of their times.
+function sortPoints(pts) {
+  pts.sort((a, b) => minutesOf(a.until) - minutesOf(b.until));
+}
+
 function validateDay(pts) {
   if (pts.length < 1 || pts.length > MAX_POINTS) return t("prog.errPoints", { n: MAX_POINTS });
   let prev = 0;
@@ -699,6 +730,7 @@ async function sendProgram(room, c) {
   const p = c.prog;
   const body = {};
   for (const day of dirtyDays(p)) {
+    sortPoints(p.days[day]); // a time typed may not have been left yet
     const err = validateDay(p.days[day]);
     if (err) return setConfigResult(room, c, t("prog.dayError", { day: dayShort(day), error: err }), false);
     body[day] = copyPoints(p.days[day]);

@@ -76,6 +76,9 @@ the next minor, a fix counts the suffix up.
 - A room's state arriving while its configuration is typed in no longer
   draws the tile again under the typing; it shows once the focus leaves.
 
+- A switch point's time can be typed in full from the keyboard in the
+  week programme; the editor no longer redraws after its first part.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
