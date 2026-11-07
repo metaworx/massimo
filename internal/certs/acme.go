@@ -134,11 +134,25 @@ func (a *ACME) Status() Status {
 // is what makes the manager use HTTP-01 beside TLS-ALPN-01.
 func (a *ACME) HTTPHandler() http.Handler { return a.m.HTTPHandler(nil) }
 
-// Check gets the certificate of every name, which orders or renews it
-// when due, and warns under WarnBefore.
+// browserHello is the hello Check asks autocert with: what a modern
+// browser sends, so that the certificate ordered and renewed is the
+// ECDSA one browsers get, and not a second, RSA one for a hello that
+// names nothing else.
+func browserHello(name string) *tls.ClientHelloInfo {
+	return &tls.ClientHelloInfo{
+		ServerName:        name,
+		CipherSuites:      []uint16{tls.TLS_AES_128_GCM_SHA256, tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
+		SignatureSchemes:  []tls.SignatureScheme{tls.ECDSAWithP256AndSHA256, tls.PSSWithSHA256, tls.PKCS1WithSHA256},
+		SupportedCurves:   []tls.CurveID{tls.X25519, tls.CurveP256},
+		SupportedVersions: []uint16{tls.VersionTLS13, tls.VersionTLS12},
+	}
+}
+
+// Check gets the certificate of every name, as a browser does (which
+// orders or renews it when due), and warns under WarnBefore.
 func (a *ACME) Check(now time.Time) {
 	for _, n := range a.names {
-		cert, err := a.m.GetCertificate(&tls.ClientHelloInfo{ServerName: n})
+		cert, err := a.m.GetCertificate(browserHello(n))
 		if err != nil {
 			a.logError(n, err)
 			continue

@@ -178,3 +178,17 @@ func TestACMEWithoutServerName(t *testing.T) {
 		t.Fatalf("served %s, want the first name's %s", got, fp)
 	}
 }
+
+// The hourly check asks for the certificate a browser gets, the ECDSA
+// one under the name's key: with that cached it orders nothing, and the
+// status shows its fingerprint.
+func TestACMECheckAsksAsABrowser(t *testing.T) {
+	a, fp, logs := cachedACME(t, "massimo.example.net")
+	a.Check(time.Now())
+	if st := a.Status(); st.Fingerprint != fp || st.Warning != "" {
+		t.Fatalf("status %+v, want the cached %s\n%s", st, fp, logs.String())
+	}
+	if strings.Contains(logs.String(), "no certificate from the ACME directory") {
+		t.Fatalf("the check ordered another certificate:\n%s", logs.String())
+	}
+}
