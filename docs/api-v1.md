@@ -599,7 +599,7 @@ The audit row of the request names the command in `command_id`.
 The states are those of docs/design.md section 5:
 `queued` while the request runs and nothing has gone to the Cube,
 `sent` once a step went to the Cube, or the request was answered `202`
-and its run goes on (a restore, an update),
+and its run goes on (a restore),
 `acknowledged` when the request was answered `2xx` (a step:
 the Cube accepted it),
 `failed` for a `5xx` (a step: the send failed),
@@ -610,6 +610,9 @@ since the queue it was in is gone.
 A restore's command is `sent` with its `202` and takes `acknowledged` or
 `failed` from its run, with the run's id, state and counts as its result,
 and the `202`'s answer under `answer`, which a replay of its key answers.
+An update's `202` hands the work to the helper,
+which reports in `GET /api/v1/update`:
+its command is `acknowledged` with the answer.
 
 `GET /api/v1/commands/{id}` is one command with its steps:
 

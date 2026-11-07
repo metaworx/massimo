@@ -277,14 +277,18 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 	return false
 }
 
+// laterRuns are the actions whose 202 is followed by a run that ends
+// the command (finishCommand); another 202, such as the update's, which
+// hands the work to the helper, is acknowledged with its answer.
+var laterRuns = map[string]bool{"restore.start": true}
+
 // endCommand sets the parent's final state from the answer: 2xx is
-// acknowledged, 202 sent (a run that reports later), 4xx and 503
-// dropped, the rest failed; the answer, without its secrets, is its
-// result.
+// acknowledged, 202 of a later run sent, 4xx and 503 dropped, the rest
+// failed; the answer, without its secrets, is its result.
 func (s *Server) endCommand(ctx context.Context, a *auditInfo, status int) {
 	state := store.StateFailed
 	switch {
-	case status == http.StatusAccepted:
+	case status == http.StatusAccepted && laterRuns[a.action]:
 		state = store.StateSent
 	case status < 300:
 		state = store.StateAcknowledged

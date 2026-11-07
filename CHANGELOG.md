@@ -127,6 +127,9 @@ the next minor, a fix counts the suffix up.
 - A replay of a restore's `Idempotency-Key` answers the first `202`, no
   longer the run's outcome (docs/api-v1.md).
 
+- `POST /api/v1/update`'s command is acknowledged with its 202, no
+  longer `sent` until a restart, and its key replays (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
