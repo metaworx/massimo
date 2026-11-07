@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, software updates: the Settings page says which
-// release runs and whether a newer one is out on the update channel, and
-// asks the server's update helper to install it (POST /api/v1/update).
-// Once the server restarts with the new version, the version check in
-// app.js offers the reload.
+// The Massimo web UI, Settings → Software: which release runs and
+// whether a newer one is out on the update channel, the request to the
+// server's update helper to install it (POST /api/v1/update), and the
+// server's restart (POST /api/v1/restart), after which the page follows
+// /healthz until the server is back. Once the server restarts with a new
+// version, the version check in app.js offers the reload.
 
 "use strict";
 
@@ -131,10 +132,122 @@ async function runUpdate(u) {
   }
 }
 
+// --- the restart ------------------------------------------------------
+
+// RESTART_POLL_MS is how often the page asks /healthz while the server
+// restarts, RESTART_WAIT_MS how long it waits for it to come back.
+const RESTART_POLL_MS = 2000;
+const RESTART_WAIT_MS = 2 * 60 * 1000;
+
+const restartState = { following: false };
+
+// showRestartText says how the restart stands, under its button.
+function showRestartText(text) {
+  const p = $("restart-text");
+  p.textContent = text;
+  p.classList.toggle("hidden", !text);
+}
+
+// renderRestart shows the button while GET /api/v1/restart says this
+// page may restart the server, and otherwise why not.
+function renderRestart(v) {
+  $("restart-btn").classList.toggle("hidden", !(v && v.available));
+  showRestartText(v && !v.available && v.blocked ? t("restart.unavailable", { reason: v.blocked }) : "");
+}
+
+// loadRestart asks whether the server can be restarted from here, for a
+// holder of restart; the others see nothing of it.
+async function loadRestart() {
+  if (!hasCap("restart") || restartState.following) return; // login.js
+  try {
+    renderRestart(await api("GET", "api/v1/restart"));
+  } catch (e) {
+    $("restart-btn").classList.add("hidden");
+    showRestartText(t("restart.cannotAsk", { error: e.message }));
+  }
+}
+
+// startedAt is the server's start from /healthz, "" when it does not
+// answer; /healthz is always open, so it needs no sign-in.
+async function startedAt() {
+  try {
+    const h = await apiRequest("GET", "healthz", undefined, { auth: false });
+    return (h && h.started_at) || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+// startRestart asks in place of the restart's button whether to restart
+// the server; Cancel puts the button back.
+function startRestart() {
+  const actions = $("restart-btn").parentElement;
+  const back = () => {
+    box.remove();
+    actions.classList.remove("hidden");
+  };
+  const box = confirmBox(t("restart.confirm"), { yes: t("restart.button"), no: t("action.cancel") }, () => {
+    back();
+    return runRestart();
+  }, () => {
+    back();
+    $("restart-btn").focus();
+  });
+  actions.classList.add("hidden");
+  actions.after(box);
+  box.focusFirst();
+}
+
+// runRestart asks the server to restart and follows it until /healthz
+// reports a new start.
+async function runRestart() {
+  const btn = $("restart-btn");
+  btn.disabled = true;
+  const before = await startedAt();
+  try {
+    await api("POST", "api/v1/restart", {});
+  } catch (e) {
+    btn.disabled = false;
+    showRestartText(t("restart.failed", { error: e.message }));
+    return;
+  }
+  showRestartText(t("restart.restarting"));
+  restartState.following = true;
+  followRestart(before, Date.now() + RESTART_WAIT_MS);
+}
+
+// followRestart asks /healthz every RESTART_POLL_MS until the server
+// answers with another start than before, then reads the data and opens
+// the stream again; after until it gives up and says so.
+function followRestart(before, until) {
+  setTimeout(async () => {
+    const now = await startedAt();
+    if (now && now !== before) {
+      restartState.following = false;
+      $("restart-btn").disabled = false;
+      showRestartText(t("restart.back", { time: fmtInstant(new Date(Date.parse(now))) }));
+      checkVersion(); // app.js: the start in the settings, and a reload for a new version
+      refresh().then(connectEvents);
+      return;
+    }
+    if (Date.now() > until) {
+      restartState.following = false;
+      $("restart-btn").disabled = false;
+      showRestartText(t("restart.notBack"));
+      return;
+    }
+    followRestart(before, until);
+  }, RESTART_POLL_MS);
+}
+
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", () => loadUpdate(true));
-  $("view-settings").addEventListener("click", () => loadUpdate(false));
+  $("restart-btn").addEventListener("click", startRestart);
+  $("view-settings").addEventListener("click", () => {
+    loadUpdate(false);
+    loadRestart();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", initUpdate);

@@ -26,6 +26,9 @@ the next minor, a fix counts the suffix up.
   `restart` of owner and manager (migration 0006), an open server only
   from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
 
+- Settings → Software restarts the server and follows it until it is
+  back (`docs/ui.md`, "Settings").
+
 - `serve -restart` (`MASSIMO_RESTART`) says when the server restarts
   for the API, stopping and exiting 75 for its service manager; `massimo
   restart` restarts the installed server (`README.md`, "Server").
