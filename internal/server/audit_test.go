@@ -4,10 +4,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -179,5 +183,108 @@ func TestAuditDetails(t *testing.T) {
 	_, legacy, _ := start(t, "secret")
 	if code, _ := callAPI(t, legacy, "GET", "/api/v1/audit", "secret", ""); code != 503 {
 		t.Fatalf("audit without a store: %d", code)
+	}
+}
+
+// countingBody counts the bytes the server reads of a request body.
+type countingBody struct {
+	r io.Reader
+	n *atomic.Int64
+}
+
+func (b countingBody) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	b.n.Add(int64(n))
+	return n, err
+}
+
+func (b countingBody) Close() error { return nil }
+
+// Requests refused before anyone is known, without a token, with a
+// wrong one or from a locked-out address, leave one audit row per
+// address and minute with their count, written when the minute ends (here:
+// when the server stops), and none of their bodies is read.
+func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	s := New(opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	var read atomic.Int64
+	body := strings.Repeat(`{"mode":"auto"}`, 1000)
+	codes := map[int]int{}
+	for i := 0; i < 20; i++ {
+		r := httptest.NewRequest("PUT", "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", countingBody{strings.NewReader(body), &read})
+		r.RemoteAddr = "192.0.2.10:4321"
+		if i%2 == 1 {
+			r.Header.Set("Authorization", "Bearer wrong")
+		}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		codes[w.Code]++
+	}
+	if codes[401] != 10 || codes[429] != 10 {
+		t.Fatalf("answers %v, want ten 401 and ten 429", codes)
+	}
+	if n := read.Load(); n != 0 {
+		t.Errorf("%d bytes of refused bodies read", n)
+	}
+	if rows, _ := opts.Store.AuditList(t.Context(), time.Time{}, 100, ""); len(rows) > 1 {
+		t.Errorf("%d audit rows within the minute, want at most one", len(rows))
+	}
+	cancel()
+	<-done
+	rows, err := opts.Store.AuditList(t.Context(), time.Time{}, 100, "")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("%d audit rows, want one: %v", len(rows), err)
+	}
+	row := rows[0]
+	var d map[string]any
+	json.Unmarshal(row.Detail, &d)
+	statuses, _ := d["statuses"].(map[string]any)
+	if row.Result != store.ResultRefused || row.Remote != "192.0.2.10" || row.Action != "setpoint" || row.Cube != "KEQ0537249" || row.UserID != 0 ||
+		d["count"] != float64(20) || statuses["401"] != float64(10) || statuses["429"] != float64(10) || d["body"] != nil || d["bytes"] != nil {
+		t.Fatalf("row %+v, detail %v", row, d)
+	}
+}
+
+// A row of refused requests is written at the address's next refusal
+// after its minute, and when more addresses are open than the limit,
+// the oldest first.
+func TestRefusalAuditWindows(t *testing.T) {
+	clock := &fakeClock{t: time.Date(2026, 11, 7, 8, 0, 0, 0, time.UTC)}
+	var written []refusal
+	var mu sync.Mutex
+	ra := newRefusalAudit(func(f refusal) { mu.Lock(); written = append(written, f); mu.Unlock() })
+	ra.now, ra.max = clock.now, 2
+	defer ra.close()
+	rows := func() []refusal {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]refusal(nil), written...)
+	}
+	open := func() int {
+		ra.mu.Lock()
+		defer ra.mu.Unlock()
+		return len(ra.open)
+	}
+	r := httptest.NewRequest("POST", "/api/v1/users", nil)
+	for i := 0; i < 3; i++ {
+		ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.10", 401)
+	}
+	clock.t = clock.t.Add(refusalWindow)
+	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.10", 429)
+	if got := rows(); len(got) != 1 || got[0].count != 3 || got[0].status != 401 || got[0].remote != "192.0.2.10" {
+		t.Fatalf("after the minute: %+v", got)
+	}
+	// Each address a second later than the one before, so that the
+	// oldest is one.
+	clock.t = clock.t.Add(time.Second)
+	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.11", 401)
+	clock.t = clock.t.Add(time.Second)
+	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.12", 401) // a third address: the oldest goes
+	if got := rows(); len(got) != 2 || got[1].remote != "192.0.2.10" || got[1].count != 1 || got[1].status != 429 || open() != 2 {
+		t.Fatalf("over the limit: %+v, %d open", got, open())
 	}
 }

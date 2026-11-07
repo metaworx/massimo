@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
@@ -110,8 +111,13 @@ func runServe(args []string) error {
 	if st != nil {
 		defer st.Close()
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	// SIGINT from a terminal, SIGTERM from systemd, launchd and kill, and
+	// the Windows service manager's stop: each stops the server, which
+	// writes the log's pending events, before the store is closed.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	ctx, cancel := serviceContext(ctx)
+	defer cancel()
 
 	// The flags given win for this run; otherwise the store's settings.
 	var staleAfter time.Duration
@@ -455,7 +461,9 @@ func fileCubes() (cubes []store.FileCube, plain *store.FileCube, err error) {
 	}
 	single := len(serials) == 1
 	for _, sn := range serials {
-		fc, err := fileCube(sn, single, false)
+		// The plain address is the one Cube's when MASSIMO_CUBE_SN (or
+		// -sn) names it, as env.Get reads it for the other commands.
+		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selectedSN))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -465,14 +473,15 @@ func fileCubes() (cubes []store.FileCube, plain *store.FileCube, err error) {
 }
 
 // fileCube reads one Cube's lines; sn "" is the plain forms only. The
-// plain MASSIMO_CUBE_ADDRESS counts only for plainCube, the Cube served
-// when no Cube has lines of its own.
+// plain MASSIMO_CUBE_ADDRESS counts only for plainCube: the Cube served
+// when no Cube has lines of its own, or the one Cube that has some when
+// MASSIMO_CUBE_SN names it.
 func fileCube(sn string, single, plainCube bool) (store.FileCube, error) {
 	fc := store.FileCube{Serial: sn, Values: map[string]store.FileValue{}}
 	line := func(field, name string, plainToo bool) {
 		if sn != "" {
-			if v := os.Getenv(env.PerCube(name, sn)); v != "" {
-				fc.Values[field] = store.FileValue{Variable: env.PerCube(name, sn), Value: v}
+			if variable, v := env.PerCubeValue(name, sn); v != "" {
+				fc.Values[field] = store.FileValue{Variable: variable, Value: v}
 				return
 			}
 		}

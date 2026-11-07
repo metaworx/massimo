@@ -601,7 +601,8 @@ a user has one role.
 The default roles and their sets are seeded at the first start and can be
 changed afterwards by whoever holds the `roles` capability, with one exception:
 `owner` always has every capability and cannot be edited, disabled or deleted,
-and the store refuses to disable or delete the last enabled owner user.
+and the store refuses to disable, delete, demote or give an end date to the
+last enabled owner user without one.
 The default roles keep their keys (`owner`, `manager`, `operator`, `guest`,
 `viewer`, `integration`), so that the code,
 the documentation and the translations can refer to them;
@@ -757,6 +758,7 @@ string so they can rise later.
 (asks for the password twice, or `-no-password` for a key-only user),
 `user list`, `user passwd <name>`, `user disable <name>`, `user enable
 <name>`, `user token <name> -label <text>` (prints a new API key once),
+`user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
 they take `-data` like `serve` and run as the service user

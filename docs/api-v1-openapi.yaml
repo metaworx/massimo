@@ -350,7 +350,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NoUser"}
         "409":
-          description: The last enabled owner
+          description: The last enabled owner without an end date
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -359,7 +359,7 @@ paths:
     delete:
       summary: Remove a user
       x-capability: users
-      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner stays (409).
+      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays (409).
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -375,7 +375,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NoUser"}
         "409":
-          description: The last enabled owner
+          description: The last enabled owner without an end date
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -402,7 +402,9 @@ paths:
     post:
       summary: Create an API key for the user
       x-capability: users
-      description: The key is shown once, in token; the store keeps its hash. It never expires.
+      description: >-
+        The key is shown once, in token; the store keeps its hash. It never expires. A retry with the same
+        Idempotency-Key answers 201 without token.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -1830,7 +1832,8 @@ components:
         for 24 hours: a retry with the same key answers what the first
         request answered, with the header Idempotent-Replayed: true, and
         sends nothing to the Cube; the same key with another request is
-        422, and one whose request is still running 409.
+        422, one whose request is still running 409, and one whose request
+        the server's restart cut off 503.
       schema: {type: string, maxLength: 128}
     name:
       name: name
@@ -2044,7 +2047,12 @@ components:
         target: {type: string, description: "device:1514b6, room:6, user:anna, role:night, token:4, cube:KEQ0000000", example: "room:6"}
         detail:
           type: object
-          description: The method, the path, the status, the milliseconds, the body's size and, when JSON and short, the body with password, current_password and token removed, and the error of a failed answer
+          description: >-
+            The method, the path, the status, the milliseconds, the body's size and, when JSON and short, the body
+            with password, current_password and token removed, and the error of a failed answer. A request refused
+            for a known user keeps no body. Requests refused before anyone is known are one row per address and
+            minute, without their bodies: the first one's method, path and status, the count of requests within
+            the minute, the count of each status in statuses, and the time of the last.
         result: {type: string, enum: [ok, refused, failed]}
         command_id: {type: integer, description: The command the request is, when it is one}
     UserCreate:

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -165,8 +166,10 @@ func TestLatestPicksNewestSignedOnChannel(t *testing.T) {
 	if err != nil || r == nil || r.Tag != "v0.1.0-alpha.10" {
 		t.Fatalf("alpha: %+v %v", r, err)
 	}
-	if r, err := c.Latest(context.Background(), "main"); err != nil || r == nil || r.Tag != "v0.1.0-alpha.11" {
-		t.Fatalf("main: %+v %v", r, err)
+	// alpha.11 is on main under alpha's label, as the two releases on
+	// phase-0 are: Latest goes by the label (hintedChannel).
+	if r, err := c.Latest(context.Background(), "main"); r != nil || err != nil {
+		t.Fatalf("main, whose one release has alpha's label: %+v %v", r, err)
 	}
 	if r, _ := c.Latest(context.Background(), "nope"); r != nil {
 		t.Fatalf("nope: %+v", r)
@@ -403,5 +406,142 @@ func TestTokenGoesToTheAPIOnly(t *testing.T) {
 	defer other.Close()
 	if _, err := c.get(context.Background(), other.URL+"/file", 10, ""); err != nil || got != "" {
 		t.Fatalf("other host: %v %q", err, got)
+	}
+}
+
+// A channel without a release is no error, also beside a release from
+// before the signed manifests; a release whose manifest does not verify
+// still is, since it may be the channel's.
+func TestLatestWithoutReleaseOnChannel(t *testing.T) {
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	bin := map[string][]byte{"massimo-linux-armv6": []byte("v9")}
+	gh.add(t, priv, "v0.1.0-alpha.9", "alpha", bin, nil)
+	gh.releases = append(gh.releases, map[string]any{"tag_name": "v0.1.0-alpha.10", "html_url": "https://example/v0.1.0-alpha.10", "assets": []any{}})
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	if r, err := c.Latest(context.Background(), "main"); r != nil || err != nil {
+		t.Fatalf("main, which has no release: %+v %v", r, err)
+	}
+	_, other := testKey(t)
+	gh.add(t, other, "v0.2.0", "main", bin, nil) // a tag without a label, nor a target
+	if r, err := c.Latest(context.Background(), "main"); r != nil || err == nil || !strings.Contains(err.Error(), "does not verify") {
+		t.Fatalf("beside a release that does not verify: %+v %v", r, err)
+	}
+}
+
+// slowBinary serves a release's binary in pieces with a pause between
+// them; pause 0 after the first piece stalls for good.
+func slowBinary(t *testing.T, gh *fakeGitHub, tag, name string, body []byte, pieces int, pause time.Duration) {
+	t.Helper()
+	path := "/dl/" + tag + "/" + name
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		step := len(body) / pieces
+		for i := 0; i < pieces; i++ {
+			end := (i + 1) * step
+			if i == pieces-1 {
+				end = len(body)
+			}
+			w.Write(body[i*step : end])
+			w.(http.Flusher).Flush()
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(pause):
+			}
+		}
+	}))
+	t.Cleanup(slow.Close)
+	for _, rel := range gh.releases {
+		if rel["tag_name"] == tag {
+			for _, a := range rel["assets"].([]map[string]any) {
+				if a["name"] == name {
+					a["browser_download_url"] = slow.URL + path
+				}
+			}
+		}
+	}
+}
+
+// The download of a binary is bounded by the context and by a pause in
+// the data, not by the client's time for the API's answers: a slow line
+// that keeps sending gets the binary.
+func TestDownloadOutlastsTheClientTimeout(t *testing.T) {
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	body := bytes.Repeat([]byte("massimo"), 4096)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": body}, nil)
+	slowBinary(t, gh, "v1.0.0", "massimo-linux-amd64", body, 6, 100*time.Millisecond)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: &http.Client{Timeout: 250 * time.Millisecond}, Key: pub}
+	r, err := c.ByTag(context.Background(), "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := c.Download(context.Background(), r, "massimo-linux-amd64", &buf); err != nil || !bytes.Equal(buf.Bytes(), body) {
+		t.Fatalf("a slow download: %v, %d of %d bytes", err, buf.Len(), len(body))
+	}
+}
+
+// A download that stops sending is given up after the idle time.
+func TestDownloadGivesUpAStall(t *testing.T) {
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	body := bytes.Repeat([]byte("massimo"), 4096)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": body}, nil)
+	slowBinary(t, gh, "v1.0.0", "massimo-linux-amd64", body, 2, 10*time.Second)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, Idle: 200 * time.Millisecond}
+	r, err := c.ByTag(context.Background(), "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	err = c.Download(context.Background(), r, "massimo-linux-amd64", &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "no data for 200ms") || time.Since(start) > 3*time.Second {
+		t.Fatalf("a stalled download: %v after %s", err, time.Since(start))
+	}
+}
+
+// Latest fetches no manifest of a release whose tag, or its target where
+// the tag has no label, names another channel (release.yml's rule): a box
+// following main, which has no releases, no longer verifies thirty alpha
+// releases on every check.
+func TestLatestSkipsOtherChannelsUnfetched(t *testing.T) {
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	bin := map[string][]byte{"massimo-linux-armv6": []byte("v9")}
+	for _, n := range []string{"1", "2", "3", "4", "5"} {
+		gh.add(t, priv, "v0.1.0-alpha."+n, "alpha", bin, nil)
+	}
+	gh.add(t, priv, "v0.2.0", "stable", bin, nil)
+	gh.releases[len(gh.releases)-1]["target_commitish"] = "stable"
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	fetched := func() (tags []string) {
+		for p := range gh.auth {
+			if strings.HasSuffix(p, "/"+ManifestName) || strings.HasSuffix(p, "/"+SignatureName) {
+				tags = append(tags, p)
+			}
+		}
+		clear(gh.auth)
+		slices.Sort(tags)
+		return tags
+	}
+
+	if r, err := c.Latest(context.Background(), "main"); r != nil || err != nil {
+		t.Fatalf("main: %+v %v", r, err)
+	}
+	if got := fetched(); len(got) != 0 {
+		t.Errorf("main fetched the files of other channels' releases: %v", got)
+	}
+	if r, err := c.Latest(context.Background(), "alpha"); err != nil || r == nil || r.Tag != "v0.1.0-alpha.5" {
+		t.Fatalf("alpha: %+v %v", r, err)
+	}
+	if got, want := fetched(), []string{"/dl/v0.1.0-alpha.5/" + ManifestName, "/dl/v0.1.0-alpha.5/" + SignatureName}; !slices.Equal(got, want) {
+		t.Errorf("alpha fetched %v, want the newest alpha's alone", got)
+	}
+	if r, err := c.Latest(context.Background(), "stable"); err != nil || r == nil || r.Tag != "v0.2.0" {
+		t.Fatalf("stable, by its target: %+v %v", r, err)
+	}
+	if got := fetched(); len(got) != 2 {
+		t.Errorf("stable fetched %v, want v0.2.0's alone", got)
 	}
 }

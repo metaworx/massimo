@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -78,5 +79,68 @@ func TestSmokeRunsRealBinary(t *testing.T) {
 	}
 	if err := update.Smoke(context.Background(), bin, "v9.8.8"); err == nil {
 		t.Fatal("wrong version passed")
+	}
+}
+
+// ownAddress is one of this box's addresses that is not a loopback, ""
+// when it has none.
+func ownAddress(t *testing.T) string {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && !n.IP.IsLoopback() && n.IP.To4() != nil {
+			return n.IP.String()
+		}
+	}
+	return ""
+}
+
+// A health URL on one of the box's own addresses, which install writes
+// for a specific -listen address, is checked over TLS without
+// verification, as the loopback is: the certificate may be self-signed,
+// or for a name rather than the address.
+func TestWaitHealthyOnOwnAddress(t *testing.T) {
+	ip := ownAddress(t)
+	if ip == "" {
+		t.Skip("no address but the loopback")
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(ip, "0"))
+	if err != nil {
+		t.Skipf("cannot listen on %s: %v", ip, err)
+	}
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"ok":true,"version":"massimo v1.2.3 (go)"}`)
+	}))
+	ts.Listener.Close()
+	ts.Listener = ln
+	ts.StartTLS()
+	defer ts.Close()
+	if err := waitHealthy(context.Background(), ts.URL+"/healthz", "v1.2.3", 5*time.Second); err != nil {
+		t.Fatalf("%s: %v", ts.URL, err)
+	}
+}
+
+// The box's own addresses are those its interfaces have when the check
+// starts; another address, and a name, stay verified.
+func TestHealthClientOwnAddresses(t *testing.T) {
+	was := interfaceAddrs
+	defer func() { interfaceAddrs = was }()
+	interfaceAddrs = func() ([]net.Addr, error) {
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("192.0.2.10"), Mask: net.CIDRMask(24, 32)}, &net.IPNet{IP: net.ParseIP("2001:db8::10"), Mask: net.CIDRMask(64, 128)}}, nil
+	}
+	for u, skip := range map[string]bool{
+		"https://192.0.2.10:443/healthz":      true,
+		"https://[2001:db8::10]:443/healthz":  true,
+		"https://192.0.2.11:443/healthz":      false,
+		"https://massimo.example.net/healthz": false,
+		"http://192.0.2.10:8099/healthz":      false,
+	} {
+		tr, _ := healthClient(u).Transport.(*http.Transport)
+		if got := tr != nil && tr.TLSClientConfig != nil && tr.TLSClientConfig.InsecureSkipVerify; got != skip {
+			t.Errorf("%s: unverified %v, want %v", u, got, skip)
+		}
 	}
 }

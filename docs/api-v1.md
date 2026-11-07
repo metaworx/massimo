@@ -221,7 +221,9 @@ With a store the counters survive a restart.
 The address is the TCP peer's, or,
 with `-trusted-proxies` naming the proxy's address,
 the client the proxy passes in `X-Forwarded-For`
-(the rightmost entry that is not a trusted proxy) or `X-Real-IP`;
+(the rightmost entry that is not a trusted proxy;
+an entry that is not an address makes it the proxy),
+or `X-Real-IP` when there is no `X-Forwarded-For`;
 without it the headers are ignored, since anyone can set them,
 and behind a reverse proxy the limit then applies to the proxy as a whole
 (docs/reverse-proxy.md).
@@ -374,7 +376,8 @@ The answer is `201` with the user; a name in use is `409`, a bad name,
 an unknown role or an unknown field `400`.
 The name of a removed user can be used again;
 the new user takes over the old one's row,
-so the audit's history of the name reads on.
+so the audit's history of the name reads on,
+and starts without the old one's preferences.
 
 On a server without users, `POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range,
@@ -391,11 +394,14 @@ A user changes its own `display_name` and, with `current_password`,
 its own `password`; the rest needs `users` (`guests` for a guest).
 A password set by someone else ends the user's sessions;
 an empty password removes it.
-The last enabled owner cannot be disabled or demoted (`409`).
+The last enabled owner without an end date cannot be disabled, demoted
+or given an end date (`409`): an owner with one does not count.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+its preferences removed,
 and its row stays for the audit; `{"ok": true, "name": "anna"}`.
-The last enabled owner stays (`409`); a user cannot remove itself.
+The last enabled owner without an end date stays (`409`);
+a user cannot remove itself.
 
 ### Tokens: /api/v1/users/{name}/tokens
 
@@ -411,6 +417,10 @@ and answers `201` with the key once:
 ```json
 {"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
 ```
+
+The key is kept nowhere but in this answer:
+the command of the request keeps the answer without `token`,
+and a retry with its `Idempotency-Key` answers `201` without it too.
 
 `DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
 a token of another user is `404`.
@@ -548,12 +558,27 @@ room, user, role, token or Cube concerned, `user` and `token_id` who asked
 (absent without authentication, for a failed login,
 and for `massimo user` on the box, whose `remote` is `cli`),
 and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
-`403` or `429` (the refused request is a row too, with who was refused),
-`failed` otherwise.
+`403` or `429`, `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
 the body's size and, when it is JSON of at most 4 KB,
 the body with `password`, `current_password` and `token` replaced by `…`,
 and the error of a failed answer.
+A request refused for a known user (a capability it lacks,
+a disabled user or role) is a row with who was refused, without its body.
+Requests refused before anyone is known, without a token,
+with a wrong one or from a locked-out address,
+are one row per address and minute, written when the minute ends,
+with their bodies never read:
+the first request's action, target, method, path and status,
+and in `detail` the `count` of requests within the minute,
+the count of each status in `statuses`, and the time of the `last`:
+
+```json
+{"id": 43, "time": "…", "remote": "192.0.2.10", "action": "setpoint", "cube": "KEQ0000000", "target": "room:6",
+ "detail": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/rooms/6/setpoint", "status": 401, "count": 20, "statuses": {"401": 10, "429": 10}, "last": "…"},
+ "result": "refused"}
+```
+
 Nothing in a row is a secret.
 
 `before`
@@ -574,7 +599,7 @@ The audit row of the request names the command in `command_id`.
 The states are those of docs/design.md section 5:
 `queued` while the request runs and nothing has gone to the Cube,
 `sent` once a step went to the Cube, or the request was answered `202`
-and its run goes on (a restore, an update),
+and its run goes on (a restore),
 `acknowledged` when the request was answered `2xx` (a step:
 the Cube accepted it),
 `failed` for a `5xx` (a step: the send failed),
@@ -583,7 +608,11 @@ command with its key, discarded by the Cube, or the server stopped);
 at a start of the server every command still `queued` or `sent` is `dropped`,
 since the queue it was in is gone.
 A restore's command is `sent` with its `202` and takes `acknowledged` or
-`failed` from its run, with the run's id, state and counts as its result.
+`failed` from its run, with the run's id, state and counts as its result,
+and the `202`'s answer under `answer`, which a replay of its key answers.
+An update's `202` hands the work to the helper,
+which reports in `GET /api/v1/update`:
+its command is `acknowledged` with the answer.
 
 `GET /api/v1/commands/{id}` is one command with its steps:
 
@@ -618,8 +647,12 @@ status and body, with the header `Idempotent-Replayed: true`,
 and sends nothing to the Cube; the same key with another request (the method,
 the path, the query or the body differ) is `422`,
 and one whose request is still running `409`.
+A key whose request was running when the server stopped is `503`
+with the row's `{"error": "server restarted"}`, since it got no answer.
 A page that lost the connection while a setpoint was on its way retries
 with the key and learns the outcome without a second radio command.
+A command keeps its answer without `password`, `current_password` and `token`,
+so the replay of a new API key's creation answers without the key.
 The login, the logout, the stream ticket and the preferences take no key
 and are no commands.
 

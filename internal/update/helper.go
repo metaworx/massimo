@@ -37,7 +37,9 @@ const (
 var ErrHelperRunning = errors.New("an update is already running")
 
 // WriteRequest asks the helper for an update to the newest release on
-// the channel.
+// the channel. A helper reading the last request in the same moment
+// holds it open, which on Windows refuses the rename for a few
+// milliseconds (renameRetrying).
 func WriteRequest(path, channel string) error {
 	if !ValidChannel(channel) {
 		return fmt.Errorf("invalid channel %q", channel)
@@ -46,7 +48,7 @@ func WriteRequest(path, channel string) error {
 	if err := os.WriteFile(tmp, []byte(channel+"\n"), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	return renameRetrying(tmp, path)
 }
 
 // TakeRequest reads and removes the request file; it reports false when
@@ -134,8 +136,9 @@ func WriteStatus(path string, s Status) error {
 
 // renameRetrying renames tmp over path. On Windows a rename over a file
 // another process has open fails (Go opens files without
-// FILE_SHARE_DELETE), which happens when the server reads the status in
-// the same moment; a few retries ride that out.
+// FILE_SHARE_DELETE), which happens when the server reads the status, or
+// the helper the request, in the same moment; a few retries ride that
+// out.
 func renameRetrying(tmp, path string) error {
 	err := os.Rename(tmp, path)
 	for i := 0; err != nil && runtime.GOOS == "windows" && i < 10; i++ {

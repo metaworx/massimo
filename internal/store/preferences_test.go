@@ -86,3 +86,36 @@ func TestPreferences(t *testing.T) {
 		t.Fatalf("remove a bad key: %v", err)
 	}
 }
+
+// A user removed and added again under the name is another person: the
+// removed user's preferences stay behind as tombstones, and a takeover
+// of a user removed before that rule, whose rows are still live, starts
+// with none either.
+func TestRemovedUserPreferencesGo(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
+	s.SetPreference(ctx, anna.ID, "ui", json.RawMessage(`{"theme":"dark"}`))
+	s.SetPreference(ctx, anna.ID, "schemes", json.RawMessage(`{"schemes":[{"name":"Mine"}]}`))
+	if err := s.DeleteUser(ctx, "anna", 0); err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "pw2", 0)
+	if err != nil || again.ID != anna.ID {
+		t.Fatalf("takeover: %+v %v", again, err)
+	}
+	if list, err := s.Preferences(ctx, again.ID); err != nil || len(list) != 0 {
+		t.Fatalf("the new anna inherits %+v %v", list, err)
+	}
+	s.SetPreference(ctx, again.ID, "ui", json.RawMessage(`{"theme":"light"}`))
+	if _, err := s.db.ExecContext(ctx, `UPDATE users SET deleted_at = ? WHERE id = ?`, s.nowText(), again.ID); err != nil {
+		t.Fatal(err)
+	}
+	third, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "pw3", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := s.Preferences(ctx, third.ID); len(list) != 0 {
+		t.Fatalf("a takeover of an older removal inherits %+v", list)
+	}
+}

@@ -92,12 +92,34 @@ func TestInfomaniakHook(t *testing.T) {
 	tokenFile := filepath.Join(t.TempDir(), "token")
 	os.WriteFile(tokenFile, []byte("test-token\n"), 0o600)
 	script, _ := filepath.Abs("../../packaging/acme-dns-hooks/infomaniak.sh")
+	// A curl in front of the real one writes down its arguments, which
+	// every local user can read through ps: the token must not be there,
+	// and every call has a time limit.
+	realCurl, _ := exec.LookPath("curl")
+	bin := t.TempDir()
+	argv := filepath.Join(t.TempDir(), "argv")
+	os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \""+argv+"\"\nexec \""+realCurl+"\" \"$@\"\n"), 0o755)
 	run := func(args ...string) (string, error) {
 		cmd := exec.Command(script, args...)
-		cmd.Env = append(hookEnv(os.Environ()), "INFOMANIAK_ENDPOINT="+srv.URL, "INFOMANIAK_TOKEN_FILE="+tokenFile)
+		cmd.Env = append(hookEnv(os.Environ()), "INFOMANIAK_ENDPOINT="+srv.URL, "INFOMANIAK_TOKEN_FILE="+tokenFile, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
+	defer func() {
+		b, _ := os.ReadFile(argv)
+		calls := strings.Split(strings.TrimSpace(string(b)), "\n")
+		if len(calls) < 5 {
+			t.Errorf("%d curl calls recorded", len(calls))
+		}
+		for _, c := range calls {
+			if strings.Contains(c, "test-token") || strings.Contains(c, "wrong") {
+				t.Errorf("the token on curl's command line: %s", c)
+			}
+			if !strings.Contains(c, "--max-time") {
+				t.Errorf("a curl call without --max-time: %s", c)
+			}
+		}
+	}()
 
 	out, err := run("set", "_acme-challenge.massimo.example.net", "value-one")
 	if err != nil || out != "1" {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -167,5 +168,77 @@ func TestCommandStateOrder(t *testing.T) {
 	}
 	if err := s.SetCommandState(ctx, 9999, StateSent, 0, nil); !errors.Is(err, ErrNoCommand) {
 		t.Fatalf("sent for nothing: %v", err)
+	}
+}
+
+// The commands are pruned at most once an hour, not on every write: a
+// row past the retention goes with the first write an hour after the
+// last prune.
+func TestCommandsPrunedHourly(t *testing.T) {
+	clock := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	if err := s.SetSetting(ctx, CommandsKeepDaysKey, 1); err != nil {
+		t.Fatal(err)
+	}
+	s.AddCommand(ctx, Command{Action: "setpoint"}) // the first write prunes
+	old, _ := s.AddCommand(ctx, Command{Action: "setpoint"})
+	s.SetCommandState(ctx, old.ID, StateAcknowledged, 200, nil)
+	if _, err := s.db.ExecContext(ctx, `UPDATE commands SET finished_at = ? WHERE id = ?`, formatTime(clock.Add(-72*time.Hour)), old.ID); err != nil {
+		t.Fatal(err)
+	}
+	// By its uuid: SQLite gives the next row the id a removed last one had.
+	clock = clock.Add(time.Minute)
+	s.AddCommand(ctx, Command{Action: "setpoint"})
+	if _, ok, _ := s.CommandByUUID(ctx, old.UUID); !ok {
+		t.Fatal("pruned again a minute after the last prune")
+	}
+	clock = clock.Add(time.Hour)
+	s.AddCommand(ctx, Command{Action: "setpoint"})
+	if _, ok, _ := s.CommandByUUID(ctx, old.UUID); ok {
+		t.Fatal("not pruned an hour after the last prune")
+	}
+}
+
+// The Idempotency-Key lookup is served by the index on (user_id,
+// idempotency_key), and a key is found for its 24 hours only, whenever
+// the prune last ran.
+func TestKeyLookup(t *testing.T) {
+	clock := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	rows, err := s.db.QueryContext(ctx, `EXPLAIN QUERY PLAN `+commandByKey, nil, "k", formatTime(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		rows.Scan(&id, &parent, &unused, &detail)
+		plan = append(plan, detail)
+	}
+	rows.Close()
+	if !strings.Contains(strings.Join(plan, "; "), "USING INDEX commands_key") {
+		t.Fatalf("the key's lookup: %v", plan)
+	}
+	if _, err := s.AddCommand(ctx, Command{Key: "k", Action: "setpoint"}); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(23 * time.Hour)
+	if _, err := s.AddCommand(ctx, Command{Key: "k", Action: "setpoint"}); !errors.Is(err, ErrKeyExists) {
+		t.Fatalf("within its 24 hours: %v", err)
+	}
+	clock = clock.Add(90 * time.Minute)
+	if _, err := s.AddCommand(ctx, Command{Key: "k", Action: "setpoint"}); err != nil {
+		t.Fatalf("after its 24 hours: %v", err)
 	}
 }

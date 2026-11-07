@@ -4,16 +4,20 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -233,5 +237,177 @@ func TestCommandsAtStart(t *testing.T) {
 	}
 	if d, _ := s.opts.Store.CommandsKeepDays(t.Context()); d != 0 {
 		t.Fatalf("keep_days after the default %d", d)
+	}
+}
+
+// A new API key is shown once: neither the command row of its creation,
+// nor GET /api/v1/commands/{id}, nor a replay of the request with its
+// Idempotency-Key gives the secret out again.
+func TestTokenCreationKeepsNoSecret(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	stores[ts] = s.opts.Store
+	userToken(t, s.opts.Store, "anna", store.RoleViewer)
+	headers := map[string]string{"Idempotency-Key": "key-1"}
+	resp, text := callWith(t, ts, "POST", "/api/v1/users/anna/tokens", "secret", `{"label":"laptop"}`, headers)
+	var made struct {
+		Token string `json:"token"`
+		ID    int64  `json:"id"`
+	}
+	if json.Unmarshal([]byte(text), &made); resp.StatusCode != 201 || made.Token == "" || made.ID == 0 {
+		t.Fatalf("token: %d %s", resp.StatusCode, text)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if len(rows) != 1 || rows[0].Action != "token.add" || rows[0].CommandID == 0 {
+		t.Fatalf("audit row %+v", rows)
+	}
+	c, ok, err := s.opts.Store.Command(t.Context(), rows[0].CommandID)
+	if err != nil || !ok {
+		t.Fatalf("command row: %v %v", ok, err)
+	}
+	if strings.Contains(string(c.Result), made.Token) {
+		t.Errorf("the command row keeps the secret: %s", c.Result)
+	}
+	if _, code, body := commandByID(t, ts, "secret", rows[0]); code != 200 || strings.Contains(body, made.Token) {
+		t.Errorf("GET /api/v1/commands/{id} gives the secret out: %d %s", code, body)
+	}
+	resp2, text2 := callWith(t, ts, "POST", "/api/v1/users/anna/tokens", "secret", `{"label":"laptop"}`, headers)
+	var again struct {
+		Token *string `json:"token"`
+		ID    int64   `json:"id"`
+	}
+	json.Unmarshal([]byte(text2), &again)
+	if resp2.StatusCode != 201 || resp2.Header.Get("Idempotent-Replayed") != "true" || again.Token != nil || again.ID != made.ID {
+		t.Errorf("replay: %d %q %s", resp2.StatusCode, resp2.Header.Get("Idempotent-Replayed"), text2)
+	}
+}
+
+// The step observer never makes the queue wait on the store: with the
+// store's write lock held by another connection, as an events batch or
+// a slow handler holds it, its calls still return at once, and the step
+// rows are written once the lock is free.
+func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	stores[ts] = s.opts.Store
+	st := s.opts.Store
+	parent, err := st.AddCommand(t.Context(), store.Command{Action: "setpoint"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	conn, err := other.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(t.Context(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	o := s.newObserver()
+	cmd := engine.Command{ID: parent.UUID, Seq: 1, Lines: []cube.Message{{Type: 's', Data: "AARAAAAAFRS2Bms="}}}
+	start := time.Now()
+	o.Enqueued(cmd)
+	o.Started(cmd)
+	o.Finished(cmd, engine.Result{})
+	took := time.Since(start)
+	conn.ExecContext(t.Context(), "ROLLBACK")
+	conn.Close()
+	if took > 500*time.Millisecond {
+		t.Fatalf("the observer waited %s on the store's lock", took)
+	}
+	var c store.Command
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if c, _, _ = st.Command(t.Context(), parent.ID); len(c.Steps) == 1 && c.Steps[0].State == store.StateAcknowledged {
+			return
+		}
+	}
+	t.Fatalf("steps after the lock: %+v", c.Steps)
+}
+
+// A retry whose first request was in flight when the server stopped,
+// its row dropped at the start with no status answered, gets 503 with
+// what the row says, not a panic.
+func TestReplayOfADroppedCommand(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	owner, _, _ := st.User(t.Context(), store.BootstrapUser)
+	path, body := "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", `{"mode":"auto"}`
+	fp := fingerprint(&auditInfo{method: "PUT", path: path, body: []byte(body)}, "")
+	req, _ := json.Marshal(map[string]any{"method": "PUT", "path": path, "query": "", "hash": fp})
+	if _, err := st.AddCommand(t.Context(), store.Command{UserID: owner.ID, Key: "key-1", Action: "setpoint", Request: req}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := st.DropUnfinished(t.Context(), "server restarted"); err != nil || n != 1 {
+		t.Fatalf("dropped %d: %v", n, err)
+	}
+	req2, _ := http.NewRequest("PUT", ts.URL+path, strings.NewReader(body))
+	req2.Header.Set("Authorization", "Bearer secret")
+	req2.Header.Set("Idempotency-Key", "key-1")
+	resp, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("the replay: %v", err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 503 || resp.Header.Get("Idempotent-Replayed") != "true" || !strings.Contains(string(b), "server restarted") {
+		t.Fatalf("the replay: %d %q %s", resp.StatusCode, resp.Header.Get("Idempotent-Replayed"), b)
+	}
+}
+
+// A replay answers what the first request answered: a restore's 202
+// with its id and steps, also once its run has finished the command.
+func TestReplayOfARestoreKeepsItsAnswer(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	stores[ts] = s.opts.Store
+	_, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0537249/backup", "secret", "")
+	f, err := backup.Unmarshal([]byte(data), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := f.Marshal(false)
+	_, text := callAPI(t, ts, "POST", restoreBase+"/plan", "secret", string(body))
+	var plan restorePlan
+	json.Unmarshal([]byte(text), &plan)
+	headers := map[string]string{"Idempotency-Key": "restore-1"}
+	resp, first := callWith(t, ts, "POST", restoreBase+"?plan="+plan.Plan, "secret", string(body), headers)
+	if resp.StatusCode != 202 {
+		t.Fatalf("restore: %d %s", resp.StatusCode, first)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	var c commandView
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if c = commandOfRow(t, ts, "secret", rows[0]); store.Final(c.State) {
+			break
+		}
+	}
+	if !store.Final(c.State) || !strings.Contains(string(c.Result), `"state"`) {
+		t.Fatalf("the run did not finish the command: %+v", c)
+	}
+	resp2, again := callWith(t, ts, "POST", restoreBase+"?plan="+plan.Plan, "secret", string(body), headers)
+	var a, b map[string]any
+	json.Unmarshal([]byte(first), &a)
+	json.Unmarshal([]byte(again), &b)
+	if resp2.StatusCode != 202 || resp2.Header.Get("Idempotent-Replayed") != "true" || len(b) != len(a) || b["id"] != a["id"] || b["steps"] != a["steps"] {
+		t.Fatalf("the replay: %d %s, first %s", resp2.StatusCode, again, first)
+	}
+}
+
+// firstAnswer replays an answer that was not JSON as its text, a run's
+// 202 as its answer, and any other result as it is.
+func TestFirstAnswer(t *testing.T) {
+	for _, c := range []struct {
+		status       int
+		result, want string
+	}{
+		{500, `{"answer":"plain text"}`, "plain text"},
+		{202, `{"answer":{"id":"r1","steps":2},"id":"r1","state":"done"}`, `{"id":"r1","steps":2}`},
+		{200, `{"ok":true}`, `{"ok":true}`},
+		{200, `{"answer":{"x":1},"other":2}`, `{"answer":{"x":1},"other":2}`},
+	} {
+		if got := string(firstAnswer(store.Command{Status: c.status, Result: json.RawMessage(c.result)})); got != c.want {
+			t.Errorf("%d %s: %s, want %s", c.status, c.result, got, c.want)
+		}
 	}
 }

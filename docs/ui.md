@@ -125,6 +125,8 @@ Every room has a tile:
     - With **Only {day}** on, changes apply to that day alone.
       Off, they apply to all selected days.
     - **Copy {day} to …** copies the day to the days you choose.
+    - A switch point's time is typed in full, hours and minutes;
+      the rows take the order of their times at the next change or at **Send**.
     - **Reset day** and **Reset all** go back to what the Cube has.
     - **Send** writes only the days that changed.
   - **Copy**:
@@ -184,11 +186,18 @@ the settings and your own colour schemes follow you:
 the server keeps them for you,
 and every browser you sign in on takes them at sign-in,
 the first one handing over what it had.
+Once the server has your schemes, its list is the list:
+a scheme deleted in one browser goes from the others when they next load the page.
 Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
 **Language**, **Mode** and **Colour scheme** a switch **only on this device**
 keeps that setting's value in this browser instead,
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
+Log out takes your settings and schemes out of the browser,
+a change made just before still reaching the server,
+so that the next one to sign in there starts from the defaults
+and does not take yours into its account;
+what is kept only on this device stays.
 A guest, a server without users and the API token keep every setting in the browser,
 without the switches.
 

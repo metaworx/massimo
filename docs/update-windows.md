@@ -145,12 +145,15 @@ failure actions restart after 10 s three times with a reset period of a day;
 the firewall rule "Massimo" for the program path on private and domain networks.
 The process answers the service manager itself (cmd/massimo/service_windows.go):
 `svc.IsWindowsService()`, then `svc.Run` in a goroutine;
-on `Stop` or `Shutdown` the handler returns and the goroutine calls `os.Exit(0)`,
-so a stop ends the process at once,
-without the HTTP server's graceful shutdown (the same as `sc.exe stop massimo` today).
+on `Stop` or `Shutdown` the handler reports stop pending with a wait hint of 20 s,
+ends `serve`'s context and waits for `serve` to return,
+which shuts the HTTP server down,
+writes the log's pending events and closes the store,
+then returns, and the goroutine calls `os.Exit(0)`.
+A `serve` that has not returned after 20 s is ended all the same.
 `service.log` is the process's stderr while it runs as a service
 (`os.Stderr = f`) plus the lines `started as a service`, `running`,
-`stop requested`, `stopped`.
+`stop requested`, `serve stopped`, `stopped`.
 
 Two facts drive the options.
 The service runs as LocalSystem, so unlike on Linux there is no privilege gap:
@@ -211,6 +214,10 @@ Linux drop-in and the macOS plist (`healthURL` in internal/install/listen.go:
 `192.168.1.5:8099` gives `http://192.168.1.5:8099/healthz`);
 `serve` computes it from its `-listen` flag,
 so `install -listen` needs no further change.
+With TLS the URL is `https://…`,
+and the helper verifies its certificate unless the host is the loopback
+or an address one of the box's interfaces has when the check starts,
+since the certificate may be self-signed or for a name.
 Request, status and the helper's log live next to the settings in
 `C:\ProgramData\Massimo`, readable by SYSTEM and the Administrators only.
 
@@ -752,11 +759,13 @@ so a stub needs no second variable), and in the job:
    `http://127.0.0.1:8123/dl/<tag>/…`;
    the `?per_page=100` is dropped by the server) and under `dl/<tag>/` the binary,
    `massimo-release.json` from
-   `go run ./internal/update/mkmanifest -tag <tag> -commit ci -channel alpha -dir … massimo-windows-amd64.exe`, and `massimo-release.json.sig` made as release.yml makes it (`openssl pkeyutl -sign -inkey ci-key.pem -rawin -in massimo-release.json | base64 -w0`): `v0.0.0-ci.2`, the same source built with `-X main.version=v0.0.0-ci.2`, which comes up healthy; and `v0.0.0-ci.3`, a stand-in of a few lines built in the job (prints `massimo v0.0.0-ci.3 (ci)` for `version`, exits 1 otherwise), which passes the smoke test, cannot be a service and must be rolled back.
+   `go run ./internal/update/mkmanifest -tag <tag> -commit ci -channel ci -dir … massimo-windows-amd64.exe`, and `massimo-release.json.sig` made as release.yml makes it (`openssl pkeyutl -sign -inkey ci-key.pem -rawin -in massimo-release.json | base64 -w0`): `v0.0.0-ci.2`, the same source built with `-X main.version=v0.0.0-ci.2`, which comes up healthy; and `v0.0.0-ci.3`, a stand-in of a few lines built in the job (prints `massimo v0.0.0-ci.3 (ci)` for `version`, exits 1 otherwise), which passes the smoke test, cannot be a service and must be rolled back.
    The list holds one of them at a time:
    the file is rewritten between the two runs.
-3. `install` again from the test-key `v0.0.0-ci.1` binary with
-   `MASSIMO_UPDATE_API=http://127.0.0.1:8123` in `ci.env`;
+3. `install` again from the test-key `v0.0.0-ci.1` binary,
+   built with `-X main.channel=ci` as the stub's `v0.0.0-ci.2` is,
+   since a check leaves out unfetched a release whose tag names another channel,
+   with `MASSIMO_UPDATE_API=http://127.0.0.1:8123` in `ci.env`;
    then the block of stage 1 twice:
    with `v0.0.0-ci.2` listed it must end in `done` and `/healthz` on `v0.0.0-ci.2`,
    `massimo.exe.prev` present and no `massimo.exe.failed` (the by-hand rollback
