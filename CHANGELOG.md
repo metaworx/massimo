@@ -31,6 +31,15 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+### Fixed
+
+- A request still being answered when `serve` stops is finished, and
+  its audit row written, before the store closes (`cmd/massimo`).
+
+- A stop of `serve` brings `massimo.db-wal` into `massimo.db`, also
+  while another program has it open, and logs `store closed`
+  (`docs/store.md` section 3).
+
 ### Security
 
 - A server that asks for no key answers only its local network, a
