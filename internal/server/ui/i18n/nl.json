@@ -569,6 +569,8 @@
   "users.you": "jij",
   "users.name": "Naam",
   "users.nameHint": "letters, cijfers, . _ - @",
+  "users.nameBad": "Alleen de letters a tot z, cijfers en . _ - @, zonder spaties, beginnend met een letter of cijfer; hoogstens 64 tekens.",
+  "users.nameTaken": "Er is al een gebruiker met de naam {name}.",
   "users.displayName": "Weergavenaam",
   "users.role": "Rol",
   "users.disabled": "Uitgeschakeld",

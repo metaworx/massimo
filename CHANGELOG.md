@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
   answer, and a Send off while nothing changed, so a second click sends
   nothing (`docs/ui.md`, "Rooms", "Settings").
 
+- The web UI checks a new user's name while it is typed, and the users
+  and roles routes refuse without the store's `store: ` prefix
+  (`docs/ui.md`, "Settings").
+
 - A request still being answered when `serve` stops is finished, and
   its audit row written, before the store closes (`cmd/massimo`).
 

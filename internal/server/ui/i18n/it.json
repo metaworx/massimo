@@ -570,6 +570,8 @@
   "users.you": "tu",
   "users.name": "Nome",
   "users.nameHint": "lettere, cifre, . _ - @",
+  "users.nameBad": "Solo le lettere dalla a alla z, cifre e . _ - @, senza spazi, iniziando con una lettera o una cifra; al massimo 64 caratteri.",
+  "users.nameTaken": "Esiste già un utente di nome {name}.",
   "users.displayName": "Nome visualizzato",
   "users.role": "Ruolo",
   "users.disabled": "Disattivato",

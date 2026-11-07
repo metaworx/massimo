@@ -12,6 +12,7 @@ and keeps the session in the browser for 30 days from its last use;
 Settings → Log out ends it.
 A server without users shows the form that creates the first owner to a
 browser on the local network; until then everything is open.
+Its name is checked as a new user's is (Settings → Users).
 What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
@@ -319,7 +320,11 @@ without the switches.
   **Remove**; the user's sessions and API keys with **Revoke**,
   and **Create key**, which shows the new key once.
   **Add a user** opens the form for one;
-  **Create** turns until the server has hashed the password,
+  its name is checked 2 seconds after the last keystroke and when the field is left:
+  the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
+  at most 64 characters, capitals taken as lower case, and not a name in use.
+  **Create** sends nothing while the name is wrong,
+  and turns until the server has hashed the password,
   which takes seconds on a Raspberry Pi 1.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,

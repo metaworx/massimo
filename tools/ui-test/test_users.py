@@ -4,7 +4,7 @@
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
 from conftest import api_call
-from helpers import assert_busy, hold, named_buttons, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -194,3 +194,84 @@ def test_role_save_is_off_until_a_change(page, case):
     switch.click()
     assert save.is_disabled(), "switched back, nothing differs"
     page.locator("#view-tiles").click()
+
+
+def name_msg(page, selector):
+    """The name check's message under a field: its text, or None while
+    hidden."""
+    return page.evaluate("(() => { const p = document.querySelector(%r); return p && !p.classList.contains('hidden') ? p.textContent : null; })()"
+                         % selector)
+
+
+def test_new_user_name_checked_while_typed(page, case, watch):
+    """A new user's name is checked 2 s after the last keystroke and when
+    the field is left, with the page's own words; a fixed name clears the
+    message at once; a name in use is reported; Create with a bad name
+    sends nothing, and a name the server finds in use is worded alike."""
+    msg = "#user-new-name-msg"
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/users") else None)
+    page.locator("#view-settings").click()
+    page.locator("#user-add").click()
+    name = page.locator("#user-new-name")
+    name.fill("test manager")
+    page.wait_for_timeout(500)
+    assert name_msg(page, msg) is None, "nothing is said while the name is being typed"
+    assert wait_until(page, "!document.querySelector(%r).classList.contains('hidden')" % msg, 4), "the name is checked after 2 s"
+    assert name_msg(page, msg) == NAME_BAD[case.lang], f"the page's words, without store: {name_msg(page, msg)}"
+    assert name.get_attribute("aria-invalid") == "true" and name.get_attribute("aria-describedby") == "user-new-name-msg", \
+        "the field is marked and described by the message"
+    name.fill("test-manager")
+    assert name_msg(page, msg) is None and name.get_attribute("aria-invalid") is None, "a fixed name clears the message at once"
+    name.fill("x y")
+    name.press("Tab")
+    assert name_msg(page, msg) == NAME_BAD[case.lang], "leaving the field checks at once"
+    name.fill("Operator")
+    name.press("Tab")
+    assert name_msg(page, msg) == NAME_TAKEN[case.lang].format(name="operator"), "a listed name is in use, in lower case"
+    name.fill("bad name")
+    page.locator("#user-new input[name=password]").fill("pw")
+    page.locator("#user-new button[type=submit]").click()
+    page.wait_for_timeout(300)
+    assert name_msg(page, msg) == NAME_BAD[case.lang] and not posts, f"Create with a bad name sends nothing: {posts}"
+    late = f"late-{case.width}-{case.lang}"
+    remove_user(late)
+    watch.expected.append(("/api/v1/users", 409))
+    api_call("POST", "api/v1/users", {"name": late, "role": "viewer"})  # after the list was read
+    try:
+        name.fill(late)
+        page.locator("#user-new button[type=submit]").click()
+        assert wait_until(page, "!document.querySelector(%r).classList.contains('hidden')" % msg, 5), "the server's 409 is said"
+        assert name_msg(page, msg) == NAME_TAKEN[case.lang].format(name=late), "worded as the page's check words it"
+        assert "store:" not in page.locator("#users-msg").inner_text(), "no store: in the list's message"
+    finally:
+        remove_user(late)
+    page.locator("#user-new .cancel-user").click()
+    page.locator("#view-tiles").click()
+
+
+def test_first_owner_name_checked(page, case):
+    """The first owner's form checks its name the same way; with a bad
+    name, Create the owner sends nothing. /api/v1/me is stubbed as an
+    open server without users, and put back."""
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/users") else None)
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body='{"mode": "open", "setup": true}'))
+    try:
+        page.evaluate("loadMe()")
+        assert wait_until(page, "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows"
+        name = page.locator("#setup-user")
+        name.fill("test manager")
+        name.press("Tab")
+        assert name_msg(page, "#setup-name-msg") == NAME_BAD[case.lang], "leaving the field checks it"
+        page.locator("#setup-password").fill("pw")
+        page.locator("#setup-again").fill("pw")
+        page.locator("#setup-form button[type=submit]").click()
+        page.wait_for_timeout(300)
+        assert not posts, f"Create the owner with a bad name sends nothing: {posts}"
+        name.fill("owner")
+        assert name_msg(page, "#setup-name-msg") is None, "a good name clears the message"
+    finally:
+        page.unroute("**/api/v1/me")
+        page.evaluate("loadMe()")
+    assert wait_until(page, "document.getElementById('setup').classList.contains('hidden')", 5), "the form goes again"

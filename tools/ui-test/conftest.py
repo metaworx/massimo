@@ -57,12 +57,14 @@ class Case:
 class Watch:
     """What the page did that a test or the guard looks at afterwards:
     the stream requests, the used ticket handed out, and the problems
-    (console errors, page errors)."""
+    (console errors, page errors). A test that has the server refuse a
+    request on purpose lists it in expected, as (the URL's end, status)."""
 
     def __init__(self):
         self.streams = []
         self.refused = []
         self.problems = []
+        self.expected = []
 
 
 @pytest.fixture(params=[(1100, "en"), (390, "en"), (1100, "de"), (390, "de")],
@@ -124,9 +126,10 @@ def page(context, case, watch, request):
 
     def on_console(m):
         src = m.location.get("url", "")
-        # the refused stream and the refused search are on purpose
+        # the refused stream, the refused search and what a test lists are on purpose
         expected = m.text.startswith("Failed to load resource") and (
-            (watch.refused and USED in src) or (src.endswith("/cubes/discover") and "503" in m.text))
+            (watch.refused and USED in src) or (src.endswith("/cubes/discover") and "503" in m.text)
+            or any(src.endswith(end) and str(status) in m.text for end, status in watch.expected))
         if m.type == "error" and not expected:
             watch.problems.append(f"console: {m.text}")
 

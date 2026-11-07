@@ -364,6 +364,10 @@ async function createOwner(ev) {
   const msg = $("setup-msg");
   const submit = $("setup-form").querySelector("button[type=submit]");
   if (isBusy(submit)) return;
+  if (!checkOwnerName()) {
+    $("setup-user").focus();
+    return;
+  }
   const name = $("setup-user").value.trim();
   const password = $("setup-password").value;
   if (!name || !password) return showResult(msg, t("login.missing"), false);
@@ -377,9 +381,15 @@ async function createOwner(ev) {
     showResult(msg, t("setup.done", { name }), true);
     afterLogin();
   } catch (e) {
-    showResult(msg, t("setup.failed", { error: e.message }), false);
+    const worded = wordNameError(e, name); // users.js
+    if (worded) checkOwnerName.say(worded);
+    showResult(msg, t("setup.failed", { error: worded || e.message }), false);
   }
 }
+
+// checkOwnerName checks the first owner's name as it is typed
+// (watchName, users.js); set by initLogin.
+let checkOwnerName = () => true;
 
 function initLogin() {
   window.addEventListener("pagehide", flushPreferences);
@@ -388,6 +398,7 @@ function initLogin() {
   });
   $("logout-btn").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
+  checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
   $("me-password-form").addEventListener("submit", changeOwnPassword);
 }
 

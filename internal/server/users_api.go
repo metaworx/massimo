@@ -74,19 +74,23 @@ func (req userRequest) expiresAt() (t time.Time, set bool, err error) {
 // userFail maps a store error of the users and roles to a status.
 func userFail(err error) error {
 	var he *httpError
-	switch {
-	case errors.As(err, &he):
+	if errors.As(err, &he) {
 		return err
-	case errors.Is(err, store.ErrNoUser), errors.Is(err, store.ErrNoRole), errors.Is(err, store.ErrNoToken):
-		return fail(http.StatusNotFound, "%v", err)
-	case errors.Is(err, store.ErrUserExists), errors.Is(err, store.ErrRoleExists), errors.Is(err, store.ErrLastOwner), errors.Is(err, store.ErrRoleInUse):
-		return fail(http.StatusConflict, "%v", err)
-	case errors.Is(err, store.ErrBadName), errors.Is(err, store.ErrBadRole):
-		return fail(http.StatusBadRequest, "%v", err)
-	case errors.Is(err, store.ErrImmutable):
-		return fail(http.StatusForbidden, "%v", err)
 	}
-	return fail(http.StatusInternalServerError, "%v", err)
+	// The store's "store: " says where the error came from, not what is
+	// wrong; a client shows the rest as it is.
+	text := strings.TrimPrefix(err.Error(), "store: ")
+	switch {
+	case errors.Is(err, store.ErrNoUser), errors.Is(err, store.ErrNoRole), errors.Is(err, store.ErrNoToken):
+		return fail(http.StatusNotFound, "%s", text)
+	case errors.Is(err, store.ErrUserExists), errors.Is(err, store.ErrRoleExists), errors.Is(err, store.ErrLastOwner), errors.Is(err, store.ErrRoleInUse):
+		return fail(http.StatusConflict, "%s", text)
+	case errors.Is(err, store.ErrBadName), errors.Is(err, store.ErrBadRole):
+		return fail(http.StatusBadRequest, "%s", text)
+	case errors.Is(err, store.ErrImmutable):
+		return fail(http.StatusForbidden, "%s", text)
+	}
+	return fail(http.StatusInternalServerError, "%s", text)
 }
 
 // userStore is the store, or the error of a server without one.

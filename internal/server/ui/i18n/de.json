@@ -568,6 +568,8 @@
   "users.you": "du",
   "users.name": "Name",
   "users.nameHint": "Buchstaben, Ziffern, . _ - @",
+  "users.nameBad": "Nur die Buchstaben a bis z, Ziffern und . _ - @, ohne Leerzeichen, am Anfang ein Buchstabe oder eine Ziffer; höchstens 64 Zeichen.",
+  "users.nameTaken": "Es gibt schon einen Benutzer {name}.",
   "users.displayName": "Anzeigename",
   "users.role": "Rolle",
   "users.disabled": "Gesperrt",

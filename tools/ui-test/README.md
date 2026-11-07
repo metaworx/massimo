@@ -66,10 +66,12 @@ with the page's DOM, console and network at every step.
   the page loaded with its room tiles and its event stream open;
 - `watch`:
   what the page did, for a test or the guard to look at: the stream requests,
-  the used ticket handed out, console and page errors;
+  the used ticket handed out, console and page errors,
+  and in `expected` the refusals a test causes on purpose (the URL's end, the status);
 - `guard` (autouse): a test fails on a console error, a page error,
   or a horizontal scroll left at its end;
-  the refused stream of the stream test and the stubbed 503 of the discovery are expected;
+  the refused stream of the stream test, the stubbed 503 of the discovery
+  and what a test lists in `watch.expected` are expected;
 - the marker `used_ticket`: the page's first stream gets a used ticket,
   which the server refuses with 401,
   and the page is handed over before the stream is open again.

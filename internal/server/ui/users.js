@@ -61,6 +61,66 @@ function roleOptions(current) {
   });
 }
 
+// USER_NAME is the store's rule for a user's name (userName in
+// internal/store/users.go), after NormalName: trimmed and lower case.
+const USER_NAME = /^[a-z0-9][a-z0-9._@-]{0,63}$/;
+
+// NAME_CHECK_MS is how long a name being typed waits before it is
+// checked: the owner asked for a check once the field has not changed
+// for 2 s.
+const NAME_CHECK_MS = 2000;
+
+// nameProblem says what is wrong with a new user's name, "" for
+// nothing: the store's rule, or a name in use among taken.
+function nameProblem(name, taken) {
+  const n = name.trim().toLowerCase();
+  if (!n) return "";
+  if (!USER_NAME.test(n)) return t("users.nameBad");
+  if ((taken || []).includes(n)) return t("users.nameTaken", { name: n });
+  return "";
+}
+
+// watchName checks a new user's name field: NAME_CHECK_MS after the
+// last keystroke and when the field is left. msg, under the field, says
+// what is wrong, and clears at the first keystroke that fixes it; taken
+// returns the names in use. It returns the check, which the form's
+// submit calls: true when the name may be sent. A refusal the server
+// words (wordNameError) goes to msg as well.
+function watchName(input, msg, taken) {
+  let timer = null;
+  const say = (text) => {
+    showResult(msg, text, false);
+    if (text) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+  };
+  const check = () => {
+    clearTimeout(timer);
+    timer = null;
+    const p = nameProblem(input.value, taken());
+    say(p);
+    return !p;
+  };
+  input.setAttribute("aria-describedby", msg.id);
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = null;
+    if (!nameProblem(input.value, taken())) say("");
+    else timer = setTimeout(check, NAME_CHECK_MS);
+  });
+  input.addEventListener("blur", check);
+  check.say = say;
+  return check;
+}
+
+// wordNameError words the server's refusal of a new user's name as the
+// page's check does, or returns "" for another error: 409, the name is
+// in use; 400 about the name, the rule.
+function wordNameError(e, name) {
+  if (e.status === 409) return t("users.nameTaken", { name: name.trim().toLowerCase() });
+  if (e.status === 400 && /user name/.test(e.message)) return t("users.nameBad");
+  return "";
+}
+
 // userAction runs a change, redraws the list and says how it went;
 // btn, the button it runs for, is busy until then (whileBusy), and a
 // click while it is runs nothing and returns undefined.
@@ -275,12 +335,19 @@ function newUserForm() {
   const field = (name) => form.querySelector("[name=" + name + "]");
   fillOptions(field("role"), roleOptions());
   field("role").value = usersAdmin() === "guests" ? "guest" : "viewer";
+  const nameMsg = form.querySelector(".name-msg");
+  nameMsg.id = "user-new-name-msg";
+  const checkName = watchName(field("name"), nameMsg, () => usersUI.users.map((u) => u.name));
   form.querySelector(".cancel-user").addEventListener("click", () => {
     clear($("user-new"));
     $("user-add").classList.remove("hidden");
   });
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
+    if (!checkName()) {
+      field("name").focus();
+      return;
+    }
     const body = { name: field("name").value.trim(), role: field("role").value };
     const display = field("display_name").value.trim();
     if (display) body.display_name = display;
@@ -288,7 +355,19 @@ function newUserForm() {
     if (password) body.password = password;
     const end = isoOf(field("expires").value);
     if (end) body.expires_at = end;
-    userAction(() => api("POST", "api/v1/users", body), t("users.created", { name: body.name }), body.name, form.querySelector("button[type=submit]")).then((ok) => {
+    const create = async () => {
+      try {
+        await api("POST", "api/v1/users", body);
+      } catch (e) {
+        const worded = wordNameError(e, body.name);
+        if (worded) {
+          checkName.say(worded);
+          e.message = worded;
+        }
+        throw e;
+      }
+    };
+    userAction(create, t("users.created", { name: body.name }), body.name, form.querySelector("button[type=submit]")).then((ok) => {
       if (ok) {
         clear($("user-new"));
         $("user-add").classList.remove("hidden");

@@ -581,6 +581,8 @@
   "users.you": "ty",
   "users.name": "Nazwa",
   "users.nameHint": "litery, cyfry, . _ - @",
+  "users.nameBad": "Tylko litery od a do z, cyfry oraz . _ - @, bez spacji, na początku litera lub cyfra; najwyżej 64 znaki.",
+  "users.nameTaken": "Użytkownik o nazwie {name} już istnieje.",
   "users.displayName": "Wyświetlana nazwa",
   "users.role": "Rola",
   "users.disabled": "Wyłączony",

@@ -366,3 +366,37 @@ func TestRolesRoutes(t *testing.T) {
 		t.Fatalf("a manager enables a capability: %d", code)
 	}
 }
+
+// A refusal of the users and roles routes says what is wrong, without
+// the store's "store: " prefix, which the web UI showed as it came:
+// `test manager: store: bad user name: "test manager"`.
+func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
+	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	owner := "secret"
+	for _, c := range []struct {
+		method, path, body string
+		code               int
+		want               string
+	}{
+		{"POST", "/api/v1/users", `{"name":"test manager"}`, 400, `bad user name: "test manager"`},
+		{"POST", "/api/v1/users", `{"name":"anna","password":"pw"}`, 201, ""},
+		{"POST", "/api/v1/users", `{"name":"Anna"}`, 409, "user exists: anna"},
+		{"PUT", "/api/v1/users/nobody", `{"display_name":"x"}`, 404, `no user "nobody"`},
+		{"DELETE", "/api/v1/roles/owner", "", 403, "the role cannot be changed"},
+	} {
+		code, text := callAPI(t, ts, c.method, c.path, owner, c.body)
+		if code != c.code {
+			t.Fatalf("%s %s: %d %s, want %d", c.method, c.path, code, text, c.code)
+		}
+		if c.want == "" {
+			continue
+		}
+		var e struct {
+			Error string `json:"error"`
+		}
+		json.Unmarshal([]byte(text), &e)
+		if strings.Contains(e.Error, "store:") || !strings.HasPrefix(e.Error, c.want) {
+			t.Errorf("%s %s: %q, want it to start with %q", c.method, c.path, e.Error, c.want)
+		}
+	}
+}
