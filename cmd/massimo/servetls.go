@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 // The TLS of serve: -tls names the certificate source (internal/certs),
@@ -22,22 +23,23 @@ import (
 // variables are those of the settings file, where install writes them
 // (docs/store.md section 4: needed before the store opens).
 const (
-	tlsVar      = "MASSIMO_TLS"
-	tlsCertVar  = "MASSIMO_TLS_CERT"
-	tlsKeyVar   = "MASSIMO_TLS_KEY"
-	tlsNamesVar = "MASSIMO_TLS_NAMES"
-	hstsVar     = "MASSIMO_HSTS"
+	// The variables install writes, named once in internal/env.
+	tlsVar      = env.TLS
+	tlsCertVar  = env.TLSCert
+	tlsKeyVar   = env.TLSKey
+	tlsNamesVar = env.TLSNames
+	hstsVar     = env.HSTS
 	// -tls acme: the account's contact address, the directory (Let's
 	// Encrypt's unless set; its staging one for experiments) and the
 	// plain helper listener for HTTP-01 and the redirect.
-	acmeEmailVar     = "MASSIMO_ACME_EMAIL"
-	acmeDirectoryVar = "MASSIMO_ACME_DIRECTORY"
-	tlsHTTPVar       = "MASSIMO_TLS_HTTP"
+	acmeEmailVar     = env.ACMEEmail
+	acmeDirectoryVar = env.ACMEDirectory
+	tlsHTTPVar       = env.TLSHTTP
 	// -acme-dns-hook: the DNS-01 challenge through a hook instead of
 	// TLS-ALPN-01 and HTTP-01; no port, wildcards allowed.
-	acmeDNSHookVar = "MASSIMO_ACME_DNS_HOOK"
+	acmeDNSHookVar = env.ACMEDNSHook
 	// -trusted-proxies: the reverse proxies whose headers name the client.
-	trustedProxiesVar = "MASSIMO_TRUSTED_PROXIES"
+	trustedProxiesVar = env.TrustedProxies
 	// certWatch is how often a source checks its certificate: a renewal
 	// 30 days before the end needs no finer clock.
 	certWatch = time.Hour

@@ -172,3 +172,38 @@ func TestGuestEndDate(t *testing.T) {
 		t.Fatalf("end date not cleared: %+v", g)
 	}
 }
+
+// An owner with an end date is no owner left: the last owner without one
+// cannot be given one, and while the only other owner has one, the last
+// cannot be demoted, disabled or removed.
+func TestLastOwnerWithEndDate(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	s.AddUser(ctx, User{Name: "o1", Role: RoleOwner}, "", 0)
+	tomorrow := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	ends := func(u *User) error { u.ExpiresAt = tomorrow; return nil }
+	if _, err := s.UpdateUser(ctx, "o1", ends, 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("an end date for the last owner: %v", err)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "o2", Role: RoleOwner, ExpiresAt: tomorrow}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateUser(ctx, "o1", func(u *User) error { u.Role = RoleViewer; return nil }, 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("demote the last owner beside one that ends: %v", err)
+	}
+	if _, err := s.UpdateUser(ctx, "o1", func(u *User) error { u.Disabled = true; return nil }, 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("disable the last owner beside one that ends: %v", err)
+	}
+	if err := s.DeleteUser(ctx, "o1", 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("remove the last owner beside one that ends: %v", err)
+	}
+	if _, err := s.UpdateUser(ctx, "o2", func(u *User) error { u.ExpiresAt = time.Time{}; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateUser(ctx, "o1", ends, 0); err != nil {
+		t.Fatalf("an end date beside an owner without one: %v", err)
+	}
+	if err := s.DeleteUser(ctx, "o1", 0); err != nil {
+		t.Fatalf("remove an owner that ends: %v", err)
+	}
+}

@@ -424,8 +424,10 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	// A visible and a hidden device: only the visible one is deleted,
 	// and the server's copy drops it once the Cube answered.
 	conn.Write([]byte(cube.CmdDeleteDevices(true, other, hidden).Wire()))
-	if a := readLine(t, r); a.Type != 'A' {
-		t.Fatalf("t: answered %s", a)
+	for i := 0; i < 2; i++ { // an A line for each device the client named
+		if a := readLine(t, r); a.Type != 'A' {
+			t.Fatalf("t: answered %s", a)
+		}
 	}
 	var got []cube.Message
 	for _, m := range fc.Received() {
@@ -589,5 +591,45 @@ func TestProxyReportsWrites(t *testing.T) {
 		if g := reported(); len(g) != len(want) || (len(want) > 0 && (g[0] != want[0] || g[1] != want[1])) {
 			t.Fatalf("discard %v: reported %+v, want %+v", discard, g, want)
 		}
+	}
+}
+
+// A client's t: for three devices gets the Cube's three A lines, and the
+// command after it its own answer.
+func TestProxyDeleteOfSeveralDevices(t *testing.T) {
+	fc, p, _, ctx := setupWith(t, func(fc *fakecube.Server) { fc.ReplyGap = 100 * time.Millisecond })
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.ServeTCP(ctx, ln)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	r := cube.NewReader(conn)
+	for readLine(t, r).Type != 'L' {
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	conn.Write([]byte(cube.CmdDeleteDevices(true, 0x14ce3d, 0x14ce58, 0x151486).Wire()))
+	for i := 0; i < 3; i++ {
+		if a := readLine(t, r); a.Type != 'A' {
+			t.Fatalf("A %d of the t: is %s", i+1, a)
+		}
+	}
+	// The next command is sent after the Cube's last A, and answered.
+	conn.Write([]byte("z:1e,G,03\r\n"))
+	if a := readLine(t, r); a.Type != 'A' {
+		t.Fatalf("z: answered %s", a)
+	}
+	var order []byte
+	for _, m := range fc.Received() {
+		if m.Type == 't' || m.Type == 'z' {
+			order = append(order, m.Type)
+		}
+	}
+	if string(order) != "tz" {
+		t.Fatalf("the Cube received %q", order)
 	}
 }

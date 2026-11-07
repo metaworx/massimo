@@ -28,6 +28,7 @@ pytest-playwright keeps the trace, the screenshot and the video of a
 failed test (pytest.ini) under the directory run.sh names with
 --output, tools/ui-test/results/.
 """
+import json
 import os
 import ssl
 import urllib.request
@@ -80,6 +81,22 @@ def watch():
     return Watch()
 
 
+def api_call(method, path, body=None, token=None):
+    """A request to the server's API from the test itself, with the test
+    token unless another is given; the answer's JSON, None for none."""
+    tls = ssl.create_default_context()
+    tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
+    headers = {"Authorization": "Bearer " + (token or TOKEN)}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(URL.rstrip("/") + "/" + path.lstrip("/"), method=method, headers=headers, data=data)
+    with urllib.request.urlopen(req, timeout=5, context=tls) as resp:
+        text = resp.read()
+    return json.loads(text) if text else None
+
+
 def clear_preferences():
     """The token's user keeps the page's settings on the server, and the
     four cases share the server: its preferences are removed before
@@ -87,13 +104,8 @@ def clear_preferences():
     browser does."""
     if not TOKEN:
         return
-    tls = ssl.create_default_context()
-    tls.check_hostname, tls.verify_mode = False, ssl.CERT_NONE
     for key in ("ui", "schemes"):
-        req = urllib.request.Request(URL.rstrip("/") + "/api/v1/me/preferences/" + key, method="DELETE",
-                                     headers={"Authorization": "Bearer " + TOKEN})
-        with urllib.request.urlopen(req, timeout=5, context=tls) as resp:
-            resp.read()
+        api_call("DELETE", "api/v1/me/preferences/" + key)
 
 
 @pytest.fixture

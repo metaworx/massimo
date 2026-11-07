@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,26 +41,7 @@ for the service run it as its user, for example
 	}
 	switch args[0] {
 	case "show":
-		certPath, keyPath := os.Getenv(tlsCertVar), os.Getenv(tlsKeyVar)
-		switch mode := tlsMode(os.Getenv(tlsVar), certPath, keyPath); mode {
-		case "off":
-			fmt.Fprintf(w, "serve has no TLS (%s is off)\n", tlsVar)
-		case "files":
-			fmt.Fprintf(w, "source:        files (cert %s, key %s)\n", orNone(certPath), orNone(keyPath))
-			printCertificate(w, mode, certPath, keyPath)
-		case "self-signed":
-			certPath, keyPath = certs.SelfSignedPaths(dataDir())
-			if _, err := os.Stat(certPath); err != nil {
-				fmt.Fprintf(w, "source:        self-signed; no certificate in %s yet: serve makes one at its start, or make it now with: massimo tls self-signed\n", filepath.Dir(certPath))
-				return nil
-			}
-			fmt.Fprintf(w, "source:        self-signed (%s)\n", filepath.Dir(certPath))
-			printCertificate(w, mode, certPath, keyPath)
-		case "acme":
-			printACME(w)
-		default:
-			fmt.Fprintf(w, "source:        %s is not a TLS mode serve knows\n", mode)
-		}
+		printTLS(w) // what massimo config prints of it
 	case "self-signed":
 		fs := flag.NewFlagSet("tls self-signed", flag.ContinueOnError)
 		names := fs.String("names", os.Getenv(tlsNamesVar), "names and addresses the certificate holds besides the box's own, comma-separated (default "+tlsNamesVar+")")

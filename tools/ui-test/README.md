@@ -94,11 +94,16 @@ what a test stores in the browser goes with its context.
   the tile warns, the temperature is greyed,
   and the device list shows the stale badge and the values' ages,
   with the type, the radio address, the exact times
-  and the server's start time in expert mode.
+  and the server's start time in expert mode;
+  a state event while a device's name is typed in the configuration keeps every key,
+  and the tile is drawn with the new state once the focus leaves;
+  a switch point's time typed part by part keeps the focus,
+  marks the day as changed, and Send right after it sends the time (stubbed).
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
-  which the server answers with 401) the page opens it again with a new ticket.
+  which the server answers with 401) the page opens it again with a new ticket;
+  the events that make the page load again leave no failed load uncaught.
 - `test_discover.py`:
   the Cube choice's "Search for new Cubes…" shows "Searching…" until the server answers,
   then lists the Cube the fake Cube announces in discovery (KEQ0000000,
@@ -120,26 +125,45 @@ what a test stores in the browser goes with its context.
   brings it back; the found Cube KEQ0000000, its DHCP flag shown,
   is added and removed again (the test searches first where nothing was found yet,
   and is skipped without a discovery answer), Remove asks in the panel,
-  and Keep takes the question back.
+  and Keep takes the question back;
+  a redraw of the open panel asks for nothing again,
+  so the focus stays in the pairing form being typed in
+  (the test holds a request for the pairing until it has typed);
+  Hide and Show again keep the name and the proxy address typed in the form.
 - `test_settings.py`:
   the settings page opens;
   with the Cube's panel open,
   English and then German chosen in the settings redraw its labels,
-  cloned from a template, in that language, and the panel stays open.
+  cloned from a template, in that language, and the panel stays open;
+  French chosen and German before French has come,
+  French failing afterwards shows no error on the German page.
 - `test_users.py`, Settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-pass`) are listed with the operator's tokens,
-  and the six default roles with the operator's seven capabilities.
+  and the six default roles with the operator's seven capabilities;
+  in the operator's open panel, Create key shows the new key,
+  lists every token once and sends one POST per click,
+  and the test revokes its keys again;
+  a guest made with an end date that has seconds is saved without the end date
+  when its display name alone changes, and Save without a change sends nothing;
+  a user's Remove asks in the panel, Keep gives the focus back to Remove,
+  and a double click on Yes sends one DELETE and says it worked.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,
-  and Log out brings the dialog back and forgets the token.
+  and Log out brings the dialog back and forgets the token;
+  a sign-in at the page's start, and again after Log out,
+  starts the page once: one stream ticket and one read of `/me` each.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
-  password `guest-pass`) has no switches, and its poll stays in the browser.
+  password `guest-pass`) has no switches, and its poll stays in the browser;
+  the operator's poll and scheme, changed just before Log out,
+  reach the operator's account and leave the browser,
+  and the owner signing in next with its key gets neither;
+  a scheme deleted in one browser stays deleted when another that had it loads.
   Since the four cases share the server,
   the page fixture removes the token's user's preferences before every page.
 - `test_log.py`:
@@ -157,7 +181,9 @@ what a test stores in the browser goes with its context.
   a Cube switch takes the device chosen back to all,
   2200 lines stay when a live event comes,
   past 2000 lines without Older the oldest go from the lines and the view alike,
-  and the error line shows with a kind chosen.
+  and the error line shows with a kind chosen;
+  a live event that comes while a page is held follows the page,
+  once, also when the page holds it already.
 - `test_pairing.py`, pairing and removal:
   in Settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,

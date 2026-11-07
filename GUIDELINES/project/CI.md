@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.7.0)
+# Massimo — CI Conventions (v1.10.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -25,7 +25,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, a pull request), `.github/workflows/release.yml` (tags `v*`), `.github/workflows/publish.yml` (a published release) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, a pull request), `.github/workflows/release.yml` (tags `v*`), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
 
 There is no other platform.
 
@@ -35,8 +35,8 @@ There is no other platform.
 |---------|------|
 | push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
-| release published | publish.yml: the Homebrew formula of the release's channel rendered and pushed to the tap, with the deploy key set |
-| tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the apt key set, rebuild the apt repository from the releases and deploy it to GitHub Pages |
+| tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
+| by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
 Each commit runs the workflow once:
 a push to a pull request's branch runs it as the pull request's,
@@ -141,7 +141,7 @@ follow COMMIT.md either and is not rewritten.
 | Name | Set where | Used by |
 |------|-----------|---------|
 | `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by `v*` tags only | release.yml, to sign the release manifest; its public half is `internal/update/release-key.pem` |
-| `HOMEBREW_TAP_DEPLOY_KEY` | a repository secret, once the owner has made the tap and the key (packaging/README.md, "Homebrew") | publish.yml, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
+| `HOMEBREW_TAP_DEPLOY_KEY` | a repository secret, once the owner has made the tap and the key (packaging/README.md, "Homebrew") | publish.yml, handed over by release.yml's `homebrew` job, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
 | `MASSIMO_APT_KEY`, `MASSIMO_APT_KEY_PASSPHRASE` | the `signing` environment, once the owner has made the key (packaging/README.md, "The apt repository") | release.yml's `apt-build` job, to sign the apt suites; the site's `massimo.asc` is its public half; without them the apt jobs are skipped |
 | `GITHUB_TOKEN` | provided by GitHub | the release jobs to publish, the Windows and macOS jobs as `MASSIMO_GITHUB_TOKEN` for the release checks against the API's rate limit |
 
@@ -165,6 +165,10 @@ The update channel of a release is the pre-release identifier of the tag's name
 then a `channel:` line in the tag message (which `make release-alpha` no longer writes:
 the name of every tag it makes holds the channel),
 then the one branch holding the commit.
+The GitHub release is created with the channel as its target,
+which a box reads, with the tag's name, to leave another channel's release
+unfetched (`internal/update`, `hintedChannel`);
+neither is signed, the manifest decides.
 The GitHub release's notes are the body of the tag's message,
 that section, then a sentence naming the channel and how to install and verify;
 a tag with no body (a `channel:` line does not count) gets the sentence alone.
@@ -173,11 +177,25 @@ Every release below 1.0.0 is a pre-release on GitHub.
 The boxes on the alpha channel (the Raspberry Pi) take a release through
 `massimo update` or the web UI;
 nothing in CI touches them.
+The Homebrew formula is pushed from the same run:
+release.yml's `homebrew` job calls publish.yml once `sign` has published the release.
+publish.yml does not listen for `release: published` itself,
+because the release is created with the run's own `GITHUB_TOKEN`,
+and GitHub starts no workflow for an event that token causes
+(only `workflow_dispatch` and `repository_dispatch` are exempt):
+until this was moved, the tap was never updated and nothing said so.
+A release published before the tap existed gets its formula by hand,
+`gh workflow run publish.yml -f tag=<tag>`,
+which renders the formula from the tag's own template
+and changes nothing when the tap holds it already.
 A release also carries a Debian package per architecture,
 and once the apt key is set the `apt-build` job rebuilds the apt repository from
 the newest ten releases of every channel (`packaging/apt/publish.sh`,
 one suite per channel) and `apt-deploy` puts it on the project's GitHub Pages,
-whose source must be set to GitHub Actions;
+whose source must be set to GitHub Actions,
+and whose `github-pages` environment must allow the tags `v*`:
+GitHub makes it allowing the default branch only,
+and the deploy runs for the release's tag;
 a box following a suite takes the release through `apt upgrade`.
 
 ## 7. Runner Constraints
@@ -194,7 +212,11 @@ a box following a suite takes the release through `apt upgrade`.
   on the first's connection from the same curl (`--next`):
   a second curl process started too late once.
   The server's answer to it is less work than the helper needs before the stop,
-  so the 409 comes first at any runner speed.
+  so the answer comes first at any runner speed.
+  It can meet the helper reading the request,
+  whose open handle refuses the request's rename on Windows for a few milliseconds:
+  the rename is retried (`internal/update`, `renameRetrying`),
+  and the answer is 409.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
 - The macOS job's update from the API installs the newest alpha release,

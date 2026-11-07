@@ -64,12 +64,17 @@ func (rt *runtime) writerOf(ctx context.Context) cubeio.Writer {
 	return w
 }
 
-// stepObserver writes the step rows of a Cube's queue.
+// stepObserver writes the step rows of a Cube's queue. The queue calls
+// it under its lock and from its Run (engine.Observer), so every call
+// only hands its write to the server's one ordered worker (s.steps),
+// which writes them in the order the queue reported them: a command's
+// row exists for its Started and Finished, and no radio command waits
+// on the store's one connection.
 type stepObserver struct {
 	s       *Server
 	mu      sync.Mutex
 	parents map[string]int64 // parent row id by uuid
-	steps   map[uint64]int64 // step row id by the queue's Seq
+	steps   map[uint64]int64 // step row id by the queue's Seq; only the worker uses it
 }
 
 func (s *Server) newObserver() engine.Observer {
@@ -100,7 +105,15 @@ func (o *stepObserver) parentOf(ctx context.Context, uuid string) int64 {
 	return c.ID
 }
 
-func (o *stepObserver) Enqueued(cmd engine.Command) {
+func (o *stepObserver) Enqueued(cmd engine.Command) { o.s.steps.do(func() { o.enqueued(cmd) }) }
+
+func (o *stepObserver) Started(cmd engine.Command) { o.s.steps.do(func() { o.started(cmd) }) }
+
+func (o *stepObserver) Finished(cmd engine.Command, res engine.Result) {
+	o.s.steps.do(func() { o.finished(cmd, res) })
+}
+
+func (o *stepObserver) enqueued(cmd engine.Command) {
 	ctx := context.Background()
 	parent := o.parentOf(ctx, cmd.ID)
 	if parent == 0 {
@@ -113,22 +126,18 @@ func (o *stepObserver) Enqueued(cmd engine.Command) {
 	case cmd.Target != 0:
 		target = "device:" + cmd.Target.String()
 	case cmd.RoomID != 0:
-		target = "room:" + itoa(int(cmd.RoomID))
+		target = "room:" + strconv.Itoa(int(cmd.RoomID))
 	}
 	step, err := o.s.opts.Store.AddStep(ctx, parent, store.Command{Target: target, Request: req})
 	if err != nil {
 		o.s.log.Error("commands: step not written", "command", cmd.ID, "error", err)
 		return
 	}
-	o.mu.Lock()
 	o.steps[cmd.Seq] = step.ID
-	o.mu.Unlock()
 }
 
-func (o *stepObserver) Started(cmd engine.Command) {
-	o.mu.Lock()
+func (o *stepObserver) started(cmd engine.Command) {
 	id, ok := o.steps[cmd.Seq]
-	o.mu.Unlock()
 	if !ok {
 		return
 	}
@@ -137,11 +146,9 @@ func (o *stepObserver) Started(cmd engine.Command) {
 	}
 }
 
-func (o *stepObserver) Finished(cmd engine.Command, res engine.Result) {
-	o.mu.Lock()
+func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 	id, ok := o.steps[cmd.Seq]
 	delete(o.steps, cmd.Seq)
-	o.mu.Unlock()
 	if !ok {
 		return
 	}
@@ -160,7 +167,52 @@ func (o *stepObserver) Finished(cmd engine.Command, res engine.Result) {
 	}
 }
 
-func itoa(n int) string { return strconv.Itoa(n) }
+// serialWorker runs functions one at a time in the order they were
+// handed to it, on a goroutine of its own that lives while there is
+// work; do never blocks.
+type serialWorker struct {
+	mu      sync.Mutex
+	jobs    []func()
+	running bool
+}
+
+// do hands f to the worker.
+func (w *serialWorker) do(f func()) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.jobs = append(w.jobs, f)
+	if !w.running {
+		w.running = true
+		go w.run()
+	}
+}
+
+func (w *serialWorker) run() {
+	for {
+		w.mu.Lock()
+		if len(w.jobs) == 0 {
+			w.running = false
+			w.mu.Unlock()
+			return
+		}
+		f := w.jobs[0]
+		w.jobs[0] = nil
+		w.jobs = w.jobs[1:]
+		w.mu.Unlock()
+		f()
+	}
+}
+
+// flush waits until everything handed to the worker before it ran, or
+// until timeout.
+func (w *serialWorker) flush(timeout time.Duration) {
+	done := make(chan struct{})
+	w.do(func() { close(done) })
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+}
 
 // fingerprint is what a retried request must repeat for its
 // Idempotency-Key: the method, the path with its query and the body.
@@ -202,10 +254,16 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 		case had.Hash != fp:
 			writeError(w, http.StatusUnprocessableEntity, "Idempotency-Key reused for another request")
 		default:
+			// A row that got no answer, dropped at a start of the server
+			// while its request ran, replays as 503 with why.
+			status := row.Status
+			if status == 0 {
+				status = http.StatusServiceUnavailable
+			}
 			w.Header().Set("Idempotent-Replayed", "true")
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(row.Status)
-			w.Write(row.Result)
+			w.WriteHeader(status)
+			w.Write(firstAnswer(row))
 		}
 		return true
 	}
@@ -217,20 +275,25 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 	return false
 }
 
+// laterRuns are the actions whose 202 is followed by a run that ends
+// the command (finishCommand); another 202, such as the update's, which
+// hands the work to the helper, is acknowledged with its answer.
+var laterRuns = map[string]bool{"restore.start": true}
+
 // endCommand sets the parent's final state from the answer: 2xx is
-// acknowledged, 202 sent (a run that reports later), 4xx and 503
-// dropped, the rest failed; the answer is its result.
+// acknowledged, 202 of a later run sent, 4xx and 503 dropped, the rest
+// failed; the answer, without its secrets, is its result.
 func (s *Server) endCommand(ctx context.Context, a *auditInfo, status int) {
 	state := store.StateFailed
 	switch {
-	case status == http.StatusAccepted:
+	case status == http.StatusAccepted && laterRuns[a.action]:
 		state = store.StateSent
 	case status < 300:
 		state = store.StateAcknowledged
 	case status < 500 || status == http.StatusServiceUnavailable:
 		state = store.StateDropped
 	}
-	result := a.w.answer.Bytes()
+	result := withoutSecrets(a.w.answer.Bytes())
 	if !json.Valid(result) {
 		result, _ = json.Marshal(map[string]any{"answer": strings.TrimSpace(string(result))})
 	}
@@ -239,9 +302,55 @@ func (s *Server) endCommand(ctx context.Context, a *auditInfo, status int) {
 	}
 }
 
+// withoutSecrets is an answer as a command row keeps it: an object
+// without the secretFields at its top level, so that a new API key is
+// shown once and its replay answers without it.
+func withoutSecrets(answer []byte) []byte {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(answer, &m) != nil {
+		return answer
+	}
+	found := false
+	for _, k := range secretFields {
+		if _, ok := m[k]; ok {
+			delete(m, k)
+			found = true
+		}
+	}
+	if !found {
+		return answer
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+// firstAnswer is the body a replay answers: what the first request
+// answered, which a run keeps under "answer" beside its outcome
+// (finishCommand), and which endCommand keeps as the text of "answer"
+// when it was not JSON.
+func firstAnswer(row store.Command) []byte {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(row.Result, &m) != nil || m["answer"] == nil {
+		return row.Result
+	}
+	var text string
+	if len(m) == 1 && json.Unmarshal(m["answer"], &text) == nil {
+		return []byte(text)
+	}
+	if row.Status == http.StatusAccepted {
+		return m["answer"]
+	}
+	return row.Result
+}
+
 // finishCommand ends a parent that was answered 202, from its run: the
-// restore's end.
-func (s *Server) finishCommand(uuid string, ok bool, result any) {
+// restore's end. The result is the run's outcome, with the 202's answer
+// under "answer" for a replay; the run may end before endCommand has
+// stored that answer, which a final row then no longer takes.
+func (s *Server) finishCommand(uuid string, ok bool, result map[string]any, answer any) {
 	st := s.opts.Store
 	if st == nil || uuid == "" {
 		return
@@ -251,11 +360,16 @@ func (s *Server) finishCommand(uuid string, ok bool, result any) {
 	if err != nil || !found {
 		return
 	}
+	s.steps.flush(2 * time.Second) // the run's steps before its end
 	state := store.StateAcknowledged
 	if !ok {
 		state = store.StateFailed
 	}
-	raw, _ := json.Marshal(result)
+	outcome := map[string]any{"answer": answer}
+	for k, v := range result {
+		outcome[k] = v
+	}
+	raw, _ := json.Marshal(outcome)
 	if err := st.SetCommandState(ctx, c.ID, state, -1, raw); err != nil {
 		s.log.Error("commands: run not recorded", "command", uuid, "error", err)
 	}

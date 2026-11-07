@@ -92,6 +92,16 @@ function isoOf(local) {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// sameMinute reports whether two API times, or none, are the same end
+// to the minute, all that the form's datetime-local holds: the server's
+// time carries seconds and an offset.
+function sameMinute(a, b) {
+  const x = Date.parse(a || "");
+  const y = Date.parse(b || "");
+  if (isNaN(x) || isNaN(y)) return isNaN(x) && isNaN(y);
+  return Math.floor(x / 60000) === Math.floor(y / 60000);
+}
+
 function userBadges(u) {
   const out = [badgeEl(roleLabel(u.role), "mode")];
   if (u.disabled) out.push(badgeEl(t("users.state.disabled"), "bad"));
@@ -104,15 +114,10 @@ function userBadges(u) {
 
 // removeUser asks in the panel, in place of its actions.
 function removeUser(u, actions) {
-  const box = confirmBox(t("users.removeConfirm", { name: u.name }), { yes: t("users.remove"), no: t("action.keep") }, () => {
+  confirmInPlace(actions, t("users.removeConfirm", { name: u.name }), { yes: t("users.remove"), no: t("action.keep") }, () => {
     usersUI.open.delete(u.name);
-    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name)), t("users.removed", { name: u.name }), u.name);
-  }, () => {
-    box.replaceWith(actions);
-    actions.querySelector(".remove-user").focus();
-  });
-  actions.replaceWith(box);
-  box.focusFirst();
+    return userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name)), t("users.removed", { name: u.name }), u.name);
+  }, ".remove-user");
 }
 
 // tokenRow is one session or key of a user, from its template, with
@@ -138,8 +143,8 @@ function tokenRow(u, tk) {
   return li;
 }
 
-// fillTokens loads a user's tokens into an open panel and wires the new
-// key.
+// fillTokens loads a user's tokens into an open panel and shows the key
+// just created.
 async function fillTokens(u, box) {
   const ul = box.querySelector(".user-tokens");
   clear(ul);
@@ -159,6 +164,10 @@ async function fillTokens(u, box) {
     shown.querySelector(".user-key").textContent = key;
     delete usersUI.keys[u.name];
   }
+}
+
+// wireNewKey wires a panel's New API key once, when the panel is built.
+function wireNewKey(u, box) {
   const input = box.querySelector("input[name=label]");
   input.id = "user-key-label-" + u.name;
   input.previousElementSibling.htmlFor = input.id;
@@ -176,11 +185,17 @@ async function fillTokens(u, box) {
 }
 
 // userPanel is one user, from its template (tpl-user-panel): the
-// summary with the name and the badges, the form, the tokens.
+// summary with the name and the badges, the form, the tokens. A panel
+// built open loads its tokens at once; the toggle event that setting
+// open queues finds the name in usersUI.open and loads nothing more, so
+// that the tokens load once and the new key, shown once, is not hidden
+// again by a second load.
 function userPanel(u) {
   const d = fromTemplate("tpl-user-panel");
   d.dataset.name = u.name;
   d.open = usersUI.open.has(u.name);
+  const tokensBox = d.querySelector(".user-tokens-box");
+  wireNewKey(u, tokensBox);
   const sum = d.querySelector("summary");
   sum.querySelector(".panel-name").textContent = u.display_name || u.name;
   sum.querySelector(".mono").textContent = u.name;
@@ -189,8 +204,9 @@ function userPanel(u) {
   const self = isSelf(u.name);
   d.addEventListener("toggle", () => {
     if (d.open) {
+      if (usersUI.open.has(u.name)) return; // built open, loaded below
       usersUI.open.add(u.name);
-      fillTokens(u, d.querySelector(".user-tokens-box"));
+      fillTokens(u, tokensBox);
     } else {
       usersUI.open.delete(u.name);
     }
@@ -222,7 +238,7 @@ function userPanel(u) {
       if (field("role").value !== u.role) body.role = field("role").value;
       if (field("disabled").checked !== !!u.disabled) body.disabled = field("disabled").checked;
       const end = isoOf(field("expires").value);
-      if ((end || null) !== (u.expires_at || null) && !(end === null && !u.expires_at)) body.expires_at = end;
+      if (!sameMinute(end, u.expires_at)) body.expires_at = end;
     }
     const password = field("password").value;
     if (password) {
@@ -237,7 +253,7 @@ function userPanel(u) {
       if (ok && self && body.password) loadMe();
     });
   });
-  if (d.open) fillTokens(u, d.querySelector(".user-tokens-box"));
+  if (d.open) fillTokens(u, tokensBox);
   return d;
 }
 

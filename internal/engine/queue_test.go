@@ -314,3 +314,54 @@ func TestQueueObserver(t *testing.T) {
 		}
 	}
 }
+
+// gatedRecorder holds the Enqueued call of one command until released.
+type gatedRecorder struct {
+	recorder
+	gate    string
+	release chan struct{}
+}
+
+func (r *gatedRecorder) Enqueued(c Command) {
+	if c.ID == r.gate {
+		<-r.release
+	}
+	r.recorder.Enqueued(c)
+}
+
+// The observer hears of a command before the queue can start it: a
+// command enqueued while another runs does not start while its Enqueued
+// call is still going on, so that the step it records is there for
+// Started and Finished.
+func TestQueueObserverHearsEnqueuedFirst(t *testing.T) {
+	rec := &gatedRecorder{gate: "b", release: make(chan struct{})}
+	_, q, _ := setup(t, Options{Gap: 20 * time.Millisecond, Observer: rec})
+	line := cube.Message{Type: 's', Data: "AARAAAAAFRS2Bms="}
+	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+	first := q.Enqueue(Command{ID: "a", Lines: []cube.Message{line}})
+	second := make(chan *Ticket, 1)
+	go func() { second <- q.Enqueue(Command{ID: "b", Lines: []cube.Message{line}}) }()
+	// Long enough for a and its gap: a queue that can see b takes it now.
+	// (The observer must not block; this one does, to show the order.)
+	time.Sleep(300 * time.Millisecond)
+	close(rec.release)
+	if res := first.Wait(ctx); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	if res := (<-second).Wait(ctx); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	got := rec.list()
+	at := func(s string) int {
+		for i, c := range got {
+			if c == s {
+				return i
+			}
+		}
+		return -1
+	}
+	if e, s := at("enqueued:b"), at("started:b"); e < 0 || s < 0 || s < e {
+		t.Fatalf("calls %v: b started before its Enqueued returned", got)
+	}
+}

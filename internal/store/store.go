@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,6 +79,10 @@ type Store struct {
 
 	nodeID string
 	key    nodeKey
+
+	// commandsPruned is when a write last pruned the commands, in Unix
+	// nanoseconds of the store's clock; 0 before the first.
+	commandsPruned atomic.Int64
 
 	// seenWritten holds the serials whose last_seen this run has
 	// written, see NoteDiscovered.

@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 // The TLS of the installed service: -tls-cert and -tls-key are copied
@@ -18,13 +21,14 @@ import (
 // as they keep -listen. The update helper's health URL follows: https://
 // where the settings say the server has TLS.
 const (
-	tlsVar      = "MASSIMO_TLS"
-	tlsCertVar  = "MASSIMO_TLS_CERT"
-	tlsKeyVar   = "MASSIMO_TLS_KEY"
-	tlsNamesVar = "MASSIMO_TLS_NAMES"
-	acmeEmail   = "MASSIMO_ACME_EMAIL"
-	tlsHTTPVar  = "MASSIMO_TLS_HTTP"
-	acmeDNSHook = "MASSIMO_ACME_DNS_HOOK"
+	// The variables serve reads, named once in internal/env.
+	tlsVar      = env.TLS
+	tlsCertVar  = env.TLSCert
+	tlsKeyVar   = env.TLSKey
+	tlsNamesVar = env.TLSNames
+	acmeEmail   = env.ACMEEmail
+	tlsHTTPVar  = env.TLSHTTP
+	acmeDNSHook = env.ACMEDNSHook
 	// The owner's files beside the settings.
 	certName = "cert.pem"
 	keyName  = "key.pem"
@@ -94,10 +98,15 @@ func (o Options) checkTLS() error {
 	}
 }
 
+// modeVars are the TLS variables an install's -tls sets; it removes the
+// others, so that a variable of the mode before (-tls-http, a DNS hook,
+// which serve refuses outside acme) does not outlive a switch.
+var modeVars = []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, acmeEmail, tlsHTTPVar, acmeDNSHook}
+
 // tlsFiles installs the TLS options: the files copied to certDst and
 // keyDst (system paths; owned by the service user where chown is set,
 // else the directory's rights hold), and the variables set in the
-// settings file env.
+// settings file env, those of modeVars the mode does not set removed.
 func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 	switch in.tlsMode() {
 	case "":
@@ -147,18 +156,27 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 	return in.setSettings(env, chown, [][2]string{{tlsVar, "files"}, {tlsCertVar, certDst}, {tlsKeyVar, keyDst}})
 }
 
-// setSettings sets variables in the settings file env (a system path),
-// keeping its mode and, where chown is set, its owner.
+// setSettings sets the TLS variables of a mode in the settings file env
+// (a system path), removing the other modeVars, and keeps the file's
+// mode and, where chown is set, its owner.
 func (in *installer) setSettings(env string, chown bool, vars [][2]string) error {
 	var names []string
+	set := map[string]bool{}
 	for _, v := range vars {
 		names = append(names, v[0]+"="+v[1])
+		set[v[0]] = true
+	}
+	var drop []string
+	for _, k := range modeVars {
+		if !set[k] {
+			drop = append(drop, k)
+		}
 	}
 	in.say("set %s in %s", strings.Join(names, " "), env)
 	if in.DryRun {
 		return nil
 	}
-	if err := setEnvLines(in.path(env), vars); err != nil {
+	if err := setEnvLines(in.path(env), vars, drop); err != nil {
 		return err
 	}
 	if chown {
@@ -169,8 +187,9 @@ func (in *installer) setSettings(env string, chown bool, vars [][2]string) error
 
 // setEnvLines sets KEY=VALUE lines in a settings file, replacing the
 // line of a variable that is there (an "export " prefix too) and
-// appending the others, written atomically with the file's mode.
-func setEnvLines(path string, vars [][2]string) error {
+// appending the others, removes the lines of the variables in drop, and
+// writes the file atomically with its mode.
+func setEnvLines(path string, vars [][2]string, drop []string) error {
 	mode := os.FileMode(0o600)
 	b, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -182,6 +201,17 @@ func setEnvLines(path string, vars [][2]string) error {
 	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	if len(b) == 0 {
 		lines = nil
+	}
+	if len(drop) > 0 {
+		kept := lines[:0]
+		for _, line := range lines {
+			k, _, ok := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "export "), "=")
+			if ok && slices.Contains(drop, strings.TrimSpace(k)) {
+				continue
+			}
+			kept = append(kept, line)
+		}
+		lines = kept
 	}
 	for _, v := range vars {
 		found := false

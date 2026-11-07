@@ -97,7 +97,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 // or by address while the serial is not known; a key that is taken
 // already is refused, so that no runtime runs unreferenced.
 func (s *Server) register(rt *runtime) error {
-	key := strings.ToLower(rt.serial)
+	key := strings.ToLower(rt.cubeSerial())
 	if key == "" {
 		key = strings.ToLower(rt.config().Addr)
 	}
@@ -218,7 +218,7 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 	}
 	ln, err := net.Listen("tcp", pl.Addr)
 	if err != nil {
-		s.log.Error("proxy listener not started", "addr", pl.Addr, "serial", rt.serial, "error", err)
+		s.log.Error("proxy listener not started", "addr", pl.Addr, "serial", rt.cubeSerial(), "error", err)
 		return false
 	}
 	parent := s.track()
@@ -243,7 +243,7 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 	s.proxyMu.Lock()
 	s.proxies = append(s.proxies, pr)
 	s.proxyMu.Unlock()
-	s.log.Info("cube proxy listening", "addr", pl.Addr, "serial", rt.serial, "discovery", pl.Discovery && r != nil, "discovery_serial", pl.DiscoverySerial)
+	s.log.Info("cube proxy listening", "addr", pl.Addr, "serial", rt.cubeSerial(), "discovery", pl.Discovery && r != nil, "discovery_serial", pl.DiscoverySerial)
 	go func() {
 		defer s.wg.Done()
 		defer close(pr.done)
@@ -300,7 +300,7 @@ func (s *Server) stopProxies(rt *runtime) {
 			r.Remove(pr.p)
 		}
 		<-pr.done
-		s.log.Info("cube proxy stopped", "addr", pr.pl.Addr, "serial", rt.serial)
+		s.log.Info("cube proxy stopped", "addr", pr.pl.Addr, "serial", rt.cubeSerial())
 	}
 }
 
@@ -335,14 +335,14 @@ func (s *Server) startCubeProxy(rt *runtime) {
 		others := len(s.proxies)
 		s.proxyMu.Unlock()
 		if others > 0 || len(s.runtimes()) != 1 {
-			s.log.Warn("cube served without a proxy: other cubes are served and this one has no proxy address", "serial", rt.serial)
+			s.log.Warn("cube served without a proxy: other cubes are served and this one has no proxy address", "serial", rt.cubeSerial())
 			return
 		}
 		addr = ":" + strconv.Itoa(cubelan.CubePort)
 	}
 	addr = withCubePort(addr)
 	_, port, _ := net.SplitHostPort(addr)
-	pl := ProxyListener{Serial: rt.serial, Addr: addr, Discovery: port == strconv.Itoa(cubelan.CubePort), DiscoverySerial: cfg.ProxySerial}
+	pl := ProxyListener{Serial: rt.cubeSerial(), Addr: addr, Discovery: port == strconv.Itoa(cubelan.CubePort), DiscoverySerial: cfg.ProxySerial}
 	s.startProxy(pl)
 }
 

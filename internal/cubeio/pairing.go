@@ -34,10 +34,15 @@ func (w Writer) StartPairing(ctx context.Context, timeout time.Duration) (<-chan
 		return nil, nil, err
 	}
 	lines, stop := w.Client.WatchInclusion()
-	res := w.Do(ctx, engine.Command{Key: "pairing", Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdInclusion(timeout)}})
+	res, withdrawn := w.run(ctx, engine.Command{Key: "pairing", Priority: engine.PriorityHigh, Lines: []cube.Message{cube.CmdInclusion(timeout)}})
 	if res.Err != nil {
 		stop()
-		w.Client.EndInclusion()
+		// Ended in the client only where the n: does not reach the Cube:
+		// taken out of the queue, or failed. One that was sent by the time
+		// the caller gave up keeps the inclusion, which its timer ends.
+		if withdrawn || ctx.Err() == nil {
+			w.Client.EndInclusion()
+		}
 		return nil, nil, res.Err
 	}
 	return lines, stop, nil
@@ -160,7 +165,7 @@ type CopyStep struct {
 // the copies of two devices put into one room do not supersede each
 // other.
 func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8, skip view.Hidden) ([]CopyStep, error) {
-	if !isThermostat(typ) {
+	if !typ.IsThermostat() {
 		return nil, nil
 	}
 	mode, err := cube.CmdSetTemperature(cube.Target{RFAddress: rf}, 0, cube.ModeAuto, cube.Until{})
