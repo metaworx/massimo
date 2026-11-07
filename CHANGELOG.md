@@ -8,6 +8,13 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Fixed
+
+- The backup list no longer shows a pending change next to the backup
+  that has just covered it (`docs/api-v1.md`, "GET …/backups").
+
+## [0.11.0-alpha.1] - 2026-11-08
+
 ### Added
 
 - The web UI's log has a choice of how far back: the last 20 events by
@@ -22,9 +29,9 @@ the next minor, a fix counts the suffix up.
   restore, and `…/backups` lists, downloads, compares and deletes the
   backups, which a restore takes by id (`docs/api-v1.md`, "Backups").
 
-- Settings → Backup and restore in the web UI: the download, the
+- System settings → Backup and restore in the web UI: the download, the
   server's backups with compare, restore and delete, and a restore from
-  a file that shows its plan first (`docs/ui.md`, "Settings").
+  a file that shows its plan first (`docs/ui.md`, "System settings").
 
 - The web UI warns under its header while the server is open, and says
   what closes it (`docs/ui.md`).
@@ -44,8 +51,8 @@ the next minor, a fix counts the suffix up.
   for the API, stopping and exiting 75 for its service manager; `massimo
   restart` restarts the installed server (`README.md`, "Server").
 
-- The web UI's header has a 👤 menu: who is signed in, My settings and
-  Sign out, which leave the settings page (`docs/ui.md`, "Header").
+- The web UI's header has a 👤 menu: who is signed in, My profile, My
+  settings and Sign out (`docs/ui.md`, "Header").
 
 - The web UI's settings are three pages: My profile with the own name,
   password and keys, My settings, and System settings behind ⚙
@@ -121,11 +128,11 @@ the next minor, a fix counts the suffix up.
 
 - The web UI keeps a button that sends off, with a spinner, until the
   answer, and a Send off while nothing changed, so a second click sends
-  nothing (`docs/ui.md`, "Rooms", "Settings").
+  nothing (`docs/ui.md`, "Rooms", "How the page is built").
 
 - The web UI checks a new user's name while it is typed, and the users
   and roles routes refuse without the store's `store: ` prefix
-  (`docs/ui.md`, "Settings").
+  (`docs/ui.md`, "System settings").
 
 - A request still being answered when `serve` stops is finished, and
   its audit row written, before the store closes (`cmd/massimo`).
@@ -137,9 +144,6 @@ the next minor, a fix counts the suffix up.
 - A lost Cube is logged and stored as `disconnected` once, not at
   every retry, and its return logged with how long it was down
   (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
-
-- The backup list no longer shows a pending change next to the backup that
-  has just covered it (`docs/api-v1.md`, "GET …/backups").
 
 ### Security
 
