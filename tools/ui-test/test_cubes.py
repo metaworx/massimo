@@ -129,3 +129,23 @@ def test_redraw_of_an_open_panel_loads_nothing(page, case):
         page.unroute("**/api/v1/cubes/KEQ0537249/pairing")
     page.locator("#view-tiles").click()
 
+
+def test_hide_and_show_keep_what_is_typed(page, case):
+    """Hide and Show again change the list of hidden devices in place:
+    the name and the proxy address typed in the same form stay. Nothing
+    is saved."""
+    panel, form = open_panel(page)
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    form.locator("input[name=name]").fill("Typed, not saved")
+    form.locator("input[name=proxy]").fill("127.0.0.1:62999")
+    form.locator("input[name=hide]").fill(rf)
+    form.locator(".cube-hide-add button").click()
+    assert form.locator(".cube-hidden-list li").count() == 1 and rf in form.locator(".cube-hidden-list").inner_text(), "the device listed to hide"
+    assert form.locator("input[name=name]").input_value() == "Typed, not saved", "the name typed stays after Hide"
+    assert form.locator("input[name=proxy]").input_value() == "127.0.0.1:62999", "the proxy typed stays after Hide"
+    form.locator(".cube-hidden-list button").first.click()
+    assert wait_until(page, "!document.querySelector(%r)" % (PANEL + " .cube-hidden-list button"), 5), "Show again takes it off the list"
+    assert form.locator("input[name=name]").input_value() == "Typed, not saved", "the name typed stays after Show again"
+    assert form.locator("input[name=proxy]").input_value() == "127.0.0.1:62999", "the proxy typed stays after Show again"
+    assert page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0537249').name") == "Fake Cube", "nothing saved"
+    page.locator("#view-tiles").click()

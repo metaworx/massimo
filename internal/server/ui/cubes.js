@@ -106,34 +106,28 @@ function removeCube(serial, actions) {
 }
 
 // fillHiddenEditor fills the template's list of hidden devices (box,
-// .cube-hidden) with Show again per entry, and wires the field that
-// offers the Cube's devices to hide another; the changes are sent with
-// Save.
+// .cube-hidden) and wires the field that offers the Cube's devices to
+// hide another; the changes are sent with Save. Hide and Show again
+// change the list in place (fillHiddenList), so that what is typed in
+// the rest of the form stays.
 function fillHiddenEditor(c, box) {
-  const list = cubesUI.edits[c.serial] || (cubesUI.edits[c.serial] = [...(c.hidden || [])]);
-  const ul = box.querySelector(".cube-hidden-list");
-  if (!list.length) ul.appendChild(textEl("li", t("cubes.hiddenNone"), "muted small"));
-  for (const rf of list) {
-    const show = button(t("cubes.unhide"), { cls: "subtle", aria: t("cubes.unhideLabel", { device: deviceLabel(rf) }) }, () => {
-      cubesUI.edits[c.serial] = list.filter((x) => x !== rf);
-      renderCubes();
-    });
-    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
-  }
+  if (!cubesUI.edits[c.serial]) cubesUI.edits[c.serial] = [...(c.hidden || [])];
   const input = box.querySelector("input[name=hide]");
   const dl = box.querySelector("datalist");
   dl.id = "cube-devices-" + c.serial;
-  fillDatalist(dl, c.serial, list);
   input.setAttribute("list", dl.id);
+  fillHiddenList(c.serial, box, input);
   const hide = () => {
     const rf = input.value.trim().toLowerCase();
     if (!/^[0-9a-f]{6}$/.test(rf)) {
       cubesMsg(t("cubes.hideBad", { value: input.value.trim() }), false);
       return;
     }
+    const list = cubesUI.edits[c.serial];
     if (!list.includes(rf)) cubesUI.edits[c.serial] = [...list, rf];
     cubesMsg("");
-    renderCubes();
+    input.value = "";
+    fillHiddenList(c.serial, box, input);
   };
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") {
@@ -142,6 +136,25 @@ function fillHiddenEditor(c, box) {
     }
   });
   box.querySelector(".cube-hide-add button").addEventListener("click", hide);
+}
+
+// fillHiddenList draws the list being edited, with Show again per entry,
+// and the device choice of the hide field; Show again hands the focus
+// to that field, since its own button goes.
+function fillHiddenList(serial, box, input) {
+  const list = cubesUI.edits[serial];
+  const ul = box.querySelector(".cube-hidden-list");
+  clear(ul);
+  if (!list.length) ul.appendChild(textEl("li", t("cubes.hiddenNone"), "muted small"));
+  for (const rf of list) {
+    const show = button(t("cubes.unhide"), { cls: "subtle", aria: t("cubes.unhideLabel", { device: deviceLabel(rf) }) }, () => {
+      cubesUI.edits[serial] = cubesUI.edits[serial].filter((x) => x !== rf);
+      fillHiddenList(serial, box, input);
+      input.focus();
+    });
+    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
+  }
+  fillDatalist(box.querySelector("datalist"), serial, list);
 }
 
 // fillDatalist offers the Cube's visible devices that are not hidden

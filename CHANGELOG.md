@@ -62,6 +62,8 @@ the next minor, a fix counts the suffix up.
 - A redraw of Settings → Cubes no longer reloads an open Cube's pairing,
   which took the focus out of the pairing form being typed in.
 
+- Hide and Show again in a Cube's panel keep what is typed in its form.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

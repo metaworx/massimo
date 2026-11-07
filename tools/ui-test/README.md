@@ -123,7 +123,8 @@ what a test stores in the browser goes with its context.
   and Keep takes the question back;
   a redraw of the open panel asks for nothing again,
   so the focus stays in the pairing form being typed in
-  (the test holds a request for the pairing until it has typed).
+  (the test holds a request for the pairing until it has typed);
+  Hide and Show again keep the name and the proxy address typed in the form.
 - `test_settings.py`:
   the settings page opens;
   with the Cube's panel open,
