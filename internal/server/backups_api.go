@@ -94,7 +94,17 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	set, setErr := st.BackupSettings(r.Context())
+	// The rows and the state in one step against takeBackup, which
+	// stores a row and makes the Cube clean under the same lock: a
+	// backup is never listed beside the change it covered.
+	var changed, due time.Time
+	rt.bk.rows.RLock()
 	list, err := st.Backups(r.Context(), cubeID)
+	if err == nil && setErr == nil {
+		changed, due = rt.bk.state(set, s.backupMinute())
+	}
+	rt.bk.rows.RUnlock()
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -102,10 +112,8 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) error {
 	for _, b := range list {
 		out.Backups = append(out.Backups, viewOfBackup(b))
 	}
-	if set, err := st.BackupSettings(r.Context()); err == nil {
-		if changed, due := rt.bk.state(set, s.backupMinute()); !changed.IsZero() {
-			out.Changed, out.Due = &changed, &due
-		}
+	if !changed.IsZero() {
+		out.Changed, out.Due = &changed, &due
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil

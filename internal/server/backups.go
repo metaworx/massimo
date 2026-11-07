@@ -40,6 +40,12 @@ const backupRetry = 10
 type backupWatch struct {
 	touched atomic.Bool // a connection or a configuration event since the last look
 
+	// rows makes a backup's row and the clean state one step for the
+	// list: takeBackup holds it to store the row and call stored(),
+	// listBackups shares it to read the rows and state(). Taken before
+	// mu, never while mu is held.
+	rows sync.RWMutex
+
 	mu         sync.Mutex
 	known      bool      // ref is read: the newest backup's hash, or none
 	none       bool      // the Cube has no backup
@@ -222,13 +228,18 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 	if err != nil {
 		return store.Backup{}, nil, fail(http.StatusInternalServerError, "backup: %v", err)
 	}
+	hash := backup.ConfigHash(f)
 	// The row's time is the store's, to the millisecond, so that backups
 	// of one second keep their order; the file's is to the second.
+	rt.bk.rows.Lock()
 	b, err := st.AddBackup(ctx, store.Backup{CubeID: cubeID, Reason: reason, Format: "json", Tool: f.Tool, UserID: userID, Note: note}, data)
+	if err == nil {
+		rt.bk.stored(hash)
+	}
+	rt.bk.rows.Unlock()
 	if err != nil {
 		return store.Backup{}, nil, fail(http.StatusInternalServerError, "%v", err)
 	}
-	rt.bk.stored(backup.ConfigHash(f))
 	s.log.Info("backup taken", "cube", rt.serial, "id", b.ID, "reason", reason, "bytes", b.Size)
 	if _, err := st.PruneBackups(ctx, time.Now()); err != nil {
 		s.log.Warn("backups not pruned", "error", err)

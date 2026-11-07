@@ -134,6 +134,9 @@ the next minor, a fix counts the suffix up.
   every retry, and its return logged with how long it was down
   (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
 
+- The backup list no longer shows a pending change next to the backup that
+  has just covered it (`docs/api-v1.md`, "GET …/backups").
+
 ### Security
 
 - A server that asks for no key answers only its local network, a
