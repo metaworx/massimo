@@ -1,4 +1,4 @@
-# AP LogView v1.0: Log view newest first, with a range
+# AP LogView v1.1: Log view newest first, with a range
 
 ## TL;DR
 
@@ -40,8 +40,9 @@ passed on by a teammate session on 2026-11-07
 Settled as recommended at the TL;DR gates of 2026-11-07
 (`PLAN++ SendButtons` took the recommendations it did not name):
 
-- **D8-A.** A plan of its own, run after AP Navigation,
-  its branch started from that plan's, with its own pull request.
+- **D8-A.** A plan of its own, run after the header and settings work,
+  its branch started from `claude/navigation` (pull request 97),
+  with its own pull request.
 - **D9-A.** A new `since` parameter: one query per page whatever the range,
   rather than paging back with `before` until the bound,
   which for "this month" on a busy Cube is many pages of 1000 on a Pi 1.
@@ -69,10 +70,19 @@ Settled as recommended at the TL;DR gates of 2026-11-07
 
 ## Implementation Plan
 
-The gate of every block as AP SendButtons states it.
-The branch starts from AP Navigation's and merges `origin/main`
-before its pull request.
-Each block is one functional commit citing `AP LogView v1.0, Block <n>`,
+Every block ends with the contract's test gate for what it touched:
+`MASSIMO_ENV_FILE=/dev/null go test ./...`
+(`-race` for `internal/server` and `internal/store`),
+`make cross`, `make ui-test` at 1100 and 390 px in English and German
+(from a worktree: `UI_TEST_PYTHON` to the main venv, free `UI_TEST_*_PORT`s),
+`gofmt -l .` empty, `go vet ./...` for linux, windows and darwin,
+and `GUIDELINES/shared/tools/changelog.sh check`.
+Nothing reaches a Cube: the tests use the fake Cube with the recorded greeting.
+A held route (`page.route` collecting the route, `route.continue_()` later)
+stands for a slow server in the tests.
+The branch starts from `claude/navigation` (pull request 97)
+and merges `origin/main` before its pull request.
+Each block is one functional commit citing `AP LogView v1.1, Block <n>`,
 with its CHANGELOG bullet; `docs/ui.md` "Log" moves with the view.
 
 ### Block 1: LogSince
@@ -129,7 +139,7 @@ Block 1, for the form the others follow:
 ```text
 feat(api): Take a lower time bound on the Cube's log
 
-GET /api/v1/cubes/{sn}/log takes since, an RFC 3339 time, for the stored log and the in-memory ring alike, so that a view of the last hour is one query (AP LogView v1.0, Block 1).
+GET /api/v1/cubes/{sn}/log takes since, an RFC 3339 time, for the stored log and the in-memory ring alike, so that a view of the last hour is one query (AP LogView v1.1, Block 1).
 
 Key changes:
 - internal/store/events.go: EventQuery.Since, bound by id on the index the before bound uses.
@@ -143,3 +153,6 @@ Assisted-by: claude-code:claude-opus-5-5
 
 - v1.0 (2026-11-07): The first revision, from the TL;DR gates of 2026-11-07:
   D8-A, D9-A, D10-A, D11-A.
+- v1.1 (2026-11-07): The block gate stated in the Implementation Plan,
+  folding in NOTE LogView v1.0: block gate stated;
+  the branch's start named, no longer cited from AP Navigation, which retires.
