@@ -33,6 +33,10 @@ the next minor, a fix counts the suffix up.
 
 ### Security
 
+- A server that asks for no key answers only its local network, a
+  reverse proxy's clients only with `-trusted-proxies`
+  (`docs/api-v1.md`, "Authentication").
+
 - The server refuses a write that another site's page sent, which an
   open server served: such a page could create the first owner
   (`docs/api-v1.md`, "Authentication").
