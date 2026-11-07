@@ -78,7 +78,8 @@ the web UI in any current browser, on a phone or a desktop.
   the design for updates from the web UI on Windows: the options,
   the recommendation, the changes per file, the CI and real-PC tests
 - [docs/handover-session.md](docs/handover-session.md):
-  where the last session stopped, open feedback, next steps
+  the context a session needs: how the project moves, where things run,
+  the conventions, the checkout
 - [docs/review-2026-11-05.md](docs/review-2026-11-05.md):
   code review with findings, extraction proposals and the coding standard
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
