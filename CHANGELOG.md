@@ -64,6 +64,9 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The web UI's log reads newest first, new events coming in on top and
+  Older events at the bottom (`docs/ui.md`, "Log").
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).

@@ -35,7 +35,7 @@ def test_log_changes(page, case):
         kind: "state", device: d.rf_address, state: d, time: new Date().toISOString(),
         changes: { window_open: { from: false, to: true }, setpoint: { from: 18, to: 5 } } }) }));
     }""")
-    line = page.locator(".log-line.kind-state").last
+    line = page.locator(".log-line.kind-state").first
     assert CHANGES[case.lang] in line.inner_text(), "the log says what changed"
     show_view(page, "tiles")
 
@@ -78,9 +78,10 @@ def test_log_filters(page, case):
 
 
 def test_log_older(page, case):
-    """Older puts the page before the oldest line above the lines, the
-    view staying where it was, until a short page ends the paging; the
-    server's answers are stubbed: a full page of 200, then two events."""
+    """Older, at the bottom, puts the page before the oldest line under
+    the lines, the view staying where it was, until a short page ends the
+    paging; the server's answers are stubbed: a full page of 200, then two
+    events."""
     now = time.time()
 
     def answer(route):
@@ -101,11 +102,17 @@ def test_log_older(page, case):
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 200", 5), "a page of 200"
         older = page.locator("#log-older")
         assert older.is_enabled() and older.inner_text() == OLDER[case.lang], "Older offered"
-        page.evaluate("document.getElementById('log-lines').scrollTop = 0")
+        box = "document.getElementById('log-lines')"
+        assert page.evaluate("document.getElementById('log-lines').compareDocumentPosition(document.getElementById('log-older'))"
+                             " & Node.DOCUMENT_POSITION_FOLLOWING"), "Older is under the lines"
+        page.evaluate(box + ".scrollTop = 120")
+        top = page.evaluate(box + ".scrollTop")
         older.click()
-        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 202", 5), "two older events above"
-        assert page.evaluate("logState.lines[0].id === 1 && logState.lines[1].id === 2 && logState.lines[2].id === 201"), "the oldest first"
-        assert page.evaluate("document.getElementById('log-lines').scrollTop") > 0, "the view stays where it was"
+        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 202", 5), "two older events"
+        assert page.evaluate("logState.lines[0].id === 1 && logState.lines[1].id === 2 && logState.lines[2].id === 201"), "kept oldest first"
+        assert page.evaluate("[...document.querySelectorAll('#log-lines .kind-hello')].slice(-2).map((l) => l.querySelector('.log-time').textContent)") \
+            == page.evaluate("[logState.lines[1], logState.lines[0]].map((l) => fmtLogTime(l.time))"), "drawn at the bottom"
+        assert page.evaluate(box + ".scrollTop") == top, "the view stays where it was"
         assert wait_until(page, "document.getElementById('log-older').disabled", 5), "a short page ends the paging"
         assert older.inner_text() == NO_OLDER[case.lang], "nothing older"
     finally:
@@ -253,4 +260,41 @@ def test_log_clear_sets_the_filter_back(page, case):
         and page.locator("#log-device").input_value() == "", "the text, the kind and the device back to all"
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= %d" % before, 5), "the lines back"
     assert clear.is_disabled(), "Clear is off again"
+    show_view(page, "tiles")
+
+
+def test_log_reads_newest_first(page, case):
+    """The newest line is at the top; a live event comes in on top, and a
+    view scrolled down keeps the lines it shows where they are."""
+    now = time.time()
+
+    def answer(route):
+        evs = [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in range(1, 61)]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
+
+    pattern = re.compile(r"/api/v1/cubes/[^/]+/log\?")
+    page.route(pattern, answer)
+    try:
+        show_view(page, "log")
+        assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 60", 5), "the page is in"
+    finally:
+        page.unroute(pattern)
+    times = page.evaluate("[...document.querySelectorAll('#log-lines .log-line')].map((l) => l.querySelector('.log-time').textContent)")
+    assert times == sorted(times, reverse=True), "newest first"
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    live = """(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+      kind: "config", device: rf, time: new Date().toISOString() }) }))"""
+    page.wait_for_timeout(1600)  # after the stream's first burst, which the log leaves out
+    page.evaluate(live, rf)
+    assert wait_until(page, "document.querySelector('#log-lines .log-line').classList.contains('kind-config')", 5), "a live event on top"
+    box = "document.getElementById('log-lines')"
+    page.evaluate(box + ".scrollTop = 200")
+    page.evaluate(box + ".dispatchEvent(new Event('scroll'))")
+    shown = page.evaluate("(() => { const b = document.getElementById('log-lines'); const r = b.getBoundingClientRect(); "
+                          "return document.elementFromPoint(r.left + 40, r.top + 20).closest('.log-line').textContent; })()")
+    page.evaluate(live, rf)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .kind-config').length === 2", 5), "the second live event"
+    still = page.evaluate("(() => { const b = document.getElementById('log-lines'); const r = b.getBoundingClientRect(); "
+                          "return document.elementFromPoint(r.left + 40, r.top + 20).closest('.log-line').textContent; })()")
+    assert still == shown, "a view scrolled down keeps its place"
     show_view(page, "tiles")

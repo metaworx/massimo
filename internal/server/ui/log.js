@@ -2,8 +2,9 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, log view: the selected Cube's events from
-// GET …/log, a page at a time with "Older" back through the server's
-// log, then the live events of the stream, one line each, with a text
+// GET …/log, newest first, a page at a time with "Older" at the bottom
+// back through the server's log, the live events of the stream coming in
+// at the top, one line each, with a text
 // filter, a choice of kind and of device, and Clear, which sets them back.
 // Uses the state, api and helpers of app.js and tiles.js.
 "use strict";
@@ -21,7 +22,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
 
 const logState = {
   open: false,
-  lines: [], // {id, time, at, kind, device, text}
+  lines: [], // {id, time, at, kind, device, text}, oldest first; drawn newest first
   filter: "",
   kind: "", // the kind chosen, "" for all
   device: "", // the radio address chosen, "" for all
@@ -30,7 +31,7 @@ const logState = {
   loading: false, // a page is on its way
   gen: 0, // raised by a new log, Clear and a Cube switch: an answer of an older one is dropped
   room: 0, // the lines live events may grow the log to before the oldest go (LOG_MAX_LINES at least)
-  stick: true, // auto-scroll to the bottom unless the user scrolled up
+  stick: true, // keep the newest line in view at the top unless the user scrolled down
   liveSeq: 0, // counts the live lines, so that loadLog finds the ones that came while it waited
 };
 
@@ -185,13 +186,15 @@ function renderLogLine(line) {
   return row;
 }
 
+// renderLog draws the lines that match, newest first.
 function renderLog() {
   const box = $("log-lines");
   clear(box);
-  for (const line of logState.lines) {
+  for (let i = logState.lines.length - 1; i >= 0; i--) {
+    const line = logState.lines[i];
     if (logLineMatches(line)) box.appendChild(renderLogLine(line));
   }
-  if (logState.stick) box.scrollTop = box.scrollHeight;
+  if (logState.stick) box.scrollTop = 0;
   renderOlder();
 }
 
@@ -223,9 +226,10 @@ function logQuery(before) {
 }
 
 // appendLogEvent adds a live event; the view is updated in place when
-// it is open. Past the room the oldest lines go: after Older, the room
-// holds the pages fetched and LOG_MAX_LINES more, so that a live event
-// does not take back a page just fetched.
+// it is open, the line on top, and a view scrolled down keeps the lines
+// it shows where they are. Past the room the oldest lines go, at the
+// bottom: after Older, the room holds the pages fetched and LOG_MAX_LINES
+// more, so that a live event does not take back a page just fetched.
 function appendLogEvent(ev) {
   const line = logLine(ev);
   line.seq = ++logState.liveSeq;
@@ -240,12 +244,14 @@ function appendLogEvent(ev) {
   if (!logState.open) return;
   const box = $("log-lines");
   for (const old of gone) {
-    if (logLineMatches(old) && box.firstChild) box.removeChild(box.firstChild); // the view drops them too
+    if (logLineMatches(old) && box.lastChild) box.removeChild(box.lastChild); // the view drops them too
   }
   if (gone.length) renderOlder();
   if (logLineMatches(line)) {
-    box.appendChild(renderLogLine(line));
-    if (logState.stick) box.scrollTop = box.scrollHeight;
+    const height = box.scrollHeight;
+    box.insertBefore(renderLogLine(line), box.firstChild);
+    if (logState.stick) box.scrollTop = 0;
+    else box.scrollTop += box.scrollHeight - height;
   }
 }
 
@@ -288,7 +294,7 @@ async function loadLog() {
   renderLog();
 }
 
-// loadOlder puts the page before the oldest line above the lines, the
+// loadOlder puts the page before the oldest line under the lines, the
 // view staying where it was; an answer that comes after a Clear, another
 // choice or a Cube switch is dropped.
 async function loadOlder() {
@@ -297,7 +303,6 @@ async function loadOlder() {
   logState.loading = true;
   renderOlder();
   const box = $("log-lines");
-  const height = box.scrollHeight;
   const top = box.scrollTop;
   let evs = null;
   let failed = null;
@@ -319,8 +324,8 @@ async function loadOlder() {
   const stick = logState.stick;
   logState.stick = false;
   renderLog();
-  box.scrollTop = top + (box.scrollHeight - height);
-  logState.stick = stick && box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+  box.scrollTop = top; // the older lines came in below
+  logState.stick = stick;
 }
 
 // renderLogClear turns Clear off while nothing narrows the log: no text
@@ -492,6 +497,6 @@ function initLog() {
   $("log-older").addEventListener("click", loadOlder);
   const box = $("log-lines");
   box.addEventListener("scroll", () => {
-    logState.stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+    logState.stick = box.scrollTop <= 8;
   });
 }

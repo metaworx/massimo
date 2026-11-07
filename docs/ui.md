@@ -199,7 +199,8 @@ the header says how many are pending.
 
 ## Log
 
-Shows the Cube's newest 200 events and new ones as they arrive: device states,
+Shows the Cube's newest 200 events, newest first, and new ones on top as they
+arrive: device states,
 configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
@@ -207,7 +208,8 @@ until the Cube is back.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
-**Older events** above the lines loads the 200 before the oldest shown,
+A view scrolled down keeps its place when a new line comes in on top.
+**Older events** under the lines loads the 200 before the oldest shown,
 the view staying where it was,
 until the server has nothing older ("No older events").
 The pages fetched stay while new events come in, with room for 2000 more lines;
