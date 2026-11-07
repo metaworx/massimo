@@ -28,6 +28,11 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+### Fixed
+
+- A request still being answered when `serve` stops is finished, and
+  its audit row written, before the store closes (`cmd/massimo`).
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added
