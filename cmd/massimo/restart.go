@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 
 	"go.metaworx.ch/massimo/internal/install"
@@ -56,21 +57,37 @@ const homebrewLabel = "homebrew.mxcl.massimo"
 
 // processInfo is what restartBy looks at, gathered by currentProcess.
 type processInfo struct {
-	goos    string
-	getenv  func(string) string
-	ppid    int
-	service bool // a Windows service, started by its manager
+	goos      string
+	getenv    func(string) string
+	pid, ppid int
+	service   bool // a Windows service, started by its manager
 }
 
 func currentProcess() processInfo {
-	return processInfo{goos: runtime.GOOS, getenv: os.Getenv, ppid: os.Getppid(), service: runningAsService}
+	return processInfo{goos: runtime.GOOS, getenv: os.Getenv, pid: os.Getpid(), ppid: os.Getppid(), service: runningAsService}
+}
+
+// systemdStarted reports whether systemd started this process itself as
+// a service's main process: INVOCATION_ID is inherited by everything a
+// service starts, such as the shells of a terminal that runs as a user
+// service, but SYSTEMD_EXEC_PID (systemd 248 on) names the main process;
+// an older systemd's services have it as their parent.
+func systemdStarted(p processInfo) bool {
+	if p.getenv("INVOCATION_ID") == "" {
+		return false
+	}
+	if v := p.getenv("SYSTEMD_EXEC_PID"); v != "" {
+		return v == strconv.Itoa(p.pid)
+	}
+	return p.ppid == 1
 }
 
 // restartBy says who starts this server again after a restart from the
 // API under the -restart mode, or, with by empty, why nobody does.
 //
 //   - A Windows service: the service manager, through massimo restart.
-//   - systemd sets INVOCATION_ID for every service it starts; the unit
+//   - systemd sets INVOCATION_ID for every service it starts, and
+//     SYSTEMD_EXEC_PID to its main process (systemdStarted); the unit
 //     must restart on failure, as the installed one does.
 //   - launchd sets XPC_SERVICE_NAME to the job's label, and is the parent
 //     of the processes it starts: the installed LaunchDaemon and
@@ -90,7 +107,7 @@ func restartBy(mode string, p processInfo) (by, blocked string, err error) {
 	switch {
 	case p.service:
 		return byWindows, "", nil
-	case p.goos == "linux" && p.getenv("INVOCATION_ID") != "":
+	case p.goos == "linux" && systemdStarted(p):
 		return bySystemd, "", nil
 	case p.goos == "darwin" && (p.ppid == 1 || p.getenv("XPC_SERVICE_NAME") == install.Label || p.getenv("XPC_SERVICE_NAME") == homebrewLabel):
 		return byLaunchd, "", nil

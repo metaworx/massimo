@@ -40,8 +40,11 @@ func TestRestartBy(t *testing.T) {
 		by         string
 		blocked    bool
 	}{
-		{"systemd", "", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd"}), ppid: 1}, bySystemd, false},
-		{"systemd, auto", "auto", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd"}), ppid: 1}, bySystemd, false},
+		{"systemd", "", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "4242"}), pid: 4242, ppid: 1}, bySystemd, false},
+		{"systemd, auto", "auto", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "4242"}), pid: 4242, ppid: 1}, bySystemd, false},
+		{"systemd before 248", "", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd"}), pid: 4242, ppid: 1}, bySystemd, false},
+		{"a terminal of a user service", "", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "1717"}), pid: 4242, ppid: 4000}, "", true},
+		{"a child of a service, old systemd", "", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd"}), pid: 4242, ppid: 4000}, "", true},
 		{"linux terminal", "", processInfo{goos: "linux", getenv: envOf(nil), ppid: 4242}, "", true},
 		{"linux, parent 1 without systemd", "", processInfo{goos: "linux", getenv: envOf(nil), ppid: 1}, "", true},
 		{"launchd daemon", "", processInfo{goos: "darwin", getenv: envOf(map[string]string{"XPC_SERVICE_NAME": install.Label}), ppid: 1}, byLaunchd, false},
