@@ -14,9 +14,9 @@ the next minor, a fix counts the suffix up.
   as the `backups.*` settings say (migration 0005; `docs/store.md`
   section 9).
 
-- The server takes a Cube's backup after a change of its configuration,
-  by hand and before every restore; `…/backups` lists, downloads and
-  deletes them, and a restore takes `backup=<id>` (`docs/api-v1.md`).
+- The server backs a Cube up after a change, by hand and before every
+  restore, and `…/backups` lists, downloads, compares and deletes the
+  backups, which a restore takes by id (`docs/api-v1.md`, "Backups").
 
 - The store keeps the Cubes' events (migration 0004), written in
   batches and pruned daily by `log.keep_days` in `/api/v1/settings`

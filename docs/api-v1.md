@@ -1345,6 +1345,29 @@ the store keeps a tombstone without the file until the retention removes it.
 Capability `restore`, so that an operator cannot erase the history;
 audited as `backup.delete`.
 
+#### GET /api/v1/cubes/{sn}/backups/{id}/diff?against={id}
+
+What differs between two stored backups, as the restore planner sees it:
+the steps a restore of `{id}` would send to the Cube as `against` recorded it
+(its raw lines and NTP servers), read-only:
+
+```json
+{
+  "steps": [
+    {"what": "write room and device names (room 6: \"Room 6\"→\"Bedroom\")", "radio": false},
+    {"what": "0abcde \"Radiator 1\": temperatures comfort 21.5 eco 17.5 …, program saturday", "radio": true, "device": "0abcde", "room": 6}
+  ],
+  "notes": [],
+  "radio_commands": 2
+}
+```
+
+No steps when the two hold the same configuration.
+The restore's options apply (`skip=clock`, `state`, `portal`),
+and hidden devices are not compared.
+`400` without `against`, `404` for an id the Cube does not have.
+Capability `backup`.
+
 ### POST /api/v1/cubes/{sn}/restore/plan
 
 What restoring a backup would send, the dry run of `massimo restore`.

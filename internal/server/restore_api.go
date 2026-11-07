@@ -234,8 +234,8 @@ func (s *Server) refuseRestore(rt *runtime, status int, format string, args ...a
 type restoreSource struct {
 	file   *backup.File
 	data   []byte // the body as sent; nil for a stored backup
-	yaml   bool
-	stored int64 // the stored backup's id; 0 for a body
+	yaml   bool   // the body is YAML
+	stored int64  // the stored backup's id; 0 for a body
 }
 
 // readRestoreSource reads the backup of a plan or restore request: the
@@ -256,23 +256,11 @@ func (s *Server) readRestoreSource(w http.ResponseWriter, r *http.Request, rt *r
 	if err != nil || id < 1 {
 		return nil, fail(http.StatusBadRequest, "backup=%q is not a backup's id", q)
 	}
-	cubeID := rt.storeID.Load()
-	b, ok, err := rt.store.StoredBackup(r.Context(), cubeID, id)
+	f, err := s.storedFile(r, rt, rt.store, rt.storeID.Load(), id)
 	if err != nil {
-		return nil, fail(http.StatusInternalServerError, "%v", err)
+		return nil, err
 	}
-	if !ok {
-		return nil, fail(http.StatusNotFound, "no backup %d of cube %s", id, rt.serial)
-	}
-	body, ok, err := rt.store.BackupBody(r.Context(), cubeID, id)
-	if err != nil || !ok {
-		return nil, fail(http.StatusInternalServerError, "backup %d: %v", id, err)
-	}
-	f, err := backup.Unmarshal(body, b.Format == "yaml")
-	if err != nil {
-		return nil, fail(http.StatusInternalServerError, "backup %d: %v", id, err)
-	}
-	return &restoreSource{file: f, yaml: b.Format == "yaml", stored: id}, nil
+	return &restoreSource{file: f, stored: id}, nil
 }
 
 // makeRestorePlan reads the backup and the options of a plan or restore

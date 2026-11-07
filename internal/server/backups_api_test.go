@@ -238,3 +238,58 @@ func TestBackupSettingsAPI(t *testing.T) {
 		t.Fatalf("after the changes: %+v %+v", all[store.BackupsAutoMinKey], all[store.BackupsKeepNewestKey])
 	}
 }
+
+// The diff of two stored backups is what a restore of the one would send
+// to a Cube as the other found it: nothing against itself; a name, a
+// setting and a programme against an edited copy; an unknown id or a
+// missing against are refused.
+func TestBackupDiff(t *testing.T) {
+	_, ts, s, st := startStored(t, Options{})
+	code, out := do(t, ts, "POST", backupsBase, "")
+	if code != 201 {
+		t.Fatalf("take: %d %v", code, out)
+	}
+	a := int64(out["id"].(float64))
+	f := withRoomName(backupWithEco(backupOf(t, ts), 17.5), "Edited")
+	for i := range f.Devices {
+		if f.Devices[i].RFAddress == 0x1514b6 {
+			f.Devices[i].Thermostat.WeekProgram[0][0].Temp += 1
+		}
+	}
+	b, err := st.AddBackup(context.Background(), store.Backup{CubeID: s.cubes["keq0537249"].storeID.Load(), Reason: store.ReasonManual, Format: "json"}, marshal(t, f))
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff := func(id, against int64) (int, backupDiff) {
+		t.Helper()
+		var d backupDiff
+		code := getJSON(t, ts, "", backupsBase+"/"+strconv.FormatInt(id, 10)+"/diff?against="+strconv.FormatInt(against, 10), &d)
+		return code, d
+	}
+	if code, d := diff(a, a); code != 200 || len(d.Steps) != 0 || d.Steps == nil {
+		t.Fatalf("against itself: %d %+v", code, d)
+	}
+	code, d := diff(b.ID, a)
+	if code != 200 {
+		t.Fatalf("against the edited copy: %d", code)
+	}
+	var whats []string
+	for _, st := range d.Steps {
+		whats = append(whats, st.What)
+	}
+	joined := strings.Join(whats, "; ")
+	// The names in one step without radio; the device's settings and its
+	// programme in one with two radio commands.
+	if len(d.Steps) != 2 || d.RadioCommands != 2 || !strings.Contains(joined, `"Edited"`) || !strings.Contains(joined, "eco 17.5") || !strings.Contains(joined, "program saturday") {
+		t.Fatalf("against the edited copy: %d radio, %s", d.RadioCommands, joined)
+	}
+	if code, _ := diff(a, b.ID); code != 200 {
+		t.Fatalf("the other way: %d", code)
+	}
+	if code, _ := diff(999, a); code != 404 {
+		t.Fatalf("an unknown id: %d", code)
+	}
+	if code := getJSON(t, ts, "", backupsBase+"/"+strconv.FormatInt(a, 10)+"/diff", &d); code != 400 {
+		t.Fatalf("without against: %d", code)
+	}
+}

@@ -1309,6 +1309,53 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/backups/{id}/diff:
+    get:
+      summary: What differs between two stored backups
+      x-capability: backup
+      description: |
+        The restore planner's comparison, read-only: the steps a restore
+        of this backup would send to the Cube as the backup against
+        recorded it (its raw lines and NTP servers), with the notes and
+        the radio commands. Nothing is sent. The restore's options apply,
+        so skip=clock leaves the clock out; hidden devices are not
+        compared.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/backupID"}
+        - {name: against, in: query, required: true, description: The id of the backup to compare with, schema: {type: integer, minimum: 1}}
+        - {$ref: "#/components/parameters/restorePortal"}
+        - {$ref: "#/components/parameters/restoreState"}
+        - {$ref: "#/components/parameters/restoreSkip"}
+      responses:
+        "200":
+          description: The steps from the one to the other; none when they hold the same configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        what: {type: string}
+                        radio: {type: boolean}
+                        device: {type: string}
+                        room: {type: integer}
+                  notes: {type: array, items: {type: string}}
+                  radio_commands: {type: integer}
+        "400":
+          description: No against, or a bad option
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotReady"}
   /api/v1/cubes/{sn}/restore/plan:
     post:
       summary: What restoring a backup would send
