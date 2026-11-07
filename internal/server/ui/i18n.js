@@ -73,7 +73,9 @@ function browserLanguage() {
 // setLanguage applies a setting, "auto" or a language code, once English
 // and the language are loaded, and returns the promise of that. When the
 // language cannot be loaded the page stays in English and the promise
-// is rejected with the error; a change made meanwhile wins over it.
+// is rejected with the error; a change made meanwhile wins over it, and
+// the promise of a load it superseded resolves without one, so that its
+// error does not show on a page in the newer language.
 function setLanguage(setting) {
   const seq = ++i18nSeq;
   i18n.setting = setting === "auto" || languages().includes(setting) ? setting : "auto";
@@ -88,6 +90,7 @@ function setLanguage(setting) {
   return Promise.all(loads).then(
     () => apply(lang),
     (e) => {
+      if (seq !== i18nSeq) return;
       apply("en");
       throw e;
     },

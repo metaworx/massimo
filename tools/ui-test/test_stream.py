@@ -21,3 +21,25 @@ def test_new_ticket_after_a_401(page, watch):
     assert all("ticket=" in u and "token=" not in u for u in streams), "stream opened with tickets only"
     tickets = [u.split("ticket=", 1)[1] for u in streams if "ticket=" in u]
     assert len(set(tickets)) == len(tickets), "a new ticket for every stream request"
+
+
+def test_stream_handlers_catch_their_reloads(page, watch):
+    """The events that make the page load again (hello, metadata,
+    device_forgotten, connected, disconnected) leave no rejected promise
+    uncaught when the load fails, as when the server is briefly gone; the
+    test makes the loads fail and puts them back."""
+    page.evaluate("""() => {
+      window.realLoads = { loadCubes, loadRooms, refresh };
+      const fail = () => Promise.reject(new Error("a reload that failed"));
+      window.loadCubes = fail;
+      window.loadRooms = fail;
+      window.refresh = fail;
+      for (const kind of ["hello", "metadata", "device_forgotten", "connected", "disconnected"]) {
+        state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify({ kind, time: new Date().toISOString() }) }));
+      }
+    }""")
+    page.wait_for_timeout(500)
+    page.evaluate("() => Object.assign(window, window.realLoads)")
+    uncaught = [p for p in watch.problems if "a reload that failed" in p]
+    watch.problems[:] = [p for p in watch.problems if p not in uncaught]
+    assert not uncaught, f"the reloads' failures are caught: {uncaught}"
