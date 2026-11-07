@@ -9,7 +9,7 @@ a token are refused on purpose."""
 import time
 
 from conftest import TOKEN, URL, api_call
-from helpers import wait_until
+from helpers import show_view, wait_until
 
 REGISTER = """async ([name, password, token, method]) => {
   const opaque = await opaqueModule();
@@ -85,7 +85,7 @@ def sign_in_in(page, name, password):
 def test_passwords_registered_in_the_browser(page, case, new_context):
     """Every password set in the page is registered by OPAQUE and none
     goes to the server: the owner adds a user with one and sets another,
-    in Settings → Users, and the user changes its own in Settings with a
+    in System settings → Users, and the user changes its own in My profile with a
     proof of the current one."""
     name = f"reg-{case.width}-{case.lang}"
     posts = []
@@ -98,7 +98,7 @@ def test_passwords_registered_in_the_browser(page, case, new_context):
     probe.on("request", record)
     probe.goto(URL)
     try:
-        page.locator("#view-settings").click()
+        show_view(page, "system")
         page.locator("#user-add").click()
         new = page.locator("#user-new")
         new.locator("[name=name]").fill(name)
@@ -123,7 +123,7 @@ def test_passwords_registered_in_the_browser(page, case, new_context):
         own.locator("#login-password").fill("second-pass")
         own.locator("#login-form button[type=submit]").click()
         own.wait_for_selector(".room", timeout=10000)
-        own.locator("#view-settings").click()
+        show_view(own, "profile")
         own.locator("#me-password summary").click()
         own.locator("#me-current").fill("second-pass")
         own.locator("#me-new").fill("third-pass")
@@ -195,13 +195,13 @@ def test_a_user_of_version_1_is_upgraded(new_context, case, guard):
 
 
 def test_the_password_sign_in_switched_off(page, case, new_context):
-    """Settings → Users has the switch of the password sign-in and says
+    """System settings → Users has the switch of the password sign-in and says
     how many users still have a password the server checks; off, such a
     user is refused in the dialog and one of version 2 signs in."""
     name = f"v1-{case.width}-{case.lang}"
     api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "v1-pass"})
     try:
-        page.locator("#view-settings").click()
+        show_view(page, "system")
         box = page.locator("#password-login")
         assert wait_until(page, "document.getElementById('password-login').checked", 5), "the password sign-in is on by default"
         assert wait_until(page, "/\\d/.test(document.getElementById('password-login-hint').textContent)", 5), "the hint counts the users of version 1"

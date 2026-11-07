@@ -849,7 +849,7 @@ password sign-in.
 The setting `auth.password_login` (true by default) ends both:
 off, `POST /api/v1/login` answers `403`, the start says so,
 and every user signs in by OPAQUE alone.
-Settings → Users shows the switch to a holder of `settings`,
+System settings → Users shows the switch to a holder of `settings`,
 with how many users still have a hash,
 who cannot sign in once it is off until a password is set for them.
 

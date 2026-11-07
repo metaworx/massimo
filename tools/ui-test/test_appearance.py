@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Settings → Appearance: a scheme changes the page's colours, the mode
+"""My settings → Appearance: a scheme changes the page's colours, the mode
 sets data-theme, the editor applies live and keeps a saved scheme in the
 browser, its hex fields take what is typed, and Export downloads the
 scheme document and Import reads it back, both under the page's
@@ -9,7 +9,7 @@ nothing is left for the next test."""
 import json
 from pathlib import Path
 
-from helpers import CONTRAST_SCHEME, HEX_BAD, HEX_LABEL, NOT_A_SCHEME, SAVED, named_buttons, scroll_width, wait_until
+from helpers import CONTRAST_SCHEME, HEX_BAD, HEX_LABEL, NOT_A_SCHEME, SAVED, named_buttons, scroll_width, show_view, wait_until
 
 
 def css_var(page, name):
@@ -18,7 +18,7 @@ def css_var(page, name):
 
 def test_schemes_editor_export_import(page, case, tmp_path):
     width, lang = case.width, case.lang
-    page.locator("#view-settings").click()
+    show_view(page, "prefs")
     bg = lambda: css_var(page, "--bg")
     stored = lambda: page.evaluate("JSON.parse(localStorage.getItem('massimo.schemes'))")
     default_bg = bg()
@@ -86,7 +86,7 @@ def test_schemes_editor_export_import(page, case, tmp_path):
     assert editor.is_hidden(), "Close hides the editor"
     sel.select_option("massimo")
     assert bg() == default_bg, "back to the default scheme"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def scheme_hex(page, lang):

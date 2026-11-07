@@ -61,6 +61,73 @@ function submitButton(label) {
   return b;
 }
 
+// busyWas keeps, per button made busy, whether it was off before.
+const busyWas = new WeakMap();
+
+// setBusy marks a button as sending, or ends that: while on, the button
+// is off, shows a spinner after its text (the class busy, style.css)
+// and is aria-busy; at the end it is as off as it was before. A button
+// that sends goes busy from its click until the answer, so that a
+// second click or Enter sends nothing (whileBusy). No button does
+// nothing.
+function setBusy(btn, on) {
+  if (!btn || !!on === isBusy(btn)) return;
+  if (on) {
+    busyWas.set(btn, btn.disabled);
+    btn.disabled = true;
+    btn.classList.add("busy");
+    btn.setAttribute("aria-busy", "true");
+    return;
+  }
+  btn.classList.remove("busy");
+  btn.removeAttribute("aria-busy");
+  btn.disabled = !!busyWas.get(btn);
+  busyWas.delete(btn);
+}
+
+// isBusy reports whether a button's request is still running.
+function isBusy(btn) {
+  return !!btn && btn.classList.contains("busy");
+}
+
+// setOff turns a button off or on; a busy one keeps turning, and is off
+// or on as set here once its request has answered.
+function setOff(btn, off) {
+  if (!btn) return;
+  if (isBusy(btn)) busyWas.set(btn, !!off);
+  else btn.disabled = !!off;
+}
+
+// whileBusy runs fn, which sends a request, with btn busy (setBusy) and
+// returns what fn returns; while the button is busy it runs nothing and
+// returns undefined.
+async function whileBusy(btn, fn) {
+  if (isBusy(btn)) return undefined;
+  setBusy(btn, true);
+  try {
+    return await fn();
+  } finally {
+    setBusy(btn, false);
+  }
+}
+
+// sendWhenChanged keeps a form's submit button off while changed()
+// reports nothing to send: at once, at every input and change in the
+// form, and when the returned function is called, for a change the
+// form's events do not see. With lazy, the form's values reach what
+// changed() reads only at their change event (numberInput), so a
+// keystroke turns the button on and the change sets it again; a click
+// on it right after typing then finds it on. A busy button keeps
+// turning, and is set for when its request has answered (setOff).
+function sendWhenChanged(form, changed, { btn, lazy } = {}) {
+  const b = btn || form.querySelector("button[type=submit]");
+  const check = () => setOff(b, !changed());
+  form.addEventListener("input", lazy ? () => setOff(b, false) : check);
+  form.addEventListener("change", check);
+  check();
+  return check;
+}
+
 // badgeEl is a small outlined or filled label (.flag) of a kind: ok,
 // warn, bad, mode, fill-ok, fill-warn, fill-bad.
 function badgeEl(text, kind) {
@@ -251,8 +318,8 @@ function showResult(el, text, ok) {
 // confirmBox asks in the page whether to go on: the question, No and
 // Yes (yes and no their labels, Yes the primary), Escape for No. The
 // caller puts it where the action was asked for, and may focus it. Yes
-// is off from its click until the promise onYes returns has settled, so
-// that a double click sends one request.
+// is busy (setBusy) and No off from Yes's click until the promise onYes
+// returns has settled, so that a double click sends one request.
 function confirmBox(text, { yes, no }, onYes, onNo) {
   const box = document.createElement("div");
   box.className = "panel confirm-box";
@@ -262,10 +329,11 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
   box.setAttribute("aria-labelledby", q.id);
   const noBtn = button(no || t("action.cancel"), "confirm-no", onNo);
   const yesBtn = button(yes, "confirm-yes primary", () => {
-    if (yesBtn.disabled) return;
-    yesBtn.disabled = true;
-    Promise.resolve(onYes && onYes()).finally(() => {
-      yesBtn.disabled = false;
+    if (isBusy(yesBtn)) return;
+    const noWas = noBtn.disabled;
+    noBtn.disabled = true;
+    whileBusy(yesBtn, () => onYes && onYes()).finally(() => {
+      noBtn.disabled = noWas;
     });
   });
   const actions = document.createElement("div");
@@ -361,3 +429,33 @@ function filePicker(accept, onFile) {
   });
   return input;
 }
+
+// dropdown makes a <details class="menu"> a menu that drops down: one
+// open at a time, closed by a choice of one of its items, by Escape
+// (the focus back on its summary) and by a click outside it. The room
+// tiles' ⋯ and the header's 👤 and ☰ are such menus.
+function dropdown(details) {
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+    for (const other of document.querySelectorAll("details.menu[open]")) {
+      if (other !== details) other.open = false;
+    }
+  });
+  details.addEventListener("click", (ev) => {
+    if (ev.target.closest(".menu-items button")) details.open = false;
+  });
+  return details;
+}
+
+document.addEventListener("click", (ev) => {
+  for (const m of document.querySelectorAll("details.menu[open]")) {
+    if (!m.contains(ev.target)) m.open = false;
+  }
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  for (const m of document.querySelectorAll("details.menu[open]")) {
+    m.open = false;
+    if (m.contains(document.activeElement)) m.querySelector("summary").focus();
+  }
+});

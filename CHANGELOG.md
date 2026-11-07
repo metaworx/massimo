@@ -29,8 +29,8 @@ the next minor, a fix counts the suffix up.
   `restart` of owner and manager (migration 0006), an open server only
   from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
 
-- Settings → Software restarts the server, follows it until it is back,
-  and lists the settings that wait for a restart (`docs/ui.md`).
+- System settings → Software restarts the server, follows it until it
+  is back, and lists the settings that wait for a restart (`docs/ui.md`).
 
 - `serve` reads its settings file again when it changes and on SIGHUP
   (`-sighup`), so `MASSIMO_API_TOKEN` applies without a restart
@@ -40,6 +40,25 @@ the next minor, a fix counts the suffix up.
   for the API, stopping and exiting 75 for its service manager; `massimo
   restart` restarts the installed server (`README.md`, "Server").
 
+- The web UI's header has a 👤 menu: who is signed in, My settings and
+  Sign out, which leave the settings page (`docs/ui.md`, "Header").
+
+- The web UI's settings are three pages: My profile with the own name,
+  password and keys, My settings, and System settings behind ⚙
+  (`docs/ui.md`, "My profile", "My settings", "System settings").
+
+- The web UI keeps the page shown in the address, so that a reload opens
+  it again and back and forward move between pages (`docs/ui.md`,
+  "Header").
+
+- The web UI's header reads the time with ↻, then the Cube choice, then
+  the pages; below 600 px ☰ holds Log and System settings (`docs/ui.md`,
+  "Header").
+
+- The web UI's Rooms page says when the Cube is not connected or none is
+  configured: the address tried, the last data and what to check
+  (`docs/ui.md`, "Rooms").
+
 - A sign-in by OPAQUE (RFC 9807) that sends no password, and the
   registration that sets one: `POST /api/v1/login/start` and `…/finish`
   (migration 0007, `opaque.key`; `docs/api-v1.md`).
@@ -48,9 +67,9 @@ the next minor, a fix counts the suffix up.
   `@serenity-kit/opaque` 1.1.0 in `ui/vendor/`; a user of version 1 is
   signed in with the password after it (`docs/ui.md`).
 
-- `auth.password_login` in `/api/v1/settings`, a switch in Settings →
-  Users: off, `POST /api/v1/login` is `403` and every user signs in by
-  OPAQUE alone (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
+- `auth.password_login` in `/api/v1/settings`, a switch in System
+  settings → Users: off, `POST /api/v1/login` is `403` and users sign
+  in by OPAQUE alone (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
 
 ### Changed
 
@@ -78,7 +97,18 @@ the next minor, a fix counts the suffix up.
   UI, the suite or `ci.yml`, and then on two of its four cases; a push to
   `main` runs all of it (`GUIDELINES/project/CI.md`, section 2).
 
+- The web UI's Log button shows a sheet, since three lines alone read as
+  a menu (`docs/ui.md`, "Header").
+
 ### Fixed
+
+- The web UI keeps a button that sends off, with a spinner, until the
+  answer, and a Send off while nothing changed, so a second click sends
+  nothing (`docs/ui.md`, "Rooms", "Settings").
+
+- The web UI checks a new user's name while it is typed, and the users
+  and roles routes refuse without the store's `store: ` prefix
+  (`docs/ui.md`, "Settings").
 
 - A request still being answered when `serve` stops is finished, and
   its audit row written, before the store closes (`cmd/massimo`).

@@ -587,11 +587,53 @@ async function loadCubes() {
     state.serial = state.cubes.length ? state.cubes[0].serial : null;
   }
   renderCubeSelect();
+  renderHomeNotice();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) {
     if (!state.tz[cube.serial]) await loadTimeZone(cube.serial);
     renderHeader(cube);
   }
+}
+
+// timeOf is an API time as a Date, null for none (a zero time).
+function timeOf(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && d.getFullYear() > 2000 ? d : null;
+}
+
+// renderHomeNotice says on Rooms why it shows nothing, or only what the
+// server last had: no Cube configured, or the Cube chosen not connected,
+// with the address the server tries, when the Cube last sent data or
+// else last answered discovery, what to check, and for a role with cubes
+// the way to System settings → Cubes. The rooms the server still has
+// stay under it.
+function renderHomeNotice() {
+  const box = $("home-notice");
+  const cube = state.cubes.find((c) => c.serial === state.serial);
+  if (cube && cube.connected) {
+    box.classList.add("hidden");
+    return;
+  }
+  const title = box.querySelector(".home-notice-title");
+  const detail = box.querySelector(".home-notice-detail");
+  const check = box.querySelector(".home-notice-check");
+  if (!cube) {
+    title.textContent = t("home.noCube");
+    detail.textContent = t(hasCap("cubes") ? "home.noCubeAdd" : "home.noCubeAsk");
+    check.textContent = "";
+  } else {
+    title.textContent = t("home.notConnected", { name: cube.name ? cube.name + " (" + cube.serial + ")" : cube.serial });
+    const parts = [cube.address ? t("home.address", { address: cube.address }) : t("home.noAddress")];
+    const data = timeOf(cube.updated);
+    const seen = timeOf(cube.last_seen);
+    if (data) parts.push(t("home.lastData", { time: fmtInstant(data) }));
+    else if (seen) parts.push(t("home.lastSeen", { time: fmtInstant(seen) }));
+    else parts.push(t("home.noData"));
+    detail.textContent = parts.join(" ");
+    check.textContent = t("home.check");
+  }
+  check.classList.toggle("hidden", !check.textContent);
+  box.classList.remove("hidden");
 }
 
 // loadTimeZone reads the Cube's daylight-saving rules once per Cube.
@@ -723,7 +765,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (!$("settings").classList.contains("hidden")) return true;
+  if (isShown("profile") || isShown("prefs") || isShown("system")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -949,7 +991,7 @@ async function connectEvents() {
 // --- settings panel ---------------------------------------------------
 
 function initSettings() {
-  // The settings page is opened with the cog in the header (showView).
+  // My settings opens from the 👤 menu (showView).
   $("poll-input").addEventListener("change", (ev) => {
     const v = validSetting("poll", ev.target.value) || 10;
     ev.target.value = v;
@@ -962,13 +1004,8 @@ function initSettings() {
   };
   $("expert-toggle").addEventListener("change", onExpert);
   $("reload-btn").addEventListener("click", () => location.reload());
-  $("refresh-btn").addEventListener("click", (ev) => {
-    const btn = ev.currentTarget;
-    btn.disabled = true;
-    poll(true).finally(() => {
-      btn.disabled = false;
-    });
-  });
+  $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
+  $("home-notice-cubes").addEventListener("click", () => showView("system"));
   $("clock-select").addEventListener("change", (ev) => {
     setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();
@@ -1064,8 +1101,11 @@ async function init() {
   });
   initTiles();
   initLog();
+  const hadSerial = !!state.serial;
+  showView(viewOfHash(location.hash), "replace"); // log.js: the page the address names
   refresh().then(() => {
     store("massimo.serial", state.serial);
+    if (isShown("log") && !hadSerial) loadLog(); // it had no Cube to load from yet
     connectEvents();
   });
   setInterval(refreshAges, 60000);
