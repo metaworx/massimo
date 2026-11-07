@@ -100,7 +100,9 @@ func TestAuditOfEveryWrite(t *testing.T) {
 		if row.Action != want || row.Result != result || row.Remote != "127.0.0.1" {
 			t.Errorf("%s %s (%d): row %+v, want action %s result %s", r.method, r.path, code, row, want, result)
 		}
-		if want != "login.failed" && row.User != store.BootstrapUser || want == "login.failed" && row.User != "" {
+		// The sign-ins have no caller yet, whatever token they carry.
+		anonymous := r.path == "/api/v1/login" || strings.HasPrefix(r.path, "/api/v1/login/")
+		if !anonymous && row.User != store.BootstrapUser || anonymous && row.User != "" {
 			t.Errorf("%s %s: user %q", r.method, r.path, row.User)
 		}
 		if strings.Contains(r.path, "{sn}") && row.Cube != "KEQ0000100" {

@@ -11,6 +11,7 @@ package server
 // not.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -94,28 +95,47 @@ func viewToken(t store.Token) tokenView {
 
 // signIns holds the addresses with a login running, so that an address
 // checks one password at a time and the lockout counts each of its
-// attempts before the next one starts.
+// attempts before the next one starts. A sign-in by OPAQUE holds its
+// address from its start to its finish, at most until the start ends
+// (hold).
 type signIns struct {
-	mu   sync.Mutex
-	keys map[string]bool
+	mu sync.Mutex
+	// keys are the addresses signing in: the zero time while a request
+	// runs, else the end of a sign-in started.
+	keys map[string]time.Time
 }
 
 // claim marks a key as signing in: false when it already is, and full
 // when maxTracked keys are.
 func (s *signIns) claim(key string) (ok, full bool) {
+	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	switch {
-	case s.keys[key]:
+	if until, held := s.keys[key]; held && (until.IsZero() || now.Before(until)) {
 		return false, false
-	case len(s.keys) >= maxTracked:
-		return false, true
+	}
+	if len(s.keys) >= maxTracked {
+		for k, until := range s.keys {
+			if !until.IsZero() && !now.Before(until) {
+				delete(s.keys, k)
+			}
+		}
+		if len(s.keys) >= maxTracked {
+			return false, true
+		}
 	}
 	if s.keys == nil {
-		s.keys = map[string]bool{}
+		s.keys = map[string]time.Time{}
 	}
-	s.keys[key] = true
+	s.keys[key] = time.Time{}
 	return true, false
+}
+
+// hold keeps a claimed key signing in past its request, until a time.
+func (s *signIns) hold(key string, until time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.keys[key] = until
 }
 
 // release ends a key's sign-in.
@@ -134,16 +154,24 @@ type loginRequest struct {
 	Label string `json:"label,omitempty"`
 }
 
-// login handles POST /api/v1/login: a session for a name and a
-// password. A wrong pair counts against the address and the name; an
-// address signs in once at a time.
-func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
+// loginMode refuses a sign-in where there are no users to sign in as.
+func (s *Server) loginMode(ctx context.Context) error {
 	switch s.authMode(ctx) {
 	case modeLegacy:
 		return fail(http.StatusConflict, "this server has no store: use the API token")
 	case modeOpen:
 		return fail(http.StatusConflict, "no users yet: create the first owner with POST /api/v1/users, or massimo user add")
+	}
+	return nil
+}
+
+// login handles POST /api/v1/login: a session for a name and a
+// password. A wrong pair counts against the address and the name; an
+// address signs in once at a time.
+func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	if err := s.loginMode(ctx); err != nil {
+		return err
 	}
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.User == "" || req.Password == "" {
@@ -184,6 +212,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || !ok {
 		return fail(http.StatusInternalServerError, "user %s: %v", name, err)
 	}
+	return s.openSession(w, r, u, req.Label, userKey, addrKey)
+}
+
+// openSession answers a sign-in whose password matched: a user that may
+// sign in gets a session, and the counters of the keys are cleared.
+func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, keys ...string) error {
+	ctx := r.Context()
+	st := s.opts.Store
+	ip := s.clientIP(r)
 	now := time.Now()
 	switch {
 	case u.Disabled:
@@ -191,7 +228,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	case u.Expired(now):
 		return fail(http.StatusForbidden, "user %s has expired", u.Name)
 	}
-	label := strings.TrimSpace(req.Label)
+	label = strings.TrimSpace(label)
 	if label == "" {
 		label = r.UserAgent()
 	}
@@ -207,11 +244,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err := st.NoteLogin(ctx, u.ID); err != nil {
 		s.log.Warn("api: login not noted", "error", err)
-	} else if again, ok, err := st.User(ctx, name); err == nil && ok {
+	} else if again, ok, err := st.User(ctx, u.Name); err == nil && ok {
 		u = again
 	}
-	s.limiter.succeed(ctx, userKey)
-	s.limiter.succeed(ctx, addrKey)
+	for _, k := range keys {
+		s.limiter.succeed(ctx, k)
+	}
 	s.log.Info("api: login", "user", u.Name, "remote", ip)
 	me, err := s.meOf(r, &principal{mode: modeUsers, user: u, token: tok})
 	if err != nil {

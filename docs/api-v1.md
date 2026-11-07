@@ -355,7 +355,48 @@ outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner.
 `auth_version` 1 says the server hashes the password;
-docs/server.md ("What version 1 prepares", item 6) says what 2 will mean.
+2, that the user signs in by OPAQUE (below) and the server never sees it.
+
+### The sign-in by OPAQUE: POST /api/v1/login/start, POST /api/v1/login/finish
+
+A user of `auth_version` 2 signs in without sending the password,
+a hash of it or anything that could be replayed: OPAQUE (RFC 9807;
+suite ristretto255-SHA512 with 3DH, argon2id run by the client,
+the empty context, the public keys as identities),
+as `@serenity-kit/opaque` and `github.com/bytemare/opaque` implement it.
+Every message is base64url without padding.
+
+`POST /api/v1/login/start` with `{"user": "anna", "ke1": "…"}`,
+the client's KE1 (96 bytes), answers
+
+```json
+{"login": "…", "ke2": "…", "ksf": "m=19456,t=2,p=1", "v1": true, "expires_at": "…"}
+```
+
+KE2 (320 bytes), the argon2id parameters the client is to run for the record,
+and the login to finish under, good for a minute.
+A name without a record of version 2, unknown or of version 1,
+is answered from a fake record of the same shape,
+so the start does not say which names exist; its finish fails.
+A start is a guess, since the client can tell from KE2 alone whether its
+password was right:
+it counts as a failed login against the address and the name at once,
+and a finished sign-in clears both again,
+the lockout its own start set included.
+The address is held from the start to the finish, at most the minute:
+a start or a `POST /api/v1/login` from it meanwhile is `429` with `Retry-After: 1`.
+`v1` says whether the box still takes `POST /api/v1/login`,
+for a client whose finish fails.
+A bad KE1 is `400`; the name's lockout `429`, as for the login.
+
+`POST /api/v1/login/finish` with `{"login": "…", "ke3": "…"}`
+and an optional `label` answers the session of `POST /api/v1/login`.
+A wrong KE3 is `401` "wrong user or password" and counts nothing more;
+an unknown login, one finished already or one past its minute, `401` too.
+`"purpose": "proof"` at the start makes the finish answer
+`{"proof": "…", "expires_at": "…"}` in place of a session:
+a proof of the password, good once for five minutes,
+for one's own password change.
 
 ### Users: /api/v1/users and /api/v1/users/{name}
 
@@ -376,7 +417,8 @@ a `guests` holder sees the guests and itself.
 
 `name` is the login name, 1 to 64 of letters, digits, `.`, `_`, `-` and `@`,
 kept in lower case; `role` is a role's key, `viewer` when absent;
-`password` may be absent for a user that logs in with keys only;
+`password` may be absent for a user that logs in with keys only,
+or replaced by `record` and `ksf`, a password of version 2 (below);
 `disabled` and, for a guest, `expires_at` (RFC 3339) as well.
 A `guests` holder creates guests only (`403` otherwise).
 The answer is `201` with the user; a name in use is `409`, a bad name,
@@ -388,20 +430,36 @@ so the audit's history of the name reads on,
 and starts without the old one's preferences.
 
 On a server without users, `POST /api/v1/users` creates the first owner:
-open to a caller on the local network (loopback, a private range,
-link-local), `role` `owner` (absent, or that) and a password required,
-`403` from anywhere else;
-`massimo user add` on the box is the other way.
+open to a caller on the local network (loopback, a private range, link-local),
+`role` `owner` (absent, or that) and a password or a record required,
+`403` from anywhere else; `massimo user add` on the box is the other way.
 From then on the server is in users mode (Authentication).
 
 `GET /api/v1/users/{name}` is one user.
 `PUT /api/v1/users/{name}` changes any of `display_name`, `role`, `disabled`,
 `expires_at` (`null` clears it) and `password`;
 absent fields stay, an unknown one is `400`.
-A user changes its own `display_name` and, with `current_password`,
-its own `password`; the rest needs `users` (`guests` for a guest).
+A user changes its own `display_name` and, with `current_password`
+or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
+the rest needs `users` (`guests` for a guest).
 A password set by someone else ends the user's sessions;
 an empty password removes it.
+
+A password of version 2 is set in two steps.
+`POST /api/v1/users/{name}/register` with `{"request": "…"}`,
+the client's registration request (32 bytes),
+answers `{"response": "…", "ksf": "m=19456,t=2,p=1"}`;
+nothing is kept.
+The client finishes with the password and sends the record (192 bytes) as `record`,
+with that `ksf`, in `POST /api/v1/users` or `PUT /api/v1/users/{name}`,
+in place of `password`.
+The registration is open to whoever may set the name's password,
+or add a user of it:
+the first owner from the local network on a server without users.
+The record replaces a hash of version 1 and the user is of version 2;
+a `password` set later makes it version 1 again.
+A record that does not decode, or a `ksf` below the cost of
+`m=19456,t=2,p=1` or above 256 MiB, 16 passes or 16 lanes, is `400`.
 The last enabled owner without an end date cannot be disabled, demoted
 or given an end date (`409`): an owner with one does not count.
 

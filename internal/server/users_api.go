@@ -34,6 +34,13 @@ type userRequest struct {
 	Disabled        *bool   `json:"disabled"`
 	Password        *string `json:"password"`
 	CurrentPassword string  `json:"current_password,omitempty"` // a user's own change
+	// Record and KSF are a password of version 2 in place of Password:
+	// the registration record of opaque_api.go and its key stretching.
+	Record *string `json:"record"`
+	KSF    string  `json:"ksf,omitempty"`
+	// Proof is a proof of the current password from a sign-in by OPAQUE,
+	// for one's own change, in place of current_password.
+	Proof string `json:"proof,omitempty"`
 	// ExpiresAt is a guest's end date; null clears it. Decoded apart,
 	// since a null must be told from an absent field.
 	ExpiresAt json.RawMessage `json:"expires_at"`
@@ -49,7 +56,19 @@ func decodeUser(r *http.Request) (userRequest, error) {
 	if req.DisplayName != nil && len(*req.DisplayName) > maxDisplayName {
 		return req, fail(http.StatusBadRequest, "display_name: at most %d bytes", maxDisplayName)
 	}
+	if req.Record != nil && req.Password != nil {
+		return req, fail(http.StatusBadRequest, "password or record, not both")
+	}
 	return req, nil
+}
+
+// record reads the registration record of a request.
+func (req userRequest) record() ([]byte, error) {
+	b, err := opaqueB64.DecodeString(*req.Record)
+	if err != nil {
+		return nil, fail(http.StatusBadRequest, "record: not base64url: %v", err)
+	}
+	return b, nil
 }
 
 // expiresAt reads the end date of a request: set, cleared (null), or
@@ -84,8 +103,10 @@ func userFail(err error) error {
 		return fail(http.StatusNotFound, "%v", err)
 	case errors.Is(err, store.ErrUserExists), errors.Is(err, store.ErrRoleExists), errors.Is(err, store.ErrLastOwner), errors.Is(err, store.ErrRoleInUse):
 		return fail(http.StatusConflict, "%v", err)
-	case errors.Is(err, store.ErrBadName), errors.Is(err, store.ErrBadRole):
+	case errors.Is(err, store.ErrBadName), errors.Is(err, store.ErrBadRole), errors.Is(err, store.ErrBadMessage):
 		return fail(http.StatusBadRequest, "%v", err)
+	case errors.Is(err, store.ErrNoOpaque):
+		return fail(http.StatusServiceUnavailable, "%v", err)
 	case errors.Is(err, store.ErrImmutable):
 		return fail(http.StatusForbidden, "%v", err)
 	}
@@ -209,7 +230,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		if !localPeer(s.clientIP(r)) {
 			return fail(http.StatusForbidden, "the first owner is created from the local network, or on the box with massimo user add")
 		}
-		if password == "" {
+		if password == "" && req.Record == nil {
 			return fail(http.StatusBadRequest, "the first owner needs a password")
 		}
 		if u.Role != "" && u.Role != store.RoleOwner {
@@ -228,7 +249,16 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	auditTarget(r, "user:"+store.NormalName(u.Name))
-	created, err := st.AddUser(ctx, u, password, by)
+	var created store.User
+	if req.Record != nil {
+		var rec []byte
+		if rec, err = req.record(); err != nil {
+			return err
+		}
+		created, err = st.AddOpaqueUser(ctx, u, rec, req.KSF, by)
+	} else {
+		created, err = st.AddUser(ctx, u, password, by)
+	}
 	if errors.Is(err, store.ErrNoRole) {
 		return fail(http.StatusBadRequest, "%v", err)
 	}
@@ -278,9 +308,10 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 }
 
 // putUser handles PUT /api/v1/users/{name}: the display name, the
-// role, disabled, the end date and the password. A user changes its own
-// display name and password, the latter with current_password; a
-// password set by someone else ends the user's sessions.
+// role, disabled, the end date and the password, of version 1 or 2. A
+// user changes its own display name and password, the latter with
+// current_password or a proof from a sign-in by OPAQUE; a password set
+// by someone else ends the user's sessions.
 func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -306,10 +337,15 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	if req.Role != nil && !a.mayAssign(*req.Role) {
 		return fail(http.StatusForbidden, "capability %q required to give the role %s", "users", *req.Role)
 	}
-	if req.Password != nil && a.self && !a.all {
+	setsPassword := req.Password != nil || req.Record != nil
+	if setsPassword && a.self && !a.all {
 		// One's own password: the current one proves the caller is the
 		// user, not someone at an unlocked browser.
-		if err := st.CheckPassword(ctx, u.Name, req.CurrentPassword); err != nil {
+		if req.Proof != "" {
+			if !s.logins.redeemProof(req.Proof, u.ID, time.Now()) {
+				return fail(http.StatusForbidden, "proof is wrong, used or too old: sign in again to prove the current password")
+			}
+		} else if err := st.CheckPassword(ctx, u.Name, req.CurrentPassword); err != nil {
 			if errors.Is(err, store.ErrBadPassword) {
 				return fail(http.StatusForbidden, "current_password is wrong")
 			}
@@ -347,8 +383,17 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 			return userFail(err)
 		}
 	}
-	if req.Password != nil {
-		if err := st.SetPassword(ctx, u.Name, *req.Password, by); err != nil {
+	if setsPassword {
+		if req.Record != nil {
+			rec, err := req.record()
+			if err != nil {
+				return err
+			}
+			err = st.SetOpaqueRecord(ctx, u.Name, rec, req.KSF, by)
+			if err != nil {
+				return userFail(err)
+			}
+		} else if err := st.SetPassword(ctx, u.Name, *req.Password, by); err != nil {
 			return userFail(err)
 		}
 		if !a.self {

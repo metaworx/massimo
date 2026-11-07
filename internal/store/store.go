@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bytemare/opaque"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
 )
@@ -80,6 +81,7 @@ type Store struct {
 
 	nodeID string
 	key    nodeKey
+	opq    *opaque.Server // the OPAQUE keys (opaque.go); nil when read-only
 
 	// commandsPruned is when a write last pruned the commands, in Unix
 	// nanoseconds of the store's clock; 0 before the first.
@@ -127,6 +129,10 @@ func Open(dir string, o Options) (*Store, error) {
 		return nil, err
 	}
 	if err := s.loadIdentity(); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	if err := s.loadOpaque(); err != nil {
 		s.db.Close()
 		return nil, err
 	}

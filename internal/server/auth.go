@@ -290,6 +290,10 @@ type failureLimiter interface {
 	lockedFor(ctx context.Context, key string) time.Duration
 	fail(ctx context.Context, key string) bool
 	succeed(ctx context.Context, key string)
+	// forgive forgets the failures of a key and its lockout too: for a
+	// sign-in by OPAQUE whose own start locked the key and that then
+	// proved the password (opaque_api.go).
+	forgive(ctx context.Context, key string)
 }
 
 // authLimiter counts failed checks per key in a fixed window and locks
@@ -371,6 +375,12 @@ func (l *authLimiter) succeed(_ context.Context, key string) {
 	}
 }
 
+func (l *authLimiter) forgive(_ context.Context, key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.addrs, key)
+}
+
 // pruneLocked keeps the map bounded: entries whose window and lockout
 // are over go first; if that is not enough, the oldest window goes.
 func (l *authLimiter) pruneLocked(now time.Time) {
@@ -441,6 +451,16 @@ func (l *storeLimiter) succeed(ctx context.Context, key string) {
 	}
 	if err := l.l.Succeed(ctx, key); err != nil {
 		l.log.Error("api: failures not forgotten", "error", err)
+		return
+	}
+	l.mu.Lock()
+	delete(l.failed, key)
+	l.mu.Unlock()
+}
+
+func (l *storeLimiter) forgive(ctx context.Context, key string) {
+	if err := l.l.Forgive(ctx, key); err != nil {
+		l.log.Error("api: lockout not lifted", "error", err)
 		return
 	}
 	l.mu.Lock()
@@ -655,6 +675,12 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		return &principal{mode: modeOpen}, true
 	case mode == modeLegacy && s.opts.Token == "":
 		return &principal{mode: modeLegacy}, true
+	}
+	if r.Pattern == "POST /api/v1/login/finish" {
+		// The finish of a sign-in started: its start was checked against
+		// the lockout and counted, and a lockout that start set is its
+		// own to lift (opaque_api.go).
+		return &principal{mode: mode}, true
 	}
 	ip := s.clientIP(r)
 	key := store.LockoutAddr(ip)

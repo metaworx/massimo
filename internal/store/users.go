@@ -49,7 +49,7 @@ type User struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	LastLoginAt time.Time
-	AuthVersion int // 1: the server hashes the password
+	AuthVersion int // 1: the server hashes the password; 2: OPAQUE (opaque.go)
 	Version     int64
 	Origin      string
 }
@@ -57,7 +57,7 @@ type User struct {
 // Expired reports whether the user's end date has passed at now.
 func (u User) Expired(now time.Time) bool { return !u.ExpiresAt.IsZero() && !now.Before(u.ExpiresAt) }
 
-const userColumns = `u.id, u.uuid, u.name, u.display_name, u.password_hash <> '', u.role_id, r.key, u.disabled, u.expires_at, u.invited_by,
+const userColumns = `u.id, u.uuid, u.name, u.display_name, (u.password_hash <> '' OR u.opaque_record IS NOT NULL), u.role_id, r.key, u.disabled, u.expires_at, u.invited_by,
 	u.created_at, u.updated_at, u.last_login_at, u.auth_version, u.version, u.origin`
 
 const userFrom = ` FROM users u JOIN roles r ON r.id = u.role_id `
@@ -163,12 +163,25 @@ func (s *Store) roleID(ctx context.Context, q queryer, key string) (int64, error
 	return id, nil
 }
 
-// AddUser adds a user with u's Name, DisplayName, Role (a key),
-// Disabled and ExpiresAt, and the password (none when empty), created
-// by the user by (0: nobody, the command line). A removed user of the
-// name is taken over: its row gets the new values and keeps its
-// identifier, and starts without preferences.
-func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) (User, error) {
+// credential is what a new user signs in with: a hash of version 1, a
+// record of version 2 (opaque.go), or neither, for keys only.
+type credential struct {
+	hash   string
+	record []byte
+	ksf    string
+}
+
+// authVersion is the auth_version of a credential.
+func (c credential) authVersion() int {
+	if c.record != nil {
+		return 2
+	}
+	return 1
+}
+
+// newUser normalises a user to add: the name checked, the role viewer
+// by default.
+func (s *Store) newUser(u User) (User, error) {
 	if err := s.writable(); err != nil {
 		return User{}, err
 	}
@@ -178,6 +191,19 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	}
 	if u.Role == "" {
 		u.Role = RoleViewer
+	}
+	return u, nil
+}
+
+// AddUser adds a user with u's Name, DisplayName, Role (a key),
+// Disabled and ExpiresAt, and the password (none when empty), created
+// by the user by (0: nobody, the command line). A removed user of the
+// name is taken over: its row gets the new values and keeps its
+// identifier, and starts without preferences.
+func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) (User, error) {
+	u, err := s.newUser(u)
+	if err != nil {
+		return User{}, err
 	}
 	hash := ""
 	if password != "" {
@@ -198,6 +224,25 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 			return User{}, err
 		}
 	}
+	return s.addUser(ctx, u, credential{hash: hash}, by)
+}
+
+// AddOpaqueUser adds a user as AddUser does, with a password of
+// version 2: the client's registration record and its key stretching
+// (OpaqueRegistration, SetOpaqueRecord).
+func (s *Store) AddOpaqueUser(ctx context.Context, u User, record []byte, ksf string, by int64) (User, error) {
+	u, err := s.newUser(u)
+	if err != nil {
+		return User{}, err
+	}
+	if err := s.checkRecord(record, ksf); err != nil {
+		return User{}, err
+	}
+	return s.addUser(ctx, u, credential{record: record, ksf: ksf}, by)
+}
+
+// addUser writes a user that newUser checked, with its credential.
+func (s *Store) addUser(ctx context.Context, u User, c credential, by int64) (User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
@@ -212,17 +257,17 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	now := s.nowText()
 	switch err := tx.QueryRowContext(ctx, `SELECT id, deleted_at FROM users WHERE name = ?`, u.Name).Scan(&id, &deleted); {
 	case errors.Is(err, sql.ErrNoRows):
-		_, err = tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, password_hash, role_id, disabled, expires_at, invited_by, created_at, updated_at, updated_by, origin)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), u.Name, u.DisplayName, hash, role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, now, nullID(by), s.nodeID)
+		_, err = tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, password_hash, opaque_record, opaque_ksf, auth_version, role_id, disabled, expires_at, invited_by, created_at, updated_at, updated_by, origin)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), u.Name, u.DisplayName, c.hash, c.record, c.ksf, c.authVersion(), role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, now, nullID(by), s.nodeID)
 	case err != nil:
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 	case !deleted.Valid:
 		return User{}, fmt.Errorf("%w: %s", ErrUserExists, u.Name)
 	default:
-		_, err = tx.ExecContext(ctx, `UPDATE users SET display_name = ?, password_hash = ?, role_id = ?, disabled = ?, expires_at = ?, invited_by = ?, last_login_at = NULL, auth_version = 1,
-			deleted_at = NULL, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-			u.DisplayName, hash, role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, nullID(by), s.nodeID, id)
+		_, err = tx.ExecContext(ctx, `UPDATE users SET display_name = ?, password_hash = ?, opaque_record = ?, opaque_ksf = ?, role_id = ?, disabled = ?, expires_at = ?, invited_by = ?, last_login_at = NULL,
+			auth_version = ?, deleted_at = NULL, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+			u.DisplayName, c.hash, c.record, c.ksf, role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), c.authVersion(), now, nullID(by), s.nodeID, id)
 		if err == nil {
 			// Another person under the name: none of the removed user's
 			// settings, also of a removal that left them live.
@@ -300,8 +345,9 @@ func (s *Store) UpdateUser(ctx context.Context, name string, change func(*User) 
 	return out, err
 }
 
-// SetPassword sets a user's password, or removes it when empty. Its
-// sessions are the caller's to revoke (RevokeSessions).
+// SetPassword sets a user's password of version 1, or removes it when
+// empty, a record of version 2 with it. Its sessions are the caller's to
+// revoke (RevokeSessions).
 func (s *Store) SetPassword(ctx context.Context, name, password string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -321,7 +367,7 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 			return err
 		}
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, auth_version = 1, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE name = ? AND deleted_at IS NULL`,
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, opaque_record = NULL, opaque_ksf = '', auth_version = 1, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE name = ? AND deleted_at IS NULL`,
 		hash, s.nowText(), nullID(by), s.nodeID, NormalName(name))
 	if err != nil {
 		return fmt.Errorf("store: user %s: %w", name, err)

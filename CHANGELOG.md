@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- A sign-in by OPAQUE (RFC 9807) that sends no password, and the
+  registration that sets one: `POST /api/v1/login/start` and `…/finish`
+  (migration 0006, `opaque.key`; `docs/api-v1.md`).
+
 ### Changed
 
 - Passwords are hashed with argon2id at 19 MiB and two passes, about
