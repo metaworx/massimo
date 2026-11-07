@@ -35,6 +35,10 @@ type Server struct {
 	// Keep names devices that t: does not delete, as the Cube keeps a
 	// device that never answers.
 	Keep map[cube.RFAddress]bool
+	// ReplyGap spaces the lines of a reply of several, the A line of
+	// each device a t: deletes, as the Cube answers each when it is done
+	// with it; 0 writes them at once.
+	ReplyGap time.Duration
 
 	ln       net.Listener
 	mu       sync.Mutex
@@ -259,9 +263,13 @@ func (s *Server) serve(conn net.Conn) {
 		}
 	}
 	var inclusion *time.Timer // ends the running inclusion
+	var join *time.Timer      // makes the Pair device join it
 	defer func() {
 		if inclusion != nil {
 			inclusion.Stop()
+		}
+		if join != nil {
+			join.Stop()
 		}
 	}()
 	var last cube.Message
@@ -327,6 +335,17 @@ func (s *Server) serve(conn net.Conn) {
 			if _, addrs, err := cube.ParseDeleteDevices(m.Data); err == nil && len(addrs) > 0 {
 				s.deleteDevices(addrs)
 				reply = strings.Repeat("A:\r\n", len(addrs))
+				if s.ReplyGap > 0 && len(addrs) > 1 {
+					for i := range addrs {
+						if i > 0 {
+							time.Sleep(s.ReplyGap)
+						}
+						if err := write("A:\r\n"); err != nil {
+							return
+						}
+					}
+					continue
+				}
 			}
 		case 'e', 'd':
 			reply = fmt.Sprintf("%c:%s\r\n", m.Type-32, m.Data)
@@ -339,8 +358,11 @@ func (s *Server) serve(conn net.Conn) {
 			if inclusion != nil {
 				inclusion.Stop()
 			}
+			if join != nil {
+				join.Stop() // a second n: makes the device join once
+			}
 			if p := s.Pair; p != nil {
-				time.AfterFunc(p.Delay, func() {
+				join = time.AfterFunc(p.Delay, func() {
 					s.mu.Lock()
 					s.joined = true
 					delete(s.deleted, p.Device.RFAddress)
@@ -354,6 +376,10 @@ func (s *Server) serve(conn net.Conn) {
 			if inclusion != nil {
 				inclusion.Stop()
 				inclusion = nil
+			}
+			if join != nil {
+				join.Stop() // no device joins an inclusion that ended
+				join = nil
 			}
 			reply = "N:\r\n"
 		default:

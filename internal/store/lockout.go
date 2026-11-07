@@ -108,6 +108,24 @@ func (l *Lockout) Succeed(ctx context.Context, key string) error {
 	return nil
 }
 
+// Keys lists the keys that have failures or a lockout.
+func (l *Lockout) Keys(ctx context.Context) ([]string, error) {
+	rows, err := l.s.db.QueryContext(ctx, `SELECT key FROM auth_failures ORDER BY key`)
+	if err != nil {
+		return nil, fmt.Errorf("store: lockout: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, fmt.Errorf("store: lockout: %w", err)
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // prune removes the rows whose window and lockout are over.
 func (l *Lockout) prune(ctx context.Context, tx *sql.Tx, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM auth_failures WHERE window_start < ? AND (locked_until IS NULL OR locked_until < ?)`, formatTime(now.Add(-l.window)), formatTime(now)); err != nil {

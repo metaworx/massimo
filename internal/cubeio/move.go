@@ -12,12 +12,7 @@ import (
 
 // Linkable reports whether a device type takes part in room links.
 func Linkable(t cube.DeviceType) bool {
-	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat || t == cube.DeviceShutterContact
-}
-
-// isThermostat reports whether t is a radiator or wall thermostat.
-func isThermostat(t cube.DeviceType) bool {
-	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat
+	return t.IsThermostat() || t == cube.DeviceShutterContact
 }
 
 // linkPair reports whether the original software links two room members:
@@ -25,7 +20,7 @@ func isThermostat(t cube.DeviceType) bool {
 // into a room with a thermostat and a contact was linked with the
 // thermostat only).
 func linkPair(a, b cube.DeviceType) bool {
-	return Linkable(a) && Linkable(b) && (isThermostat(a) || isThermostat(b))
+	return Linkable(a) && Linkable(b) && (a.IsThermostat() || b.IsThermostat())
 }
 
 // linkTarget addresses a link radiogram to a room member the way the

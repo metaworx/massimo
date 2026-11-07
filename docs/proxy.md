@@ -105,6 +105,10 @@ A delete command (`t:`) naming a hidden device is refused for that device and lo
 the others in it are deleted,
 and when none is left the proxy answers the client itself without sending anything,
 so a client cannot delete a hidden device (and make the Cube send it a factory reset).
+The Cube answers a `t:` with an `A:` line for each device it names,
+each when it is done with it;
+the server waits for all of them before the next command,
+and the client gets one for each device it named, the hidden ones included.
 `serve -show-hidden` switches all of this off.
 Once the Cube answered a client's `t:`,
 the server's copy forgets the devices it deleted,

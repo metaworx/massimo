@@ -56,11 +56,12 @@ func runPortal(args []string) error {
 	codecs := map[string]*portal.Codec{}
 	sns, _ := env.Serials(env.Key)
 	for _, sn := range sns {
-		ivs := os.Getenv(env.PerCube(env.IV, sn))
+		keyVar, key := env.PerCubeValue(env.Key, sn)
+		ivVar, ivs := env.PerCubeValue(env.IV, sn)
 		if ivs == "" {
-			return fmt.Errorf("portal: %s is set but %s is not", env.PerCube(env.Key, sn), env.PerCube(env.IV, sn))
+			return fmt.Errorf("portal: %s is set but %s is not", keyVar, ivVar)
 		}
-		c, err := codecFor(os.Getenv(env.PerCube(env.Key, sn)), ivs)
+		c, err := codecFor(key, ivs)
 		if err != nil {
 			return fmt.Errorf("portal: cube %s: %w", sn, err)
 		}

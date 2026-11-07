@@ -43,3 +43,38 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Log out brings the dialog back"
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "the token is forgotten"
+
+
+def sign_in(page, user, password):
+    """The dialog's sign-in, once the dialog is open; the tiles shown."""
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
+    page.locator("#login-user").fill(user)
+    page.locator("#login-password").fill(password)
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the stream is open"
+    page.wait_for_timeout(1000)  # a second start would have asked by now
+
+
+def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
+    """A sign-in that the page's start waited for, or Log out's, lets
+    that start go on, and starts nothing beside it: one stream ticket and
+    one read of who is in per sign-in."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    tickets, mes = [], []
+    page.on("request", lambda r: tickets.append(r.url) if r.method == "POST" and r.url.endswith("/events/ticket") else None)
+    page.on("response", lambda r: mes.append(r.url) if r.request.method == "GET" and r.url.endswith("/api/v1/me") and r.ok else None)
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    assert (len(tickets), len(mes)) == (1, 1), f"one start after the sign-in at the page's start: {len(tickets)} ticket(s), {len(mes)} /me"
+    page.locator("#view-settings").click()
+    page.locator("#logout-btn").click()
+    sign_in(page, "operator", "op-pass")
+    assert (len(tickets), len(mes)) == (2, 2), f"one start after the sign-in after Log out: {len(tickets)} ticket(s), {len(mes)} /me"
+    page.locator("#view-settings").click()
+    page.locator("#logout-btn").click()
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"

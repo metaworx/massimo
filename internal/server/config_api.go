@@ -209,11 +209,6 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// thermostat reports whether a device type has settings to copy.
-func thermostat(t cube.DeviceType) bool {
-	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat
-}
-
 // updateDevice handles PUT /devices/{rf} with {"name": "…"} and/or
 // {"room_id": N}. A room change is done as the original software does
 // it: unlink from the old room's partners, relink with the new room's,
@@ -281,7 +276,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			idx = i
 		}
 	}
-	withCopy := (req.Copy == nil || *req.Copy) && thermostat(c.Type)
+	withCopy := (req.Copy == nil || *req.Copy) && c.Type.IsThermostat()
 	var room uint8 // the room the device went into, 0 when it stayed
 	if idx < 0 {
 		room, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)
@@ -373,7 +368,7 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 	}
 	rt.afterWrite(copied.Temperatures...) // with none, the budget's follow-up of the 0x40
 	if !copied.Empty() || copied.ModeNotSet {
-		s.log.Info("settings copied", "cube", rt.serial, "device", rf, "room", room, "temperatures", len(copied.Temperatures),
+		s.log.Info("settings copied", "cube", rt.cubeSerial(), "device", rf, "room", room, "temperatures", len(copied.Temperatures),
 			"valve", copied.Valve, "days", copied.Days, "mode_not_set", copied.ModeNotSet)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
@@ -479,7 +474,7 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		rt.client.ForgetDevice(rf)
-		s.log.Info("device removed", "cube", rt.serial, "device", rf, "type", listed.Type, "from", "metadata", "remote", s.clientIP(r))
+		s.log.Info("device removed", "cube", rt.cubeSerial(), "device", rf, "type", listed.Type, "from", "metadata", "remote", s.clientIP(r))
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 		return nil
 	}
@@ -491,7 +486,7 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	rt.afterWrite() // the unlinks were radio writes
-	s.log.Info("device removed", "cube", rt.serial, "device", rf, "type", c.Type, "remote", s.clientIP(r))
+	s.log.Info("device removed", "cube", rt.cubeSerial(), "device", rf, "type", c.Type, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 	return nil
 }

@@ -194,10 +194,10 @@ func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
 		case d == nil:
 		case line.Data != d.baseline:
 			delete(f.devices, rf)
-			s.log.Info("device configuration taken over by the device", "cube", rt.serial, "device", rf)
+			s.log.Info("device configuration taken over by the device", "cube", rt.cubeSerial(), "device", rf)
 		case d.step+1 >= len(f.delays):
 			delete(f.devices, rf)
-			s.log.Info("device configuration unchanged after the follow-up", "cube", rt.serial, "device", rf)
+			s.log.Info("device configuration unchanged after the follow-up", "cube", rt.cubeSerial(), "device", rf)
 		default:
 			d.step++
 			d.next = time.Now().Add(f.delays[d.step])
@@ -222,8 +222,8 @@ func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
 	f.mu.Unlock()
 	res := rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityLow, Reconnect: true}).Wait(ctx)
 	if res.Err != nil && ctx.Err() == nil {
-		s.log.Warn("budget refresh failed", "cube", rt.serial, "error", res.Err)
+		s.log.Warn("budget refresh failed", "cube", rt.cubeSerial(), "error", res.Err)
 		return
 	}
-	s.log.Info("budget refreshed after writes", "cube", rt.serial, "pending", rt.client.Budget().Pending())
+	s.log.Info("budget refreshed after writes", "cube", rt.cubeSerial(), "pending", rt.client.Budget().Pending())
 }

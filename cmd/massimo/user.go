@@ -47,8 +47,9 @@ func userUsage() {
   enable <name>
   token <name> -label <text>
                      create an API key for the user and print it once
+  tokens <name>      the user's live sessions and keys with their ids
   revoke <name> [<token id>]
-                     revoke one session or key of the user (the id of list), or every one
+                     revoke one session or key of the user (the id of tokens), or every one
 
 The roles are owner, manager, operator, guest, viewer, integration and the
 ones created through the API (viewer when -role is absent); -expires takes
@@ -84,6 +85,8 @@ func runUser(args []string) error {
 		return u.setDisabled(args[1:], args[0] == "disable")
 	case "token":
 		return u.token(args[1:])
+	case "tokens":
+		return u.tokens(args[1:])
 	case "revoke":
 		return u.revoke(args[1:])
 	case "help", "-h", "--help":
@@ -330,6 +333,42 @@ func (u userCmd) token(args []string) error {
 	fmt.Fprintf(os.Stderr, "API key %d of %s, shown once; send it as \"Authorization: Bearer <key>\":\n", tok.ID, us.Name)
 	fmt.Fprintln(stdout, secret)
 	return nil
+}
+
+// tokens lists a user's live sessions and keys, oldest first, with the
+// ids revoke takes; never their secrets, which the store does not have.
+func (u userCmd) tokens(args []string) error {
+	if len(args) != 1 {
+		userUsage()
+		return errors.New("user tokens: give the name")
+	}
+	us, ok, err := u.st.User(u.ctx, args[0])
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("user tokens: no user %q", args[0])
+	}
+	tokens, err := u.st.Tokens(u.ctx, us.ID)
+	if err != nil {
+		return err
+	}
+	when := func(t time.Time) string {
+		if t.IsZero() {
+			return "never"
+		}
+		return t.Local().Format("2006-01-02 15:04")
+	}
+	w := tabwriter.NewWriter(stdout, 0, 8, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tKIND\tLABEL\tCREATED\tLAST USED\tFROM\tEXPIRES")
+	for _, t := range tokens {
+		from := t.LastUsedFrom
+		if from == "" {
+			from = "-"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Kind, t.Label, when(t.CreatedAt), when(t.LastUsedAt), from, when(t.ExpiresAt))
+	}
+	return w.Flush()
 }
 
 func (u userCmd) revoke(args []string) error {

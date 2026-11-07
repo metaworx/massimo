@@ -53,11 +53,11 @@ docs/handover-session.md is the context a session needs to work here.
    "The owner's steps left"):
    the checks "Debian package (debian:trixie-slim)" and "(debian:bookworm-slim)"
    added to the ruleset on `main`;
-   the apt key made, `MASSIMO_APT_KEY` and `MASSIMO_APT_KEY_PASSPHRASE` in the
-   `signing` environment, Pages set to deploy from Actions;
    the repository `metaworx/homebrew-massimo` created,
-   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY`;
-   until then the apt and tap jobs skip themselves.
+   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY`,
+   then `gh workflow run publish.yml -f tag=<newest release>` once;
+   until then the tap job skips itself.
+   The first release with the deploy key set proves the Homebrew job.
 3. **Packaging, the rest**
    (AP Packaging v1.0, Blocks 4 to 10, each a `PLAN+` revision when wanted,
    else `EXEC retire`): Windows code signing (none for now;
@@ -85,7 +85,6 @@ docs/handover-session.md is the context a session needs to work here.
    a native speaker's review of FR, IT, NL and PL;
    the server's error texts in the UI's language.
 10. **Release engineering**:
-    the next release (`BUMP=minor`: pairing and the log in the store);
     macOS notarization; log rotation through SIGHUP; the `edge` mode.
 11. **Firmware dump** of the spare Cube once the FT232H is in
     (docs/firmware-extraction.md),

@@ -10,7 +10,8 @@ name: Release
 # through the `signing` environment, which only v* tags may use, runs
 # nothing but openssl and gh on what build handed over, checks the
 # signature against the public key compiled into massimo before
-# publishing, and publishes exactly what it signed. `apt-build` holds
+# publishing, and publishes exactly what it signed. `homebrew` then
+# pushes the formula to the tap (publish.yml). `apt-build` holds
 # the apt repository's key through the same environment and rebuilds
 # the site from the releases (packaging/apt/publish.sh); `apt-deploy`
 # puts it on GitHub Pages. Both are skipped until the owner has made
@@ -166,7 +167,23 @@ jobs:
           else
             printf '%s\n' "$sentence" > "$RUNNER_TEMP/notes.md"
           fi
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+          # The target is the channel: a box reads it before it fetches the
+          # manifest of a release whose tag has no label (internal/update,
+          # hintedChannel); the tag exists, so nothing is made from it.
+          gh release create "$TAG" --verify-tag --target "$CHANNEL" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+
+  # The Homebrew formula of the release's channel, pushed to the tap
+  # (publish.yml), once the release is published; skipped without the
+  # tap's deploy key. It runs from here because the release this run
+  # creates with its own token starts no workflow of its own.
+  homebrew:
+    name: Homebrew
+    needs: [ build, sign ]
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.build.outputs.tag }}
+    secrets:
+      HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
   # The apt repository: the packages of the newest releases of every
   # channel, one suite per channel, signed with the repository key
@@ -215,8 +232,12 @@ jobs:
         with:
           path: site
 
-  # Pages deploys from the artifact; the repository's Pages source must
-  # be "GitHub Actions" (a setting of the owner's).
+  # Pages deploys from the artifact. Two settings of the owner's
+  # (packaging/README.md, "The apt repository"): the repository's Pages
+  # source is "GitHub Actions", and the github-pages environment GitHub
+  # then makes, which deploys from the default branch only, also allows
+  # the tags v* (Settings → Environments → github-pages → Deployment
+  # branches and tags), since this job runs for a tag; else it is refused.
   apt-deploy:
     name: Deploy the apt repository
     needs: apt-build

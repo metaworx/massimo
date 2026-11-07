@@ -131,3 +131,13 @@ func (s *Store) DeletePreference(ctx context.Context, userID int64, key string) 
 	}
 	return nil
 }
+
+// removePreferences makes every live preference of a user a tombstone,
+// within the transaction of the user's removal or takeover.
+func (s *Store) removePreferences(ctx context.Context, tx *sql.Tx, userID int64, now string) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE preferences SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND deleted_at IS NULL`,
+		now, now, s.nodeID, userID); err != nil {
+		return fmt.Errorf("store: preferences of user %d: %w", userID, err)
+	}
+	return nil
+}

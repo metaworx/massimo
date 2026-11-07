@@ -95,6 +95,12 @@ func (t DeviceType) IsRadiatorThermostat() bool {
 	return t == DeviceRadiatorThermostat || t == DeviceRadiatorThermostatPlus
 }
 
+// IsThermostat reports whether the type is a radiator or a wall
+// thermostat: a device with temperatures, a mode and a week programme.
+func (t DeviceType) IsThermostat() bool {
+	return t.IsRadiatorThermostat() || t == DeviceWallThermostat
+}
+
 // Mode is the operating mode of a thermostat.
 type Mode uint8
 

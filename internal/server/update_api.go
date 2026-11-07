@@ -165,6 +165,10 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	case !v.Available:
 		return fail(http.StatusConflict, "already up to date (%s)", v.Current)
 	}
+	// One request at a time: a second POST waits for the first's write
+	// and start, and the helper that start left at work answers it.
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {
 		return fail(http.StatusInternalServerError, "asking the update helper: %v", err)
 	}

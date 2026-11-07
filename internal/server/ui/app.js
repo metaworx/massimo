@@ -151,6 +151,16 @@ function storeUserSetting(key, v) {
   store("massimo." + key, SETTING_STORE[key](v));
 }
 
+// forgetUserSettings takes the user's values out of the browser, the
+// settings and the schemes (theme.js), as Log out does for a user whose
+// settings followed it; what is kept for this device only stays, and the
+// defaults apply where it keeps nothing.
+function forgetUserSettings() {
+  for (const k of SETTING_KEYS) store("massimo." + k, null);
+  forgetCustomSchemes();
+  return applyStoredSettings();
+}
+
 // setSetting changes a setting: on this device only where it is kept for
 // this device, else the user's value, which goes to the server as well
 // (login.js schedulePreferences).
@@ -203,15 +213,17 @@ function base() {
   return "api/v1/cubes/" + encodeURIComponent(state.serial);
 }
 
-async function api(method, path, body) {
+// apiRequest sends one request and returns the answer's JSON, null for
+// an empty one; an answer that is not ok is thrown as an Error with the
+// server's error (or the status), its status and its data. The token
+// goes along unless auth is false; keepalive lets the request outlive
+// the page. api() adds the sign-in on a 401; the sign-in itself and the
+// last preferences sent as the page is left use it as it is (login.js).
+async function apiRequest(method, path, body, { auth = true, keepalive = false } = {}) {
   const headers = {};
-  if (state.token) headers.Authorization = "Bearer " + state.token;
+  if (auth && state.token) headers.Authorization = "Bearer " + state.token;
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  if (resp.status === 401) {
-    if (await askLogin()) return api(method, path, body); // login.js
-    throw new Error(t("api.badToken"));
-  }
+  const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
   let data = null;
   const text = await resp.text();
   if (text) {
@@ -223,11 +235,23 @@ async function api(method, path, body) {
   }
   if (!resp.ok) {
     const err = new Error((data && data.error) || resp.status + " " + resp.statusText);
-    err.data = data;
     err.status = resp.status;
+    err.data = data;
     throw err;
   }
   return data;
+}
+
+// api is apiRequest with the token, asking for a sign-in on a 401 and
+// sending the request again once one is in.
+async function api(method, path, body) {
+  try {
+    return await apiRequest(method, path, body);
+  } catch (e) {
+    if (e.status !== 401) throw e;
+    if (await askLogin()) return api(method, path, body); // login.js
+    throw new Error(t("api.badToken"));
+  }
 }
 
 // apiRaw is api for what is not JSON, a backup file: body goes as it is,
@@ -870,10 +894,14 @@ async function connectEvents() {
     if (data.state) updateDevice(data.state);
     if (!initial) appendLogEvent(data);
   });
+  // A handler's load that fails, as when the server is briefly gone, is
+  // left to the next poll or event: its rejection is caught here, as the
+  // other call sites catch theirs.
   const logged = (handler) => (ev) => {
     const data = JSON.parse(ev.data);
     appendLogEvent(data);
-    handler(data);
+    const done = handler(data);
+    if (done && typeof done.catch === "function") done.catch(() => {});
   };
   es.addEventListener("hello", logged(() => loadCubes()));
   es.addEventListener("metadata", logged(() => loadRooms()));
@@ -904,13 +932,8 @@ async function connectEvents() {
   });
   // A restore's steps and its end go to the log and to the backup panel
   // that sent it (backup.js).
-  for (const kind of ["restore_step", "restore_done"]) {
-    es.addEventListener(kind, (ev) => {
-      const data = JSON.parse(ev.data);
-      appendLogEvent(data);
-      restoreEvent(data);
-    });
-  }
+  es.addEventListener("restore_step", logged(restoreEvent));
+  es.addEventListener("restore_done", logged(restoreEvent));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -1031,8 +1054,7 @@ async function init() {
   initSettings();
   applySettings();
   checkVersion();
-  await loadMe(); // login.js: who is signed in, or the sign-in dialog
-  await loadPreferences(); // login.js: the user's settings from the server
+  await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
   $("cube-select").addEventListener("change", (ev) => {
     if (ev.target.value !== DISCOVER) return selectCube(ev.target.value);
     ev.target.value = state.serial || "";

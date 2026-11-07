@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+## [0.10.0-alpha.1] - 2026-11-07
+
+### Added
+
 - The store keeps the Cubes' events (migration 0004), written in
   batches and pruned daily by `log.keep_days` in `/api/v1/settings`
   (30 days; 0 keeps them), so that the log survives a restart.
@@ -50,6 +54,197 @@ the next minor, a fix counts the suffix up.
 - `PUT …/devices/{rf}` gives a thermostat put into a room or moved the
   room's settings, as the original software does, with `configure`;
   `"copy": false` skips it (docs/api-v1.md).
+
+### Fixed
+
+- A stop of `serve` just after the Cube of the plain
+  `MASSIMO_CUBE_ADDRESS` reported its serial no longer leaves the next
+  start refusing "several cubes configured".
+
+- A second update started on Windows while the helper reads the first
+  answers 409, no longer 500 from the request file the helper holds.
+
+- Two updates started at once, as from two tabs, write one request and
+  answer 202 and 409, no longer 500 when both wrote the request file.
+
+- A Debian package built between two tags holds the version its file
+  name shows (`make packages`).
+
+- The apt repository's keyring package is versioned by the time of the
+  publish, so that its version only goes up, whatever the key's dates.
+
+- The apt snippet's Signed-By names the keyring package's key, installed
+  first, so that an extended key reaches the boxes (packaging/README.md).
+
+- The release workflow pushes the Homebrew formula to the tap itself:
+  the release it creates never started publish.yml (CI.md, section 6).
+
+- The apt repository's setup names the `github-pages` environment's rule
+  for the tags `v*`, without which every deploy is refused.
+
+- Settings → Users shows a key just created, lists each token once, and
+  one click on Create key makes one key.
+
+- A redraw of Settings → Cubes no longer reloads an open Cube's pairing,
+  which took the focus out of the pairing form being typed in.
+
+- Hide and Show again in a Cube's panel keep what is typed in its form.
+
+- A sign-in as the page starts, or after Log out, starts the page once,
+  with one event stream instead of two.
+
+- Log out takes the user's settings and colour schemes out of the
+  browser, so that the next user neither sees nor inherits them.
+
+- A colour scheme deleted in one browser no longer comes back from
+  another that still had it (docs/ui.md, "Settings").
+
+- A room's state arriving while its configuration is typed in no longer
+  draws the tile again under the typing; it shows once the focus leaves.
+
+- A switch point's time can be typed in full from the keyboard in the
+  week programme; the editor no longer redraws after its first part.
+
+- The log keeps the live events that come while it loads a page.
+
+- Saving a user with an end date no longer sends the end date again,
+  cut to the minute, when it did not change.
+
+- A double click on Yes of a removal sends one request, and the page
+  says it worked instead of reporting the second as failed.
+
+- A language load that a newer choice has superseded no longer shows
+  its error on the page in the newer language.
+
+- An event that makes the page load again no longer leaves a failed
+  load as an uncaught error in the browser's console.
+
+- A new API key is no longer kept in its command's result, nor given
+  out again by a replay of its `Idempotency-Key` (docs/api-v1.md).
+
+- Behind a trusted proxy, a client's `X-Real-IP` no longer wins over an
+  `X-Forwarded-For` entry that is not an address, nor a second
+  `X-Forwarded-For` line over the proxy's (docs/reverse-proxy.md).
+
+- Requests refused before anyone is known are one audit row per address
+  and minute, with their count, and their bodies are not read
+  (docs/api-v1.md, "GET /api/v1/audit").
+
+- A user added under a removed user's name no longer inherits that
+  user's settings and colour schemes (docs/api-v1.md).
+
+- The Infomaniak hook hands its token to curl on standard input, not on
+  the command line, and gives each call 30 seconds (packaging/README.md).
+
+- A DNS-01 hook whose child keeps its output open no longer holds the
+  order past the hook's two minutes; the child ends with the hook.
+
+- `massimo install -no-update-helper` on Linux disables and removes the
+  update helper an earlier install put there (packaging/README.md).
+
+- An owner with an end date no longer counts as the owner left, so the
+  last one without an end date keeps the box reachable (docs/api-v1.md).
+
+- A DNS-01 order that ran out of time still clears its TXT record, and
+  a clear that fails is always logged.
+
+- An authenticated request writes the store's lockout only where its
+  address or user name had failed checks, no longer on every request.
+
+- `-tls acme` serves the first name's certificate to a client that names
+  no host, so the update helper's health check no longer rolls back.
+
+- `-tls acme`'s hourly check orders the ECDSA certificate browsers get,
+  no longer a second RSA one, and the status shows the one served.
+
+- `massimo install` with another `-tls` mode removes the variables of
+  the one before, so serve no longer refuses to start after a switch.
+
+- The update helper's health check over TLS on one of the box's own
+  addresses (a specific `-listen`) no longer fails on its certificate.
+
+- `massimo serve` stops on SIGTERM as on Ctrl-C, so a stop by systemd or
+  launchd writes the pending log events and closes the store.
+
+- A stop of the Windows service, as by an update or a reboot, waits for
+  `serve` to write the pending log events and close the store.
+
+- The update helper reports "failed" for every error after it took the
+  request, so the web UI no longer shows the previous run's result.
+
+- `massimo serve` takes the plain `MASSIMO_CUBE_ADDRESS` for the one Cube
+  `MASSIMO_CUBE_SN` names, also beside a variable of its own (README.md).
+
+- A serial in lower case in a variable's name, such as
+  `MASSIMO_CUBE_keq0000000_ADDRESS`, is that Cube's again on Linux.
+
+- The self-signed certificate's renewal keeps a name added with
+  `massimo tls self-signed -names` (README.md, "Server").
+
+- `massimo update -check` and the web UI say that a channel has no
+  signed release, no longer that an old release has no manifest.
+
+- `massimo update` downloads a binary for as long as a slow line needs,
+  no longer cut off after two minutes; a stall ends it after one.
+
+- An update check fetches no manifest of another channel's release, so
+  a build from `main` no longer verifies thirty alpha releases each time.
+
+- `massimo tls show` prints what `massimo config` prints of the TLS,
+  the HSTS days and the names given included.
+
+- `massimo user tokens <name>` lists a user's sessions and keys with the
+  ids `user revoke` takes, so one key can be revoked alone (README.md).
+
+- The TLS variables are named once for `massimo install`, `serve` and
+  `massimo config`, which can no longer read different names.
+
+- A command's step in `GET /api/v1/commands/{id}` no longer stays
+  `queued` when the queue ran it at once (docs/api-v1.md).
+
+- A radio command no longer waits for the store to record its step,
+  which a busy SD card could delay by up to five seconds.
+
+- A retry with the `Idempotency-Key` of a request the server's restart
+  cut off answers 503, not a closed connection (docs/api-v1.md).
+
+- A replay of a restore's `Idempotency-Key` answers the first `202`, no
+  longer the run's outcome (docs/api-v1.md).
+
+- `POST /api/v1/update`'s command is acknowledged with its 202, no
+  longer `sent` until a restart, and its key replays (docs/api-v1.md).
+
+- A Cube served by its address alone learns its serial without a data
+  race with the handlers and discovery that read it.
+
+- A Cube served by its address that reports the serial of a Cube added
+  meanwhile stops, instead of taking its place beside it.
+
+- A `t:` deleting several devices waits for the Cube's `A:` of each, so
+  the next command no longer takes a late one as its reply
+  (docs/proxy.md).
+
+- A Cube's new address from discovery is dialled at once, with one
+  connection, no longer after the minute of backoff the old address
+  built up.
+
+- A device whose greeting C line answered a re-read sent during the
+  greeting no longer drops out of the server's copy.
+
+- A pairing given up while its `n:` still waits in the queue is taken
+  out of it, so the Cube no longer starts an inclusion nobody watches.
+
+- The re-read after a configuration write is a step of its command in
+  `GET /api/v1/commands/{id}`, so a failed one shows there.
+
+- `massimo fakecube -pair`: the device no longer joins after `x:` or
+  twice after two `n:`, nor once the connection is closed.
+
+- A write no longer scans the commands table for its `Idempotency-Key`
+  and for the retention: the key's index serves it, the prune is hourly.
+
+- What counts as a thermostat is decided in one place, so the copy of a
+  room's settings, the stale rule and the log can no longer disagree.
 
 ## [0.9.0-alpha.1] - 2026-11-06
 

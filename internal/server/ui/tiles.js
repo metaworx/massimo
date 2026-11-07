@@ -73,7 +73,7 @@ function received(d, field) {
 }
 
 function roomUI(room) {
-  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null };
+  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false };
   return state.ui[room.id];
 }
 
@@ -210,6 +210,7 @@ async function removeFromCube(d) {
 function renderRoom(room) {
   const el = fromTemplate("room-template");
   const ui = roomUI(room);
+  ui.deferred = false; // this render shows the state a state event left waiting
   el.dataset.id = room.id;
   el.querySelector(".room-name").textContent = room.name;
   el.querySelector(".room-name-btn").addEventListener("click", () => toggleDevices(room));
@@ -230,6 +231,16 @@ function renderRoom(room) {
   renderVacation(el, room);
   renderDeleteConfirm(el, room);
   renderConfig(el, room);
+  // A state event that came while the configuration had the focus is
+  // drawn once the focus has left it (updateDevice); a tick later, since
+  // focusout comes before the focus is anywhere else.
+  el.querySelector(".config-area").addEventListener("focusout", () => {
+    setTimeout(() => {
+      const r = state.rooms.find((x) => x.id === room.id);
+      if (!r || !roomUI(r).deferred || configFocused(r)) return;
+      rerenderRoom(r);
+    }, 0);
+  });
 
   const devs = el.querySelector(".devices");
   if (ui.open) {
@@ -509,7 +520,7 @@ function renderDeleteConfirm(el, room) {
   if (!ui.confirm) return;
   el.querySelector(".room-confirm").appendChild(confirmBox(t("room.deleteConfirm"), { yes: t("action.delete"), no: t("action.keep") }, () => {
     ui.confirm = false;
-    deleteRoom(room);
+    return deleteRoom(room);
   }, () => {
     ui.confirm = false;
     rerenderRoom(room);
@@ -669,7 +680,17 @@ function rerenderRoom(room) {
   }
 }
 
+// configFocused reports whether the focus is in a room tile's
+// configuration.
+function configFocused(room) {
+  const area = document.querySelector('.room[data-id="' + room.id + '"] .config-area');
+  return !!(area && area.contains(document.activeElement));
+}
+
 // updateDevice applies a state event to the room or the unlisted list.
+// A tile whose configuration has the focus is not drawn again under the
+// user's typing: the state is taken, and drawn once the focus leaves the
+// configuration (renderRoom).
 function updateDevice(d) {
   for (const r of state.rooms) {
     const i = r.devices.findIndex((x) => x.rf_address === d.rf_address);
@@ -677,7 +698,8 @@ function updateDevice(d) {
       r.devices[i] = d;
       r.ready = r.devices.every((x) => x.reported);
       r.stale = r.devices.some((x) => x.stale);
-      rerenderRoom(r);
+      if (configFocused(r)) roomUI(r).deferred = true;
+      else rerenderRoom(r);
       return;
     }
   }

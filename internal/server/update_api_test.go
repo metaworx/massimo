@@ -11,9 +11,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -191,5 +196,73 @@ func TestUpdateManaged(t *testing.T) {
 	}
 	if _, err := os.Stat(req); err == nil {
 		t.Fatal("a request was written")
+	}
+}
+
+// An update request's 202 has no run that reports back to its command:
+// the command is acknowledged with the answer, and a retry with its
+// Idempotency-Key gets the 202 again instead of "still running".
+func TestUpdateCommandIsAcknowledged(t *testing.T) {
+	dir := t.TempDir()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Update = UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"),
+		Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}}
+	_, ts, s := startWith(t, opts)
+	stores[ts] = s.opts.Store
+	headers := map[string]string{"Idempotency-Key": "update-1"}
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", headers); resp.StatusCode != 202 {
+		t.Fatalf("update: %d %s", resp.StatusCode, text)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if c := commandOfRow(t, ts, "secret", rows[0]); c.Action != "update.start" || c.State != store.StateAcknowledged || c.Status != 202 || c.FinishedAt == nil {
+		t.Fatalf("the update's command %+v", c)
+	}
+	os.Remove(opts.Update.Request)
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", headers); resp.StatusCode != 202 || resp.Header.Get("Idempotent-Replayed") != "true" {
+		t.Fatalf("the retry: %d %s", resp.StatusCode, text)
+	}
+	if _, err := os.Stat(opts.Update.Request); err == nil {
+		t.Fatal("the retry asked the helper again")
+	}
+}
+
+// Two POSTs at once: the second waits for the first's request and start,
+// and its starter, whose helper is still at work, answers it with 409.
+// Both used to write update-request.tmp together, and the second rename
+// could answer 500.
+func TestUpdatePostsOneAtATime(t *testing.T) {
+	req := filepath.Join(t.TempDir(), "update-request")
+	var active, overlaps, starts atomic.Int32
+	start := func() error {
+		defer active.Add(-1)
+		if active.Add(1) > 1 {
+			overlaps.Add(1)
+		}
+		time.Sleep(200 * time.Millisecond)
+		if starts.Add(1) > 1 {
+			return update.ErrHelperRunning
+		}
+		return nil
+	}
+	ts, _ := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Start: start})
+	codes := make([]int, 2)
+	var wg sync.WaitGroup
+	for i := range codes {
+		wg.Go(func() {
+			r, _ := http.NewRequest("POST", ts.URL+"/api/v1/update", strings.NewReader("{}"))
+			r.Header.Set("Authorization", "Bearer secret")
+			resp, err := http.DefaultClient.Do(r)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			resp.Body.Close()
+			codes[i] = resp.StatusCode
+		})
+	}
+	wg.Wait()
+	slices.Sort(codes)
+	if overlaps.Load() != 0 || !slices.Equal(codes, []int{202, 409}) {
+		t.Fatalf("two POSTs at once: %v, %d starts overlapping", codes, overlaps.Load())
 	}
 }

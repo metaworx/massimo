@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
@@ -22,7 +23,7 @@ func TestTLSCommand(t *testing.T) {
 	t.Setenv(tlsNamesVar, "")
 	t.Setenv("MASSIMO_LISTEN", "")
 	var out strings.Builder
-	if err := tlsCommand([]string{"show"}, &out); err != nil || !strings.Contains(out.String(), "serve has no TLS") {
+	if err := tlsCommand([]string{"show"}, &out); err != nil || !strings.Contains(out.String(), "tls:           off (serve has no TLS)") {
 		t.Fatalf("show off: %v %q", err, out.String())
 	}
 	t.Setenv(tlsVar, "self-signed")
@@ -46,10 +47,10 @@ func TestTLSCommand(t *testing.T) {
 		t.Fatalf("self-signed: %q", out.String())
 	}
 	out.Reset()
-	if err := tlsCommand([]string{"show"}, &out); err != nil || !strings.Contains(out.String(), "source:        self-signed") || !strings.Contains(out.String(), st.Fingerprint) || !strings.Contains(out.String(), "browsers warn once") {
+	if err := tlsCommand([]string{"show"}, &out); err != nil || !strings.Contains(out.String(), "tls:           self-signed") || !strings.Contains(out.String(), st.Fingerprint) || !strings.Contains(out.String(), "browsers warn once") {
 		t.Fatalf("show after: %v %q", err, out.String())
 	}
-	// config prints the same.
+	// config prints the same (TestTLSShowIsConfigsView).
 	out.Reset()
 	printTLS(&out)
 	if !strings.Contains(out.String(), "tls:           self-signed ("+filepath.Join(data, "tls")) || !strings.Contains(out.String(), st.Fingerprint) {
@@ -78,5 +79,30 @@ func TestTLSCommand(t *testing.T) {
 		if err := tlsCommand(bad, &out); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+// tls show prints what massimo config prints of the TLS: the HSTS days
+// and the names given among it.
+func TestTLSShowIsConfigsView(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv(env.DataVar, data)
+	t.Setenv(tlsVar, "self-signed")
+	t.Setenv(tlsCertVar, "")
+	t.Setenv(tlsKeyVar, "")
+	t.Setenv(tlsNamesVar, "nas.lan")
+	t.Setenv(hstsVar, "30")
+	t.Setenv("MASSIMO_LISTEN", "")
+	certPath, keyPath := certs.SelfSignedPaths(data)
+	if _, err := certs.Generate(certPath, keyPath, []string{"pi", "nas.lan"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var show, config strings.Builder
+	if err := tlsCommand([]string{"show"}, &show); err != nil {
+		t.Fatal(err)
+	}
+	printTLS(&config)
+	if show.String() != config.String() || !strings.Contains(show.String(), "hsts 30 days") || !strings.Contains(show.String(), "names given: nas.lan") {
+		t.Fatalf("tls show:\n%s\nconfig:\n%s", show.String(), config.String())
 	}
 }

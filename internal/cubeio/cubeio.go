@@ -12,6 +12,7 @@ package cubeio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -43,12 +44,11 @@ func MetadataCommand(md *cube.Metadata) (engine.Command, error) {
 
 // Do runs cmd through the queue. When it succeeded, a metadata write (m:
 // lines) is mirrored into the snapshot, and the configuration of each
-// device in reread is read back from the Cube.
+// device in reread is read back from the Cube. A command still waiting
+// when ctx ends is taken out of the queue; one that runs by then is
+// left to finish, and a metadata write of it is mirrored once it did.
 func (w Writer) Do(ctx context.Context, cmd engine.Command, reread ...cube.RFAddress) engine.Result {
-	if cmd.ID == "" {
-		cmd.ID = w.ID
-	}
-	res := w.Queue.Enqueue(cmd).Wait(ctx)
+	res, _ := w.run(ctx, cmd)
 	if res.Err != nil {
 		return res
 	}
@@ -59,6 +59,31 @@ func (w Writer) Do(ctx context.Context, cmd engine.Command, reread ...cube.RFAdd
 		w.Reread(ctx, rf)
 	}
 	return res
+}
+
+// run enqueues cmd and waits for it. When ctx ends first, the command
+// is withdrawn while it still waits (withdrawn reports that it was); one
+// that runs already is left to finish, its metadata write mirrored then.
+func (w Writer) run(ctx context.Context, cmd engine.Command) (res engine.Result, withdrawn bool) {
+	if cmd.ID == "" {
+		cmd.ID = w.ID
+	}
+	t := w.Queue.Enqueue(cmd)
+	res = t.Wait(ctx)
+	if res.Err == nil || ctx.Err() == nil || !errors.Is(res.Err, ctx.Err()) {
+		return res, false
+	}
+	if w.Queue.Withdraw(t, res.Err) {
+		return res, true
+	}
+	if isMetadataWrite(cmd.Lines) {
+		go func() {
+			if late := <-t.Done(); late.Err == nil {
+				w.Client.ApplyMetadataWrite(cmd.Lines)
+			}
+		}()
+	}
+	return res, false
 }
 
 // WriteMetadata writes md to the Cube and mirrors it into the snapshot.
@@ -73,11 +98,11 @@ func (w Writer) WriteMetadata(ctx context.Context, md *cube.Metadata) (engine.Re
 }
 
 // Reread asks the Cube for a device's C line, usually after a
-// configuration write, and applies the answer to the snapshot. Failures
-// are ignored: the write itself succeeded, and the copy catches up on
-// the next connection.
+// configuration write, and applies the answer to the snapshot, as a
+// step of the writer's request (ID). Failures are ignored: the write
+// itself succeeded, and the copy catches up on the next connection.
 func (w Writer) Reread(ctx context.Context, rf cube.RFAddress) {
-	res := w.Queue.Enqueue(engine.Command{Lines: []cube.Message{{Type: 'c', Data: rf.String()}}}).Wait(ctx)
+	res := w.Queue.Enqueue(engine.Command{ID: w.ID, Lines: []cube.Message{{Type: 'c', Data: rf.String()}}}).Wait(ctx)
 	if res.Err == nil && len(res.Replies) == 1 && res.Replies[0].Type == 'C' {
 		w.Client.ApplyLocal(res.Replies[0])
 	}
