@@ -435,6 +435,88 @@ func TestBackupAndInfo(t *testing.T) {
 	}
 }
 
+// copyAlone copies massimo.db of dir, without its -wal file, into a
+// directory of its own, and opens the copy read-only: what a copy of the
+// file alone holds.
+func copyAlone(t *testing.T, dir string) *Store {
+	t.Helper()
+	b, err := os.ReadFile(Path(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	alone := t.TempDir()
+	if err := os.WriteFile(Path(alone), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := OpenReadOnly(alone, Options{})
+	if err != nil {
+		t.Fatalf("massimo.db alone, %d bytes: %v", len(b), err)
+	}
+	t.Cleanup(func() { cp.Close() })
+	return cp
+}
+
+// Close brings the WAL into massimo.db even while another connection
+// holds the file open, where SQLite's own checkpoint at the last close
+// does not run: the file alone then holds what was written. It used to
+// stay as it was created, its rows only in the WAL.
+func TestCloseCheckpointsBesideAnotherConnection(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, Options{Version: "test", Logger: quiet()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := s.AddCube(ctx, Cube{Serial: "keq0000001", Configured: true}); err != nil {
+		t.Fatal(err)
+	}
+	other, err := OpenReadOnly(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	cubes, err := copyAlone(t, dir).Cubes(ctx)
+	if err != nil || len(cubes) != 1 {
+		t.Fatalf("massimo.db alone after the close holds %d cubes (%v), want 1", len(cubes), err)
+	}
+}
+
+// Checkpoint brings the WAL into massimo.db while the store stays open,
+// as a reload of the running server may ask; a store opened read-only
+// checkpoints nothing.
+func TestCheckpoint(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	ctx := context.Background()
+	if _, err := s.AddCube(ctx, Cube{Serial: "keq0000001", Configured: true}); err != nil {
+		t.Fatal(err)
+	}
+	ck, err := s.Checkpoint(ctx)
+	if err != nil || ck.Busy || ck.WALBytes == 0 {
+		t.Fatalf("checkpoint %+v %v, want the WAL's bytes and not busy", ck, err)
+	}
+	if fi, err := os.Stat(Path(dir) + "-wal"); err != nil || fi.Size() != 0 {
+		t.Errorf("the WAL after the checkpoint: %v %v, want it empty", fi, err)
+	}
+	if cubes, err := copyAlone(t, dir).Cubes(ctx); err != nil || len(cubes) != 1 {
+		t.Fatalf("massimo.db alone after the checkpoint holds %d cubes (%v), want 1", len(cubes), err)
+	}
+	if _, err := s.AddCube(ctx, Cube{Serial: "keq0000002", Configured: true}); err != nil {
+		t.Fatalf("a write after the checkpoint: %v", err)
+	}
+	ro, err := OpenReadOnly(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	if ck, err := ro.Checkpoint(ctx); err != nil || ck != (Checkpoint{}) {
+		t.Errorf("read-only checkpoint %+v %v, want nothing done", ck, err)
+	}
+}
+
 // A file left at version 1 by v0.7.0-alpha.1 is migrated to version 2
 // by the next binary, additively: min_reader stays 1, and the columns
 // and the table of 0002 are there.

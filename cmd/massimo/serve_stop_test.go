@@ -160,7 +160,8 @@ func (s *builtServe) wait(t *testing.T, since time.Time) time.Duration {
 
 // serve stops on SIGTERM, which systemd, launchd and kill send, as it
 // does on SIGINT: the server shuts down and the store is closed, which
-// SQLite shows by removing its -wal file at the last close.
+// SQLite shows by removing its -wal file at the last close, and the log
+// says so.
 func TestServeStopsOnSIGTERM(t *testing.T) {
 	s := startBuiltServe(t, nil)
 	if _, err := os.Stat(filepath.Join(s.data, "massimo.db-wal")); err != nil {
@@ -169,6 +170,9 @@ func TestServeStopsOnSIGTERM(t *testing.T) {
 	s.stop(t)
 	if _, err := os.Stat(filepath.Join(s.data, "massimo.db-wal")); err == nil {
 		t.Fatal("the store was not closed: its -wal file is left")
+	}
+	if p := s.waitFor(t, "store closed")["path"]; p != store.Path(s.data) {
+		t.Errorf("store closed names %s, want %s", p, store.Path(s.data))
 	}
 }
 
