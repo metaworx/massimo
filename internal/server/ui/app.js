@@ -254,6 +254,33 @@ async function api(method, path, body) {
   }
 }
 
+// apiRaw is api for what is not JSON, a backup file: body goes as it is,
+// with contentType, and the answer is the Response; an error is thrown
+// as api throws it.
+async function apiRaw(method, path, body, contentType) {
+  const headers = {};
+  if (state.token) headers.Authorization = "Bearer " + state.token;
+  if (body !== undefined) headers["Content-Type"] = contentType || "application/octet-stream";
+  const resp = await fetch(path, { method, headers, body });
+  if (resp.status === 401) {
+    if (await askLogin()) return apiRaw(method, path, body, contentType); // login.js
+    throw new Error(t("api.badToken"));
+  }
+  if (!resp.ok) {
+    let msg = resp.status + " " + resp.statusText;
+    try {
+      const data = JSON.parse(await resp.text());
+      if (data && data.error) msg = data.error;
+    } catch (e) {
+      // not JSON: the status says it
+    }
+    const err = new Error(msg);
+    err.status = resp.status;
+    throw err;
+  }
+  return resp;
+}
+
 // deviceDetail fetches and caches a device's configuration.
 async function deviceDetail(rf) {
   if (state.details[rf]) return state.details[rf];
@@ -686,6 +713,7 @@ function selectCube(serial) {
   state.ui = {};
   refresh().then(connectEvents);
   logCubeChanged();
+  backupCubeChanged();
 }
 
 // --- version ----------------------------------------------------------
@@ -902,6 +930,10 @@ async function connectEvents() {
     appendLogEvent(data);
     addFound(data.cube);
   });
+  // A restore's steps and its end go to the log and to the backup panel
+  // that sent it (backup.js).
+  es.addEventListener("restore_step", logged(restoreEvent));
+  es.addEventListener("restore_done", logged(restoreEvent));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -998,6 +1030,8 @@ function applyLanguage() {
   renderMe();
   renderDeviceSwitches();
   renderUsers();
+  renderBackups();
+  renderPlan();
   renderRoles();
   renderCubes();
   const cube = state.cubes.find((c) => c.serial === state.serial);

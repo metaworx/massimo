@@ -1,0 +1,23 @@
+<!-- A stored backup's row and a restore's plan, backup.js. -->
+<template id="tpl-backup-row">
+  <div class="backup-row">
+    <div class="backup-head">
+      <span class="backup-when"></span>
+      <span class="backup-reason flag mode"></span>
+      <span class="backup-who muted small"></span>
+    </div>
+    <p class="backup-note muted small hidden"></p>
+    <div class="actions backup-actions"></div>
+    <div class="backup-detail"></div>
+  </div>
+</template>
+<template id="tpl-restore-plan">
+  <div class="panel restore-plan">
+    <p class="restore-title"></p>
+    <ol class="restore-steps small"></ol>
+    <ul class="restore-notes muted small"></ul>
+    <p class="restore-cost muted small"></p>
+    <p class="restore-result small hidden" role="status"></p>
+    <div class="actions restore-actions"></div>
+  </div>
+</template>

@@ -18,6 +18,10 @@ the next minor, a fix counts the suffix up.
   restore, and `…/backups` lists, downloads, compares and deletes the
   backups, which a restore takes by id (`docs/api-v1.md`, "Backups").
 
+- Settings → Backup and restore in the web UI: the download, the
+  server's backups with compare, restore and delete, and a restore from
+  a file that shows its plan first (`docs/ui.md`, "Settings").
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added
