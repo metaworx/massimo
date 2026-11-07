@@ -28,6 +28,13 @@ type Options struct {
 	ReplyTimeout time.Duration // how long to wait for a command's reply
 	Logger       *slog.Logger
 	Dialer       func(ctx context.Context, addr string) (net.Conn, error) // for tests; nil uses net.Dialer
+	// Backoff is the wait after the first failed attempt; it doubles
+	// with each failure to about a minute. 0 is one second; the tests
+	// set less.
+	Backoff time.Duration
+	// RemindEvery is how often a Cube that stays unreachable is warned
+	// of again. 0 is a day; the tests set less.
+	RemindEvery time.Duration
 }
 
 // Client is a persistent, reconnecting connection to one Cube.
@@ -81,6 +88,12 @@ func New(opts Options) *Client {
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
+	}
+	if opts.Backoff == 0 {
+		opts.Backoff = time.Second
+	}
+	if opts.RemindEvery == 0 {
+		opts.RemindEvery = 24 * time.Hour
 	}
 	if opts.Dialer == nil {
 		d := &net.Dialer{Timeout: 10 * time.Second}
@@ -156,27 +169,46 @@ func (c *Client) Ready() <-chan struct{} { return c.ready }
 // Run connects and keeps the connection alive until ctx is cancelled.
 // It reconnects with exponential backoff after failures; the backoff
 // starts over after a connection that got its greeting.
+//
+// A loss is reported once, with an EventDisconnected and a warning: the
+// end of a connection that got its greeting, or the first attempt that
+// fails since the start or since a deliberate reconnect. The attempts
+// after it are logged at Debug, a reminder is warned every RemindEvery
+// while the Cube stays unreachable, and the next greeting logs that the
+// connection is re-established and how long the Cube was down. A
+// connection closed by Reconnect is no loss.
 func (c *Client) Run(ctx context.Context) error {
 	select {
 	case <-c.hasAdr:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	backoff := time.Second
+	backoff := c.opts.Backoff
+	var lost, warned time.Time // when the Cube was lost and last warned of; zero while it is up
 	for {
-		greeted, err := c.session(ctx)
+		greeted, err := c.session(ctx, lost)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if greeted {
-			backoff = time.Second
+			backoff = c.opts.Backoff
+			lost = time.Time{}
 		}
 		if c.reconnecting.Swap(false) {
 			c.log.Info("cube reconnecting", "addr", c.Address())
 			continue
 		}
-		c.emit(Event{Kind: EventDisconnected, Err: err})
-		c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
+		switch now := time.Now(); {
+		case lost.IsZero():
+			lost, warned = now, now
+			c.emit(Event{Kind: EventDisconnected, Err: err})
+			c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
+		case now.Sub(warned) >= c.opts.RemindEvery:
+			warned = now
+			c.log.Warn("cube still unreachable", "addr", c.Address(), "down_for", now.Sub(lost).Round(time.Second), "error", err)
+		default:
+			c.log.Debug("cube connection attempt failed", "addr", c.Address(), "error", err, "retry_in", backoff)
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -190,8 +222,8 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 // session runs one connection until it fails and reports whether the
-// greeting arrived.
-func (c *Client) session(ctx context.Context) (bool, error) {
+// greeting arrived. lost is when the Cube was lost, zero if it was not.
+func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 	select { // a wake from before this dial is spent
 	case <-c.wake:
 	default:
@@ -243,7 +275,11 @@ func (c *Client) session(ctx context.Context) (bool, error) {
 				c.mu.Unlock()
 				c.once.Do(func() { close(c.ready) })
 				c.emit(Event{Kind: EventConnected})
-				c.log.Info("cube connected", "addr", c.Address())
+				if lost.IsZero() {
+					c.log.Info("cube connected", "addr", c.Address())
+				} else {
+					c.log.Info("cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
+				}
 			}
 		}
 	}()

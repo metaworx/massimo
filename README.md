@@ -445,7 +445,7 @@ and the commands (`GET /api/v1/commands/{id}`) its steps on the Cube's queue,
 with `Idempotency-Key` answering a retry without a second radio command.
 `MASSIMO_API_TOKEN` (or `-token`) becomes the owner's key at the first start,
 and is the one token without a store (`serve -addr`);
-while there are no users the API is open on the default localhost listener,
+while there are no users the API is open to the local network only,
 and the first owner is created with `massimo user add` or by the web UI from
 the local network.
 See docs/api-v1.md, "Authentication".
@@ -539,6 +539,29 @@ such as every command the proxy passes on to the Cube;
 the level is read at the start, so a service takes a new one at its restart.
 Every other command takes `-log-level` before its name,
 `massimo -log-level debug watch`.
+A restart from the API (`POST /api/v1/restart`, for the capability `restart`)
+stops the server as SIGTERM does and exits with status 75,
+which systemd, launchd and Homebrew answer with a start;
+a Windows service runs `massimo restart` instead,
+which stops and starts the service through the service manager.
+`-restart` (or `MASSIMO_RESTART`) says when it is offered:
+`auto` where a service manager starts the server again, so not in a terminal;
+`exit` always, exiting 75 for whatever runs `serve`,
+such as Docker's `--restart`;
+`off` never.
+`sudo massimo restart` restarts the installed server from a prompt as well.
+`serve` reads its settings file again while it runs:
+it looks at it every five seconds,
+and reads it once a change has held for one more look,
+and on Unix also on SIGHUP (`systemctl reload massimo`),
+which checkpoints the store too.
+`MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
+every other setting that changed is listed by `GET /api/v1/restart`
+as applying at the next restart.
+`-sighup` (or `MASSIMO_SIGHUP`) says what SIGHUP does:
+`reload`, `stop` as SIGTERM does,
+or `auto`, a reload under a service manager or after `nohup`,
+and a stop in a terminal, where SIGHUP means that the terminal closed.
 Every six hours (`-refresh`,
 `0` to switch it off) `serve` reconnects to each Cube,
 in turn with the queued commands, and re-reads everything the Cube holds,

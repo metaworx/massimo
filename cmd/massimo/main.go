@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -67,6 +68,8 @@ func main() {
 		err = runLegacy(rest)
 	case "update":
 		err = runUpdate(rest)
+	case "restart":
+		err = runRestart(rest)
 	case "store":
 		err = runStore(rest)
 	case "tls":
@@ -84,14 +87,16 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, errRestart) {
 		fmt.Fprintln(os.Stderr, "error:", err)
 	}
 	// A Windows service that its manager stopped reports that before the
 	// process ends.
 	serviceEnd()
-	if err != nil {
-		os.Exit(1)
+	// A serve that stopped for a restart exits with exitRestart, which its
+	// service manager answers with a start (restart.go).
+	if code := exitCode(err); code != 0 {
+		os.Exit(code)
 	}
 }
 
@@ -142,6 +147,7 @@ commands:
   user            add, list, disable and enable the users of serve's store, set passwords, make API keys (see its usage)
   install         install massimo serve as a service (systemd), or update or -remove it
   update          install the newest signed release from GitHub (-check only looks)
+  restart         restart the installed server (systemd, launchd, the Windows service)
   version         print the version (also --version)
 `)
 }
