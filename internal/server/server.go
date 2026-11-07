@@ -542,9 +542,22 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 		case e := <-rt.client.Events():
 			if e.Kind == cubelan.EventConnected {
 				if h := rt.client.Snapshot().Hello(); h != nil && rt.learnSerial(h.Serial) {
+					key := strings.ToLower(h.Serial)
 					s.mu.Lock()
-					s.cubes[strings.ToLower(h.Serial)] = rt
+					other, taken := s.cubes[key]
+					if !taken {
+						s.cubes[key] = rt
+					}
 					s.mu.Unlock()
+					if taken && other != rt {
+						// Another runtime serves the serial, one added by
+						// serial meanwhile: two clients would compete for a
+						// one-client Cube, so this one stops, as register
+						// refuses a second runtime for a serial.
+						s.log.Error("cube served twice: its serial is served already, the connection by address stops", "serial", h.Serial, "addr", rt.client.Address())
+						go s.removeCube(rt)
+						return
+					}
 					s.seedLearned(ctx, rt)
 				}
 				s.learnStoreID(ctx, rt)

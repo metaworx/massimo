@@ -133,6 +133,9 @@ the next minor, a fix counts the suffix up.
 - A Cube served by its address alone learns its serial without a data
   race with the handlers and discovery that read it.
 
+- A Cube served by its address that reports the serial of a Cube added
+  meanwhile stops, instead of taking its place beside it.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

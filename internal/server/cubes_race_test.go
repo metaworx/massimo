@@ -151,3 +151,58 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 	}
 	t.Fatal("the serial was not learned")
 }
+
+// A Cube served by its address that reports a serial another runtime
+// serves already, one added by serial through the API meanwhile, does
+// not take that runtime's place: it stops, as register refuses a second
+// runtime for a serial, and the one added keeps the serial.
+func TestLearnedSerialServedAlready(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	free, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := free.Addr().String()
+	free.Close()
+	fc := &fakecube.Server{Greeting: greeting}
+	defer fc.Close()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Cubes = []CubeConfig{{Addr: addr}}
+	opts.Queue = engine.Options{Gap: time.Millisecond}
+	s := New(opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	lookup := func(key string) *runtime {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		return s.cubes[key]
+	}
+	byAddr := lookup(strings.ToLower(addr))
+	if code, text := callAPI(t, ts, "POST", "/api/v1/cubes", "secret", `{"serial":"KEQ0537249","address":"`+addr+`"}`); code != 201 {
+		t.Fatalf("add: %d %s", code, text)
+	}
+	bySerial := lookup("keq0537249")
+	if byAddr == nil || bySerial == nil || bySerial == byAddr {
+		t.Fatalf("runtimes %p %p", byAddr, bySerial)
+	}
+	if _, err := fc.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if byAddr.cubeSerial() != "" && lookup(strings.ToLower(addr)) == nil {
+			break
+		}
+	}
+	if got := lookup("keq0537249"); got != bySerial {
+		t.Fatalf("the serial's runtime is the one by address (%p), not the one added (%p)", got, bySerial)
+	}
+	if lookup(strings.ToLower(addr)) != nil {
+		t.Fatal("the runtime by address still served")
+	}
+}
