@@ -44,6 +44,9 @@ the next minor, a fix counts the suffix up.
 - A Debian package built between two tags holds the version its file
   name shows (`make packages`).
 
+- The apt repository's keyring package is versioned by the time of the
+  publish, so that its version only goes up, whatever the key's dates.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

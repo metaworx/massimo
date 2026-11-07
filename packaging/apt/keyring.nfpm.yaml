@@ -1,8 +1,8 @@
 # The keyring package of the apt repository, built by packaging/apt/publish.sh
 # from the repository's public key: apt verifies the suites with it through
 # a Signed-By line naming it (packaging/README.md, "The apt repository").
-# VERSION (the key's creation date), KEYRING (the exported key) and
-# MAINTAINER come from the script.
+# VERSION (1.0.<the publish's UTC time, to the second>, so that it only
+# goes up), KEYRING (the exported key) and MAINTAINER come from the script.
 name: massimo-archive-keyring
 arch: all
 platform: linux

@@ -289,8 +289,11 @@ and `apt install massimo=0.6.0~alpha.1` goes back to one still in the pool.
 The package `massimo-archive-keyring` carries the key as
 `/usr/share/keyrings/massimo-archive-keyring.gpg`;
 with `Signed-By:` pointing there instead of the downloaded file,
-an extended or a rotated key arrives through apt
-(the package's version is the key's expiry date).
+an extended key arrives through apt (the package's version is the time of the publish,
+so it only goes up).
+A new key would reach the boxes only through a keyring package carrying both
+keys on a site the old key still signs, which `publish.sh` does not make:
+it signs with one key.
 
 The site is built by `packaging/apt/publish.sh` in the release workflow (the
 pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,

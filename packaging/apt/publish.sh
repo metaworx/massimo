@@ -108,15 +108,15 @@ else
 fi
 
 # 2. The key, and the keyring package in every suite's pool: its version
-# is the key's expiry date (its creation date for a key without one), so
-# that an extended or a rotated key is a newer package and reaches the
-# boxes through apt.
+# is the time of this publish (UTC, to the second), which only goes up,
+# so that every publish, an extended key's or a new key's, is a newer
+# package. The key's own dates are not: a new key may expire sooner than
+# the old one, or never.
 gpg --armor --export "$key" >"$apt/massimo.asc"
 keyring=$(mktemp)
 trap 'rm -f "${keyring:?}"' EXIT
 gpg --export "$key" >"$keyring"
-stamp=$(gpg --list-keys --with-colons "$key" | awk -F: '/^pub/ { print ($7 != "" ? $7 : $6); exit }')
-keyring_version="1.0.$(date -u -d "@$stamp" +%Y%m%d)"
+keyring_version="1.0.$(date -u +%Y%m%d%H%M%S)"
 for pool in "$apt"/pool/*/; do
 	VERSION=$keyring_version KEYRING=$keyring MAINTAINER=$(sed -n 's/^maintainer: *//p' "$root/packaging/nfpm.yaml") \
 		$NFPM package -f "$root/packaging/apt/keyring.nfpm.yaml" -p deb \

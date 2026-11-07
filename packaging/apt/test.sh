@@ -36,6 +36,25 @@ grep -q '^Package: massimo-archive-keyring$' "$work/site/apt/dists/alpha/main/bi
 	exit 1
 }
 
+# A rotated key makes a newer keyring package, whatever its expiry: here
+# one without any, after the first that expires tomorrow.
+keyring_version() { # <site>
+	local debs=("$1"/apt/pool/alpha/massimo-archive-keyring_*_all.deb)
+	dpkg-deb -f "${debs[0]}" Version
+}
+sleep 1
+gpg --batch --quiet --quick-gen-key --passphrase '' 'Massimo CI rotated <ci@example.invalid>' rsa3072 sign never
+rotated=$(gpg --list-keys --with-colons | awk -F: '/^fpr/ { f = $10 } END { print f }')
+[ "$rotated" != "$key" ] || {
+	echo "FAIL: no second key" >&2
+	exit 1
+}
+"$root/packaging/apt/publish.sh" --out "$work/rotated" --key "$rotated" --from "$root/dist" --channel alpha >/dev/null
+dpkg --compare-versions "$(keyring_version "$work/rotated")" gt "$(keyring_version "$work/site")" || {
+	echo "FAIL: the rotated key's keyring package $(keyring_version "$work/rotated") is not newer than $(keyring_version "$work/site")" >&2
+	exit 1
+}
+
 # A container installs from it over file://, the key as the snippet says;
 # Debian's own sources stay for the dependencies (adduser is not in the
 # slim images), and apt-cache policy shows the package came from the suite.
