@@ -125,6 +125,54 @@ the next minor, a fix counts the suffix up.
 - An authenticated request writes the store's lockout only where its
   address or user name had failed checks, no longer on every request.
 
+- `-tls acme` serves the first name's certificate to a client that names
+  no host, so the update helper's health check no longer rolls back.
+
+- `-tls acme`'s hourly check orders the ECDSA certificate browsers get,
+  no longer a second RSA one, and the status shows the one served.
+
+- `massimo install` with another `-tls` mode removes the variables of
+  the one before, so serve no longer refuses to start after a switch.
+
+- The update helper's health check over TLS on one of the box's own
+  addresses (a specific `-listen`) no longer fails on its certificate.
+
+- `massimo serve` stops on SIGTERM as on Ctrl-C, so a stop by systemd or
+  launchd writes the pending log events and closes the store.
+
+- A stop of the Windows service, as by an update or a reboot, waits for
+  `serve` to write the pending log events and close the store.
+
+- The update helper reports "failed" for every error after it took the
+  request, so the web UI no longer shows the previous run's result.
+
+- `massimo serve` takes the plain `MASSIMO_CUBE_ADDRESS` for the one Cube
+  `MASSIMO_CUBE_SN` names, also beside a variable of its own (README.md).
+
+- A serial in lower case in a variable's name, such as
+  `MASSIMO_CUBE_keq0000000_ADDRESS`, is that Cube's again on Linux.
+
+- The self-signed certificate's renewal keeps a name added with
+  `massimo tls self-signed -names` (README.md, "Server").
+
+- `massimo update -check` and the web UI say that a channel has no
+  signed release, no longer that an old release has no manifest.
+
+- `massimo update` downloads a binary for as long as a slow line needs,
+  no longer cut off after two minutes; a stall ends it after one.
+
+- An update check fetches no manifest of another channel's release, so
+  a build from `main` no longer verifies thirty alpha releases each time.
+
+- `massimo tls show` prints what `massimo config` prints of the TLS,
+  the HSTS days and the names given included.
+
+- `massimo user tokens <name>` lists a user's sessions and keys with the
+  ids `user revoke` takes, so one key can be revoked alone (README.md).
+
+- The TLS variables are named once for `massimo install`, `serve` and
+  `massimo config`, which can no longer read different names.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

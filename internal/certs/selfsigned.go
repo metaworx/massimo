@@ -113,14 +113,17 @@ func unwrapPath(err error) error {
 }
 
 // Check makes the pair anew when it expires within RenewBefore, with
-// the names it was opened for, and serves it from the next handshake.
+// the names it was opened for and those of the certificate it renews (a
+// name added by hand with massimo tls self-signed -names stays), and
+// serves it from the next handshake.
 func (s *SelfSigned) Check(now time.Time) {
 	st := s.Status()
 	if !now.Add(RenewBefore).After(st.NotAfter) {
 		return
 	}
 	certPath, keyPath := s.Paths()
-	st, err := Generate(certPath, keyPath, s.names, now)
+	names := append(slices.Clone(s.names), Missing(s.names, st.Names)...)
+	st, err := Generate(certPath, keyPath, names, now)
 	if err != nil {
 		s.log.Error("tls: self-signed certificate not renewed", "error", err)
 		return

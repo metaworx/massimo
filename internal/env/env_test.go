@@ -165,3 +165,35 @@ func TestKnown(t *testing.T) {
 		}
 	}
 }
+
+// A serial written in lower case in a variable's name, as Linux keeps
+// it: Serials lists it in upper case, and the per-Cube lookups find it.
+func TestLowerCaseSerial(t *testing.T) {
+	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
+	t.Setenv("MASSIMO_CUBE_keq0000000_IGNORE", "0abcde")
+	sns, addrs := Serials(Address)
+	if len(sns) != 1 || sns[0] != "KEQ0000000" || addrs["KEQ0000000"] != "192.0.2.5" {
+		t.Fatalf("serials %v %v", sns, addrs)
+	}
+	if v := Get(Address, "KEQ0000000"); v != "192.0.2.5" {
+		t.Fatalf("Get: %q", v)
+	}
+	if v := Own(Address, "keq0000000", false); v != "192.0.2.5" {
+		t.Fatalf("Own: %q", v)
+	}
+	if list, err := HiddenList("KEQ0000000"); err != nil || len(list) != 1 || list[0].String() != "0abcde" {
+		t.Fatalf("hidden %v %v", list, err)
+	}
+}
+
+// PerCubeValue names the variable as it is set, for massimo config and
+// the store's file view.
+func TestPerCubeValue(t *testing.T) {
+	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
+	if name, v := PerCubeValue(Address, "KEQ0000000"); name != "MASSIMO_CUBE_keq0000000_ADDRESS" || v != "192.0.2.5" {
+		t.Fatalf("PerCubeValue: %s=%q", name, v)
+	}
+	if name, v := PerCubeValue(Address, "KEQ0000001"); name != "MASSIMO_CUBE_KEQ0000001_ADDRESS" || v != "" {
+		t.Fatalf("PerCubeValue of a Cube without one: %s=%q", name, v)
+	}
+}

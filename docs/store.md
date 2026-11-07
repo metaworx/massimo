@@ -758,6 +758,7 @@ string so they can rise later.
 (asks for the password twice, or `-no-password` for a key-only user),
 `user list`, `user passwd <name>`, `user disable <name>`, `user enable
 <name>`, `user token <name> -label <text>` (prints a new API key once),
+`user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
 they take `-data` like `serve` and run as the service user

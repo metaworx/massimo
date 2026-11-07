@@ -170,7 +170,7 @@ func TestConfigPrintsTLS(t *testing.T) {
 	t.Setenv(hstsVar, "")
 	var out strings.Builder
 	printTLS(&out)
-	if out.String() != "tls:           off\n" {
+	if out.String() != "tls:           off (serve has no TLS)\n" {
 		t.Fatalf("off: %q", out.String())
 	}
 	t.Setenv(tlsCertVar, certPath)

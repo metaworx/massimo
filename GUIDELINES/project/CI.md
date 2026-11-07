@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.9.0)
+# Massimo — CI Conventions (v1.10.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -165,6 +165,10 @@ The update channel of a release is the pre-release identifier of the tag's name
 then a `channel:` line in the tag message (which `make release-alpha` no longer writes:
 the name of every tag it makes holds the channel),
 then the one branch holding the commit.
+The GitHub release is created with the channel as its target,
+which a box reads, with the tag's name, to leave another channel's release
+unfetched (`internal/update`, `hintedChannel`);
+neither is signed, the manifest decides.
 The GitHub release's notes are the body of the tag's message,
 that section, then a sentence naming the channel and how to install and verify;
 a tag with no body (a `channel:` line does not count) gets the sentence alone.

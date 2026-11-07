@@ -10,11 +10,13 @@ import (
 	"crypto/elliptic"
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +156,30 @@ func TestNames(t *testing.T) {
 	}
 	if len(Names("", nil)) < 3 {
 		t.Fatal("the box's own names")
+	}
+}
+
+// The renewal keeps the names of the certificate it renews: a name added
+// by hand (massimo tls self-signed -names) that the running server took
+// up stays in the next certificate.
+func TestSelfSignedRenewalKeepsNames(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s, err := OpenSelfSigned(dir, []string{"pi", "localhost"}, log, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPath, keyPath := SelfSignedPaths(dir)
+	if _, err := Generate(certPath, keyPath, []string{"pi", "localhost", "nas.lan", "192.0.2.20"}, now); err != nil {
+		t.Fatal(err)
+	}
+	s.Reload()
+	if !slices.Contains(s.Status().Names, "nas.lan") {
+		t.Fatalf("the pair made by hand is not served: %v", s.Status().Names)
+	}
+	s.Check(s.Status().NotAfter.Add(-RenewBefore + time.Hour))
+	if got := s.Status().Names; Missing(got, []string{"pi", "localhost", "nas.lan", "192.0.2.20"}) != nil {
+		t.Fatalf("renewed for %v, names lost", got)
 	}
 }

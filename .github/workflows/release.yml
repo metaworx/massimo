@@ -167,7 +167,10 @@ jobs:
           else
             printf '%s\n' "$sentence" > "$RUNNER_TEMP/notes.md"
           fi
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+          # The target is the channel: a box reads it before it fetches the
+          # manifest of a release whose tag has no label (internal/update,
+          # hintedChannel); the tag exists, so nothing is made from it.
+          gh release create "$TAG" --verify-tag --target "$CHANNEL" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
 
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the
