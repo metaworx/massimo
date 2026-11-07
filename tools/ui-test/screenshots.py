@@ -46,7 +46,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from helpers import show_view
+from helpers import open_user_menu, show_view
 
 OUT = Path(__file__).resolve().parents[2] / "docs" / "screenshots"
 NOW = "2026-11-03T20:51:00+01:00"            # the page's clock: the greeting's Cube clock in TZ
@@ -84,19 +84,24 @@ PAGES = {
     "config-copy": ".room",
     "house": "#house",
     "log": None,                                    # its lines run the full width
+    "user-menu": None,                              # the 👤 menu open over the rooms
     "prefs": "#prefs",                              # My settings
     "appearance": "#prefs .appearance",
     "system": "#system",                            # System settings
     "cube-found": "header.top",                     # the Cube choice with the found Cube under it
     "cubes": "#system .cubes-settings",
+    "nav-menu": None,                               # ☰, which only a narrow screen shows
 }
+
+# The pages of the full width: all but ☰.
+WIDE = [p for p in PAGES if p != "nav-menu"]
 
 # The set: each run is one browser context, (width, theme, language,
 # pages). The first is the main set and the slideshow's frames.
 SETS = [
-    (1100, "light", "en", list(PAGES)),
-    (1100, "dark", "en", list(PAGES)),
-    (390, "light", "en", ["rooms", "prefs", "system"]),
+    (1100, "light", "en", WIDE),
+    (1100, "dark", "en", WIDE),
+    (390, "light", "en", ["rooms", "nav-menu", "prefs", "system"]),
     (1100, "light", "de", ["rooms"]),
 ]
 
@@ -267,6 +272,11 @@ def step(page, which):
             changes: { window_open: { from: false, to: true }, setpoint: { from: 18.5, to: 12 } } }) }));
         }""", LOG_TIME)
         page.wait_for_selector("#logview .log-line.kind-state >> nth=-1")
+    elif which == "user-menu":
+        open_user_menu(page)
+    elif which == "nav-menu":
+        page.locator("#nav-menu summary").click()
+        page.locator("#nav-menu .menu-items").wait_for(state="visible")
     elif which in ("prefs", "system"):
         show_view(page, which)
     elif which == "appearance":
