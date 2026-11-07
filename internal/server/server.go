@@ -225,6 +225,8 @@ type Server struct {
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
+	// updateMu holds one update request at a time (startUpdate).
+	updateMu sync.Mutex
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving

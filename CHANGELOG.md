@@ -41,6 +41,12 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- A second update started on Windows while the helper reads the first
+  answers 409, no longer 500 from the request file the helper holds.
+
+- Two updates started at once, as from two tabs, write one request and
+  answer 202 and 409, no longer 500 when both wrote the request file.
+
 - A Debian package built between two tags holds the version its file
   name shows (`make packages`).
 
@@ -198,8 +204,9 @@ the next minor, a fix counts the suffix up.
   the next command no longer takes a late one as its reply
   (docs/proxy.md).
 
-- A Cube's new address from discovery is dialled at once, no longer after
-  the minute of backoff the old address built up.
+- A Cube's new address from discovery is dialled at once, with one
+  connection, no longer after the minute of backoff the old address
+  built up.
 
 - A device whose greeting C line answered a re-read sent during the
   greeting no longer drops out of the server's copy.
