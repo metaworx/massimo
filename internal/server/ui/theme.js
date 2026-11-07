@@ -223,23 +223,15 @@ function schemesDocument() {
   return { format: "massimo-schemes/1", schemes: themeState.custom.map((c) => ({ format: SCHEME_FORMAT, name: c.name, light: c.light, dark: c.dark })) };
 }
 
-// mergeSchemes takes the user's schemes from the server and keeps the
-// browser's own that the server lacks; it reports whether it kept any,
-// which the server is then to learn.
-function mergeSchemes(doc) {
-  const local = themeState.custom.slice();
+// takeSchemes takes the user's schemes from the server as the list: a
+// scheme the browser has and the server lacks was deleted elsewhere, and
+// is dropped, not sent back. The browser's own reach the server only
+// while the server has no list yet (login.js, loadPreferences).
+function takeSchemes(doc) {
   const list = doc && Array.isArray(doc.schemes) ? doc.schemes : [];
   store("massimo.schemes", JSON.stringify(list.map((s) => ({ name: s && s.name, light: s && s.light, dark: s && s.dark }))));
   loadCustomSchemes();
-  let kept = false;
-  for (const c of local) {
-    if (!themeState.custom.some((x) => x.name === c.name)) {
-      themeState.custom.push(c);
-      kept = true;
-    }
-  }
   store("massimo.schemes", themeState.custom.length ? JSON.stringify(themeState.custom) : null);
-  return kept;
 }
 
 // putCustomScheme stores a scheme under its name, replacing one with

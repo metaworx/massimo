@@ -298,10 +298,11 @@ function flushPreferences() {
 }
 
 // loadPreferences takes the signed-in user's settings from the server:
-// the schemes first, merged with the browser's own, so that a chosen
-// scheme of the user's resolves, then ui, applied where this device does
-// not keep its own. What the server lacks it learns from the browser, so
-// that the first sign-in keeps the settings the browser had.
+// the schemes first, the server's list as it is, so that a chosen scheme
+// of the user's resolves and a deleted one stays deleted, then ui,
+// applied where this device does not keep its own. What the server lacks
+// it learns from the browser, so that the first sign-in keeps the
+// settings and the schemes the browser had.
 async function loadPreferences() {
   if (!canSync()) return;
   let prefs;
@@ -311,7 +312,7 @@ async function loadPreferences() {
     return;
   }
   if (prefs.schemes) {
-    if (mergeSchemes(prefs.schemes)) schedulePreferences("schemes");
+    takeSchemes(prefs.schemes); // theme.js
   } else if (themeState.custom.length) {
     schedulePreferences("schemes");
   }

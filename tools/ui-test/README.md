@@ -151,7 +151,8 @@ what a test stores in the browser goes with its context.
   password `guest-pass`) has no switches, and its poll stays in the browser;
   the operator's poll and scheme, changed just before Log out,
   reach the operator's account and leave the browser,
-  and the owner signing in next with its key gets neither.
+  and the owner signing in next with its key gets neither;
+  a scheme deleted in one browser stays deleted when another that had it loads.
   Since the four cases share the server,
   the page fixture removes the token's user's preferences before every page.
 - `test_log.py`:

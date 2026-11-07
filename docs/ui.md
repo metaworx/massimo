@@ -184,6 +184,8 @@ the settings and your own colour schemes follow you:
 the server keeps them for you,
 and every browser you sign in on takes them at sign-in,
 the first one handing over what it had.
+Once the server has your schemes, its list is the list:
+a scheme deleted in one browser goes from the others when they next load the page.
 Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
 **Language**, **Mode** and **Colour scheme** a switch **only on this device**
 keeps that setting's value in this browser instead,

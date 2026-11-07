@@ -70,6 +70,9 @@ the next minor, a fix counts the suffix up.
 - Log out takes the user's settings and colour schemes out of the
   browser, so that the next user neither sees nor inherits them.
 
+- A colour scheme deleted in one browser no longer comes back from
+  another that still had it (docs/ui.md, "Settings").
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

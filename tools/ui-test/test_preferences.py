@@ -163,3 +163,38 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
         clear_user(op)
         api_call("POST", "api/v1/logout", token=op)
         clear_preferences()
+
+
+def server_schemes():
+    """The names of the owner's schemes on the server, None for none."""
+    doc = (api_call("GET", "api/v1/me/preferences") or {}).get("schemes")
+    return None if doc is None else [s.get("name") for s in doc.get("schemes") or []]
+
+
+def test_a_deleted_scheme_stays_deleted(page, new_context, case):
+    """Once the server has the user's list of schemes it is the list: a
+    scheme deleted in one browser does not come back from another that
+    still has it, at that browser's next load."""
+    try:
+        page.evaluate("putCustomScheme('Shared', schemeById('massimo').light, schemeById('massimo').dark)")
+        for _ in range(25):
+            if "Shared" in (server_schemes() or []):
+                break
+            page.wait_for_timeout(200)
+        assert "Shared" in (server_schemes() or []), "the scheme reaches the server"
+        other = fresh(new_context)
+        assert wait_until(other, "themeState.custom.some((c) => c.name === 'Shared')", 5), "another browser takes it"
+        page.evaluate("themeState.custom = themeState.custom.filter((c) => c.name !== 'Shared'); storeCustomSchemes();")
+        for _ in range(25):
+            if server_schemes() == []:
+                break
+            page.wait_for_timeout(200)
+        assert server_schemes() == [], "the deletion reaches the server"
+        other.reload()
+        other.wait_for_selector(".room", timeout=10000)
+        other.wait_for_timeout(2000)  # a push of the old list would have come by now
+        assert server_schemes() == [], "the other browser does not bring it back"
+        assert not other.evaluate("themeState.custom.some((c) => c.name === 'Shared')"), "and drops it itself"
+        other.context.close()
+    finally:
+        clear_preferences()
