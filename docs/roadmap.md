@@ -7,14 +7,6 @@ What is done is in CHANGELOG.md, one section per release;
 docs/handover-session.md is the context a session needs to work here.
 
 1. **On the hardware**, by the owner, with a session watching the log:
-   1. The update to the newest alpha on the Raspberry Pi and on jaguar's Windows
-      service (Settings → Software): the store created,
-      seeded and migrated (`store created`, `cube added from the settings file`,
-      `owner created from MASSIMO_API_TOKEN`), `massimo store info`,
-      Settings → Cubes and Settings → Users,
-      every client still in with its token,
-      a manager's settings following them to another browser,
-      the log paging back and filtering with real events.
    2. TLS (the TLS plan's NOTE, item 10): a certificate from Let's Encrypt's
       staging directory on the Pi with a name and the router's port-443 forward
       (`serve -tls acme -tls-names <name> -acme-directory <staging URL>`,
@@ -67,7 +59,6 @@ docs/handover-session.md is the context a session needs to work here.
 4. **The store, after stage (e)** (docs/store.md section 9):
    ownership per Cube, `-server` for the commands, secrets in the store,
    the export and import of design.md section 7, the PostgreSQL driver.
-   The next migration is 0006.
 5. **The UI when the server is gone**:
    a prominent notice, edits blocked, polling until it is back; brief ready.
 6. **Settings → Server** in the UI:
@@ -97,7 +88,17 @@ docs/handover-session.md is the context a session needs to work here.
     the UI ignoring the short `connected: false` of the six-hourly refresh and
     the budget reconnects; `serve -log` writing twice under a supervisor that
     keeps stderr; `detailsPanel` and `stepper` in components.js, written and
-    without a caller; a UI test for each new panel in tools/ui-test/.
+    without a caller; a UI test for each new panel in tools/ui-test/;
+    `store info` run from a directory whose `.env` the service user cannot read,
+    as the README's example does from a home directory
+    (`-env /etc/massimo/env` in the example,
+    or an unreadable default `.env` counted as absent in internal/env);
+    `api: token not resolved` logged at ERROR for a request cancelled
+    during the auth check;
+    the update's own command marked dropped at the next start;
+    a note in README.md and docs/update-windows.md
+    that a Windows service created before v0.7.0 needs `install` again
+    before the Update button works.
 13. **Housekeeping**:
     the `.env` copies and the release key in the Mint box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;
