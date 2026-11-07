@@ -61,7 +61,7 @@ func (s *Server) seedLearned(ctx context.Context, rt *runtime) {
 	s.fileMu.Lock()
 	fc, ok := s.fileCubes[""]
 	if ok {
-		fc.Serial = strings.ToUpper(rt.serial)
+		fc.Serial = strings.ToUpper(rt.cubeSerial())
 		delete(s.fileCubes, "")
 		s.fileCubes[fc.Serial] = fc
 	}

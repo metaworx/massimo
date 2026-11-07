@@ -130,6 +130,9 @@ the next minor, a fix counts the suffix up.
 - `POST /api/v1/update`'s command is acknowledged with its 202, no
   longer `sent` until a restart, and its key replays (docs/api-v1.md).
 
+- A Cube served by its address alone learns its serial without a data
+  race with the handlers and discovery that read it.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

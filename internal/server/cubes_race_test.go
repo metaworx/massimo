@@ -6,10 +6,16 @@ package server
 import (
 	"context"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/engine"
 )
 
 // Two POSTs for one serial at the same time: one 201, one 409, and one
@@ -34,7 +40,7 @@ func TestConcurrentAddCube(t *testing.T) {
 	}
 	n := 0
 	for _, rt := range s.runtimes() {
-		if rt.serial == "KEQ0537249" {
+		if rt.cubeSerial() == "KEQ0537249" {
 			n++
 		}
 	}
@@ -81,4 +87,67 @@ func TestNothingStartsAfterRun(t *testing.T) {
 	if s.startProxy(ProxyListener{Addr: "127.0.0.1:0"}) {
 		t.Fatal("a proxy started after the end of Run")
 	}
+}
+
+// A Cube served by its address alone learns its serial when it connects,
+// while a handler reads the serial (go test -race).
+func TestSerialLearnedWhileRead(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The Cube comes up only once the handlers read: its address is
+	// reserved, and the client's first dial fails.
+	free, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := free.Addr().String()
+	free.Close()
+	fc := &fakecube.Server{Greeting: greeting}
+	defer fc.Close()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Cubes = []CubeConfig{{Addr: addr}}
+	opts.Queue = engine.Options{Gap: time.Millisecond}
+	s := New(opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/"+addr, strings.NewReader("{}"))
+				req.Header.Set("Authorization", "Bearer secret")
+				if resp, err := http.DefaultClient.Do(req); err == nil {
+					resp.Body.Close()
+				}
+			}
+		}()
+	}
+	defer func() { close(stop); wg.Wait() }()
+	time.Sleep(200 * time.Millisecond)
+	if _, err := fc.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		var cubes []cubeView
+		getJSON(t, ts, "secret", "/api/v1/cubes", &cubes)
+		for _, c := range cubes {
+			if c.Serial == "KEQ0537249" && c.Connected {
+				return
+			}
+		}
+	}
+	t.Fatal("the serial was not learned")
 }
