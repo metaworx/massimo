@@ -312,3 +312,27 @@ func TestNoHashForAKnownAnswer(t *testing.T) {
 		t.Fatalf("a removed user's name: %v, %d hashes", err, hashes.Load())
 	}
 }
+
+// A stored string of another argon2 version, which this code would
+// compute as version 19 and so never match, or with a salt shorter than
+// the PHC format's minimum, is refused as malformed.
+func TestParseHashRefusesOtherVersionsAndShortSalts(t *testing.T) {
+	h, err := HashPassword("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := parseHash(h); !ok {
+		t.Fatalf("a hash of HashPassword refused: %s", h)
+	}
+	key := "a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2U"
+	for _, s := range []string{
+		"$argon2id$v=16$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$" + key,
+		"$argon2id$$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$" + key,
+		"$argon2id$v=19$m=19456,t=2,p=1$$" + key,
+		"$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$" + key,
+	} {
+		if _, ok := parseHash(s); ok {
+			t.Errorf("accepted: %s", s)
+		}
+	}
+}

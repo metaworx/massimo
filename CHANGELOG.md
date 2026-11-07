@@ -142,6 +142,10 @@ the next minor, a fix counts the suffix up.
   may send it, gets none added when the server or the proxy writes it
   back (`internal/protocol/cube`).
 
+- A stored password hash of another argon2 version, or with a salt under
+  8 bytes, is refused as malformed, as one over the ceiling is
+  (`docs/store.md` section 6).
+
 ### Security
 
 - A server that asks for no key answers only its local network, a
