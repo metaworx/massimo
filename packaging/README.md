@@ -203,6 +203,11 @@ certbot's renewal service sees no shell environment,
 so the token goes into the credentials file or the unit's `Environment=`.
 `lego --dns infomaniak -d massimo.example.net run` with
 `INFOMANIAK_ACCESS_TOKEN` is the other way.
+An install with another `-tls` mode removes the variables of the one before
+(`MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`,
+`MASSIMO_ACME_EMAIL`, `MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`)
+and sets those the new one is given;
+an install without `-tls` keeps them all.
 `-tls off` switches it off again;
 run the service once with `-hsts 0` over TLS first,
 since a browser that saw the server's HSTS header refuses `http://` to it

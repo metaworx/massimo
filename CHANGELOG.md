@@ -79,6 +79,9 @@ the next minor, a fix counts the suffix up.
 - `-tls acme`'s hourly check orders the ECDSA certificate browsers get,
   no longer a second RSA one, and the status shows the one served.
 
+- `massimo install` with another `-tls` mode removes the variables of
+  the one before, so serve no longer refuses to start after a switch.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
