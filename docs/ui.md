@@ -12,7 +12,7 @@ and keeps the session in the browser for 30 days from its last use;
 👤 → Sign out ends it.
 A server without users shows the form that creates the first owner to a
 browser on the local network; until then everything is open.
-Its name is checked as a new user's is (Settings → Users).
+Its name is checked as a new user's is (System settings → Users).
 What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
@@ -45,7 +45,7 @@ so the session never appears in a URL.
 - **↻** asks the server for the current state now.
 - **👤** drops down who is signed in, with the role,
   or the API key and whose it is;
-  **My settings**, which opens Settings,
+  **My profile** and **My settings**, which open those pages,
   and **Sign out**, which ends the session.
   An API key or the server's token is only forgotten in this browser
   (**Forget key**),
@@ -53,10 +53,10 @@ so the session never appears in a URL.
   Escape, a click outside and a choice close the menu,
   as they close a room's **⋯**.
 - The three page buttons, a house, a sheet and a cog,
-  switch between **Rooms**, **Log** and **Settings**.
+  switch between **Rooms**, **Log** and **System settings**.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
-  no panel and not the settings page.
+  no panel and none of the settings pages.
 - In expert mode the header also shows the Cube's details and its radio budget,
   when the server was started, with how long ago,
   and the certificate the server serves (its source, names and expiry).
@@ -122,7 +122,7 @@ Every room has a tile:
     name, room, temperature offset,
     and for a wall thermostat whether its display shows the measured temperature.
     A device moved to another room gets that room's settings,
-    as when it is put into a room (Settings → Cubes, **Pair a device**),
+    as when it is put into a room (System settings → Cubes, **Pair a device**),
     where the role has the capability `configure`.
     **Remove from the Cube** asks in the row,
     then deletes the device from the Cube:
@@ -156,7 +156,7 @@ its **Send** is off while no room is ticked.
 **Devices without a room** are listed at the end:
 a device just paired, or one the original software paired through the proxy
 and never put into a room.
-**Put into a room…** opens the form of Settings → Cubes' pairing under the row,
+**Put into a room…** opens the form of System settings → Cubes' pairing under the row,
 with name, room and **Copy the room's settings**,
 and **Remove from the Cube** asks in the row, then deletes it from the Cube.
 
@@ -195,7 +195,23 @@ and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
 **Clear** empties the view only; the server keeps its log.
 
-## Settings
+## My profile
+
+👤 → **My profile**, for a user signed in (not on an open server,
+nor with the server's API token):
+
+- **Display name**, the name the 👤 menu and the users list show,
+  with **Save**, off while it is the one stored.
+- **Change password**, for a user with a password:
+  the own password, with the current one.
+- **Sessions and keys**: the own sessions and API keys,
+  each with where and when it was last used and **Revoke**,
+  which signs another browser out without an administrator;
+  **Create key** shows the new key once.
+
+## My settings
+
+👤 → **My settings**, the page's settings:
 
 Signed in with a role that has the capability `preferences` (manager,
 operator and viewer by default),
@@ -232,6 +248,41 @@ without the switches.
   French, Italian, Dutch and Polish are machine-translated and not yet reviewed
   by a native speaker; a note under the choice says so,
   in the language and in English.
+- **Appearance**:
+  **Mode** is light, dark, or as the system,
+  which follows the device's setting and changes with it.
+  **Colour scheme** picks the colours: the built-in Massimo (the default),
+  High contrast and Graphite (a grey accent in place of the blue), and your own.
+  Every scheme has a light and a dark set; the mode picks which is shown.
+  **Customise…** opens an editor with a colour input per token for both sets,
+  applied to the page as you change them,
+  and a number in front of each background's colour that is the contrast of the text on it
+  (from 4.5 it reads well, under 3 badly).
+  Next to each colour input is its hex value, `#f6f6f4`, in a text field:
+  a value typed or pasted there, with or without the `#`,
+  also as `#abc` and in any case, applies at once
+  and is written as `#rrggbb` in lower case when you leave the field.
+  Anything that is not a colour is refused: the field is marked,
+  a message under the sets says why, the colour stays,
+  and Escape puts the field back.
+  The browser's own colour picker (the popup with R, G, B fields in Chromium)
+  cannot be changed by the page, so the hex field is the place to paste a value.
+  **Save as** keeps the edited scheme in this browser under the name given,
+  **Reset** goes back to the scheme the editor started from,
+  **Delete** removes one of your own.
+  **Export** downloads the chosen scheme (or the one being edited) as a JSON file,
+  `{"format": "massimo-scheme/1", "name": …, "light": {…}, "dark": {…}}` with
+  the token names of style.css without `--`;
+  **Import…** reads such a file and keeps it under its name.
+  A token the file lacks takes the default's value, unknown ones are ignored,
+  and a file that is not a scheme says so under the buttons.
+
+## System settings
+
+The cog in the header, **System settings**, holds what is the server's,
+each part for a role with its capability;
+a role with none of them (the viewer's, a guest's) has no cog.
+
 - **Cubes**:
   the Cubes the server serves, kept in its store,
   each in a panel that opens with a click: its connection,
@@ -295,34 +346,6 @@ without the switches.
   then each step is marked as the Cube took it, and the end is said.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
-- **Appearance**:
-  **Mode** is light, dark, or as the system,
-  which follows the device's setting and changes with it.
-  **Colour scheme** picks the colours: the built-in Massimo (the default),
-  High contrast and Graphite (a grey accent in place of the blue), and your own.
-  Every scheme has a light and a dark set; the mode picks which is shown.
-  **Customise…** opens an editor with a colour input per token for both sets,
-  applied to the page as you change them,
-  and a number in front of each background's colour that is the contrast of the text on it
-  (from 4.5 it reads well, under 3 badly).
-  Next to each colour input is its hex value, `#f6f6f4`, in a text field:
-  a value typed or pasted there, with or without the `#`,
-  also as `#abc` and in any case, applies at once
-  and is written as `#rrggbb` in lower case when you leave the field.
-  Anything that is not a colour is refused: the field is marked,
-  a message under the sets says why, the colour stays,
-  and Escape puts the field back.
-  The browser's own colour picker (the popup with R, G, B fields in Chromium)
-  cannot be changed by the page, so the hex field is the place to paste a value.
-  **Save as** keeps the edited scheme in this browser under the name given,
-  **Reset** goes back to the scheme the editor started from,
-  **Delete** removes one of your own.
-  **Export** downloads the chosen scheme (or the one being edited) as a JSON file,
-  `{"format": "massimo-scheme/1", "name": …, "light": {…}, "dark": {…}}` with
-  the token names of style.css without `--`;
-  **Import…** reads such a file and keeps it under its name.
-  A token the file lacks takes the default's value, unknown ones are ignored,
-  and a file that is not a scheme says so under the buttons.
 - **Users** (with `users`, or `guests` for the guests alone):
   every user in a panel with its display name, role, whether it is disabled,
   a guest's end, and a new password, which ends the user's sessions;
@@ -343,18 +366,13 @@ without the switches.
   and **Add a role**; the owner cannot be changed.
   **Capabilities for every role** (with `capabilities`) switches a capability
   off for every role but the owner.
-- **Change password**:
-  the own password, with the current one.
-- **Software**:
+- **Software** (with `update`):
   the running version, the update channel and whether a newer release is out.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** installs it and restarts the server.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-
-The settings are kept in the browser, per browser, except the Cubes,
-which are the server's.
 
 ## How the page is built
 

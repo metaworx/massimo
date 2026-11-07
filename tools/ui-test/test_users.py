@@ -1,32 +1,32 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Settings → Users and Roles as the owner (the test token is the
+"""System settings → Users and Roles as the owner (the test token is the
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
 from conftest import api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
     """The operator is listed with its tokens, the roles with the
     operator's seven capabilities on, every button has a name, and nothing
     overflows."""
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     users = page.locator(".users-settings")
-    assert users.is_visible(), "Settings → Users shown to the owner"
+    assert users.is_visible(), "System settings → Users shown to the owner"
     assert wait_until(page, "document.querySelectorAll('.user-panel').length >= 2", 5), "the users are listed"
     assert page.locator(".user-panel[data-name='operator']").count() == 1, "the operator is listed"
     page.locator(".user-panel[data-name='operator'] summary").click()
     assert wait_until(page, "document.querySelectorAll(\".user-panel[data-name='operator'] .user-tokens li\").length >= 1", 5), \
         "the operator's tokens are listed"
-    named_buttons(page, "Settings → Users")
+    named_buttons(page, "System settings → Users")
     roles = page.locator(".roles-settings")
     assert roles.is_visible() and wait_until(page, "document.querySelectorAll('.role-panel').length >= 6", 5), "the roles are listed"
     page.locator(".role-panel[data-key='operator'] summary").click()
     assert page.locator(".role-panel[data-key='operator'] .cap-grid input:checked").count() == 7, "the operator's seven capabilities are on"
-    named_buttons(page, "Settings → Roles")
-    assert scroll_width(page) <= case.width, "no horizontal scroll in Settings → Users and Roles"
-    page.locator("#view-tiles").click()
+    named_buttons(page, "System settings → Roles")
+    assert scroll_width(page) <= case.width, "no horizontal scroll in System settings → Users and Roles"
+    show_view(page, "tiles")
 
 
 def revoke_keys(prefix):
@@ -46,7 +46,7 @@ def test_new_key_shown_once(page, case):
     revoke_keys(prefix)
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     panel = page.locator(".user-panel[data-name='operator']")
     panel.wait_for()
     panel.locator("summary").click()
@@ -67,7 +67,7 @@ def test_new_key_shown_once(page, case):
             assert len(posts) == n, f"one POST per click, {len(posts)} after {n}"
     finally:
         revoke_keys(prefix)
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def remove_user(name):
@@ -89,7 +89,7 @@ def test_an_unchanged_end_date_is_not_sent(page, case):
     puts = []
     page.on("request", lambda r: puts.append(r.post_data_json) if r.method == "PUT" and r.url.endswith("/users/" + name) else None)
     try:
-        page.locator("#view-settings").click()
+        show_view(page, "system")
         panel = page.locator(".user-panel[data-name='%s']" % name)
         panel.wait_for()
         panel.locator("summary").click()
@@ -108,7 +108,7 @@ def test_an_unchanged_end_date_is_not_sent(page, case):
         assert puts == [{"display_name": "Guest with an end"}], f"the display name alone is sent: {puts}"
     finally:
         remove_user(name)
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_a_double_click_on_yes_removes_once(page, case):
@@ -122,7 +122,7 @@ def test_a_double_click_on_yes_removes_once(page, case):
     deletes = []
     page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and r.url.endswith("/users/" + name) else None)
     try:
-        page.locator("#view-settings").click()
+        show_view(page, "system")
         panel = page.locator(".user-panel[data-name='%s']" % name)
         panel.wait_for()
         panel.locator("summary").click()
@@ -141,7 +141,7 @@ def test_a_double_click_on_yes_removes_once(page, case):
         assert "ok" in page.locator("#users-msg").get_attribute("class"), "the message says it worked"
     finally:
         remove_user(name)
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_create_is_busy_until_answered(page, case):
@@ -154,7 +154,7 @@ def test_create_is_busy_until_answered(page, case):
     held, posts = [], []
     hold(page, "**/api/v1/users", "POST", held, posts)
     try:
-        page.locator("#view-settings").click()
+        show_view(page, "system")
         page.locator("#user-add").click()
         form = page.locator("#user-new form")
         form.locator("input[name=name]").fill(name)
@@ -175,14 +175,14 @@ def test_create_is_busy_until_answered(page, case):
     finally:
         page.unroute("**/api/v1/users")
         remove_user(name)
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_role_save_is_off_until_a_change(page, case):
     """A role's Save is off while its name and set are as stored; a
     capability switched turns it on, switched back off again. Nothing
     is sent."""
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     panel = page.locator(".role-panel[data-key='operator']")
     assert wait_until(page, "!!document.querySelector(\".role-panel[data-key='operator']\")", 5), "the roles are listed"
     panel.locator("summary").click()
@@ -193,7 +193,7 @@ def test_role_save_is_off_until_a_change(page, case):
     assert save.is_enabled(), "a capability switched turns Save on"
     switch.click()
     assert save.is_disabled(), "switched back, nothing differs"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def name_msg(page, selector):
@@ -211,7 +211,7 @@ def test_new_user_name_checked_while_typed(page, case, watch):
     msg = "#user-new-name-msg"
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/users") else None)
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     page.locator("#user-add").click()
     name = page.locator("#user-new-name")
     name.fill("test manager")
@@ -247,7 +247,7 @@ def test_new_user_name_checked_while_typed(page, case, watch):
     finally:
         remove_user(late)
     page.locator("#user-new .cancel-user").click()
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_first_owner_name_checked(page, case):

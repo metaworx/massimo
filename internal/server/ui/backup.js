@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, Settings → Backup and restore: the Cube's backup
+// The Massimo web UI, System settings → Backup and restore: the Cube's backup
 // as it is now (GET …/backup), the backups the server keeps
 // (GET …/backups) with download, the comparison with the one before
 // (…/diff), restore and delete, a backup taken by hand (POST …/backups),
@@ -310,7 +310,7 @@ function backupCubeChanged() {
   backupUI.changed = backupUI.due = null;
   backupUI.plan = backupUI.run = null;
   renderPlan();
-  if (!$("settings").classList.contains("hidden")) refreshBackups();
+  if (isShown("system")) refreshBackups();
 }
 
 function initBackups() {
@@ -319,7 +319,7 @@ function initBackups() {
   const picker = filePicker(".json,.yaml,.yml,application/json,application/yaml", (f) => planFile(f));
   $("restore-file").after(picker);
   $("restore-file").addEventListener("click", () => picker.click());
-  $("view-settings").addEventListener("click", () => {
+  onView("system", () => {
     backupMsg("");
     if (hasCap("backup")) refreshBackups();
   });

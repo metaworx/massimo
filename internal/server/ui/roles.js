@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, Settings → Roles: the roles with their sets, each
+// The Massimo web UI, System settings → Roles: the roles with their sets, each
 // in a panel with its display name, a switch per capability, Disable
 // and Remove (/api/v1/roles); the form that creates a role; and the
 // switch per capability that disables it for every role but owner
@@ -193,7 +193,7 @@ function renderCapabilities() {
   box.appendChild(grid);
 }
 
-// renderRoles draws Settings → Roles from rolesUI.
+// renderRoles draws System settings → Roles from rolesUI.
 function renderRoles() {
   const box = $("roles-list");
   if (!box || !hasCap("roles")) return;
@@ -211,7 +211,7 @@ function initRoles() {
     box.appendChild(form);
     form.querySelector("input[name=key]").focus();
   });
-  $("view-settings").addEventListener("click", () => {
+  onView("system", () => {
     rolesMsg("");
     if (!hasCap("roles")) return;
     loadRoles().then(renderRoles).catch((e) => rolesMsg(t("roles.failed", { role: "", error: e.message }), false));

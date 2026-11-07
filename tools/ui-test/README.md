@@ -78,7 +78,10 @@ with the page's DOM, console and network at every step.
 
 `helpers.py` holds the texts the tests expect in both languages,
 the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
-and `open_user_menu` and `sign_out` for the header's 👤 menu.
+`open_user_menu` and `sign_out` for the header's 👤 menu,
+and `show_view`, which opens a page as a user does:
+Rooms, the log and System settings with their header button,
+My profile and My settings from the 👤 menu.
 
 The four cases share the one server,
 so a test that changes the server's store puts it back;
@@ -127,7 +130,7 @@ what a test stores in the browser goes with its context.
   The server's own discovery socket is UDP 23272 as always,
   so where another program holds that port the search answers 503
   and the tests that need an answer are skipped.
-- `test_cubes.py`, Settings → Cubes:
+- `test_cubes.py`, System settings → Cubes:
   a new name is saved and shown in the Cube choice,
   the settings file's name is offered as a differing line and "Take the file's
   value" brings it back;
@@ -141,18 +144,24 @@ what a test stores in the browser goes with its context.
   (the test holds a request for the pairing until it has typed);
   Hide and Show again keep the name and the proxy address typed in the form.
 - `test_settings.py`:
-  the settings page opens;
-  with the Cube's panel open,
-  English and then German chosen in the settings redraw its labels,
+  My settings and System settings open, each alone, with their parts;
+  with the Cube's panel open in System settings,
+  English and then German chosen in My settings redraw its labels,
   cloned from a template, in that language, and the panel stays open;
   French chosen and German before French has come,
-  French failing afterwards shows no error on the German page.
-- `test_backup.py`, Settings → Backup and restore against the fake Cube's store:
+  French failing afterwards shows no error on the German page;
+  My profile's Save is off until the display name differs,
+  turns while it is sent (the test holds the PUT) and stores it;
+  My profile lists the own keys, the suite's among them,
+  and Create key and Revoke work there;
+  a viewer (`/me` stubbed) has no ⚙, and System settings open as it signs in
+  gives way to Rooms.
+- `test_backup.py`, System settings → Backup and restore against the fake Cube's store:
   the Cube's backup downloads as YAML,
   one taken by hand shows in the list as "by hand" and downloads,
   its plan says the Cube holds it already,
   it compares with the one before when there is one, and it is deleted again.
-- `test_users.py`, Settings → Users and Roles as the owner:
+- `test_users.py`, System settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-pass`) are listed with the operator's tokens,
   and the six default roles with the operator's seven capabilities;
@@ -201,7 +210,7 @@ what a test stores in the browser goes with its context.
   a live event that comes while a page is held follows the page,
   once, also when the page holds it already.
 - `test_pairing.py`, pairing and removal:
-  in Settings → Cubes, Pair a device with 5 seconds,
+  in System settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,
   is named and put into the first room with the copy on,
   the row says so and the end of pairing is said;
@@ -214,10 +223,10 @@ what a test stores in the browser goes with its context.
   the log without a copy;
   another is removed from there.
   With the body's `no-cubes`, the default manager's,
-  the Cube's panel holds the pairing alone, and with `no-pair` too Settings →
+  the Cube's panel holds the pairing alone, and with `no-pair` too System settings →
   Cubes is gone.
   Each test stops pairing and removes the device at its start and end.
-- `test_appearance.py`, Settings → Appearance:
+- `test_appearance.py`, My settings → Appearance:
   a scheme changes the computed `--bg`, the dark mode sets `data-theme`,
   the editor applies a colour live, grades the contrast
   and keeps a saved scheme in the browser;
@@ -228,7 +237,7 @@ what a test stores in the browser goes with its context.
   Import reads it back with a missing token filled from the default
   and an unknown one dropped,
   and a file that is not a scheme shows a message.
-- `test_update.py`, Settings → Software:
+- `test_update.py`, System settings → Software:
   both buttons are greyed while the update helper installs (a stubbed
   `GET /api/v1/update`) and come back when it is done;
   Update asks in the page with the version,
@@ -254,16 +263,17 @@ It takes a fixed set of PNGs into `docs/screenshots/`,
 named `<page>-<width>-<theme>-<lang>.png` and listed in one place,
 `SETS` in the script:
 the Rooms page, a tile's device list, the configuration's tabs Temperatures,
-Devices, Week programme and Copy, the House panel, the log, the settings,
-the Appearance editor, the Cube choice with a found Cube and Settings → Cubes,
+Devices, Week programme and Copy, the House panel, the log, My settings,
+the Appearance editor, System settings,
+the Cube choice with a found Cube and System settings → Cubes,
 at 1100 px in light and dark (`data-theme`), in English;
-the Rooms and the Settings page also at 390 px,
+the Rooms page, My settings and System settings also at 390 px,
 and the Rooms page in German as well.
 A shot is framed by its subject, set beside each page in `PAGES`:
 the viewport (1100 × 800,
 at phone width 390 × 844) where the page is the subject (the Rooms page,
 the log, every phone shot), and the one element where one element is (a tile,
-the House panel, the Settings panel or one of its sections,
+the House panel, a settings page or one of its sections,
 the header with the found Cube), whole however tall, with 12 CSS px around it,
 so that the sizes differ from shot to shot.
 The PNGs it took before are removed first.

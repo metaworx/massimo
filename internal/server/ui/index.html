@@ -51,13 +51,14 @@
           <summary class="nav-btn" aria-label="who is signed in" title="Who is signed in" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></summary>
           <div class="menu-items">
             <p id="me-line" class="menu-line small"></p>
+            <button type="button" id="menu-profile" data-i18n="nav.profile">My profile</button>
             <button type="button" id="menu-prefs" data-i18n="nav.prefs">My settings</button>
             <button type="button" id="logout-btn" data-i18n="me.signOut">Sign out</button>
           </div>
         </details>
         <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
         <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
-        <button type="button" id="view-settings" class="icon-btn nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+        <button type="button" id="view-settings" class="icon-btn nav-btn needs-system" aria-label="system settings" title="System settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
       </nav>
     </div>
   </div>
@@ -109,8 +110,15 @@
     </form>
   </section>
 
-  <section id="settings" class="tile settings hidden" aria-label="settings" data-i18n-attr="aria-label:nav.settings">
-    <header class="tile-head"><h2 data-i18n="settings.title">Settings</h2></header>
+  <section id="profile" class="tile settings hidden" aria-labelledby="profile-title">
+    <header class="tile-head"><h2 id="profile-title" data-i18n="nav.profile">My profile</h2></header>
+    <div class="settings-body">
+      <!-- partials: profile -->
+    </div>
+  </section>
+
+  <section id="prefs" class="tile settings hidden" aria-labelledby="prefs-title">
+    <header class="tile-head"><h2 id="prefs-title" data-i18n="nav.prefs">My settings</h2></header>
     <div class="settings-body">
       <div class="field">
         <label for="poll-input" data-i18n="settings.poll">Poll every</label>
@@ -143,7 +151,14 @@
         <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
         <p id="lang-note" class="muted small lang-note hidden"></p>
       </div>
-      <!-- partials: settings -->
+      <!-- partials: prefs -->
+    </div>
+  </section>
+
+  <section id="system" class="tile settings hidden" aria-labelledby="system-title">
+    <header class="tile-head"><h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2></header>
+    <div class="settings-body">
+      <!-- partials: system -->
     </div>
   </section>
 

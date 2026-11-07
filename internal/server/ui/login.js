@@ -38,6 +38,20 @@ function canManageUsers() {
   return hasCap("users") || hasCap("guests");
 }
 
+// hasSystem reports whether the signed-in user sees System settings: one
+// of the capabilities of its panels, Cubes, backups, users, roles and the
+// software update.
+function hasSystem() {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "update"].some(hasCap) || canManageUsers();
+}
+
+// hasProfile reports whether the page is signed in as a user, who has My
+// profile; an open server and the server's token have none.
+function hasProfile() {
+  const me = state.me;
+  return !!(me && me.mode === "users" && me.user);
+}
+
 // isSelf reports whether a user is the signed-in one.
 function isSelf(name) {
   return !!(state.me && state.me.user && state.me.user.name === name);
@@ -79,14 +93,16 @@ function applyCaps() {
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
+  body.classList.toggle("no-system", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderMe();
+  if (!mayShow(currentView)) showView("tiles"); // log.js: a page the user signed in now may not open
 }
 
 // renderMe says in the 👤 menu who is signed in, and what Sign out
 // does: a session ends, an API key or the token is only forgotten (Forget
 // key), and an open server or one without authentication has nothing to
-// end, so the menu offers My settings alone.
+// end and no profile, so the menu offers My settings alone.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -113,6 +129,7 @@ function renderMe() {
   line.classList.toggle("hidden", !text);
   btn.textContent = label || t("me.signOut");
   btn.classList.toggle("hidden", !label);
+  $("menu-profile").classList.toggle("hidden", !hasProfile());
   $("me-password").classList.toggle("hidden", !(me && me.mode === "users" && me.user && me.user.has_password));
 }
 

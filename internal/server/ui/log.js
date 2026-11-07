@@ -357,33 +357,68 @@ function logCubeChanged() {
   loadLog();
 }
 
-// showView switches the main area between the three pages: the tiles
-// ("tiles"), the log ("log") and the settings ("settings"). The tiles
-// keep their state while hidden. The page is kept in memory only.
+// The pages of the main area: Rooms ("tiles"), the log ("log"), My
+// profile ("profile"), My settings ("prefs") and System settings
+// ("system"), each with its section and, where it has one, its button in
+// the header; My profile and My settings open from the 👤 menu, which is
+// highlighted while one of them is shown. The tiles keep their state
+// while hidden. The page is kept in memory only.
+const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", system: "system" };
+const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", system: "view-settings" };
+let currentView = "tiles";
+
+// mayShow reports whether the signed-in user may open a page: System
+// settings with one of its capabilities, My profile as a user.
+function mayShow(view) {
+  if (view === "system") return hasSystem(); // login.js
+  if (view === "profile") return hasProfile();
+  return view in VIEW_BUTTON || view in VIEW_SECTION;
+}
+
+// isShown reports whether a page is the one shown.
+function isShown(view) {
+  return currentView === view;
+}
+
+// showView shows a page, Rooms in place of one the user may not open,
+// and tells the scripts that load what it shows (onView).
 function showView(view) {
+  if (!mayShow(view)) view = "tiles";
+  currentView = view;
   logState.open = view === "log";
   for (const id of ["house", "rooms", "unlisted"]) {
     $(id).classList.toggle("view-hidden", view !== "tiles");
   }
-  $("logview").classList.toggle("hidden", view !== "log");
-  $("settings").classList.toggle("hidden", view !== "settings");
-  const buttons = { tiles: "view-tiles", log: "view-log", settings: "view-settings" };
-  for (const [name, id] of Object.entries(buttons)) {
+  for (const [name, id] of Object.entries(VIEW_SECTION)) {
+    $(id).classList.toggle("hidden", view !== name);
+  }
+  for (const [name, id] of Object.entries(VIEW_BUTTON)) {
     $(id).classList.toggle("active", view === name);
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
+  $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs");
   if (view === "log") {
     fillLogSelects();
     loadLog();
   }
+  document.dispatchEvent(new CustomEvent("viewshown", { detail: view }));
+}
+
+// onView runs fn each time a page is shown, for a script that loads
+// what the page shows.
+function onView(view, fn) {
+  document.addEventListener("viewshown", (ev) => {
+    if (ev.detail === view) fn();
+  });
 }
 
 function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   $("view-log").addEventListener("click", () => showView("log"));
-  $("view-settings").addEventListener("click", () => showView("settings"));
-  $("menu-prefs").addEventListener("click", () => showView("settings"));
+  $("view-settings").addEventListener("click", () => showView("system"));
+  $("menu-profile").addEventListener("click", () => showView("profile"));
+  $("menu-prefs").addEventListener("click", () => showView("prefs"));
   dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;

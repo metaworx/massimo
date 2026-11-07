@@ -721,7 +721,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (!$("settings").classList.contains("hidden")) return true;
+  if (isShown("profile") || isShown("prefs") || isShown("system")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -947,7 +947,7 @@ async function connectEvents() {
 // --- settings panel ---------------------------------------------------
 
 function initSettings() {
-  // The settings page is opened with the cog in the header (showView).
+  // My settings opens from the 👤 menu (showView).
   $("poll-input").addEventListener("change", (ev) => {
     const v = validSetting("poll", ev.target.value) || 10;
     ev.target.value = v;

@@ -955,13 +955,14 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 
 /* what the signed-in user may not do is hidden: login.js puts a class
    no-<capability> on the body per capability the user lacks, and the
-   markup marks what each one hides with needs-<capability>, and with
-   needs-cubes-or-pair what either of the two shows (Settings → Cubes) */
+   markup marks what each one hides with needs-<capability>, with
+   needs-cubes-or-pair what either of the two shows (System settings →
+   Cubes), and with needs-system what one of System settings' does (⚙) */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
-.no-settings .needs-settings, .no-update .needs-update, .no-sync .needs-sync,
+.no-settings .needs-settings, .no-update .needs-update, .no-sync .needs-sync, .no-system .needs-system,
 .no-cubes.no-pair .needs-cubes-or-pair { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 

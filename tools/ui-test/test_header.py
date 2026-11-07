@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """The header: the log button's symbol, the 👤 menu."""
-from helpers import open_user_menu
+from helpers import open_user_menu, show_view
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -53,9 +53,10 @@ def test_user_menu_says_who_is_in(page, case):
     open_user_menu(page)
     page.locator("#menu-prefs").click()
     assert not menu_open(page), "a choice closes it"
-    assert page.locator("#settings").is_visible(), "My settings opens the settings"
-    assert not page.locator("#settings #logout-btn, #settings #me-line").count(), "the settings no longer hold who is in"
-    page.locator("#view-tiles").click()
+    assert page.locator("#prefs").is_visible(), "My settings opens"
+    assert page.locator("#user-menu summary").evaluate("e => e.classList.contains('active')"), "👤 is highlighted while it is open"
+    assert not page.locator("#prefs #logout-btn, #prefs #me-line").count(), "the settings no longer hold who is in"
+    show_view(page, "tiles")
 
 
 def test_user_menu_on_an_open_server(page, case):
@@ -68,6 +69,7 @@ def test_user_menu_on_an_open_server(page, case):
         assert OPEN_LINE[case.lang] in page.locator("#me-line").inner_text(), "the menu says the server is open"
         assert page.locator("#menu-prefs").is_visible() and not page.locator("#logout-btn").is_visible(), \
             "My settings, and nothing to sign out of"
+        assert not page.locator("#menu-profile").is_visible(), "no profile without a user"
     finally:
         page.unroute("**/api/v1/me")
         page.evaluate("loadMe()")

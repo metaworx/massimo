@@ -46,6 +46,8 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+from helpers import show_view
+
 OUT = Path(__file__).resolve().parents[2] / "docs" / "screenshots"
 NOW = "2026-11-03T20:51:00+01:00"            # the page's clock: the greeting's Cube clock in TZ
 SERVER_TIME = "2026-11-03T20:39:00+01:00"    # every time the server sends: 12 minutes ago
@@ -82,10 +84,11 @@ PAGES = {
     "config-copy": ".room",
     "house": "#house",
     "log": None,                                    # its lines run the full width
-    "settings": "#settings",
-    "appearance": "#settings .appearance",
+    "prefs": "#prefs",                              # My settings
+    "appearance": "#prefs .appearance",
+    "system": "#system",                            # System settings
     "cube-found": "header.top",                     # the Cube choice with the found Cube under it
-    "cubes": "#settings .cubes-settings",
+    "cubes": "#system .cubes-settings",
 }
 
 # The set: each run is one browser context, (width, theme, language,
@@ -93,7 +96,7 @@ PAGES = {
 SETS = [
     (1100, "light", "en", list(PAGES)),
     (1100, "dark", "en", list(PAGES)),
-    (390, "light", "en", ["rooms", "settings"]),
+    (390, "light", "en", ["rooms", "prefs", "system"]),
     (1100, "light", "de", ["rooms"]),
 ]
 
@@ -253,7 +256,7 @@ def step(page, which):
         page.locator("#house-panel").wait_for(state="visible")
         to_top(page, page.locator("#house"))
     elif which == "log":
-        page.locator("#view-log").click()
+        show_view(page, "log")
         page.wait_for_selector("#logview .log-line")
         # After the connect burst (1.5 s), which the log leaves out.
         page.wait_for_timeout(1600)
@@ -264,26 +267,25 @@ def step(page, which):
             changes: { window_open: { from: false, to: true }, setpoint: { from: 18.5, to: 12 } } }) }));
         }""", LOG_TIME)
         page.wait_for_selector("#logview .log-line.kind-state >> nth=-1")
-    elif which == "settings":
-        page.locator("#view-settings").click()
-        page.locator("#settings").wait_for(state="visible")
+    elif which in ("prefs", "system"):
+        show_view(page, which)
     elif which == "appearance":
-        page.locator("#view-settings").click()
+        show_view(page, "prefs")
         page.locator("#scheme-customise").click()
         page.locator("#scheme-editor").wait_for(state="visible")
-        to_top(page, page.locator("#settings .appearance"))
+        to_top(page, page.locator("#prefs .appearance"))
     elif which == "cube-found":
         found = page.locator("#cube-found")
         found.wait_for(state="visible")
         found.locator("summary").click()
         found.locator(".env-lines").wait_for(state="visible")
     elif which == "cubes":
-        page.locator("#view-settings").click()
+        show_view(page, "system")
         panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
         panel.locator("summary").click()
         panel.locator("form.cube-form").wait_for(state="visible")
         page.locator(".cube-found-row[data-serial='KEQ0000000']").wait_for(state="visible")
-        to_top(page, page.locator("#settings .cubes-settings"))
+        to_top(page, page.locator("#system .cubes-settings"))
     else:
         raise ValueError("no such page: " + which)
 

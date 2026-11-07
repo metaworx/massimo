@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Settings → Backup and restore against the server run.sh starts, whose
+"""System settings → Backup and restore against the server run.sh starts, whose
 store holds the fake Cube: the backup of the Cube as it is now downloads,
 one taken by hand shows in the list and downloads, its plan says that
 the Cube holds it already, it compares with the one before, and it is
 deleted again. The four cases share the server, so each removes what it
 took."""
-from helpers import assert_busy, busy_state, hold, named_buttons, open_settings, wait_held, wait_until
+from helpers import assert_busy, busy_state, hold, named_buttons, show_view, wait_held, wait_until
 
 REASON_MANUAL = {"en": "by hand", "de": "von Hand"}
 NOTHING = {"en": "The Cube already holds this backup: nothing to send.",
@@ -14,7 +14,7 @@ NOTHING = {"en": "The Cube already holds this backup: nothing to send.",
 
 
 def test_backup_panel(page, case):
-    open_settings(page)
+    show_view(page, "system")
     panel = page.locator(".backup-settings")
     panel.scroll_into_view_if_needed()
     assert wait_until(page, "backupUI.history && document.getElementById('backups-list').children.length > 0", 10), "the list loaded"
@@ -53,14 +53,14 @@ def test_backup_panel(page, case):
     row.locator(".backup-actions button").last.click()
     row.locator(".confirm-yes").click()
     assert wait_until(page, "!backupUI.list.some((b) => b.id === %d)" % taken, 10), "the backup deleted"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_back_up_now_turns_until_answered(page, case):
     """Back up now turns until the server answers, and a second click
     sends nothing; the POST is answered with a stub, so no backup is
     stored."""
-    open_settings(page)
+    show_view(page, "system")
     assert wait_until(page, "backupUI.history && !document.getElementById('backup-take').classList.contains('hidden')", 10), \
         "the server keeps backups"
     held, sent = [], []
@@ -78,4 +78,4 @@ def test_back_up_now_turns_until_answered(page, case):
         assert busy_state(page, "#backup-take") == [False, False, None], "and on"
     finally:
         page.unroute("**/backups")
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")

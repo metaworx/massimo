@@ -8,14 +8,14 @@ import re
 import time
 from urllib.parse import parse_qs, urlparse
 
-from helpers import CHANGES, named_buttons, wait_until
+from helpers import CHANGES, named_buttons, show_view, wait_until
 
 OLDER = {"en": "Older events", "de": "Ältere Ereignisse"}
 NO_OLDER = {"en": "No older events", "de": "Keine älteren Ereignisse"}
 
 
 def test_log_opens(page):
-    page.locator("#view-log").click()
+    show_view(page, "log")
     assert page.locator("#logview").is_visible(), "log opens"
     named_buttons(page, "the log")
 
@@ -26,7 +26,7 @@ def test_log_changes(page, case):
     opened first: opening it loads the server's log. The page leaves the
     stream's first 1.5 s out of the log (the burst of state events a
     connection starts with), so the event comes after that."""
-    page.locator("#view-log").click()
+    show_view(page, "log")
     page.wait_for_timeout(1600)
     page.evaluate("""() => {
       const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
@@ -36,7 +36,7 @@ def test_log_changes(page, case):
     }""")
     line = page.locator(".log-line.kind-state").last
     assert CHANGES[case.lang] in line.inner_text(), "the log says what changed"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def stamp(now, i):
@@ -47,7 +47,7 @@ def test_log_filters(page, case):
     """The kind and the device chosen narrow the log the server answers;
     back to all, the lines of before, and Older offered as the page's
     size says: nothing older after a page shorter than 200."""
-    page.locator("#view-log").click()
+    show_view(page, "log")
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= 7", 5), "the log loaded"
     before = page.locator("#log-lines .log-line").count()
     page.locator("#log-kind").select_option("state")
@@ -73,7 +73,7 @@ def test_log_filters(page, case):
     else:
         assert older.is_enabled() and older.inner_text() == OLDER[case.lang], f"a page of {n}: Older offered"
     named_buttons(page, "the log with its choices")
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_log_older(page, case):
@@ -96,7 +96,7 @@ def test_log_older(page, case):
     pattern = re.compile(r"/api/v1/cubes/[^/]+/log\?")
     page.route(pattern, answer)
     try:
-        page.locator("#view-log").click()
+        show_view(page, "log")
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 200", 5), "a page of 200"
         older = page.locator("#log-older")
         assert older.is_enabled() and older.inner_text() == OLDER[case.lang], "Older offered"
@@ -109,7 +109,7 @@ def test_log_older(page, case):
         assert older.inner_text() == NO_OLDER[case.lang], "nothing older"
     finally:
         page.unroute(pattern)
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_log_answers(page, case):
@@ -120,7 +120,7 @@ def test_log_answers(page, case):
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time."""
     now = time.time()
-    page.locator("#view-log").click()
+    show_view(page, "log")
     assert wait_until(page, "!logState.loading", 5), "the log loaded"
     page.evaluate("""() => {
       window.logAnswers = [];
@@ -194,7 +194,7 @@ def test_log_answers(page, case):
     page.evaluate("window.logAnswers.shift().reject(new Error('nope'))")
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error').length === 1", 5), \
         "the error line shows with a kind chosen"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_log_keeps_events_that_come_while_it_loads(page, case):
@@ -202,7 +202,7 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
     kept after the page, and one the page holds already is not doubled.
     The page's api() holds the log's request until the test answers it."""
     now = time.time()
-    page.locator("#view-log").click()
+    show_view(page, "log")
     assert wait_until(page, "!logState.loading", 5), "the log loaded"
     page.evaluate("""() => {
       window.logAnswers = [];
@@ -227,4 +227,4 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
     assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
         f"the page, then the live event it lacks, once each: {kinds}"
     assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")

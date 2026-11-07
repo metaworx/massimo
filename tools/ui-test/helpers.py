@@ -137,7 +137,20 @@ def sign_out(page):
     page.locator("#logout-btn").click()
 
 
-def open_settings(page):
-    """The settings page, opened with the cog in the header."""
-    page.locator("#view-settings").click()
-    page.locator("#settings").wait_for(state="visible")
+# The pages of the main area: how a user opens each, and the section it
+# shows.
+VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}
+VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs"}
+VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "system": "#system"}
+
+
+def show_view(page, view):
+    """A page of the main area, opened as a user opens it: Rooms, the log
+    and System settings with their button in the header, My profile and
+    My settings from the 👤 menu."""
+    if view in VIEW_MENU:
+        open_user_menu(page)
+        page.locator(VIEW_MENU[view]).click()
+    else:
+        page.locator(VIEW_BUTTON[view]).click()
+    page.locator(VIEW_SECTION[view]).wait_for(state="visible")

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Settings → Cubes: a new name is saved and shown in the header, the
+"""System settings → Cubes: a new name is saved and shown in the header, the
 settings file's differing name is offered and taken back; hiding the
 devices of a room makes its tile go, showing them again brings it back;
 a Cube found on the LAN is added and removed again, and is then listed
@@ -10,23 +10,23 @@ import json
 
 import pytest
 
-from helpers import assert_busy, busy_state, hold, named_buttons, scroll_width, wait_held, wait_until
+from helpers import assert_busy, busy_state, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
 
 def open_panel(page):
-    """Settings → Cubes with the fake Cube's panel open; its form."""
-    page.locator("#view-settings").click()
+    """System settings → Cubes with the fake Cube's panel open; its form."""
+    show_view(page, "system")
     panel = page.locator(PANEL)
     panel.locator("summary").click()
     return panel, panel.locator("form.cube-form")
 
 
 def test_name_saved_and_taken_back(page, case):
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     panel = page.locator(PANEL)
-    assert panel.count() == 1, "the Cube in Settings → Cubes"
+    assert panel.count() == 1, "the Cube in System settings → Cubes"
     panel.locator("summary").click()
     form = panel.locator("form.cube-form")
     assert form.is_visible(), "the Cube's panel opens"
@@ -57,17 +57,17 @@ def test_hidden_devices(page, case):
     form.locator("button[type=submit]").click()
     gone = "!state.rooms.some((r) => r.name === %s)" % json.dumps(room["name"])
     assert wait_until(page, gone, 5), "hiding the devices removes their room"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
     assert page.evaluate("![...document.querySelectorAll('.room .room-name')].some((e) => e.textContent.trim() === %s)" % json.dumps(room["name"])), \
         "the room's tile is gone"
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     for _ in room["rfs"]:
         form.locator(".cube-hidden-list button").first.click()
     form.locator("button[type=submit]").click()
     assert wait_until(page, "!(" + gone + ")", 5), "showing them again brings the room back"
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.hidden.length === 0)", 5), "nothing hidden any more"
-    assert scroll_width(page) <= case.width, "no horizontal scroll in Settings → Cubes"
-    page.locator("#view-tiles").click()
+    assert scroll_width(page) <= case.width, "no horizontal scroll in System settings → Cubes"
+    show_view(page, "tiles")
 
 
 def test_found_cube_added_and_removed(page):
@@ -78,11 +78,11 @@ def test_found_cube_added_and_removed(page):
     if not page.evaluate("state.found.some((c) => c.serial === 'KEQ0000000')"):
         page.locator("#cube-select").select_option("__discover")
         wait_until(page, "!discovery.running", 10)
-    page.locator("#view-settings").click()
+    show_view(page, "system")
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
     if found.count() == 0:
         pytest.skip("no found Cube to add (discovery did not answer)")
-    assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in Settings → Cubes"
+    assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in System settings → Cubes"
     found.locator("button").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add serves the found Cube"
     assert page.evaluate("state.serial") == "KEQ0000100", "the selected Cube stays"
@@ -97,11 +97,11 @@ def test_found_cube_added_and_removed(page):
     other.locator(".confirm-box .confirm-yes").click()
     assert wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5), \
         "Remove lists it as found again"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_redraw_of_an_open_panel_loads_nothing(page, case):
-    """A redraw of Settings → Cubes, as after a save, builds the open
+    """A redraw of System settings → Cubes, as after a save, builds the open
     panel open again without asking for its pairing again, so that an
     answer arriving later does not redraw the pairing under the user's
     typing; the test holds such a request until it has typed."""
@@ -127,7 +127,7 @@ def test_redraw_of_an_open_panel_loads_nothing(page, case):
         assert asked == 0, f"a redraw asks for the pairing again: {asked} request(s)"
     finally:
         page.unroute("**/api/v1/cubes/KEQ0000100/pairing")
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_hide_and_show_keep_what_is_typed(page, case):
@@ -148,7 +148,7 @@ def test_hide_and_show_keep_what_is_typed(page, case):
     assert form.locator("input[name=name]").input_value() == "Typed, not saved", "the name typed stays after Show again"
     assert form.locator("input[name=proxy]").input_value() == "127.0.0.1:62999", "the proxy typed stays after Show again"
     assert page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100').name") == "Fake Cube", "nothing saved"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")
 
 
 def test_save_is_off_until_a_change_and_turns(page, case):
@@ -182,4 +182,4 @@ def test_save_is_off_until_a_change_and_turns(page, case):
     finally:
         page.unroute("**/api/v1/cubes/KEQ0000100")
     assert busy_state(page, PANEL + " form.cube-form button[type=submit]")[0], "the Cube's name as it was: nothing differs"
-    page.locator("#view-tiles").click()
+    show_view(page, "tiles")

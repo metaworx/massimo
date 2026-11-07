@@ -134,7 +134,9 @@ async function runUpdate(u) {
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
-  $("view-settings").addEventListener("click", () => loadUpdate(false));
+  onView("system", () => {
+    if (hasCap("update")) loadUpdate(false);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", initUpdate);

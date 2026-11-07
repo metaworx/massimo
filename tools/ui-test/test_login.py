@@ -5,12 +5,12 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import URL
-from helpers import named_buttons, open_user_menu, sign_out, wait_until
+from helpers import named_buttons, open_user_menu, show_view, sign_out, wait_until
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
     """The sign-in dialog opens without a token and refuses a wrong
-    password; the operator signs in, sees the tiles and no Settings →
+    password; the operator signs in, sees the tiles and no System settings →
     Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
     forgets the token and brings the dialog back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
@@ -34,10 +34,10 @@ def test_sign_in_and_out(new_context, case, watch, guard):
         "the missing capabilities are on the body"
     assert page.locator(".room .tile-cog").first.is_visible() and not page.locator(".room .menu-delete").first.is_visible(), \
         "an operator configures but does not delete rooms"
-    page.locator("#view-settings").click()
-    assert not page.locator(".users-settings").is_visible(), "no Settings → Users for an operator"
-    assert not page.locator(".roles-settings").is_visible(), "no Settings → Roles for an operator"
-    assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no Settings → Cubes for an operator"
+    show_view(page, "system")
+    assert not page.locator(".users-settings").is_visible(), "no System settings → Users for an operator"
+    assert not page.locator(".roles-settings").is_visible(), "no System settings → Roles for an operator"
+    assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no System settings → Cubes for an operator"
     named_buttons(page, "the settings as an operator")
     open_user_menu(page)
     assert "operator" in page.locator("#me-line").inner_text(), "the 👤 menu says who is signed in"

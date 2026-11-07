@@ -213,13 +213,24 @@ func TestUIPageMarkers(t *testing.T) {
 			}
 		}
 	}
-	skeleton := "<body>\n  <!-- partials: settings -->\n<!-- partials: templates -->\n</body>\n"
+	// The first marker indented, the others not; each partial but the
+	// first is empty.
+	skeleton := "<body>\n"
+	for i, p := range uiPartials {
+		if i == 0 {
+			skeleton += "  "
+		}
+		skeleton += "<!-- partials: " + p.marker + " -->\n"
+	}
+	skeleton += "</body>\n"
+	first := "<!-- partials: " + uiPartials[0].marker + " -->"
+	last := "<!-- partials: " + uiPartials[len(uiPartials)-1].marker + " -->"
 	files["index.html"] = &fstest.MapFile{Data: []byte(skeleton)}
 	got, err := uiPage(files)
 	if want := "<body>\n  <p>\n    x\n  </p>\n</body>\n"; err != nil || string(got) != want {
 		t.Fatalf("uiPage = %q, %v, want %q", got, err, want)
 	}
-	for _, bad := range []string{"<body>\n<!-- partials: templates -->\n", skeleton + "<!-- partials: settings -->\n", "<p><!-- partials: settings --><!-- partials: templates -->\n"} {
+	for _, bad := range []string{strings.Replace(skeleton, first+"\n", "", 1), skeleton + first + "\n", strings.Replace(skeleton, first+"\n", "<p>"+first+last+"\n", 1)} {
 		files["index.html"] = &fstest.MapFile{Data: []byte(bad)}
 		if _, err := uiPage(files); err == nil {
 			t.Errorf("uiPage(%q): no error", bad)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, Settings → Users: the users of the store, each in
+// The Massimo web UI, System settings → Users: the users of the store, each in
 // a panel with its display name, role, end date, a new password and
 // Remove (PUT and DELETE /api/v1/users/{name}), its sessions and API
 // keys with Revoke and a new key shown once (/api/v1/users/{name}/tokens),
@@ -12,6 +12,7 @@
 
 const usersUI = {
   users: [],
+  self: null, // the signed-in user, as My profile shows it
   roles: null, // the roles, when they may be read, for the role choice
   open: new Set(), // names of the open panels
   keys: {}, // per name: the key just created, shown once
@@ -19,6 +20,16 @@ const usersUI = {
 
 function usersMsg(text, ok) {
   showResult($("users-msg"), text, ok);
+}
+
+function profileMsg(text, ok) {
+  showResult($("profile-msg"), text, ok);
+}
+
+// sayFor is where a change says how it went: in My profile for one made
+// there ("profile"), else under System settings → Users.
+function sayFor(where) {
+  return where === "profile" ? profileMsg : usersMsg;
 }
 
 // usersAdmin says what the signed-in user may do with users: everything,
@@ -121,19 +132,24 @@ function wordNameError(e, name) {
   return "";
 }
 
-// userAction runs a change, redraws the list and says how it went;
-// btn, the button it runs for, is busy until then (whileBusy), and a
-// click while it is runs nothing and returns undefined.
-function userAction(fn, okText, name, btn) {
+// userAction runs a change, redraws the list, and My profile for a
+// change made there (where "profile"), and says how it went there; btn,
+// the button it runs for, is busy until then (whileBusy), and a click
+// while it is runs nothing and returns undefined.
+function userAction(fn, okText, name, btn, where) {
+  const say = sayFor(where);
   return whileBusy(btn, async () => {
     try {
       await fn();
-      await loadUsers();
-      renderUsers();
-      usersMsg(okText, true);
+      if (canManageUsers()) {
+        await loadUsers();
+        renderUsers();
+      }
+      if (where === "profile") await renderProfile();
+      say(okText, true);
       return true;
     } catch (e) {
-      usersMsg(t("users.failed", { name, error: e.message }), false);
+      say(t("users.failed", { name, error: e.message }), false);
       return false;
     }
   });
@@ -182,7 +198,7 @@ function removeUser(u, actions) {
 
 // tokenRow is one session or key of a user, from its template, with
 // Revoke.
-function tokenRow(u, tk) {
+function tokenRow(u, tk, where) {
   const li = fromTemplate("tpl-token-row");
   li.dataset.id = String(tk.id);
   li.querySelector(".token-kind").textContent = t("users.kind." + tk.kind);
@@ -198,14 +214,14 @@ function tokenRow(u, tk) {
   const revoke = li.querySelector(".revoke-token");
   revoke.setAttribute("aria-label", t("users.revokeLabel", { label: tk.label || t("users.kind." + tk.kind) }));
   revoke.addEventListener("click", () => {
-    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name, revoke);
+    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name, revoke, where);
   });
   return li;
 }
 
-// fillTokens loads a user's tokens into an open panel and shows the key
-// just created.
-async function fillTokens(u, box) {
+// fillTokens loads a user's tokens into an open panel, or My profile,
+// and shows the key just created.
+async function fillTokens(u, box, where) {
   const ul = box.querySelector(".user-tokens");
   clear(ul);
   let tokens = [];
@@ -216,7 +232,7 @@ async function fillTokens(u, box) {
     return;
   }
   if (!tokens.length) ul.appendChild(textEl("li", t("users.tokensNone"), "muted small"));
-  for (const tk of tokens) ul.appendChild(tokenRow(u, tk));
+  for (const tk of tokens) ul.appendChild(tokenRow(u, tk, where));
   const key = usersUI.keys[u.name];
   const shown = box.querySelector(".user-key-box");
   shown.classList.toggle("hidden", !key);
@@ -227,21 +243,21 @@ async function fillTokens(u, box) {
 }
 
 // wireNewKey wires a panel's New API key once, when the panel is built.
-function wireNewKey(u, box) {
+function wireNewKey(u, box, where) {
   const input = box.querySelector("input[name=label]");
-  input.id = "user-key-label-" + u.name;
+  input.id = (where === "profile" ? "profile-key-label-" : "user-key-label-") + u.name;
   input.previousElementSibling.htmlFor = input.id;
   const create = box.querySelector(".create-key");
   create.addEventListener("click", () => {
     const label = input.value.trim();
     if (!label) {
-      usersMsg(t("users.keyLabelNeeded"), false);
+      sayFor(where)(t("users.keyLabelNeeded"), false);
       return;
     }
     userAction(async () => {
       const res = await api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens", { label });
       usersUI.keys[u.name] = res.token;
-    }, t("users.keyCreated", { label }), u.name, create);
+    }, t("users.keyCreated", { label }), u.name, create, where);
   });
 }
 
@@ -255,7 +271,8 @@ function userPanel(u) {
   const d = fromTemplate("tpl-user-panel");
   d.dataset.name = u.name;
   d.open = usersUI.open.has(u.name);
-  const tokensBox = d.querySelector(".user-tokens-box");
+  const tokensBox = fromTemplate("tpl-user-tokens");
+  d.appendChild(tokensBox);
   wireNewKey(u, tokensBox);
   const sum = d.querySelector("summary");
   sum.querySelector(".panel-name").textContent = u.display_name || u.name;
@@ -325,6 +342,50 @@ function userPanel(u) {
   return d;
 }
 
+// renderProfile draws My profile for the signed-in user: the display
+// name with Save, off while it is the one stored, and the own sessions
+// and keys with Revoke and Create key, the parts of a panel of System
+// settings → Users; the own password is login.js' (#me-password). The
+// own user's routes need no capability.
+async function renderProfile() {
+  if (!hasProfile()) {
+    clear($("profile-name"));
+    clear($("profile-tokens"));
+    usersUI.self = null;
+    return;
+  }
+  const name = state.me.user.name;
+  let u;
+  try {
+    u = await api("GET", "api/v1/users/" + encodeURIComponent(name));
+  } catch (e) {
+    profileMsg(t("users.failed", { name, error: e.message }), false);
+    return;
+  }
+  usersUI.self = u;
+  const form = fromTemplate("tpl-profile-form");
+  const input = form.querySelector("input[name=display_name]");
+  input.id = "profile-display-name";
+  input.previousElementSibling.htmlFor = input.id;
+  input.value = u.display_name || "";
+  const save = form.querySelector("button[type=submit]");
+  const changed = () => input.value.trim() !== (u.display_name || "");
+  sendWhenChanged(form, changed, { btn: save });
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!changed()) return;
+    const display = input.value.trim();
+    userAction(() => api("PUT", "api/v1/users/" + encodeURIComponent(name), { display_name: display }), t("users.saved", { name }), name, save, "profile").then((ok) => {
+      if (ok) loadMe(); // the 👤 menu names the user by it
+    });
+  });
+  const tokens = fromTemplate("tpl-user-tokens");
+  wireNewKey(u, tokens, "profile");
+  $("profile-name").replaceChildren(form);
+  $("profile-tokens").replaceChildren(tokens);
+  fillTokens(u, tokens, "profile");
+}
+
 // newUserForm is the form that adds a user, from its template.
 function newUserForm() {
   const form = fromTemplate("tpl-user-new");
@@ -377,7 +438,7 @@ function newUserForm() {
   return form;
 }
 
-// renderUsers draws Settings → Users from usersUI.users.
+// renderUsers draws System settings → Users from usersUI.users.
 function renderUsers() {
   const box = $("users-list");
   if (!box || !canManageUsers()) return;
@@ -395,10 +456,14 @@ function initUsers() {
     box.appendChild(form);
     form.querySelector("input[name=name]").focus();
   });
-  $("view-settings").addEventListener("click", () => {
+  onView("system", () => {
     usersMsg("");
     if (!canManageUsers()) return;
     loadUsers().then(renderUsers).catch((e) => usersMsg(t("users.failed", { name: "", error: e.message }), false));
+  });
+  onView("profile", () => {
+    profileMsg("");
+    renderProfile();
   });
 }
 

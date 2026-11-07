@@ -25,6 +25,10 @@ the next minor, a fix counts the suffix up.
 - The web UI's header has a 👤 menu: who is signed in, My settings and
   Sign out, which leave the settings page (`docs/ui.md`, "Header").
 
+- The web UI's settings are three pages: My profile with the own name,
+  password and keys, My settings, and System settings behind ⚙
+  (`docs/ui.md`, "My profile", "My settings", "System settings").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

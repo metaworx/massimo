@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, Settings → Cubes: the Cubes the server serves,
+// The Massimo web UI, System settings → Cubes: the Cubes the server serves,
 // from its store, each in a panel with its name, address, proxy and
 // hidden devices (PUT /api/v1/cubes/{sn}), a notice with "Take the
 // file's value" for a line of the settings file that differs, and
@@ -30,9 +30,9 @@ function cubesMsg(text, ok) {
   showResult($("cubes-msg"), text, ok);
 }
 
-// cubesVisible reports whether the settings page is shown.
+// cubesVisible reports whether System settings, with the Cubes, is shown.
 function cubesVisible() {
-  return !$("settings").classList.contains("hidden");
+  return isShown("system");
 }
 
 // cubesPolled is called by loadCubes after every load of the list.
@@ -649,7 +649,7 @@ function cubePanel(c) {
 // (tpl-found-row): its serial, address and firmware, in expert mode its
 // radio and MAC address, how long ago it answered, and Add (addCube),
 // which serves it at once; the header's list of found Cubes (app.js) and
-// Settings → Cubes show it.
+// System settings → Cubes show it.
 function foundRow(c) {
   const li = fromTemplate("tpl-found-row");
   li.dataset.serial = c.serial;
@@ -672,7 +672,7 @@ function foundRow(c) {
   return li;
 }
 
-// renderCubes draws Settings → Cubes from state.cubes and state.found.
+// renderCubes draws System settings → Cubes from state.cubes and state.found.
 function renderCubes() {
   const box = $("cubes-list");
   if (!box) return;
@@ -691,10 +691,10 @@ function renderCubes() {
   }
 }
 
-// initCubes draws Settings → Cubes when the settings open; the panels
+// initCubes draws System settings → Cubes when the page opens; the panels
 // still open from before load what they would load when opened.
 function initCubes() {
-  $("view-settings").addEventListener("click", () => {
+  onView("system", () => {
     cubesMsg("");
     renderCubes();
     for (const serial of cubesUI.open) {

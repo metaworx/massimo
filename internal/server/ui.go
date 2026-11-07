@@ -26,14 +26,17 @@ var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per
 // feature, by the marker of index.html they replace
-// (<!-- partials: settings -->), in their order there: the panels of the
-// settings, then the templates the scripts clone, each named for what it
-// holds and saying which script uses it.
+// (<!-- partials: system -->), in their order there: the panels of My
+// profile, of My settings and of System settings, then the templates the
+// scripts clone, each named for what it holds and saying which script
+// uses it.
 var uiPartials = []struct {
 	marker string
 	files  []string
 }{
-	{"settings", []string{"cubes.html", "backup.html", "users.html", "roles.html", "appearance.html", "page.html", "software.html"}},
+	{"profile", []string{"profile.html"}},
+	{"prefs", []string{"appearance.html", "page.html"}},
+	{"system", []string{"cubes.html", "backup.html", "users.html", "roles.html", "software.html"}},
 	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "roles-panel.html", "backups-panel.html"}},
 }
 
