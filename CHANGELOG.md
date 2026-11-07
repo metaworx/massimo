@@ -50,6 +50,9 @@ the next minor, a fix counts the suffix up.
 - The apt snippet's Signed-By names the keyring package's key, installed
   first, so that an extended key reaches the boxes (packaging/README.md).
 
+- The release workflow pushes the Homebrew formula to the tap itself:
+  the release it creates never started publish.yml (CI.md, section 6).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

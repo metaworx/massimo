@@ -759,8 +759,9 @@ the settings under `etc/massimo` stay, as brew keeps them.
 The formula is rendered from `homebrew/massimo.rb.in` by `homebrew/render.sh`
 for each release,
 conflicting with the tap's other formulae (all install `bin/massimo`),
-and pushed to the tap by `.github/workflows/publish.yml` (on a published release,
-with a deploy key); CI's macOS job renders it for a tarball of the checkout,
+and pushed to the tap with a deploy key by `.github/workflows/publish.yml`,
+which the release workflow calls once the release is published;
+CI's macOS job renders it for a tarball of the checkout,
 builds and tests it, and checks the marker.
 Until the owner has made the tap and the key, the workflow skips the push.
 
@@ -772,6 +773,9 @@ The owner's steps, once:
   the public half as a deploy key of the tap with write access,
   the private half as the repository secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository
   (GUIDELINES/project/CI.md, section 5).
+- For the newest release, published before the tap existed:
+  `gh workflow run publish.yml -f tag=<tag>`;
+  every later release pushes its formula itself.
 
 ## Resource use
 
