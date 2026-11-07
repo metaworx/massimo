@@ -157,6 +157,9 @@ the next minor, a fix counts the suffix up.
 - A write no longer scans the commands table for its `Idempotency-Key`
   and for the retention: the key's index serves it, the prune is hourly.
 
+- What counts as a thermostat is decided in one place, so the copy of a
+  room's settings, the stale rule and the log can no longer disagree.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

@@ -165,7 +165,7 @@ type CopyStep struct {
 // the copies of two devices put into one room do not supersede each
 // other.
 func CopyCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8, skip view.Hidden) ([]CopyStep, error) {
-	if !isThermostat(typ) {
+	if !typ.IsThermostat() {
 		return nil, nil
 	}
 	mode, err := cube.CmdSetTemperature(cube.Target{RFAddress: rf}, 0, cube.ModeAuto, cube.Until{})

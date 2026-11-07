@@ -636,7 +636,7 @@ func stateAttrs(serial string, d view.Device) []any {
 		return append(attrs, "reported", false)
 	}
 	st := d.State
-	if d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat {
+	if d.Type.IsThermostat() {
 		attrs = append(attrs, "mode", st.Mode.String())
 	}
 	if st.Setpoint != nil {

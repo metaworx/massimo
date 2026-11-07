@@ -209,11 +209,6 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// thermostat reports whether a device type has settings to copy.
-func thermostat(t cube.DeviceType) bool {
-	return t.IsRadiatorThermostat() || t == cube.DeviceWallThermostat
-}
-
 // updateDevice handles PUT /devices/{rf} with {"name": "…"} and/or
 // {"room_id": N}. A room change is done as the original software does
 // it: unlink from the old room's partners, relink with the new room's,
@@ -281,7 +276,7 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 			idx = i
 		}
 	}
-	withCopy := (req.Copy == nil || *req.Copy) && thermostat(c.Type)
+	withCopy := (req.Copy == nil || *req.Copy) && c.Type.IsThermostat()
 	var room uint8 // the room the device went into, 0 when it stayed
 	if idx < 0 {
 		room, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)

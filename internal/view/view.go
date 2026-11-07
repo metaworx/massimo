@@ -208,7 +208,7 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, staleAfter time.Duratio
 		if len(t.Fields) > 0 {
 			d.Received = t.Fields
 		}
-		thermostat := d.Type.IsRadiatorThermostat() || d.Type == cube.DeviceWallThermostat
+		thermostat := d.Type.IsThermostat()
 		d.Stale = thermostat && now().Sub(changed) > staleAfter
 	}
 	return d
