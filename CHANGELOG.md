@@ -10,6 +10,28 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The store keeps each Cube's backups, gzip, pruned by reason and age
+  as the `backups.*` settings say (migration 0005; `docs/store.md`
+  section 9).
+
+- The server backs a Cube up after a change, by hand and before every
+  restore, and `…/backups` lists, downloads, compares and deletes the
+  backups, which a restore takes by id (`docs/api-v1.md`, "Backups").
+
+- Settings → Backup and restore in the web UI: the download, the
+  server's backups with compare, restore and delete, and a restore from
+  a file that shows its plan first (`docs/ui.md`, "Settings").
+
+### Changed
+
+- The recorded greeting that the tests and CI's fake Cube load, and its
+  UI-test copy, carry placeholder serials
+  (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
+
+## [0.10.0-alpha.1] - 2026-11-07
+
+### Added
+
 - The store keeps the Cubes' events (migration 0004), written in
   batches and pruned daily by `log.keep_days` in `/api/v1/settings`
   (30 days; 0 keeps them), so that the log survives a restart.
@@ -39,11 +61,17 @@ the next minor, a fix counts the suffix up.
   room's settings, as the original software does, with `configure`;
   `"copy": false` skips it (docs/api-v1.md).
 
-- The recorded greeting that the tests and CI's fake Cube load, and its
-  UI-test copy, carry placeholder serials
-  (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
-
 ### Fixed
+
+- A stop of `serve` just after the Cube of the plain
+  `MASSIMO_CUBE_ADDRESS` reported its serial no longer leaves the next
+  start refusing "several cubes configured".
+
+- A second update started on Windows while the helper reads the first
+  answers 409, no longer 500 from the request file the helper holds.
+
+- Two updates started at once, as from two tabs, write one request and
+  answer 202 and 409, no longer 500 when both wrote the request file.
 
 - A Debian package built between two tags holds the version its file
   name shows (`make packages`).
@@ -202,8 +230,9 @@ the next minor, a fix counts the suffix up.
   the next command no longer takes a late one as its reply
   (docs/proxy.md).
 
-- A Cube's new address from discovery is dialled at once, no longer after
-  the minute of backoff the old address built up.
+- A Cube's new address from discovery is dialled at once, with one
+  connection, no longer after the minute of backoff the old address
+  built up.
 
 - A device whose greeting C line answered a re-read sent during the
   greeting no longer drops out of the server's copy.

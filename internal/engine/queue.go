@@ -62,6 +62,10 @@ type Command struct {
 	// holds; run in queue order, it never cuts off another command. The
 	// gateway must support it (see Reconnector).
 	Reconnect bool
+	// Moved, with Reconnect, is the reconnect for a Cube found at a new
+	// address: it drops only a connection to the old one, since the
+	// gateway may have dialled the new one already (see Mover).
+	Moved bool
 	// ID names the request the command belongs to (the server's command
 	// row), for the Observer; empty for work of the server's own, which
 	// is not observed.
@@ -88,6 +92,12 @@ type Observer interface {
 // fresh greeting. *cubelan.Client satisfies it.
 type Reconnector interface {
 	Reconnect(ctx context.Context) error
+}
+
+// Mover is a Reconnector that can drop only a connection to an address
+// it has since left (Command.Moved). *cubelan.Client satisfies it.
+type Mover interface {
+	ReconnectIfMoved(ctx context.Context) error
 }
 
 // Result is the outcome of a Command.
@@ -346,6 +356,9 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		// the queue; the commands after it then fail until it does.
 		rctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
+		if m, ok := q.gw.(Mover); ok && cmd.Moved {
+			return Result{Err: m.ReconnectIfMoved(rctx), Budget: q.gw.Budget()}
+		}
 		return Result{Err: rc.Reconnect(rctx), Budget: q.gw.Budget()}
 	}
 	needsRadio := false

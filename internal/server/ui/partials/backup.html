@@ -1,0 +1,23 @@
+<!-- Settings → Backup and restore: the backup of the Cube as it is now, the backups the server keeps and the restore, backup.js draws into #backups-list and #restore-box. -->
+<div class="backup-settings needs-backup" aria-live="polite">
+  <div class="cubes-head">
+    <span class="muted" data-i18n="backup.title">Backup and restore</span>
+    <span data-help="backup" data-help-label="backup.title"></span>
+  </div>
+  <div class="field">
+    <label for="backup-format" data-i18n="backup.format">Format</label>
+    <select id="backup-format" class="field-control">
+      <option value="yaml">YAML</option>
+      <option value="json">JSON</option>
+    </select>
+  </div>
+  <div class="actions"><span class="actions-left">
+    <button type="button" id="backup-download" data-i18n="backup.download">Download backup</button>
+    <button type="button" id="backup-take" data-i18n="backup.take">Take a backup now</button>
+    <button type="button" id="restore-file" class="needs-restore" data-i18n="restore.fromFile">Restore from file…</button>
+  </span></div>
+  <p id="backup-pending" class="muted small hidden"></p>
+  <div id="backups-list" class="backups-list"></div>
+  <div id="restore-box"></div>
+  <p id="backup-msg" class="small cubes-msg hidden" role="status"></p>
+</div>

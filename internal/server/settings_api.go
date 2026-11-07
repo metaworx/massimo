@@ -51,6 +51,15 @@ var intSettings = []intSetting{
 	{key: store.CommandsKeepDaysKey, def: 0, min: 0, max: 3650},
 	// The Cubes' events are kept this many days; 0 keeps them (log.go).
 	{key: store.LogKeepDaysKey, def: store.DefaultLogKeepDays, min: 0, max: 3650},
+	// The backups (backups.go): the automatic backup's quiet window and
+	// its latest, in minutes, auto_min not above auto_max; the days an
+	// automatic backup and the others are kept, 0 keeping them; how many
+	// of a Cube's newest are kept whatever their age.
+	{key: store.BackupsAutoMinKey, def: store.DefaultBackupsAutoMin, min: 1, max: 7 * 24 * 60},
+	{key: store.BackupsAutoMaxKey, def: store.DefaultBackupsAutoMax, min: 1, max: 7 * 24 * 60},
+	{key: store.BackupsKeepDaysAutoKey, def: store.DefaultBackupsKeepDaysAuto, min: 0, max: 3650},
+	{key: store.BackupsKeepDaysManualKey, def: store.DefaultBackupsKeepDaysManual, min: 0, max: 3650},
+	{key: store.BackupsKeepNewestKey, def: store.DefaultBackupsKeepNewest, min: 0, max: 1000},
 }
 
 var durationSettings = []durationSetting{
@@ -216,6 +225,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		writes = append(writes, write{key: k, number: &v})
 	}
+	if err := checkBackupWindows(r, st, func(key string) (int, bool, bool) {
+		for _, wr := range writes {
+			if wr.key == key {
+				if wr.clear {
+					return 0, true, true
+				}
+				return *wr.number, false, true
+			}
+		}
+		return 0, false, false
+	}); err != nil {
+		return err
+	}
+	pruneBackups := false
 	for _, wr := range writes {
 		switch {
 		case wr.clear:
@@ -230,6 +253,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		if wr.key == store.LogKeepDaysKey {
 			st.PruneEventsSoon() // the retention applies now
+		}
+		switch wr.key {
+		case store.BackupsKeepDaysAutoKey, store.BackupsKeepDaysManualKey, store.BackupsKeepNewestKey:
+			pruneBackups = true
 		}
 		if wr.key == store.StaleAfterKey {
 			if wr.duration == nil {
@@ -247,7 +274,38 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", s.clientIP(r))
 	}
+	if pruneBackups {
+		if _, err := st.PruneBackups(r.Context(), time.Now()); err != nil {
+			s.log.Warn("backups not pruned", "error", err)
+		}
+	}
 	return s.getSettings(w, r)
+}
+
+// checkBackupWindows refuses a change that leaves backups.auto_min above
+// backups.auto_max: given reports a key's new value, whether it goes
+// back to the default, and whether the request has it.
+func checkBackupWindows(r *http.Request, st *store.Store, given func(key string) (n int, clear, ok bool)) error {
+	cur, err := st.BackupSettings(r.Context())
+	if err != nil {
+		return fail(http.StatusInternalServerError, "%v", err)
+	}
+	value := func(key string, now, def int) int {
+		n, clear, ok := given(key)
+		switch {
+		case !ok:
+			return now
+		case clear:
+			return def
+		}
+		return n
+	}
+	lo := value(store.BackupsAutoMinKey, cur.AutoMin, store.DefaultBackupsAutoMin)
+	hi := value(store.BackupsAutoMaxKey, cur.AutoMax, store.DefaultBackupsAutoMax)
+	if lo > hi {
+		return fail(http.StatusBadRequest, "%s (%d) must not be above %s (%d)", store.BackupsAutoMinKey, lo, store.BackupsAutoMaxKey, hi)
+	}
+	return nil
 }
 
 // parseSettingInt reads and checks one whole number, given as a JSON

@@ -7,7 +7,7 @@ the stages of the work and the decisions the owner takes before any code is writ
 It follows section 4 of the proposal of 2026-11-05 and roadmap item 6;
 docs/design.md sections 2, 6 and 7 are the frame.
 Stages (a) to (c) shipped in v0.7.0-alpha.1 to v0.9.0-alpha.1,
-and stage (d) is implemented (section 9);
+and stages (d) and (e) are implemented (section 9);
 the owner's decisions are listed at the end. docs/server.md looks further ahead,
 at encryption at rest, the public server and sync,
 and says what version 1 prepares for them.
@@ -372,7 +372,7 @@ CREATE TABLE tokens (
 CREATE INDEX tokens_user ON tokens (user_id);
 
 CREATE TABLE settings (
-    key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days', …
+    key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
     value      TEXT    NOT NULL,   -- JSON: a string, a number or a document
     updated_at TEXT    NOT NULL,
     updated_by INTEGER REFERENCES users (id),
@@ -445,13 +445,13 @@ CREATE TABLE backups (
     id         INTEGER PRIMARY KEY,
     cube_id    INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
     taken_at   TEXT    NOT NULL,
-    reason     TEXT    NOT NULL CHECK (reason IN ('connect', 'daily', 'before_restore', 'manual', 'upload')),
+    reason     TEXT    NOT NULL CHECK (reason IN ('auto', 'manual', 'before_restore', 'upload')),  -- migration 0005
     format     TEXT    NOT NULL CHECK (format IN ('json', 'yaml')),
     tool       TEXT    NOT NULL DEFAULT '',      -- backup.File.Tool, the version that took it
     size       INTEGER NOT NULL,                 -- bytes before compression
-    sha256     TEXT    NOT NULL,
-    body       BLOB    NOT NULL,                 -- the backup file, gzip
-    user_id    INTEGER REFERENCES users (id),    -- who asked, for manual and before_restore
+    sha256     TEXT    NOT NULL,                 -- of the file before compression
+    body       BLOB    NOT NULL,                 -- the backup file, gzip; empty in a tombstone
+    user_id    INTEGER REFERENCES users (id),    -- who asked, for manual, before_restore and upload
     note       TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX backups_cube_time ON backups (cube_id, taken_at);
@@ -498,13 +498,17 @@ Notes on the tables:
   Nothing in `detail` is a secret:
   passwords and tokens are removed before the row is written.
 - `backups.body` holds the file itself, gzip-compressed,
-  because a backup of a Cube with thirty devices is tens of kilobytes and a year
-  of daily backups is well under a hundred megabytes;
+  because a backup of a Cube with thirty devices is tens of kilobytes,
+  about 11 KB compressed (the six-device fixture: 24 KB of JSON, 2.2 KB gzip),
+  and the server takes one only after a change;
   one file to copy wins over a directory of files to keep in step.
-  `before_restore` is the backup the restore API takes before writing (proposal
-  section 3), `upload` is a file the user restored from.
-  Retention by `backups.keep_days` with `manual` and `before_restore` kept
-  longer (open decision 5).
+  `auto` is the server's own after a change of the Cube's configuration,
+  `before_restore` the one a restore takes before writing,
+  `upload` the file a restore was sent, `manual` one taken by hand (stage (e);
+  migration 0005 replaced `connect` and `daily`).
+  Retention per Cube: the newest `backups.keep_newest` whatever their age,
+  of the others `auto` for `backups.keep_days_auto` days and the rest for
+  `backups.keep_days_manual` (open decision 5's 90 and 365).
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -1031,25 +1035,53 @@ Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
 
 ### (e) Backup history
 
-After the restore API (proposal section 3) and its UI panel are merged.
+Implemented on 2026-11-07 (AP StoreBackups v1.0).
 
-- Files: `internal/store/backups.go`, `internal/server/backups_api.go` (new),
-  `internal/backup` gains a diff between two files (the restore planner's comparison,
-  read-only), backup.js (the panel from the restore work gains the list).
-- API: `GET …/backups` (list: time, reason, size, who),
-  `POST …/backups` (take one now), `GET …/backups/{id}` (download,
-  format by `Accept` or `?format=`), `DELETE …/backups/{id}`,
-  `GET …/backups/{id}/diff?against={id}`,
-  and `POST …/restore` taking `backup_id` in place of a body.
-- Automatic backups: one at the first connect of a day per Cube (`connect`),
-  one before every restore (`before_restore`); retention by `backups.keep_days`,
-  with `manual`, `upload` and `before_restore` kept for a longer window.
-- UI: Settings → Backup and restore: the list, download,
-  restore from a stored one, the diff view between two.
-- Tests: the connect backup is taken once a day;
-  the restore takes its backup first;
-  the diff of a backup against itself is empty and against an edited copy lists the edits;
-  the smoke test downloads one from the list.
+- Files: `internal/store/backups.go` (add, list, read,
+  delete as a tombstone without the file, the prune),
+  migration 0005 (the four reasons);
+  `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the
+  routes); `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
+  `backup.js` with its partials (the Settings panel).
+- When the server takes one: only after a change.
+  The Cube's configuration, the decoded part of a backup without the live state,
+  the time, the NTP servers and the raw lines, is hashed and compared with the
+  newest backup's, or after a restore with the file restored;
+  the backup follows `backups.auto_min` minutes (60) after the last change,
+  at the latest `backups.auto_max` (120) after the first,
+  and at once for a Cube without one.
+  The comparison runs once a minute after a connection or a configuration event,
+  so changes made outside Massimo count once the Cube reports them;
+  the reference lives in memory, read from the newest backup.
+  A restore takes `before_restore` first and is refused when it cannot,
+  and keeps the file of its body as `upload`.
+- API: `GET`/`POST …/backups` (the list newest first,
+  with `changed` and `due` while one is pending; one by hand with a note),
+  `GET …/backups/{id}` (as stored, or `?format=`),
+  `DELETE …/backups/{id}` (capability `restore`),
+  `GET …/backups/{id}/diff?against={id}`;
+  the plan and the restore take `backup=<id>`; the settings `backups.auto_min`,
+  `backups.auto_max` (never below `auto_min`), `backups.keep_days_auto`,
+  `backups.keep_days_manual`, `backups.keep_newest`.
+  A Cube without a row in the store has none of it (503).
+- UI: Settings → Backup and restore: the download as YAML or JSON,
+  a backup by hand, the list with download, the comparison with the one before,
+  restore and delete, a restore from a file; a restore shows its plan first,
+  then each step as the Cube took it.
+- Tests: the store's round trip,
+  the prune by reason and age and the migration's copy; the hash;
+  the first backup, none without a change,
+  one after a quiet window and one at `auto_max`;
+  the routes and the settings' check;
+  a restore keeping `before_restore` and `upload`, by id, and clean after;
+  the diff of a backup against itself and an edited copy;
+  the pytest suite's panel.
+- Decisions, the owner's of 2026-11-07: the whole panel in this stage (D1);
+  backups after a change with a quiet window and a latest (D2,
+  D3 folded into it); the five settings (D4); deleting needs `restore` (D5);
+  a restore refused without its own backup (D6); the planner's diff (D7).
+  A newer version that decodes a field the older did not changes the hash,
+  so one automatic backup may follow an update.
 
 After (e): ownership per Cube (section 6),
 `-server` for the commands (section 7), secrets in the store,
@@ -1081,6 +1113,9 @@ and the capability `preferences`, which a guest has not.
 Stage (d) followed (AP StoreLog v1.0 and v1.1): the log in the store,
 paged by the event's id, 30 days kept, the ring only without a row,
 migration 0004 for the pages' indexes.
+Stage (e) followed (AP StoreBackups v1.0): the backup history,
+taken after a change rather than daily, with the five `backups.*` settings,
+the Settings panel, and migration 0005 for the reasons.
 
 1. Taken: SQLite through `modernc.org/sqlite`.
    For it: SQL with indexes and queries for the log,

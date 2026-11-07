@@ -63,6 +63,12 @@ FOUND = {"serial": "KEQ0000000", "configured": False, "address": "192.168.1.77",
          "firmware": "1.1.3", "dhcp": True, "found_at": SERVER_TIME, "last_seen": SERVER_TIME}
 CUBE_ADDRESS = "192.168.1.76:62910"         # the fake Cube's loopback address, which has run.sh's port
 ADDRESS_RE = re.compile(r"127\.0\.0\.1:\d+")
+# The backup history the settings show: one taken by hand, one after a change.
+BACKUPS = {"backups": [
+    {"id": 2, "taken_at": SERVER_TIME, "reason": "manual", "format": "json", "tool": VERSION, "size": 23994,
+     "sha256": "0" * 64, "user": "owner", "note": "before the holidays"},
+    {"id": 1, "taken_at": "2026-11-02T18:05:00+01:00", "reason": "auto", "format": "json", "tool": VERSION, "size": 23990,
+     "sha256": "1" * 64}]}
 TIME_RE = re.compile(r'"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)"')
 
 # The pages, in the order of the set and of the slideshow, each with its
@@ -133,6 +139,10 @@ class Answers:
             return route.fulfill(status=200, content_type="application/json", body=json.dumps(UPDATE))
         if path.endswith("/events/ticket"):
             return route.continue_()
+        if path.endswith("/backups") and req.method == "GET":
+            # The backup history depends on when the run started; the set
+            # shows a fixed one.
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps(BACKUPS))
         if path.startswith("/api/v1/me/preferences"):
             # Each shot keeps the settings of its own context: the server
             # keeps none for it, so that one shot's mode is not the next's.

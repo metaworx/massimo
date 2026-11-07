@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.10.0)
+# Massimo — CI Conventions (v1.10.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -212,7 +212,11 @@ a box following a suite takes the release through `apt upgrade`.
   on the first's connection from the same curl (`--next`):
   a second curl process started too late once.
   The server's answer to it is less work than the helper needs before the stop,
-  so the 409 comes first at any runner speed.
+  so the answer comes first at any runner speed.
+  It can meet the helper reading the request,
+  whose open handle refuses the request's rename on Windows for a few milliseconds:
+  the rename is retried (`internal/update`, `renameRetrying`),
+  and the answer is 409.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
 - The macOS job's update from the API installs the newest alpha release,

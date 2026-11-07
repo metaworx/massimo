@@ -448,6 +448,9 @@ for the days `log.keep_days` says (30 by default, `GET`/`PUT /api/v1/settings`):
 a state event takes about 0.65 KB with its indexes (measured),
 so a house of thirty devices that sends 3000 events a day adds about 2 MB a day,
 60 MB over the 30 days.
+The Cubes' backups are there as well, about 11 KB each for thirty devices,
+taken only after a change and kept as the `backups.*` settings say
+(docs/api-v1.md, "Backups"), a few megabytes at most.
 The file stops growing at that size, since the server reuses the pages the daily
 prune frees and never runs `VACUUM`;
 `massimo store backup` writes a compact copy.

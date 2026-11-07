@@ -264,6 +264,18 @@ body.expert #clock-plain { display: none; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
+/* Settings → Backup and restore (backup.js): the stored backups, each
+   a row with its actions, and a restore's plan */
+.backups-list { margin: 8px 0 14px; }
+.backup-row { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
+.backup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.backup-note { margin: 2px 0 0; }
+.settings .backup-actions { margin: 4px 0 0; gap: 6px; justify-content: flex-start; }
+.backup-diff ul, .restore-steps, .restore-notes { margin: 4px 0; padding-left: 1.4em; overflow-wrap: anywhere; }
+.backup-diff p { margin: 4px 0 0; }
+.restore-plan { margin-top: 10px; padding: 8px 12px; }
+.restore-title { font-weight: 600; margin: 0 0 4px; overflow-wrap: anywhere; }
+.restore-steps li { margin: 2px 0; }
 .cube-listening { margin: -6px 0 12px; overflow-wrap: anywhere; }
 .cube-hidden { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 6px; margin-bottom: 12px; }
 .cube-hidden-title { flex-basis: 100%; color: var(--muted); }

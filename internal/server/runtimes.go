@@ -169,6 +169,7 @@ func (s *Server) startRuntime(rt *runtime) {
 	run(func() { rt.queue.Run(ctx) })
 	run(func() { s.pump(ctx, rt) })
 	run(func() { s.followUps(ctx, rt) })
+	run(func() { s.backupLoop(ctx, rt) })
 	if s.opts.RefreshInterval > 0 {
 		run(func() { s.refresh(ctx, rt) })
 	}

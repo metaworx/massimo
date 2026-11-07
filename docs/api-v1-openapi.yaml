@@ -1206,6 +1206,158 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
         "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/backups:
+    get:
+      summary: The Cube's stored backups
+      x-capability: backup
+      description: |
+        The backups the server keeps for the Cube in its store, newest
+        first: taken by the server after a change of the Cube's
+        configuration (auto), by hand (manual), by a restore before its
+        first step (before_restore), and the file a restore was sent
+        (upload). While the configuration differs from the newest
+        backup's, changed says when it last changed and due when the
+        automatic backup follows (backups.auto_min after the last change,
+        at the latest backups.auto_max after the first). A Cube without a
+        row in the store has no history (503).
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200":
+          description: The backups and the pending automatic one
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/BackupList"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotReady"}
+    post:
+      summary: Take a backup now
+      x-capability: backup
+      description: |
+        A backup of the Cube as GET …/backup takes it, stored with the
+        reason manual, the user and the note.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/sn"}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                note: {type: string, maxLength: 200}
+      responses:
+        "201":
+          description: The backup stored
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StoredBackup"}
+        "400":
+          description: A field other than note, or a note longer than 200 characters
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/backups/{id}:
+    get:
+      summary: A stored backup's file
+      x-capability: backup
+      description: The file as it was stored, or in the format asked for, as an attachment.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/backupID"}
+        - name: format
+          in: query
+          description: The stored format when absent
+          schema: {type: string, enum: [json, yaml]}
+      responses:
+        "200":
+          description: The backup file
+          content:
+            application/json:
+              schema: {type: object, description: "See internal/backup for the structure"}
+            application/yaml:
+              schema: {type: string}
+        "400":
+          description: A format other than json or yaml
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotReady"}
+    delete:
+      summary: Remove a stored backup
+      x-capability: restore
+      description: The backup leaves the history; the store keeps a tombstone without the file until the retention removes it.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/backupID"}
+      responses:
+        "204": {description: Removed}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotReady"}
+  /api/v1/cubes/{sn}/backups/{id}/diff:
+    get:
+      summary: What differs between two stored backups
+      x-capability: backup
+      description: |
+        The restore planner's comparison, read-only: the steps a restore
+        of this backup would send to the Cube as the backup against
+        recorded it (its raw lines and NTP servers), with the notes and
+        the radio commands. Nothing is sent. The restore's options apply,
+        so skip=clock leaves the clock out; hidden devices are not
+        compared.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/backupID"}
+        - {name: against, in: query, required: true, description: The id of the backup to compare with, schema: {type: integer, minimum: 1}}
+        - {$ref: "#/components/parameters/restorePortal"}
+        - {$ref: "#/components/parameters/restoreState"}
+        - {$ref: "#/components/parameters/restoreSkip"}
+      responses:
+        "200":
+          description: The steps from the one to the other; none when they hold the same configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        what: {type: string}
+                        radio: {type: boolean}
+                        device: {type: string}
+                        room: {type: integer}
+                  notes: {type: array, items: {type: string}}
+                  radio_commands: {type: integer}
+        "400":
+          description: No against, or a bad option
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {$ref: "#/components/responses/NotReady"}
   /api/v1/cubes/{sn}/restore/plan:
     post:
       summary: What restoring a backup would send
@@ -1218,10 +1370,12 @@ paths:
         cost in duty cycle (1.25 % each), the Cube's budget, and a hash
         of the plan that POST …/restore takes. Nothing is written. The
         clock group reads the Cube's NTP servers first; hidden devices
-        are neither compared nor written.
+        are neither compared nor written. With backup=<id> the stored
+        backup is the file, and the body is left empty.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/restoreBackup"}
         - {$ref: "#/components/parameters/restorePortal"}
         - {$ref: "#/components/parameters/restoreState"}
         - {$ref: "#/components/parameters/restoreSkip"}
@@ -1256,11 +1410,14 @@ paths:
         restore stops at the first step the Cube refused or that failed.
         Guard rails: a restore already running on the Cube, a changed
         plan, and radio commands while the duty cycle is above 80 %
-        answer 409.
+        answer 409. A Cube with a row in the store keeps a backup of its
+        configuration before the first step (before_restore; 503 when it
+        cannot be stored) and the file of the body (upload).
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/sn"}
         - {name: plan, in: query, required: true, description: The hash from POST …/restore/plan, schema: {type: string}}
+        - {$ref: "#/components/parameters/restoreBackup"}
         - {$ref: "#/components/parameters/restorePortal"}
         - {$ref: "#/components/parameters/restoreState"}
         - {$ref: "#/components/parameters/restoreSkip"}
@@ -1488,6 +1645,11 @@ paths:
                 stale_after: {value: 24h, default: 24h, set: false, in_effect: 24h, applies: now}
                 commands.keep_days: {value: "0", default: "0", set: false, in_effect: "0", applies: now}
                 log.keep_days: {value: "30", default: "30", set: false, in_effect: "30", applies: now}
+                backups.auto_min: {value: "60", default: "60", set: false, in_effect: "60", applies: now}
+                backups.auto_max: {value: "120", default: "120", set: false, in_effect: "120", applies: now}
+                backups.keep_days_auto: {value: "90", default: "90", set: false, in_effect: "90", applies: now}
+                backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
+                backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1645,6 +1807,17 @@ components:
       description: Also re-apply each thermostat's mode and setpoint from the backup's state; off unless given
       allowEmptyValue: true
       schema: {type: boolean, default: false}
+    restoreBackup:
+      name: backup
+      in: query
+      description: A stored backup's id (GET …/backups), in place of the file in the body
+      schema: {type: integer, minimum: 1}
+    backupID:
+      name: id
+      in: path
+      required: true
+      description: A stored backup's id, from GET …/backups
+      schema: {type: integer, minimum: 1}
     restoreSkip:
       name: skip
       in: query
@@ -1676,8 +1849,8 @@ components:
       schema: {type: string, example: operator}
   requestBodies:
     Backup:
-      required: true
-      description: A backup file as GET …/backup or massimo backup writes it, which may be edited by hand; at most 1 MB. A body that does not start with a brace is read as YAML whatever the Content-Type.
+      required: false
+      description: Left empty with backup=<id>; else a backup file as GET …/backup or massimo backup writes it, which may be edited by hand; at most 1 MB. A body that does not start with a brace is read as YAML whatever the Content-Type.
       content:
         application/json:
           schema: {type: object, description: "See internal/backup for the structure"}
@@ -1795,6 +1968,26 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    StoredBackup:
+      type: object
+      properties:
+        id: {type: integer}
+        taken_at: {type: string, format: date-time}
+        reason: {type: string, enum: [auto, manual, before_restore, upload]}
+        format: {type: string, enum: [json, yaml]}
+        tool: {type: string, description: The software that wrote the file}
+        size: {type: integer, description: Bytes of the file}
+        sha256: {type: string}
+        user: {type: string, description: Who asked; absent for the server's own}
+        note: {type: string}
+    BackupList:
+      type: object
+      properties:
+        backups:
+          type: array
+          items: {$ref: "#/components/schemas/StoredBackup"}
+        changed: {type: string, format: date-time, description: When the configuration last changed against the newest backup; absent when it did not}
+        due: {type: string, format: date-time, description: When the automatic backup follows; absent when none is due}
     Preference:
       type: object
       properties:
