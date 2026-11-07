@@ -40,9 +40,11 @@
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
+//	POST /api/v1/login/start, /login/finish          a session by OPAQUE, no password sent (opaque_api.go)
 //	POST /api/v1/logout                              end the session
 //	GET  /api/v1/me                                  who the caller is and what the caller may do
 //	GET|POST /api/v1/users, /users/{name}, /users/{name}/tokens    the users and their tokens (users_api.go)
+//	POST /api/v1/users/{name}/register               a registration by OPAQUE, its first step (opaque_api.go)
 //	GET|POST /api/v1/roles, /roles/{key}, /roles/{key}/disabled   the roles and their sets (roles_api.go)
 //	GET|PUT /api/v1/capabilities, /capabilities/{key}              the capabilities, disabled or not
 //	GET  /api/v1/audit                               every request that changed something (audit.go)
@@ -246,6 +248,8 @@ type Server struct {
 
 	limiter     failureLimiter
 	authLockout time.Duration // the lockout in effect, for the log
+	signIns     signIns       // the addresses with a login running
+	logins      opaqueLogins  // the sign-ins by OPAQUE started, and the proofs given
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).
@@ -787,6 +791,9 @@ func (s *Server) routes() {
 			if err := h(w, r); err != nil {
 				var he *httpError
 				if errors.As(err, &he) {
+					if he.retryAfter > 0 {
+						w.Header().Set("Retry-After", strconv.Itoa(he.retryAfter))
+					}
 					if len(he.noState) > 0 {
 						writeJSON(w, he.status, map[string]any{"error": he.msg, "no_state": he.noState})
 						return
@@ -803,6 +810,8 @@ func (s *Server) routes() {
 	}
 	api("GET /api/v1/cubes", "read", s.listCubes)
 	api("POST /api/v1/login", "none", s.login)
+	api("POST /api/v1/login/start", "none", s.loginStart)
+	api("POST /api/v1/login/finish", "none", s.loginFinish)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
@@ -819,6 +828,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/users/{name}/tokens", "users", s.listTokens)
 	api("POST /api/v1/users/{name}/tokens", "users", s.postToken)
 	api("DELETE /api/v1/users/{name}/tokens/{id}", "users", s.deleteToken)
+	api("POST /api/v1/users/{name}/register", "users", s.registerOpaque)
 	api("GET /api/v1/roles", "roles", s.listRoles)
 	api("POST /api/v1/roles", "roles", s.postRole)
 	api("PUT /api/v1/roles/{key}", "roles", s.putRole)
@@ -903,6 +913,8 @@ type httpError struct {
 	// noState lists room members the Cube holds no state for when a
 	// room command was discarded for that reason.
 	noState []string
+	// retryAfter is the Retry-After header's seconds, none when 0.
+	retryAfter int
 }
 
 func (e *httpError) Error() string { return e.msg }

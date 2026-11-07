@@ -59,7 +59,35 @@ the next minor, a fix counts the suffix up.
   configured: the address tried, the last data and what to check
   (`docs/ui.md`, "Rooms").
 
+- A sign-in by OPAQUE (RFC 9807) that sends no password, and the
+  registration that sets one: `POST /api/v1/login/start` and `…/finish`
+  (migration 0007, `opaque.key`; `docs/api-v1.md`).
+
+- The web UI signs in by OPAQUE, the password kept in the browser, with
+  `@serenity-kit/opaque` 1.1.0 in `ui/vendor/`; a user of version 1 is
+  signed in with the password after it (`docs/ui.md`).
+
+- `auth.password_login` in `/api/v1/settings`, a switch in System
+  settings → Users: off, `POST /api/v1/login` is `403` and users sign
+  in by OPAQUE alone (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
+
 ### Changed
+
+- Passwords are hashed with argon2id at 19 MiB and two passes, about
+  55 % of the time and 30 % of the memory of the 64 MiB before; an old
+  hash is replaced at the next sign-in (`docs/store.md` section 6).
+
+- A user add of a taken name or an unknown role, and a password set for
+  a user that is not there, answer at once rather than after a hash
+  (`docs/store.md` section 6).
+
+- Every password the web UI or `massimo user add` and `user passwd` set
+  is registered by OPAQUE, `auth_version` 2, and never sent: the server
+  keeps a record and no hash (`docs/store.md` section 6, README.md).
+
+- A user of `auth_version` 1 who signs in in the web UI is moved to 2 at
+  once: the password crosses that once more and the hash goes
+  (`docs/store.md` section 6).
 
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
@@ -106,6 +134,14 @@ the next minor, a fix counts the suffix up.
 - The server refuses a write that another site's page sent, which an
   open server served: such a page could create the first owner
   (`docs/api-v1.md`, "Authentication").
+
+- Password hashes run at most one a core at once, four at the most, and
+  eight wait; a sign-in, user add or password change beyond them is
+  `503` with `Retry-After` (`docs/store.md` section 6, "The lockout").
+
+- An address signs in once at a time: a login while its previous one
+  is checked is `429` with `Retry-After: 1`, and the web UI's dialog
+  sends one sign-in at a time (`docs/api-v1.md`, "POST /api/v1/login").
 
 ## [0.10.0-alpha.1] - 2026-11-07
 

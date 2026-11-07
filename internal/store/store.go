@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bytemare/opaque"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
 )
@@ -72,6 +73,7 @@ type Store struct {
 	now      func() time.Time
 	version  string
 	readOnly bool
+	hashes   *hashGate // the password hashes at once
 
 	schema    int // the file's schema version after Open
 	minReader int
@@ -79,6 +81,7 @@ type Store struct {
 
 	nodeID string
 	key    nodeKey
+	opq    *opaque.Server // the OPAQUE keys (opaque.go); nil when read-only
 
 	// commandsPruned is when a write last pruned the commands, in Unix
 	// nanoseconds of the store's clock; 0 before the first.
@@ -129,6 +132,10 @@ func Open(dir string, o Options) (*Store, error) {
 		s.db.Close()
 		return nil, err
 	}
+	if err := s.loadOpaque(); err != nil {
+		s.db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -149,11 +156,14 @@ func OpenReadOnly(dir string, o Options) (*Store, error) {
 		return nil, err
 	}
 	s.nodeID, _ = s.settingString(context.Background(), NodeIDKey)
+	if err := s.loadOpaque(); err != nil {
+		s.log.Warn("store: OPAQUE keys not read", "error", err)
+	}
 	return s, nil
 }
 
 func newStore(dir string, o Options) *Store {
-	s := &Store{dir: dir, path: Path(dir), log: o.Logger, now: o.Now, version: o.Version, seenWritten: map[string]bool{}}
+	s := &Store{dir: dir, path: Path(dir), log: o.Logger, now: o.Now, version: o.Version, hashes: defaultHashGate(), seenWritten: map[string]bool{}}
 	s.ev.init()
 	if s.log == nil {
 		s.log = slog.Default()

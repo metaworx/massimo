@@ -334,8 +334,20 @@ function userPanel(u) {
       usersMsg(t("users.unchanged"), true);
       return;
     }
-    userAction(() => api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body), t("users.saved", { name: u.name }), u.name, save).then((ok) => {
-      if (ok && self && body.password) loadMe();
+    // A password is registered by OPAQUE in the browser (login.js), one's
+    // own after proving the current one; neither goes to the server.
+    const { password, current_password: current } = body;
+    delete body.password;
+    delete body.current_password;
+    const send = async () => {
+      if (password) {
+        if (!manage || self) Object.assign(body, await currentPassword(u, current || ""));
+        Object.assign(body, await registerPassword(u.name, password));
+      }
+      return api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body);
+    };
+    userAction(send, t("users.saved", { name: u.name }), u.name, save).then((ok) => {
+      if (ok && self && password) loadMe();
     });
   });
   if (d.open) fillTokens(u, tokensBox);
@@ -413,10 +425,10 @@ function newUserForm() {
     const display = field("display_name").value.trim();
     if (display) body.display_name = display;
     const password = field("password").value;
-    if (password) body.password = password;
     const end = isoOf(field("expires").value);
     if (end) body.expires_at = end;
     const create = async () => {
+      if (password) Object.assign(body, await registerPassword(body.name, password));
       try {
         await api("POST", "api/v1/users", body);
       } catch (e) {
@@ -438,16 +450,54 @@ function newUserForm() {
   return form;
 }
 
+// --- the password sign-in (auth.password_login) ------------------------
+
+// loadPasswordLogin reads whether the server takes the password sign-in,
+// for a holder of settings, who alone sees the switch.
+async function loadPasswordLogin() {
+  if (!hasCap("settings")) return;
+  try {
+    const all = (await api("GET", "api/v1/settings")) || {};
+    const v = all["auth.password_login"];
+    $("password-login").checked = !v || v.value !== "false";
+  } catch (e) {
+    // the switch stays as it was
+  }
+}
+
+// renderPasswordLoginHint says how many users still have a password the
+// server checks (auth_version 1): with the switch off they cannot sign
+// in until a password is set for them here, by OPAQUE.
+function renderPasswordLoginHint() {
+  const left = usersUI.users.filter((u) => u.has_password && u.auth_version === 1).length;
+  $("password-login-hint").textContent = left ? tn("users.passwordLoginHint", left) : t("users.passwordLoginNone");
+}
+
+// setPasswordLogin turns the password sign-in on or off.
+async function setPasswordLogin() {
+  const box = $("password-login");
+  const on = box.checked;
+  try {
+    await api("PUT", "api/v1/settings", { "auth.password_login": on });
+    usersMsg(t(on ? "users.passwordLoginOn" : "users.passwordLoginOff"), true);
+  } catch (e) {
+    box.checked = !on;
+    usersMsg(t("users.failed", { name: "", error: e.message }), false);
+  }
+}
+
 // renderUsers draws System settings → Users from usersUI.users.
 function renderUsers() {
   const box = $("users-list");
   if (!box || !canManageUsers()) return;
+  renderPasswordLoginHint();
   clear(box);
   if (!usersUI.users.length) box.appendChild(textEl("p", t("users.none"), "muted small"));
   for (const u of usersUI.users) box.appendChild(userPanel(u));
 }
 
 function initUsers() {
+  $("password-login").addEventListener("change", setPasswordLogin);
   $("user-add").addEventListener("click", () => {
     $("user-add").classList.add("hidden");
     const box = $("user-new");
@@ -459,7 +509,10 @@ function initUsers() {
   onView("system", () => {
     usersMsg("");
     if (!canManageUsers()) return;
-    loadUsers().then(renderUsers).catch((e) => usersMsg(t("users.failed", { name: "", error: e.message }), false));
+    loadUsers()
+      .then(renderUsers)
+      .then(loadPasswordLogin)
+      .catch((e) => usersMsg(t("users.failed", { name: "", error: e.message }), false));
   });
   onView("profile", () => {
     profileMsg("");

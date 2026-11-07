@@ -740,8 +740,12 @@ also while `serve` runs (copying `massimo.db` alone can miss the last writes,
 which are in `massimo.db-wal` until a checkpoint,
 at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
-and `store info` prints its schema version, node and row counts;
-for the service run them as its user,
+and `store info` prints its schema version, node and row counts.
+The copy holds the database alone:
+`opaque.key` and `node.key` beside it are kept with it,
+since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,
+"The store").
+For the service run them as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo store info`.
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
@@ -754,6 +758,11 @@ a user with keys only,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
+A password set with `user add` or `user passwd` is of `auth_version` 2:
+the command registers it by OPAQUE in its own process,
+with the browser's key stretching, so the web UI signs in with it and the
+server keeps no hash (docs/store.md section 6).
+A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
 for the service run it as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.

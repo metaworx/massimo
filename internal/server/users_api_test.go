@@ -4,7 +4,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -364,6 +367,21 @@ func TestRolesRoutes(t *testing.T) {
 	}
 	if code, _ := callAPI(t, ts, "PUT", "/api/v1/capabilities/lock", mgr, `{"disabled":false}`); code != 403 {
 		t.Fatalf("a manager enables a capability: %d", code)
+	}
+}
+
+// A password check or hash the store refuses for the load, or that
+// waited until the client went away, answers 503 with Retry-After;
+// a wrong password is not that.
+func TestPasswordBusy(t *testing.T) {
+	for _, err := range []error{store.ErrBusy, fmt.Errorf("store: password check: %w", context.Canceled)} {
+		var he *httpError
+		if !errors.As(userFail(err), &he) || he.status != 503 || he.retryAfter != busyRetry {
+			t.Errorf("%v: %+v", err, he)
+		}
+	}
+	if passwordBusy(store.ErrBadPassword) != nil || passwordBusy(store.ErrUserExists) != nil {
+		t.Error("an answer that is not the load is busy")
 	}
 }
 

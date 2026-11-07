@@ -5,12 +5,15 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"maps"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -45,13 +48,27 @@ func TestUIServed(t *testing.T) {
 	if code, ct, _ := get("/ui/style.css"); code != 200 || !strings.HasPrefix(ct, "text/css") {
 		t.Fatalf("GET /ui/style.css: %d %s", code, ct)
 	}
+	if code, ct, body := get("/ui/vendor/opaque.js"); code != 200 || !strings.Contains(ct, "javascript") || !strings.Contains(body, "export { client, ready, server }") {
+		t.Fatalf("GET /ui/vendor/opaque.js: %d %s", code, ct)
+	}
+	if code, _, body := get("/ui/vendor/opaque.LICENSE"); code != 200 || !strings.HasPrefix(body, "MIT License") {
+		t.Fatalf("GET /ui/vendor/opaque.LICENSE: %d", code)
+	}
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self' 'wasm-unsafe-eval';") || strings.Contains(csp, "'unsafe-eval'") && !strings.Contains(csp, "'wasm-unsafe-eval'") {
+		t.Fatalf("the page's CSP: %s", csp)
+	}
 	for _, lang := range uiLanguages {
 		p := "/ui/i18n/" + lang + ".json"
 		if code, ct, body := get(p); code != 200 || !strings.HasPrefix(ct, "application/json") || !strings.HasPrefix(body, "{") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
 	}
-	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/other"} {
+	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/nope.js", "/other"} {
 		if code, _, _ := get(p); code != 404 {
 			t.Fatalf("GET %s: %d, want 404", p, code)
 		}
@@ -97,7 +114,7 @@ func TestUIServed(t *testing.T) {
 	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events?token=secret", nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,6 +278,24 @@ func TestUIRelativeURLs(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The vendored OPAQUE client is @serenity-kit/opaque 1.1.0's
+// esm/index.js as published (ui/vendor/README.md): a change to it is
+// a change on purpose, with the README.
+func TestVendoredOpaque(t *testing.T) {
+	b, err := uiFiles.ReadFile("ui/vendor/opaque.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "1e8d56383a77948e453085b6d4f52dcb9645f8bfff32395738b63d3a2e2fcb52"
+	if got := fmt.Sprintf("%x", sha256.Sum256(b)); got != want {
+		t.Errorf("ui/vendor/opaque.js: SHA-256 %s, want %s", got, want)
+	}
+	readme, _ := os.ReadFile("ui/vendor/README.md")
+	if !strings.Contains(string(readme), want) {
+		t.Error("ui/vendor/README.md does not name the file's SHA-256")
 	}
 }
 
