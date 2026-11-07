@@ -174,7 +174,9 @@ what a test stores in the browser goes with its context.
   a Cube switch takes the device chosen back to all,
   2200 lines stay when a live event comes,
   past 2000 lines without Older the oldest go from the lines and the view alike,
-  and the error line shows with a kind chosen.
+  and the error line shows with a kind chosen;
+  a live event that comes while a page is held follows the page,
+  once, also when the page holds it already.
 - `test_pairing.py`, pairing and removal:
   in Settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,
