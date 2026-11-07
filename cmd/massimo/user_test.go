@@ -135,3 +135,45 @@ func TestUserCommands(t *testing.T) {
 		t.Fatal("no command")
 	}
 }
+
+// user tokens lists a user's live sessions and keys with the ids that
+// user revoke takes, so that one leaked key can go alone.
+func TestUserTokens(t *testing.T) {
+	clearCubeEnv(t)
+	t.Setenv(env.DataVar, t.TempDir())
+	if _, err := runUserWith(t, "", "add", "anna", "-no-password"); err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, label := range []string{"Loxone", "laptop"} {
+		out, err := runUserWith(t, "", "token", "anna", "-label", label)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, strings.TrimSpace(out))
+	}
+	out, err := runUserWith(t, "", "tokens", "anna")
+	if err != nil {
+		t.Fatalf("tokens: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 3 || !strings.HasPrefix(lines[0], "ID") || !strings.Contains(lines[1], "Loxone") || !strings.Contains(lines[2], "laptop") ||
+		!strings.Contains(lines[1], "api") || !strings.Contains(lines[1], "never") {
+		t.Fatalf("tokens:\n%s", out)
+	}
+	for _, k := range keys {
+		if strings.Contains(out, k) {
+			t.Fatal("a key's secret listed")
+		}
+	}
+	id := strings.Fields(lines[1])[0]
+	if out, err := runUserWith(t, "", "revoke", "anna", id); err != nil || !strings.Contains(out, "1 token(s)") {
+		t.Fatalf("revoke %s: %q %v", id, out, err)
+	}
+	if out, _ := runUserWith(t, "", "tokens", "anna"); strings.Contains(out, "Loxone") || !strings.Contains(out, "laptop") {
+		t.Fatalf("after the revoke:\n%s", out)
+	}
+	if _, err := runUserWith(t, "", "tokens", "nobody"); err == nil {
+		t.Fatal("tokens of nobody")
+	}
+}

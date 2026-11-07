@@ -109,6 +109,9 @@ the next minor, a fix counts the suffix up.
 - `massimo tls show` prints what `massimo config` prints of the TLS,
   the HSTS days and the names given included.
 
+- `massimo user tokens <name>` lists a user's sessions and keys with the
+  ids `user revoke` takes, so one key can be revoked alone (README.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

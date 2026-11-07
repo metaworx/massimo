@@ -727,6 +727,7 @@ a user with keys only,
 `-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
 `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
+`user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
 It opens the store beside a running `serve`;
 for the service run it as its user,
