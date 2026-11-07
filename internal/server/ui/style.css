@@ -98,32 +98,76 @@ body:not(.expert) .expert-only { display: none !important; }
   border-bottom: 1px solid var(--line);
   margin-bottom: 16px;
 }
-/* First line: everything that may wrap on the left, the refresh button
-   and the page icons pinned to the right edge. */
+/* First line, a grid: at the left the brand, the time of the last update
+   with ↻ beside it and the Cube's clock, wrapping where they must; then
+   the connection and the Cube choice; at the right the pages. Below
+   600 px the Cube choice takes a line of its own under the other two,
+   and ☰ holds Log and System settings. */
 .top-line {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "left cube nav";
+  align-items: start;
+  gap: 8px 16px;
   width: 100%;
 }
 .top-left {
+  grid-area: left;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 20px;
+  gap: 4px 16px;
   min-width: 0;
-  flex: 1 1 auto;
+  min-height: 36px;
 }
-.top-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.top-line > .cube { grid-area: cube; min-height: 36px; }
+.top-line > .nav { grid-area: nav; justify-self: end; }
+.updated-line { display: inline-flex; align-items: center; gap: 6px; }
+.icon-btn.refresh-btn { height: 30px; padding: 0 8px; font-size: 1.05rem; line-height: 1; }
+#nav-menu { display: none; }
+@media (max-width: 599px) {
+  .top-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "left nav" "cube cube"; }
+  #view-log, #view-settings { display: none; }
+  #nav-menu { display: block; }
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .nav { display: inline-flex; gap: 4px; }
 .nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 36px; padding: 0; }
 .nav-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+/* The header's menus (👤, ☰): the summary drawn as a page button, the items
+   dropping down from the header's right edge, so that they fit a phone. */
+.nav { position: relative; }
+.menu.nav-menu { position: static; }
+.menu.nav-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+}
+.menu.nav-menu > summary:hover, .menu.nav-menu[open] > summary { border-color: var(--accent); }
+.nav-menu .menu-items { width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
+.menu-line { margin: 0 0 4px; padding: 6px 10px 10px; color: var(--muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
-#cube-select { max-width: min(100%, 60vw); min-width: 0; }
+#cube-select { max-width: min(100%, 320px); min-width: 0; }
+@media (max-width: 599px) {
+  #cube-select { flex: 1 1 160px; max-width: 100%; }
+}
 #cube-search.bad { color: var(--bad); }
 /* Cubes found on the LAN but not configured, with the env lines */
 .cube-found { margin-top: 8px; font-size: 0.9rem; max-width: 100%; }
@@ -266,7 +310,7 @@ body.expert #clock-plain { display: none; }
 .settings .update p, .settings .restart p { margin: 4px 0; overflow-wrap: anywhere; }
 .settings .restart { padding-top: 6px; }
 
-/* Settings → Cubes (cubes.js) */
+/* System settings → Cubes (cubes.js) */
 .settings .cubes-settings { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
 .cubes-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .cubes-head .help-text { flex-basis: 100%; }
@@ -276,7 +320,7 @@ body.expert #clock-plain { display: none; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
-/* Settings → Backup and restore (backup.js): the stored backups, each
+/* System settings → Backup and restore (backup.js): the stored backups, each
    a row with its actions, and a restore's plan */
 .backups-list { margin: 8px 0 14px; }
 .backup-row { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
@@ -474,6 +518,11 @@ button.subtle { color: var(--muted); }
 .menu-items button:hover { background: var(--card-head); }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
+/* Rooms without a connected Cube (app.js renderHomeNotice) */
+.home-notice { padding: 12px 14px; }
+.home-notice p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.home-notice .home-notice-title { font-weight: 600; }
+.home-notice button { margin-top: 4px; }
 
 .setpoint-row {
   display: flex;
@@ -717,6 +766,38 @@ button:hover { border-color: var(--accent); }
 .menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: default; }
+/* A button whose request is running (setBusy, components.js): off, less
+   faded than a button with nothing to do, a ring turning after its text
+   in the button's own colour, so in either theme. */
+button.busy:disabled { opacity: 0.75; cursor: progress; }
+button.busy::after {
+  content: "";
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.45em;
+  vertical-align: -0.1em;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: busy-turn 0.8s linear infinite;
+}
+/* An icon button turns in place of its icon, keeping its size. */
+.icon-btn.busy { position: relative; color: transparent; }
+.icon-btn.busy > svg { visibility: hidden; }
+.icon-btn.busy::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -0.4em 0 0 -0.4em;
+  border-color: var(--fg);
+  border-right-color: transparent;
+}
+@keyframes busy-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  button.busy::after { animation-duration: 2.4s; }
+}
 
 dialog {
   background: var(--card);
@@ -855,13 +936,16 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 /* log view */
 .log .tile-head { gap: 8px 12px; flex-wrap: wrap; }
 .log .tile-head select { max-width: 14em; min-width: 0; }
-.log-older { display: flex; justify-content: center; padding: 6px 14px 0; }
+.log-older { display: flex; justify-content: center; padding: 0 14px 10px; }
 .log .tile-head h2 { flex: 0 0 auto; }
 #log-filter { flex: 1; min-width: 8em; }
+/* newest first: log.js keeps the place of a view scrolled down itself,
+   so the browser's own scroll anchoring stays out */
 .log-lines {
   max-height: 70vh;
   overflow-y: auto;
-  padding: 6px 14px 10px;
+  overflow-anchor: none;
+  padding: 6px 14px 6px;
   font-size: 0.9rem;
 }
 .log-line {
@@ -916,17 +1000,19 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 
 /* what the signed-in user may not do is hidden: login.js puts a class
    no-<capability> on the body per capability the user lacks, and the
-   markup marks what each one hides with needs-<capability>, and with
-   needs-cubes-or-pair what either of the two shows (Settings → Cubes) */
+   markup marks what each one hides with needs-<capability>, with
+   needs-cubes-or-pair what either of the two shows (System settings →
+   Cubes), and with needs-system what one of System settings' does (⚙) */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
 .no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-sync .needs-sync,
+.no-system .needs-system,
 .no-cubes.no-pair .needs-cubes-or-pair { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
-/* the sign-in dialog, the first-owner form, Settings → Users and Roles */
+/* the sign-in dialog, the first-owner form, System settings → Users and Roles */
 .login-token summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
 #login-error.bad { color: var(--bad); }
 .setup { margin-bottom: 16px; }

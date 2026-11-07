@@ -6,12 +6,14 @@ package server
 // The server's settings in the store (GET and PUT /api/v1/settings): the
 // stale threshold, which applies at once, and the poll, refresh and
 // discovery intervals, which apply at the next start; the command-line
-// flags win over them for one run. node.id and tenant.id are shown and
-// cannot be changed.
+// flags win over them for one run; the whole numbers and the switches,
+// which apply at once. node.id and tenant.id are shown and cannot be
+// changed.
 
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,6 +62,18 @@ var intSettings = []intSetting{
 	{key: store.BackupsKeepDaysAutoKey, def: store.DefaultBackupsKeepDaysAuto, min: 0, max: 3650},
 	{key: store.BackupsKeepDaysManualKey, def: store.DefaultBackupsKeepDaysManual, min: 0, max: 3650},
 	{key: store.BackupsKeepNewestKey, def: store.DefaultBackupsKeepNewest, min: 0, max: 1000},
+}
+
+// boolSetting describes one switch, which applies at once.
+type boolSetting struct {
+	key string
+	def bool
+}
+
+var boolSettings = []boolSetting{
+	// The password sign-in, POST /api/v1/login (login_api.go): off, the
+	// users sign in by OPAQUE alone.
+	{key: store.PasswordLoginKey, def: true},
 }
 
 var durationSettings = []durationSetting{
@@ -131,6 +145,16 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 		}
 		out[d.key] = settingView{Value: strconv.Itoa(v), Default: strconv.Itoa(d.def), Set: ok, InEffect: strconv.Itoa(v), Applies: "now"}
 	}
+	for _, d := range boolSettings {
+		v, ok, err := st.SettingBool(r.Context(), d.key)
+		if err != nil {
+			return nil, fail(http.StatusInternalServerError, "%v", err)
+		}
+		if !ok {
+			v = d.def
+		}
+		out[d.key] = settingView{Value: strconv.FormatBool(v), Default: strconv.FormatBool(d.def), Set: ok, InEffect: strconv.FormatBool(v), Applies: "now"}
+	}
 	tenant, err := st.TenantID()
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
@@ -152,8 +176,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) error {
 
 // putSettings handles PUT /api/v1/settings: an object of keys and
 // values, a duration as a string ("36h", "0" to switch an interval off),
-// a whole number as a number or a string, or null to go back to the
-// default. Every value is checked before any is written.
+// a whole number as a number or a string, a switch as true or false, or
+// null to go back to the default. Every value is checked before any is
+// written.
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.cubeStore()
 	if err != nil {
@@ -170,6 +195,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		key      string
 		duration *time.Duration // a duration setting
 		number   *int           // a whole-number setting
+		on       *bool          // a switch
 		clear    bool
 	}
 	var writes []write
@@ -204,6 +230,18 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			writes = append(writes, write{key: k, duration: &v})
+			continue
+		}
+		if slices.ContainsFunc(boolSettings, func(b boolSetting) bool { return b.key == k }) {
+			if isNull {
+				writes = append(writes, write{key: k, clear: true})
+				continue
+			}
+			var on bool
+			if json.Unmarshal(raw, &on) != nil {
+				return fail(http.StatusBadRequest, "%s: want true or false", k)
+			}
+			writes = append(writes, write{key: k, on: &on})
 			continue
 		}
 		var n *intSetting
@@ -245,6 +283,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			err = st.DeleteSetting(r.Context(), wr.key)
 		case wr.duration != nil:
 			err = st.SetSetting(r.Context(), wr.key, fmtDuration(*wr.duration))
+		case wr.on != nil:
+			err = st.SetSetting(r.Context(), wr.key, *wr.on)
 		default:
 			err = st.SetSetting(r.Context(), wr.key, *wr.number)
 		}
@@ -271,6 +311,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			value = fmtDuration(*wr.duration)
 		case wr.number != nil:
 			value = strconv.Itoa(*wr.number)
+		case wr.on != nil:
+			value = strconv.FormatBool(*wr.on)
 		}
 		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", s.clientIP(r))
 	}

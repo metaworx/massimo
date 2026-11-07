@@ -209,7 +209,7 @@ sudo massimo install -remove              # -purge: the settings, state, logs an
 `update` installs the newest signed release of the channel and puts the old
 binary back when the restarted server does not report the new version
 (`-rollback` goes back by hand);
-the button under Settings → Software in the web UI asks the helper to do the same,
+the button under System settings → Software in the web UI asks the helper to do the same,
 which needs `MASSIMO_API_TOKEN`.
 Running `install` again from a newer binary replaces the binary and the units
 and keeps the settings.
@@ -338,7 +338,7 @@ in
 `Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 10`.
 Running `install` again from a newer downloaded binary also replaces the binary
 and keeps the settings.
-The Update button under Settings → Software works as on Linux (with
+The Update button under System settings → Software works as on Linux (with
 `MASSIMO_API_TOKEN` set): the server starts the same `update` in the background,
 which stops and starts the service,
 rolls back when the new version does not come up,
@@ -401,7 +401,7 @@ massimo update -restart ch.metaworx.massimo -health http://127.0.0.1:8099/health
 massimo install -remove                                                      # -purge: the settings, state, logs and user too
 ```
 
-The button under Settings → Software in the web UI works as on Linux,
+The button under System settings → Software in the web UI works as on Linux,
 through the helper (its log is `/var/log/massimo-update.log`).
 Details: [macOS](packaging/README.md#macos).
 
@@ -731,7 +731,7 @@ From then on the store wins for that Cube: `_ADDRESS`, `_NAME`, `_PROXY`,
 and a line of the file that differs is logged at the start
 (`settings file differs from the store, the store wins`,
 with both values) and shown on the Cube in `GET /api/v1/cubes` (`file_differs`)
-and under Settings → Cubes in the web UI, which offers the file's value.
+and under System settings → Cubes in the web UI, which offers the file's value.
 That page, and `POST /api/v1/cubes`, `PUT` and `DELETE /api/v1/cubes/{serial}`,
 add a Cube, change its name, address, proxy and hidden devices,
 and remove it while `serve` runs.
@@ -749,8 +749,12 @@ also while `serve` runs (copying `massimo.db` alone can miss the last writes,
 which are in `massimo.db-wal` until a checkpoint,
 at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
-and `store info` prints its schema version, node and row counts;
-for the service run them as its user,
+and `store info` prints its schema version, node and row counts.
+The copy holds the database alone:
+`opaque.key` and `node.key` beside it are kept with it,
+since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,
+"The store").
+For the service run them as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo store info`.
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
@@ -763,6 +767,11 @@ a user with keys only,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
+A password set with `user add` or `user passwd` is of `auth_version` 2:
+the command registers it by OPAQUE in its own process,
+with the browser's key stretching, so the web UI signs in with it and the
+server keeps no hash (docs/store.md section 6).
+A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
 for the service run it as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.

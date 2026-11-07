@@ -79,14 +79,19 @@ The Cube's own memory and the radio are eQ-3's and out of reach.
   each row's table and identifier as associated data so that a ciphertext cannot
   be moved to another row.
 - **Per user, a wrapped copy.**
-  From the password, argon2id with a per-user salt gives a master secret;
-  HKDF splits it into an authentication key, which goes to the server at login,
-  and a wrapping key, which never leaves the client.
-  The data key is stored wrapped with the wrapping key (`user_keys`: user,
-  key_id, wrapped bytes).
-  The server stores a hash of the authentication key,
-  not the password's hash as docs/store.md section 6 has it today;
-  guessing against a copy of the store still costs an argon2id per guess.
+  The password never leaves the client:
+  the user signs in by OPAQUE (docs/store.md section 6, `auth_version` 2),
+  whose client ends every sign-in with an export key that the server never sees,
+  the same at each sign-in until the password is set again.
+  HKDF of the export key gives the wrapping key,
+  and the data key is stored wrapped with it (`user_keys`: user, key_id,
+  wrapped bytes).
+  The server stores the user's OPAQUE record,
+  no hash of anything the client sends;
+  guessing against a copy of the store needs the server's `opaque.key` as well,
+  and then costs an argon2id per guess, at the record's parameters.
+  A new password is a new registration and a new export key,
+  so the client wraps the data key again in the same step.
 - **Sharing** is wrapping the data key for another user.
   For a household the simple way is an invitation: the owner,
   logged in and so holding the data key, creates the user with a one-time code;
@@ -250,6 +255,9 @@ at setup, and the server only caches; a tampered server is recognised.
 That works, with one condition:
 the verifier must be anchored outside the server,
 because a verifier that arrives from the server is replaced with the page.
+The page includes one module that is not the project's,
+the OPAQUE client in WebAssembly (`ui/vendor/opaque.js`, docs/ui.md),
+which comes from the server like the rest and which the anchors cover in the same way.
 Two anchors do it, and both are standard browser mechanics rather than a custom scheme:
 
 1. **A web app installed from the edge, on the LAN.**
@@ -427,6 +435,9 @@ They are small; together they are a day in stages (a) and (b) of docs/store.md.
    not as a reset of every password.
    Cost: one column and the `auth_version` check at login.
    Saves: every user re-enrolling.
+   Done: `auth_version` 2 is the sign-in by OPAQUE (docs/store.md section 6),
+   the record in `users.opaque_record` (migration 0007),
+   and a user of version 1 moves to 2 at the next sign-in in the browser.
 7. **`commands` in stage (b) of docs/store.md** with `Idempotency-Key` on the
    write routes and `GET /api/v1/commands/{id}`:
    the restore API's id and state made general, the engine's tickets durable,
@@ -448,7 +459,7 @@ They are small; together they are a day in stages (a) and (b) of docs/store.md.
 Not worth preparing now, because each can be added behind the above
 without touching what exists: the `keys` and `user_keys` tables
 (additive migration when encryption is turned on), the sync protocol
-and the `nodes` table, signed tokens, argon2id in the browser,
+and the `nodes` table, signed tokens,
 SQLCipher or a filesystem choice, PostgreSQL migrations, the relay.
 The schema stays SQLite-only until the server mode is built.
 

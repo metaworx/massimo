@@ -10,7 +10,7 @@ import json
 import urllib.request
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import wait_until
+from helpers import show_view, sign_out, wait_until
 
 
 def server_ui():
@@ -49,7 +49,7 @@ def test_settings_follow_the_user(page, new_context, case):
     assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the owner's settings follow the owner"
     ui = wait_server(page, lambda ui: ui.get("poll") == 10)
     assert ui is not None and ui["poll"] == 10, "the first page hands its settings to the server"
-    page.locator("#view-settings").click()
+    show_view(page, "prefs")
     switches = page.locator("input[data-device-only]")
     assert switches.count() == 6, "a switch under each of the six settings"
     assert switches.first.get_attribute("aria-label"), "the switch is named for its row"
@@ -91,7 +91,7 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)
     assert page.evaluate("document.body.classList.contains('no-sync')"), "a guest's settings do not follow it"
-    page.locator("#view-settings").click()
+    show_view(page, "prefs")
     assert not page.locator("input[data-device-only=poll]").is_visible(), "no switches for a guest"
     page.locator("#poll-input").fill("45")
     page.locator("#poll-input").dispatch_event("change")
@@ -100,9 +100,12 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     assert server_ui() is None, "nothing reached the server"
 
 
-def operator_session():
-    """A session of the operator run.sh creates, for the test's own calls."""
-    return api_call("POST", "api/v1/login", {"user": "operator", "password": "op-pass"})["token"]
+def operator_key():
+    """An API key of the operator run.sh creates, for the test's own
+    calls, and its id: the operator's password is of auth_version 2, which
+    signs in by OPAQUE in the browser and not by POST /api/v1/login."""
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": "ui-test preferences"})
+    return key["token"], key["id"]
 
 
 def clear_user(token):
@@ -116,7 +119,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
     then the browser forgets the user's settings and schemes: the next to
     sign in, the owner with its key, neither sees them nor gets them into
     its account. What is kept for this device only stays."""
-    op = operator_session()
+    op, op_id = operator_key()
     try:
         clear_user(op)
         clear_preferences()
@@ -132,13 +135,13 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
         page.locator("#login-form button[type=submit]").click()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the operator's settings follow it"
-        page.locator("#view-settings").click()
+        show_view(page, "prefs")
         page.locator("input[data-device-only=clock]").check(force=True)
         page.locator("#poll-input").fill("37")
         page.locator("#poll-input").dispatch_event("change")
         page.evaluate("putCustomScheme('Operator only', schemeById('massimo').light, schemeById('massimo').dark)")
-        page.locator("#logout-btn").click()  # within the second the change waits
-        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Log out brings the dialog back"
+        sign_out(page)  # within the second the change waits
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
         assert page.evaluate("localStorage.getItem('massimo.poll')") is None, "the operator's poll is forgotten"
         assert page.evaluate("localStorage.getItem('massimo.schemes')") is None, "the operator's schemes are forgotten"
         assert json.loads(page.evaluate("localStorage.getItem('massimo.device')") or "{}") == {"clock": "browser"}, \
@@ -161,7 +164,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
             "and so is the scheme"
     finally:
         clear_user(op)
-        api_call("POST", "api/v1/logout", token=op)
+        api_call("DELETE", "api/v1/users/operator/tokens/%d" % op_id)
         clear_preferences()
 
 

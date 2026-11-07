@@ -1,8 +1,18 @@
-<!-- Settings → Users: the users of the store with their sessions and keys, users.js draws into #users-list. -->
+<!-- System settings → Users: the users of the store with their sessions and keys, users.js draws into #users-list. -->
 <div class="users-settings needs-users-admin" aria-live="polite">
   <div class="cubes-head">
     <span class="muted" data-i18n="users.title">Users</span>
     <span data-help="users" data-help-label="users.title"></span>
+  </div>
+  <div class="password-login needs-settings">
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" id="password-login">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="users.passwordLogin">Password sign-in</span>
+      </label>
+    </div>
+    <p id="password-login-hint" class="muted small"></p>
   </div>
   <div id="users-list"></div>
   <div id="user-new"></div>

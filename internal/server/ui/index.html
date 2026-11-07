@@ -22,7 +22,11 @@
   <symbol id="icon-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/></symbol>
   <!-- navigation -->
   <symbol id="icon-house" viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-6h4v6"/></symbol>
-  <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <!-- the log: a sheet with a folded corner and its lines, so that it
+       does not read as a menu (three lines alone) -->
+  <symbol id="icon-log" viewBox="0 0 24 24"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4.5"/></symbol>
+  <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <header class="top">
@@ -32,23 +36,39 @@
         <h1>Massimo</h1>
         <span id="version-short" class="muted mono small" title="server version" data-i18n-attr="title:header.serverVersion"></span>
       </div>
-      <div class="cube">
-        <label for="cube-select" class="muted" data-i18n="header.cube">Cube</label>
-        <select id="cube-select"></select>
-        <span id="connection" class="pill"></span>
-        <span id="cube-search" class="muted small hidden" role="status"></span>
-      </div>
+      <span class="updated-line">
+        <span id="updated" class="muted" title="time of the last successful poll" data-i18n-attr="title:header.updatedTitle"></span>
+        <button type="button" id="refresh-btn" class="icon-btn refresh-btn" aria-label="refresh" title="Refresh now" data-i18n-attr="aria-label:header.refresh title:header.refreshTitle">↻</button>
+      </span>
       <span id="clock-plain" class="muted" title=""></span>
-      <span id="updated" class="muted" title="time of the last successful poll" data-i18n-attr="title:header.updatedTitle"></span>
     </div>
-    <div class="top-right">
-      <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now" data-i18n-attr="aria-label:header.refresh title:header.refreshTitle">↻</button>
-      <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
-        <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-        <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
-        <button type="button" id="view-settings" class="icon-btn nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
-      </nav>
+    <div class="cube">
+      <span id="connection" class="pill"></span>
+      <label for="cube-select" class="visually-hidden" data-i18n="header.cube">Cube</label>
+      <select id="cube-select"></select>
+      <span id="cube-search" class="muted small hidden" role="status"></span>
     </div>
+    <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
+      <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
+      <details id="user-menu" class="menu nav-menu">
+        <summary class="nav-btn" aria-label="who is signed in" title="Who is signed in" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></summary>
+        <div class="menu-items">
+          <p id="me-line" class="menu-line small"></p>
+          <button type="button" id="menu-profile" data-i18n="nav.profile">My profile</button>
+          <button type="button" id="menu-prefs" data-i18n="nav.prefs">My settings</button>
+          <button type="button" id="logout-btn" data-i18n="me.signOut">Sign out</button>
+        </div>
+      </details>
+      <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
+      <button type="button" id="view-settings" class="icon-btn nav-btn needs-system" aria-label="system settings" title="System settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+      <details id="nav-menu" class="menu nav-menu">
+        <summary class="nav-btn" aria-label="more pages" title="More pages" data-i18n-attr="aria-label:nav.more title:nav.moreTitle"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+        <div class="menu-items">
+          <button type="button" id="menu-log" data-i18n="nav.logTitle">Log</button>
+          <button type="button" id="menu-system" class="needs-system" data-i18n="nav.settingsTitle">System settings</button>
+        </div>
+      </details>
+    </nav>
   </div>
   <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
   <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span> <span id="tls-fingerprint" class="mono tls-fp"></span></p>
@@ -77,6 +97,13 @@
   <p id="open-banner" class="open-banner hidden" role="note"><strong data-i18n="open.title">Open server.</strong> <span id="open-banner-text"></span></p>
   <p id="message" class="message hidden"></p>
 
+  <div id="home-notice" class="notice home-notice hidden" role="status">
+    <p class="home-notice-title"></p>
+    <p class="home-notice-detail small"></p>
+    <p class="home-notice-check small"></p>
+    <button type="button" id="home-notice-cubes" class="needs-cubes" data-i18n="home.toCubes">Open System settings → Cubes</button>
+  </div>
+
   <section id="setup" class="tile setup hidden" aria-labelledby="setup-title">
     <header class="tile-head"><h2 id="setup-title" data-i18n="setup.title">No users yet</h2></header>
     <form id="setup-form" class="setup-form">
@@ -84,6 +111,7 @@
       <div class="field wide">
         <label for="setup-user" data-i18n="users.name">Name</label>
         <input type="text" id="setup-user" class="field-control" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required>
+        <p id="setup-name-msg" class="small cubes-msg field-hint hidden" role="status"></p>
       </div>
       <div class="field wide">
         <label for="setup-password" data-i18n="login.password">Password</label>
@@ -98,8 +126,15 @@
     </form>
   </section>
 
-  <section id="settings" class="tile settings hidden" aria-label="settings" data-i18n-attr="aria-label:nav.settings">
-    <header class="tile-head"><h2 data-i18n="settings.title">Settings</h2></header>
+  <section id="profile" class="tile settings hidden" aria-labelledby="profile-title">
+    <header class="tile-head"><h2 id="profile-title" data-i18n="nav.profile">My profile</h2></header>
+    <div class="settings-body">
+      <!-- partials: profile -->
+    </div>
+  </section>
+
+  <section id="prefs" class="tile settings hidden" aria-labelledby="prefs-title">
+    <header class="tile-head"><h2 id="prefs-title" data-i18n="nav.prefs">My settings</h2></header>
     <div class="settings-body">
       <div class="field">
         <label for="poll-input" data-i18n="settings.poll">Poll every</label>
@@ -132,7 +167,14 @@
         <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
         <p id="lang-note" class="muted small lang-note hidden"></p>
       </div>
-      <!-- partials: settings -->
+      <!-- partials: prefs -->
+    </div>
+  </section>
+
+  <section id="system" class="tile settings hidden" aria-labelledby="system-title">
+    <header class="tile-head"><h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2></header>
+    <div class="settings-body">
+      <!-- partials: system -->
     </div>
   </section>
 
@@ -195,10 +237,11 @@
       <input type="search" id="log-filter" placeholder="filter" aria-label="filter the log" data-i18n-attr="placeholder:log.filter aria-label:log.filterAria">
       <select id="log-kind" aria-label="kind of event" data-i18n-attr="aria-label:log.kindAria"></select>
       <select id="log-device" aria-label="device" data-i18n-attr="aria-label:log.deviceAria"></select>
+      <select id="log-range" aria-label="how far back" data-i18n-attr="aria-label:log.rangeAria"></select>
       <button type="button" id="log-clear" data-i18n="log.clear">Clear</button>
     </header>
-    <div class="log-older"><button type="button" id="log-older" class="subtle" data-i18n="log.older">Older events</button></div>
     <div id="log-lines" class="log-lines"></div>
+    <div class="log-older"><button type="button" id="log-older" class="subtle" data-i18n="log.older">Older events</button></div>
   </section>
 </main>
 

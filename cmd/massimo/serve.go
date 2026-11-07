@@ -423,9 +423,9 @@ func serveSetup(ctx context.Context, st *store.Store, addr string, proxies []str
 		}
 	}
 	if len(targets) == 0 {
-		// Nothing to serve yet: the web UI adds a Cube (Settings →
+		// Nothing to serve yet: the web UI adds a Cube (System settings →
 		// Cubes), as does the settings file at the next start.
-		logger.Warn("no cube configured yet: add one under Settings → Cubes in the web UI, set MASSIMO_CUBE_<SN>_ADDRESS, use -addr, or give the serial with -sn")
+		logger.Warn("no cube configured yet: add one under System settings → Cubes in the web UI, set MASSIMO_CUBE_<SN>_ADDRESS, use -addr, or give the serial with -sn")
 		return out, nil
 	}
 	sort.SliceStable(targets, func(i, j int) bool { return targets[i].cfg.Serial < targets[j].cfg.Serial })

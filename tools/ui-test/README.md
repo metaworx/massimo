@@ -66,16 +66,23 @@ with the page's DOM, console and network at every step.
   the page loaded with its room tiles and its event stream open;
 - `watch`:
   what the page did, for a test or the guard to look at: the stream requests,
-  the used ticket handed out, console and page errors;
+  the used ticket handed out, console and page errors,
+  and in `expected` the refusals a test causes on purpose (the URL's end, the status);
 - `guard` (autouse): a test fails on a console error, a page error,
   or a horizontal scroll left at its end;
-  the refused stream of the stream test and the stubbed 503 of the discovery are expected;
+  the refused stream of the stream test, the stubbed 503 of the discovery
+  and what a test lists in `watch.expected` are expected;
 - the marker `used_ticket`: the page's first stream gets a used ticket,
   which the server refuses with 401,
   and the page is handed over before the stream is open again.
 
 `helpers.py` holds the texts the tests expect in both languages,
-the stubbed answers, `wait_until`, `named_buttons` and `found_text`.
+the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
+`open_user_menu` and `sign_out` for the header's 👤 menu,
+and `show_view`, which opens a page as a user does:
+Rooms, the log and System settings with their header button,
+or the log and System settings from ☰ on a narrow screen,
+My profile and My settings from the 👤 menu.
 
 The four cases share the one server,
 so a test that changes the server's store puts it back;
@@ -99,6 +106,28 @@ what a test stores in the browser goes with its context.
   and the tile is drawn with the new state once the focus leaves;
   a switch point's time typed part by part keeps the focus,
   marks the day as changed, and Send right after it sends the time (stubbed).
+- `test_header.py`:
+  the Log button's symbol is a sheet, taller than wide;
+  the 👤 menu names the owner by the suite's key and offers Forget key,
+  fits the window, and closes on Escape, on a click outside and on a choice,
+  My settings opening the settings;
+  on an open server (`/me` stubbed) it says so, without Sign out;
+  a room's ⋯ and 👤 are one open at a time;
+  each page puts its name into the address, back and forward move between
+  them, and a reload opens the log and My profile again with the header in view;
+  System settings in a viewer's address (`/me` stubbed) shows Rooms;
+  at 1100 px the header is one line in its order,
+  the brand, the time with ↻, the connection, the Cube choice, 🏠 👤 📄 ⚙;
+  at 390 px 🏠 👤 ☰ with the Cube choice under them,
+  and ☰ opens the log and System settings and is highlighted on them.
+- `test_home.py`:
+  Rooms on the second server, whose Cube sits at a closed port,
+  says that the Cube is not connected, the address the server tries,
+  that no data has come and what to check, and its button opens
+  System settings → Cubes;
+  with the Cube list stubbed, it says that no Cube is configured,
+  and for a Cube that dropped after its rooms loaded it stands above the rooms,
+  with when the last data came.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
@@ -117,7 +146,7 @@ what a test stores in the browser goes with its context.
   The server's own discovery socket is UDP 23272 as always,
   so where another program holds that port the search answers 503
   and the tests that need an answer are skipped.
-- `test_cubes.py`, Settings → Cubes:
+- `test_cubes.py`, System settings → Cubes:
   a new name is saved and shown in the Cube choice,
   the settings file's name is offered as a differing line and "Take the file's
   value" brings it back;
@@ -131,18 +160,24 @@ what a test stores in the browser goes with its context.
   (the test holds a request for the pairing until it has typed);
   Hide and Show again keep the name and the proxy address typed in the form.
 - `test_settings.py`:
-  the settings page opens;
-  with the Cube's panel open,
-  English and then German chosen in the settings redraw its labels,
+  My settings and System settings open, each alone, with their parts;
+  with the Cube's panel open in System settings,
+  English and then German chosen in My settings redraw its labels,
   cloned from a template, in that language, and the panel stays open;
   French chosen and German before French has come,
-  French failing afterwards shows no error on the German page.
-- `test_backup.py`, Settings → Backup and restore against the fake Cube's store:
+  French failing afterwards shows no error on the German page;
+  My profile's Save is off until the display name differs,
+  turns while it is sent (the test holds the PUT) and stores it;
+  My profile lists the own keys, the suite's among them,
+  and Create key and Revoke work there;
+  a viewer (`/me` stubbed) has no ⚙, and System settings open as it signs in
+  gives way to Rooms.
+- `test_backup.py`, System settings → Backup and restore against the fake Cube's store:
   the Cube's backup downloads as YAML,
   one taken by hand shows in the list as "by hand" and downloads,
   its plan says the Cube holds it already,
   it compares with the one before when there is one, and it is deleted again.
-- `test_users.py`, Settings → Users and Roles as the owner:
+- `test_users.py`, System settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-pass`) are listed with the operator's tokens,
   and the six default roles with the operator's seven capabilities;
@@ -156,8 +191,9 @@ what a test stores in the browser goes with its context.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,
-  and Log out brings the dialog back and forgets the token;
-  a sign-in at the page's start, and again after Log out,
+  and is named in the 👤 menu, whose Sign out brings the dialog back and
+  forgets the token;
+  a sign-in at the page's start, and again after Sign out,
   starts the page once: one stream ticket and one read of `/me` each.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
@@ -165,7 +201,7 @@ what a test stores in the browser goes with its context.
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
   password `guest-pass`) has no switches, and its poll stays in the browser;
-  the operator's poll and scheme, changed just before Log out,
+  the operator's poll and scheme, changed just before Sign out,
   reach the operator's account and leave the browser,
   and the owner signing in next with its key gets neither;
   a scheme deleted in one browser stays deleted when another that had it loads.
@@ -177,9 +213,9 @@ what a test stores in the browser goes with its context.
   the seven devices' at least, a device chosen shows only its events,
   all again shows the lines of before,
   and Older is offered as the page's size says,
-  nothing older after a page shorter than 200;
-  with the server's answers stubbed, Older puts a page above the lines,
-  oldest first, the view staying where it was,
+  nothing older after a page shorter than 200 (with all events);
+  with the server's answers stubbed, Older, under the lines, puts a page
+  at the bottom, the view staying where it was,
   until a short page ends the paging;
   with the page's `api()` holding the log's requests until the test answers
   them, an Older answer after Clear is dropped,
@@ -188,9 +224,18 @@ what a test stores in the browser goes with its context.
   past 2000 lines without Older the oldest go from the lines and the view alike,
   and the error line shows with a kind chosen;
   a live event that comes while a page is held follows the page,
-  once, also when the page holds it already.
+  once, also when the page holds it already;
+  Clear is off with nothing chosen, and after a kind and a text sets them
+  back and asks for every kind and device;
+  the lines read newest first, a live event comes in on top,
+  and a view scrolled down keeps its place;
+  the last 20 events are the range at first, asked for without a time,
+  without Older, and keep the newest 20 as live events come;
+  the last hour asks since an hour ago and pages back within it,
+  a line out of the hour goes at the minute's check,
+  and with all events a line of another day shows its date.
 - `test_pairing.py`, pairing and removal:
-  in Settings → Cubes, Pair a device with 5 seconds,
+  in System settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,
   is named and put into the first room with the copy on,
   the row says so and the end of pairing is said;
@@ -203,10 +248,10 @@ what a test stores in the browser goes with its context.
   the log without a copy;
   another is removed from there.
   With the body's `no-cubes`, the default manager's,
-  the Cube's panel holds the pairing alone, and with `no-pair` too Settings →
+  the Cube's panel holds the pairing alone, and with `no-pair` too System settings →
   Cubes is gone.
   Each test stops pairing and removes the device at its start and end.
-- `test_appearance.py`, Settings → Appearance:
+- `test_appearance.py`, My settings → Appearance:
   a scheme changes the computed `--bg`, the dark mode sets `data-theme`,
   the editor applies a colour live, grades the contrast
   and keeps a saved scheme in the browser;
@@ -217,7 +262,7 @@ what a test stores in the browser goes with its context.
   Import reads it back with a missing token filled from the default
   and an unknown one dropped,
   and a file that is not a scheme shows a message.
-- `test_update.py`, Settings → Software:
+- `test_update.py`, System settings → Software:
   both buttons are greyed while the update helper installs (a stubbed
   `GET /api/v1/update`) and come back when it is done;
   Update asks in the page with the version,
@@ -243,16 +288,17 @@ It takes a fixed set of PNGs into `docs/screenshots/`,
 named `<page>-<width>-<theme>-<lang>.png` and listed in one place,
 `SETS` in the script:
 the Rooms page, a tile's device list, the configuration's tabs Temperatures,
-Devices, Week programme and Copy, the House panel, the log, the settings,
-the Appearance editor, the Cube choice with a found Cube and Settings → Cubes,
+Devices, Week programme and Copy, the House panel, the log, the 👤 menu,
+My settings, the Appearance editor, System settings,
+the Cube choice with a found Cube and System settings → Cubes,
 at 1100 px in light and dark (`data-theme`), in English;
-the Rooms and the Settings page also at 390 px,
+the Rooms page, ☰ open, My settings and System settings also at 390 px,
 and the Rooms page in German as well.
 A shot is framed by its subject, set beside each page in `PAGES`:
 the viewport (1100 × 800,
 at phone width 390 × 844) where the page is the subject (the Rooms page,
 the log, every phone shot), and the one element where one element is (a tile,
-the House panel, the Settings panel or one of its sections,
+the House panel, a settings page or one of its sections,
 the header with the found Cube), whole however tall, with 12 CSS px around it,
 so that the sizes differ from shot to shot.
 The PNGs it took before are removed first.

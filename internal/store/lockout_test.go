@@ -51,6 +51,17 @@ func TestLockout(t *testing.T) {
 	if d, _ := l.LockedFor(ctx, a); d != 5*time.Minute {
 		t.Fatal("success lifted the lockout")
 	}
+	// Forgive does: a sign-in by OPAQUE whose own start locked the key.
+	b := LockoutAddr("10.0.0.6")
+	fail(b)
+	fail(b)
+	fail(b)
+	if err := l.Forgive(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := l.LockedFor(ctx, b); d != 0 {
+		t.Fatalf("forgiven, still locked for %v", d)
+	}
 
 	// A restart keeps the lockout.
 	s.Close()

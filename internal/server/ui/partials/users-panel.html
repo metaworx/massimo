@@ -1,4 +1,4 @@
-<!-- A user of Settings → Users, the form that adds one, and a session or key row, users.js. -->
+<!-- A user of System settings → Users, the form that adds one, a user's sessions and keys with a row each, and My profile's form, users.js. -->
 <template id="tpl-user-panel">
   <details class="panel user-panel">
     <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
@@ -36,19 +36,6 @@
         <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
       </div>
     </form>
-    <div class="user-tokens-box">
-      <span class="muted small" data-i18n="users.tokens">Sessions and keys</span>
-      <ul class="user-tokens"></ul>
-      <div class="user-key-box hidden">
-        <p class="small" data-i18n="users.keyShown">The new key, shown once; send it as Authorization: Bearer &lt;key&gt;:</p>
-        <p class="mono user-key"></p>
-      </div>
-      <div class="field wide">
-        <label data-i18n="users.newKey">New API key</label>
-        <input type="text" name="label" class="field-control" autocomplete="off" spellcheck="false" maxlength="64" placeholder="what the key is for" data-i18n-attr="placeholder:users.keyLabel">
-      </div>
-      <div class="actions"><span class="actions-right"><button type="button" class="create-key" data-i18n="users.createKey">Create key</button></span></div>
-    </div>
   </details>
 </template>
 
@@ -57,6 +44,7 @@
     <div class="field wide">
       <label data-i18n="users.name">Name</label>
       <input type="text" name="name" class="field-control" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required placeholder="letters, digits, . _ - @" data-i18n-attr="placeholder:users.nameHint">
+      <p class="small cubes-msg field-hint name-msg hidden" role="status"></p>
     </div>
     <div class="field wide">
       <label data-i18n="users.displayName">Display name</label>
@@ -82,4 +70,30 @@
 
 <template id="tpl-token-row">
   <li><span class="flag mode token-kind"></span><span class="token-label"></span><span class="muted small token-used"></span><button type="button" class="revoke-token" data-i18n="users.revoke">Revoke</button></li>
+</template>
+
+<template id="tpl-user-tokens">
+  <div class="user-tokens-box">
+    <span class="muted small" data-i18n="users.tokens">Sessions and keys</span>
+    <ul class="user-tokens"></ul>
+    <div class="user-key-box hidden">
+      <p class="small" data-i18n="users.keyShown">The new key, shown once; send it as Authorization: Bearer &lt;key&gt;:</p>
+      <p class="mono user-key"></p>
+    </div>
+    <div class="field wide">
+      <label data-i18n="users.newKey">New API key</label>
+      <input type="text" name="label" class="field-control" autocomplete="off" spellcheck="false" maxlength="64" placeholder="what the key is for" data-i18n-attr="placeholder:users.keyLabel">
+    </div>
+    <div class="actions"><span class="actions-right"><button type="button" class="create-key" data-i18n="users.createKey">Create key</button></span></div>
+  </div>
+</template>
+
+<template id="tpl-profile-form">
+  <form class="profile-form">
+    <div class="field wide">
+      <label data-i18n="users.displayName">Display name</label>
+      <input type="text" name="display_name" class="field-control" autocomplete="off" spellcheck="false" maxlength="64">
+    </div>
+    <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span></div>
+  </form>
 </template>

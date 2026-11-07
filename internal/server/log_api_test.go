@@ -118,7 +118,19 @@ func TestLogFromStore(t *testing.T) {
 	if code, page := logOf(t, ts, "?limit=1000&before="+url.QueryEscape(last.Time.Add(time.Millisecond).Format(time.RFC3339Nano))); code != 200 || len(page) != len(all) {
 		t.Fatalf("before a millisecond after the last event: %d %d of %d", code, len(page), len(all))
 	}
-	for _, q := range []string{"?before=x", "?before=0", "?limit=0", "?limit=1001", "?limit=x", "?device=zz"} {
+	// since takes the events at or after a time, with before too.
+	if code, page := logOf(t, ts, "?limit=1000&since="+url.QueryEscape(first.Time.Format(time.RFC3339Nano))); code != 200 || len(page) != len(all) {
+		t.Fatalf("since the first event's time: %d %d of %d", code, len(page), len(all))
+	}
+	if code, page := logOf(t, ts, "?limit=1000&since="+url.QueryEscape(last.Time.Add(time.Millisecond).Format(time.RFC3339Nano))); code != 200 || len(page) != 0 {
+		t.Fatalf("since a millisecond after the last event: %d %d", code, len(page))
+	}
+	if code, page := logOf(t, ts, "?limit=1000&since="+url.QueryEscape(last.Time.Format(time.RFC3339Nano))+
+		"&before="+url.QueryEscape(last.Time.Add(time.Millisecond).Format(time.RFC3339Nano))); code != 200 || len(page) == 0 || page[len(page)-1].ID != last.ID {
+		t.Fatalf("since and before around the last event: %d %v", code, ids(page))
+	}
+	for _, q := range []string{"?before=x", "?before=0", "?limit=0", "?limit=1001", "?limit=x", "?device=zz", "?since=x", "?since=4711",
+		"?since=2026-11-06T21:00:00Z&before=2026-11-06T20:00:00Z"} {
 		if code, _ := logOf(t, ts, q); code != 400 {
 			t.Errorf("%s: %d", q, code)
 		}
@@ -285,6 +297,15 @@ func TestLogWithoutStore(t *testing.T) {
 	}
 	if len(older) == 0 && all[0].Time.Before(last) {
 		t.Fatalf("before=%v on the ring: nothing", last)
+	}
+	_, newer := logOf(t, ts, "?limit=1000&since="+url.QueryEscape(last.Format(time.RFC3339Nano)))
+	for _, e := range newer {
+		if e.Time.Before(last) {
+			t.Fatalf("since=%v on the ring: %+v", last, e)
+		}
+	}
+	if len(newer) == 0 || len(newer)+len(older) != len(all) {
+		t.Fatalf("since=%v on the ring: %d, and %d before, of %d", last, len(newer), len(older), len(all))
 	}
 	if code, _ := logOf(t, ts, "?limit=1001"); code != http.StatusBadRequest {
 		t.Fatalf("limit=1001: %d", code)

@@ -15,7 +15,7 @@ import (
 // does.
 func TestPasswordHash(t *testing.T) {
 	h, err := HashPassword("correct horse")
-	if err != nil || !strings.HasPrefix(h, "$argon2id$v=19$m=65536,t=1,p=4$") {
+	if err != nil || !strings.HasPrefix(h, "$argon2id$v=19$m=19456,t=2,p=1$") {
 		t.Fatalf("%q %v", h, err)
 	}
 	if !VerifyPassword(h, "correct horse") || VerifyPassword(h, "wrong") || VerifyPassword("", "correct horse") || VerifyPassword("$argon2id$v=19$m=65536,t=1,p=4$x$y", "correct horse") {

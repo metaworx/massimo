@@ -65,11 +65,13 @@ type Event struct {
 }
 
 // EventQuery selects a page of a Cube's events: those before an id or a
-// time, of a kind, of a device, at most Limit (MaxEventsPage).
+// time and at or after a time, of a kind, of a device, at most Limit
+// (MaxEventsPage).
 type EventQuery struct {
 	CubeID   int64
 	BeforeID int64     // 0: no bound
 	Before   time.Time // zero: no bound
+	Since    time.Time // zero: no bound; the events at or after it
 	Kind     string    // "": every kind
 	Device   string    // "": every device
 	Limit    int
@@ -402,8 +404,8 @@ cubes:
 }
 
 // Events returns a page of a Cube's events, newest first: at most
-// q.Limit (MaxEventsPage, 1 at least) before q.BeforeID and q.Before,
-// of q.Kind and q.Device where given.
+// q.Limit (MaxEventsPage, 1 at least) before q.BeforeID and q.Before and
+// not before q.Since, of q.Kind and q.Device where given.
 func (s *Store) Events(ctx context.Context, q EventQuery) ([]Event, error) {
 	limit := q.Limit
 	if limit <= 0 || limit > MaxEventsPage {
@@ -432,8 +434,9 @@ func (s *Store) Events(ctx context.Context, q EventQuery) ([]Event, error) {
 // eventsQuery is the SELECT of a page with only the terms q gives, every
 // value bound, so that SQLite walks one index of migration 0004 in id
 // order from the end instead of sorting all of the Cube's rows. A time
-// bound becomes an id bound first, the newest id before that time, and
-// stays a filter without its index (+time), which keeps the id order.
+// bound becomes an id bound first, the newest id before that time or
+// the oldest at or after it, and stays a filter without its index
+// (+time), which keeps the id order.
 func eventsQuery(q EventQuery, limit int) (string, []any) {
 	where, args := []string{"cube_id = ?"}, []any{q.CubeID}
 	if q.BeforeID > 0 {
@@ -442,6 +445,11 @@ func eventsQuery(q EventQuery, limit int) (string, []any) {
 	if !q.Before.IsZero() {
 		at := formatTime(q.Before)
 		where = append(where, "id <= (SELECT max(id) FROM events WHERE cube_id = ? AND time < ?)", "+time < ?")
+		args = append(args, q.CubeID, at, at)
+	}
+	if !q.Since.IsZero() {
+		at := formatTime(q.Since)
+		where = append(where, "id >= (SELECT min(id) FROM events WHERE cube_id = ? AND time >= ?)", "+time >= ?")
 		args = append(args, q.CubeID, at, at)
 	}
 	if q.Kind != "" {

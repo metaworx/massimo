@@ -41,7 +41,7 @@ async function openConfig(room, el, tab) {
   const ui = roomUI(room);
   ui.open = false; // one of device list and configuration at a time
   // The Room tab is a rename, which the role may not do: the temperatures then come first.
-  ui.config = { open: true, tab: tab || (hasCap("rename") ? "room" : "temps"), loading: true, cfg: null, prog: null, edit: {}, result: null };
+  ui.config = { open: true, tab: tab || (hasCap("rename") ? "room" : "temps"), loading: true, cfg: null, prog: null, edit: {}, result: null, sending: null };
   rerenderRoom(room);
   try {
     const [cfg, prog] = await Promise.all([
@@ -186,6 +186,44 @@ function renderConfig(el, room) {
     showResult(p, c.result.text, c.result.ok);
     body.appendChild(p);
   }
+  markConfigSending(body, c);
+}
+
+// markConfigSending draws every Send of the area off while one of its
+// writes runs (c.sending), the Send of the form that sent turning.
+function markConfigSending(body, c) {
+  if (!c.sending) return;
+  for (const b of body.querySelectorAll("form button[type=submit]")) {
+    if (b.closest("form").dataset.send === c.sending) setBusy(b, true);
+    else b.disabled = true;
+  }
+}
+
+// configWrite runs fn, a write of the configuration area, as the form
+// key (the form's data-send): every Send of the area is off meanwhile,
+// key's turning (markConfigSending), so that a double click sends one
+// radio command, and a write asked for while one runs sends nothing.
+// The tile is drawn again at the end, with the room as it is then.
+async function configWrite(room, c, key, fn) {
+  if (c.sending) return;
+  c.sending = key;
+  try {
+    await fn();
+  } finally {
+    c.sending = null;
+    const r = state.rooms.find((x) => x.id === room.id);
+    if (r && configUI(r) === c) rerenderRoom(r);
+  }
+}
+
+// configForm is a form of the area that sends as key through
+// configWrite; whenChanged, given after its Send is in it, keeps the
+// Send off while there is nothing to send (sendWhenChanged).
+function configForm(room, c, key, send) {
+  const form = formEl(() => configWrite(room, c, key, send), "cfg-form");
+  form.dataset.send = key;
+  form.whenChanged = (changed, lazy) => sendWhenChanged(form, () => !c.sending && changed(), { lazy });
+  return form;
 }
 
 // renderTabs builds the configuration area's sub-navigation from its
@@ -210,7 +248,7 @@ function renderTabs(room, c) {
 // --- room tab ---------------------------------------------------------
 
 function renderRoomTab(room, c) {
-  const form = formEl(() => sendRoomName(room, c), "cfg-form");
+  const form = configForm(room, c, "room", () => sendRoomName(room, c));
   const name = document.createElement("input");
   name.type = "text";
   name.value = c.edit.name;
@@ -223,6 +261,7 @@ function renderRoomTab(room, c) {
   const hint = textEl("p", t("cfg.nameHint", { n: NAME_BYTES }), "muted small");
   form.appendChild(hint);
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send") }));
+  form.whenChanged(() => c.edit.name.trim() !== room.name);
   return form;
 }
 
@@ -248,7 +287,7 @@ async function sendRoomName(room, c) {
 // --- temperatures tab -------------------------------------------------
 
 function renderTempsTab(room, c) {
-  const form = formEl(() => sendRoomConfig(room, c, TEMP_FIELDS, t("cfg.tab.temps")), "cfg-form");
+  const form = configForm(room, c, "temps", () => sendRoomConfig(room, c, TEMP_FIELDS, t("cfg.tab.temps")));
   const e = c.edit.common;
   const set = (k) => (v) => {
     e[k] = v;
@@ -261,6 +300,7 @@ function renderTempsTab(room, c) {
   form.appendChild(fieldRow(t("cfg.minTemp"), numberInput(e.min_setpoint, MIN_TEMP, MAX_TEMP, STEP, set("min_setpoint")), { unit: "°C", help: "minTemp" }));
   form.appendChild(sourceNote(c));
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send") }));
+  form.whenChanged(() => Object.keys(changedFields(c, TEMP_FIELDS)).length > 0, true);
   return form;
 }
 
@@ -317,7 +357,7 @@ function renderDevicesTab(room, c) {
   const wrap = elem("div");
   const thermostats = room.devices.filter(isThermostat);
   if (thermostats.length) {
-    const form = formEl(() => sendRoomConfig(room, c, VALVE_FIELDS, t("cfg.deviceSettings")), "cfg-form");
+    const form = configForm(room, c, "valves", () => sendRoomConfig(room, c, VALVE_FIELDS, t("cfg.deviceSettings")));
     const e = c.edit.common;
     const set = (k) => (v) => {
       e[k] = v;
@@ -333,6 +373,7 @@ function renderDevicesTab(room, c) {
     form.appendChild(fieldRow(t("cfg.maxValve"), numberInput(e.max_valve_pct, 0, 100, 1, set("max_valve_pct")), { unit: "%", help: "maxValve" }));
     form.appendChild(fieldRow(t("cfg.valveOffset"), numberInput(e.valve_offset_pct, 0, 100, 1, set("valve_offset_pct")), { unit: "%", help: "valveOffset" }));
     form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send") }));
+    form.whenChanged(() => Object.keys(changedFields(c, VALVE_FIELDS)).length > 0, true);
     wrap.appendChild(form);
   }
   const h = textEl("h4", t("cfg.devices"));
@@ -347,7 +388,8 @@ function renderDevicesTab(room, c) {
 // Remove from the Cube (capability structure), asked in the row.
 function renderDeviceForm(room, c, d) {
   const e = c.edit.devices[d.rf_address];
-  const form = formEl(() => sendDevice(room, c, d), "cfg-form");
+  const key = "device:" + d.rf_address;
+  const form = configForm(room, c, key, () => sendDevice(room, c, d));
   form.className += " cfg-device";
   form.appendChild(elem("div", "device-main",
     textEl("span", d.name || d.rf_address, "device-name"),
@@ -386,7 +428,7 @@ function renderDeviceForm(room, c, d) {
     const text = t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id });
     form.appendChild(confirmBox(text, { yes: t("cfg.move"), no: t("action.keep") }, () => {
       e.confirmMove = false;
-      return sendDevice(room, c, d, true);
+      return configWrite(room, c, key, () => sendDevice(room, c, d, true));
     }, () => {
       e.confirmMove = false;
       e.room_id = room.id;
@@ -401,13 +443,17 @@ function renderDeviceForm(room, c, d) {
   if (e.confirmRemove) {
     form.appendChild(confirmBox(t("device.removeConfirm", { device: label }), { yes: t("device.remove"), no: t("action.keep") }, () => {
       e.confirmRemove = false;
-      return removeDeviceOfRoom(room, c, d);
+      return configWrite(room, c, "remove", () => removeDeviceOfRoom(room, c, d));
     }, () => {
       e.confirmRemove = false;
       rerenderRoom(room);
     }));
   }
   form.appendChild(formFooter({ submit: t("action.send"), extra: [remove] }));
+  form.whenChanged(() => {
+    const { meta, cfg } = deviceChanges(room, c, d);
+    return Object.keys(meta).length + Object.keys(cfg).length > 0;
+  }, true);
   return form;
 }
 
@@ -428,30 +474,38 @@ async function removeDeviceOfRoom(room, c, d) {
   rerenderRoom(again);
 }
 
-// sendDevice writes what changed on a device: name and room through
-// PUT /devices/{rf}, offset and display mode through its config.
+// deviceChanges is what a device's Send writes: meta, the name and the
+// room, through PUT /devices/{rf}; cfg, the offset and the display
+// mode, through its config; loaded is the device's configuration as
+// loaded, which a write updates.
+function deviceChanges(room, c, d) {
+  const e = c.edit.devices[d.rf_address];
+  const meta = {};
+  const name = e.name.trim();
+  if (name && name !== (d.name || "")) meta.name = name;
+  if (e.room_id !== room.id) meta.room_id = e.room_id;
+  const cfg = {};
+  const loaded = ((c.cfg && c.cfg.devices) || []).find((x) => x.rf_address === d.rf_address) || {};
+  if (isThermostat(d) && e.temp_offset !== undefined && Number(e.temp_offset) !== Number(loaded.temp_offset)) cfg.temp_offset = Number(e.temp_offset);
+  if (d.type === "wall_thermostat" && e.display_actual !== undefined && e.display_actual !== loaded.display_actual) cfg.display_actual = e.display_actual;
+  return { meta, cfg, loaded };
+}
+
+// sendDevice writes what changed on a device (deviceChanges); a move to
+// another room is asked first.
 async function sendDevice(room, c, d, moveConfirmed) {
   const e = c.edit.devices[d.rf_address];
   const label = d.name || d.rf_address;
-  const meta = {};
-  const name = e.name.trim();
-  if (name && name !== (d.name || "")) {
-    if (byteLength(name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.devNameTooLong", { name: label, n: NAME_BYTES }), false);
-    meta.name = name;
-  }
-  if (e.room_id !== room.id) {
+  const { meta, cfg, loaded } = deviceChanges(room, c, d);
+  if (meta.name !== undefined && byteLength(meta.name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.devNameTooLong", { name: label, n: NAME_BYTES }), false);
+  if (meta.room_id !== undefined) {
     if (!moveConfirmed) {
       e.confirmMove = true;
       rerenderRoom(room);
       return;
     }
-    meta.room_id = e.room_id;
     if (!hasCap("configure")) meta.copy = false; // the copy of the room's settings needs configure
   }
-  const cfg = {};
-  const loaded = ((c.cfg && c.cfg.devices) || []).find((x) => x.rf_address === d.rf_address) || {};
-  if (isThermostat(d) && e.temp_offset !== undefined && Number(e.temp_offset) !== Number(loaded.temp_offset)) cfg.temp_offset = Number(e.temp_offset);
-  if (d.type === "wall_thermostat" && e.display_actual !== undefined && e.display_actual !== loaded.display_actual) cfg.display_actual = e.display_actual;
   if (Object.keys(meta).length === 0 && Object.keys(cfg).length === 0) return setConfigResult(room, c, t("cfg.nothingChanged", { label }), true);
   setConfigResult(room, c, t("result.waiting", { label }), true);
   const lines = [];
@@ -510,7 +564,7 @@ function clockOf(minutes) {
 function renderProgramTab(room, c) {
   const p = c.prog;
   sortPoints(p.days[p.day]);
-  const form = formEl(() => sendProgram(room, c), "cfg-form");
+  const form = configForm(room, c, "program", () => sendProgram(room, c));
   const days = elem("div", "day-bar week prog-days");
   days.setAttribute("role", "group");
   days.setAttribute("aria-label", t("prog.dayToEdit"));
@@ -554,6 +608,7 @@ function renderProgramTab(room, c) {
     rerenderRoom(room);
   });
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send"), extra: [resetDay, resetAll] }));
+  form.whenChanged(() => dirtyDays(p).length > 0, true);
   markProgram(form, p);
   return form;
 }
@@ -757,7 +812,7 @@ async function sendProgram(room, c) {
 function renderCopyTab(room, c) {
   if (!c.copy) c.copy = { rooms: new Set(), temps: true, program: false, radiator: true };
   const k = c.copy;
-  const form = formEl(() => sendCopy(room, c), "cfg-form");
+  const form = configForm(room, c, "copy", () => sendCopy(room, c));
   form.appendChild(textEl("p", t("copy.intro"), "muted small"));
   const others = state.rooms.filter((r) => r.id !== room.id && roomThermostat(r));
 
@@ -800,6 +855,7 @@ function renderCopyTab(room, c) {
   settings.setAttribute("aria-label", t("copy.settingsAria"));
   form.appendChild(settings);
   form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("copy.send") }));
+  form.whenChanged(() => k.rooms.size > 0 && (k.temps || k.radiator || (k.program && !!c.prog)));
   return form;
 }
 

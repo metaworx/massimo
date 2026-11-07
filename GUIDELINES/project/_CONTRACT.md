@@ -47,6 +47,7 @@ not this block:
 - `go.sum`
 - `Makefile`
 - `.github/**`
+- `third_party/**`
 - `:!docs/**`
 - `:!tools/**`
 - `:!GUIDELINES/**`

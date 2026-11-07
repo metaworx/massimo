@@ -585,6 +585,10 @@ and a step row per engine command beneath it, with `parent_id`,
 `idempotency_key`, `state`, `status`, `request` and `result`;
 NOTE StoreUsers v1.0 of the plan: one table, `commands.keep_days` the retention)
 and `audit.command_id`, additively.
+`0007_opaque.sql` adds `users.opaque_record` and `users.opaque_ksf`,
+the record of a password of `auth_version` 2 and its key stretching (section 6,
+"The sign-in by OPAQUE"), additively:
+a binary of before reads such a user as one with keys only.
 Rules:
 
 - A migration is additive when it only adds tables,
@@ -767,9 +771,88 @@ Sessions last 30 days and are extended on use (`expires_at` moved,
 at most once an hour);
 the owner sees every session and key under Settings → Users and revokes them there.
 Passwords are hashed with argon2id from `golang.org/x/crypto`, pure Go,
-one more module;
-the parameters are the library's recommended ones and are stored in the PHC
-string so they can rise later.
+one more module,
+with OWASP's parameters on every box:
+19 MiB, two passes, one lane (`m=19456,t=2,p=1`),
+so that a hash costs the same wherever the store goes.
+The first releases used the library's 64 MiB and one pass on four lanes,
+which took 4.5 s a hash and 64 MiB an attempt on a Raspberry Pi 1 (one core,
+426 MB, measured on 2026-11-07);
+the new ones take about 55 % of that time and 30 % of that memory
+(`BenchmarkPassword` in `internal/store`, on one core).
+The PHC string carries the parameters, so an old hash still verifies,
+and a sign-in that matches one hashes the password again with these:
+an old hash goes at its user's next sign-in, at the cost of one hash more then.
+Only `password_hash` is written, as `last_login_at` is,
+and only where it is still the old one;
+the row keeps its version and update time, since the password is the same.
+A stored string that asks for more than 256 MiB, 16 passes or 16 lanes
+is refused rather than allocated.
+A hash is the cost of the call, so the answers that need none come first:
+a user add finds a taken name or an unknown role,
+and a password change a user that is not there, before it hashes.
+
+### The sign-in by OPAQUE
+
+A user of `auth_version` 2 signs in by OPAQUE (RFC 9807),
+and the server never sees the password: the client blinds it,
+the server evaluates it under a key of its own for the user,
+and the client runs argon2id over the result, in the browser,
+at the parameters above, and keeps the password.
+The server keeps a registration record in `users.opaque_record` (192 bytes:
+the client's public key, a masking key and an envelope) with its argon2id
+parameters in `users.opaque_ksf`, and `password_hash` empty;
+nothing it keeps is a hash of anything the client sends.
+A guess against a copy of the store needs the server's keys too,
+`opaque.key` in the data directory (mode 0600,
+made at the first open as `node.key` is: the AKE private key and the OPRF seed),
+and then costs an argon2id a guess, as a hash does.
+Lost, `opaque.key` makes every record useless and its user needs a password set again,
+so the box's backup keeps the data directory, not the file alone.
+The OPRF key of a user follows from the seed and the login name,
+which does not change, so a name meets the same key with a record,
+with a hash of version 1 or with no user at all;
+a name without a record is answered from a fake one of the same shape,
+and the start does not tell which names exist.
+The suite is ristretto255-SHA512 with 3DH,
+`github.com/bytemare/opaque` on the server and `@serenity-kit/opaque`
+(`opaque-ke` in WebAssembly) in the browser.
+`bytemare/ksf`, which the Go module pulls in, does not build for 32-bit
+targets in its release 0.5.0; `third_party/bytemare-ksf` is that release with
+the two lines fixed, through a `replace` in `go.mod`, until a release has it.
+
+What it costs the server: a start (KE1 to KE2) takes 0.76 ms and 20 KB on one
+amd64 core and 5.1 ms on a 32-bit build, the finish a MAC check
+(`BenchmarkOpaqueLogin` in `internal/store`),
+so about 0.1 s on the Raspberry Pi 1 by the ratio of section 6's hashes,
+against about 2 s and 19 MiB for a hash.
+The sign-in takes two requests (docs/api-v1.md, "The sign-in by OPAQUE"),
+and so does a registration: the server answers the client's request,
+keeping nothing, and the record arrives with the user add or the password
+change in place of `password`.
+One's own password change proves the current one with a sign-in whose finish
+answers a proof, good once for five minutes, in place of a session.
+
+A user of version 1 moves to version 2 at the next sign-in in the browser.
+The browser cannot know a user's version, and the start does not say it,
+so the start of a user of version 1 is answered from a fake record and the
+browser cannot finish it;
+while the box takes the password sign-in, the browser then sends the password,
+over TLS, with the start's login, which the sign-in takes over,
+so the attempt counts once.
+The answer adds a proof, good once,
+and the browser registers the same password and sets the record with it:
+the hash is gone, and the password crosses no more.
+That is the one time an existing password crosses;
+the other is a mistyped password of a user of version 2,
+which the browser cannot tell from one of version 1 while the box takes the
+password sign-in.
+The setting `auth.password_login` (true by default) ends both:
+off, `POST /api/v1/login` answers `403`, the start says so,
+and every user signs in by OPAQUE alone.
+System settings → Users shows the switch to a holder of `settings`,
+with how many users still have a hash,
+who cannot sign in once it is off until a password is set for them.
 
 ### The commands
 
@@ -783,6 +866,14 @@ These are the only commands that open the store;
 they take `-data` like `serve` and run as the service user
 (`sudo -u massimo massimo -data /var/lib/massimo user add anna`),
 beside a running server thanks to WAL.
+`user add` and `user passwd` set a password of version 2:
+both halves of the registration run in the command,
+with the server's keys from the data directory,
+and the key stretching runs as the browser's library runs it,
+with `opaque-ke`'s salt of 16 zero bytes and output of 64,
+which RFC 9807 leaves open,
+so that the record opens in the browser;
+`tools/ui-test` checks that with a user the command added.
 The audit records them with `user_id` NULL and `remote` `cli`.
 
 ### The lockout
@@ -793,6 +884,29 @@ for a login, against the user name;
 ten in a minute lock for five minutes with `429` and `Retry-After`.
 The counters survive a restart,
 which closes the loophole where a restart cleared them.
+
+The counters see a failure only once its hash is done,
+so attempts sent together would all pass them.
+An address therefore signs in once at a time:
+a login from an address whose sign-in is still being checked is `429`
+with `Retry-After: 1`, which counts as no failure,
+so that the lockout counts each attempt before the next one starts;
+the web UI's dialog sends one at a time.
+A sign-in by OPAQUE holds its address from the start to the finish,
+at most a minute, and counts as a failure at the start:
+the client can tell from the start's answer alone whether its password was right,
+so a start never finished is a guess all the same.
+The finish that proves the password clears the counters as a password sign-in does,
+and lifts a lockout that its own start set.
+And the hashes are bounded besides.
+At most one a core, four at the most, run at once, and eight more wait;
+a check, a user add or a password change beyond them
+is answered `503` with `Retry-After: 5`.
+So a box holds at most that many 19 MiB blocks for passwords in use at once,
+and about as many again freed but not yet collected:
+eight checks sent together peak at 38 MiB of heap with one slot,
+152 MiB without the bound, and eight times 64 MiB with the parameters
+of the first releases (`BenchmarkPasswordChecksAtOnce` in `internal/store`).
 
 ### Later: ownership per Cube
 
@@ -1210,18 +1324,20 @@ From docs/server.md, the later questions:
 14. **Tombstones, `version`,
     `origin` and the node identity from version 1** (recommended,
     docs/server.md, "What version 1 prepares", items 2 and 3).
-15. **The password flow prepared for client-side derivation** with
-    `auth_version` (recommended, docs/server.md, "What version 1 prepares",
+15. Taken: the password flow moved to the client with `auth_version` 2,
+    the sign-in by OPAQUE (section 6; docs/server.md, "What version 1 prepares",
     item 6).
 16. Taken: `commands` with `Idempotency-Key` in stage (b) (docs/server.md,
     "What version 1 prepares", item 7),
     the engine writing the states of each step through an observer,
     one table with `commands.keep_days` rather than a history table.
-17. **The browser's key derivation when end to end comes**:
-    a WebAssembly argon2id module in the no-build UI,
-    or PBKDF2 from WebCrypto with a high count.
-    Not needed until then;
-    noted so that the UI's "no dependencies" rule is bent knowingly, if it is.
+17. Taken: the browser's key derivation is a WebAssembly module in the no-build UI,
+    `@serenity-kit/opaque` vendored as `ui/vendor/opaque.js`,
+    with OPAQUE's argon2id in it,
+    the UI's "no dependencies" rule bent knowingly for it (docs/ui.md,
+    "How the page is built"); PBKDF2 from WebCrypto fits neither OPAQUE library.
+    Its export key is the wrapping key's source when end to end comes (docs/server.md,
+    "The key scheme").
 18. **The trust anchor for the page** (docs/server.md, "Trusting the code"):
     the web app installed from the edge on the LAN with the service worker as
     the verifier, the app shells, or both.
