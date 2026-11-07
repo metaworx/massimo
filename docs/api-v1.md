@@ -1606,7 +1606,11 @@ event: disconnected
 data: {"kind":"disconnected","error":"read tcp …: i/o timeout","time":"…"}
 ```
 
-Kinds: `connected`, `disconnected` (the server reconnects by itself),
+Kinds: `connected`,
+`disconnected` (once per loss: a connection that had its greeting ends,
+or the first attempt fails after the start or after a reconnect;
+the server retries by itself, without an event for each attempt,
+and sends `connected` when the Cube is back),
 `hello` (new budget or clock from the Cube),
 `metadata` (rooms or names changed), `config` (a device configuration arrived),
 `state`, `pairing_started`, `paired` (with `paired`, the device that joined),

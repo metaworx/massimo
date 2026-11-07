@@ -37,6 +37,10 @@ the next minor, a fix counts the suffix up.
   while another program has it open, and logs `store closed`
   (`docs/store.md` section 3).
 
+- A lost Cube is logged and stored as `disconnected` once, not at
+  every retry, and its return logged with how long it was down
+  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added
