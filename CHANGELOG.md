@@ -118,6 +118,10 @@ the next minor, a fix counts the suffix up.
 - The web UI's Log button shows a sheet, since three lines alone read as
   a menu (`docs/ui.md`, "Header").
 
+- CI runs the race detector on `internal/server`, `store`, `cubelan` and
+  `proxy` in a Race job beside Vet and test; `make race` runs it
+  locally (`GUIDELINES/project/CI.md`, section 2).
+
 ### Fixed
 
 - The web UI's Clear in the log sets the filter, the kind and the device

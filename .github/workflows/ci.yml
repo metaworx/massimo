@@ -66,6 +66,23 @@ jobs:
       - name: Cross build
         run: make cross
 
+  # The race detector (make race, GUIDELINES/project/CI.md, section 2) on
+  # the packages whose goroutines meet, beside Vet and test rather than in
+  # it, so that neither waits for the other.
+  race:
+    name: Race
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: make race
+        run: make race
+
   # The fuzz targets (make fuzz, GUIDELINES/project/CI.md, section 2), on
   # a push to main only, 10 s a target: a pull request runs their seeds
   # in Vet and test. A crash's input is kept as the artifact fuzz-crash,
