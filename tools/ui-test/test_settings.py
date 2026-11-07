@@ -7,7 +7,7 @@ without System settings' capabilities has no ⚙."""
 import json
 
 from conftest import api_call
-from helpers import PANEL_TEXTS, VIEWER, assert_busy, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import PANEL_TEXTS, VIEWER, assert_busy, css_hidden, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 
 def test_settings_open(page, case):
@@ -130,7 +130,7 @@ def test_no_system_settings_without_their_capabilities(page, case):
         show_view(page, "system")
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-system')", 5), "no System settings for a viewer"
-        assert page.locator("#view-settings").is_hidden(), "no ⚙"
+        assert css_hidden(page, "#view-settings") and css_hidden(page, "#menu-system"), "no ⚙, and nothing in ☰"
         assert page.locator("#system").is_hidden() and page.locator(".room").first.is_visible(), \
             "System settings, open as the viewer signs in, gives way to Rooms"
         page.evaluate("showView('system')")

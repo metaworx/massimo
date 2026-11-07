@@ -57,6 +57,8 @@
   "nav.userTitle": "Kto jest zalogowany",
   "nav.prefs": "Moje ustawienia",
   "nav.profile": "Mój profil",
+  "nav.more": "więcej stron",
+  "nav.moreTitle": "Więcej stron",
   "budget.server": "Serwer",
   "budget.built": "Zbudowano z",
   "budget.started": "Serwer uruchomiony",

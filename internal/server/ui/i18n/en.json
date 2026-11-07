@@ -54,6 +54,8 @@
   "nav.userTitle": "Who is signed in",
   "nav.prefs": "My settings",
   "nav.profile": "My profile",
+  "nav.more": "more pages",
+  "nav.moreTitle": "More pages",
   "budget.server": "Server",
   "budget.built": "Built with",
   "budget.started": "Server started",

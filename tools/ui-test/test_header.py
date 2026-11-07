@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""The header: the log button's symbol, the 👤 menu, and the page shown
-in the address."""
+"""The header: its order at full width and ☰ on a narrow screen, the log
+button's symbol, the 👤 menu, and the page shown in the address."""
 import json
 
-from helpers import VIEWER, open_user_menu, show_view, wait_until
+from helpers import VIEWER, css_hidden, open_user_menu, show_view, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -133,6 +133,55 @@ def test_an_address_the_user_may_not_open_shows_rooms(page, case):
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "location.hash === ''", 5), "the address drops System settings"
-        assert page.locator("#system").is_hidden() and page.locator("#view-settings").is_hidden(), "Rooms, and no ⚙"
+        assert page.locator("#system").is_hidden() and css_hidden(page, "#view-settings"), "Rooms, and no ⚙"
     finally:
         page.unroute("**/api/v1/me")
+
+
+def box(page, selector):
+    return page.locator(selector).bounding_box()
+
+
+def active(page, selector):
+    return page.locator(selector).evaluate("(e) => e.classList.contains('active')")
+
+
+def test_header_order_and_the_narrow_header(page, case):
+    """At full width the brand and the time of the last update with ↻
+    beside it at the left (the time under the brand where a long version
+    leaves no room), then on the first line the connection and the Cube
+    choice, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰ beside the
+    brand and the connection with the Cube choice on a line of their own
+    under them; ☰ holds Log and System settings, opens each, and is
+    highlighted while one of them is shown."""
+    order = ["h1", "#updated", "#refresh-btn", "#connection", "#cube-select", "#view-tiles", "#user-menu summary"]
+    b = {sel: box(page, sel) for sel in order}
+    assert b["#updated"]["x"] < b["#refresh-btn"]["x"], "↻ after the time it renews"
+    assert b["#connection"]["x"] < b["#cube-select"]["x"], f"the connection in front of the Cube choice: {b}"
+    assert abs(b["#connection"]["y"] + b["#connection"]["height"] / 2 - b["#cube-select"]["y"] - b["#cube-select"]["height"] / 2) < 8, \
+        f"on one line: {b}"
+    assert b["#view-tiles"]["x"] < b["#user-menu summary"]["x"], "🏠 left of 👤"
+    if case.width >= 600:
+        right = ["#connection", "#cube-select", "#view-tiles", "#user-menu summary", "#view-log", "#view-settings"]
+        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-settings")})
+        xs = [b[sel]["x"] for sel in right]
+        assert xs == sorted(xs), f"left to right in this order: {right}"
+        assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#connection"]["x"], \
+            f"the brand and the time left of the Cube choice: {b}"
+        first_line = b["h1"]["y"] + b["h1"]["height"]
+        assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
+        assert page.locator("#view-log").is_visible() and page.locator("#view-settings").is_visible(), "📄 and ⚙ shown"
+        assert page.locator("#nav-menu").is_hidden(), "no ☰"
+        return
+    assert page.locator("#nav-menu").is_visible(), "☰ shown"
+    assert page.locator("#view-log").is_hidden() and page.locator("#view-settings").is_hidden(), "📄 and ⚙ in it"
+    assert b["#user-menu summary"]["x"] < box(page, "#nav-menu summary")["x"], "🏠 👤 ☰"
+    assert b["#cube-select"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
+    for view, section in (("log", "#logview"), ("system", "#system")):
+        page.locator("#nav-menu summary").click()
+        page.locator("#menu-" + view).click()
+        page.locator(section).wait_for(state="visible")
+        assert page.locator("#nav-menu").get_attribute("open") is None, "the choice closes ☰"
+        assert active(page, "#nav-menu summary"), f"☰ highlighted while {view} is shown"
+    show_view(page, "tiles")
+    assert not active(page, "#nav-menu summary"), "and not on Rooms"

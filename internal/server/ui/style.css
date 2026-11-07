@@ -98,28 +98,50 @@ body:not(.expert) .expert-only { display: none !important; }
   border-bottom: 1px solid var(--line);
   margin-bottom: 16px;
 }
-/* First line: everything that may wrap on the left, the refresh button
-   and the page icons pinned to the right edge. */
+/* First line, a grid: at the left the brand, the time of the last update
+   with ↻ beside it and the Cube's clock, wrapping where they must; then
+   the connection and the Cube choice; at the right the pages. Below
+   600 px the Cube choice takes a line of its own under the other two,
+   and ☰ holds Log and System settings. */
 .top-line {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "left cube nav";
+  align-items: start;
+  gap: 8px 16px;
   width: 100%;
 }
 .top-left {
+  grid-area: left;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 20px;
+  gap: 4px 16px;
   min-width: 0;
-  flex: 1 1 auto;
+  min-height: 36px;
 }
-.top-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.top-line > .cube { grid-area: cube; min-height: 36px; }
+.top-line > .nav { grid-area: nav; justify-self: end; }
+.updated-line { display: inline-flex; align-items: center; gap: 6px; }
+.icon-btn.refresh-btn { height: 30px; padding: 0 8px; font-size: 1.05rem; line-height: 1; }
+#nav-menu { display: none; }
+@media (max-width: 599px) {
+  .top-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "left nav" "cube cube"; }
+  #view-log, #view-settings { display: none; }
+  #nav-menu { display: block; }
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .nav { display: inline-flex; gap: 4px; }
 .nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 36px; padding: 0; }
 .nav-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-/* The header's menus (👤): the summary drawn as a page button, the items
+/* The header's menus (👤, ☰): the summary drawn as a page button, the items
    dropping down from the header's right edge, so that they fit a phone. */
 .nav { position: relative; }
 .menu.nav-menu { position: static; }
@@ -142,7 +164,10 @@ body:not(.expert) .expert-only { display: none !important; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
-#cube-select { max-width: min(100%, 60vw); min-width: 0; }
+#cube-select { max-width: min(100%, 320px); min-width: 0; }
+@media (max-width: 599px) {
+  #cube-select { flex: 1 1 160px; max-width: 100%; }
+}
 #cube-search.bad { color: var(--bad); }
 /* Cubes found on the LAN but not configured, with the env lines */
 .cube-found { margin-top: 8px; font-size: 0.9rem; max-width: 100%; }

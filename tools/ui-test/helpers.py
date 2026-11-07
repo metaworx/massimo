@@ -123,6 +123,12 @@ def assert_busy(page, selector, what):
     assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
 
 
+def css_hidden(page, selector):
+    """Whether the page's style hides an element (display none), shown or
+    not where it sits: an item of a closed menu is not."""
+    return page.locator(selector).evaluate("(e) => getComputedStyle(e).display === 'none'")
+
+
 def open_user_menu(page):
     """The 👤 menu in the header, open."""
     menu = page.locator("#user-menu")
@@ -147,16 +153,23 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}
 VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs"}
+VIEW_FOLDED = {"log": "#menu-log", "system": "#menu-system"}  # in ☰ below 600 px
 VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "system": "#system"}
 
 
 def show_view(page, view):
     """A page of the main area, opened as a user opens it: Rooms, the log
-    and System settings with their button in the header, My profile and
-    My settings from the 👤 menu."""
+    and System settings with their button in the header, or on a narrow
+    screen the log and System settings from ☰, My profile and My settings
+    from the 👤 menu."""
     if view in VIEW_MENU:
         open_user_menu(page)
         page.locator(VIEW_MENU[view]).click()
+    elif view in VIEW_FOLDED and page.locator("#nav-menu").is_visible():
+        menu = page.locator("#nav-menu")
+        if menu.get_attribute("open") is None:
+            menu.locator("summary").click()
+        page.locator(VIEW_FOLDED[view]).click()
     else:
         page.locator(VIEW_BUTTON[view]).click()
     page.locator(VIEW_SECTION[view]).wait_for(state="visible")

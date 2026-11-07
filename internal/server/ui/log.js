@@ -361,7 +361,8 @@ function logCubeChanged() {
 // profile ("profile"), My settings ("prefs") and System settings
 // ("system"), each with its section and, where it has one, its button in
 // the header; My profile and My settings open from the 👤 menu, which is
-// highlighted while one of them is shown. The tiles keep their state
+// highlighted while one of them is shown, as ☰ is for Log and System
+// settings, which it holds on a narrow screen. The tiles keep their state
 // while hidden. The page shown is in the address (VIEW_HASH), Rooms
 // without one, so that a reload opens it again and the browser's back
 // and forward move between the pages.
@@ -422,6 +423,7 @@ function showView(view, address = "push") {
     else $(id).removeAttribute("aria-current");
   }
   $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs");
+  $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
   if (view === "log") {
     fillLogSelects();
     loadLog();
@@ -443,6 +445,9 @@ function initLog() {
   $("view-settings").addEventListener("click", () => showView("system"));
   $("menu-profile").addEventListener("click", () => showView("profile"));
   $("menu-prefs").addEventListener("click", () => showView("prefs"));
+  $("menu-log").addEventListener("click", () => showView("log"));
+  $("menu-system").addEventListener("click", () => showView("system"));
+  dropdown($("nav-menu"));
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showView(viewOfHash(location.hash), "none"));
   dropdown($("user-menu"));

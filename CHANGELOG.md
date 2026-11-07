@@ -33,6 +33,10 @@ the next minor, a fix counts the suffix up.
   it again and back and forward move between pages (`docs/ui.md`,
   "Header").
 
+- The web UI's header reads the time with ↻, then the Cube choice, then
+  the pages; below 600 px ☰ holds Log and System settings (`docs/ui.md`,
+  "Header").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

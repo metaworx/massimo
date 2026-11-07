@@ -20,9 +20,18 @@ so the session never appears in a URL.
 
 ## Header
 
+The header's line reads, from the left:
+**Massimo** with the server's version, the time of the last update with **↻**,
+the Cube's clock;
+then whether the server is connected to the Cube, and the Cube choice;
+then the house, **👤** and the other page buttons.
+On a screen narrower than 600 px the Cube choice takes a line of its own,
+and **☰** beside the house and 👤 holds **Log** and **System settings**,
+highlighted while one of them is shown.
+
 - **Cube**:
   chooses the Cube when the server has several.
-  Next to it you see whether the server is connected to that Cube.
+  In front of it you see whether the server is connected to that Cube.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
@@ -41,8 +50,8 @@ so the session never appears in a URL.
   "Cube variables").
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **The Cube's clock** and the time of the last update.
-- **↻** asks the server for the current state now.
+- **The time of the last update**, **↻**, which asks the server for the
+  current state now, and **the Cube's clock**.
 - **👤** drops down who is signed in, with the role,
   or the API key and whose it is;
   **My profile** and **My settings**, which open those pages,

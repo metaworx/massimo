@@ -81,6 +81,7 @@ the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
 `open_user_menu` and `sign_out` for the header's 👤 menu,
 and `show_view`, which opens a page as a user does:
 Rooms, the log and System settings with their header button,
+or the log and System settings from ☰ on a narrow screen,
 My profile and My settings from the 👤 menu.
 
 The four cases share the one server,
@@ -114,7 +115,11 @@ what a test stores in the browser goes with its context.
   a room's ⋯ and 👤 are one open at a time;
   each page puts its name into the address, back and forward move between
   them, and a reload opens the log and My profile again with the header in view;
-  System settings in a viewer's address (`/me` stubbed) shows Rooms.
+  System settings in a viewer's address (`/me` stubbed) shows Rooms;
+  at 1100 px the header is one line in its order,
+  the brand, the time with ↻, the connection, the Cube choice, 🏠 👤 📄 ⚙;
+  at 390 px 🏠 👤 ☰ with the Cube choice under them,
+  and ☰ opens the log and System settings and is highlighted on them.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

@@ -56,6 +56,8 @@
   "nav.userTitle": "Qui est connecté",
   "nav.prefs": "Mes réglages",
   "nav.profile": "Mon profil",
+  "nav.more": "autres pages",
+  "nav.moreTitle": "Autres pages",
   "budget.server": "Serveur",
   "budget.built": "Compilé avec",
   "budget.started": "Serveur démarré",
