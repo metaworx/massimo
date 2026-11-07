@@ -61,6 +61,9 @@ the next minor, a fix counts the suffix up.
 - A DNS-01 hook whose child keeps its output open no longer holds the
   order past the hook's two minutes; the child ends with the hook.
 
+- `massimo install -no-update-helper` on Linux disables and removes the
+  update helper an earlier install put there (packaging/README.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

@@ -460,3 +460,51 @@ func TestInstallListenKeptAcrossInstalls(t *testing.T) {
 		t.Fatal("drop-in directory left behind")
 	}
 }
+
+// A reinstall with -no-update-helper takes the helper out: its units and
+// their drop-in go, and the path unit is disabled, so that a request
+// file no longer starts a root update.
+func TestReinstallWithoutHelperRemovesIt(t *testing.T) {
+	root, bin := setup(t)
+	if err := Install(Options{Root: root, Binary: bin, Listen: "0.0.0.0:8099", Out: &bytes.Buffer{}, Run: (&recorder{}).run}); err != nil {
+		t.Fatal(err)
+	}
+	units := []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", HealthDropIn}
+	for _, f := range units {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			t.Fatalf("first install: %v", err)
+		}
+	}
+	rec := &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, NoUpdateHelper: true, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range units {
+		if _, err := os.Stat(filepath.Join(root, f)); err == nil {
+			t.Errorf("%s left after -no-update-helper", f)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.Dir(HealthDropIn))); err == nil {
+		t.Errorf("the empty drop-in directory %s left", filepath.Dir(HealthDropIn))
+	}
+	if !rec.has("systemctl disable --now massimo-update.path") {
+		t.Fatalf("the path unit is not disabled: %q", rec.cmds)
+	}
+	if _, err := os.Stat(filepath.Join(root, ListenDropIn)); err != nil {
+		t.Errorf("the serve drop-in went with the helper: %v", err)
+	}
+	// The order: the units are disabled before the reload forgets them.
+	disable, reload := -1, -1
+	for i, c := range rec.cmds {
+		switch {
+		case strings.HasPrefix(c, "systemctl disable --now massimo-update.path") && disable < 0:
+			disable = i
+		case c == "systemctl daemon-reload" && reload < 0:
+			reload = i
+		}
+	}
+	if disable < 0 || reload < disable {
+		t.Errorf("disable at %d, daemon-reload at %d: %q", disable, reload, rec.cmds)
+	}
+}

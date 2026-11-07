@@ -191,6 +191,9 @@ func Install(o Options) error {
 	if err := in.listen(in.tlsEffective(in.path(EnvPath)), in.tlsHTTPEffective(in.path(EnvPath))); err != nil {
 		return err
 	}
+	if in.NoUpdateHelper {
+		in.removeHelper()
+	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
 		return err
 	}
@@ -553,6 +556,31 @@ func (in *installer) units() error {
 		}
 	}
 	return nil
+}
+
+// removeHelper takes out the update helper of an earlier install, as
+// InstallDarwin unloads its own: the path unit disabled and stopped, its
+// units and the health drop-in removed, so that a request file no longer
+// starts a root update.
+func (in *installer) removeHelper() {
+	units := []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", HealthDropIn}
+	found := false
+	for _, p := range units {
+		if _, err := os.Lstat(in.path(p)); err == nil {
+			found = true
+		}
+	}
+	if !found {
+		return
+	}
+	// Disabling fails for a unit systemd does not know; that is fine.
+	in.run("systemctl", "disable", "--now", "massimo-update.path")
+	for _, p := range units {
+		in.remove(p, false)
+	}
+	if !in.DryRun {
+		os.Remove(in.path(filepath.Dir(HealthDropIn))) // only when empty
+	}
 }
 
 // Remove stops and removes the service, the units and the binary. With

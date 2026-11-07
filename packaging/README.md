@@ -120,7 +120,10 @@ and a unit that differs from the new one (edited with `systemctl edit --full`)
 is kept as `<unit>.bak`.
 Local changes belong in a drop-in (`systemctl edit massimo`),
 which install never touches.
-`-no-update-helper` leaves the helper out, `-no-start` only enables.
+`-no-update-helper` leaves the helper out,
+and on a box an earlier install gave it disables `massimo-update.path`
+and removes both units and their drop-in, as macOS unloads its own;
+`-no-start` only enables.
 
 `-listen <addr>` moves the API and web UI off `:8099`,
 for example to port 80 (`sudo massimo install -listen :80`,
