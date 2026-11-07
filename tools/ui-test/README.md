@@ -120,7 +120,10 @@ what a test stores in the browser goes with its context.
   brings it back; the found Cube KEQ0000000, its DHCP flag shown,
   is added and removed again (the test searches first where nothing was found yet,
   and is skipped without a discovery answer), Remove asks in the panel,
-  and Keep takes the question back.
+  and Keep takes the question back;
+  a redraw of the open panel asks for nothing again,
+  so the focus stays in the pairing form being typed in
+  (the test holds a request for the pairing until it has typed).
 - `test_settings.py`:
   the settings page opens;
   with the Cube's panel open,

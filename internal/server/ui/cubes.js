@@ -495,7 +495,11 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
 // line of the settings file that differs (tpl-cube-differs); the
 // pairing (pairingSection); the form with the fields, the hidden devices
 // and Remove and Save. A Cube served from serve's command line has a
-// note instead of the form.
+// note instead of the form. The panel's loads run when the user opens it
+// (or opens the settings, initCubes): the toggle event that a panel
+// built open queues finds the serial in cubesUI.open and asks for
+// nothing, so that a redraw does not redraw the pairing again when the
+// answers come, under what the user is typing there.
 function cubePanel(c) {
   const d = fromTemplate("tpl-cube-panel");
   d.dataset.serial = c.serial;
@@ -509,6 +513,7 @@ function cubePanel(c) {
   sum.querySelector(".panel-badges").append(...badges);
   d.addEventListener("toggle", () => {
     if (d.open) {
+      if (cubesUI.open.has(c.serial)) return; // built open by a redraw
       cubesUI.open.add(c.serial);
       if (!cubesUI.devices[c.serial]) loadCubeDevices(c.serial).then(() => devicesLoaded(c.serial));
       loadPairing(c.serial);
@@ -627,11 +632,17 @@ function renderCubes() {
   }
 }
 
+// initCubes draws Settings → Cubes when the settings open; the panels
+// still open from before load what they would load when opened.
 function initCubes() {
   $("view-settings").addEventListener("click", () => {
     cubesMsg("");
     renderCubes();
-    for (const serial of cubesUI.open) loadCubeDevices(serial).then(() => devicesLoaded(serial));
+    for (const serial of cubesUI.open) {
+      loadCubeDevices(serial).then(() => devicesLoaded(serial));
+      loadPairing(serial);
+      loadCubeRooms(serial);
+    }
   });
 }
 

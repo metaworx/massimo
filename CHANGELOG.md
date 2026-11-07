@@ -59,6 +59,9 @@ the next minor, a fix counts the suffix up.
 - Settings → Users shows a key just created, lists each token once, and
   one click on Create key makes one key.
 
+- A redraw of Settings → Cubes no longer reloads an open Cube's pairing,
+  which took the focus out of the pairing form being typed in.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

@@ -98,3 +98,34 @@ def test_found_cube_added_and_removed(page):
     assert wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5), \
         "Remove lists it as found again"
     page.locator("#view-tiles").click()
+
+
+def test_redraw_of_an_open_panel_loads_nothing(page, case):
+    """A redraw of Settings → Cubes, as after a save, builds the open
+    panel open again without asking for its pairing again, so that an
+    answer arriving later does not redraw the pairing under the user's
+    typing; the test holds such a request until it has typed."""
+    panel, form = open_panel(page)
+    assert wait_until(page, "!!document.querySelector(%r)" % (PANEL + " .pair-open"), 5), "the pairing is drawn"
+    page.wait_for_timeout(500)  # the panel's own loads are in
+    held = []
+    page.route("**/api/v1/cubes/KEQ0537249/pairing", lambda route: held.append(route))
+    try:
+        page.evaluate("renderCubes()")
+        panel.locator(".pair-open").click()
+        seconds = "pair-seconds-KEQ0537249"
+        assert wait_until(page, "document.activeElement && document.activeElement.id === %r" % seconds, 5), "the time has the focus"
+        page.keyboard.press("End")
+        page.keyboard.type("5")
+        asked = len(held)
+        for route in held:
+            route.continue_()
+        page.wait_for_timeout(500)
+        assert page.evaluate("document.activeElement && document.activeElement.id") == seconds, "the focus stays in the time"
+        page.keyboard.type("0")
+        assert page.locator("#" + seconds).input_value() == "6050", "every key typed is in the time"
+        assert asked == 0, f"a redraw asks for the pairing again: {asked} request(s)"
+    finally:
+        page.unroute("**/api/v1/cubes/KEQ0537249/pairing")
+    page.locator("#view-tiles").click()
+
