@@ -46,13 +46,14 @@ func useDeviceSerial(serial string) {
 }
 
 // globalOptions parses options that precede the command name:
-// -env <file>, -data <dir>, -sn <serial>, -show-hidden, and -direct or
-// -no-direct. It returns the remaining arguments.
+// -env <file>, -data <dir>, -sn <serial>, -log-level <level>,
+// -show-hidden, and -direct or -no-direct. It returns the remaining
+// arguments.
 func globalOptions(args []string) ([]string, error) {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		name, value, hasValue := strings.Cut(strings.TrimLeft(args[0], "-"), "=")
 		switch name {
-		case "env", "data", "sn":
+		case "env", "data", "sn", "log-level":
 		case "show-hidden", "no-ignore", "show-ghosts":
 			showHidden = true
 			args = args[1:]
@@ -85,6 +86,10 @@ func globalOptions(args []string) ([]string, error) {
 			os.Setenv(env.DataVar, value)
 		case "sn":
 			selectedSN, snExplicit = value, true
+		case "log-level":
+			if err := setLogLevelVar(value); err != nil {
+				return nil, fmt.Errorf("-log-level: %w", err)
+			}
 		}
 	}
 	return args, nil

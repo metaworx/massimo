@@ -533,6 +533,14 @@ and the page works under a path prefix such as `/massimo/`
 ([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
+`-log-level debug` (or `MASSIMO_LOG_LEVEL`; `info`, the default,
+`warn` and `error`) adds the Debug lines,
+such as every failed attempt to reach a lost Cube
+and every command the proxy passes on to it;
+the level is read at the start,
+and a change in the settings file waits for the next restart, as listed below.
+Every other command takes `-log-level` before its name,
+`massimo -log-level debug watch`.
 A restart from the API (`POST /api/v1/restart`, for the capability `restart`)
 stops the server as SIGTERM does and exits with status 75,
 which systemd, launchd and Homebrew answer with a start;
@@ -729,7 +737,8 @@ add a Cube, change its name, address, proxy and hidden devices,
 and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
-The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`, `MASSIMO_LOG`,
+The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
+`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`,
 the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;

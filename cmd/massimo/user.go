@@ -17,7 +17,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -68,7 +67,11 @@ func runUser(args []string) error {
 		return errors.New("user: which command?")
 	}
 	ctx := context.Background()
-	st, err := store.Open(dataDir(), store.Options{Version: versionString(), Logger: slog.New(slog.NewTextHandler(os.Stderr, nil))})
+	logger, err := newLogger(os.Stderr)
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
 	if err != nil {
 		return err
 	}

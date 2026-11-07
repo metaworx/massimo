@@ -7,7 +7,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"time"
@@ -35,7 +34,10 @@ func runWatch(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger, err := newLogger(os.Stderr)
+	if err != nil {
+		return err
+	}
 	c := cubelan.New(cubelan.Options{Addr: *addr, PollInterval: *poll, Logger: logger})
 	go c.Run(ctx)
 

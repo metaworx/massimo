@@ -78,6 +78,10 @@ the next minor, a fix counts the suffix up.
 - `GET /api/v1/cubes/{sn}/log` takes `since`, an RFC 3339 time, for the
   events at or after it (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/log").
 
+- `-log-level debug|info|warn|error` or `MASSIMO_LOG_LEVEL` sets the
+  level the commands log at, `info` by default; a change in `serve`'s
+  settings file waits for its restart (`README.md`, "Server").
+
 ### Changed
 
 - Passwords are hashed with argon2id at 19 MiB and two passes, about

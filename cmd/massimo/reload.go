@@ -34,7 +34,7 @@ const settingsWatchEvery = 5 * time.Second
 // flagVars are serve's flags that default to a variable: a flag given on
 // the command line wins over the file, now and at the next start.
 var flagVars = map[string]string{
-	"listen": "MASSIMO_LISTEN", "token": tokenVar, "log": "MASSIMO_LOG", "update-request": "MASSIMO_UPDATE_REQUEST",
+	"listen": "MASSIMO_LISTEN", "token": tokenVar, "log": "MASSIMO_LOG", "log-level": env.LogLevel, "update-request": "MASSIMO_UPDATE_REQUEST",
 	"tls": env.TLS, "tls-cert": env.TLSCert, "tls-key": env.TLSKey, "tls-names": env.TLSNames, "acme-email": env.ACMEEmail,
 	"acme-directory": env.ACMEDirectory, "tls-http": env.TLSHTTP, "trusted-proxies": env.TrustedProxies,
 	"acme-dns-hook": env.ACMEDNSHook, "hsts": env.HSTS, "restart": restartVar, "sighup": sighupVar,
