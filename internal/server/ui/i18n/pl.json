@@ -577,7 +577,7 @@
   "me.passwordChanged": "Hasło zmienione.",
   "open.title": "Otwarty serwer.",
   "open.text": "Każdy, kto dotrze do tego serwera, może wszystko zmienić. Utwórz pierwszego właściciela albo ustaw MASSIMO_API_TOKEN w pliku ustawień serwera.",
-  "open.textNoStore": "Każdy, kto dotrze do tego serwera, może wszystko zmienić. Uruchom go z MASSIMO_API_TOKEN lub -token.",
+  "open.textNoStore": "Każdy, kto dotrze do tego serwera, może wszystko zmienić. Ustaw MASSIMO_API_TOKEN w pliku ustawień serwera albo uruchom go z -token.",
   "settings.logout": "Wyloguj",
   "settings.forgetKey": "Zapomnij klucz",
   "setup.title": "Nie ma jeszcze użytkowników",

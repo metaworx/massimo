@@ -566,7 +566,7 @@
   "me.passwordChanged": "Mot de passe changé.",
   "open.title": "Serveur ouvert.",
   "open.text": "Quiconque atteint ce serveur peut tout modifier. Créez le premier propriétaire ou définissez MASSIMO_API_TOKEN dans le fichier de paramètres du serveur.",
-  "open.textNoStore": "Quiconque atteint ce serveur peut tout modifier. Démarrez-le avec MASSIMO_API_TOKEN ou -token.",
+  "open.textNoStore": "Quiconque atteint ce serveur peut tout modifier. Définissez MASSIMO_API_TOKEN dans le fichier de paramètres du serveur, ou démarrez-le avec -token.",
   "settings.logout": "Se déconnecter",
   "settings.forgetKey": "Oublier la clé",
   "setup.title": "Pas encore d'utilisateurs",

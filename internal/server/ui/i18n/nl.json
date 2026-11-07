@@ -565,7 +565,7 @@
   "me.passwordChanged": "Wachtwoord gewijzigd.",
   "open.title": "Open server.",
   "open.text": "Iedereen die deze server bereikt, kan alles wijzigen. Maak de eerste eigenaar aan of zet MASSIMO_API_TOKEN in het instellingenbestand van de server.",
-  "open.textNoStore": "Iedereen die deze server bereikt, kan alles wijzigen. Start hem met MASSIMO_API_TOKEN of -token.",
+  "open.textNoStore": "Iedereen die deze server bereikt, kan alles wijzigen. Zet MASSIMO_API_TOKEN in het instellingenbestand van de server, of start hem met -token.",
   "settings.logout": "Afmelden",
   "settings.forgetKey": "Sleutel vergeten",
   "setup.title": "Nog geen gebruikers",
