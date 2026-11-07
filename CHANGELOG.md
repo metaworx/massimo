@@ -87,6 +87,9 @@ the next minor, a fix counts the suffix up.
 - A double click on Yes of a removal sends one request, and the page
   says it worked instead of reporting the second as failed.
 
+- A language load that a newer choice has superseded no longer shows
+  its error on the page in the newer language.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

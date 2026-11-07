@@ -133,7 +133,9 @@ what a test stores in the browser goes with its context.
   the settings page opens;
   with the Cube's panel open,
   English and then German chosen in the settings redraw its labels,
-  cloned from a template, in that language, and the panel stays open.
+  cloned from a template, in that language, and the panel stays open;
+  French chosen and German before French has come,
+  French failing afterwards shows no error on the German page.
 - `test_users.py`, Settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-pass`) are listed with the operator's tokens,
