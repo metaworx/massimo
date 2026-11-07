@@ -261,6 +261,31 @@ async function signIn(user, password, purpose) {
   return apiRequest("POST", "api/v1/login", { user, password }, { auth: false });
 }
 
+// registerPassword makes a password of version 2 for a name, the password
+// kept in the browser: the server answers the client's registration
+// request, and the client's record comes back as the fields that set it,
+// {record, ksf}, for POST /api/v1/users or PUT /api/v1/users/{name}.
+async function registerPassword(name, password) {
+  const opaque = await opaqueModule();
+  const reg = opaque.client.startRegistration({ password });
+  const answer = await api("POST", "api/v1/users/" + encodeURIComponent(name) + "/register", { request: reg.registrationRequest });
+  const done = opaque.client.finishRegistration({
+    clientRegistrationState: reg.clientRegistrationState,
+    registrationResponse: answer.response,
+    password,
+    keyStretching: keyStretching(answer.ksf),
+  });
+  return { record: done.registrationRecord, ksf: answer.ksf };
+}
+
+// currentPassword proves the current password for one's own change: for a
+// user of version 2 a proof from a sign-in by OPAQUE, which keeps it in
+// the browser, for one still of version 1 the password itself.
+async function currentPassword(user, password) {
+  if (user.auth_version === 2) return { proof: (await signIn(user.name, password, "proof")).proof };
+  return { current_password: password };
+}
+
 // afterLogin reads who is in, and starts the stream and the data again,
 // for a sign-in that no start waited for: a session that ended while the
 // page ran, a key pasted, the first owner.
@@ -407,11 +432,15 @@ async function changeOwnPassword(ev) {
   if (password !== $("me-again").value) return showResult(msg, t("setup.mismatch"), false);
   if (!password) return showResult(msg, t("login.missing"), false);
   try {
-    await api("PUT", "api/v1/users/" + encodeURIComponent(state.me.user.name), { password, current_password: current });
+    const me = state.me.user;
+    const body = await currentPassword(me, current);
+    Object.assign(body, await registerPassword(me.name, password));
+    await api("PUT", "api/v1/users/" + encodeURIComponent(me.name), body);
     showResult(msg, t("me.passwordChanged"), true);
     $("me-current").value = "";
     $("me-new").value = "";
     $("me-again").value = "";
+    loadMe();
   } catch (e) {
     showResult(msg, t("users.failed", { name: state.me.user.name, error: e.message }), false);
   }
@@ -420,7 +449,7 @@ async function changeOwnPassword(ev) {
 // --- the first owner --------------------------------------------------
 
 // createOwner handles the form of a server without users: the owner is
-// created and signed in at once.
+// created with a password of version 2 and signed in at once.
 async function createOwner(ev) {
   ev.preventDefault();
   const msg = $("setup-msg");
@@ -429,7 +458,7 @@ async function createOwner(ev) {
   if (!name || !password) return showResult(msg, t("login.missing"), false);
   if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
   try {
-    await api("POST", "api/v1/users", { name, password, role: "owner" });
+    await api("POST", "api/v1/users", { name, role: "owner", ...(await registerPassword(name, password)) });
     const session = await signIn(name, password);
     setToken(session.token);
     showResult(msg, t("setup.done", { name }), true);

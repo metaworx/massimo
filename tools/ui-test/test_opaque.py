@@ -71,3 +71,88 @@ def test_sign_in_by_opaque(new_context, case, watch, guard):
         print(f"\n{case.width}-{case.lang}: the sign-in by OPAQUE took {took:.2f} s in the browser")
     finally:
         api_call("DELETE", f"api/v1/users/{name}")
+
+
+def sign_in_in(page, name, password):
+    """A sign-in by the page's own client (login.js), no dialog: whether
+    the password opens the user's record."""
+    return page.evaluate("async ([n, p]) => { try { return !!(await signIn(n, p)).token; } catch (e) { return false; } }", [name, password])
+
+
+def test_passwords_registered_in_the_browser(page, case, new_context):
+    """Every password set in the page is registered by OPAQUE and none
+    goes to the server: the owner adds a user with one and sets another,
+    in Settings → Users, and the user changes its own in Settings with a
+    proof of the current one."""
+    name = f"reg-{case.width}-{case.lang}"
+    posts = []
+    record = lambda r: posts.append((r.url, r.post_data or "")) if r.method in ("POST", "PUT") else None
+    page.on("request", record)
+    # The sign-ins that check a password run in a page of their own, whose
+    # refused requests on purpose the guard does not watch.
+    ctx = new_context()
+    probe = ctx.new_page()
+    probe.on("request", record)
+    probe.goto(URL)
+    try:
+        page.locator("#view-settings").click()
+        page.locator("#user-add").click()
+        new = page.locator("#user-new")
+        new.locator("[name=name]").fill(name)
+        new.locator("[name=password]").fill("first-pass")
+        new.locator("button[type=submit]").click()
+        assert wait_until(page, f"!!document.querySelector(\".user-panel[data-name='{name}']\")", 10), "the user is added"
+        user = api_call("GET", f"api/v1/users/{name}")
+        assert user["auth_version"] == 2 and user["has_password"], f"added with a record: {user}"
+        panel = page.locator(f".user-panel[data-name='{name}']")
+        panel.locator("summary").click()
+        panel.locator("[name=password]").fill("second-pass")
+        panel.locator(".user-form button[type=submit]").first.click()
+        assert wait_until(page, "!document.getElementById('users-msg').classList.contains('hidden') && document.getElementById('users-msg').classList.contains('ok')", 10), "the password is set"
+        assert sign_in_in(probe, name, "second-pass") and not sign_in_in(probe, name, "first-pass"), "the second password replaced the first"
+
+        own = ctx.new_page()
+        own.set_default_timeout(5000)
+        own.on("request", record)
+        own.goto(URL)
+        assert wait_until(own, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
+        own.locator("#login-user").fill(name)
+        own.locator("#login-password").fill("second-pass")
+        own.locator("#login-form button[type=submit]").click()
+        own.wait_for_selector(".room", timeout=10000)
+        own.locator("#view-settings").click()
+        own.locator("#me-password summary").click()
+        own.locator("#me-current").fill("second-pass")
+        own.locator("#me-new").fill("third-pass")
+        own.locator("#me-again").fill("third-pass")
+        own.locator("#me-password-form button[type=submit]").click()
+        assert wait_until(own, "document.getElementById('me-password-msg').classList.contains('ok')", 10), "one's own password is changed"
+        assert any(u.endswith("/api/v1/login/start") and '"purpose":"proof"' in body for u, body in posts), "the current password is proven by a sign-in"
+        assert sign_in_in(probe, name, "third-pass") and not sign_in_in(probe, name, "second-pass"), "the own change took"
+        # The two old passwords tried on purpose fall back to the password
+        # sign-in while the server takes it; nothing else sends one.
+        fallback = [u for u, _ in posts if u.endswith("/api/v1/login")]
+        assert len(fallback) == 2, f"a password sign-in beside the two old passwords tried: {fallback}"
+        sent = [u for u, body in posts if not u.endswith("/api/v1/login") and any(p in body for p in ("first-pass", "second-pass", "third-pass"))]
+        assert not sent, f"a password went to the server: {sent}"
+    finally:
+        ctx.close()
+        api_call("DELETE", f"api/v1/users/{name}")
+
+
+def test_a_record_of_the_command_line_opens_in_the_browser(new_context, case, guard):
+    """run.sh adds the operator with massimo user add, which registers
+    both halves in Go with the browser's key stretching: the page's
+    client opens that record, without the password sign-in."""
+    user = api_call("GET", "api/v1/users/operator")
+    assert user["auth_version"] == 2, f"massimo user add registered by OPAQUE: {user}"
+    ctx = new_context()
+    probe = ctx.new_page()
+    posts = []
+    probe.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+    probe.goto(URL)
+    try:
+        assert sign_in_in(probe, "operator", "op-pass"), "the browser opens the record made in Go"
+        assert not [u for u in posts if u.endswith("/api/v1/login")], "without the password sign-in"
+    finally:
+        ctx.close()

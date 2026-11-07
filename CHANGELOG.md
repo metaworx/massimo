@@ -40,6 +40,10 @@ the next minor, a fix counts the suffix up.
   a user that is not there, answer at once rather than after a hash
   (`docs/store.md` section 6).
 
+- Every password the web UI or `massimo user add` and `user passwd` set
+  is registered by OPAQUE, `auth_version` 2, and never sent: the server
+  keeps a record and no hash (`docs/store.md` section 6, README.md).
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).

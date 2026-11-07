@@ -241,16 +241,21 @@ function userPanel(u) {
       if (!sameMinute(end, u.expires_at)) body.expires_at = end;
     }
     const password = field("password").value;
-    if (password) {
-      body.password = password;
-      if (!manage || self) body.current_password = field("current_password").value;
-    }
-    if (!Object.keys(body).length) {
+    if (!password && !Object.keys(body).length) {
       usersMsg(t("users.unchanged"), true);
       return;
     }
-    userAction(() => api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body), t("users.saved", { name: u.name }), u.name).then((ok) => {
-      if (ok && self && body.password) loadMe();
+    // A password is registered by OPAQUE in the browser (login.js), one's
+    // own after proving the current one.
+    const save = async () => {
+      if (password) {
+        if (!manage || self) Object.assign(body, await currentPassword(u, field("current_password").value));
+        Object.assign(body, await registerPassword(u.name, password));
+      }
+      return api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body);
+    };
+    userAction(save, t("users.saved", { name: u.name }), u.name).then((ok) => {
+      if (ok && self && password) loadMe();
     });
   });
   if (d.open) fillTokens(u, tokensBox);
@@ -277,10 +282,13 @@ function newUserForm() {
     const display = field("display_name").value.trim();
     if (display) body.display_name = display;
     const password = field("password").value;
-    if (password) body.password = password;
     const end = isoOf(field("expires").value);
     if (end) body.expires_at = end;
-    userAction(() => api("POST", "api/v1/users", body), t("users.created", { name: body.name }), body.name).then((ok) => {
+    const add = async () => {
+      if (password) Object.assign(body, await registerPassword(body.name, password));
+      return api("POST", "api/v1/users", body);
+    };
+    userAction(add, t("users.created", { name: body.name }), body.name).then((ok) => {
       if (ok) {
         clear($("user-new"));
         $("user-add").classList.remove("hidden");

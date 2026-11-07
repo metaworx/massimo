@@ -51,7 +51,7 @@ var (
 	ErrBadMessage = errors.New("store: malformed OPAQUE message")
 	// ErrNoOpaque is a store without the server's keys: one opened
 	// read-only.
-	ErrNoOpaque = errors.New("store: no OPAQUE keys in a store opened read-only")
+	ErrNoOpaque = errors.New("store: no OPAQUE keys: opaque.key is not readable in a store opened read-only")
 )
 
 // opaqueConf is the configuration, the same on both sides.
@@ -67,7 +67,8 @@ func OpaqueKeyPath(dir string) string { return filepath.Join(dir, OpaqueKeyFileN
 func credentialID(name string) []byte { return []byte(NormalName(name)) }
 
 // loadOpaque reads the server's OPAQUE keys, creating the key file
-// (mode 0600) when there is none, as loadIdentity does node.key.
+// (mode 0600) when there is none, as loadIdentity does node.key; a store
+// opened read-only only reads it, and goes without where it cannot.
 func (s *Store) loadOpaque() error {
 	srv, err := opaqueConf.Server()
 	if err != nil {
@@ -88,6 +89,8 @@ func (s *Store) loadOpaque() error {
 		return nil
 	case !errors.Is(err, fs.ErrNotExist):
 		return fmt.Errorf("store: %w", err)
+	case s.readOnly:
+		return nil
 	}
 	sk, _ := opaqueConf.KeyGen()
 	key := append(sk.Encode(), opaqueConf.GenerateOPRFSeed()...)
@@ -212,6 +215,56 @@ func (s *Store) SetOpaqueRecord(ctx context.Context, name string, record []byte,
 		return fmt.Errorf("%w: %s", ErrNoUser, NormalName(name))
 	}
 	return nil
+}
+
+// opaqueRecordFor runs both halves of a registration in this process, in
+// a slot of the store's gate: the client's key stretching as the
+// browser's library runs it (opaque-ke: a salt of 16 zero bytes, an
+// output as long as the OPRF's, OpaqueKSF's parameters), so that the
+// record opens in the browser.
+func (s *Store) opaqueRecordFor(ctx context.Context, name, password string) ([]byte, error) {
+	if s.opq == nil {
+		return nil, ErrNoOpaque
+	}
+	if password == "" {
+		return nil, fmt.Errorf("%w: an empty password", ErrBadMessage)
+	}
+	leave, err := s.hashes.enter(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer leave()
+	c, err := opaqueConf.Client()
+	if err != nil {
+		return nil, fmt.Errorf("store: opaque: %w", err)
+	}
+	defer c.ClearState()
+	req, err := c.RegistrationInit([]byte(password))
+	if err != nil {
+		return nil, fmt.Errorf("store: opaque: %w", err)
+	}
+	resp, err := s.opq.RegistrationResponse(req, credentialID(name), nil)
+	if err != nil {
+		return nil, fmt.Errorf("store: opaque: %w", err)
+	}
+	m, t, p, err := ParseKSF(OpaqueKSF)
+	if err != nil {
+		return nil, err
+	}
+	rec, _, err := c.RegistrationFinalize(resp, nil, nil, BrowserKSF(m, t, p))
+	if err != nil {
+		return nil, fmt.Errorf("store: opaque: %w", err)
+	}
+	return rec.Serialize(), nil
+}
+
+// BrowserKSF is the key stretching of @serenity-kit/opaque's client
+// (opaque-ke) for bytemare/opaque's: argon2id at the parameters, with a
+// salt of 16 zero bytes and an output of 64, which RFC 9807 leaves to
+// the implementation; with the library's own defaults a record made in
+// Go does not open in the browser.
+func BrowserKSF(memory, time uint32, threads uint8) *opaque.ClientOptions {
+	return &opaque.ClientOptions{KSFSalt: make([]byte, 16), KSFLength: 64, KSFParameters: []uint64{uint64(time), uint64(memory), uint64(threads)}}
 }
 
 // OpaqueStart is a sign-in started (KE1 answered by KE2) that waits for

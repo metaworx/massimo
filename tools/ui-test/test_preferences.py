@@ -100,9 +100,12 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     assert server_ui() is None, "nothing reached the server"
 
 
-def operator_session():
-    """A session of the operator run.sh creates, for the test's own calls."""
-    return api_call("POST", "api/v1/login", {"user": "operator", "password": "op-pass"})["token"]
+def operator_key():
+    """An API key of the operator run.sh creates, for the test's own
+    calls, and its id: the operator's password is of auth_version 2, which
+    signs in by OPAQUE in the browser and not by POST /api/v1/login."""
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": "ui-test preferences"})
+    return key["token"], key["id"]
 
 
 def clear_user(token):
@@ -116,7 +119,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
     then the browser forgets the user's settings and schemes: the next to
     sign in, the owner with its key, neither sees them nor gets them into
     its account. What is kept for this device only stays."""
-    op = operator_session()
+    op, op_id = operator_key()
     try:
         clear_user(op)
         clear_preferences()
@@ -161,7 +164,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
             "and so is the scheme"
     finally:
         clear_user(op)
-        api_call("POST", "api/v1/logout", token=op)
+        api_call("DELETE", "api/v1/users/operator/tokens/%d" % op_id)
         clear_preferences()
 
 

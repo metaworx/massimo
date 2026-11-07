@@ -836,6 +836,14 @@ These are the only commands that open the store;
 they take `-data` like `serve` and run as the service user
 (`sudo -u massimo massimo -data /var/lib/massimo user add anna`),
 beside a running server thanks to WAL.
+`user add` and `user passwd` set a password of version 2:
+both halves of the registration run in the command,
+with the server's keys from the data directory,
+and the key stretching runs as the browser's library runs it,
+with `opaque-ke`'s salt of 16 zero bytes and output of 64,
+which RFC 9807 leaves open,
+so that the record opens in the browser;
+`tools/ui-test` checks that with a user the command added.
 The audit records them with `user_id` NULL and `remote` `cli`.
 
 ### The lockout

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bytemare/opaque"
+
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -23,6 +25,32 @@ func runUserWith(t *testing.T, input string, args ...string) (string, error) {
 	defer func() { stdin, stdout = nil, nil }()
 	err := runUser(args)
 	return out.String(), err
+}
+
+// signsIn runs a sign-in by OPAQUE against the store with the browser's
+// key stretching, as the web UI's client would: whether the password
+// opens the user's record.
+func signsIn(t *testing.T, st *store.Store, name, password string) bool {
+	t.Helper()
+	c, err := opaque.DefaultConfiguration().Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ke1, err := c.GenerateKE1([]byte(password))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, err := st.StartOpaque(context.Background(), name, ke1.Serialize())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ke2, err := c.Deserialize.KE2(start.KE2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, tt, p, _ := store.ParseKSF(start.KSF)
+	ke3, _, _, err := c.GenerateKE3(ke2, nil, nil, store.BrowserKSF(m, tt, p))
+	return err == nil && st.FinishOpaque(start, ke3.Serialize()) == nil
 }
 
 // The user commands against a store in a temporary directory, with the
@@ -58,8 +86,8 @@ func TestUserCommands(t *testing.T) {
 	if !ok || anna.Role != store.RoleOperator || !anna.HasPassword || anna.DisplayName != "Anna" {
 		t.Fatalf("anna %+v", anna)
 	}
-	if err := st.CheckPassword(ctx, "anna", "pw"); err != nil {
-		t.Fatal(err)
+	if !signsIn(t, st, "anna", "pw") || anna.AuthVersion != 2 {
+		t.Fatalf("anna does not sign in by OPAQUE: auth_version %d", anna.AuthVersion)
 	}
 	g, _, _ := st.User(ctx, "guest1")
 	if g.Role != store.RoleGuest || g.ExpiresAt.IsZero() || g.HasPassword {
@@ -97,7 +125,7 @@ func TestUserCommands(t *testing.T) {
 	if !ok || tok.Label != "Loxone" || tok.Kind != store.TokenAPI {
 		t.Fatalf("key %+v %v", tok, ok)
 	}
-	if err := st.CheckPassword(ctx, "anna", "new"); err != nil {
+	if !signsIn(t, st, "anna", "new") || signsIn(t, st, "anna", "pw") {
 		t.Fatal("password not set")
 	}
 	st.Close()

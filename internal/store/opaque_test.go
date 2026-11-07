@@ -31,9 +31,7 @@ func newTestClient(t testing.TB) testClient {
 	return testClient{t: t, c: c}
 }
 
-func testKSF() *opaque.ClientOptions {
-	return &opaque.ClientOptions{KSFSalt: make([]byte, 16), KSFLength: 64, KSFParameters: []uint64{argonTime, argonMemory, argonThreads}}
-}
+func testKSF() *opaque.ClientOptions { return BrowserKSF(argonMemory, argonTime, argonThreads) }
 
 // register runs a registration against the store and returns the record.
 func (c testClient) register(s *Store, name, password string) []byte {
@@ -320,4 +318,45 @@ func BenchmarkOpaqueLogin(b *testing.B) {
 			}
 		}
 	})
+}
+
+// The command line registers both halves here, with the browser's key
+// stretching: the user signs in by OPAQUE, a taken name, an unknown role
+// and a missing user are refused before the key stretching, and a store
+// opened read-only reads the key to check a sign-in.
+func TestOpaqueInProcess(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	ctx := context.Background()
+	u, err := s.AddUserOpaque(ctx, User{Name: "Anna", Role: RoleOperator}, "secret", 0)
+	if err != nil || u.AuthVersion != 2 || !u.HasPassword {
+		t.Fatalf("add: %+v %v", u, err)
+	}
+	if start, ke3 := newTestClient(t).login(s, "anna", "secret"); ke3 == nil || s.FinishOpaque(start, ke3) != nil {
+		t.Fatal("the record made here does not sign in")
+	}
+	if _, err := s.AddUserOpaque(ctx, User{Name: "anna"}, "x", 0); !errors.Is(err, ErrUserExists) {
+		t.Errorf("a taken name: %v", err)
+	}
+	if _, err := s.AddUserOpaque(ctx, User{Name: "bob", Role: "nope"}, "x", 0); !errors.Is(err, ErrNoRole) {
+		t.Errorf("an unknown role: %v", err)
+	}
+	if err := s.SetPasswordOpaque(ctx, "nobody", "x", 0); !errors.Is(err, ErrNoUser) {
+		t.Errorf("a missing user: %v", err)
+	}
+	if err := s.SetPasswordOpaque(ctx, "anna", "", 0); !errors.Is(err, ErrBadMessage) {
+		t.Errorf("an empty password: %v", err)
+	}
+	if err := s.SetPasswordOpaque(ctx, "anna", "other", 0); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	ro, err := OpenReadOnly(dir, Options{Logger: quiet()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	if start, ke3 := newTestClient(t).login(ro, "anna", "other"); ke3 == nil || ro.FinishOpaque(start, ke3) != nil {
+		t.Error("the new password does not sign in against the store opened read-only")
+	}
 }

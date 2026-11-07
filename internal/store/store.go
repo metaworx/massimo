@@ -156,6 +156,9 @@ func OpenReadOnly(dir string, o Options) (*Store, error) {
 		return nil, err
 	}
 	s.nodeID, _ = s.settingString(context.Background(), NodeIDKey)
+	if err := s.loadOpaque(); err != nil {
+		s.log.Warn("store: OPAQUE keys not read", "error", err)
+	}
 	return s, nil
 }
 

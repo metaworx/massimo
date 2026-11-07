@@ -207,17 +207,8 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	}
 	hash := ""
 	if password != "" {
-		// A hash is the cost of the call: the answers that need none
-		// come first, and the transaction checks again for a race.
-		if _, err := s.roleID(ctx, s.db, u.Role); err != nil {
+		if err := s.addable(ctx, u); err != nil {
 			return User{}, err
-		}
-		var deleted sql.NullString
-		switch err := s.db.QueryRowContext(ctx, `SELECT deleted_at FROM users WHERE name = ?`, u.Name).Scan(&deleted); {
-		case err == nil && !deleted.Valid:
-			return User{}, fmt.Errorf("%w: %s", ErrUserExists, u.Name)
-		case err != nil && !errors.Is(err, sql.ErrNoRows):
-			return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 		}
 		var err error
 		if hash, err = s.hashPassword(ctx, password); err != nil {
@@ -225,6 +216,61 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 		}
 	}
 	return s.addUser(ctx, u, credential{hash: hash}, by)
+}
+
+// addable answers what a user add would refuse, before the cost of a
+// hash: an unknown role, a taken name. The transaction checks again for
+// a race.
+func (s *Store) addable(ctx context.Context, u User) error {
+	if _, err := s.roleID(ctx, s.db, u.Role); err != nil {
+		return err
+	}
+	var deleted sql.NullString
+	switch err := s.db.QueryRowContext(ctx, `SELECT deleted_at FROM users WHERE name = ?`, u.Name).Scan(&deleted); {
+	case err == nil && !deleted.Valid:
+		return fmt.Errorf("%w: %s", ErrUserExists, u.Name)
+	case err != nil && !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("store: add user %s: %w", u.Name, err)
+	}
+	return nil
+}
+
+// AddUserOpaque adds a user as AddUser does, with a password of version 2
+// whose registration runs here, both halves (opaqueRecordFor): for the
+// command line, which has the password and the store at hand.
+func (s *Store) AddUserOpaque(ctx context.Context, u User, password string, by int64) (User, error) {
+	u, err := s.newUser(u)
+	if err != nil {
+		return User{}, err
+	}
+	if err := s.addable(ctx, u); err != nil {
+		return User{}, err
+	}
+	record, err := s.opaqueRecordFor(ctx, u.Name, password)
+	if err != nil {
+		return User{}, err
+	}
+	return s.addUser(ctx, u, credential{record: record, ksf: OpaqueKSF}, by)
+}
+
+// SetPasswordOpaque sets a user's password of version 2, registered here
+// as AddUserOpaque does. Its sessions are the caller's to revoke.
+func (s *Store) SetPasswordOpaque(ctx context.Context, name, password string, by int64) error {
+	if err := s.writable(); err != nil {
+		return err
+	}
+	var live int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&live); err != nil {
+		return fmt.Errorf("store: user %s: %w", name, err)
+	}
+	if live == 0 {
+		return fmt.Errorf("%w: %s", ErrNoUser, NormalName(name))
+	}
+	record, err := s.opaqueRecordFor(ctx, name, password)
+	if err != nil {
+		return err
+	}
+	return s.SetOpaqueRecord(ctx, name, record, OpaqueKSF, by)
 }
 
 // AddOpaqueUser adds a user as AddUser does, with a password of

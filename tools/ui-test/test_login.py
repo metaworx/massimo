@@ -31,8 +31,8 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     with page.expect_response(lambda r: r.url.endswith("/api/v1/login")):
         page.evaluate("() => { const f = document.getElementById('login-form'); f.requestSubmit(); f.requestSubmit(); }")
     page.wait_for_timeout(300)
-    # The operator's password is of version 1: a start by OPAQUE that it
-    # does not open, then the password sign-in.
+    # A wrong password: a start by OPAQUE that it does not open, then the
+    # password sign-in, while the server takes that.
     assert len(logins) == 2, f"two submits send one sign-in, not {logins}"
     page.locator("#login-password").fill("op-pass")
     page.locator("#login-form button[type=submit]").click()

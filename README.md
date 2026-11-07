@@ -731,6 +731,11 @@ a user with keys only,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
+A password set with `user add` or `user passwd` is of `auth_version` 2:
+the command registers it by OPAQUE in its own process,
+with the browser's key stretching, so the web UI signs in with it and the
+server keeps no hash (docs/store.md section 6).
+A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
 for the service run it as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.

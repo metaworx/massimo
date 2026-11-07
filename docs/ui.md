@@ -315,9 +315,11 @@ without the switches.
   and a file that is not a scheme says so under the buttons.
 - **Users** (with `users`, or `guests` for the guests alone):
   every user in a panel with its display name, role, whether it is disabled,
-  a guest's end, and a new password, which ends the user's sessions;
-  **Remove**; the user's sessions and API keys with **Revoke**,
-  and **Create key**, which shows the new key once.
+  a guest's end, and a new password, which ends the user's sessions and,
+  as every password the page sets,
+  is registered by OPAQUE in the browser and never sent; **Remove**;
+  the user's sessions and API keys with **Revoke**, and **Create key**,
+  which shows the new key once.
   **Add a user** opens the form for one.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
@@ -325,9 +327,10 @@ without the switches.
   and **Add a role**; the owner cannot be changed.
   **Capabilities for every role** (with `capabilities`) switches a capability
   off for every role but the owner.
-- **Change password** and **Log out**:
-  the own password, with the current one, and the end of the session
-  (an API key is only forgotten).
+- **Change password** and **Log out**: the own password, with the current one,
+  which a sign-in by OPAQUE proves without sending it,
+  and the end of the session (an API key is only forgotten).
+  The form that creates the first owner registers its password the same way.
 - **Software**:
   the running version, the update channel and whether a newer release is out.
   On a box with the update helper installed (packaging/README.md, "Updating"),

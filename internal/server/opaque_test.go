@@ -24,7 +24,7 @@ func opaqueOptions(t *testing.T) *opaque.ClientOptions {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &opaque.ClientOptions{KSFSalt: make([]byte, 16), KSFLength: 64, KSFParameters: []uint64{uint64(p), uint64(m), uint64(l)}}
+	return store.BrowserKSF(m, p, l)
 }
 
 func opaqueClient(t *testing.T) *opaque.Client {
