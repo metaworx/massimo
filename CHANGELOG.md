@@ -151,6 +151,9 @@ the next minor, a fix counts the suffix up.
 - The re-read after a configuration write is a step of its command in
   `GET /api/v1/commands/{id}`, so a failed one shows there.
 
+- `massimo fakecube -pair`: the device no longer joins after `x:` or
+  twice after two `n:`, nor once the connection is closed.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

@@ -263,9 +263,13 @@ func (s *Server) serve(conn net.Conn) {
 		}
 	}
 	var inclusion *time.Timer // ends the running inclusion
+	var join *time.Timer      // makes the Pair device join it
 	defer func() {
 		if inclusion != nil {
 			inclusion.Stop()
+		}
+		if join != nil {
+			join.Stop()
 		}
 	}()
 	var last cube.Message
@@ -354,8 +358,11 @@ func (s *Server) serve(conn net.Conn) {
 			if inclusion != nil {
 				inclusion.Stop()
 			}
+			if join != nil {
+				join.Stop() // a second n: makes the device join once
+			}
 			if p := s.Pair; p != nil {
-				time.AfterFunc(p.Delay, func() {
+				join = time.AfterFunc(p.Delay, func() {
 					s.mu.Lock()
 					s.joined = true
 					delete(s.deleted, p.Device.RFAddress)
@@ -369,6 +376,10 @@ func (s *Server) serve(conn net.Conn) {
 			if inclusion != nil {
 				inclusion.Stop()
 				inclusion = nil
+			}
+			if join != nil {
+				join.Stop() // no device joins an inclusion that ended
+				join = nil
 			}
 			reply = "N:\r\n"
 		default:
