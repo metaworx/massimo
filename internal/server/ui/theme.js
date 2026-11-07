@@ -209,6 +209,14 @@ function storeCustomSchemes() {
   schedulePreferences("schemes"); // login.js: the user's schemes follow the user
 }
 
+// forgetCustomSchemes drops the user's schemes from the browser, and
+// sends nothing: the server keeps them for the user (Log out, app.js
+// forgetUserSettings).
+function forgetCustomSchemes() {
+  themeState.custom = [];
+  store("massimo.schemes", null);
+}
+
 // schemesDocument is the user's schemes as the server keeps them, the
 // preference schemes: a list of massimo-scheme/1 documents.
 function schemesDocument() {

@@ -189,6 +189,11 @@ Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
 keeps that setting's value in this browser instead,
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
+Log out takes your settings and schemes out of the browser,
+a change made just before still reaching the server,
+so that the next one to sign in there starts from the defaults
+and does not take yours into its account;
+what is kept only on this device stays.
 A guest, a server without users and the API token keep every setting in the browser,
 without the switches.
 

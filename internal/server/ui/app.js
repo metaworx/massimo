@@ -151,6 +151,16 @@ function storeUserSetting(key, v) {
   store("massimo." + key, SETTING_STORE[key](v));
 }
 
+// forgetUserSettings takes the user's values out of the browser, the
+// settings and the schemes (theme.js), as Log out does for a user whose
+// settings followed it; what is kept for this device only stays, and the
+// defaults apply where it keeps nothing.
+function forgetUserSettings() {
+  for (const k of SETTING_KEYS) store("massimo." + k, null);
+  forgetCustomSchemes();
+  return applyStoredSettings();
+}
+
 // setSetting changes a setting: on this device only where it is kept for
 // this device, else the user's value, which goes to the server as well
 // (login.js schedulePreferences).

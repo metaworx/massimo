@@ -148,7 +148,10 @@ what a test stores in the browser goes with its context.
   browser with the same token,
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
-  password `guest-pass`) has no switches, and its poll stays in the browser.
+  password `guest-pass`) has no switches, and its poll stays in the browser;
+  the operator's poll and scheme, changed just before Log out,
+  reach the operator's account and leave the browser,
+  and the owner signing in next with its key gets neither.
   Since the four cases share the server,
   the page fixture removes the token's user's preferences before every page.
 - `test_log.py`:

@@ -67,6 +67,9 @@ the next minor, a fix counts the suffix up.
 - A sign-in as the page starts, or after Log out, starts the page once,
   with one event stream instead of two.
 
+- Log out takes the user's settings and colour schemes out of the
+  browser, so that the next user neither sees nor inherits them.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
