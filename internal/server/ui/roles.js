@@ -69,16 +69,12 @@ function setOf(grid) {
   return [...grid.querySelectorAll("input[name^='cap:']")].filter((i) => i.checked).map((i) => i.name.slice(4));
 }
 
+// removeRole asks in the panel, in place of its actions.
 function removeRole(r, actions) {
-  const box = confirmBox(t("roles.removeConfirm", { role: r.key }), { yes: t("roles.remove"), no: t("action.keep") }, () => {
+  confirmInPlace(actions, t("roles.removeConfirm", { role: r.key }), { yes: t("roles.remove"), no: t("action.keep") }, () => {
     rolesUI.open.delete(r.key);
-    roleAction(() => api("DELETE", "api/v1/roles/" + encodeURIComponent(r.key)), t("roles.removed", { role: r.key }), r.key);
-  }, () => {
-    box.replaceWith(actions);
-    actions.querySelector(".remove-role").focus();
-  });
-  actions.replaceWith(box);
-  box.focusFirst();
+    return roleAction(() => api("DELETE", "api/v1/roles/" + encodeURIComponent(r.key)), t("roles.removed", { role: r.key }), r.key);
+  }, ".remove-role");
 }
 
 // rolePanel is one role, from its template (tpl-role-panel).

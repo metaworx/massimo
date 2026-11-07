@@ -195,3 +195,36 @@ def test_log_answers(page, case):
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error').length === 1", 5), \
         "the error line shows with a kind chosen"
     page.locator("#view-tiles").click()
+
+
+def test_log_keeps_events_that_come_while_it_loads(page, case):
+    """A live event that comes while a page of the log is on its way is
+    kept after the page, and one the page holds already is not doubled.
+    The page's api() holds the log's request until the test answers it."""
+    now = time.time()
+    page.locator("#view-log").click()
+    assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    page.evaluate("""() => {
+      window.logAnswers = [];
+      const real = api;
+      window.api = (method, path, body) => path.includes("/log")
+        ? new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }))
+        : real(method, path, body);
+    }""")
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    assert wait_until(page, "window.logAnswers.length === 1", 5), "the log's request held"
+    late = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now + 5)) + "Z"
+    both = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now + 1)) + "Z"
+    for at in (both, late):
+        page.evaluate("""([rf, at]) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+          kind: "config", device: rf, time: at }) }))""", [rf, at])
+    page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)",
+                  [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in (1, 2)] +
+                  [{"id": 3, "kind": "config", "device": rf, "time": both}])
+    assert wait_until(page, "!logState.loading", 5), "the page is in"
+    kinds = page.evaluate("logState.lines.map((l) => l.kind + ' ' + l.at)")
+    assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
+        f"the page, then the live event it lacks, once each: {kinds}"
+    assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
+    page.locator("#view-tiles").click()

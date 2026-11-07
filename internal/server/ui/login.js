@@ -117,6 +117,24 @@ function renderMe() {
 
 let loginPromise = null;
 
+// startWaits counts the starts that wait for who is in, the page's own
+// and Log out's (loadMeAndPreferences): each goes on by itself after a
+// sign-in, with the settings, the data and the stream, so the dialog
+// starts nothing beside it (afterLogin), which would start the page twice.
+let startWaits = 0;
+
+// loadMeAndPreferences reads who is in, through the sign-in dialog where
+// the server asks for one, then the user's settings from the server.
+async function loadMeAndPreferences() {
+  startWaits++;
+  try {
+    await loadMe();
+  } finally {
+    startWaits--;
+  }
+  await loadPreferences();
+}
+
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed.
 function askLogin() {
@@ -142,7 +160,7 @@ function askLogin() {
       if (key) {
         setToken(key);
         done(true);
-        afterLogin();
+        if (!startWaits) afterLogin();
         return;
       }
       const user = $("login-user").value.trim();
@@ -155,7 +173,7 @@ function askLogin() {
         const session = await signIn(user, password);
         setToken(session.token);
         done(true);
-        afterLogin();
+        if (!startWaits) afterLogin();
       } catch (e) {
         showResult(error, t("login.failed", { error: e.message }), false);
         $("login-password").focus();
@@ -168,21 +186,15 @@ function askLogin() {
   return loginPromise;
 }
 
-// signIn posts the login and returns the session; the answer's error is
-// thrown.
-async function signIn(user, password) {
-  const resp = await fetch("api/v1/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user, password }) });
-  let data = null;
-  try {
-    data = await resp.json();
-  } catch (e) {
-    // no JSON: the status says enough
-  }
-  if (!resp.ok) throw new Error((data && data.error) || resp.status + " " + resp.statusText);
-  return data;
+// signIn posts the login, without a token and without the dialog's
+// retry, and returns the session; the answer's error is thrown.
+function signIn(user, password) {
+  return apiRequest("POST", "api/v1/login", { user, password }, { auth: false });
 }
 
-// afterLogin reads who is in, and starts the stream and the data again.
+// afterLogin reads who is in, and starts the stream and the data again,
+// for a sign-in that no start waited for: a session that ended while the
+// page ran, a key pasted, the first owner.
 function afterLogin() {
   loadMe()
     .then(loadPreferences)
@@ -192,21 +204,31 @@ function afterLogin() {
 }
 
 // logout ends the session (an API key is only forgotten) and asks who
-// is there again.
+// is there again. The settings that followed the user go with it: a
+// change still waiting is sent under the user's token first, then the
+// browser forgets the user's values and schemes and keeps what is kept
+// for this device only, so that the next to sign in neither sees them
+// nor hands them to its own account, as loadPreferences would hand over
+// what a server lacks. Neither request asks for a sign-in.
 async function logout() {
   const me = state.me;
+  const synced = canSync();
+  for (const key of takeScheduled()) {
+    await apiRequest("PUT", "api/v1/me/preferences/" + key, preferenceBody(key)).catch(() => {});
+  }
   if (me && me.mode === "users" && me.token && me.token.kind === "session") {
     try {
-      await api("POST", "api/v1/logout");
+      await apiRequest("POST", "api/v1/logout");
     } catch (e) {
       // the session may be gone already
     }
   }
   setToken(null);
   state.me = null;
+  if (synced) await forgetUserSettings(); // app.js
   closeEvents();
   showView("tiles");
-  await loadMe();
+  await loadMeAndPreferences();
   refresh().then(connectEvents);
 }
 
@@ -235,16 +257,28 @@ function schedulePreferences(key) {
   prefsSync.timer = setTimeout(pushPreferences, PREFS_DELAY);
 }
 
-// pushPreferences sends the preferences scheduled: ui is the user's
-// values as the browser keeps them, without this device's.
-async function pushPreferences() {
+// takeScheduled ends the wait of schedulePreferences and returns the
+// preferences it held.
+function takeScheduled() {
+  if (prefsSync.timer) clearTimeout(prefsSync.timer);
   prefsSync.timer = null;
   const keys = [...prefsSync.keys];
   prefsSync.keys.clear();
-  for (const key of keys) {
-    const body = key === "ui" ? storedSettings() : schemesDocument(); // app.js, theme.js
+  return keys;
+}
+
+// preferenceBody is what a preference sends: ui is the user's values as
+// the browser keeps them, without this device's, schemes the user's
+// schemes.
+function preferenceBody(key) {
+  return key === "ui" ? storedSettings() : schemesDocument(); // app.js, theme.js
+}
+
+// pushPreferences sends the preferences scheduled.
+async function pushPreferences() {
+  for (const key of takeScheduled()) {
     try {
-      await api("PUT", "api/v1/me/preferences/" + key, body);
+      await api("PUT", "api/v1/me/preferences/" + key, preferenceBody(key));
     } catch (e) {
       showMessage(t("prefs.saveFailed", { error: e.message }), false);
     }
@@ -258,23 +292,17 @@ async function pushPreferences() {
 // the page.
 function flushPreferences() {
   if (!prefsSync.timer) return;
-  clearTimeout(prefsSync.timer);
-  prefsSync.timer = null;
-  const keys = [...prefsSync.keys];
-  prefsSync.keys.clear();
-  for (const key of keys) {
-    const body = key === "ui" ? storedSettings() : schemesDocument();
-    const headers = { "Content-Type": "application/json" };
-    if (state.token) headers.Authorization = "Bearer " + state.token;
-    fetch("api/v1/me/preferences/" + key, { method: "PUT", headers, body: JSON.stringify(body), keepalive: true }).catch(() => {});
+  for (const key of takeScheduled()) {
+    apiRequest("PUT", "api/v1/me/preferences/" + key, preferenceBody(key), { keepalive: true }).catch(() => {});
   }
 }
 
 // loadPreferences takes the signed-in user's settings from the server:
-// the schemes first, merged with the browser's own, so that a chosen
-// scheme of the user's resolves, then ui, applied where this device does
-// not keep its own. What the server lacks it learns from the browser, so
-// that the first sign-in keeps the settings the browser had.
+// the schemes first, the server's list as it is, so that a chosen scheme
+// of the user's resolves and a deleted one stays deleted, then ui,
+// applied where this device does not keep its own. What the server lacks
+// it learns from the browser, so that the first sign-in keeps the
+// settings and the schemes the browser had.
 async function loadPreferences() {
   if (!canSync()) return;
   let prefs;
@@ -284,7 +312,7 @@ async function loadPreferences() {
     return;
   }
   if (prefs.schemes) {
-    if (mergeSchemes(prefs.schemes)) schedulePreferences("schemes");
+    takeSchemes(prefs.schemes); // theme.js
   } else if (themeState.custom.length) {
     schedulePreferences("schemes");
   }
