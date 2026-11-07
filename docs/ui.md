@@ -233,7 +233,8 @@ without the switches.
   **Hidden devices** lists the devices hidden besides those of room 255,
   each with **Show again**; **Hide** takes a radio address,
   with the Cube's devices to choose from.
-  **Save** sends the changes, which apply at once:
+  **Save**, off while nothing differs from the Cube's settings,
+  sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
   and a room that holds only hidden devices goes with it.
   When a line of the server's settings file says something else than the panel,
@@ -322,6 +323,7 @@ without the switches.
   which takes seconds on a Raspberry Pi 1.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
+  **Save**, off while nothing differs from the role,
   **Disable** (with `roles.disable`), **Remove** for a created role nobody has,
   and **Add a role**; the owner cannot be changed.
   **Capabilities for every role** (with `capabilities`) switches a capability

@@ -20,7 +20,6 @@ const backupUI = {
   diff: {}, // per backup id: the comparison with the one before, once asked for
   plan: null, // the restore shown: {title, backup, body, type, plan}
   run: null, // the restore sent: {id, steps, results, state, sent, error}
-  busy: false,
 };
 
 function backupMsg(text, ok) {
@@ -96,8 +95,13 @@ function backupRow(b, older) {
     note.classList.remove("hidden");
   }
   const actions = row.querySelector(".backup-actions");
-  actions.append(button(t("backup.downloadOne"), "small", () => downloadStored(b)), button(t("backup.restore"), "small needs-restore", () => planStored(b)));
-  if (older) actions.append(button(t("backup.compare"), "small", () => compareBackup(b, older)));
+  // Each request turns its button until the answer (whileBusy).
+  const busy = (label, cls, fn) => {
+    const btn = button(label, cls, () => whileBusy(btn, fn));
+    return btn;
+  };
+  actions.append(busy(t("backup.downloadOne"), "small", () => downloadStored(b)), busy(t("backup.restore"), "small needs-restore", () => planStored(b)));
+  if (older) actions.append(busy(t("backup.compare"), "small", () => compareBackup(b, older)));
   actions.append(button(t("action.delete"), "small needs-restore", () => askDelete(b, row)));
   if (backupUI.diff[b.id]) row.querySelector(".backup-detail").appendChild(diffEl(backupUI.diff[b.id]));
   return row;
@@ -142,21 +146,17 @@ async function downloadStored(b) {
 }
 
 async function takeBackup() {
-  if (backupUI.busy) return;
-  backupUI.busy = true;
-  $("backup-take").disabled = true;
-  backupMsg("");
-  try {
-    await api("POST", base() + "/backups", {});
-    backupMsg(t("backup.taken"), true);
-    await loadBackups();
-    renderBackups();
-  } catch (e) {
-    backupMsg(t("backup.failed", { error: e.message }), false);
-  } finally {
-    backupUI.busy = false;
-    $("backup-take").disabled = false;
-  }
+  await whileBusy($("backup-take"), async () => {
+    backupMsg("");
+    try {
+      await api("POST", base() + "/backups", {});
+      backupMsg(t("backup.taken"), true);
+      await loadBackups();
+      renderBackups();
+    } catch (e) {
+      backupMsg(t("backup.failed", { error: e.message }), false);
+    }
+  });
 }
 
 async function compareBackup(b, older) {
@@ -256,7 +256,10 @@ function renderPlan() {
   if (!run) {
     if (!n) showResult(result, t("restore.nothing"), true);
     actions.appendChild(button(n ? t("action.cancel") : t("action.close"), "", closePlan));
-    if (n) actions.appendChild(button(tn("restore.send", n), "primary", sendRestore));
+    if (n) {
+      const send = button(tn("restore.send", n), "primary", () => whileBusy(send, sendRestore));
+      actions.appendChild(send);
+    }
   } else if (run.state === "running") {
     showResult(result, t("restore.running", { done: run.results.filter((r) => r).length, n }), true);
   } else {
@@ -311,7 +314,7 @@ function backupCubeChanged() {
 }
 
 function initBackups() {
-  $("backup-download").addEventListener("click", downloadNow);
+  $("backup-download").addEventListener("click", (ev) => whileBusy(ev.currentTarget, downloadNow));
   $("backup-take").addEventListener("click", takeBackup);
   const picker = filePicker(".json,.yaml,.yml,application/json,application/yaml", (f) => planFile(f));
   $("restore-file").after(picker);

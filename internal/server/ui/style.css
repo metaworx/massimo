@@ -722,6 +722,17 @@ button.busy::after {
   border-radius: 50%;
   animation: busy-turn 0.8s linear infinite;
 }
+/* An icon button turns in place of its icon, keeping its size. */
+.icon-btn.busy { position: relative; color: transparent; }
+.icon-btn.busy > svg { visibility: hidden; }
+.icon-btn.busy::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -0.4em 0 0 -0.4em;
+  border-color: var(--fg);
+  border-right-color: transparent;
+}
 @keyframes busy-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   button.busy::after { animation-duration: 2.4s; }

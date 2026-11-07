@@ -65,30 +65,33 @@ async function loadCubeDevices(serial) {
 }
 
 // cubeAction runs a change and redraws the list, the header and the
-// tiles afterwards; the message says how it went.
-async function cubeAction(fn, okText, serial) {
-  cubesUI.busy = true;
-  try {
-    await fn();
-    delete cubesUI.edits[serial];
-    await refresh();
-    renderCubes();
-    cubesMsg(okText, true);
-    return true;
-  } catch (e) {
-    cubesMsg(t("cubes.failed", { serial, error: e.message }), false);
-    return false;
-  } finally {
-    cubesUI.busy = false;
-  }
+// tiles afterwards; the message says how it went. btn, the button it
+// runs for, is busy until then (whileBusy).
+function cubeAction(fn, okText, serial, btn) {
+  return whileBusy(btn, async () => {
+    cubesUI.busy = true;
+    try {
+      await fn();
+      delete cubesUI.edits[serial];
+      await refresh();
+      renderCubes();
+      cubesMsg(okText, true);
+      return true;
+    } catch (e) {
+      cubesMsg(t("cubes.failed", { serial, error: e.message }), false);
+      return false;
+    } finally {
+      cubesUI.busy = false;
+    }
+  });
 }
 
-function saveCube(serial, body) {
-  return cubeAction(() => api("PUT", "api/v1/cubes/" + encodeURIComponent(serial), body), t("cubes.saved", { serial }), serial);
+function saveCube(serial, body, btn) {
+  return cubeAction(() => api("PUT", "api/v1/cubes/" + encodeURIComponent(serial), body), t("cubes.saved", { serial }), serial, btn);
 }
 
-function addCube(serial) {
-  return cubeAction(() => api("POST", "api/v1/cubes", { serial }), t("cubes.added", { serial }), serial);
+function addCube(serial, btn) {
+  return cubeAction(() => api("POST", "api/v1/cubes", { serial }), t("cubes.added", { serial }), serial, btn);
 }
 
 // removeCube asks in the panel, in place of its actions, whether to stop
@@ -150,6 +153,8 @@ function fillHiddenList(serial, box, input) {
     ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
   }
   fillDatalist(box.querySelector("datalist"), serial, list);
+  // The list is part of what Save sends: its form checks again (sendWhenChanged).
+  box.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 // fillDatalist offers the Cube's visible devices that are not hidden
@@ -241,8 +246,39 @@ async function loadPairing(serial) {
   }
 }
 
+// PAIRING_BUTTONS are, per pairing request (pairingOf(serial).sending),
+// the button that turns while it runs.
+const PAIRING_BUTTONS = { start: ".pairing-form button[type=submit]", stop: ".pair-stop" };
+
+// markPairing draws the pairing's Start and Stop turning while theirs
+// runs; pairingSection calls it, and pairingWrite on the panel in place.
+function markPairing(box, p) {
+  for (const [key, sel] of Object.entries(PAIRING_BUTTONS)) setBusy(box.querySelector(sel), p.sending === key);
+}
+
+// pairingWrite runs fn, Start's or Stop's request, as key: its button
+// turns, also across a redraw of the section, and a second click sends
+// nothing.
+async function pairingWrite(serial, key, fn) {
+  const p = pairingOf(serial);
+  if (p.sending) return;
+  p.sending = key;
+  const mark = () => {
+    const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
+    const box = panel && panel.querySelector(".cube-pairing");
+    if (box) markPairing(box, p);
+  };
+  mark();
+  try {
+    await fn();
+  } finally {
+    p.sending = null;
+    mark();
+  }
+}
+
 // startPairing sends Start: POST …/pairing with the seconds.
-async function startPairing(serial) {
+function startPairing(serial) {
   const p = pairingOf(serial);
   const secs = Number(p.seconds);
   if (!Number.isInteger(secs) || secs < 1 || secs > 600) {
@@ -250,26 +286,33 @@ async function startPairing(serial) {
     redrawPairing(serial);
     return;
   }
-  p.msg = null;
-  p.edits = {};
-  p.active = false;
-  try {
-    applyPairing(serial, await api("POST", cubePath(serial) + "/pairing", { seconds: secs }));
+  return pairingWrite(serial, "start", async () => {
+    let st;
+    try {
+      st = await api("POST", cubePath(serial) + "/pairing", { seconds: secs });
+    } catch (e) {
+      p.msg = { text: t("pairing.failed", { error: e.message }), ok: false };
+      redrawPairing(serial);
+      return;
+    }
+    p.msg = null;
+    p.edits = {};
+    p.active = false;
+    applyPairing(serial, st);
     loadCubeRooms(serial);
-  } catch (e) {
-    p.msg = { text: t("pairing.failed", { error: e.message }), ok: false };
-    redrawPairing(serial);
-  }
+  });
 }
 
 // stopPairing sends Stop: DELETE …/pairing.
-async function stopPairing(serial) {
-  try {
-    applyPairing(serial, await api("DELETE", cubePath(serial) + "/pairing"));
-  } catch (e) {
-    pairingOf(serial).msg = { text: t("pairing.failed", { error: e.message }), ok: false };
-    redrawPairing(serial);
-  }
+function stopPairing(serial) {
+  return pairingWrite(serial, "stop", async () => {
+    try {
+      applyPairing(serial, await api("DELETE", cubePath(serial) + "/pairing"));
+    } catch (e) {
+      pairingOf(serial).msg = { text: t("pairing.failed", { error: e.message }), ok: false };
+      redrawPairing(serial);
+    }
+  });
 }
 
 // startPairingTick counts down every second while pairing runs. The
@@ -374,6 +417,7 @@ function pairingSection(serial) {
     const left = Math.ceil((p.until - Date.now()) / 1000);
     box.querySelector(".pairing-countdown").textContent = left > 0 ? t("pairing.left", { seconds: left }) : t("pairing.ending");
   }
+  markPairing(box, p);
   return box;
 }
 
@@ -439,11 +483,11 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   const result = form.querySelector(".pair-result");
   const submit = form.querySelector("button[type=submit]");
   if (e.result) showResult(result, e.result.text, e.result.ok);
-  submit.disabled = !!e.busy; // a redraw while it is being sent
   if (!rooms.length) {
     submit.disabled = true;
     showResult(result, t("pairing.noRooms"), false);
   }
+  setBusy(submit, !!e.busy); // a redraw while it is being sent
   const cancel = form.querySelector(".pair-device-cancel");
   if (onCancel) cancel.addEventListener("click", onCancel);
   else cancel.remove();
@@ -466,7 +510,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
     const roomName = target ? target.name : String(e.room);
     e.busy = true;
     e.result = { text: t("pairing.putting", { device: label, room: roomName }), ok: true };
-    submit.disabled = true;
+    setBusy(submit, true);
     showResult(result, e.result.text, true);
     let res;
     try {
@@ -477,7 +521,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
       e.busy = false;
       e.result = { text: errorText(label, err), ok: false };
       showResult(result, e.result.text, false);
-      submit.disabled = false;
+      setBusy(submit, false);
       if (serial === state.serial) await loadRooms().catch(() => {});
       if (onFail) onFail();
       return;
@@ -543,7 +587,7 @@ function cubePanel(c) {
     row.querySelector("p").textContent = t("cubes.differs", { variable: fd.variable, file: valueText(fd.file), store: valueText(fd.store) });
     const b = row.querySelector(".take-file");
     b.dataset.field = fd.field;
-    b.addEventListener("click", () => saveCube(c.serial, { [fd.field]: fd.file }));
+    b.addEventListener("click", () => saveCube(c.serial, { [fd.field]: fd.file }, b));
     form.before(row);
   }
 
@@ -571,8 +615,8 @@ function cubePanel(c) {
   const actions = form.querySelector(".actions");
   actions.querySelector(".remove-cube").addEventListener("click", () => removeCube(c.serial, actions));
 
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
+  // changes is what Save sends: the fields that differ from the Cube's.
+  const changes = () => {
     const body = {};
     const name = field("name").value.trim();
     if (name !== (c.name || "")) body.name = name;
@@ -585,11 +629,18 @@ function cubePanel(c) {
     if (ps.toUpperCase() !== (c.proxy_serial || "")) body.proxy_serial = ps;
     const hidden = cubesUI.edits[c.serial] || c.hidden || [];
     if (!sameList(hidden, c.hidden)) body.hidden = hidden;
+    return body;
+  };
+  const save = actions.querySelector("button[type=submit]");
+  sendWhenChanged(form, () => Object.keys(changes()).length > 0, { btn: save });
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const body = changes();
     if (!Object.keys(body).length) {
       cubesMsg(t("cubes.unchanged"), true);
       return;
     }
-    saveCube(c.serial, body);
+    saveCube(c.serial, body, save);
   });
   return d;
 }
@@ -617,7 +668,7 @@ function foundRow(c) {
   const age = ageEl(c.last_seen, false, true);
   if (age) add.before(age);
   add.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
-  add.addEventListener("click", () => addCube(c.serial));
+  add.addEventListener("click", () => addCube(c.serial, add));
   return li;
 }
 

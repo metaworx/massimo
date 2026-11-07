@@ -176,3 +176,21 @@ def test_create_is_busy_until_answered(page, case):
         page.unroute("**/api/v1/users")
         remove_user(name)
     page.locator("#view-tiles").click()
+
+
+def test_role_save_is_off_until_a_change(page, case):
+    """A role's Save is off while its name and set are as stored; a
+    capability switched turns it on, switched back off again. Nothing
+    is sent."""
+    page.locator("#view-settings").click()
+    panel = page.locator(".role-panel[data-key='operator']")
+    assert wait_until(page, "!!document.querySelector(\".role-panel[data-key='operator']\")", 5), "the roles are listed"
+    panel.locator("summary").click()
+    save = panel.locator("form button[type=submit]")
+    assert save.is_disabled(), "Save is off with the role as stored"
+    switch = panel.locator(".cap-grid .switch").first
+    switch.click()
+    assert save.is_enabled(), "a capability switched turns Save on"
+    switch.click()
+    assert save.is_disabled(), "switched back, nothing differs"
+    page.locator("#view-tiles").click()

@@ -32,7 +32,7 @@ the next minor, a fix counts the suffix up.
 
 - The web UI keeps a button that sends off, with a spinner, until the
   answer, and a Send off while nothing changed, so a second click sends
-  nothing: users, sign-in, Rooms (`docs/ui.md`, "Rooms").
+  nothing (`docs/ui.md`, "Rooms", "Settings").
 
 - A request still being answered when `serve` stops is finished, and
   its audit row written, before the store closes (`cmd/massimo`).

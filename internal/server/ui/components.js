@@ -90,6 +90,14 @@ function isBusy(btn) {
   return !!btn && btn.classList.contains("busy");
 }
 
+// setOff turns a button off or on; a busy one keeps turning, and is off
+// or on as set here once its request has answered.
+function setOff(btn, off) {
+  if (!btn) return;
+  if (isBusy(btn)) busyWas.set(btn, !!off);
+  else btn.disabled = !!off;
+}
+
 // whileBusy runs fn, which sends a request, with btn busy (setBusy) and
 // returns what fn returns; while the button is busy it runs nothing and
 // returns undefined.
@@ -109,16 +117,12 @@ async function whileBusy(btn, fn) {
 // form's events do not see. With lazy, the form's values reach what
 // changed() reads only at their change event (numberInput), so a
 // keystroke turns the button on and the change sets it again; a click
-// on it right after typing then finds it on. A busy button is left to
-// setBusy.
+// on it right after typing then finds it on. A busy button keeps
+// turning, and is set for when its request has answered (setOff).
 function sendWhenChanged(form, changed, { btn, lazy } = {}) {
   const b = btn || form.querySelector("button[type=submit]");
-  const check = () => {
-    if (b && !isBusy(b)) b.disabled = !changed();
-  };
-  form.addEventListener("input", lazy ? () => {
-    if (b && !isBusy(b)) b.disabled = false;
-  } : check);
+  const check = () => setOff(b, !changed());
+  form.addEventListener("input", lazy ? () => setOff(b, false) : check);
   form.addEventListener("change", check);
   check();
   return check;

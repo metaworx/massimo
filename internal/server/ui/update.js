@@ -16,12 +16,12 @@ function updateBusy(h) {
   return !!h && ["checking", "installing", "restarting"].includes(h.state);
 }
 
-// setUpdateBusy greys out both buttons of the Software section while an
+// setUpdateBusy turns the update button and greys out Check while an
 // update runs: a check or a second request in the middle of an install
 // would only confuse, and the server goes away for the restart anyway.
 function setUpdateBusy(busy) {
-  $("update-btn").disabled = busy;
-  $("update-check").disabled = busy;
+  setBusy($("update-btn"), busy);
+  setOff($("update-check"), busy);
 }
 
 // helperText is the helper's last state; unknown states are shown as
@@ -133,7 +133,7 @@ async function runUpdate(u) {
 
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
-  $("update-check").addEventListener("click", () => loadUpdate(true));
+  $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
   $("view-settings").addEventListener("click", () => loadUpdate(false));
 }
 

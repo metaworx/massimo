@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from helpers import named_buttons, scroll_width, wait_until
+from helpers import assert_busy, busy_state, hold, named_buttons, scroll_width, wait_held, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -148,4 +148,38 @@ def test_hide_and_show_keep_what_is_typed(page, case):
     assert form.locator("input[name=name]").input_value() == "Typed, not saved", "the name typed stays after Show again"
     assert form.locator("input[name=proxy]").input_value() == "127.0.0.1:62999", "the proxy typed stays after Show again"
     assert page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100').name") == "Fake Cube", "nothing saved"
+    page.locator("#view-tiles").click()
+
+
+def test_save_is_off_until_a_change_and_turns(page, case):
+    """A Cube's Save is off while nothing differs from the Cube's
+    settings, and also once a hidden device is added and shown again;
+    held, it turns and a second click sends nothing. The PUT is answered
+    with a stub, so the store keeps its name."""
+    panel, form = open_panel(page)
+    save = form.locator("button[type=submit]")
+    assert save.is_disabled(), "Save is off while nothing differs"
+    form.locator("input[name=hide]").fill("0abcde")
+    form.locator(".cube-hide-add button").click()
+    assert save.is_enabled(), "a device to hide turns Save on"
+    form.locator(".cube-hidden-list button").first.click()
+    assert save.is_disabled(), "shown again, nothing differs"
+    held, sent = [], []
+    hold(page, "**/api/v1/cubes/KEQ0000100", "PUT", held, sent)
+    try:
+        form.locator("input[name=name]").fill("Held name")
+        assert save.is_enabled(), "a changed name turns Save on"
+        save.click()
+        assert wait_held(page, held), "the PUT is sent"
+        assert_busy(page, PANEL + " form.cube-form button[type=submit]", "Save")
+        save.click(force=True)
+        page.wait_for_timeout(300)
+        assert sent == [{"name": "Held name"}], f"one PUT, with the name: {sent}"
+        for route in held:
+            route.fulfill(status=200, content_type="application/json", body="{}")
+        assert wait_until(page, "(() => { const b = document.querySelector(%r); return b && !b.classList.contains('busy'); })()"
+                          % (PANEL + " form.cube-form button[type=submit]"), 5), "Save stops turning once answered"
+    finally:
+        page.unroute("**/api/v1/cubes/KEQ0000100")
+    assert busy_state(page, PANEL + " form.cube-form button[type=submit]")[0], "the Cube's name as it was: nothing differs"
     page.locator("#view-tiles").click()

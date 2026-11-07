@@ -13,7 +13,6 @@ const rolesUI = {
   roles: [],
   capabilities: [], // every capability with whether it is disabled
   open: new Set(),
-  busy: false,
 };
 
 function rolesMsg(text, ok) {
@@ -33,20 +32,21 @@ async function loadRoles() {
   usersUI.roles = rolesUI.roles;
 }
 
-async function roleAction(fn, okText, key) {
-  rolesUI.busy = true;
-  try {
-    await fn();
-    await loadRoles();
-    renderRoles();
-    rolesMsg(okText, true);
-    return true;
-  } catch (e) {
-    rolesMsg(t("roles.failed", { role: key, error: e.message }), false);
-    return false;
-  } finally {
-    rolesUI.busy = false;
-  }
+// roleAction runs a change, redraws the roles and says how it went;
+// btn, the button it runs for, is busy until then (whileBusy).
+function roleAction(fn, okText, key, btn) {
+  return whileBusy(btn, async () => {
+    try {
+      await fn();
+      await loadRoles();
+      renderRoles();
+      rolesMsg(okText, true);
+      return true;
+    } catch (e) {
+      rolesMsg(t("roles.failed", { role: key, error: e.message }), false);
+      return false;
+    }
+  });
 }
 
 // capGrid is the switches of a role's set: one per capability, named
@@ -110,25 +110,32 @@ function rolePanel(r) {
   toggle.classList.toggle("hidden", owner);
   toggle.addEventListener("click", () => {
     roleAction(() => api("PUT", "api/v1/roles/" + encodeURIComponent(r.key) + "/disabled", { disabled: !r.disabled }),
-      t(r.disabled ? "roles.enabledNow" : "roles.disabledNow", { role: r.key }), r.key);
+      t(r.disabled ? "roles.enabledNow" : "roles.disabledNow", { role: r.key }), r.key, toggle);
   });
   const remove = actions.querySelector(".remove-role");
   remove.classList.toggle("hidden", r.builtin || r.users > 0);
   remove.addEventListener("click", () => removeRole(r, actions));
-  actions.querySelector("button[type=submit]").classList.toggle("hidden", owner);
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    if (owner) return;
+  const save = actions.querySelector("button[type=submit]");
+  save.classList.toggle("hidden", owner);
+  // changes is what Save sends: the name and the set, where they differ.
+  const changes = () => {
     const body = {};
     const n = name.value.trim();
     if (n !== (r.name || "")) body.name = n;
     const set = setOf(grid);
     if (set.slice().sort().join(",") !== (r.capabilities || []).slice().sort().join(",")) body.capabilities = set;
+    return body;
+  };
+  sendWhenChanged(form, () => !owner && Object.keys(changes()).length > 0, { btn: save });
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (owner) return;
+    const body = changes();
     if (!Object.keys(body).length) {
       rolesMsg(t("users.unchanged"), true);
       return;
     }
-    roleAction(() => api("PUT", "api/v1/roles/" + encodeURIComponent(r.key), body), t("roles.saved", { role: r.key }), r.key);
+    roleAction(() => api("PUT", "api/v1/roles/" + encodeURIComponent(r.key), body), t("roles.saved", { role: r.key }), r.key, save);
   });
   return d;
 }
@@ -152,7 +159,7 @@ function newRoleForm() {
     const body = { key, capabilities: setOf(grid) };
     const n = form.querySelector("input[name=name]").value.trim();
     if (n) body.name = n;
-    roleAction(() => api("POST", "api/v1/roles", body), t("roles.created", { role: key }), key).then((ok) => {
+    roleAction(() => api("POST", "api/v1/roles", body), t("roles.created", { role: key }), key, form.querySelector("button[type=submit]")).then((ok) => {
       if (ok) {
         clear($("role-new"));
         $("role-add").classList.remove("hidden");
@@ -169,9 +176,16 @@ function renderCapabilities() {
   clear(box);
   const grid = elem("div", "cap-grid");
   for (const c of rolesUI.capabilities) {
+    // The switch is off while its PUT runs, and goes back where it was
+    // when the server refuses.
     const sw = switchEl(capLabel(c.key), !c.disabled, (on) => {
+      const cb = sw.control;
+      cb.disabled = true;
       roleAction(() => api("PUT", "api/v1/capabilities/" + encodeURIComponent(c.key), { disabled: !on }),
-        t(on ? "roles.capEnabled" : "roles.capDisabled", { cap: capLabel(c.key) }), c.key);
+        t(on ? "roles.capEnabled" : "roles.capDisabled", { cap: capLabel(c.key) }), c.key).then((ok) => {
+        cb.disabled = false;
+        if (!ok) cb.checked = !on;
+      });
     }, "global:" + c.key);
     sw.title = c.key;
     grid.appendChild(sw);

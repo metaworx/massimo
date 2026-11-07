@@ -960,13 +960,7 @@ function initSettings() {
   };
   $("expert-toggle").addEventListener("change", onExpert);
   $("reload-btn").addEventListener("click", () => location.reload());
-  $("refresh-btn").addEventListener("click", (ev) => {
-    const btn = ev.currentTarget;
-    btn.disabled = true;
-    poll(true).finally(() => {
-      btn.disabled = false;
-    });
-  });
+  $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("clock-select").addEventListener("change", (ev) => {
     setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();
