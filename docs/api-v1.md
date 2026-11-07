@@ -376,7 +376,8 @@ The answer is `201` with the user; a name in use is `409`, a bad name,
 an unknown role or an unknown field `400`.
 The name of a removed user can be used again;
 the new user takes over the old one's row,
-so the audit's history of the name reads on.
+so the audit's history of the name reads on,
+and starts without the old one's preferences.
 
 On a server without users, `POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range,
@@ -396,6 +397,7 @@ an empty password removes it.
 The last enabled owner cannot be disabled or demoted (`409`).
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
+its preferences removed,
 and its row stays for the audit; `{"ok": true, "name": "anna"}`.
 The last enabled owner stays (`409`); a user cannot remove itself.
 

@@ -167,7 +167,7 @@ func (s *Store) roleID(ctx context.Context, q queryer, key string) (int64, error
 // Disabled and ExpiresAt, and the password (none when empty), created
 // by the user by (0: nobody, the command line). A removed user of the
 // name is taken over: its row gets the new values and keeps its
-// identifier.
+// identifier, and starts without preferences.
 func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) (User, error) {
 	if err := s.writable(); err != nil {
 		return User{}, err
@@ -211,6 +211,11 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 		_, err = tx.ExecContext(ctx, `UPDATE users SET display_name = ?, password_hash = ?, role_id = ?, disabled = ?, expires_at = ?, invited_by = ?, last_login_at = NULL, auth_version = 1,
 			deleted_at = NULL, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
 			u.DisplayName, hash, role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, nullID(by), s.nodeID, id)
+		if err == nil {
+			// Another person under the name: none of the removed user's
+			// settings, also of a removal that left them live.
+			err = s.removePreferences(ctx, tx, id, now)
+		}
 	}
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
@@ -332,7 +337,9 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 }
 
 // DeleteUser removes a user: a tombstone, with every token of the user
-// revoked. The last enabled owner is ErrLastOwner.
+// revoked and every preference a tombstone too, so that a user added
+// later under the name inherits none. The last enabled owner is
+// ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -361,6 +368,9 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, version = version + 1 WHERE user_id = ? AND revoked_at IS NULL`, now, u.ID); err != nil {
+		return fmt.Errorf("store: user %s: %w", u.Name, err)
+	}
+	if err := s.removePreferences(ctx, tx, u.ID, now); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := tx.Commit(); err != nil {

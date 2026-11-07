@@ -52,6 +52,9 @@ the next minor, a fix counts the suffix up.
   and minute, with their count, and their bodies are not read
   (docs/api-v1.md, "GET /api/v1/audit").
 
+- A user added under a removed user's name no longer inherits that
+  user's settings and colour schemes (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
