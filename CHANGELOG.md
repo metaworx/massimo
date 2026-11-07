@@ -22,6 +22,9 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- The web UI warns under its header while the server is open, and says
+  what closes it (`docs/ui.md`).
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its
