@@ -1,12 +1,13 @@
-# AP Redact v1.0: placeholders for real identifiers
+# AP Redact v1.1: placeholders for real identifiers
 
 ## TL;DR
 
 The recorded greeting, its UI-test copy, and the tests, CI and documents
-around them carry the owner's real Cube serials and the recorded room and
+around them carried the owner's real Cube serials and the recorded room and
 device names.
 They become placeholders: both greetings re-encoded in their decoded bytes,
-every expectation and document following; history stays as it is.
+every expectation, document and screenshot following;
+history stays as it is.
 
 - spare Cube → `KEQ0000100`, in every case and derived form the tests use;
   its thermostats → `MEQ0000101`–`MEQ0000106`, by room;
@@ -16,10 +17,13 @@ every expectation and document following; history stays as it is.
   the UI copy's window contact → `Fenster Fels 1`
 - every line keeps its length: same byte lengths, umlauts and sort order
 - guard: a test fails on a greeting serial that is not a placeholder
+- screenshots: taken from the old UI-test greeting → retaken from the new
 - kept: RF addresses, LAN details, the public protocol examples,
   the captured ciphertexts
 - history: not rewritten; two pull request descriptions edited once this
   plan's pull request is open
+
+Blocks 1 and 2 ran under v1.0; v1.1 adds Block 3 (D8).
 
 ### Blocks
 
@@ -27,10 +31,13 @@ every expectation and document following; history stays as it is.
    UI-test expectation, the CHANGELOG bullet
 2. Documents: placeholders in the examples, a Cube's role and `$SN` where a
    document is worked from
+3. Screenshots: the set retaken with `make ui-screenshots`, the slideshow
+   with `slideshow.sh`
 
 ## Discussion
 
-Seven decisions, settled by the owner at the TL;DR gate as recommended.
+Seven decisions, settled by the owner at the TL;DR gate as recommended,
+and an eighth at v1.0's completion gate.
 
 ### D1. Placeholder serials: A
 
@@ -92,6 +99,15 @@ Seven decisions, settled by the owner at the TL;DR gate as recommended.
   once this plan's pull request is open and under the signal that opens it.
   Their edit history keeps the old text until the owner deletes it.
 - B. Left as they are.
+
+### D8. The screenshots: A, retaken
+
+- **A (chosen).** Block 3 retakes the set from the new greeting with
+  `make ui-screenshots` and the slideshow with `slideshow.sh`, in one commit
+  (Analysis §7).
+  Every image changes, and this machine's fonts may draw other pixels than
+  the set's last machine.
+- B. Left: `main` would keep showing the old names and the serial in pictures.
 
 ## Analysis
 
@@ -203,6 +219,27 @@ document.
 - The serials stay public in history and in the two descriptions' edit
   history (D6, D7).
 
+### 7. The screenshots
+
+Found during Blocks 1 and 2
+([NOTE Redact v1.0](2026-11-07_09-51_NOTE_Redact_v1.0_how_the_run_went.md)):
+the 28 images of `docs/screenshots/` are taken from `tools/ui-test/greeting.txt`
+by `tools/ui-test/screenshots.py`, so they show the old room and device names,
+and the Cube choice and Settings → Cubes show the spare Cube's serial.
+A text search cannot see them.
+
+- `make ui-screenshots` (`tools/ui-test/run.sh screenshots`) removes the old
+  PNGs and takes the set again, byte for byte the same on one machine;
+  it runs here with the main checkout's Playwright environment
+  (`UI_TEST_PYTHON`), as `make ui-test` did.
+- `tools/ui-test/slideshow.sh` builds `slideshow.gif` from the 1100 px light
+  English shots; it needs ImageMagick, installed here (6.9).
+- The set's file names do not change; a shot that cannot be taken fails the
+  run. CI's Screenshots job takes the set again on the pull request and
+  uploads it as an artifact, without comparing.
+- `docs/images/windows-smartscreen-unknown-publisher.png`, the tree's only
+  other image, shows no Cube.
+
 ## Implementation Plan
 
 ### Block 1: Fixtures
@@ -241,11 +278,36 @@ Commit (Proposed commit message, Block 1).
 
 Commit (Proposed commit message, Block 2).
 
+### Block 3: Screenshots
+
+1. `make ui-screenshots`, with `UI_TEST_PYTHON` set to the main checkout's
+   Playwright environment.
+2. `tools/ui-test/slideshow.sh`.
+
+**Verification:**
+
+- the same 28 file names in `docs/screenshots/`, none missing, none new;
+- the rooms shots and Settings → Cubes, looked at:
+  the new names and `KEQ0000100`, no old name or serial;
+- the slideshow's frames are the new shots.
+
+Commit (Proposed commit message, Block 3).
+
 ### After the blocks
 
 Under the signal that opens this plan's pull request:
-merge `origin/main`, push, open the pull request against `main`,
-then D7's two descriptions, by `gh api -X PATCH …/pulls/<n> -F body=@<file>`.
+
+1. Merge `origin/main`.
+   Its release cut moved `[Unreleased]` into v0.10.0-alpha.1,
+   so `CHANGELOG.md` conflicts: Block 1's bullet goes into the new
+   `[Unreleased]` → `Changed`.
+   `origin/main` adds no use of either serial (checked at v1.0's completion gate).
+2. The test gate again: `go test ./...`, `make cross`, `make ui-test`,
+   `gofmt` and `go vet` for the three platforms; the masked search.
+3. Push the branch, open the pull request against `main`.
+4. D7's two descriptions, by `gh api -X PATCH …/pulls/<n> -F body=@<file>`,
+   the old serial in any form → its placeholder, nothing else changed.
+
 Retirement is the owner's call.
 
 ## Proposed commit message
@@ -294,8 +356,48 @@ Key changes:
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+The revision v1.1:
+
+```
+chore(aps): +Redact v1.1
+
+The plan gets Block 3, the screenshots, which were taken from the UI test's old greeting and show the old names and the spare Cube's serial (D8, settled at v1.0's completion gate).
+
+File-revision-v1: GUIDELINES/wip/2026-11-07_09-35_AP_Redact_placeholders_for_real_identifiers.md::v1.1::2026-11-07::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Block 3, the screenshots; the merge before the pull request
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 3:
+
+```
+docs(ui): Retake the screenshots from the placeholder greeting
+
+The screenshot set and the slideshow were taken from the UI test's greeting while it carried the old room and device names and the spare Cube's serial; they are taken again from the placeholder greeting (AP Redact v1.1, Block 3).
+
+Key changes:
+- docs/screenshots/*.png: retaken with make ui-screenshots, the same 28 files.
+- docs/screenshots/slideshow.gif: rebuilt with tools/ui-test/slideshow.sh.
+- No CHANGELOG bullet: docs/ is exempt, and nothing shipped changes.
+
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+The merge of `origin/main`, its conflict in `CHANGELOG.md` resolved:
+
+```
+merge: main, with the v0.10.0-alpha.1 release, into the placeholders branch
+
+Block 1's CHANGELOG bullet moves from the released section into the new [Unreleased]; nothing else conflicted.
+
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-07): the first revision,
   from the TL;DR gate of the same morning;
   D1 to D7 settled there as recommended.
+- v1.1 (2026-11-07): Block 3, the screenshots (D8-A, settled at v1.0's
+  completion gate after Blocks 1 and 2 had run);
+  "After the blocks" spells out the merge of `origin/main` and its
+  `CHANGELOG.md` conflict.
