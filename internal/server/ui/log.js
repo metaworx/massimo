@@ -4,8 +4,8 @@
 // The Massimo web UI, log view: the selected Cube's events from
 // GET …/log, a page at a time with "Older" back through the server's
 // log, then the live events of the stream, one line each, with a text
-// filter, a choice of kind and of device, and a clear that only empties
-// the view. Uses the state, api and helpers of app.js and tiles.js.
+// filter, a choice of kind and of device, and Clear, which sets them back.
+// Uses the state, api and helpers of app.js and tiles.js.
 "use strict";
 
 const LOG_MAX_LINES = 2000;
@@ -323,6 +323,25 @@ async function loadOlder() {
   logState.stick = stick && box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
 }
 
+// renderLogClear turns Clear off while nothing narrows the log: no text
+// filter, every kind and every device.
+function renderLogClear() {
+  $("log-clear").disabled = !(logState.filter || logState.kind || logState.device);
+}
+
+// clearLogFilter sets the text filter, the kind and the device back to
+// all and loads the log again; a page on its way is dropped (loadLog).
+function clearLogFilter() {
+  logState.filter = "";
+  logState.kind = "";
+  logState.device = "";
+  $("log-filter").value = "";
+  $("log-kind").value = "";
+  $("log-device").value = "";
+  renderLogClear();
+  loadLog();
+}
+
 // fillLogSelects fills the choice of kind, every kind the server sends,
 // and of device, the Cube's devices by name; a device chosen that is gone
 // falls back to all, and the answer is true then.
@@ -337,6 +356,7 @@ function fillLogSelects() {
   const gone = logState.device !== "" && !devs.some((d) => d.rf_address === logState.device);
   if (gone) logState.device = "";
   sel.value = logState.device;
+  renderLogClear();
   return gone;
 }
 
@@ -351,6 +371,7 @@ function logCubeChanged() {
   logState.more = false;
   logState.loading = false;
   logState.room = LOG_MAX_LINES;
+  renderLogClear();
   if (!logState.open) return;
   $("log-device").value = "";
   renderLog();
@@ -453,25 +474,21 @@ function initLog() {
   dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
+    renderLogClear();
     renderLog();
   });
-  $("log-clear").addEventListener("click", () => {
-    logState.gen++; // a page on its way is dropped
-    logState.lines = [];
-    logState.cursor = null;
-    logState.more = false;
-    logState.loading = false;
-    logState.room = LOG_MAX_LINES;
-    renderLog();
-  });
+  $("log-clear").addEventListener("click", clearLogFilter);
   $("log-kind").addEventListener("change", (ev) => {
     logState.kind = ev.target.value;
+    renderLogClear();
     loadLog();
   });
   $("log-device").addEventListener("change", (ev) => {
     logState.device = ev.target.value;
+    renderLogClear();
     loadLog();
   });
+  renderLogClear();
   $("log-older").addEventListener("click", loadOlder);
   const box = $("log-lines");
   box.addEventListener("scroll", () => {

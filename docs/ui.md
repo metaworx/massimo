@@ -224,7 +224,8 @@ The two choices in the head show one kind of event (all kinds by default)
 and one device (all devices); the server answers what matches,
 and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
-**Clear** empties the view only; the server keeps its log.
+**Clear** sets the filter, the kind and the device back to all
+and loads the log again; it is off while none of them is set.
 
 ## My profile
 

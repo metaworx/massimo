@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """The log: it opens, a state event with changes shows what changed,
-the kind and the device chosen narrow it, Older pages back, and an
-answer that comes late or fails leaves the log as it should be."""
+the kind and the device chosen narrow it, Clear sets them back, Older
+pages back, and an answer that comes late or fails leaves the log as it
+should be."""
 import json
 import re
 import time
@@ -148,7 +149,9 @@ def test_log_answers(page, case):
     older.click()
     assert "before=201" in held(), "Older asks before the oldest"
     page.locator("#log-clear").click()
-    answer(range(1, 201))
+    assert "kind=" not in page.evaluate("window.logAnswers[1].path"), "Clear asks for every kind again"
+    answer(range(1, 201))  # the Older answer, dropped
+    answer([])  # Clear's own page
     page.wait_for_timeout(200)
     assert page.evaluate(hellos) == 0, "the Older answer after Clear is dropped"
     assert older.is_disabled(), "nothing to page after Clear"
@@ -177,7 +180,6 @@ def test_log_answers(page, case):
     assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
         "a live event keeps the page fetched"
 
-    page.locator("#log-clear").click()
     page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
     held()
     answer(range(1, 2001))
@@ -227,4 +229,28 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
     assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
         f"the page, then the live event it lacks, once each: {kinds}"
     assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
+    show_view(page, "tiles")
+
+
+def test_log_clear_sets_the_filter_back(page, case):
+    """Clear is off while nothing narrows the log; after a kind and a text,
+    it sets the text, the kind and the device back to all and loads the
+    lines again, and is off again."""
+    show_view(page, "log")
+    assert wait_until(page, "!logState.loading && document.querySelectorAll('#log-lines .log-line').length > 0", 5), "the log loaded"
+    clear = page.locator("#log-clear")
+    assert clear.is_disabled(), "Clear is off with nothing chosen"
+    before = page.locator("#log-lines .log-line").count()
+    page.locator("#log-kind").select_option("connected")
+    assert wait_until(page, "!logState.loading", 5), "the kind's page is in"
+    page.locator("#log-filter").fill("zzz no such line")
+    assert page.locator("#log-lines .log-line").count() == 0, "nothing matches the text"
+    assert clear.is_enabled(), "Clear is on"
+    with page.expect_response(lambda r: "/log?" in r.url) as answer:
+        clear.click()
+    assert "kind=" not in answer.value.url and "device=" not in answer.value.url, f"every kind and device asked for: {answer.value.url}"
+    assert page.locator("#log-filter").input_value() == "" and page.locator("#log-kind").input_value() == "" \
+        and page.locator("#log-device").input_value() == "", "the text, the kind and the device back to all"
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= %d" % before, 5), "the lines back"
+    assert clear.is_disabled(), "Clear is off again"
     show_view(page, "tiles")

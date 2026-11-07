@@ -77,6 +77,9 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- The web UI's Clear in the log sets the filter, the kind and the device
+  back to all, in place of emptying the view (`docs/ui.md`, "Log").
+
 - The web UI keeps a button that sends off, with a spinner, until the
   answer, and a Send off while nothing changed, so a second click sends
   nothing (`docs/ui.md`, "Rooms", "Settings").
