@@ -102,6 +102,92 @@ server {
 The trailing slash of `proxy_pass` strips the prefix.
 On the box: `massimo serve -trusted-proxies 127.0.0.1`.
 
+### A Raspberry Pi with the Debian package and a DNS-validated certificate
+
+Tried on a Raspberry Pi 5 with Raspberry Pi OS Lite 64-bit (Debian 13),
+for a name that resolves only in the site's own DNS,
+so Let's Encrypt validates through the DNS provider's API (DNS-01)
+and the box needs no port open to the internet.
+
+1. Massimo from the apt repository (packaging/README.md, "The apt repository"),
+   nginx and acme.sh from Debian:
+   `sudo apt install massimo nginx acme.sh`.
+2. Massimo on localhost only, trusting nginx's headers:
+   `sudo massimo install -listen 127.0.0.1:8099`
+   and `MASSIMO_TRUSTED_PROXIES=127.0.0.1` in `/etc/massimo/env`.
+   Create the first owner before nginx forwards the LAN to it,
+   since an empty store leaves the API open:
+   `cd / && sudo -u massimo massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`.
+3. The certificate, here with Infomaniak (`dns_infomaniak`, token in
+   `INFOMANIAK_API_TOKEN`; for Cloudflare `dns_cf` with `CF_Token`).
+   acme.sh defaults to ZeroSSL, so name Let's Encrypt;
+   `--server letsencrypt_test` first is cheap, a failed real order counts
+   against the rate limits:
+
+   ```bash
+   sudo install -d -m 0700 /etc/acme.sh /etc/nginx/ssl
+   A="--home /etc/acme.sh --config-home /etc/acme.sh --cert-home /etc/acme.sh/certs"
+   sudo INFOMANIAK_API_TOKEN=… acme.sh $A --server letsencrypt --issue \
+       --dns dns_infomaniak -d massimo.example.net --keylength ec-256 \
+       --accountemail certificates@example.net
+   sudo acme.sh $A --install-cert -d massimo.example.net --ecc \
+       --fullchain-file /etc/nginx/ssl/massimo.example.net.fullchain.pem \
+       --key-file /etc/nginx/ssl/massimo.example.net.key.pem \
+       --reloadcmd "systemctl reload nginx"
+   sudo chmod 600 /etc/acme.sh/account.conf
+   ```
+
+   acme.sh keeps the token in `account.conf` for the renewals,
+   but writes that file with mode 644 (the 0700 directory protects it;
+   the `chmod` makes it explicit).
+   Debian's acme.sh brings no timer:
+   a oneshot service running `acme.sh --cron` with the same three
+   directory options, and a timer with `OnCalendar=daily`,
+   `RandomizedDelaySec=1h` and `Persistent=true`, renew 30 days before the end
+   and run the reload command.
+   Debian 13's lego (4.9.1) fails with Infomaniak
+   (`expected record, got: <id>`, the record is created but not removed),
+   since Infomaniak's API now answers a new record with its id;
+   acme.sh's hook only checks for success.
+4. One nginx site with the name of its own, the server's own `location /`
+   instead of the prefix above, port 80 redirecting to it,
+   and Debian's `sites-enabled/default` removed so that the box's address
+   no longer shows nginx's welcome page:
+
+   ```nginx
+   server {
+       listen 80 default_server;
+       listen [::]:80 default_server;
+       server_name massimo.example.net;
+       return 301 https://massimo.example.net$request_uri;
+   }
+   server {
+       listen 443 ssl default_server;
+       listen [::]:443 ssl default_server;
+       http2 on;
+       server_name massimo.example.net;
+       ssl_certificate     /etc/nginx/ssl/massimo.example.net.fullchain.pem;
+       ssl_certificate_key /etc/nginx/ssl/massimo.example.net.key.pem;
+       ssl_protocols TLSv1.2 TLSv1.3;
+       add_header Strict-Transport-Security "max-age=31536000" always;
+       location / {
+           proxy_pass http://127.0.0.1:8099;
+           proxy_http_version 1.1;
+           proxy_set_header Connection "";
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Real-IP $remote_addr;
+       }
+   }
+   ```
+
+To check from another machine before the site's DNS has the name,
+`curl --resolve massimo.example.net:443:<the box's address> https://massimo.example.net/healthz`;
+one failed `POST /api/v1/login` must appear in the log with that machine's
+address as `remote`, not 127.0.0.1.
+The Cubes' LAN proxy (port 62910 and discovery) does not go through nginx:
+`MASSIMO_CUBE_<SN>_PROXY` names an address of the box as before.
+
 ## Caddy
 
 ```caddyfile
