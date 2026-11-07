@@ -259,22 +259,32 @@ func TestRefusalAuditWindows(t *testing.T) {
 	ra := newRefusalAudit(func(f refusal) { mu.Lock(); written = append(written, f); mu.Unlock() })
 	ra.now, ra.max = clock.now, 2
 	defer ra.close()
+	rows := func() []refusal {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]refusal(nil), written...)
+	}
+	open := func() int {
+		ra.mu.Lock()
+		defer ra.mu.Unlock()
+		return len(ra.open)
+	}
 	r := httptest.NewRequest("POST", "/api/v1/users", nil)
 	for i := 0; i < 3; i++ {
 		ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.10", 401)
 	}
 	clock.t = clock.t.Add(refusalWindow)
 	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.10", 429)
-	mu.Lock()
-	if len(written) != 1 || written[0].count != 3 || written[0].status != 401 || written[0].remote != "192.0.2.10" {
-		t.Fatalf("after the minute: %+v", written)
+	if got := rows(); len(got) != 1 || got[0].count != 3 || got[0].status != 401 || got[0].remote != "192.0.2.10" {
+		t.Fatalf("after the minute: %+v", got)
 	}
-	mu.Unlock()
+	// Each address a second later than the one before, so that the
+	// oldest is one.
+	clock.t = clock.t.Add(time.Second)
 	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.11", 401)
+	clock.t = clock.t.Add(time.Second)
 	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.12", 401) // a third address: the oldest goes
-	mu.Lock()
-	if len(written) != 2 || written[1].remote != "192.0.2.10" || written[1].count != 1 || written[1].status != 429 || len(ra.open) != 2 {
-		t.Fatalf("over the limit: %+v, %d open", written, len(ra.open))
+	if got := rows(); len(got) != 2 || got[1].remote != "192.0.2.10" || got[1].count != 1 || got[1].status != 429 || open() != 2 {
+		t.Fatalf("over the limit: %+v, %d open", got, open())
 	}
-	mu.Unlock()
 }
