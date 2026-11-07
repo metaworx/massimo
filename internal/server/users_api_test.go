@@ -293,7 +293,7 @@ func TestRolesRoutes(t *testing.T) {
 		t.Fatalf("change unknown: %d", code)
 	}
 	n := userToken(t, st, "n", "night")
-	lock := "/api/v1/cubes/KEQ0537249/devices/1514b6/lock"
+	lock := "/api/v1/cubes/KEQ0000100/devices/1514b6/lock"
 	if code, _ := callAPI(t, ts, "PUT", lock, n, `{"locked":true}`); code == 403 {
 		t.Fatal("the created role's lock refused")
 	}

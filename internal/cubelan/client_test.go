@@ -61,7 +61,7 @@ func TestClientGreetingAndSnapshot(t *testing.T) {
 		t.Fatal("client never became ready")
 	}
 	s := c.Snapshot()
-	if s.Hello() == nil || s.Hello().Serial != "KEQ0537249" {
+	if s.Hello() == nil || s.Hello().Serial != "KEQ0000100" {
 		t.Fatalf("hello: %+v", s.Hello())
 	}
 	if len(s.Metadata().Rooms) != 6 || len(s.Devices()) != 6 {

@@ -244,7 +244,7 @@ and it will be removed in a later release.
 
 ## Identifiers
 
-- `{sn}` is a Cube's serial number, as printed on it (`KEQ0537249`);
+- `{sn}` is a Cube's serial number, as printed on it (`KEQ0000100`);
   case does not matter.
 - `{rf}` is a device's radio address, six hex digits (`012ca9`).
 - `{id}` is a room number as the Cube assigns it (1..255).
@@ -668,13 +668,13 @@ then every Cube discovery found on the LAN that is not configured:
 ```json
 [
   {
-    "serial": "JEQ0192422",
+    "serial": "KEQ0000200",
     "name": "Ground floor",
     "address": "192.168.1.9",
     "configured": true,
     "source": "env",
     "file_differs": [
-      {"field": "name", "variable": "MASSIMO_CUBE_JEQ0192422_NAME", "file": "Downstairs", "store": "Ground floor"}
+      {"field": "name", "variable": "MASSIMO_CUBE_KEQ0000200_NAME", "file": "Downstairs", "store": "Ground floor"}
     ],
     "mac": "00:1a:22:0a:0b:0c",
     "last_seen": "2026-11-04T15:00:02+01:00",
@@ -869,7 +869,7 @@ objects of the found Cubes above:
 {
   "ran_at": "2026-11-04T15:00:00+01:00",
   "found": [
-    {"serial": "JEQ0192422", "configured": true, "address": "192.168.1.9", "mac": "00:1a:22:0a:0b:0c",
+    {"serial": "KEQ0000200", "configured": true, "address": "192.168.1.9", "mac": "00:1a:22:0a:0b:0c",
      "rf_address": "022839", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"},
     {"serial": "KEQ0000000", "configured": false, "address": "192.168.1.23", "mac": "00:1a:22:01:02:03",
      "rf_address": "0a0b0c", "firmware": "1.1.3", "dhcp": true, "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"}

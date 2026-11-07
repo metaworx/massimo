@@ -20,7 +20,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
 
-const restoreBase = "/api/v1/cubes/KEQ0537249/restore"
+const restoreBase = "/api/v1/cubes/KEQ0000100/restore"
 
 // ecoLine is the 0x11 radiogram that sets 1514b6 (room 6 of the fixture)
 // to its fixture temperatures with eco 17.0 instead of 16.5.
@@ -42,14 +42,14 @@ func startRestoreCube(t *testing.T, fc *fakecube.Server, gap time.Duration) (*ht
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: gap}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: gap}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	waitFor(t, "the cube", func() bool {
 		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	return ts, s
 }
@@ -57,7 +57,7 @@ func startRestoreCube(t *testing.T, fc *fakecube.Server, gap time.Duration) (*ht
 // backupOf downloads the Cube's backup through the API.
 func backupOf(t *testing.T, ts *httptest.Server) *backup.File {
 	t.Helper()
-	resp, err := http.Get(ts.URL + "/api/v1/cubes/KEQ0537249/backup")
+	resp, err := http.Get(ts.URL + "/api/v1/cubes/KEQ0000100/backup")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestRestorePlan(t *testing.T) {
 
 func TestRestoreRunSendsThePlan(t *testing.T) {
 	fc, ts, s := start(t, "")
-	rt := s.cubes["keq0537249"]
+	rt := s.cubes["keq0000100"]
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
 
@@ -306,7 +306,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 	}
 	// And the log remembers them.
 	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log", &evs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 	logged := map[string]bool{}
 	for _, e := range evs {
 		logged[e.Kind] = true
@@ -337,7 +337,7 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 		t.Fatalf("state %v", st)
 	}
 	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log", &evs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 	var done *event
 	for i := range evs {
 		if evs[i].Kind == "restore_done" {
@@ -354,7 +354,7 @@ func TestRestoreRefusals(t *testing.T) {
 	// two steps runs long enough for a second one to be refused.
 	fc := &fakecube.Server{}
 	ts, s := startRestoreCube(t, fc, 500*time.Millisecond)
-	rt := s.cubes["keq0537249"]
+	rt := s.cubes["keq0000100"]
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
 

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -459,7 +460,8 @@ func TestDeviceListInvalidEntryHasNoValues(t *testing.T) {
 }
 
 // TestRealCubeGreeting decodes a session captured from a Cube with firmware
-// 1.1.3 (room and device names anonymised, everything else verbatim).
+// 1.1.3 (room and device names anonymised, the serials replaced by
+// placeholders, everything else verbatim).
 func TestRealCubeGreeting(t *testing.T) {
 	raw, err := os.ReadFile("testdata/cube-fw0113-greeting.txt")
 	if err != nil {
@@ -507,7 +509,7 @@ func TestRealCubeGreeting(t *testing.T) {
 			t.Fatalf("unexpected message type %c", m.Type)
 		}
 	}
-	if hello.Serial != "KEQ0537249" || hello.FirmwareVersion != "1.1.3" || hello.FreeMemorySlots != 50 || hello.CubeDate != "2026-11-03" {
+	if hello.Serial != "KEQ0000100" || hello.FirmwareVersion != "1.1.3" || hello.FreeMemorySlots != 50 || hello.CubeDate != "2026-11-03" {
 		t.Errorf("hello: %+v", hello)
 	}
 	if len(md.Rooms) != 6 || len(md.Devices) != 6 || md.Rooms[1].Name != "Küche" {
@@ -530,6 +532,62 @@ func TestRealCubeGreeting(t *testing.T) {
 	}
 	if len(states) != 6 || states[0].Valid || states[0].Type != DeviceRadiatorThermostat {
 		t.Errorf("states: %+v", states)
+	}
+}
+
+// placeholderSerial is the form of the placeholders a fixture carries in
+// place of a real serial (KEQ0000100, MEQ0000101).
+var placeholderSerial = regexp.MustCompile(`^[A-Z]EQ0000[0-9]{3}$`)
+
+// TestGreetingsUsePlaceholders keeps real serials out of the recorded
+// greetings: every serial in an H, M or C line is a placeholder.
+func TestGreetingsUsePlaceholders(t *testing.T) {
+	for _, path := range []string{"testdata/cube-fw0113-greeting.txt", "../../../tools/ui-test/greeting.txt"} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		msgs, err := SplitLines(string(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var serials []string
+		for _, m := range msgs {
+			switch m.Type {
+			case 'H':
+				h, err := ParseHello(m.Data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				serials = append(serials, h.Serial)
+			case 'M':
+				p, err := ParseMetadataPart(m.Data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				md, err := ParseMetadata([]MetadataPart{p})
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, d := range md.Devices {
+					serials = append(serials, d.Serial)
+				}
+			case 'C':
+				c, err := ParseConfig(m.Data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				serials = append(serials, c.Serial)
+			}
+		}
+		if len(serials) == 0 {
+			t.Fatalf("%s: no serial found", path)
+		}
+		for i, s := range serials {
+			if !placeholderSerial.MatchString(s) {
+				t.Errorf("%s: serial %d is not a placeholder of the form KEQ0000123", path, i)
+			}
+		}
 	}
 }
 

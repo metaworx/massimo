@@ -19,7 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// startStored starts a server whose one Cube, the fake Cube KEQ0537249,
+// startStored starts a server whose one Cube, the fake Cube KEQ0000100,
 // is a row of a store in a temporary directory.
 func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
 	t.Helper()
@@ -33,7 +33,7 @@ func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server
 		t.Fatal(err)
 	}
 	st := testStore(t, "")
-	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0537249", Configured: true, Address: addr, Source: store.SourceEnv})
+	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0537249")
+	waitConnected(t, ts, "KEQ0000100")
 	return fc, ts, s, st
 }
 
@@ -107,38 +107,38 @@ func TestPutCube(t *testing.T) {
 	ctx := context.Background()
 
 	var devs []view.Device
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs)
 	if len(devs) < 2 {
 		t.Fatalf("devices %v", devs)
 	}
 	hide := devs[0].RFAddress
 
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249", `{"name":"Cellar","hidden":["`+strings.ToUpper(hide)+`"]}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"name":"Cellar","hidden":["`+strings.ToUpper(hide)+`"]}`)
 	if code != 200 || out["name"] != "Cellar" || out["source"] != "ui" || len(out["hidden"].([]any)) != 1 || out["hidden"].([]any)[0] != hide {
 		t.Fatalf("put %d %v", code, out)
 	}
-	row, _, _ := st.Cube(ctx, "KEQ0537249")
+	row, _, _ := st.Cube(ctx, "KEQ0000100")
 	if row.Name != "Cellar" || row.Source != store.SourceUI || row.Version != 2 || len(row.Hidden) != 1 {
 		t.Fatalf("row %+v", row)
 	}
 	var after []view.Device
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &after)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &after)
 	if len(after) != len(devs)-1 {
 		t.Fatalf("hidden device still listed: %d of %d", len(after), len(devs))
 	}
-	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/"+hide, nil); code != 404 {
+	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/"+hide, nil); code != 404 {
 		t.Fatalf("hidden device answered %d", code)
 	}
 
 	// The proxy listener starts on its address, and moves with it.
 	p1, p2 := freeTCP(t), freeTCP(t)
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249", `{"proxy_address":"`+p1+`","proxy_serial":"leq0537249"}`); code != 200 || out["proxy_address"] != p1 || out["proxy_serial"] != "LEQ0537249" {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+p1+`","proxy_serial":"leq0000100"}`); code != 200 || out["proxy_address"] != p1 || out["proxy_serial"] != "LEQ0000100" {
 		t.Fatalf("proxy %d %v", code, out)
 	}
-	if m := greetingAt(t, p1); m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0537249,") {
+	if m := greetingAt(t, p1); m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0000100,") {
 		t.Fatalf("greeting %v", m)
 	}
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249", `{"proxy_address":"`+p2+`"}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+p2+`"}`); code != 200 {
 		t.Fatal(code)
 	}
 	greetingAt(t, p2)
@@ -148,7 +148,7 @@ func TestPutCube(t *testing.T) {
 	}
 
 	for _, bad := range []string{`{"address":"no such host:x"}`, `{"hidden":["zz"]}`, `{"nmae":"typo"}`, `{"proxy_serial":"a-b"}`, `{"serial":"KEQ1"}`, `{"name":"` + strings.Repeat("x", 65) + `"}`} {
-		if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249", bad); code != 400 {
+		if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", bad); code != 400 {
 			t.Errorf("%s: %d %v", bad, code, out)
 		}
 	}
@@ -161,12 +161,12 @@ func TestPutCube(t *testing.T) {
 func TestDeleteAndAddCube(t *testing.T) {
 	_, ts, _, st := startStored(t, Options{})
 	ctx := context.Background()
-	before, _, _ := st.Cube(ctx, "KEQ0537249")
+	before, _, _ := st.Cube(ctx, "KEQ0000100")
 	cubeAddr := before.Address
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249", ""); code != 200 || out["serial"] != "KEQ0537249" {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100", ""); code != 200 || out["serial"] != "KEQ0000100" {
 		t.Fatalf("delete %d %v", code, out)
 	}
-	row, ok, _ := st.Cube(ctx, "KEQ0537249")
+	row, ok, _ := st.Cube(ctx, "KEQ0000100")
 	if !ok || row.Configured || row.Source != store.SourceUI {
 		t.Fatalf("row after delete %+v %v", row, ok)
 	}
@@ -175,23 +175,23 @@ func TestDeleteAndAddCube(t *testing.T) {
 	if len(cubes) != 0 {
 		t.Fatalf("cubes after delete %v", cubes)
 	}
-	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", nil); code != 404 {
+	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", nil); code != 404 {
 		t.Fatalf("removed cube answered %d", code)
 	}
 
-	code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"keq0537249","address":"`+cubeAddr+`","name":"Again"}`)
-	if code != 201 || out["serial"] != "KEQ0537249" || out["name"] != "Again" || out["source"] != "ui" {
+	code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"keq0000100","address":"`+cubeAddr+`","name":"Again"}`)
+	if code != 201 || out["serial"] != "KEQ0000100" || out["name"] != "Again" || out["source"] != "ui" {
 		t.Fatalf("post %d %v", code, out)
 	}
-	c := waitConnected(t, ts, "KEQ0537249")
+	c := waitConnected(t, ts, "KEQ0000100")
 	if c["address"] != cubeAddr {
 		t.Fatalf("address %v", c)
 	}
-	row, _, _ = st.Cube(ctx, "KEQ0537249")
+	row, _, _ = st.Cube(ctx, "KEQ0000100")
 	if !row.Configured || row.Name != "Again" {
 		t.Fatalf("row after post %+v", row)
 	}
-	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0537249"}`); code != 409 {
+	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000100"}`); code != 409 {
 		t.Fatalf("second post %d", code)
 	}
 	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"no/serial"}`); code != 400 {
@@ -240,7 +240,7 @@ func TestAddFoundCube(t *testing.T) {
 // Without a store the Cube and settings routes say so.
 func TestCubeRoutesNeedAStore(t *testing.T) {
 	_, ts, _ := start(t, "")
-	for _, r := range [][3]string{{"PUT", "/api/v1/cubes/KEQ0537249", `{"name":"x"}`}, {"DELETE", "/api/v1/cubes/KEQ0537249", ""}, {"POST", "/api/v1/cubes", `{"serial":"KEQ0000001"}`}, {"GET", "/api/v1/settings", ""}} {
+	for _, r := range [][3]string{{"PUT", "/api/v1/cubes/KEQ0000100", `{"name":"x"}`}, {"DELETE", "/api/v1/cubes/KEQ0000100", ""}, {"POST", "/api/v1/cubes", `{"serial":"KEQ0000001"}`}, {"GET", "/api/v1/settings", ""}} {
 		if code, _ := do(t, ts, r[0], r[1], r[2]); code != 503 {
 			t.Errorf("%s %s: %d", r[0], r[1], code)
 		}

@@ -22,6 +22,12 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+### Changed
+
+- The recorded greeting that the tests and CI's fake Cube load, and its
+  UI-test copy, carry placeholder serials
+  (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added

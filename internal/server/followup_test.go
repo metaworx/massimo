@@ -48,7 +48,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
 		RefreshInterval: time.Hour, FollowUpDelays: []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
 		FollowUpReconnectGap: time.Millisecond})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -57,9 +57,9 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	eventually(t, "the cube", func() bool {
 		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
-	const base = "/api/v1/cubes/KEQ0537249"
+	const base = "/api/v1/cubes/KEQ0000100"
 	eco := func() any {
 		_, d := do(t, ts, "GET", base+"/devices/14d08e", "")
 		th, _ := d["thermostat"].(map[string]any)
@@ -114,7 +114,7 @@ func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	// No RefreshInterval: no reconnects for the budget.
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
 		FollowUpDelays: []time.Duration{20 * time.Millisecond, 20 * time.Millisecond}, FollowUpReconnectGap: time.Millisecond})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
@@ -122,9 +122,9 @@ func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	eventually(t, "the cube", func() bool {
 		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/14d08e/config", `{"eco_temp":17}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/14d08e/config", `{"eco_temp":17}`); code != 200 {
 		t.Fatal(code)
 	}
 	time.Sleep(300 * time.Millisecond)
@@ -223,7 +223,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	proxyAddr := ln.Addr().String()
 	ln.Close()
 	var logs syncBuffer
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
 		RefreshInterval: time.Hour, FollowUpDelays: []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
 		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}},
 		Logger: slog.New(slog.NewTextHandler(&logs, nil))})
@@ -233,7 +233,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	eventually(t, "the cube", func() bool {
 		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	sent := func() (rereads, others int) {
 		for _, m := range fc.Received() {
@@ -255,7 +255,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	eventually(t, "the device's new configuration", func() bool {
 		return strings.Contains(logs.String(), "device configuration taken over by the device")
 	})
-	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0537249/devices/14d08e", "")
+	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/14d08e", "")
 	if th, _ := d["thermostat"].(map[string]any); th["eco_temp"] != float64(17) {
 		t.Fatalf("eco after the follow-up %v", th["eco_temp"])
 	}

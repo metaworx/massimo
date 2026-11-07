@@ -15,16 +15,18 @@ and record what happened.
 - `serve` running on the Mint box with both Cubes, the UI reachable,
   `-log serve.log` (or `MASSIMO_LOG` in `.env`) so every device state
   change and every passed command is on file.
-- Work on Cube JEQ0192422 (the live house) in a room with one radiator
-  thermostat and no wall thermostat, for example Halle 1 (room 1,
-  thermostat 07631e) or Küche (room 2, thermostat 05cdc6).
+- Work on the live house Cube,
+  with `SN` set to its serial (in the Pi's `/etc/massimo/env`),
+  in a room with one radiator thermostat and no wall thermostat,
+  for example Halle 1 (room 1, thermostat 07631e) or Küche (room 2,
+  thermostat 05cdc6).
 - Everything below also works through the proxy: `status` and `backup`
   use the proxy automatically with `MASSIMO_CUBE_<SN>_PROXY` set.
 
 ## Before
 
 ```bash
-go run ./cmd/massimo -show-hidden backup -sn JEQ0192422 -out verify-before.yaml
+go run ./cmd/massimo -show-hidden backup -sn "$SN" -out verify-before.yaml
 ```
 
 Note the duty cycle and the free slots from `status`;
@@ -37,7 +39,7 @@ Each step: do the change in the UI (Configure… in the tile's ⋯ menu)
 or with the curl line, wait for the answer in the panel, then run
 
 ```bash
-go run ./cmd/massimo -show-hidden backup -sn JEQ0192422 -out verify-after.yaml && diff verify-before.yaml verify-after.yaml
+go run ./cmd/massimo -show-hidden backup -sn "$SN" -out verify-after.yaml && diff verify-before.yaml verify-after.yaml
 ```
 
 The diff must show exactly the intended change in the device's configuration
@@ -50,7 +52,7 @@ the Cube's answer (not discarded) and the `c:` re-read.
    Or:
 
    ```bash
-   curl -s -X PUT localhost:8099/api/v1/cubes/JEQ0192422/rooms/1/config -d '{"eco_temp": 17.5}'
+   curl -s -X PUT localhost:8099/api/v1/cubes/$SN/rooms/1/config -d '{"eco_temp": 17.5}'
    ```
 
    Expected: one 0x11 radiogram per thermostat of the room,
@@ -63,7 +65,7 @@ the Cube's answer (not discarded) and the `c:` re-read.
    Or:
 
    ```bash
-   curl -s -X PUT localhost:8099/api/v1/cubes/JEQ0192422/devices/07631e/config -d '{"temp_offset": 0.5}'
+   curl -s -X PUT localhost:8099/api/v1/cubes/$SN/devices/07631e/config -d '{"temp_offset": 0.5}'
    ```
 
    Expected: one 0x11 radiogram, diff shows `temp_offset: 0.5`.
@@ -78,7 +80,7 @@ the Cube's answer (not discarded) and the `c:` re-read.
    Or:
 
    ```bash
-   curl -s -X GET localhost:8099/api/v1/cubes/JEQ0192422/rooms/1/program
+   curl -s -X GET localhost:8099/api/v1/cubes/$SN/rooms/1/program
    ```
 
    then PUT the same JSON for one day with one time changed to `…/rooms/1/program`.

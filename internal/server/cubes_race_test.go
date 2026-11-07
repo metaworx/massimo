@@ -22,11 +22,11 @@ import (
 // runtime for the Cube.
 func TestConcurrentAddCube(t *testing.T) {
 	_, ts, s, st := startStored(t, Options{})
-	before, _, _ := st.Cube(context.Background(), "KEQ0537249")
-	if code, _ := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249", ""); code != 200 {
+	before, _, _ := st.Cube(context.Background(), "KEQ0000100")
+	if code, _ := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100", ""); code != 200 {
 		t.Fatal(code)
 	}
-	body := `{"serial":"KEQ0537249","address":"` + before.Address + `"}`
+	body := `{"serial":"KEQ0000100","address":"` + before.Address + `"}`
 	codes := make([]int, 2)
 	var wg sync.WaitGroup
 	for i := range codes {
@@ -40,7 +40,7 @@ func TestConcurrentAddCube(t *testing.T) {
 	}
 	n := 0
 	for _, rt := range s.runtimes() {
-		if rt.cubeSerial() == "KEQ0537249" {
+		if rt.cubeSerial() == "KEQ0000100" {
 			n++
 		}
 	}
@@ -58,12 +58,12 @@ func TestProxyPortInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer taken.Close()
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249", `{"proxy_address":"`+taken.Addr().String()+`"}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+taken.Addr().String()+`"}`)
 	if code != 200 || out["proxy_listening"] != nil {
 		t.Fatalf("put %d %v", code, out)
 	}
 	free := freeTCP(t)
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249", `{"proxy_address":"`+free+`"}`); code != 200 || len(out["proxy_listening"].([]any)) != 1 {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+free+`"}`); code != 200 || len(out["proxy_listening"].([]any)) != 1 {
 		t.Fatalf("put %d %v", code, out)
 	}
 	greetingAt(t, free)
@@ -144,7 +144,7 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 		var cubes []cubeView
 		getJSON(t, ts, "secret", "/api/v1/cubes", &cubes)
 		for _, c := range cubes {
-			if c.Serial == "KEQ0537249" && c.Connected {
+			if c.Serial == "KEQ0000100" && c.Connected {
 				return
 			}
 		}
@@ -184,10 +184,10 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 		return s.cubes[key]
 	}
 	byAddr := lookup(strings.ToLower(addr))
-	if code, text := callAPI(t, ts, "POST", "/api/v1/cubes", "secret", `{"serial":"KEQ0537249","address":"`+addr+`"}`); code != 201 {
+	if code, text := callAPI(t, ts, "POST", "/api/v1/cubes", "secret", `{"serial":"KEQ0000100","address":"`+addr+`"}`); code != 201 {
 		t.Fatalf("add: %d %s", code, text)
 	}
-	bySerial := lookup("keq0537249")
+	bySerial := lookup("keq0000100")
 	if byAddr == nil || bySerial == nil || bySerial == byAddr {
 		t.Fatalf("runtimes %p %p", byAddr, bySerial)
 	}
@@ -199,7 +199,7 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 			break
 		}
 	}
-	if got := lookup("keq0537249"); got != bySerial {
+	if got := lookup("keq0000100"); got != bySerial {
 		t.Fatalf("the serial's runtime is the one by address (%p), not the one added (%p)", got, bySerial)
 	}
 	if lookup(strings.ToLower(addr)) != nil {

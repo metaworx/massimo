@@ -76,7 +76,7 @@ env -i PATH="$PATH" HOME="$HOME" ./massimo fakecube -greeting "$here/greeting.tx
 	-pair 1514b6,0abcde,TEQ0000001 > fakecube.log 2>&1 &
 pids="$pids $!"
 env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
-	MASSIMO_CUBE_KEQ0537249_ADDRESS="127.0.0.1:$cube_port" MASSIMO_CUBE_KEQ0537249_NAME="Fake Cube" \
+	MASSIMO_CUBE_KEQ0000100_ADDRESS="127.0.0.1:$cube_port" MASSIMO_CUBE_KEQ0000100_NAME="Fake Cube" \
 	./massimo serve -proxy off \
 	-listen "127.0.0.1:$api_port" -update-status "$work/no-update-status.json" \
 	-discover-target "127.0.0.1:$discovery_port" -discover-interval 0 > serve.log 2>&1 &

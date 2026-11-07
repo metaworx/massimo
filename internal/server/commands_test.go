@@ -84,7 +84,7 @@ func countRadio(fc *fakecube.Server) int {
 func TestCommandsOfWrites(t *testing.T) {
 	fc, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	stores[ts] = s.opts.Store
-	setpoint := "/api/v1/cubes/KEQ0537249/rooms/6/setpoint"
+	setpoint := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint"
 	resp, text := callWith(t, ts, "PUT", setpoint, "secret", `{"mode":"auto"}`, map[string]string{"Idempotency-Key": "k1"})
 	if resp.StatusCode != 200 || resp.Header.Get("Idempotent-Replayed") != "" {
 		t.Fatalf("setpoint: %d %s", resp.StatusCode, text)
@@ -95,7 +95,7 @@ func TestCommandsOfWrites(t *testing.T) {
 		t.Fatalf("audit row %+v", rows)
 	}
 	c := commandOfRow(t, ts, "secret", rows[0])
-	if c.State != store.StateAcknowledged || c.Status != 200 || c.Action != "setpoint" || c.Target != "room:6" || c.Cube != "KEQ0537249" || c.User != store.BootstrapUser || c.FinishedAt == nil || len(c.Steps) != 1 {
+	if c.State != store.StateAcknowledged || c.Status != 200 || c.Action != "setpoint" || c.Target != "room:6" || c.Cube != "KEQ0000100" || c.User != store.BootstrapUser || c.FinishedAt == nil || len(c.Steps) != 1 {
 		t.Fatalf("command %+v", c)
 	}
 	step := c.Steps[0]
@@ -149,7 +149,7 @@ func TestCommandsOfWrites(t *testing.T) {
 	}
 
 	// A move is several steps; a user without audit sees own commands only.
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/1514b6", "secret", `{"room_id":5}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/1514b6", "secret", `{"room_id":5}`)
 	rows = auditRows(t, ts, "secret", "?limit=1")
 	c, code, _ := commandByID(t, ts, "secret", rows[0])
 	if code != 200 || c.Action != "device.update" || len(c.Steps) < 2 {
@@ -172,7 +172,7 @@ func TestCommandsOfWrites(t *testing.T) {
 func TestRestoreCommand(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	stores[ts] = s.opts.Store
-	code0, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0537249/backup", "secret", "")
+	code0, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/backup", "secret", "")
 	f, err := backup.Unmarshal([]byte(data), false)
 	if code0 != 200 || err != nil {
 		t.Fatalf("backup: %d %v", code0, err)
@@ -333,7 +333,7 @@ func TestReplayOfADroppedCommand(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
 	owner, _, _ := st.User(t.Context(), store.BootstrapUser)
-	path, body := "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", `{"mode":"auto"}`
+	path, body := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", `{"mode":"auto"}`
 	fp := fingerprint(&auditInfo{method: "PUT", path: path, body: []byte(body)}, "")
 	req, _ := json.Marshal(map[string]any{"method": "PUT", "path": path, "query": "", "hash": fp})
 	if _, err := st.AddCommand(t.Context(), store.Command{UserID: owner.ID, Key: "key-1", Action: "setpoint", Request: req}); err != nil {
@@ -361,7 +361,7 @@ func TestReplayOfADroppedCommand(t *testing.T) {
 func TestReplayOfARestoreKeepsItsAnswer(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	stores[ts] = s.opts.Store
-	_, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0537249/backup", "secret", "")
+	_, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/backup", "secret", "")
 	f, err := backup.Unmarshal([]byte(data), false)
 	if err != nil {
 		t.Fatal(err)

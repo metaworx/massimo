@@ -105,8 +105,8 @@ func TestCaptureLoginExchange(t *testing.T) {
 
 func TestReplierConnPlaceholder(t *testing.T) {
 	r := DefaultReplier("{conn},00000000,ffffffff", nil)
-	req := []cube.Message{{Type: 'H', Data: "KEQ0537249,0b9573,0113,00000000,4470fa70,44,32,1a0b03,1602,03,0000"}}
-	got := r("KEQ0537249", req)
+	req := []cube.Message{{Type: 'H', Data: "KEQ0000100,0b9573,0113,00000000,4470fa70,44,32,1a0b03,1602,03,0000"}}
+	got := r("KEQ0000100", req)
 	if len(got) != 1 || got[0].String() != "i:4470fa70,00000000,ffffffff" {
 		t.Fatalf("got %v", got)
 	}
@@ -127,14 +127,14 @@ func TestExpandNowPlaceholder(t *testing.T) {
 
 func TestAccountRepliesAndLookup(t *testing.T) {
 	r := DefaultReplier("", nil)
-	login := []cube.Message{{Type: 'H', Data: "KEQ0537249,0b9573,0113"}, {Type: 'B', Data: "alice,hash,1,pw"}}
-	if got := r("KEQ0537249", login); len(got) != 1 || got[0].String() != "b:OK" {
+	login := []cube.Message{{Type: 'H', Data: "KEQ0000100,0b9573,0113"}, {Type: 'B', Data: "alice,hash,1,pw"}}
+	if got := r("KEQ0000100", login); len(got) != 1 || got[0].String() != "b:OK" {
 		t.Fatalf("login reply %v", got)
 	}
-	if got := r("KEQ0537249", []cube.Message{{Type: 'J', Data: "1"}}); len(got) != 1 || got[0].String() != "j:OK" {
+	if got := r("KEQ0000100", []cube.Message{{Type: 'J', Data: "1"}}); len(got) != 1 || got[0].String() != "j:OK" {
 		t.Fatalf("J reply %v", got)
 	}
-	if got := r("KEQ0537249", []cube.Message{{Type: 'G'}}); len(got) != 1 || got[0].String() != "g:alice,true" {
+	if got := r("KEQ0000100", []cube.Message{{Type: 'G'}}); len(got) != 1 || got[0].String() != "g:alice,true" {
 		t.Fatalf("G reply %v", got)
 	}
 

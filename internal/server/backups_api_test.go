@@ -17,7 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-const backupsBase = "/api/v1/cubes/KEQ0537249/backups"
+const backupsBase = "/api/v1/cubes/KEQ0000100/backups"
 
 // historyOf reads GET …/backups.
 func historyOf(t *testing.T, url string) (int, backupList) {
@@ -60,7 +60,7 @@ func TestBackupAutomatic(t *testing.T) {
 	if _, l = historyOf(t, ts.URL); len(l.Backups) != 1 || l.Changed != nil {
 		t.Fatalf("a backup without a change: %s, changed %v", reasons(l), l.Changed)
 	}
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6", `{"name":"Renamed"}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`); code != 200 {
 		t.Fatalf("rename: %d", code)
 	}
 	eventually(t, "the backup after the change", func() bool {
@@ -73,7 +73,7 @@ func TestBackupAutomatic(t *testing.T) {
 	// A quiet window of a thousand minutes: backups.auto_max decides.
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 1000)
 	began := time.Now()
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6", `{"name":"Again"}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Again"}`); code != 200 {
 		t.Fatalf("rename: %d", code)
 	}
 	eventually(t, "the change seen", func() bool {
@@ -122,7 +122,7 @@ func TestBackupsAPI(t *testing.T) {
 	}
 	code, ctype, data := get(backupsBase + "/" + id)
 	f, err := backup.Unmarshal(data, false)
-	if code != 200 || ctype != "application/json" || err != nil || f.Cube.Serial != "KEQ0537249" {
+	if code != 200 || ctype != "application/json" || err != nil || f.Cube.Serial != "KEQ0000100" {
 		t.Fatalf("download: %d %s %v", code, ctype, err)
 	}
 	code, ctype, data = get(backupsBase + "/" + id + "?format=yaml")
@@ -256,7 +256,7 @@ func TestBackupDiff(t *testing.T) {
 			f.Devices[i].Thermostat.WeekProgram[0][0].Temp += 1
 		}
 	}
-	b, err := st.AddBackup(context.Background(), store.Backup{CubeID: s.cubes["keq0537249"].storeID.Load(), Reason: store.ReasonManual, Format: "json"}, marshal(t, f))
+	b, err := st.AddBackup(context.Background(), store.Backup{CubeID: s.cubes["keq0000100"].storeID.Load(), Reason: store.ReasonManual, Format: "json"}, marshal(t, f))
 	if err != nil {
 		t.Fatal(err)
 	}

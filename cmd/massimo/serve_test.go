@@ -129,13 +129,13 @@ func TestServeSingleCubeWithoutSerial(t *testing.T) {
 	defer conn.Close()
 	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 	m, err := cube.NewReader(conn).Read()
-	if err != nil || m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0537249,") {
+	if err != nil || m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0000100,") {
 		t.Fatalf("greeting %v %v", m, err)
 	}
 	var row store.Cube
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		var ok bool
-		if row, ok, _ = st.Cube(ctx, "KEQ0537249"); ok {
+		if row, ok, _ = st.Cube(ctx, "KEQ0000100"); ok {
 			break
 		}
 	}
@@ -144,12 +144,12 @@ func TestServeSingleCubeWithoutSerial(t *testing.T) {
 	}
 	cancel()
 
-	// The next start: the plain lines belong to KEQ0537249's row.
+	// The next start: the plain lines belong to KEQ0000100's row.
 	su, err = serveSetup(ctx, st, "", nil, "", quietLog())
-	if err != nil || len(su.cubes) != 1 || su.cubes[0].Serial != "KEQ0537249" || su.cubes[0].SeedFromFile || su.cubes[0].Addr != cubeAddr {
+	if err != nil || len(su.cubes) != 1 || su.cubes[0].Serial != "KEQ0000100" || su.cubes[0].SeedFromFile || su.cubes[0].Addr != cubeAddr {
 		t.Fatalf("second start %+v %v", su.cubes, err)
 	}
-	if _, ok := su.fileCubes["KEQ0537249"]; !ok {
+	if _, ok := su.fileCubes["KEQ0000100"]; !ok {
 		t.Fatalf("file values not kept by serial: %+v", su.fileCubes)
 	}
 }

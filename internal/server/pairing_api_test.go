@@ -33,14 +33,14 @@ func startPairingCube(t *testing.T, delay time.Duration) (*fakecube.Server, *htt
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		var c cubeView
-		if getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected {
+		if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected {
 			return fc, ts, s
 		}
 	}
@@ -61,7 +61,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 
 func TestPairingAndAddingToARoom(t *testing.T) {
 	fc, ts, _ := startPairingCube(t, 50*time.Millisecond)
-	const base = "/api/v1/cubes/KEQ0537249"
+	const base = "/api/v1/cubes/KEQ0000100"
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":0}`); code != 400 {
 		t.Fatalf("0 seconds: %d", code)
 	}
@@ -159,7 +159,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 
 func TestPairingEndsWithTheCube(t *testing.T) {
 	fc, ts, _ := startPairingCube(t, time.Hour)
-	const base = "/api/v1/cubes/KEQ0537249"
+	const base = "/api/v1/cubes/KEQ0000100"
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":1}`); code != 200 {
 		t.Fatal(code)
 	}

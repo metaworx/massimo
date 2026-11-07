@@ -130,7 +130,7 @@ func TestRealCubeVectorsShowFixedIVCBC(t *testing.T) {
 }
 
 // Two e: calls made by the original software on the same Cube: both
-// plaintexts start with the same 16 bytes ("H:KEQ0537249,0b9"), and so do
+// plaintexts start with the same 16 bytes ("H:", the Cube's serial, ",0b9"), and so do
 // the ciphertexts, which again shows a fixed IV.
 func TestOriginalSoftwareVectorsShareFirstBlock(t *testing.T) {
 	a, _ := base64.StdEncoding.DecodeString("MgMYlNDXbqm4PhERXHoyI63jvEzCs4JW9bJfuLRj3mc=")

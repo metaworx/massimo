@@ -13,7 +13,7 @@ The script:
    "Fenster Kind 1", that reports an open window;
 3. starts `massimo serve` against the fake Cube,
    with the API token `ui-test-token`;
-   the Cube comes from `MASSIMO_CUBE_KEQ0537249_ADDRESS` and `_NAME` ("Fake Cube"),
+   the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
    which the server seeds into its store,
    `massimo.db` in the temporary directory;
 4. runs the pytest suite in this directory with `pytest-playwright` (Chromium),

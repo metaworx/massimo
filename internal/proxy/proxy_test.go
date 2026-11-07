@@ -206,7 +206,7 @@ func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 
 func TestProxyDiscovery(t *testing.T) {
 	_, p, c, ctx := setup(t)
-	p.opts.DiscoverySerial = "XEQ0537249"
+	p.opts.DiscoverySerial = "XEQ0000100"
 	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestProxyDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	reply := buf[:n]
-	if string(reply[:8]) != "eQ3MaxAp" || string(reply[8:18]) != "XEQ0537249" || reply[18] != '>' || reply[19] != 'I' || len(reply) != 26 {
+	if string(reply[:8]) != "eQ3MaxAp" || string(reply[8:18]) != "XEQ0000100" || reply[18] != '>' || reply[19] != 'I' || len(reply) != 26 {
 		t.Fatalf("reply %q", reply)
 	}
 	h := c.Snapshot().Hello()
@@ -243,7 +243,7 @@ func TestProxyDiscovery(t *testing.T) {
 	client.WriteTo(append([]byte("eQ3Max*\x00ZZZ0000000"), 'I'), pc.LocalAddr())
 	client.WriteTo(append([]byte("eQ3Max*\x00"+h.Serial), 'I'), pc.LocalAddr())
 	n, _, err = client.ReadFrom(buf)
-	if err != nil || string(buf[8:18]) != "XEQ0537249" {
+	if err != nil || string(buf[8:18]) != "XEQ0000100" {
 		t.Fatalf("second reply %q %v", buf[:n], err)
 	}
 }

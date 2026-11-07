@@ -23,7 +23,7 @@ func TestStatusFromSnapshot(t *testing.T) {
 	}
 	// 1514b6 is the only device of room 6: hiding it hides the room.
 	rep := statusFromSnapshot(snap, cubelan.Budget{}, view.Set([]cube.RFAddress{0x1514b6}))
-	if rep.Serial != "KEQ0537249" || len(rep.Rooms) != 5 || len(rep.Unlisted) != 0 {
+	if rep.Serial != "KEQ0000100" || len(rep.Rooms) != 5 || len(rep.Unlisted) != 0 {
 		t.Fatalf("report %+v", rep)
 	}
 	for _, r := range rep.Rooms {

@@ -72,7 +72,7 @@ func TestFoundCubeSurvivesRestart(t *testing.T) {
 	}
 	postDiscovery(t, ts)
 	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log", &evs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 	for _, e := range evs {
 		if e.Kind == "cube_found" {
 			t.Fatalf("announced again after the restart: %+v", e)
