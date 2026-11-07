@@ -235,3 +235,44 @@ func TestCommandsAtStart(t *testing.T) {
 		t.Fatalf("keep_days after the default %d", d)
 	}
 }
+
+// A new API key is shown once: neither the command row of its creation,
+// nor GET /api/v1/commands/{id}, nor a replay of the request with its
+// Idempotency-Key gives the secret out again.
+func TestTokenCreationKeepsNoSecret(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	stores[ts] = s.opts.Store
+	userToken(t, s.opts.Store, "anna", store.RoleViewer)
+	headers := map[string]string{"Idempotency-Key": "key-1"}
+	resp, text := callWith(t, ts, "POST", "/api/v1/users/anna/tokens", "secret", `{"label":"laptop"}`, headers)
+	var made struct {
+		Token string `json:"token"`
+		ID    int64  `json:"id"`
+	}
+	if json.Unmarshal([]byte(text), &made); resp.StatusCode != 201 || made.Token == "" || made.ID == 0 {
+		t.Fatalf("token: %d %s", resp.StatusCode, text)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if len(rows) != 1 || rows[0].Action != "token.add" || rows[0].CommandID == 0 {
+		t.Fatalf("audit row %+v", rows)
+	}
+	c, ok, err := s.opts.Store.Command(t.Context(), rows[0].CommandID)
+	if err != nil || !ok {
+		t.Fatalf("command row: %v %v", ok, err)
+	}
+	if strings.Contains(string(c.Result), made.Token) {
+		t.Errorf("the command row keeps the secret: %s", c.Result)
+	}
+	if _, code, body := commandByID(t, ts, "secret", rows[0]); code != 200 || strings.Contains(body, made.Token) {
+		t.Errorf("GET /api/v1/commands/{id} gives the secret out: %d %s", code, body)
+	}
+	resp2, text2 := callWith(t, ts, "POST", "/api/v1/users/anna/tokens", "secret", `{"label":"laptop"}`, headers)
+	var again struct {
+		Token *string `json:"token"`
+		ID    int64   `json:"id"`
+	}
+	json.Unmarshal([]byte(text2), &again)
+	if resp2.StatusCode != 201 || resp2.Header.Get("Idempotent-Replayed") != "true" || again.Token != nil || again.ID != made.ID {
+		t.Errorf("replay: %d %q %s", resp2.StatusCode, resp2.Header.Get("Idempotent-Replayed"), text2)
+	}
+}

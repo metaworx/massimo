@@ -219,7 +219,8 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 
 // endCommand sets the parent's final state from the answer: 2xx is
 // acknowledged, 202 sent (a run that reports later), 4xx and 503
-// dropped, the rest failed; the answer is its result.
+// dropped, the rest failed; the answer, without its secrets, is its
+// result.
 func (s *Server) endCommand(ctx context.Context, a *auditInfo, status int) {
 	state := store.StateFailed
 	switch {
@@ -230,13 +231,38 @@ func (s *Server) endCommand(ctx context.Context, a *auditInfo, status int) {
 	case status < 500 || status == http.StatusServiceUnavailable:
 		state = store.StateDropped
 	}
-	result := a.w.answer.Bytes()
+	result := withoutSecrets(a.w.answer.Bytes())
 	if !json.Valid(result) {
 		result, _ = json.Marshal(map[string]any{"answer": strings.TrimSpace(string(result))})
 	}
 	if err := s.opts.Store.SetCommandState(context.WithoutCancel(ctx), a.commandID, state, status, result); err != nil {
 		s.log.Error("commands: row not finished", "command", a.commandUUID, "error", err)
 	}
+}
+
+// withoutSecrets is an answer as a command row keeps it: an object
+// without the secretFields at its top level, so that a new API key is
+// shown once and its replay answers without it.
+func withoutSecrets(answer []byte) []byte {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(answer, &m) != nil {
+		return answer
+	}
+	found := false
+	for _, k := range secretFields {
+		if _, ok := m[k]; ok {
+			delete(m, k)
+			found = true
+		}
+	}
+	if !found {
+		return answer
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // finishCommand ends a parent that was answered 202, from its run: the

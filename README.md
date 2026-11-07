@@ -188,7 +188,9 @@ enables them and starts the service,
 which listens on `:8099` on every interface.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
-`-no-update-helper` leaves the helper out, `-no-start` only enables.
+`-no-update-helper` leaves the helper out,
+and removes it where an earlier install put it,
+`-no-start` only enables.
 With several Cubes each needs its own `MASSIMO_CUBE_<SERIAL>_PROXY` address on the box,
 see [Install by hand](packaging/README.md#install-by-hand).
 Afterwards the settings are in `/etc/massimo/env` (readable by `massimo` only),

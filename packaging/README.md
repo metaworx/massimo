@@ -120,7 +120,10 @@ and a unit that differs from the new one (edited with `systemctl edit --full`)
 is kept as `<unit>.bak`.
 Local changes belong in a drop-in (`systemctl edit massimo`),
 which install never touches.
-`-no-update-helper` leaves the helper out, `-no-start` only enables.
+`-no-update-helper` leaves the helper out,
+and on a box an earlier install gave it disables `massimo-update.path`
+and removes both units and their drop-in, as macOS unloads its own;
+`-no-start` only enables.
 
 `-listen <addr>` moves the API and web UI off `:8099`,
 for example to port 80 (`sudo massimo install -listen :80`,
@@ -172,12 +175,16 @@ and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
 The name may point at the box's LAN address,
 and wildcards work (`-tls-names '*.example.net,example.net'`).
 The script runs as `massimo` with the server's environment less the `MASSIMO_` variables,
-so its own secret comes from a file.
+so its own secret comes from a file;
+a run ends after two minutes, with every process it started.
 `packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
 Infomaniak (its name servers, not merely registered there):
 it needs `curl` and `jq`,
 and a token with the DNS scope from the API section of the Infomaniak
 manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
+It hands the token to `curl` on its standard input, never on its command line,
+which every local user can read,
+and gives each call 30 seconds.
 It is untested against the real API until the owner's day;
 the test runs it against a fake one.
 

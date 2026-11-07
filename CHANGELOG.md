@@ -93,6 +93,38 @@ the next minor, a fix counts the suffix up.
 - An event that makes the page load again no longer leaves a failed
   load as an uncaught error in the browser's console.
 
+- A new API key is no longer kept in its command's result, nor given
+  out again by a replay of its `Idempotency-Key` (docs/api-v1.md).
+
+- Behind a trusted proxy, a client's `X-Real-IP` no longer wins over an
+  `X-Forwarded-For` entry that is not an address, nor a second
+  `X-Forwarded-For` line over the proxy's (docs/reverse-proxy.md).
+
+- Requests refused before anyone is known are one audit row per address
+  and minute, with their count, and their bodies are not read
+  (docs/api-v1.md, "GET /api/v1/audit").
+
+- A user added under a removed user's name no longer inherits that
+  user's settings and colour schemes (docs/api-v1.md).
+
+- The Infomaniak hook hands its token to curl on standard input, not on
+  the command line, and gives each call 30 seconds (packaging/README.md).
+
+- A DNS-01 hook whose child keeps its output open no longer holds the
+  order past the hook's two minutes; the child ends with the hook.
+
+- `massimo install -no-update-helper` on Linux disables and removes the
+  update helper an earlier install put there (packaging/README.md).
+
+- An owner with an end date no longer counts as the owner left, so the
+  last one without an end date keeps the box reachable (docs/api-v1.md).
+
+- A DNS-01 order that ran out of time still clears its TXT record, and
+  a clear that fails is always logged.
+
+- An authenticated request writes the store's lockout only where its
+  address or user name had failed checks, no longer on every request.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

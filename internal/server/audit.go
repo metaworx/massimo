@@ -10,6 +10,11 @@ package server
 // the target), the request with its secrets removed, and how it went.
 // A handler names its target where the path does not (auditTarget) and
 // may rename the action (auditAction), as the login does when it fails.
+// A request refused before anyone is known (no token, a wrong one, a
+// locked-out address) is no row of its own: such requests are one row
+// per address and minute with their count, and their bodies are never
+// read, so that a loop of them neither fills the store nor reads
+// megabytes (refusalAudit).
 
 import (
 	"bytes"
@@ -19,6 +24,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
@@ -192,11 +198,12 @@ func pathTarget(r *http.Request, pattern string) string {
 	return ""
 }
 
-// beginAudit prepares the row of a request: the body is read ahead and
-// handed on, and the answer's status is recorded.
-func (s *Server) beginAudit(w http.ResponseWriter, r *http.Request, pattern, action string) (*auditInfo, http.ResponseWriter, *http.Request) {
-	a := &auditInfo{action: action, pattern: pattern, path: r.URL.Path, method: r.Method, started: time.Now(), target: pathTarget(r, pattern)}
-	if r.Body != nil {
+// beginAudit prepares the row of an authenticated request, whose
+// answer w records: the body of an authorized one is read ahead and
+// handed on; a refused one's is not read.
+func (s *Server) beginAudit(w *statusWriter, r *http.Request, pattern, action string, authorized bool) (*auditInfo, *http.Request) {
+	a := &auditInfo{action: action, pattern: pattern, path: r.URL.Path, method: r.Method, started: time.Now(), target: pathTarget(r, pattern), w: w}
+	if r.Body != nil && authorized {
 		b, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
 		r.Body.Close()
 		if err != nil {
@@ -205,13 +212,30 @@ func (s *Server) beginAudit(w http.ResponseWriter, r *http.Request, pattern, act
 		a.body, a.bodyLen = b, len(b)
 		r.Body = io.NopCloser(bytes.NewReader(b))
 	}
-	if sn := r.PathValue("sn"); sn != "" && s.opts.Store != nil {
-		if row, ok, err := s.opts.Store.Cube(r.Context(), sn); err == nil && ok {
-			a.cubeID = row.ID
-		}
+	a.cubeID = s.cubeIDOf(r.Context(), r.PathValue("sn"))
+	return a, r.WithContext(context.WithValue(r.Context(), auditKey, a))
+}
+
+// cubeIDOf is the store's id of the Cube a path names, 0 for none.
+func (s *Server) cubeIDOf(ctx context.Context, sn string) int64 {
+	if sn == "" || s.opts.Store == nil {
+		return 0
 	}
-	a.w = &statusWriter{ResponseWriter: w}
-	return a, a.w, r.WithContext(context.WithValue(r.Context(), auditKey, a))
+	if row, ok, err := s.opts.Store.Cube(ctx, sn); err == nil && ok {
+		return row.ID
+	}
+	return 0
+}
+
+// resultOf is how a status went, as an audit row says it.
+func resultOf(status int) string {
+	switch {
+	case status < 300:
+		return store.ResultOK
+	case status == http.StatusUnauthorized, status == http.StatusForbidden, status == http.StatusTooManyRequests:
+		return store.ResultRefused
+	}
+	return store.ResultFailed
 }
 
 // redacted is the body as the row keeps it: the JSON with the secret
@@ -246,13 +270,7 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 	if status == 0 {
 		status = http.StatusOK
 	}
-	result := store.ResultFailed
-	switch {
-	case status < 300:
-		result = store.ResultOK
-	case status == http.StatusUnauthorized, status == http.StatusForbidden, status == http.StatusTooManyRequests:
-		result = store.ResultRefused
-	}
+	result := resultOf(status)
 	detail := map[string]any{"method": a.method, "path": a.path, "status": status, "ms": time.Since(a.started).Milliseconds()}
 	if a.bodyLen > 0 {
 		detail["bytes"] = a.bodyLen
@@ -281,6 +299,144 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 	}
 	if a.commandID != 0 {
 		s.endCommand(ctx, a, status)
+	}
+}
+
+// refusalWindow is the span one row of refused requests covers.
+const refusalWindow = time.Minute
+
+// refusalAudit keeps the refused requests of each address for a minute
+// and writes them as one row: the first request's action, target and
+// path, with the count of requests within the minute and of each
+// status. A row is written when its minute ends, at the address's next
+// refused request after it, when more addresses are open than the
+// limiter tracks (the oldest first), and when the server stops.
+type refusalAudit struct {
+	window time.Duration
+	max    int
+	now    func() time.Time
+	write  func(refusal)
+
+	mu     sync.Mutex
+	open   map[string]*refusal
+	closed bool
+}
+
+// refusal is one address's refused requests within a minute.
+type refusal struct {
+	remote, action, target, sn, method, path string
+	first, last                              time.Time
+	status, count                            int // the first request's status, and how many
+	statuses                                 map[int]int
+	timer                                    *time.Timer
+}
+
+func newRefusalAudit(write func(refusal)) *refusalAudit {
+	return &refusalAudit{window: refusalWindow, max: maxTracked, now: time.Now, write: write, open: map[string]*refusal{}}
+}
+
+// note counts a refused request of the address.
+func (ra *refusalAudit) note(r *http.Request, pattern, action, remote string, status int) {
+	if ra == nil {
+		return
+	}
+	if status == 0 {
+		status = http.StatusOK
+	}
+	now := ra.now()
+	var due []refusal
+	ra.mu.Lock()
+	f := ra.open[remote]
+	if f != nil && now.Sub(f.first) >= ra.window {
+		due = append(due, ra.takeLocked(remote))
+		f = nil
+	}
+	if f == nil {
+		for len(ra.open) >= ra.max {
+			due = append(due, ra.takeLocked(ra.oldestLocked()))
+		}
+		nf := &refusal{remote: remote, action: action, target: pathTarget(r, pattern), sn: r.PathValue("sn"), method: r.Method, path: r.URL.Path,
+			first: now, status: status, statuses: map[int]int{}}
+		if !ra.closed {
+			nf.timer = time.AfterFunc(ra.window, func() { ra.flush(remote, nf) })
+		}
+		ra.open[remote], f = nf, nf
+	}
+	f.last = now
+	f.count++
+	f.statuses[status]++
+	if ra.closed {
+		due = append(due, ra.takeLocked(remote))
+	}
+	ra.mu.Unlock()
+	for _, d := range due {
+		ra.write(d)
+	}
+}
+
+// flush writes the address's row once its minute is over, if it is
+// still the open one.
+func (ra *refusalAudit) flush(remote string, f *refusal) {
+	ra.mu.Lock()
+	if ra.open[remote] != f {
+		ra.mu.Unlock()
+		return
+	}
+	d := ra.takeLocked(remote)
+	ra.mu.Unlock()
+	ra.write(d)
+}
+
+// close writes every open row; later refusals are written at once.
+func (ra *refusalAudit) close() {
+	if ra == nil {
+		return
+	}
+	ra.mu.Lock()
+	ra.closed = true
+	var due []refusal
+	for remote := range ra.open {
+		due = append(due, ra.takeLocked(remote))
+	}
+	ra.mu.Unlock()
+	for _, d := range due {
+		ra.write(d)
+	}
+}
+
+// takeLocked removes an open row and stops its timer.
+func (ra *refusalAudit) takeLocked(remote string) refusal {
+	f := ra.open[remote]
+	delete(ra.open, remote)
+	if f.timer != nil {
+		f.timer.Stop()
+	}
+	return *f
+}
+
+// oldestLocked is the address whose open row began first.
+func (ra *refusalAudit) oldestLocked() string {
+	oldest, at := "", time.Time{}
+	for remote, f := range ra.open {
+		if oldest == "" || f.first.Before(at) {
+			oldest, at = remote, f.first
+		}
+	}
+	return oldest
+}
+
+// writeRefusal writes the row of an address's refused requests.
+func (s *Server) writeRefusal(f refusal) {
+	ctx := context.Background()
+	statuses := map[string]int{}
+	for status, n := range f.statuses {
+		statuses[strconv.Itoa(status)] = n
+	}
+	detail := map[string]any{"method": f.method, "path": f.path, "status": f.status, "count": f.count, "statuses": statuses, "last": f.last}
+	raw, _ := json.Marshal(detail)
+	e := store.AuditEntry{Time: f.first, Remote: f.remote, Action: f.action, CubeID: s.cubeIDOf(ctx, f.sn), Target: f.target, Detail: raw, Result: resultOf(f.status)}
+	if _, err := s.opts.Store.Audit(ctx, e); err != nil {
+		s.log.Error("api: audit row of refused requests not written", "remote", f.remote, "error", err)
 	}
 }
 

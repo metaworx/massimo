@@ -221,6 +221,7 @@ type Server struct {
 	limiter     failureLimiter
 	authLockout time.Duration // the lockout in effect, for the log
 	tickets     *ticketStore
+	refusals    *refusalAudit // nil without a store
 	updates     updateCheck
 
 	// Discovery, see discovery.go.
@@ -397,6 +398,7 @@ func New(opts Options) *Server {
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	if opts.Store != nil {
+		s.refusals = newRefusalAudit(s.writeRefusal)
 		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
 		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
 			s.log.Error("store: bootstrap failed", "error", err)
@@ -453,6 +455,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.mu.Unlock()
 	s.wg.Wait()
+	s.refusals.close()
 	stopWriter()
 	<-writerDone
 	return ctx.Err()
@@ -669,14 +672,24 @@ func (s *Server) routes() {
 			audited = false
 		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			var au *auditInfo
+			// Authorized first (audit.go): a request refused before
+			// anyone is known is counted per address and minute, its body
+			// unread; any other is a row of its own.
+			var sw *statusWriter
 			if audited && action != "" && s.opts.Store != nil {
-				au, w, r = s.beginAudit(w, r, pattern, action)
-				defer func() { s.endAudit(r.Context(), au, s.clientIP(r)) }()
+				sw = &statusWriter{ResponseWriter: w}
+				w = sw
 			}
 			p, ok := s.authorize(w, r, capability)
-			if au != nil {
+			if sw != nil && p == nil {
+				s.refusals.note(r, pattern, action, s.clientIP(r), sw.status)
+				return
+			}
+			var au *auditInfo
+			if sw != nil {
+				au, r = s.beginAudit(sw, r, pattern, action, ok)
 				au.p = p
+				defer func() { s.endAudit(r.Context(), au, s.clientIP(r)) }()
 			}
 			if !ok {
 				return

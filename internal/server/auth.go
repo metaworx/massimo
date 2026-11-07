@@ -194,26 +194,32 @@ func tokenMatches(want, got string) bool {
 // clientIP is the address a request came from, without the port: the
 // TCP peer's, or, when the peer is one of Options.TrustedProxies, the
 // client that proxy names in X-Forwarded-For (the rightmost entry that
-// is not a trusted proxy itself) or X-Real-IP. Without trusted proxies
-// the headers are ignored: anyone can set them. One address serves the
-// lockout, the local-network check of the first owner, the audit and
-// the log.
+// is not a trusted proxy itself, the leftmost when every one is), its
+// header lines read as one list, or, only when no X-Forwarded-For came
+// at all, X-Real-IP. An entry that does not parse is the peer: what a
+// client can set never wins over what the proxy appended. Without
+// trusted proxies the headers are ignored: anyone can set them. One
+// address serves the lockout, the local-network check of the first
+// owner, the audit and the log.
 func (s *Server) clientIP(r *http.Request) string {
 	peer := peerIP(r.RemoteAddr)
 	if len(s.opts.TrustedProxies) == 0 || !s.trustedProxy(peer) {
 		return peer
 	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
+	if lines := r.Header.Values("X-Forwarded-For"); len(lines) > 0 {
+		parts := strings.Split(strings.Join(lines, ","), ",")
+		client := peer
 		for i := len(parts) - 1; i >= 0; i-- {
 			a, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
 			if err != nil {
-				break // a proxy would not write this; the peer it is
+				return peer // a proxy would not write this
 			}
-			if !s.trustedProxy(a.Unmap().String()) {
-				return a.Unmap().String()
+			client = a.Unmap().String()
+			if !s.trustedProxy(client) {
+				return client
 			}
 		}
+		return client
 	}
 	if a, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil {
 		return a.Unmap().String()
@@ -391,10 +397,15 @@ func (l *authLimiter) pruneLocked(now time.Time) {
 }
 
 // storeLimiter is the limiter on auth_failures; an error of the store
-// is logged, and counts as not locked.
+// is logged, and counts as not locked. It keeps the keys that have a
+// row in memory, so that the success of every authenticated request
+// writes the store only for an address that failed.
 type storeLimiter struct {
 	l   *store.Lockout
 	log *slog.Logger
+
+	mu     sync.Mutex
+	failed map[string]bool // keys with failures in the store, up to maxTracked
 }
 
 func (l *storeLimiter) lockedFor(ctx context.Context, key string) time.Duration {
@@ -410,13 +421,31 @@ func (l *storeLimiter) fail(ctx context.Context, key string) bool {
 	if err != nil {
 		l.log.Error("api: failure not counted", "error", err)
 	}
+	l.mu.Lock()
+	if l.failed == nil {
+		l.failed = map[string]bool{}
+	}
+	if len(l.failed) < maxTracked {
+		l.failed[key] = true
+	}
+	l.mu.Unlock()
 	return locked
 }
 
 func (l *storeLimiter) succeed(ctx context.Context, key string) {
+	l.mu.Lock()
+	had := l.failed[key]
+	l.mu.Unlock()
+	if !had {
+		return
+	}
 	if err := l.l.Succeed(ctx, key); err != nil {
 		l.log.Error("api: failures not forgotten", "error", err)
+		return
 	}
+	l.mu.Lock()
+	delete(l.failed, key)
+	l.mu.Unlock()
 }
 
 // newLimiter picks the limiter of the options: on the store when there
@@ -435,7 +464,18 @@ func newLimiter(opts Options, log *slog.Logger) failureLimiter {
 	if lockout <= 0 {
 		lockout = DefaultAuthLockout
 	}
-	return &storeLimiter{l: opts.Store.Lockout(max, window, lockout), log: log}
+	l := &storeLimiter{l: opts.Store.Lockout(max, window, lockout), log: log, failed: map[string]bool{}}
+	// The failures from before a restart go with the next success too.
+	keys, err := l.l.Keys(context.Background())
+	if err != nil {
+		log.Error("api: lockout not read", "error", err)
+	}
+	for _, k := range keys {
+		if len(l.failed) < maxTracked {
+			l.failed[k] = true
+		}
+	}
+	return l
 }
 
 // ticketStore holds the stream tickets: random, single-use, bound to one
