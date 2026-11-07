@@ -150,17 +150,40 @@ The server authenticates in one of three ways, by what it has:
   A disabled user, a guest past its end date or a disabled role is `403` too,
   with the reason.
 - **Open**, a store without users, the state before the first owner:
-  every request may do everything,
-  which is only acceptable on the default localhost listener.
+  every request from the local network may do everything,
+  as the original software can on the LAN.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
 - **Token**, no store (`serve -addr`):
   `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
-  without it the API is open.
+  without it the API is open as in open mode.
+
+An open server answers its local network only:
+the box itself, the private ranges (RFC 1918),
+IPv6 unique local and link-local addresses.
+A client beyond them gets `403` with
+`this server is open and answers only its local network; …`,
+and so does a request whose forwarding header names a client,
+`X-Forwarded-For`, `X-Real-IP` or `Forwarded`,
+unless it comes from a proxy of `-trusted-proxies`, whose client then decides:
+a reverse proxy on the box would otherwise pass the internet through as itself.
+`/healthz` stays open.
 
 `/healthz` is always open.
 The errors say which: `401` is a missing, wrong, revoked or expired token,
 `403` a token whose user may not do this.
+
+A write that another site's page sent is refused in every mode,
+before the token is looked at,
+with `403` and `{"error": "cross-origin request refused"}`:
+a request whose `Sec-Fetch-Site` is `cross-site` or `same-site`,
+or, without that header, whose `Origin` names another host than its `Host`.
+A browser sends a `POST` with a plain-text body from any page without asking
+the server first, and an open server would serve it.
+`GET`, `HEAD` and `OPTIONS` pass,
+and so does a client that sends neither header, such as curl or a script.
+Behind a reverse proxy see [reverse-proxy.md](reverse-proxy.md),
+"The `Host` header".
 
 `MASSIMO_API_TOKEN` and the store:
 at the first start with the variable set and no user,

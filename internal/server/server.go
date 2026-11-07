@@ -831,7 +831,14 @@ func (s *Server) routes() {
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
-	s.handler = mux
+	// A write that another site's page sent is refused before it is
+	// routed (docs/api-v1.md, "Authentication"): a browser sends a POST
+	// with a plain-text body without asking the server first, and a
+	// server that asks for no key would serve it.
+	cop := http.NewCrossOriginProtection()
+	cop.SetDenyHandler(http.HandlerFunc(s.crossOriginRefused))
+	inner := cop.Handler(mux)
+	s.handler = inner
 	if s.opts.TLS != nil {
 		// HSTS on every response, the API's included: a browser that saw
 		// it refuses http:// to this host for that long, so it goes out
@@ -840,9 +847,23 @@ func (s *Server) routes() {
 		hsts := "max-age=" + strconv.Itoa(max(s.opts.HSTSDays, 0)*24*60*60)
 		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Strict-Transport-Security", hsts)
-			mux.ServeHTTP(w, r)
+			inner.ServeHTTP(w, r)
 		})
 	}
+}
+
+// crossOriginRefused answers a write another site's page sent, with 403;
+// on an audited route it is counted with the other refusals of its
+// address (audit.go).
+func (s *Server) crossOriginRefused(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Store != nil {
+		if _, pattern := s.mux.Handler(r); pattern != "" {
+			if action := actions[pattern]; action != "" {
+				s.refusals.note(r, pattern, action, s.clientIP(r), http.StatusForbidden)
+			}
+		}
+	}
+	writeError(w, http.StatusForbidden, "cross-origin request refused")
 }
 
 type httpError struct {

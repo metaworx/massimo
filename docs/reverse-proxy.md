@@ -29,7 +29,11 @@ An entry that is not an address, such as `unknown` or `192.0.2.10:443`,
 makes the client the proxy itself, whatever `X-Real-IP` says:
 a client can set that header, and a proxy that appends to
 `X-Forwarded-For` may leave it in place.
-Without the option the headers are ignored, since anyone can set them.
+Without the option the headers are ignored, since anyone can set them,
+except on an open server (no users, or no store and no token),
+which refuses a request that carries them:
+it answers its local network only, and behind a proxy it needs the option
+to know whether the client is on it.
 
 ```bash
 massimo serve -trusted-proxies 127.0.0.1          # a proxy on the box
@@ -61,6 +65,18 @@ Caddy streams `text/event-stream` by itself.
 The proxy must speak HTTP/1.1 to the server with the `Connection` header cleared,
 as the samples do.
 
+## The `Host` header
+
+The server refuses a write that another site's page sent:
+see `docs/api-v1.md`, "Authentication".
+A browser says where a request comes from in `Sec-Fetch-Site`,
+which every browser since 2023 sends and a proxy passes as it is;
+for an older browser the server compares the `Origin` with the `Host` the request
+arrived with,
+so the proxy passes the `Host` the browser used.
+Caddy does that by itself; nginx needs `proxy_set_header Host $host`,
+as its sample has.
+
 ## nginx
 
 ```nginx
@@ -76,6 +92,7 @@ server {
         proxy_pass http://127.0.0.1:8099/;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
+        proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Real-IP $remote_addr;
     }
