@@ -227,6 +227,10 @@ func (c *Client) list(ctx context.Context) ([]ghRelease, error) {
 	return rels, nil
 }
 
+// errNoManifest is a release from before the signed manifests: no
+// channel's, and no reason why a channel has no release.
+var errNoManifest = errors.New("no signed manifest")
+
 // verify fetches a release's manifest and signature and checks both.
 func (c *Client) verify(ctx context.Context, gr ghRelease) (*Release, error) {
 	r := &Release{URL: gr.HTMLURL, assets: map[string]string{}}
@@ -234,7 +238,7 @@ func (c *Client) verify(ctx context.Context, gr ghRelease) (*Release, error) {
 		r.assets[a.Name] = a.URL
 	}
 	if r.assets[ManifestName] == "" || r.assets[SignatureName] == "" {
-		return nil, fmt.Errorf("release %s has no signed manifest", gr.TagName)
+		return nil, fmt.Errorf("release %s has %w", gr.TagName, errNoManifest)
 	}
 	manifest, err := c.get(ctx, r.assets[ManifestName], maxManifestSize, "")
 	if err != nil {
@@ -279,7 +283,8 @@ func VerifyManifest(key ed25519.PublicKey, manifest, sig []byte) (*Manifest, err
 // Latest returns the newest signed release on the channel, or nil when
 // the channel has none. Releases are tried newest first by version, and
 // one that fails verification is skipped, its error kept for when no
-// release at all verifies.
+// release of the channel verifies; one without a manifest, from before
+// the manifests, is skipped without an error.
 func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	rels, err := c.list(ctx)
 	if err != nil {
@@ -308,7 +313,7 @@ func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	for _, cd := range cands {
 		r, err := c.verify(ctx, cd.gr)
 		if err != nil {
-			if firstErr == nil {
+			if firstErr == nil && !errors.Is(err, errNoManifest) {
 				firstErr = err
 			}
 			continue

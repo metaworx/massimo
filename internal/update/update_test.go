@@ -405,3 +405,23 @@ func TestTokenGoesToTheAPIOnly(t *testing.T) {
 		t.Fatalf("other host: %v %q", err, got)
 	}
 }
+
+// A channel without a release is no error, also beside a release from
+// before the signed manifests; a release whose manifest does not verify
+// still is, since it may be the channel's.
+func TestLatestWithoutReleaseOnChannel(t *testing.T) {
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	bin := map[string][]byte{"massimo-linux-armv6": []byte("v9")}
+	gh.add(t, priv, "v0.1.0-alpha.9", "alpha", bin, nil)
+	gh.releases = append(gh.releases, map[string]any{"tag_name": "v0.1.0-alpha.10", "html_url": "https://example/v0.1.0-alpha.10", "assets": []any{}})
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	if r, err := c.Latest(context.Background(), "main"); r != nil || err != nil {
+		t.Fatalf("main, which has no release: %+v %v", r, err)
+	}
+	_, other := testKey(t)
+	gh.add(t, other, "v0.1.0-alpha.11", "alpha", bin, nil)
+	if r, err := c.Latest(context.Background(), "main"); r != nil || err == nil || !strings.Contains(err.Error(), "does not verify") {
+		t.Fatalf("beside a release that does not verify: %+v %v", r, err)
+	}
+}

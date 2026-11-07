@@ -100,6 +100,9 @@ the next minor, a fix counts the suffix up.
 - The self-signed certificate's renewal keeps a name added with
   `massimo tls self-signed -names` (README.md, "Server").
 
+- `massimo update -check` and the web UI say that a channel has no
+  signed release, no longer that an old release has no manifest.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
