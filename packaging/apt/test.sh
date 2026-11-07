@@ -24,7 +24,7 @@ gpgv --keyring "$work/keyring.gpg" "$work/site/apt/dists/alpha/InRelease" 2>/dev
 	echo "FAIL: InRelease does not verify" >&2
 	exit 1
 }
-for f in apt/massimo.asc apt/massimo.sources index.html apt/dists/alpha/Release.gpg \
+for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources index.html apt/dists/alpha/Release.gpg \
 	apt/dists/alpha/main/binary-amd64/Packages.gz apt/dists/alpha/main/binary-armhf/Packages; do
 	[ -s "$work/site/$f" ] || {
 		echo "FAIL: $f missing" >&2
@@ -36,19 +36,44 @@ grep -q '^Package: massimo-archive-keyring$' "$work/site/apt/dists/alpha/main/bi
 	exit 1
 }
 
-# A container installs from it over file://, the key as the snippet says;
-# Debian's own sources stay for the dependencies (adduser is not in the
-# slim images), and apt-cache policy shows the package came from the suite.
+# A rotated key makes a newer keyring package, whatever its expiry: here
+# one without any, after the first that expires tomorrow.
+keyring_version() { # <site>
+	local debs=("$1"/apt/pool/alpha/massimo-archive-keyring_*_all.deb)
+	dpkg-deb -f "${debs[0]}" Version
+}
+sleep 1
+gpg --batch --quiet --quick-gen-key --passphrase '' 'Massimo CI rotated <ci@example.invalid>' rsa3072 sign never
+rotated=$(gpg --list-keys --with-colons | awk -F: '/^fpr/ { f = $10 } END { print f }')
+[ "$rotated" != "$key" ] || {
+	echo "FAIL: no second key" >&2
+	exit 1
+}
+"$root/packaging/apt/publish.sh" --out "$work/rotated" --key "$rotated" --from "$root/dist" --channel alpha >/dev/null
+dpkg --compare-versions "$(keyring_version "$work/rotated")" gt "$(keyring_version "$work/site")" || {
+	echo "FAIL: the rotated key's keyring package $(keyring_version "$work/rotated") is not newer than $(keyring_version "$work/site")" >&2
+	exit 1
+}
+
+# A container installs from it over file:// as packaging/README.md says:
+# the keyring package first, then the snippet, whose Signed-By must name
+# the file that package owns, so that a new keyring package is what apt
+# verifies with; Debian's own sources stay for the dependencies (adduser
+# is not in the slim images), and apt-cache policy shows the package came
+# from the suite.
 chmod -R a+rX "$work/site"
 docker run --rm -v "$work/site/apt:/repo:ro" "$image" bash -euo pipefail -c '
-	install -d /etc/apt/keyrings
-	cp /repo/massimo.asc /etc/apt/keyrings/massimo.asc
-	sed "s#^URIs: .*#URIs: file:///repo#" /repo/massimo.sources >/etc/apt/sources.list.d/massimo.sources
 	export DEBIAN_FRONTEND=noninteractive
+	apt-get -qq install -y /repo/massimo-archive-keyring.deb >/dev/null
+	sed "s#^URIs: .*#URIs: file:///repo#" /repo/massimo.sources >/etc/apt/sources.list.d/massimo.sources
+	signed_by=$(sed -n "s/^Signed-By: *//p" /etc/apt/sources.list.d/massimo.sources)
+	[ "$(dpkg -S "$signed_by" 2>/dev/null)" = "massimo-archive-keyring: $signed_by" ] ||
+		{ echo "FAIL: Signed-By names $signed_by, which the keyring package does not own" >&2; exit 1; }
 	apt-get -qq update
-	apt-get -qq install -y massimo massimo-archive-keyring >/dev/null
+	apt-get -qq install -y massimo >/dev/null
 	grep -q "alpha/main" <<<"$(apt-cache policy massimo)" || { echo "FAIL: not from the suite alpha" >&2; exit 1; }
-	[ -s /usr/share/keyrings/massimo-archive-keyring.gpg ] || { echo "FAIL: no keyring installed" >&2; exit 1; }
+	grep -q "alpha/main" <<<"$(apt-cache policy massimo-archive-keyring)" ||
+		{ echo "FAIL: the keyring package is not in the suite alpha" >&2; exit 1; }
 	grep -q "^massimo " <<<"$(massimo version)" || { echo "FAIL: massimo version" >&2; exit 1; }
 	[ "$(head -n 1 /usr/share/massimo/packaged)" = apt ] || { echo "FAIL: marker" >&2; exit 1; }
 	echo "apt test: ok"

@@ -322,3 +322,56 @@ func TestDataDir(t *testing.T) {
 		t.Fatalf("-data %q %v", dataDir(), err)
 	}
 }
+
+// One Cube with a variable of its own beside the plain address: the
+// plain MASSIMO_CUBE_ADDRESS is that Cube's when MASSIMO_CUBE_SN names
+// it, as env.Get reads it for the other commands; with another serial
+// named, or two Cubes, it is no Cube's.
+func TestServePlainAddressOfTheNamedCube(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		sn, other, want string
+	}{
+		{"KEQ0000000", "", "192.0.2.5"},
+		{"keq0000000", "", "192.0.2.5"},
+		{"KEQ0000001", "", ""},
+		{"KEQ0000000", "KEQ0000002", ""},
+	} {
+		clearCubeEnv(t)
+		t.Setenv(env.SN, c.sn)
+		selectedSN = c.sn // as main takes it from MASSIMO_CUBE_SN
+		t.Setenv(env.Address, "192.0.2.5")
+		t.Setenv("MASSIMO_CUBE_KEQ0000000_PROXY", "192.0.2.6")
+		if c.other != "" {
+			t.Setenv("MASSIMO_CUBE_"+c.other+"_NAME", "Attic")
+		}
+		su, err := serveSetup(ctx, testStore(t, ""), "", nil, "", quietLog())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		for _, cu := range su.cubes {
+			if cu.Serial == "KEQ0000000" {
+				got = cu.Addr
+			}
+		}
+		if got != c.want {
+			t.Errorf("MASSIMO_CUBE_SN=%s, other %q: the Cube's address %q, want %q (%+v)", c.sn, c.other, got, c.want, su.cubes)
+		}
+	}
+	selectedSN, snExplicit = "", false
+}
+
+// A Cube whose serial a variable's name has in lower case is served with
+// that variable's address.
+func TestServeLowerCaseSerial(t *testing.T) {
+	clearCubeEnv(t)
+	t.Setenv("MASSIMO_CUBE_keq0000000_ADDRESS", "192.0.2.5")
+	su, err := serveSetup(context.Background(), testStore(t, ""), "", nil, "", quietLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(su.cubes) != 1 || su.cubes[0].Serial != "KEQ0000000" || su.cubes[0].Addr != "192.0.2.5" {
+		t.Fatalf("cubes %+v", su.cubes)
+	}
+}

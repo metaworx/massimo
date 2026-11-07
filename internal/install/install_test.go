@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"go.metaworx.ch/massimo/internal/env"
 )
 
 type recorder struct{ cmds []string }
@@ -257,17 +259,25 @@ func TestListenDropIns(t *testing.T) {
 func TestSetEnvLines(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "env")
 	os.WriteFile(p, []byte("# settings\nexport MASSIMO_TLS=off\nMASSIMO_API_TOKEN=t\n"), 0o640)
-	if err := setEnvLines(p, [][2]string{{"MASSIMO_TLS", "files"}, {"MASSIMO_TLS_CERT", "/etc/massimo/cert.pem"}}); err != nil {
+	if err := setEnvLines(p, [][2]string{{"MASSIMO_TLS", "files"}, {"MASSIMO_TLS_CERT", "/etc/massimo/cert.pem"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, p); got != "# settings\nMASSIMO_TLS=files\nMASSIMO_API_TOKEN=t\nMASSIMO_TLS_CERT=/etc/massimo/cert.pem\n" {
 		t.Fatalf("%q", got)
 	}
+	// A variable dropped goes, an "export " line of it too; a comment stays.
+	os.WriteFile(p, []byte("# MASSIMO_TLS_HTTP=:80 was here\nexport MASSIMO_TLS_HTTP=:80\nMASSIMO_TLS=acme\n"), 0o640)
+	if err := setEnvLines(p, [][2]string{{"MASSIMO_TLS", "off"}}, []string{"MASSIMO_TLS_HTTP", "MASSIMO_TLS_NAMES"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); got != "# MASSIMO_TLS_HTTP=:80 was here\nMASSIMO_TLS=off\n" {
+		t.Fatalf("dropped: %q", got)
+	}
 	if fi, _ := os.Stat(p); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o640 {
 		t.Fatalf("mode %v", fi.Mode())
 	}
 	missing := filepath.Join(t.TempDir(), "new")
-	if err := setEnvLines(missing, [][2]string{{"A", "1"}}); err != nil || read(t, missing) != "A=1\n" {
+	if err := setEnvLines(missing, [][2]string{{"A", "1"}}, nil); err != nil || read(t, missing) != "A=1\n" {
 		t.Fatalf("new file: %v %q", err, read(t, missing))
 	}
 }
@@ -327,7 +337,7 @@ func TestInstallTLSFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	env = read(t, filepath.Join(root, EnvPath))
-	if strings.Count(env, "MASSIMO_TLS=off\n") != 1 || strings.Contains(env, "MASSIMO_TLS=files") || !strings.Contains(env, "MASSIMO_TLS_CERT=/etc/massimo/cert.pem") {
+	if strings.Count(env, "MASSIMO_TLS=off\n") != 1 || strings.Contains(env, "MASSIMO_TLS=files") || strings.Contains(env, "MASSIMO_TLS_CERT=") {
 		t.Fatalf("settings after -tls off:\n%s", env)
 	}
 	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "http://127.0.0.1:443/healthz") {
@@ -458,5 +468,119 @@ func TestInstallListenKeptAcrossInstalls(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, filepath.Dir(ListenDropIn))); err == nil {
 		t.Fatal("drop-in directory left behind")
+	}
+}
+
+// A reinstall with -no-update-helper takes the helper out: its units and
+// their drop-in go, and the path unit is disabled, so that a request
+// file no longer starts a root update.
+func TestReinstallWithoutHelperRemovesIt(t *testing.T) {
+	root, bin := setup(t)
+	if err := Install(Options{Root: root, Binary: bin, Listen: "0.0.0.0:8099", Out: &bytes.Buffer{}, Run: (&recorder{}).run}); err != nil {
+		t.Fatal(err)
+	}
+	units := []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", HealthDropIn}
+	for _, f := range units {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			t.Fatalf("first install: %v", err)
+		}
+	}
+	rec := &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, Binary: bin, NoUpdateHelper: true, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range units {
+		if _, err := os.Stat(filepath.Join(root, f)); err == nil {
+			t.Errorf("%s left after -no-update-helper", f)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.Dir(HealthDropIn))); err == nil {
+		t.Errorf("the empty drop-in directory %s left", filepath.Dir(HealthDropIn))
+	}
+	if !rec.has("systemctl disable --now massimo-update.path") {
+		t.Fatalf("the path unit is not disabled: %q", rec.cmds)
+	}
+	if _, err := os.Stat(filepath.Join(root, ListenDropIn)); err != nil {
+		t.Errorf("the serve drop-in went with the helper: %v", err)
+	}
+	// The order: the units are disabled before the reload forgets them.
+	disable, reload := -1, -1
+	for i, c := range rec.cmds {
+		switch {
+		case strings.HasPrefix(c, "systemctl disable --now massimo-update.path") && disable < 0:
+			disable = i
+		case c == "systemctl daemon-reload" && reload < 0:
+			reload = i
+		}
+	}
+	if disable < 0 || reload < disable {
+		t.Errorf("disable at %d, daemon-reload at %d: %q", disable, reload, rec.cmds)
+	}
+}
+
+// A new -tls mode takes the TLS variables of the old one out of the
+// settings, so that serve, which refuses -tls-http or a DNS hook outside
+// acme, starts after the switch; the owner's other lines stay.
+func TestInstallSwitchesTLSMode(t *testing.T) {
+	root, bin := setup(t)
+	hook := filepath.Join(t.TempDir(), "hook.sh")
+	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	cert, key := filepath.Join(t.TempDir(), "c.pem"), filepath.Join(t.TempDir(), "k.pem")
+	os.WriteFile(cert, []byte("CERT"), 0o644)
+	os.WriteFile(key, []byte("KEY"), 0o600)
+	env := filepath.Join(root, EnvPath)
+	install := func(o Options) map[string]string {
+		t.Helper()
+		o.Root, o.Binary, o.Out, o.Run = root, bin, &bytes.Buffer{}, (&recorder{}).run
+		if err := Install(o); err != nil {
+			t.Fatal(err)
+		}
+		vars, err := readEnv(env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return vars
+	}
+	install(Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEEmail: "owner@example.net", TLSHTTP: ":80"})
+	f, _ := os.OpenFile(env, os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString("MASSIMO_API_TOKEN=kept\n")
+	f.Close()
+	for _, c := range []struct {
+		o          Options
+		want, gone []string
+	}{
+		{Options{TLS: "off"}, []string{"MASSIMO_TLS=off"}, []string{"MASSIMO_TLS_HTTP", "MASSIMO_TLS_NAMES", "MASSIMO_ACME_EMAIL"}},
+		{Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEDNSHook: hook}, []string{"MASSIMO_TLS=acme", "MASSIMO_ACME_DNS_HOOK=" + hook}, []string{"MASSIMO_TLS_HTTP"}},
+		{Options{TLS: "acme", TLSNames: "massimo.example.net", TLSHTTP: ":80"}, []string{"MASSIMO_TLS_HTTP=:80"}, []string{"MASSIMO_ACME_DNS_HOOK"}},
+		{Options{TLSCert: cert, TLSKey: key}, []string{"MASSIMO_TLS=files", "MASSIMO_TLS_CERT=/etc/massimo/cert.pem"}, []string{"MASSIMO_TLS_HTTP", "MASSIMO_TLS_NAMES"}},
+		{Options{TLS: "self-signed", TLSNames: "nas.lan"}, []string{"MASSIMO_TLS=self-signed", "MASSIMO_TLS_NAMES=nas.lan"}, []string{"MASSIMO_TLS_CERT", "MASSIMO_TLS_KEY"}},
+		{Options{}, []string{"MASSIMO_TLS=self-signed", "MASSIMO_TLS_NAMES=nas.lan"}, nil}, // no -tls: the settings stay
+	} {
+		vars := install(c.o)
+		for _, w := range c.want {
+			k, v, _ := strings.Cut(w, "=")
+			if vars[k] != v {
+				t.Errorf("-tls %q: %s=%q, want %q", c.o.tlsMode(), k, vars[k], v)
+			}
+		}
+		for _, g := range c.gone {
+			if _, ok := vars[g]; ok {
+				t.Errorf("-tls %q: %s left from the mode before", c.o.tlsMode(), g)
+			}
+		}
+		if vars["MASSIMO_API_TOKEN"] != "kept" {
+			t.Fatalf("-tls %q: the owner's line went", c.o.tlsMode())
+		}
+	}
+}
+
+// Every TLS variable install writes is one serve reads, as massimo
+// config knows them.
+func TestTLSVariablesAreKnown(t *testing.T) {
+	for _, k := range modeVars {
+		if !env.Known(k) {
+			t.Errorf("%s is not a variable serve knows", k)
+		}
 	}
 }

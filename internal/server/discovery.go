@@ -105,7 +105,7 @@ func (s *Server) runtimes() []*runtime {
 // configured returns the runtime of a serial, or nil.
 func (s *Server) configured(serial string) *runtime {
 	for _, rt := range s.runtimes() {
-		if strings.EqualFold(rt.serial, serial) || strings.EqualFold(rt.config().Serial, serial) {
+		if strings.EqualFold(rt.cubeSerial(), serial) || strings.EqualFold(rt.config().Serial, serial) {
 			return rt
 		}
 	}
@@ -268,7 +268,7 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 		s.log.Info("cube address from discovery", "serial", serial, "ip", cp.Address, "was", host)
 		if had {
 			// Connected, or trying, to the old address: reconnect now.
-			go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true}).Wait(ctx)
+			go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true, Moved: true}).Wait(ctx)
 		}
 	}
 	return cp

@@ -94,46 +94,35 @@ function addCube(serial) {
 // removeCube asks in the panel, in place of its actions, whether to stop
 // serving the Cube; Keep puts the actions back.
 function removeCube(serial, actions) {
-  const box = confirmBox(t("cubes.removeConfirm", { serial }), { yes: t("cubes.remove"), no: t("action.keep") }, () => {
+  confirmInPlace(actions, t("cubes.removeConfirm", { serial }), { yes: t("cubes.remove"), no: t("action.keep") }, () => {
     cubesUI.open.delete(serial);
-    cubeAction(() => api("DELETE", "api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
-  }, () => {
-    box.replaceWith(actions);
-    actions.querySelector(".remove-cube").focus();
-  });
-  actions.replaceWith(box);
-  box.focusFirst();
+    return cubeAction(() => api("DELETE", "api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
+  }, ".remove-cube");
 }
 
 // fillHiddenEditor fills the template's list of hidden devices (box,
-// .cube-hidden) with Show again per entry, and wires the field that
-// offers the Cube's devices to hide another; the changes are sent with
-// Save.
+// .cube-hidden) and wires the field that offers the Cube's devices to
+// hide another; the changes are sent with Save. Hide and Show again
+// change the list in place (fillHiddenList), so that what is typed in
+// the rest of the form stays.
 function fillHiddenEditor(c, box) {
-  const list = cubesUI.edits[c.serial] || (cubesUI.edits[c.serial] = [...(c.hidden || [])]);
-  const ul = box.querySelector(".cube-hidden-list");
-  if (!list.length) ul.appendChild(textEl("li", t("cubes.hiddenNone"), "muted small"));
-  for (const rf of list) {
-    const show = button(t("cubes.unhide"), { cls: "subtle", aria: t("cubes.unhideLabel", { device: deviceLabel(rf) }) }, () => {
-      cubesUI.edits[c.serial] = list.filter((x) => x !== rf);
-      renderCubes();
-    });
-    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
-  }
+  if (!cubesUI.edits[c.serial]) cubesUI.edits[c.serial] = [...(c.hidden || [])];
   const input = box.querySelector("input[name=hide]");
   const dl = box.querySelector("datalist");
   dl.id = "cube-devices-" + c.serial;
-  fillDatalist(dl, c.serial, list);
   input.setAttribute("list", dl.id);
+  fillHiddenList(c.serial, box, input);
   const hide = () => {
     const rf = input.value.trim().toLowerCase();
     if (!/^[0-9a-f]{6}$/.test(rf)) {
       cubesMsg(t("cubes.hideBad", { value: input.value.trim() }), false);
       return;
     }
+    const list = cubesUI.edits[c.serial];
     if (!list.includes(rf)) cubesUI.edits[c.serial] = [...list, rf];
     cubesMsg("");
-    renderCubes();
+    input.value = "";
+    fillHiddenList(c.serial, box, input);
   };
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") {
@@ -142,6 +131,25 @@ function fillHiddenEditor(c, box) {
     }
   });
   box.querySelector(".cube-hide-add button").addEventListener("click", hide);
+}
+
+// fillHiddenList draws the list being edited, with Show again per entry,
+// and the device choice of the hide field; Show again hands the focus
+// to that field, since its own button goes.
+function fillHiddenList(serial, box, input) {
+  const list = cubesUI.edits[serial];
+  const ul = box.querySelector(".cube-hidden-list");
+  clear(ul);
+  if (!list.length) ul.appendChild(textEl("li", t("cubes.hiddenNone"), "muted small"));
+  for (const rf of list) {
+    const show = button(t("cubes.unhide"), { cls: "subtle", aria: t("cubes.unhideLabel", { device: deviceLabel(rf) }) }, () => {
+      cubesUI.edits[serial] = cubesUI.edits[serial].filter((x) => x !== rf);
+      fillHiddenList(serial, box, input);
+      input.focus();
+    });
+    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
+  }
+  fillDatalist(box.querySelector("datalist"), serial, list);
 }
 
 // fillDatalist offers the Cube's visible devices that are not hidden
@@ -495,7 +503,11 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
 // line of the settings file that differs (tpl-cube-differs); the
 // pairing (pairingSection); the form with the fields, the hidden devices
 // and Remove and Save. A Cube served from serve's command line has a
-// note instead of the form.
+// note instead of the form. The panel's loads run when the user opens it
+// (or opens the settings, initCubes): the toggle event that a panel
+// built open queues finds the serial in cubesUI.open and asks for
+// nothing, so that a redraw does not redraw the pairing again when the
+// answers come, under what the user is typing there.
 function cubePanel(c) {
   const d = fromTemplate("tpl-cube-panel");
   d.dataset.serial = c.serial;
@@ -509,6 +521,7 @@ function cubePanel(c) {
   sum.querySelector(".panel-badges").append(...badges);
   d.addEventListener("toggle", () => {
     if (d.open) {
+      if (cubesUI.open.has(c.serial)) return; // built open by a redraw
       cubesUI.open.add(c.serial);
       if (!cubesUI.devices[c.serial]) loadCubeDevices(c.serial).then(() => devicesLoaded(c.serial));
       loadPairing(c.serial);
@@ -627,11 +640,17 @@ function renderCubes() {
   }
 }
 
+// initCubes draws Settings → Cubes when the settings open; the panels
+// still open from before load what they would load when opened.
 function initCubes() {
   $("view-settings").addEventListener("click", () => {
     cubesMsg("");
     renderCubes();
-    for (const serial of cubesUI.open) loadCubeDevices(serial).then(() => devicesLoaded(serial));
+    for (const serial of cubesUI.open) {
+      loadCubeDevices(serial).then(() => devicesLoaded(serial));
+      loadPairing(serial);
+      loadCubeRooms(serial);
+    }
   });
 }
 

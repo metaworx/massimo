@@ -14,6 +14,11 @@ fail() {
 debs=(/dist/massimo_*_amd64.deb)
 deb=${debs[0]}
 [ -f "$deb" ] || fail "no /dist/massimo_*_amd64.deb"
+# The version in the file name is the package's own, as dpkg reads it.
+name=${deb##*/}
+name=${name#massimo_}
+[ "$(dpkg-deb -f "$deb" Version)" = "${name%_amd64.deb}" ] ||
+	fail "$deb holds the version $(dpkg-deb -f "$deb" Version)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
 apt-get -qq install -y "$deb" >/dev/null

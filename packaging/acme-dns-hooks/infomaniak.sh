@@ -17,6 +17,9 @@
 # INFOMANIAK_TOKEN_FILE (/etc/massimo/infomaniak.token, owned by the
 # service user, mode 0600). INFOMANIAK_ENDPOINT overrides the API's
 # address (the test's fake), INFOMANIAK_TTL the record's TTL (300).
+# The token reaches curl on its standard input (-K -), never on its
+# command line, which every local user can read; every call ends after
+# 30 seconds, within the server's two minutes for one run of the hook.
 # Untested against the real API until the owner's day; the test runs it
 # against a fake one (internal/certs/hooks_test.go).
 set -eu
@@ -28,14 +31,20 @@ endpoint=${INFOMANIAK_ENDPOINT:-https://api.infomaniak.com}
 token_file=${INFOMANIAK_TOKEN_FILE:-/etc/massimo/infomaniak.token}
 ttl=${INFOMANIAK_TTL:-300}
 token=$(cat "$token_file")
+# The token as a quoted value of curl's configuration: \ and " escaped.
+header=$(printf '%s' "$token" | sed 's/[\\"]/\\&/g')
 
 # api <method> <path> [<json body>]: the API's answer, an envelope of
 # {"result": "success", "data": ...} or {"result": "error", "error": ...}.
+# printf is the shell's own, so the header shows in no process's
+# arguments.
 api() {
 	if [ $# -ge 3 ]; then
-		curl -sS -X "$1" "$endpoint$2" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' --data "$3"
+		printf 'header = "Authorization: Bearer %s"\n' "$header" |
+			curl -sS --max-time 30 -K - -X "$1" "$endpoint$2" -H 'Content-Type: application/json' --data "$3"
 	else
-		curl -sS -X "$1" "$endpoint$2" -H "Authorization: Bearer $token"
+		printf 'header = "Authorization: Bearer %s"\n' "$header" |
+			curl -sS --max-time 30 -K - -X "$1" "$endpoint$2"
 	fi
 }
 

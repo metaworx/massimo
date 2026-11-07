@@ -188,7 +188,9 @@ enables them and starts the service,
 which listens on `:8099` on every interface.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
-`-no-update-helper` leaves the helper out, `-no-start` only enables.
+`-no-update-helper` leaves the helper out,
+and removes it where an earlier install put it,
+`-no-start` only enables.
 With several Cubes each needs its own `MASSIMO_CUBE_<SERIAL>_PROXY` address on the box,
 see [Install by hand](packaging/README.md#install-by-hand).
 Afterwards the settings are in `/etc/massimo/env` (readable by `massimo` only),
@@ -315,6 +317,8 @@ and otherwise puts `massimo.exe.prev` back and keeps the failed binary as
 a binary that cannot run as a service is given up by the service manager after 30 s,
 so that case ends after about 35 s.
 With another `-listen` address give it in `-health`;
+over `https://` the certificate is verified unless the host is the loopback
+or one of the box's own addresses.
 `-version <tag>` installs a given release, older ones too.
 
 ```powershell
@@ -326,8 +330,9 @@ sc.exe query massimo
 `-rollback` swaps `massimo.exe` and `massimo.exe.prev` back and restarts the
 service (once more goes forward again).
 The result is in the command's own output,
-in `C:\ProgramData\Massimo\service.log` ("stop requested", "stopped",
-"started as a service", "running", and any error that ended `serve`), and,
+in `C:\ProgramData\Massimo\service.log` ("stop requested", "serve stopped",
+"stopped", "started as a service", "running",
+and any error that ended `serve`), and,
 for the service manager's view,
 in
 `Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 10`.
@@ -484,7 +489,7 @@ see [packaging/README.md](packaging/README.md)).
 the server makes one at its first start for the box's names (its hostname,
 `<hostname>.local`, `localhost`, its addresses,
 and `-tls-names` for a name you gave it) into the data directory's `tls/`,
-valid 825 days and renewed 30 days before the end;
+valid 825 days and renewed 30 days before the end with the names it has;
 every browser warns once per device,
 and the fingerprint to compare is in the log, in `massimo config`,
 in `massimo tls show`, in `/healthz` and under the page's header.
@@ -499,6 +504,9 @@ or with `-tls-http :80` by HTTP-01 on a plain port 80 as well,
 which then redirects to `https://`.
 `-acme-email` gives the account a contact address;
 the account key and the certificates live in the data directory's `tls/acme/`.
+A client that names no host, as one does for an address (`https://127.0.0.1`,
+the update helper's health check among them),
+gets the certificate of the first name.
 Let's Encrypt allows five failed orders an hour per name,
 so experiments use its staging directory
 (`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`).
@@ -720,6 +728,7 @@ a user with keys only,
 `-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
 `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
+`user tokens <name>` lists the user's sessions and keys with their ids,
 and `user revoke <name> [<token id>]` revokes one token or every one.
 It opens the store beside a running `serve`;
 for the service run it as its user,
@@ -763,6 +772,9 @@ and reconnected when that changes.
 A key alone does not make `serve` take a Cube.
 A lone `MASSIMO_CUBE_ADDRESS` without a serial is served from the file until the
 Cube reports its serial, and then added to the store.
+Beside the variables of one Cube, such as its `_PROXY`,
+the plain `MASSIMO_CUBE_ADDRESS` is that Cube's when `MASSIMO_CUBE_SN` names it,
+as for the other commands.
 `serve` runs discovery at the start and every 30 minutes (`-discover-interval`,
 `0` for only on request through the API,
 `-discover-target <host>` to ask given addresses instead of broadcasting),

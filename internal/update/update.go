@@ -146,7 +146,15 @@ type Client struct {
 	HTTP  *http.Client
 	Key   ed25519.PublicKey
 	Token string // optional, for the API only: see TokenVar
+	// Idle is the longest pause in a download's data, DownloadIdle
+	// when 0; the download itself has no time limit of the client's.
+	Idle time.Duration
 }
+
+// DownloadIdle is how long a download may go without data: a Pi 1 on a
+// slow line takes minutes for a binary, which the API's two minutes
+// would cut off, while a stalled one should not wait for ever.
+const DownloadIdle = time.Minute
 
 // TokenVar names an optional GitHub token for the release list. Without
 // one GitHub allows 60 API requests an hour per address, which a shared
@@ -175,11 +183,12 @@ func NewClient() *Client {
 }
 
 type ghRelease struct {
-	TagName    string `json:"tag_name"`
-	HTMLURL    string `json:"html_url"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
-	Assets     []struct {
+	TagName         string `json:"tag_name"`
+	TargetCommitish string `json:"target_commitish"`
+	HTMLURL         string `json:"html_url"`
+	Draft           bool   `json:"draft"`
+	Prerelease      bool   `json:"prerelease"`
+	Assets          []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
 	} `json:"assets"`
@@ -227,6 +236,10 @@ func (c *Client) list(ctx context.Context) ([]ghRelease, error) {
 	return rels, nil
 }
 
+// errNoManifest is a release from before the signed manifests: no
+// channel's, and no reason why a channel has no release.
+var errNoManifest = errors.New("no signed manifest")
+
 // verify fetches a release's manifest and signature and checks both.
 func (c *Client) verify(ctx context.Context, gr ghRelease) (*Release, error) {
 	r := &Release{URL: gr.HTMLURL, assets: map[string]string{}}
@@ -234,7 +247,7 @@ func (c *Client) verify(ctx context.Context, gr ghRelease) (*Release, error) {
 		r.assets[a.Name] = a.URL
 	}
 	if r.assets[ManifestName] == "" || r.assets[SignatureName] == "" {
-		return nil, fmt.Errorf("release %s has no signed manifest", gr.TagName)
+		return nil, fmt.Errorf("release %s has %w", gr.TagName, errNoManifest)
 	}
 	manifest, err := c.get(ctx, r.assets[ManifestName], maxManifestSize, "")
 	if err != nil {
@@ -277,9 +290,12 @@ func VerifyManifest(key ed25519.PublicKey, manifest, sig []byte) (*Manifest, err
 }
 
 // Latest returns the newest signed release on the channel, or nil when
-// the channel has none. Releases are tried newest first by version, and
-// one that fails verification is skipped, its error kept for when no
-// release at all verifies.
+// the channel has none. A release whose tag or target names another
+// channel (hintedChannel) is left out unfetched; the others are tried
+// newest first by version, and one that fails verification is skipped,
+// its error kept for when no release of the channel verifies; one
+// without a manifest, from before the manifests, is skipped without an
+// error.
 func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	rels, err := c.list(ctx)
 	if err != nil {
@@ -291,6 +307,9 @@ func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	}
 	var cands []cand
 	for _, gr := range rels {
+		if hint := hintedChannel(gr); hint != "" && hint != channel {
+			continue
+		}
 		if v, ok := ParseVersion(gr.TagName); ok && !gr.Draft && v.Tag() {
 			cands = append(cands, cand{gr, v})
 		}
@@ -308,7 +327,7 @@ func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	for _, cd := range cands {
 		r, err := c.verify(ctx, cd.gr)
 		if err != nil {
-			if firstErr == nil {
+			if firstErr == nil && !errors.Is(err, errNoManifest) {
 				firstErr = err
 			}
 			continue
@@ -318,6 +337,24 @@ func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 		}
 	}
 	return nil, firstErr
+}
+
+// labelRe is release.yml's rule for the channel a tag names: its
+// pre-release label, as alpha of v0.9.0-alpha.1.
+var labelRe = regexp.MustCompile(`^v[0-9][0-9.]*-([a-z][a-z0-9]*)\.[0-9]+$`)
+
+// hintedChannel is the channel a release names before its manifest is
+// fetched, "" where it names none: release.yml makes the label of a tag
+// its channel (labelRe) and creates the release with the channel as its
+// target, which a tag without a label goes by. Neither is signed, so the
+// hint only spares the requests for another channel's release; the
+// manifest decides. The two releases before v0.1.0-alpha.12 are on
+// phase-0 under alpha's label and are no longer found there.
+func hintedChannel(gr ghRelease) string {
+	if m := labelRe.FindStringSubmatch(gr.TagName); m != nil {
+		return m[1]
+	}
+	return gr.TargetCommitish
 }
 
 // ByTag returns the signed release with this tag, on whatever channel.
@@ -346,22 +383,43 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 	if url == "" {
 		return fmt.Errorf("release %s lists %s in its manifest but has no such file", r.Tag, name)
 	}
+	// Bounded by ctx and by a pause in the data, not by the client's
+	// Timeout, which counts the whole body.
+	idle := c.Idle
+	if idle <= 0 {
+		idle = DownloadIdle
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stall := time.AfterFunc(idle, func() { cancel(fmt.Errorf("GET %s: no data for %s", url, idle)) })
+	defer stall.Stop()
+	stalled := func(err error) error {
+		if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+			return cause
+		}
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.HTTP.Do(req)
+	var hc http.Client
+	if c.HTTP != nil {
+		hc = *c.HTTP
+	}
+	hc.Timeout = 0
+	resp, err := hc.Do(req)
 	if err != nil {
-		return err
+		return stalled(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
 	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(resp.Body, MaxBinarySize+1))
+	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(idleReader{resp.Body, stall, idle}, MaxBinarySize+1))
 	if err != nil {
-		return err
+		return stalled(err)
 	}
 	if n > MaxBinarySize {
 		return fmt.Errorf("%s is larger than %d bytes", name, MaxBinarySize)
@@ -370,4 +428,20 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 		return fmt.Errorf("%s: SHA-256 %s, the signed manifest says %s", name, got, want)
 	}
 	return nil
+}
+
+// idleReader moves a download's stall timer on with every read that
+// brings data.
+type idleReader struct {
+	r     io.Reader
+	stall *time.Timer
+	idle  time.Duration
+}
+
+func (r idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.stall.Reset(r.idle)
+	}
+	return n, err
 }

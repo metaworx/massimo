@@ -4,12 +4,18 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 type fakeClock struct{ t time.Time }
@@ -209,15 +215,66 @@ func TestClientIP(t *testing.T) {
 		{trusting, "127.0.0.1:1234", "192.0.2.10", "", "192.0.2.10"},
 		{trusting, "127.0.0.1:1234", "192.0.2.10, 10.1.2.3", "", "192.0.2.10"},     // a chain through two trusted proxies
 		{trusting, "127.0.0.1:1234", "198.51.100.1, 192.0.2.10", "", "192.0.2.10"}, // the rightmost client
-		{trusting, "127.0.0.1:1234", "10.1.2.3", "192.0.2.12", "192.0.2.12"},       // every hop trusted: X-Real-IP
+		{trusting, "127.0.0.1:1234", "10.1.2.3", "192.0.2.12", "10.1.2.3"},         // every hop trusted: the leftmost, never X-Real-IP
 		{trusting, "127.0.0.1:1234", "", "192.0.2.12", "192.0.2.12"},
 		{trusting, "127.0.0.1:1234", "", "", "127.0.0.1"},
 		{trusting, "127.0.0.1:1234", "garbage", "", "127.0.0.1"},
+		// An entry that does not parse is the peer, whatever X-Real-IP
+		// the client set; X-Real-IP counts only without X-Forwarded-For.
+		{trusting, "127.0.0.1:1234", "unknown", "192.0.2.13", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "192.0.2.10:5555", "192.0.2.13", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "192.0.2.10, unknown", "192.0.2.13", "127.0.0.1"},
+		{trusting, "127.0.0.1:1234", "198.51.100.7", "192.0.2.13", "198.51.100.7"},
 		{trusting, "[::1]:1234", "2001:db8::10", "", "2001:db8::10"},
 		{trusting, "[::ffff:127.0.0.1]:1234", "192.0.2.10", "", "192.0.2.10"},
 	} {
 		if got := c.s.clientIP(req(c.remote, c.xff, c.real)); got != c.want {
 			t.Errorf("%s xff=%q real=%q: %q, want %q", c.remote, c.xff, c.real, got, c.want)
 		}
+	}
+	// A proxy that adds a header line of its own after the client's: the
+	// lines are one list, the proxy's entry the rightmost.
+	r := req("127.0.0.1:1234", "192.0.2.66", "")
+	r.Header.Add("X-Forwarded-For", "192.0.2.10")
+	if got := trusting.clientIP(r); got != "192.0.2.10" {
+		t.Errorf("two X-Forwarded-For lines: %q, want the proxy's 192.0.2.10", got)
+	}
+}
+
+// A success writes the store only for an address that has failures: an
+// authenticated request from an address without any writes nothing (a
+// read-only store makes a write show as an error in the log). Failures
+// still go with a success, also those from before a restart.
+func TestStoreLimiterWritesOnlyAfterFailures(t *testing.T) {
+	dir := t.TempDir()
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	st := testStore(t, dir)
+	ctx := context.Background()
+	key := store.LockoutAddr("192.0.2.10")
+	l := newLimiter(Options{Store: st, AuthFailures: 3}, quiet)
+	l.fail(ctx, key)
+	l.fail(ctx, key)
+	l.succeed(ctx, key)
+	if l.fail(ctx, key) || l.fail(ctx, key) {
+		t.Fatal("a success did not forget the failures")
+	}
+	// A restart: the failures in the store go with the next success.
+	again := newLimiter(Options{Store: st, AuthFailures: 3}, quiet)
+	again.succeed(ctx, key)
+	if again.fail(ctx, key) {
+		t.Fatal("a success after a restart did not forget the failures")
+	}
+	ro, err := store.OpenReadOnly(dir, store.Options{Version: "test", Logger: quiet})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	var buf bytes.Buffer
+	rl := newLimiter(Options{Store: ro}, slog.New(slog.NewTextHandler(&buf, nil)))
+	for i := 0; i < 3; i++ {
+		rl.succeed(ctx, store.LockoutAddr("192.0.2.11"))
+	}
+	if strings.Contains(buf.String(), "not forgotten") {
+		t.Fatalf("a success without failures wrote the store:\n%s", buf.String())
 	}
 }

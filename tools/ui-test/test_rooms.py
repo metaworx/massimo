@@ -7,7 +7,7 @@ device, and what expert mode adds.
 The window and the staleness come from state events applied in the page
 (updateDevice), since the fake Cube does not change its states.
 """
-from helpers import OPEN, STALE, named_buttons, scroll_width
+from helpers import OPEN, STALE, named_buttons, scroll_width, wait_until
 
 
 def test_tiles_device_list_configuration(page, case):
@@ -84,3 +84,64 @@ def test_stale_and_expert(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll in expert mode"
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
     tile.locator(".room-name-btn").click()
+
+
+def test_typing_in_the_configuration_survives_a_state_event(page, case):
+    """A state event for a room whose configuration has the focus waits:
+    the tile is not drawn again under the user's typing, and is once the
+    focus leaves the configuration, with the new state. Nothing is sent."""
+    tile = page.locator(".room").first
+    tile.locator(".tile-cog").click()
+    page.wait_for_selector(".room .config-body", timeout=5000)
+    tile.locator(".config-tabs [role=tab][data-tab=devices]").click()
+    name = tile.locator(".config-area .cfg-device input[type=text]").first
+    name.fill("Typed")
+    page.evaluate("document.querySelector('.room').dataset.mark = 'before'")
+    page.evaluate("""() => {
+      const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
+      d.state = Object.assign({}, d.state, { valve_pct: 77 });
+      state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
+        kind: "state", device: d.rf_address, state: d, time: new Date().toISOString() }) }));
+    }""")
+    page.keyboard.type(" on")
+    assert name.input_value() == "Typed on", "every key typed is in the name"
+    assert page.evaluate("document.querySelector('.room').dataset.mark") == "before", "the tile is not drawn again while typed in"
+    assert page.evaluate("state.rooms[0].devices[0].state.valve_pct") == 77, "the state is taken all the same"
+    page.evaluate("document.activeElement.blur()")
+    assert wait_until(page, "document.querySelector('.room').dataset.mark === undefined", 5), "the tile is drawn once the focus leaves"
+    tile.locator(".config-tabs .close").click()
+    assert tile.locator(".config-body").count() == 0, "the configuration closes, nothing sent"
+
+
+def test_a_switch_point_takes_a_full_time(page, case):
+    """The programme's time input keeps the focus while a time is typed
+    part by part (Chrome fires change at each part), and Send right after
+    it sends the time; the PUT is stubbed, nothing reaches the Cube."""
+    tile = page.locator(".room").first
+    tile.locator(".tile-cog").click()
+    page.wait_for_selector(".room .config-body", timeout=5000)
+    tile.locator(".config-tabs [role=tab][data-tab=program]").click()
+    time_input = tile.locator(".prog-point input[type=time]").first
+    time_input.wait_for()
+    sent = []
+
+    def answer(route):
+        sent.append(route.request.post_data_json)
+        route.fulfill(status=200, content_type="application/json", body="{}")
+
+    page.route("**/rooms/*/program", answer)
+    try:
+        before = time_input.input_value()
+        time_input.focus()  # the hour part
+        page.keyboard.type("0115A")  # headless Chromium shows 12 hours and AM/PM in both languages
+        assert time_input.input_value() == "01:15", f"the full time typed, from {before}"
+        assert "dirty" in tile.locator(".prog-days .day.editing").get_attribute("class") and \
+            tile.locator(".prog-reset-day").is_enabled(), "the day is marked as changed in place"
+        tile.locator(".config-body button[type=submit]").click()
+        page.wait_for_timeout(500)
+        assert sent, "Send right after the time sends it"
+        points = next(iter(sent[0].values()))
+        assert points[0]["until"] == "01:15", f"the time sent: {points}"
+    finally:
+        page.unroute("**/rooms/*/program")
+    tile.locator(".config-tabs .close").click()

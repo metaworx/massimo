@@ -44,8 +44,10 @@ const (
 	// the resolver, dnsEvery how often it looks.
 	dnsWait  = 10 * time.Minute
 	dnsEvery = 10 * time.Second
-	// hookTimeout bounds one run of the hook.
-	hookTimeout = 2 * time.Minute
+	// hookTimeout bounds one run of the hook, hookWaitDelay the wait for
+	// its output after the time is up.
+	hookTimeout   = 2 * time.Minute
+	hookWaitDelay = 5 * time.Second
 	// orderTimeout bounds a whole order.
 	orderTimeout = 30 * time.Minute
 )
@@ -288,7 +290,10 @@ func (d *DNS01) authorize(ctx context.Context, client *acme.Client, url string) 
 			_, err = client.WaitAuthorization(ctx, z.URI)
 		}
 	}
-	if cerr := d.runHook(ctx, "clear", record, txt); cerr != nil && err == nil {
+	// The clear runs on a context of its own: the order's may be over
+	// (its 30 minutes, or the wait for the record), and a record left
+	// behind would pile up with every retry.
+	if cerr := d.runHook(context.WithoutCancel(ctx), "clear", record, txt); cerr != nil {
 		d.log.Warn("tls: the dns hook could not clear the record", "record", record, "error", cerr)
 	}
 	if err != nil {
@@ -322,13 +327,16 @@ func (d *DNS01) waitTXT(ctx context.Context, record, txt string) error {
 
 // runHook runs the hook with the verb, the record and the value, with
 // the server's environment less its MASSIMO_ variables (the keys and the
-// token are none of the hook's business) and a timeout; its output goes
-// to the log.
+// token are none of the hook's business) and a timeout, after which the
+// hook and, on unix, its children are ended and its output is waited
+// for hookWaitDelay at most; its output goes to the log.
 func (d *DNS01) runHook(ctx context.Context, verb, record, txt string) error {
 	ctx, cancel := context.WithTimeout(ctx, hookTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, d.hook, verb, record, txt)
 	cmd.Env = hookEnv(os.Environ())
+	cmd.WaitDelay = hookWaitDelay
+	ownGroup(cmd)
 	out, err := cmd.CombinedOutput()
 	if s := strings.TrimSpace(string(out)); s != "" {
 		d.log.Info("tls: dns hook", "verb", verb, "record", record, "output", s)

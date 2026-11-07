@@ -2,12 +2,14 @@
 # the Makefile pins, from the release binary and the files of
 # packaging/deb/; packaging/README.md, "Debian package", says what it
 # installs and what its scripts do. VERSION, NFPM_ARCH and BINARY are set
-# by the Makefile for each architecture.
+# by the Makefile for each architecture; VERSION is already the dpkg form
+# of the tag (DEBVER, 0.7.0~alpha.1), taken as it is, so that the control
+# Version and the file name agree.
 name: massimo
 arch: ${NFPM_ARCH}
 platform: linux
 version: ${VERSION}
-version_schema: semver
+version_schema: none
 section: net
 priority: optional
 maintainer: Martin Rüegg <martin.rueegg@metaworx.ch>

@@ -1,13 +1,32 @@
 name: Publish
 
-# After a release is published: the Homebrew formula of its channel,
-# rendered from packaging/homebrew/massimo.rb.in for the tag and pushed
-# to the tap metaworx/homebrew-massimo with a deploy key
-# (packaging/README.md, "Homebrew"). Skipped until the owner has made
-# the tap and put the key into the secret HOMEBREW_TAP_DEPLOY_KEY.
+# The Homebrew formula of a release's channel, rendered from
+# packaging/homebrew/massimo.rb.in for the tag and pushed to the tap
+# metaworx/homebrew-massimo with a deploy key (packaging/README.md,
+# "Homebrew"). Skipped until the owner has made the tap and put the key
+# into the secret HOMEBREW_TAP_DEPLOY_KEY.
+#
+# release.yml calls it once the release is published. It does not listen
+# for "release: published" itself: a release that a workflow creates with
+# its own token starts no other workflow, so that event never came. By
+# hand, for a release already out (the tap set up after it), with
+# `gh workflow run publish.yml -f tag=<tag>`.
 on:
-  release:
-    types: [ published ]
+  workflow_call:
+    inputs:
+      tag:
+        description: The release's tag.
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_DEPLOY_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag, such as v0.9.0-alpha.1.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,8 +38,12 @@ jobs:
     env:
       HAS_TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY != '' }}
     steps:
+      # The template and the renderer of the tag, so that a run by hand
+      # renders what the release's own run would have.
       - uses: actions/checkout@v5
         if: env.HAS_TAP_KEY == 'true'
+        with:
+          ref: refs/tags/${{ inputs.tag }}
 
       # The tap is cloned first: the formula conflicts with the other
       # formulae then in it (all install bin/massimo), and brew wants a
@@ -30,7 +53,7 @@ jobs:
         if: env.HAS_TAP_KEY == 'true'
         env:
           DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag }}
         run: |
           umask 077
           key="$(mktemp)"
@@ -49,5 +72,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "Formula/$name.rb"
+          # A run by hand for a release the tap already has changes nothing.
+          if git diff --cached --quiet; then
+            echo "the tap holds this formula for ${TAG} already"
+            exit 0
+          fi
           git commit -m "$name $TAG" -m "Rendered by metaworx/massimo's release workflow from packaging/homebrew/massimo.rb.in."
           git push

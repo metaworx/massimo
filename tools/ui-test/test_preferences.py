@@ -9,7 +9,7 @@ page fixture removes the owner's preferences before every page."""
 import json
 import urllib.request
 
-from conftest import TOKEN, URL, clear_preferences
+from conftest import TOKEN, URL, api_call, clear_preferences
 from helpers import wait_until
 
 
@@ -98,3 +98,103 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     page.wait_for_timeout(1500)
     assert page.evaluate("localStorage.getItem('massimo.poll')") == "45", "the guest's poll in the browser"
     assert server_ui() is None, "nothing reached the server"
+
+
+def operator_session():
+    """A session of the operator run.sh creates, for the test's own calls."""
+    return api_call("POST", "api/v1/login", {"user": "operator", "password": "op-pass"})["token"]
+
+
+def clear_user(token):
+    """A user's preferences removed, by its own token."""
+    for key in ("ui", "schemes"):
+        api_call("DELETE", "api/v1/me/preferences/" + key, token=token)
+
+
+def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guard):
+    """Log out sends a change still waiting under the user's own token,
+    then the browser forgets the user's settings and schemes: the next to
+    sign in, the owner with its key, neither sees them nor gets them into
+    its account. What is kept for this device only stays."""
+    op = operator_session()
+    try:
+        clear_user(op)
+        clear_preferences()
+        ctx = new_context()
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog"
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the operator's settings follow it"
+        page.locator("#view-settings").click()
+        page.locator("input[data-device-only=clock]").check(force=True)
+        page.locator("#poll-input").fill("37")
+        page.locator("#poll-input").dispatch_event("change")
+        page.evaluate("putCustomScheme('Operator only', schemeById('massimo').light, schemeById('massimo').dark)")
+        page.locator("#logout-btn").click()  # within the second the change waits
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Log out brings the dialog back"
+        assert page.evaluate("localStorage.getItem('massimo.poll')") is None, "the operator's poll is forgotten"
+        assert page.evaluate("localStorage.getItem('massimo.schemes')") is None, "the operator's schemes are forgotten"
+        assert json.loads(page.evaluate("localStorage.getItem('massimo.device')") or "{}") == {"clock": "browser"}, \
+            "what is kept for this device stays"
+        page.locator("details.login-token summary").click()
+        page.locator("#login-token").fill(TOKEN)
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the owner's settings follow it"
+        page.wait_for_timeout(2000)  # the page's writes, a second after a change
+        owner = api_call("GET", "api/v1/me/preferences") or {}
+        assert (owner.get("ui") or {}).get("poll") != 37, "the operator's poll did not reach the owner"
+        assert not any(s.get("name") == "Operator only" for s in (owner.get("schemes") or {}).get("schemes") or []), \
+            "the operator's scheme did not reach the owner"
+        assert page.evaluate("state.settings.poll") != 37 and not page.evaluate("themeState.custom.some((c) => c.name === 'Operator only')"), \
+            "the owner does not see them"
+        mine = api_call("GET", "api/v1/me/preferences", token=op) or {}
+        assert (mine.get("ui") or {}).get("poll") == 37, "the change made just before Log out is the operator's on the server"
+        assert any(s.get("name") == "Operator only" for s in (mine.get("schemes") or {}).get("schemes") or []), \
+            "and so is the scheme"
+    finally:
+        clear_user(op)
+        api_call("POST", "api/v1/logout", token=op)
+        clear_preferences()
+
+
+def server_schemes():
+    """The names of the owner's schemes on the server, None for none."""
+    doc = (api_call("GET", "api/v1/me/preferences") or {}).get("schemes")
+    return None if doc is None else [s.get("name") for s in doc.get("schemes") or []]
+
+
+def test_a_deleted_scheme_stays_deleted(page, new_context, case):
+    """Once the server has the user's list of schemes it is the list: a
+    scheme deleted in one browser does not come back from another that
+    still has it, at that browser's next load."""
+    try:
+        page.evaluate("putCustomScheme('Shared', schemeById('massimo').light, schemeById('massimo').dark)")
+        for _ in range(25):
+            if "Shared" in (server_schemes() or []):
+                break
+            page.wait_for_timeout(200)
+        assert "Shared" in (server_schemes() or []), "the scheme reaches the server"
+        other = fresh(new_context)
+        assert wait_until(other, "themeState.custom.some((c) => c.name === 'Shared')", 5), "another browser takes it"
+        page.evaluate("themeState.custom = themeState.custom.filter((c) => c.name !== 'Shared'); storeCustomSchemes();")
+        for _ in range(25):
+            if server_schemes() == []:
+                break
+            page.wait_for_timeout(200)
+        assert server_schemes() == [], "the deletion reaches the server"
+        other.reload()
+        other.wait_for_selector(".room", timeout=10000)
+        other.wait_for_timeout(2000)  # a push of the old list would have come by now
+        assert server_schemes() == [], "the other browser does not bring it back"
+        assert not other.evaluate("themeState.custom.some((c) => c.name === 'Shared')"), "and drops it itself"
+        other.context.close()
+    finally:
+        clear_preferences()

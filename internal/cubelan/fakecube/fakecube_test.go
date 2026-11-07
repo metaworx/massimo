@@ -151,3 +151,44 @@ func TestDeletedPairDeviceJoinsAgain(t *testing.T) {
 		}
 	}
 }
+
+// The device that joins after n: does not join once x: ended the
+// inclusion before its delay, and a second n: makes it join once.
+func TestPairDeviceJoinsOnlyWhileIncluding(t *testing.T) {
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pair, err := PairingFrom(greeting, 0x1514b6, 0x0a0b0c, "TEQ0000001", 200*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting, Pair: pair}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	c := dial(t, addr)
+	c.conn.Write([]byte(cube.CmdInclusion(time.Minute).Wire()))
+	if n := c.send(cube.CmdCancelInclusion); n.Type != 'N' || n.Data != "" {
+		t.Fatalf("x: answered %s", n)
+	}
+	// Within the delay and after: nothing more comes.
+	c.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	if m, err := c.r.Read(); err == nil {
+		t.Fatalf("after x: the fake sent %s", m)
+	}
+	c.conn.SetDeadline(time.Now().Add(5 * time.Second))
+	c.r = cube.NewReader(c.conn)
+	// Two n: in a row: the device joins once.
+	c.conn.Write([]byte(cube.CmdInclusion(time.Minute).Wire()))
+	c.conn.Write([]byte(cube.CmdInclusion(time.Minute).Wire()))
+	if n := c.read(); n.String() != NewDeviceLine(pair.Device).String() {
+		t.Fatalf("n: brought %s, want the N line", n)
+	}
+	c.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	if m, err := c.r.Read(); err == nil {
+		t.Fatalf("a second join: %s", m)
+	}
+}

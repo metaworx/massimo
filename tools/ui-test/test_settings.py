@@ -33,3 +33,26 @@ def test_language_redraw(page):
         assert panel.get_attribute("open") is not None and got == want, f"the open Cube panel redrawn in {lang}: {got}"
     page.locator("#lang-select").select_option("auto")
     page.locator("#view-tiles").click()
+
+
+def test_a_superseded_language_says_nothing(page):
+    """French chosen, then German before French has come: German applies,
+    and French, failing afterwards, shows no error on the German page.
+    The test holds French's table and answers it with something that is
+    no JSON, which fails the load without a console error."""
+    held = []
+    page.route("**/i18n/fr.json", lambda route: held.append(route))
+    try:
+        page.locator("#view-settings").click()
+        page.locator("#lang-select").select_option("fr")
+        page.locator("#lang-select").select_option("de")
+        assert wait_until(page, "document.documentElement.lang === 'de'", 5), "German applies"
+        assert held, "French's table was asked for"
+        held[0].fulfill(status=200, content_type="application/json", body="not a table")
+        page.wait_for_timeout(500)
+        assert page.locator("#message").is_hidden(), f"no error of the French load: {page.locator('#message').inner_text()}"
+        assert page.evaluate("document.documentElement.lang") == "de", "the page stays German"
+    finally:
+        page.unroute("**/i18n/fr.json")
+    page.locator("#lang-select").select_option("auto")
+    page.locator("#view-tiles").click()
