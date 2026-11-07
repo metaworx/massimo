@@ -54,10 +54,14 @@ docs/handover-session.md is the context a session needs to work here.
    the checks "Debian package (debian:trixie-slim)" and "(debian:bookworm-slim)"
    added to the ruleset on `main`;
    the apt key made, `MASSIMO_APT_KEY` and `MASSIMO_APT_KEY_PASSPHRASE` in the
-   `signing` environment, Pages set to deploy from Actions;
+   `signing` environment, Pages set to deploy from Actions,
+   and in the `github-pages` environment a deployment rule for the tags `v*`;
    the repository `metaworx/homebrew-massimo` created,
-   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY`;
+   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY`,
+   then `gh workflow run publish.yml -f tag=<newest release>` once;
    until then the apt and tap jobs skip themselves.
+   The first Pages deploy proves the Pages job,
+   the first release with the deploy key set the Homebrew job.
 3. **Packaging, the rest**
    (AP Packaging v1.0, Blocks 4 to 10, each a `PLAN+` revision when wanted,
    else `EXEC retire`): Windows code signing (none for now;
