@@ -162,6 +162,18 @@ The server authenticates in one of three ways, by what it has:
 The errors say which: `401` is a missing, wrong, revoked or expired token,
 `403` a token whose user may not do this.
 
+A write that another site's page sent is refused in every mode,
+before the token is looked at,
+with `403` and `{"error": "cross-origin request refused"}`:
+a request whose `Sec-Fetch-Site` is `cross-site` or `same-site`,
+or, without that header, whose `Origin` names another host than its `Host`.
+A browser sends a `POST` with a plain-text body from any page without asking
+the server first, and an open server would serve it.
+`GET`, `HEAD` and `OPTIONS` pass,
+and so does a client that sends neither header, such as curl or a script.
+Behind a reverse proxy see [reverse-proxy.md](reverse-proxy.md),
+"The `Host` header".
+
 `MASSIMO_API_TOKEN` and the store:
 at the first start with the variable set and no user,
 the server creates the user `owner` with the role `owner`,
