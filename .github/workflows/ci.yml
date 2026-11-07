@@ -36,11 +36,11 @@ jobs:
     name: Vet and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0 # git describe needs the tags
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -73,9 +73,9 @@ jobs:
     name: Race
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -92,9 +92,9 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -104,7 +104,7 @@ jobs:
 
       - name: Keep a crash's input
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: fuzz-crash
           path: internal/**/testdata/fuzz/
@@ -124,7 +124,7 @@ jobs:
     outputs:
       ui: ${{ steps.paths.outputs.ui }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 2 # the merge commit and its parents
 
@@ -167,9 +167,9 @@ jobs:
       # the binary under test needs none.
       GOFLAGS: -buildvcs=false
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -190,7 +190,7 @@ jobs:
       - name: Screenshots
         run: tools/ui-test/run.sh screenshots
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: ${{ !cancelled() }}
         with:
           name: ui-screenshots
@@ -198,7 +198,7 @@ jobs:
             docs/screenshots/*.png
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: failure()
         with:
           name: ui-test-results
@@ -215,9 +215,9 @@ jobs:
       matrix:
         goos: [ linux, windows ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -243,11 +243,11 @@ jobs:
       matrix:
         image: [ 'debian:trixie-slim', 'debian:bookworm-slim' ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0 # git describe names the version
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -266,7 +266,7 @@ jobs:
           command -v apt-ftparchive >/dev/null || sudo apt-get -qq install -y apt-utils
           make apt-test DEB_IMAGE=${{ matrix.image }}
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: matrix.image == 'debian:trixie-slim'
         with:
           name: packages
@@ -281,9 +281,9 @@ jobs:
     name: Windows service
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -580,9 +580,9 @@ jobs:
     name: macOS LaunchDaemon
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
@@ -735,7 +735,7 @@ jobs:
     name: Guidelines
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           submodules: true
           # The changelog check compares the released sections with the
@@ -743,13 +743,17 @@ jobs:
           fetch-depth: 0
       - name: Tags
         run: git fetch --quiet --force --tags origin
+      # Without a range, check reads no commit message in a fresh checkout:
+      # a push to main, and a pull request of Dependabot's, whose messages
+      # cannot take the project's form (GUIDELINES/project/CI.md,
+      # "Dependabot"); every other check runs on them.
       - name: Checks
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
         run: GUIDELINES/shared/tools/check
       # base..head, not ..HEAD: on a pull request HEAD is the merge commit
       # GitHub makes for the run, whose message is not ours to write; the
       # merge commits main receives are left out the same way, by running
       # the commit-message check on pull requests only.
       - name: Checks, with the pull request's commit messages
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: GUIDELINES/shared/tools/check --commit-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"

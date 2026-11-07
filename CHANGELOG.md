@@ -122,6 +122,10 @@ the next minor, a fix counts the suffix up.
   `proxy` in a Race job beside Vet and test; `make race` runs it
   locally (`GUIDELINES/project/CI.md`, section 2).
 
+- The workflows pin their actions by commit SHA; Dependabot proposes
+  their updates and the Go modules' monthly
+  (`GUIDELINES/project/CI.md`, "Dependabot").
+
 ### Fixed
 
 - The web UI's Clear in the log sets the filter, the kind and the device
