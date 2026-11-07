@@ -1853,7 +1853,12 @@ components:
         target: {type: string, description: "device:1514b6, room:6, user:anna, role:night, token:4, cube:KEQ0000000", example: "room:6"}
         detail:
           type: object
-          description: The method, the path, the status, the milliseconds, the body's size and, when JSON and short, the body with password, current_password and token removed, and the error of a failed answer
+          description: >-
+            The method, the path, the status, the milliseconds, the body's size and, when JSON and short, the body
+            with password, current_password and token removed, and the error of a failed answer. A request refused
+            for a known user keeps no body. Requests refused before anyone is known are one row per address and
+            minute, without their bodies: the first one's method, path and status, the count of requests within
+            the minute, the count of each status in statuses, and the time of the last.
         result: {type: string, enum: [ok, refused, failed]}
         command_id: {type: integer, description: The command the request is, when it is one}
     UserCreate:

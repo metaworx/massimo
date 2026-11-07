@@ -554,12 +554,27 @@ room, user, role, token or Cube concerned, `user` and `token_id` who asked
 (absent without authentication, for a failed login,
 and for `massimo user` on the box, whose `remote` is `cli`),
 and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
-`403` or `429` (the refused request is a row too, with who was refused),
-`failed` otherwise.
+`403` or `429`, `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
 the body's size and, when it is JSON of at most 4 KB,
 the body with `password`, `current_password` and `token` replaced by `…`,
 and the error of a failed answer.
+A request refused for a known user (a capability it lacks,
+a disabled user or role) is a row with who was refused, without its body.
+Requests refused before anyone is known, without a token,
+with a wrong one or from a locked-out address,
+are one row per address and minute, written when the minute ends,
+with their bodies never read:
+the first request's action, target, method, path and status,
+and in `detail` the `count` of requests within the minute,
+the count of each status in `statuses`, and the time of the `last`:
+
+```json
+{"id": 43, "time": "…", "remote": "192.0.2.10", "action": "setpoint", "cube": "KEQ0000000", "target": "room:6",
+ "detail": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/rooms/6/setpoint", "status": 401, "count": 20, "statuses": {"401": 10, "429": 10}, "last": "…"},
+ "result": "refused"}
+```
+
 Nothing in a row is a secret.
 
 `before`

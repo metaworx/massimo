@@ -48,6 +48,10 @@ the next minor, a fix counts the suffix up.
   `X-Forwarded-For` entry that is not an address, nor a second
   `X-Forwarded-For` line over the proxy's (docs/reverse-proxy.md).
 
+- Requests refused before anyone is known are one audit row per address
+  and minute, with their count, and their bodies are not read
+  (docs/api-v1.md, "GET /api/v1/audit").
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
