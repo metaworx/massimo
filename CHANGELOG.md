@@ -136,6 +136,9 @@ the next minor, a fix counts the suffix up.
 - A Cube served by its address that reports the serial of a Cube added
   meanwhile stops, instead of taking its place beside it.
 
+- A `t:` deleting several devices waits for the Cube's `A:` of each, so
+  the next command no longer takes a late one as its reply (docs/proxy.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

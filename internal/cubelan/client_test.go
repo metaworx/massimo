@@ -329,3 +329,32 @@ func TestForgetDevice(t *testing.T) {
 		t.Fatal("not back after its C line")
 	}
 }
+
+// A t: naming several devices is answered with an A line for each, and
+// Send returns only after the last, so that the next command's reply is
+// its own and not a late A of the deletion.
+func TestSendWaitsForEveryAOfADelete(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakecube.Server{Greeting: greeting, ReplyGap: 100 * time.Millisecond}
+	addr, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	<-c.Ready()
+	del := cube.CmdDeleteDevices(true, 0x14ce3d, 0x14ce58, 0x151486)
+	start := time.Now()
+	if _, err := c.Send(ctx, del); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took < 180*time.Millisecond {
+		t.Fatalf("Send of a t: for three devices returned after %s, before the Cube's third A", took)
+	}
+}

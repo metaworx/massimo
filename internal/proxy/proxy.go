@@ -331,8 +331,8 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 	if m.Type == 't' && !p.opts.ShowHidden {
 		kept, ok := p.withoutHidden(m, remote)
 		if !ok {
-			// The Cube acknowledges t: with an empty A line.
-			return []cube.Message{{Type: 'A'}}
+			// The Cube acknowledges t: with an empty A line per device.
+			return deleteAnswer(m)
 		}
 		lines = []cube.Message{kept}
 	}
@@ -377,11 +377,30 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 			}
 		}
 	}
+	if m.Type == 't' && len(res.Replies) > 0 && res.Replies[0].Type == 'A' {
+		// The client expects an A line per device it named, as the Cube
+		// sends them, also for the hidden ones it left out.
+		return deleteAnswer(m)
+	}
 	// The client sent one line and expects one answer.
 	if len(res.Replies) > 1 {
 		return res.Replies[len(res.Replies)-1:]
 	}
 	return res.Replies
+}
+
+// deleteAnswer is the Cube's answer to a client's t:, an empty A line
+// for each device it names.
+func deleteAnswer(m cube.Message) []cube.Message {
+	n := 1
+	if _, addrs, err := cube.ParseDeleteDevices(m.Data); err == nil && len(addrs) > 1 {
+		n = len(addrs)
+	}
+	out := make([]cube.Message, n)
+	for i := range out {
+		out[i] = cube.Message{Type: 'A'}
+	}
+	return out
 }
 
 // pairing handles n: and x: from a client. Inclusion mode runs through

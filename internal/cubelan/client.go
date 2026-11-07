@@ -60,6 +60,7 @@ type Client struct {
 
 type pendingReply struct {
 	want byte
+	left int // replies still due: one, or one A per device of a t:
 	ch   chan cube.Message
 }
 
@@ -268,6 +269,12 @@ func (c *Client) handle(m cube.Message) {
 	}
 	c.mu.Lock()
 	p := c.pending
+	if p != nil && m.Type == p.want && p.left > 1 {
+		// An A of a t: for several devices; the last answers the Send.
+		p.left--
+		c.mu.Unlock()
+		return
+	}
 	if p != nil && m.Type == p.want {
 		c.pending = nil
 		c.mu.Unlock()
@@ -343,14 +350,26 @@ func replyType(cmd byte) byte {
 	return 0
 }
 
-// Send writes a command and waits for its reply. Only one command can be
-// in flight at a time, which matches how the Cube behaves.
+// replies is how many lines answer a command: one, or for a t: one A
+// for each device it deletes, as the Cube answered on hardware.
+func replies(m cube.Message) int {
+	if m.Type == 't' {
+		if _, addrs, err := cube.ParseDeleteDevices(m.Data); err == nil && len(addrs) > 1 {
+			return len(addrs)
+		}
+	}
+	return 1
+}
+
+// Send writes a command and waits for its reply, the last of them for a
+// t: that deletes several devices. Only one command can be in flight at
+// a time, which matches how the Cube behaves.
 func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error) {
 	want := replyType(m.Type)
 	if want == 0 {
 		return cube.Message{}, c.write(m)
 	}
-	p := &pendingReply{want: want, ch: make(chan cube.Message, 1)}
+	p := &pendingReply{want: want, left: replies(m), ch: make(chan cube.Message, 1)}
 	c.mu.Lock()
 	if c.conn == nil {
 		c.mu.Unlock()
