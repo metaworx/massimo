@@ -327,6 +327,15 @@ without the switches.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
+  **Restart the server**, with the capability `restart`,
+  asks in the section and restarts the server through its service manager
+  (`docs/api-v1.md`, "POST /api/v1/restart");
+  the page then asks `/healthz` every two seconds until the server reports a new start,
+  reads the data again and says when it started,
+  or says after two minutes that it has not come back.
+  Where the server cannot be restarted from this page the button is missing
+  and the server's reason is shown,
+  such as a server in a terminal or an open server asked from elsewhere than the box.
 
 The settings are kept in the browser, per browser, except the Cubes,
 which are the server's.

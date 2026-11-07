@@ -664,9 +664,11 @@ The default roles, as seeded.
 | `backup` | ✓ | ✓ | | | |
 | `restore` | ✓ | | | | |
 | `guests` | ✓ | | | | |
+| `restart` | ✓ | | | | |
 | `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `audit` | | | | | |
 
-So `manager` is `operator` plus guests, pairing, names, structure and restore;
+So `manager` is `operator` plus guests, pairing, names, structure, restore
+and the server's restart (migration 0006, 2026-11-07);
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;

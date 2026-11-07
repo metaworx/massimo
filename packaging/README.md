@@ -13,7 +13,9 @@ on a Mac LaunchDaemons (see "macOS").
   Runs as the user `massimo`, reads its settings from `/etc/massimo/env`,
   listens on port 8099 on every interface (API and web UI;
   `install -listen` changes it),
-  logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure.
+  logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure
+  and after a restart from the API,
+  which exits with 75 (`RestartForceExitStatus`, not counted as a failure).
 - `systemd/massimo-update.path` and `systemd/massimo-update.service`:
   the update helper,
   which installs a new release when the web UI or the API asks for one (see Updating).
@@ -634,6 +636,9 @@ which covers the API, the Cube proxy and discovery.
 and sets `MASSIMO_TLS`,
 `MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` in the settings, as on Linux;
 the helper's `-health` URL follows (`https://`).
+A restart from the API starts `massimo restart -service massimo` detached,
+which stops and starts the service through the service manager;
+`massimo restart` from an administrator prompt does the same.
 `sc start massimo`, `sc stop massimo` and `sc query massimo` control it;
 `install -remove` deletes the service, the rule and the program folder,
 `-purge` the settings and the log too.

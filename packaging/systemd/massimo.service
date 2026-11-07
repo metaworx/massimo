@@ -25,6 +25,10 @@ Environment=MASSIMO_LISTEN=:8099
 ExecStart=/usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo serve -listen ${MASSIMO_LISTEN} -log /var/log/massimo/serve.log -update-request /var/lib/massimo/update-request
 Restart=on-failure
 RestartSec=10s
+# A restart from the API or the web UI stops the server and exits with
+# 75, which is started again and not counted as a failure.
+RestartForceExitStatus=75
+SuccessExitStatus=75
 WorkingDirectory=/var/lib/massimo
 StateDirectory=massimo
 LogsDirectory=massimo

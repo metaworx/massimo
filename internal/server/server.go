@@ -37,6 +37,8 @@
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
+//	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
 //	POST /api/v1/logout                              end the session
 //	GET  /api/v1/me                                  who the caller is and what the caller may do
@@ -120,6 +122,19 @@ type CubeConfig struct {
 	StoreID int64
 }
 
+// RestartOptions say who starts the server again after a restart from
+// the API, and how it stops for one; cmd/massimo finds them.
+type RestartOptions struct {
+	// By names who starts the server again: "systemd", "launchd",
+	// "windows" (the service manager), "exit" (whatever runs it, told by
+	// the exit status); "" when nobody would, and Blocked says why.
+	By      string
+	Blocked string
+	// Restart stops the server for the restart, or asks the service
+	// manager to; it is called once the answer to the request is written.
+	Restart func() error
+}
+
 // Options configure a Server.
 type Options struct {
 	Cubes []CubeConfig
@@ -153,6 +168,8 @@ type Options struct {
 	ShowHidden bool
 	// Update configures the update endpoints (update_api.go).
 	Update UpdateOptions
+	// Restart configures the restart from the API.
+	Restart RestartOptions
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address.
@@ -236,6 +253,8 @@ type Server struct {
 	updates updateCheck
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
+	// restartGate lets one restart through (restart_api.go).
+	restartGate restartGate
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -828,10 +847,19 @@ func (s *Server) routes() {
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
+	api("GET /api/v1/restart", "restart", s.getRestart)
+	api("POST /api/v1/restart", "restart", s.startRestart)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
-	s.handler = mux
+	// A write that another site's page sent is refused before it is
+	// routed (docs/api-v1.md, "Authentication"): a browser sends a POST
+	// with a plain-text body without asking the server first, and a
+	// server that asks for no key would serve it.
+	cop := http.NewCrossOriginProtection()
+	cop.SetDenyHandler(http.HandlerFunc(s.crossOriginRefused))
+	inner := cop.Handler(mux)
+	s.handler = inner
 	if s.opts.TLS != nil {
 		// HSTS on every response, the API's included: a browser that saw
 		// it refuses http:// to this host for that long, so it goes out
@@ -840,9 +868,23 @@ func (s *Server) routes() {
 		hsts := "max-age=" + strconv.Itoa(max(s.opts.HSTSDays, 0)*24*60*60)
 		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Strict-Transport-Security", hsts)
-			mux.ServeHTTP(w, r)
+			inner.ServeHTTP(w, r)
 		})
 	}
+}
+
+// crossOriginRefused answers a write another site's page sent, with 403;
+// on an audited route it is counted with the other refusals of its
+// address (audit.go).
+func (s *Server) crossOriginRefused(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Store != nil {
+		if _, pattern := s.mux.Handler(r); pattern != "" {
+			if action := actions[pattern]; action != "" {
+				s.refusals.note(r, pattern, action, s.clientIP(r), http.StatusForbidden)
+			}
+		}
+	}
+	writeError(w, http.StatusForbidden, "cross-origin request refused")
 }
 
 type httpError struct {

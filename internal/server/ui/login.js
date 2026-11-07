@@ -13,7 +13,7 @@
 // "Authentication"); each hides, as a class needs-<capability> in the
 // markup, what it alone allows.
 const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-  "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"];
+  "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice
 // that cannot read the roles.
