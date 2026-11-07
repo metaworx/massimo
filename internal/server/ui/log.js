@@ -31,6 +31,7 @@ const logState = {
   gen: 0, // raised by a new log, Clear and a Cube switch: an answer of an older one is dropped
   room: 0, // the lines live events may grow the log to before the oldest go (LOG_MAX_LINES at least)
   stick: true, // auto-scroll to the bottom unless the user scrolled up
+  liveSeq: 0, // counts the live lines, so that loadLog finds the ones that came while it waited
 };
 
 // logDeviceName resolves a device's name from the rooms and the unlisted
@@ -227,6 +228,7 @@ function logQuery(before) {
 // does not take back a page just fetched.
 function appendLogEvent(ev) {
   const line = logLine(ev);
+  line.seq = ++logState.liveSeq;
   logState.lines.push(line);
   const room = Math.max(logState.room, LOG_MAX_LINES);
   let gone = [];
@@ -249,10 +251,13 @@ function appendLogEvent(ev) {
 
 // loadLog replaces the lines with the Cube's newest events of the kind
 // and the device chosen; Older waits for it. An answer that comes after
-// a Clear, another choice or a Cube switch is dropped.
+// a Clear, another choice or a Cube switch is dropped. The live events
+// that came while it waited follow the page, but for one the page holds
+// already: the server may have stored it before it answered.
 async function loadLog() {
   if (!state.serial) return;
   const gen = ++logState.gen;
+  const since = logState.liveSeq;
   logState.loading = true;
   renderOlder();
   let evs = null;
@@ -264,6 +269,7 @@ async function loadLog() {
   }
   if (gen !== logState.gen) return;
   logState.loading = false;
+  const live = logState.lines.filter((l) => l.seq > since);
   if (failed) {
     logState.lines = [{ id: 0, at: "", time: new Date(), kind: "error", device: "", state: null, text: t("log.cannotLoad", { error: failed.message }) }];
     logState.cursor = null;
@@ -272,6 +278,10 @@ async function loadLog() {
     logState.lines = evs.map(logLine);
     logState.cursor = logCursor();
     logState.more = evs.length >= LOG_PAGE;
+  }
+  const page = logState.lines.slice();
+  for (const l of live) {
+    if (!page.some((x) => x.at === l.at && x.kind === l.kind && x.device === l.device)) logState.lines.push(l);
   }
   logState.room = LOG_MAX_LINES;
   logState.stick = true;
