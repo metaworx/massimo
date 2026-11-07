@@ -39,6 +39,11 @@ the next minor, a fix counts the suffix up.
   room's settings, as the original software does, with `configure`;
   `"copy": false` skips it (docs/api-v1.md).
 
+### Fixed
+
+- A Debian package built between two tags holds the version its file
+  name shows (`make packages`).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
