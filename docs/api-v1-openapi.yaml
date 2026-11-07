@@ -350,7 +350,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NoUser"}
         "409":
-          description: The last enabled owner
+          description: The last enabled owner without an end date
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -359,7 +359,7 @@ paths:
     delete:
       summary: Remove a user
       x-capability: users
-      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner stays (409).
+      description: The user's tokens are revoked; its row stays for the audit. The last enabled owner without an end date stays (409).
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -375,7 +375,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NoUser"}
         "409":
-          description: The last enabled owner
+          description: The last enabled owner without an end date
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}

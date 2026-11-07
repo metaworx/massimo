@@ -24,7 +24,7 @@ var (
 	ErrUserExists = errors.New("store: user exists")
 	ErrNoUser     = errors.New("store: no such user")
 	ErrBadName    = errors.New("store: bad user name")
-	ErrLastOwner  = errors.New("store: the last enabled owner cannot be disabled, removed or demoted")
+	ErrLastOwner  = errors.New("store: the last enabled owner without an end date cannot be disabled, removed, demoted or given one")
 )
 
 // userName is a login name: lower case, 1 to 64 of letters, digits,
@@ -227,11 +227,16 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	return out, err
 }
 
-// ownersLeft counts the enabled owners that are not removed, other than
-// the user id.
+// ownerLeft reports whether a user counts as an owner that is left: an
+// enabled owner without an end date, who can sign in for good.
+func ownerLeft(u User) bool { return u.Role == RoleOwner && !u.Disabled && u.ExpiresAt.IsZero() }
+
+// ownersLeft counts the owners left (ownerLeft) that are not removed,
+// other than the user id.
 func (s *Store) ownersLeft(ctx context.Context, q queryer, id int64) (int, error) {
 	var n int
-	err := q.QueryRowContext(ctx, `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE r.key = ? AND u.disabled = 0 AND u.deleted_at IS NULL AND u.id <> ?`, RoleOwner, id).Scan(&n)
+	err := q.QueryRowContext(ctx, `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id
+		WHERE r.key = ? AND u.disabled = 0 AND u.expires_at IS NULL AND u.deleted_at IS NULL AND u.id <> ?`, RoleOwner, id).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("store: owners: %w", err)
 	}
@@ -240,7 +245,7 @@ func (s *Store) ownersLeft(ctx context.Context, q queryer, id int64) (int, error
 
 // UpdateUser changes a user with change, in one transaction, and
 // writes back DisplayName, Role, Disabled and ExpiresAt. A change that
-// would leave no enabled owner is ErrLastOwner.
+// would leave no owner without an end date is ErrLastOwner.
 func (s *Store) UpdateUser(ctx context.Context, name string, change func(*User) error, by int64) (User, error) {
 	if err := s.writable(); err != nil {
 		return User{}, err
@@ -265,7 +270,7 @@ func (s *Store) UpdateUser(ctx context.Context, name string, change func(*User) 
 	if err != nil {
 		return User{}, err
 	}
-	if was.Role == RoleOwner && !was.Disabled && (u.Role != RoleOwner || u.Disabled) {
+	if ownerLeft(was) && !ownerLeft(u) {
 		if n, err := s.ownersLeft(ctx, tx, u.ID); err != nil {
 			return User{}, err
 		} else if n == 0 {
@@ -338,8 +343,8 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 
 // DeleteUser removes a user: a tombstone, with every token of the user
 // revoked and every preference a tombstone too, so that a user added
-// later under the name inherits none. The last enabled owner is
-// ErrLastOwner.
+// later under the name inherits none. The last owner without an end
+// date is ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -356,7 +361,7 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrNoUser, NormalName(name))
 	}
-	if u.Role == RoleOwner && !u.Disabled {
+	if ownerLeft(u) {
 		if n, err := s.ownersLeft(ctx, tx, u.ID); err != nil {
 			return err
 		} else if n == 0 {

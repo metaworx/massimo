@@ -601,7 +601,8 @@ a user has one role.
 The default roles and their sets are seeded at the first start and can be
 changed afterwards by whoever holds the `roles` capability, with one exception:
 `owner` always has every capability and cannot be edited, disabled or deleted,
-and the store refuses to disable or delete the last enabled owner user.
+and the store refuses to disable, delete, demote or give an end date to the
+last enabled owner user without one.
 The default roles keep their keys (`owner`, `manager`, `operator`, `guest`,
 `viewer`, `integration`), so that the code,
 the documentation and the translations can refer to them;

@@ -394,12 +394,14 @@ A user changes its own `display_name` and, with `current_password`,
 its own `password`; the rest needs `users` (`guests` for a guest).
 A password set by someone else ends the user's sessions;
 an empty password removes it.
-The last enabled owner cannot be disabled or demoted (`409`).
+The last enabled owner without an end date cannot be disabled, demoted
+or given an end date (`409`): an owner with one does not count.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
 and its row stays for the audit; `{"ok": true, "name": "anna"}`.
-The last enabled owner stays (`409`); a user cannot remove itself.
+The last enabled owner without an end date stays (`409`);
+a user cannot remove itself.
 
 ### Tokens: /api/v1/users/{name}/tokens
 

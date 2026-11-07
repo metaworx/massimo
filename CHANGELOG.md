@@ -64,6 +64,9 @@ the next minor, a fix counts the suffix up.
 - `massimo install -no-update-helper` on Linux disables and removes the
   update helper an earlier install put there (packaging/README.md).
 
+- An owner with an end date no longer counts as the owner left, so the
+  last one without an end date keeps the box reachable (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
