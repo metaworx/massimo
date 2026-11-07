@@ -297,8 +297,11 @@ func (c *Client) handle(m cube.Message) {
 		c.pending = nil
 		c.mu.Unlock()
 		p.ch <- m
-		// L replies also carry state; fall through to apply them.
-		if m.Type != 'L' {
+		// L and C replies also carry state; fall through to apply them.
+		// A C line of the greeting may answer a re-read sent while the
+		// greeting still comes, and the device it describes must not
+		// drop out of the snapshot at the greeting's end.
+		if m.Type != 'L' && m.Type != 'C' {
 			return
 		}
 	} else {

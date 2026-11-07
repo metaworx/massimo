@@ -6,6 +6,7 @@ package cubelan
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net"
 	"sync"
 	"testing"
@@ -416,5 +417,83 @@ func TestReconnectWhileDisconnected(t *testing.T) {
 	}
 	if !c.Connected() {
 		t.Fatal("not connected after Reconnect")
+	}
+}
+
+// A re-read c: sent while the greeting is still coming takes one of its
+// C lines as its reply; that line is applied all the same, so the
+// device it describes is still there when the greeting ends.
+func TestGreetingCLineAnsweringASend(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, client := net.Pipe()
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: "192.0.2.10:62910", Dialer: func(context.Context, string) (net.Conn, error) { return client, nil }})
+	go c.Run(ctx)
+	var first cube.RFAddress
+	for _, m := range greeting {
+		if m.Type == 'C' && first == 0 {
+			cfg, err := cube.ParseConfig(m.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			first = cfg.RFAddress
+		}
+	}
+	go func() {
+		for _, m := range greeting {
+			if m.Type != 'C' && m.Type != 'L' {
+				server.Write([]byte(m.Wire()))
+			}
+		}
+	}()
+	// The re-read goes out mid-greeting and the Cube's first C answers it.
+	replied := make(chan error, 1)
+	go func() {
+		for {
+			_, err := c.Send(ctx, cube.Message{Type: 'c', Data: first.String()})
+			if !errors.Is(err, ErrNotConnected) {
+				replied <- err
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	r := cube.NewReader(server)
+	for {
+		m, err := r.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Type == 'c' {
+			break
+		}
+	}
+	go func() {
+		for _, m := range greeting {
+			if m.Type == 'C' || m.Type == 'L' {
+				server.Write([]byte(m.Wire()))
+			}
+		}
+		for { // the rest the client sends
+			if _, err := r.Read(); err != nil {
+				return
+			}
+		}
+	}()
+	if err := <-replied; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-c.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("no greeting")
+	}
+	if c.Snapshot().Config(first) == nil {
+		t.Fatalf("device %s dropped at the end of the greeting", first)
 	}
 }

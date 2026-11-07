@@ -142,6 +142,9 @@ the next minor, a fix counts the suffix up.
 - A Cube's new address from discovery is dialled at once, no longer after
   the minute of backoff the old address built up.
 
+- A device whose greeting C line answered a re-read sent during the
+  greeting no longer drops out of the server's copy.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
