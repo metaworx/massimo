@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
@@ -110,7 +111,10 @@ func runServe(args []string) error {
 	if st != nil {
 		defer st.Close()
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	// SIGINT from a terminal, SIGTERM from systemd, launchd and kill: both
+	// stop the server, which writes the log's pending events, before the
+	// store is closed.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// The flags given win for this run; otherwise the store's settings.

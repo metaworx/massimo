@@ -85,6 +85,9 @@ the next minor, a fix counts the suffix up.
 - The update helper's health check over TLS on one of the box's own
   addresses (a specific `-listen`) no longer fails on its certificate.
 
+- `massimo serve` stops on SIGTERM as on Ctrl-C, so a stop by systemd or
+  launchd writes the pending log events and closes the store.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
