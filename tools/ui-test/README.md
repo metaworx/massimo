@@ -120,6 +120,14 @@ what a test stores in the browser goes with its context.
   the brand, the time with ↻, the connection, the Cube choice, 🏠 👤 📄 ⚙;
   at 390 px 🏠 👤 ☰ with the Cube choice under them,
   and ☰ opens the log and System settings and is highlighted on them.
+- `test_home.py`:
+  Rooms on the second server, whose Cube sits at a closed port,
+  says that the Cube is not connected, the address the server tries,
+  that no data has come and what to check, and its button opens
+  System settings → Cubes;
+  with the Cube list stubbed, it says that no Cube is configured,
+  and for a Cube that dropped after its rooms loaded it stands above the rooms,
+  with when the last data came.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

@@ -411,7 +411,7 @@ function showView(view, address = "push") {
   setAddress(VIEW_HASH[view], address);
   currentView = view;
   logState.open = view === "log";
-  for (const id of ["house", "rooms", "unlisted"]) {
+  for (const id of ["home-notice", "house", "rooms", "unlisted"]) {
     $(id).classList.toggle("view-hidden", view !== "tiles");
   }
   for (const [name, id] of Object.entries(VIEW_SECTION)) {

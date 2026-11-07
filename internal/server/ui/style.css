@@ -506,6 +506,11 @@ button.subtle { color: var(--muted); }
 .menu-items button:hover { background: var(--card-head); }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
+/* Rooms without a connected Cube (app.js renderHomeNotice) */
+.home-notice { padding: 12px 14px; }
+.home-notice p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.home-notice .home-notice-title { font-weight: 600; }
+.home-notice button { margin-top: 4px; }
 
 .setpoint-row {
   display: flex;

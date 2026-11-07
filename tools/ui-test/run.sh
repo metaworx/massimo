@@ -30,9 +30,15 @@
 # so a search answers 503 where another program holds that port, and
 # the suite then skips the tests that need an answer.
 #
+# A second server, for the page of a Cube that is not connected, serves
+# a Cube at a closed loopback port (127.0.0.1:9), Cellar Cube
+# (KEQ0000200), from a directory of its own, with the same token; the
+# suite gets its address in UI_TEST_DOWN_URL.
+#
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
 # when present, else python3), UI_TEST_REQUIRED, UI_TEST_CUBE_PORT
-# (62919), UI_TEST_API_PORT (8119), UI_TEST_DISCOVERY_PORT (23919).
+# (62919), UI_TEST_API_PORT (8119), UI_TEST_DISCOVERY_PORT (23919),
+# UI_TEST_DOWN_PORT (the second server's, UI_TEST_API_PORT + 1).
 set -eu
 
 mode=${1:-smoke}
@@ -60,6 +66,7 @@ fi
 cube_port=${UI_TEST_CUBE_PORT:-62919}
 api_port=${UI_TEST_API_PORT:-8119}
 discovery_port=${UI_TEST_DISCOVERY_PORT:-23919}
+down_port=${UI_TEST_DOWN_PORT:-$((api_port + 1))}
 token=ui-test-token
 work=$(mktemp -d)
 pids=""
@@ -94,6 +101,27 @@ until curl -sf -H "Authorization: Bearer $token" "${url}api/v1/cubes" 2>/dev/nul
 	sleep 0.2
 done
 
+mkdir "$work/down"
+cd "$work/down"
+env -i PATH="$PATH" HOME="$HOME" MASSIMO_API_TOKEN="$token" \
+	MASSIMO_CUBE_KEQ0000200_ADDRESS="127.0.0.1:9" MASSIMO_CUBE_KEQ0000200_NAME="Cellar Cube" \
+	../massimo serve -proxy off \
+	-listen "127.0.0.1:$down_port" -update-status "$work/no-update-status.json" \
+	-discover-target "127.0.0.1:9" -discover-interval 0 > ../serve-down.log 2>&1 &
+pids="$pids $!"
+cd "$work"
+down_url="http://127.0.0.1:$down_port/"
+i=0
+until curl -sf -H "Authorization: Bearer $token" "${down_url}api/v1/cubes" >/dev/null 2>&1; do
+	i=$((i + 1))
+	if [ $i -gt 50 ]; then
+		echo "ui-test: the second server did not answer; its log:" >&2
+		cat serve-down.log >&2
+		exit 1
+	fi
+	sleep 0.2
+done
+
 # An operator and a guest with passwords, for the sign-in and the
 # preferences tests: user add opens the store beside the running server.
 printf 'op-pass\n' | env -i PATH="$PATH" HOME="$HOME" ./massimo -data "$work" user add operator -role operator -password-stdin >/dev/null 2>>serve.log
@@ -104,4 +132,4 @@ if [ "$mode" = screenshots ]; then
 	exit
 fi
 cd "$here"
-UI_TEST_URL="$url" UI_TEST_TOKEN="$token" UI_TEST_SERVE_LOG="$work/serve.log" "$py" -m pytest --output "$here/results" "$@"
+UI_TEST_URL="$url" UI_TEST_DOWN_URL="$down_url" UI_TEST_TOKEN="$token" UI_TEST_SERVE_LOG="$work/serve.log" "$py" -m pytest --output "$here/results" "$@"

@@ -37,6 +37,10 @@ the next minor, a fix counts the suffix up.
   the pages; below 600 px ☰ holds Log and System settings (`docs/ui.md`,
   "Header").
 
+- The web UI's Rooms page says when the Cube is not connected or none is
+  configured: the address tried, the last data and what to check
+  (`docs/ui.md`, "Rooms").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

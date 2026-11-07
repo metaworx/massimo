@@ -86,6 +86,14 @@ highlighted while one of them is shown.
 
 ## Rooms
 
+When the Cube chosen is not connected, a notice above the rooms says so:
+the address the server tries, when the Cube last sent data
+(or last answered discovery),
+and what to check, a Cube serving one client at a time;
+the rooms the server still has stay under it.
+Without a Cube, it says that none is configured.
+For a role with `cubes` its button opens System settings → Cubes.
+
 Every room has a tile:
 
 - **IS** is the measured temperature: the wall thermostat's,
