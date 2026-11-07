@@ -330,8 +330,9 @@ sc.exe query massimo
 `-rollback` swaps `massimo.exe` and `massimo.exe.prev` back and restarts the
 service (once more goes forward again).
 The result is in the command's own output,
-in `C:\ProgramData\Massimo\service.log` ("stop requested", "stopped",
-"started as a service", "running", and any error that ended `serve`), and,
+in `C:\ProgramData\Massimo\service.log` ("stop requested", "serve stopped",
+"stopped", "started as a service", "running",
+and any error that ended `serve`), and,
 for the service manager's view,
 in
 `Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 10`.

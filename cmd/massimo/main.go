@@ -86,6 +86,11 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+	}
+	// A Windows service that its manager stopped reports that before the
+	// process ends.
+	serviceEnd()
+	if err != nil {
 		os.Exit(1)
 	}
 }

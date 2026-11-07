@@ -145,12 +145,15 @@ failure actions restart after 10 s three times with a reset period of a day;
 the firewall rule "Massimo" for the program path on private and domain networks.
 The process answers the service manager itself (cmd/massimo/service_windows.go):
 `svc.IsWindowsService()`, then `svc.Run` in a goroutine;
-on `Stop` or `Shutdown` the handler returns and the goroutine calls `os.Exit(0)`,
-so a stop ends the process at once,
-without the HTTP server's graceful shutdown (the same as `sc.exe stop massimo` today).
+on `Stop` or `Shutdown` the handler reports stop pending with a wait hint of 20 s,
+ends `serve`'s context and waits for `serve` to return,
+which shuts the HTTP server down,
+writes the log's pending events and closes the store,
+then returns, and the goroutine calls `os.Exit(0)`.
+A `serve` that has not returned after 20 s is ended all the same.
 `service.log` is the process's stderr while it runs as a service
 (`os.Stderr = f`) plus the lines `started as a service`, `running`,
-`stop requested`, `stopped`.
+`stop requested`, `serve stopped`, `stopped`.
 
 Two facts drive the options.
 The service runs as LocalSystem, so unlike on Linux there is no privilege gap:

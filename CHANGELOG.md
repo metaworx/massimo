@@ -88,6 +88,9 @@ the next minor, a fix counts the suffix up.
 - `massimo serve` stops on SIGTERM as on Ctrl-C, so a stop by systemd or
   launchd writes the pending log events and closes the store.
 
+- A stop of the Windows service, as by an update or a reboot, waits for
+  `serve` to write the pending log events and close the store.
+
 - The update helper reports "failed" for every error after it took the
   request, so the web UI no longer shows the previous run's result.
 
