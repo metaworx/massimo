@@ -115,6 +115,9 @@ the next minor, a fix counts the suffix up.
 - The TLS variables are named once for `massimo install`, `serve` and
   `massimo config`, which can no longer read different names.
 
+- A command's step in `GET /api/v1/commands/{id}` no longer stays
+  `queued` when the queue ran it at once (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
