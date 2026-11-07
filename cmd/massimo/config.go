@@ -48,6 +48,7 @@ func runConfig(args []string) error {
 		src = env.SN
 	}
 	fmt.Printf("data dir:      %s (%s)\n", dataDir(), storeState())
+	fmt.Printf("log level:     %s\n", logLevelState())
 	fmt.Printf("selected cube: %s (from %s)\n", orNone(selectedSN), src)
 	fmt.Println("for the commands (serve takes these from its store, see below):")
 	fmt.Printf("key in effect: %s\n", redact(cubeEnv(env.Key)))
@@ -101,6 +102,20 @@ func runConfig(args []string) error {
 // why it cannot.
 func openStoreToRead() (*store.Store, error) {
 	return store.OpenReadOnly(dataDir(), store.Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+}
+
+// logLevelState says which level the commands log at and where it
+// came from, or why it is refused.
+func logLevelState() string {
+	v := os.Getenv(env.LogLevel)
+	l, err := parseLogLevel(v)
+	switch {
+	case err != nil:
+		return "invalid: " + err.Error()
+	case v == "":
+		return "info (default)"
+	}
+	return strings.ToLower(l.String()) + " (" + env.LogLevel + ", " + env.Source(env.LogLevel) + ")"
 }
 
 // storeState says whether the data directory has a store and its

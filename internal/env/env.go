@@ -49,6 +49,9 @@ const (
 	// DataVar names the data directory, where serve keeps massimo.db
 	// (internal/store); default the current directory.
 	DataVar = "MASSIMO_DATA"
+	// LogLevel is the level every command logs at: debug, info, warn or
+	// error; default info.
+	LogLevel = "MASSIMO_LOG_LEVEL"
 )
 
 // The TLS of massimo serve (internal/certs) and its HSTS days, the
@@ -161,7 +164,7 @@ func Serials(name string) (serials []string, values map[string]string) {
 // Known reports whether a MASSIMO_* name is one the program reads.
 func Known(k string) bool {
 	switch k {
-	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar,
+	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST",
 		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies,
 		// massimo update: the release channel, the API (update.APIVar)

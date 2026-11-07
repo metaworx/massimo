@@ -34,6 +34,18 @@ on a Mac LaunchDaemons (see "macOS").
 - `homebrew/`:
   the Homebrew formula's template and renderer (see "Homebrew").
 
+Every service starts `serve` with `-env <settings file>`,
+so a line there reaches it without a change to its command line.
+`MASSIMO_LOG_LEVEL=debug` adds the Debug lines to the log
+from the service's next restart,
+such as every failed attempt to reach a lost Cube
+and every command the proxy passes on to it;
+the log then grows faster, so remove the line again after the diagnosis.
+`env.template` does not carry it:
+the package and `install` start the service only once the settings file
+differs from the template,
+and a new line there would make an untouched file differ after an upgrade.
+
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
 so that the binary embeds the files byte for byte as reviewed.

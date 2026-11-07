@@ -8,7 +8,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -23,7 +22,10 @@ import (
 
 // connectCube connects to a Cube and waits for the greeting.
 func connectCube(ctx context.Context, addr string) (*cubelan.Client, error) {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger, err := newLogger(os.Stderr)
+	if err != nil {
+		return nil, err
+	}
 	c := cubelan.New(cubelan.Options{Addr: addr, Logger: logger})
 	go c.Run(ctx)
 	select {
@@ -193,7 +195,11 @@ func runRestore(args []string) error {
 			return fmt.Errorf("restore: cancelled")
 		}
 	}
-	q := engine.NewQueue(c, engine.Options{Gap: *gap, Logger: slog.New(slog.NewTextHandler(os.Stderr, nil))})
+	logger, err := newLogger(os.Stderr)
+	if err != nil {
+		return err
+	}
+	q := engine.NewQueue(c, engine.Options{Gap: *gap, Logger: logger})
 	go q.Run(ctx)
 	results, err := p.Run(ctx, cubeio.Writer{Client: c, Queue: q}, func(i int, s backup.Step, r engine.Result) {
 		status := fmt.Sprintf("ok (duty cycle %d%%, %d free slots)", r.Budget.DutyCyclePct, r.Budget.FreeMemorySlots)
