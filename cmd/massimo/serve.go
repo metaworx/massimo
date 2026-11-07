@@ -71,6 +71,7 @@ func runServe(args []string) error {
 	tlsHTTP := fs.String("tls-http", os.Getenv(tlsHTTPVar), "with -tls acme, also listen on this plain address, such as :80, for the HTTP-01 challenge and a redirect to https:// (default "+tlsHTTPVar+"; without it the TLS-ALPN-01 challenge on the TLS listener alone)")
 	trustedProxies := fs.String("trusted-proxies", os.Getenv(trustedProxiesVar), "the reverse proxies whose X-Forwarded-For and X-Real-IP name the client, addresses and CIDRs separated by commas, such as 127.0.0.1 for a proxy on this box (default "+trustedProxiesVar+"; empty: the headers are ignored, anyone can set them)")
 	acmeDNSHook := fs.String("acme-dns-hook", os.Getenv(acmeDNSHookVar), "with -tls acme, get the certificate by the DNS-01 challenge through this executable, run as '<hook> set <record> <txt>' and '<hook> clear <record> <txt>' (packaging/acme-dns-hooks/); no port needed, wildcards allowed (default "+acmeDNSHookVar+")")
+	restartMode := fs.String("restart", os.Getenv(restartVar), "what a restart from the API and the web UI does: auto offers it under a service manager that starts the server again (systemd, launchd, Homebrew, the Windows service); exit stops and exits with status 75 for whatever runs serve, such as Docker's --restart; off never offers it (default "+restartVar+", else auto)")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
@@ -98,6 +99,10 @@ func runServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
+	restartFor, restartBlocked, err := restartBy(*restartMode, currentProcess())
+	if err != nil {
+		return err
+	}
 	src, err := tlsSource(tlsOptions{mode: *tlsFlag, certPath: *tlsCert, keyPath: *tlsKey, names: *tlsNames, listen: *listen, dataDir: dataDir(),
 		email: *acmeEmail, directory: *acmeDirectory, httpAddr: *tlsHTTP, hook: *acmeDNSHook}, logger)
 	if err != nil {
@@ -118,6 +123,21 @@ func runServe(args []string) error {
 	defer stop()
 	ctx, cancel := serviceContext(ctx)
 	defer cancel()
+	// A restart from the API ends this context too (restart.go), or, as a
+	// Windows service, asks the service manager to stop and start it.
+	ctx, restartCancel := context.WithCancel(ctx)
+	defer restartCancel()
+	rs := &restarter{by: restartFor, cancel: restartCancel}
+	if restartFor == byWindows {
+		exe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("serve: %w", err)
+		}
+		if rs.helper, restartBlocked = restartHelperStarter(logger, exe); rs.helper == nil {
+			restartFor = ""
+			logger.Warn("the restart cannot be started from the API", "reason", restartBlocked)
+		}
+	}
 
 	// The flags given win for this run; otherwise the store's settings.
 	var staleAfter time.Duration
@@ -153,7 +173,8 @@ func runServe(args []string) error {
 		}
 	}
 	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
-		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd, TLS: src, HSTSDays: hsts, TrustedProxies: trusted})
+		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd, TLS: src, HSTSDays: hsts, TrustedProxies: trusted,
+		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -165,7 +186,11 @@ func runServe(args []string) error {
 	if st != nil {
 		auth = srv.AuthMode()
 	}
-	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "tls", "off"}
+	restartAttr := restartFor
+	if restartAttr == "" {
+		restartAttr = "none"
+	}
+	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "restart", restartAttr, "tls", "off"}
 	hs := &http.Server{Handler: srv.Handler()}
 	if src != nil {
 		hs.TLSConfig = certs.Config(src)
@@ -206,7 +231,10 @@ func runServe(args []string) error {
 		case <-time.After(10 * time.Second):
 		}
 	}
-	return err
+	if rs.asked.Load() {
+		logger.Info("stopped for a restart", "by", restartFor, "exit", exitRestart)
+	}
+	return rs.result(err)
 }
 
 // defaultUpdateStatus is the helper's status file where install puts it:

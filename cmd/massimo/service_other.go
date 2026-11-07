@@ -7,6 +7,10 @@ package main
 
 import "context"
 
+// runningAsService is false: only a Windows service is started by a
+// manager that the process must answer.
+const runningAsService = false
+
 // serviceDataDir is the data directory of a Windows service started
 // without -data; elsewhere the installers always pass -data.
 func serviceDataDir() string { return "" }

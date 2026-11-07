@@ -142,9 +142,14 @@ func hstsDays(v string) (int, error) {
 
 // serveHTTP serves hs on ln until ctx is done, over TLS when hs has a
 // TLSConfig (whose GetCertificate is the source, so no file is named),
-// then shuts down with a short grace.
+// then shuts down with a short grace. It returns once the requests still
+// being answered have finished, or the grace is over, so that their
+// audit rows are written before the store closes; Serve itself returns
+// as soon as the listener is closed.
 func serveHTTP(ctx context.Context, hs *http.Server, ln net.Listener) error {
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -159,5 +164,6 @@ func serveHTTP(ctx context.Context, hs *http.Server, ln net.Listener) error {
 	if err != nil && err != http.ErrServerClosed {
 		return err
 	}
+	<-stopped
 	return nil
 }

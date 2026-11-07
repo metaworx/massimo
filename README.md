@@ -533,6 +533,15 @@ and the page works under a path prefix such as `/massimo/`
 ([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
+A restart from the API stops the server as SIGTERM does and exits with status 75,
+which systemd, launchd and Homebrew answer with a start;
+a Windows service runs `massimo restart` instead,
+which stops and starts the service through the service manager.
+`-restart` (or `MASSIMO_RESTART`) says when it is offered:
+`auto` where a service manager starts the server again, so not in a terminal;
+`exit` always, exiting 75 for whatever runs `serve`, such as Docker's `--restart`;
+`off` never.
+`sudo massimo restart` restarts the installed server from a prompt as well.
 Every six hours (`-refresh`,
 `0` to switch it off) `serve` reconnects to each Cube,
 in turn with the queued commands, and re-reads everything the Cube holds,

@@ -25,11 +25,20 @@ the next minor, a fix counts the suffix up.
 - The capability `restart`, held by owner and manager (migration 0006;
   `docs/api-v1.md`, "Authentication").
 
+- `serve -restart` (`MASSIMO_RESTART`) says when the server restarts
+  for the API, stopping and exiting 75 for its service manager, and
+  `massimo restart` restarts the installed server (`README.md`, "Server").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
+
+### Fixed
+
+- A request still being answered when `serve` stops is finished, and
+  its audit row written, before the store closes (`cmd/massimo`).
 
 ### Security
 

@@ -120,6 +120,19 @@ type CubeConfig struct {
 	StoreID int64
 }
 
+// RestartOptions say who starts the server again after a restart from
+// the API, and how it stops for one; cmd/massimo finds them.
+type RestartOptions struct {
+	// By names who starts the server again: "systemd", "launchd",
+	// "windows" (the service manager), "exit" (whatever runs it, told by
+	// the exit status); "" when nobody would, and Blocked says why.
+	By      string
+	Blocked string
+	// Restart stops the server for the restart, or asks the service
+	// manager to; it is called once the answer to the request is written.
+	Restart func() error
+}
+
 // Options configure a Server.
 type Options struct {
 	Cubes []CubeConfig
@@ -153,6 +166,8 @@ type Options struct {
 	ShowHidden bool
 	// Update configures the update endpoints (update_api.go).
 	Update UpdateOptions
+	// Restart configures the restart from the API.
+	Restart RestartOptions
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address.
