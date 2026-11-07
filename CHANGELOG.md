@@ -46,6 +46,10 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+- CI runs the web UI's suite on a pull request only when it changes the
+  UI, the suite or `ci.yml`, and then on two of its four cases; a push to
+  `main` runs all of it (`GUIDELINES/project/CI.md`, section 2).
+
 ### Fixed
 
 - A request still being answered when `serve` stops is finished, and
