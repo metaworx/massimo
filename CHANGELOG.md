@@ -41,6 +41,9 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- A second update started on Windows while the helper reads the first
+  answers 409, no longer 500 from the request file the helper holds.
+
 - A Debian package built between two tags holds the version its file
   name shows (`make packages`).
 
