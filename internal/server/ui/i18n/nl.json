@@ -545,6 +545,7 @@
   "login.tokenInstead": "Of een API-sleutel",
   "login.token": "API-sleutel",
   "login.submit": "Aanmelden",
+  "login.signingIn": "Bezig met aanmelden…",
   "login.missing": "Naam en wachtwoord zijn nodig.",
   "login.failed": "Niet aangemeld: {error}",
   "me.signedIn": "Aangemeld als {name} ({role}).",

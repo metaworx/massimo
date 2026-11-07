@@ -27,11 +27,13 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused in the dialog"
     assert page.evaluate("document.getElementById('login-dialog').open"), "the dialog stays open"
     logins = []
-    page.on("request", lambda r: logins.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/login") else None)
+    page.on("request", lambda r: logins.append(r.url) if r.method == "POST" and r.url.endswith(("/api/v1/login", "/api/v1/login/start")) else None)
     with page.expect_response(lambda r: r.url.endswith("/api/v1/login")):
         page.evaluate("() => { const f = document.getElementById('login-form'); f.requestSubmit(); f.requestSubmit(); }")
     page.wait_for_timeout(300)
-    assert len(logins) == 1, f"two submits send one sign-in, not {len(logins)}"
+    # The operator's password is of version 1: a start by OPAQUE that it
+    # does not open, then the password sign-in.
+    assert len(logins) == 2, f"two submits send one sign-in, not {logins}"
     page.locator("#login-password").fill("op-pass")
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)

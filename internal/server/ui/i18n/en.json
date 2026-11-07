@@ -544,6 +544,7 @@
   "login.tokenInstead": "Or an API key",
   "login.token": "API key",
   "login.submit": "Sign in",
+  "login.signingIn": "Signing in…",
   "login.missing": "Name and password are needed.",
   "login.failed": "Not signed in: {error}",
   "me.signedIn": "Signed in as {name} ({role}).",

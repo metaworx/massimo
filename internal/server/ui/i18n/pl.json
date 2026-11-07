@@ -557,6 +557,7 @@
   "login.tokenInstead": "Albo klucz API",
   "login.token": "Klucz API",
   "login.submit": "Zaloguj",
+  "login.signingIn": "Logowanie…",
   "login.missing": "Potrzebne są nazwa i hasło.",
   "login.failed": "Nie zalogowano: {error}",
   "me.signedIn": "Zalogowano jako {name} ({role}).",

@@ -2,11 +2,12 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, login: who the page is signed in as (GET
-// /api/v1/me), the sign-in dialog in place of the token prompt (POST
-// /api/v1/login with a name and a password, or an API key pasted), Log
-// out, hiding what the role may not do, the own password, and the form
-// that creates the first owner on a server without users. Loaded after
-// app.js; api() calls askLogin on a 401.
+// /api/v1/me), the sign-in dialog in place of the token prompt (a name
+// and a password, signed in by OPAQUE so that the password stays in the
+// browser, or an API key pasted), Log out, hiding what the role may not
+// do, the own password, and the form that creates the first owner on a
+// server without users. Loaded after app.js; api() calls askLogin on a
+// 401.
 "use strict";
 
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
@@ -158,6 +159,7 @@ function askLogin() {
     // same address while the first is checked, so a submit meanwhile is
     // ignored.
     let signing = false;
+    const submit = form.querySelector("button[type=submit]");
     form.onsubmit = async (ev) => {
       ev.preventDefault();
       if (signing) return;
@@ -174,7 +176,11 @@ function askLogin() {
         showResult(error, t("login.missing"), false);
         return;
       }
+      // The key stretching runs in the browser and takes a moment on a
+      // phone: the button says so meanwhile.
       signing = true;
+      submit.disabled = true;
+      submit.textContent = t("login.signingIn");
       try {
         const session = await signIn(user, password);
         setToken(session.token);
@@ -185,6 +191,8 @@ function askLogin() {
         $("login-password").focus();
       } finally {
         signing = false;
+        submit.disabled = false;
+        submit.textContent = t("login.submit");
       }
     };
     dlg.onclose = () => done(false);
@@ -194,9 +202,62 @@ function askLogin() {
   return loginPromise;
 }
 
-// signIn posts the login, without a token and without the dialog's
-// retry, and returns the session; the answer's error is thrown.
-function signIn(user, password) {
+// --- the sign-in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE") ----
+
+// opaqueLoad is the vendored OPAQUE client (ui/vendor/opaque.js,
+// @serenity-kit/opaque), imported when a sign-in or a password first
+// needs it rather than with the page.
+let opaqueLoad = null;
+
+function opaqueModule() {
+  if (!opaqueLoad) {
+    opaqueLoad = import("./vendor/opaque.js").then(async (m) => {
+      await m.ready;
+      return m;
+    });
+    opaqueLoad.catch(() => {
+      opaqueLoad = null;
+    });
+  }
+  return opaqueLoad;
+}
+
+// keyStretching is the argon2id a record asks for, "m=19456,t=2,p=1" as
+// the server sends it, in the client's terms.
+function keyStretching(ksf) {
+  const m = /^m=(\d+),t=(\d+),p=(\d+)$/.exec(ksf || "");
+  if (!m) throw new Error("the server's key stretching " + JSON.stringify(ksf));
+  return { "argon2id-custom": { memory: Number(m[1]), iterations: Number(m[2]), parallelism: Number(m[3]) } };
+}
+
+// NO_KE3 ends a sign-in whose answer the password did not open: a KE3 the
+// server refuses as a wrong password, so that it lets the address go at
+// once rather than after the start's minute.
+const NO_KE3 = "A".repeat(86);
+
+// signIn signs in, without a token and without the dialog's retry, and
+// returns the session, or with the purpose "proof" a proof of the
+// password; the answer's error is thrown. The password stays in the
+// browser: the client runs OPAQUE and the server sees none of it. Where
+// it does not open the server's answer and the server still takes the
+// password sign-in, that follows, for a user still of version 1.
+async function signIn(user, password, purpose) {
+  const opaque = await opaqueModule();
+  const start = opaque.client.startLogin({ password });
+  const started = await apiRequest("POST", "api/v1/login/start", { user, ke1: start.startLoginRequest, purpose }, { auth: false });
+  const done = opaque.client.finishLogin({
+    clientLoginState: start.clientLoginState,
+    loginResponse: started.ke2,
+    password,
+    keyStretching: keyStretching(started.ksf),
+  });
+  const finish = apiRequest("POST", "api/v1/login/finish", { login: started.login, ke3: done ? done.finishLoginRequest : NO_KE3 }, { auth: false });
+  if (done) return finish;
+  try {
+    await finish;
+  } catch (e) {
+    if (!started.v1 || purpose) throw e;
+  }
   return apiRequest("POST", "api/v1/login", { user, password }, { auth: false });
 }
 

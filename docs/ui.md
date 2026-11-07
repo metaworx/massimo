@@ -10,6 +10,12 @@ The page asks who you are: a name and a password,
 or an API key pasted into the second field,
 and keeps the session in the browser for 30 days from its last use;
 Settings → Log out ends it.
+The password stays in the browser:
+the page signs in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE"),
+running argon2id itself, and the button says "Signing in…" meanwhile,
+a fraction of a second on a laptop, more on an old phone.
+A user whose password the server still hashes (`auth_version` 1) is signed in
+with the password after the OPAQUE attempt, while the server takes that.
 The dialog sends one sign-in at a time;
 a submit while the server checks the password does nothing.
 A server without users shows the form that creates the first owner to a
@@ -366,3 +372,12 @@ Every URL the page and the scripts use is relative to the page (`ui/style.css`,
 `api/v1/cubes`, `healthz`),
 so that a reverse proxy may serve the UI under a path prefix it strips
 (docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.
+
+One file is not the project's: `ui/vendor/opaque.js`,
+`@serenity-kit/opaque` as published, the OPAQUE client in WebAssembly,
+which the sign-in needs and which the browser does not offer
+(`ui/vendor/README.md` says which version, its licence and how to update it).
+`login.js` imports it when a sign-in first needs it, not with the page,
+and the page's `Content-Security-Policy` allows WebAssembly to compile
+(`'wasm-unsafe-eval'`) for it;
+`go test ./internal/server` checks the file's SHA-256.

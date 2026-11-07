@@ -546,6 +546,7 @@
   "login.tokenInstead": "Ou une clé API",
   "login.token": "Clé API",
   "login.submit": "Se connecter",
+  "login.signingIn": "Connexion en cours…",
   "login.missing": "Le nom et le mot de passe sont nécessaires.",
   "login.failed": "Non connecté : {error}",
   "me.signedIn": "Connecté en tant que {name} ({role}).",

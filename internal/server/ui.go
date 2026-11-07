@@ -18,10 +18,11 @@ import (
 
 // The web UI: plain HTML, CSS and JavaScript, no build step. It is
 // served at / (the page, assembled from index.html and the partials at
-// start) and /ui/ (the files, the translations under /ui/i18n/) and
+// start) and /ui/ (the files, the translations under /ui/i18n/, the
+// vendored OPAQUE client under /ui/vendor/, ui/vendor/README.md) and
 // talks to the API.
 //
-//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/backup.js ui/roles.js ui/theme.js ui/style.css ui/i18n/*.json ui/partials/*.html
+//go:embed ui/index.html ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/backup.js ui/roles.js ui/theme.js ui/style.css ui/i18n/*.json ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE
 var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per
@@ -129,6 +130,10 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 		}
 		serve(w, r, name)
 	})
+	mux.HandleFunc("GET /ui/vendor/{file}", func(w http.ResponseWriter, r *http.Request) {
+		securityHeaders(w)
+		serve(w, r, "vendor/"+r.PathValue("file"))
+	})
 	mux.HandleFunc("GET /ui/i18n/{lang}", func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
 		name := r.PathValue("lang")
@@ -164,8 +169,10 @@ func uiETagVersion(v string, started time.Time) string {
 
 // securityHeaders restricts the page to its own origin: scripts, styles
 // and requests only from the server itself, no framing, no MIME sniffing.
+// WebAssembly is allowed to compile, which the vendored OPAQUE client
+// needs ('wasm-unsafe-eval' allows that and no eval of JavaScript).
 func securityHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 }

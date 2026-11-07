@@ -544,6 +544,7 @@
   "login.tokenInstead": "Oder ein API-Schlüssel",
   "login.token": "API-Schlüssel",
   "login.submit": "Anmelden",
+  "login.signingIn": "Anmeldung läuft…",
   "login.missing": "Name und Passwort sind nötig.",
   "login.failed": "Nicht angemeldet: {error}",
   "me.signedIn": "Angemeldet als {name} ({role}).",
