@@ -24,7 +24,6 @@ import (
 	"errors"
 	"net/http"
 	"slices"
-	"strconv"
 	"sync"
 	"time"
 
@@ -196,9 +195,8 @@ func (s *Server) loginStart(w http.ResponseWriter, r *http.Request) error {
 	ip := s.clientIP(r)
 	auditTarget(r, "user:"+name)
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
-	if d := s.limiter.lockedFor(ctx, userKey); d > 0 {
-		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
-		return fail(http.StatusTooManyRequests, "too many failed logins for this user; try again later")
+	if err := s.lockedOut(w, ctx, addrKey, userKey); err != nil {
+		return err
 	}
 	switch ok, full := s.signIns.claim(addrKey); {
 	case full:
@@ -288,7 +286,7 @@ func (s *Server) loginFinish(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if p.purpose != purposeProof {
-		if err := s.openSession(w, r, u, req.Label); err != nil {
+		if err := s.openSession(w, r, u, req.Label, nil); err != nil {
 			return err
 		}
 		s.cleared(ctx, p)

@@ -359,3 +359,72 @@ func must[T any](v T, err error) T {
 	}
 	return v
 }
+
+// A user of version 1 signs in in the browser by its password after a
+// start by OPAQUE that the fake record cannot finish: the password
+// sign-in takes the start over, so the attempt counts once, lifts a
+// lockout its start set, and answers a proof to upgrade with, good once,
+// with which the user's own record replaces the hash.
+func TestOpaqueUpgrade(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.AuthFailures = 2
+	_, ts, _ := startWith(t, opts)
+	if code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"pw"}`); code != 201 {
+		t.Fatalf("add: %d %s", code, body)
+	}
+	start := func(password string) string {
+		t.Helper()
+		ke1, _ := opaqueClient(t).GenerateKE1([]byte(password))
+		code, body := callAPI(t, ts, "POST", "/api/v1/login/start", "", `{"user":"anna","ke1":"`+opaqueB64.EncodeToString(ke1.Serialize())+`"}`)
+		var started loginStarted
+		json.Unmarshal([]byte(body), &started)
+		if code != 200 || !started.V1 {
+			t.Fatalf("start: %d %s", code, body)
+		}
+		return started.Login
+	}
+	fallback := func(password, login string) (int, string) {
+		return callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"`+password+`","login":"`+login+`"}`)
+	}
+	if code, _ := fallback("wrong", start("wrong")); code != 401 {
+		t.Fatalf("a wrong password after a start: %d", code)
+	}
+	// One failure so far, the start's: the next start is let in, and
+	// locks; its own password sign-in still checks, and lifts the lock.
+	code, body := fallback("pw", start("pw"))
+	if code != 200 {
+		t.Fatalf("the right password after a start that locked: %d %s", code, body)
+	}
+	var sess struct {
+		Token   string   `json:"token"`
+		Upgrade string   `json:"upgrade"`
+		User    userView `json:"user"`
+	}
+	json.Unmarshal([]byte(body), &sess)
+	if sess.Upgrade == "" || sess.User.AuthVersion != 1 {
+		t.Fatalf("no proof to upgrade with: %s", body)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", sess.Token, ""); code != 200 {
+		t.Fatalf("the session from the address the start locked: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"bert","password":"pw","login":"`+start("pw")+`"}`); code != 400 {
+		t.Errorf("a password sign-in taking over another name's start: %d", code)
+	}
+	rec := opaqueRecord(t, ts, sess.Token, "anna", "pw")
+	put := `{"record":"` + rec + `","ksf":"` + store.OpaqueKSF + `","proof":"` + sess.Upgrade + `"}`
+	code, body = callAPI(t, ts, "PUT", "/api/v1/users/anna", sess.Token, put)
+	var u userView
+	json.Unmarshal([]byte(body), &u)
+	if code != 200 || u.AuthVersion != 2 {
+		t.Fatalf("the upgrade: %d %s", code, body)
+	}
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/users/anna", sess.Token, put); code != 403 {
+		t.Errorf("the proof used twice: %d", code)
+	}
+	if _, code, _ := opaqueSignIn(t, ts, "anna", "pw", ""); code != 200 {
+		t.Errorf("after the upgrade, by OPAQUE: %d", code)
+	}
+	if code, body := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"pw"}`); code != 401 {
+		t.Errorf("after the upgrade, by the password: %d %s", code, body)
+	}
+}

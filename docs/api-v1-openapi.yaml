@@ -2280,6 +2280,12 @@ components:
         user: {type: string, description: The login name; case does not matter}
         password: {type: string}
         label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+        login:
+          type: string
+          description: >-
+            A sign-in by OPAQUE for the name, started from this address, that the client could not finish:
+            this request takes it over, so that the attempt counts once, and answers upgrade for a user still of
+            auth_version 1
     LoginStart:
       type: object
       required: [user, ke1]
@@ -2328,6 +2334,11 @@ components:
           type: array
           description: The effective set
           items: {type: string}
+        upgrade:
+          type: string
+          description: >-
+            With login, for a user of auth_version 1: a proof, good once for five minutes, to set the user's own
+            record with in PUT /api/v1/users/{name} without the password
     User:
       type: object
       properties:

@@ -44,6 +44,10 @@ the next minor, a fix counts the suffix up.
   is registered by OPAQUE, `auth_version` 2, and never sent: the server
   keeps a record and no hash (`docs/store.md` section 6, README.md).
 
+- A user of `auth_version` 1 who signs in in the web UI is moved to 2 at
+  once: the password crosses that once more and the hash goes
+  (`docs/store.md` section 6).
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).

@@ -216,12 +216,14 @@ function base() {
 // apiRequest sends one request and returns the answer's JSON, null for
 // an empty one; an answer that is not ok is thrown as an Error with the
 // server's error (or the status), its status and its data. The token
-// goes along unless auth is false; keepalive lets the request outlive
-// the page. api() adds the sign-in on a 401; the sign-in itself and the
-// last preferences sent as the page is left use it as it is (login.js).
-async function apiRequest(method, path, body, { auth = true, keepalive = false } = {}) {
+// goes along unless auth is false, and a token given in its place;
+// keepalive lets the request outlive the page. api() adds the sign-in on
+// a 401; the sign-in itself and the last preferences sent as the page is
+// left use it as it is (login.js).
+async function apiRequest(method, path, body, { auth = true, keepalive = false, token = "" } = {}) {
   const headers = {};
-  if (auth && state.token) headers.Authorization = "Bearer " + state.token;
+  const bearer = token || (auth && state.token);
+  if (bearer) headers.Authorization = "Bearer " + bearer;
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
   let data = null;

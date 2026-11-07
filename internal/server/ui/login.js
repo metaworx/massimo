@@ -251,24 +251,45 @@ async function signIn(user, password, purpose) {
     password,
     keyStretching: keyStretching(started.ksf),
   });
-  const finish = apiRequest("POST", "api/v1/login/finish", { login: started.login, ke3: done ? done.finishLoginRequest : NO_KE3 }, { auth: false });
-  if (done) return finish;
-  try {
-    await finish;
-  } catch (e) {
-    if (!started.v1 || purpose) throw e;
+  if (done) return apiRequest("POST", "api/v1/login/finish", { login: started.login, ke3: done.finishLoginRequest }, { auth: false });
+  if (!started.v1 || purpose) {
+    return apiRequest("POST", "api/v1/login/finish", { login: started.login, ke3: NO_KE3 }, { auth: false });
   }
-  return apiRequest("POST", "api/v1/login", { user, password }, { auth: false });
+  // The password sign-in takes the start over, so that the attempt counts
+  // once; a user still of version 1 is upgraded at once.
+  const session = await apiRequest("POST", "api/v1/login", { user, password, login: started.login }, { auth: false });
+  if (session.upgrade) await upgradePassword(session, password);
+  return session;
+}
+
+// upgradePassword moves a user of version 1 to version 2 right after its
+// password sign-in: the password registered by OPAQUE in the browser and
+// set with the one-time proof the sign-in answered, so that it crosses
+// no more. A failure leaves the user of version 1, and the next sign-in
+// tries again.
+async function upgradePassword(session, password) {
+  const name = session.user.name;
+  try {
+    const body = await registerPassword(name, password, session.token);
+    body.proof = session.upgrade;
+    await apiRequest("PUT", "api/v1/users/" + encodeURIComponent(name), body, { token: session.token });
+    session.user.auth_version = 2;
+  } catch (e) {
+    // still of version 1
+  }
 }
 
 // registerPassword makes a password of version 2 for a name, the password
 // kept in the browser: the server answers the client's registration
 // request, and the client's record comes back as the fields that set it,
-// {record, ksf}, for POST /api/v1/users or PUT /api/v1/users/{name}.
-async function registerPassword(name, password) {
+// {record, ksf}, for POST /api/v1/users or PUT /api/v1/users/{name}. A
+// token given is the one asked with, else the page's.
+async function registerPassword(name, password, token) {
   const opaque = await opaqueModule();
   const reg = opaque.client.startRegistration({ password });
-  const answer = await api("POST", "api/v1/users/" + encodeURIComponent(name) + "/register", { request: reg.registrationRequest });
+  const path = "api/v1/users/" + encodeURIComponent(name) + "/register";
+  const request = { request: reg.registrationRequest };
+  const answer = token ? await apiRequest("POST", path, request, { token }) : await api("POST", path, request);
   const done = opaque.client.finishRegistration({
     clientRegistrationState: reg.clientRegistrationState,
     registrationResponse: answer.response,

@@ -14,8 +14,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -152,6 +152,11 @@ type loginRequest struct {
 	// Label names the session under the user's tokens ("Firefox on the
 	// laptop"); the User-Agent, shortened, when absent.
 	Label string `json:"label,omitempty"`
+	// Login is a sign-in by OPAQUE for the name that the browser could
+	// not finish (opaque_api.go): the password sign-in takes it over, so
+	// that the attempt, counted at the start, counts once, and a user
+	// still of version 1 gets a proof to upgrade with.
+	Login string `json:"login,omitempty"`
 }
 
 // loginMode refuses a sign-in where there are no users to sign in as.
@@ -167,7 +172,9 @@ func (s *Server) loginMode(ctx context.Context) error {
 
 // login handles POST /api/v1/login: a session for a name and a
 // password. A wrong pair counts against the address and the name; an
-// address signs in once at a time.
+// address signs in once at a time. With login, the sign-in by OPAQUE it
+// follows has counted the attempt and holds the address; a user still of
+// version 1 is answered a proof, upgrade, for its record.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	if err := s.loginMode(ctx); err != nil {
@@ -182,15 +189,29 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	ip := s.clientIP(r)
 	auditTarget(r, "user:"+name)
 	addrKey, userKey := store.LockoutAddr(ip), store.LockoutUser(name)
-	if d := s.limiter.lockedFor(ctx, userKey); d > 0 {
-		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
-		return fail(http.StatusTooManyRequests, "too many failed logins for this user; try again later")
+	var started *pendingLogin
+	if req.Login != "" {
+		p, ok := s.logins.take(req.Login, time.Now())
+		switch {
+		case ok && (p.name != name || p.addrKey != addrKey):
+			s.signIns.release(p.addrKey)
+			return fail(http.StatusBadRequest, "login was started for another name or from another address")
+		case ok:
+			// The start's claim of the address, now this request's.
+			started = p
+			s.signIns.hold(addrKey, time.Time{})
+		}
 	}
-	switch ok, full := s.signIns.claim(addrKey); {
-	case full:
-		return passwordBusy(store.ErrBusy)
-	case !ok:
-		return &httpError{status: http.StatusTooManyRequests, msg: "a sign-in from this address is already running; try again when it is done", retryAfter: 1}
+	if started == nil {
+		if err := s.lockedOut(w, ctx, addrKey, userKey); err != nil {
+			return err
+		}
+		switch ok, full := s.signIns.claim(addrKey); {
+		case full:
+			return passwordBusy(store.ErrBusy)
+		case !ok:
+			return &httpError{status: http.StatusTooManyRequests, msg: "a sign-in from this address is already running; try again when it is done", retryAfter: 1}
+		}
 	}
 	defer s.signIns.release(addrKey)
 	if err := st.CheckPassword(ctx, name, req.Password); err != nil {
@@ -200,9 +221,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		if !errors.Is(err, store.ErrBadPassword) {
 			return fail(http.StatusInternalServerError, "%v", err)
 		}
-		s.limiter.fail(ctx, userKey)
-		if s.limiter.fail(ctx, addrKey) {
-			s.log.Warn("api: address locked out after failed logins", "remote", ip, "for", s.authLockout)
+		if started == nil {
+			s.limiter.fail(ctx, userKey)
+			if s.limiter.fail(ctx, addrKey) {
+				s.log.Warn("api: address locked out after failed logins", "remote", ip, "for", s.authLockout)
+			}
 		}
 		auditAction(r, "login.failed")
 		s.log.Warn("api: login failed", "user", name, "remote", ip)
@@ -212,12 +235,26 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || !ok {
 		return fail(http.StatusInternalServerError, "user %s: %v", name, err)
 	}
-	return s.openSession(w, r, u, req.Label, userKey, addrKey)
+	if started == nil {
+		return s.openSession(w, r, u, req.Label, nil, userKey, addrKey)
+	}
+	var extra map[string]any
+	if u.AuthVersion == 1 {
+		if proof, _ := s.logins.issueProof(u.ID, time.Now()); proof != "" {
+			extra = map[string]any{"upgrade": proof}
+		}
+	}
+	if err := s.openSession(w, r, u, req.Label, extra); err != nil {
+		return err
+	}
+	s.cleared(ctx, started)
+	return nil
 }
 
 // openSession answers a sign-in whose password matched: a user that may
-// sign in gets a session, and the counters of the keys are cleared.
-func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, keys ...string) error {
+// sign in gets a session, with the extra fields, and the counters of the
+// keys are cleared.
+func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, extra map[string]any, keys ...string) error {
 	ctx := r.Context()
 	st := s.opts.Store
 	ip := s.clientIP(r)
@@ -255,7 +292,9 @@ func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.Use
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": secret, "expires_at": tok.ExpiresAt, "user": me.User, "role": me.Role, "capabilities": me.Capabilities})
+	answer := map[string]any{"token": secret, "expires_at": tok.ExpiresAt, "user": me.User, "role": me.Role, "capabilities": me.Capabilities}
+	maps.Copy(answer, extra)
+	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 

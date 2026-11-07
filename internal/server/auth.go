@@ -676,10 +676,11 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	case mode == modeLegacy && s.opts.Token == "":
 		return &principal{mode: modeLegacy}, true
 	}
-	if r.Pattern == "POST /api/v1/login/finish" {
-		// The finish of a sign-in started: its start was checked against
-		// the lockout and counted, and a lockout that start set is its
-		// own to lift (opaque_api.go).
+	if capability == capNone {
+		// The sign-ins: nobody yet. Each checks the address's lockout
+		// itself (lockedOut), since one that goes on with a sign-in by
+		// OPAQUE started was checked and counted at the start, and a
+		// lockout that start set is its own to lift (opaque_api.go).
 		return &principal{mode: mode}, true
 	}
 	ip := s.clientIP(r)
@@ -688,10 +689,6 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
 		writeError(w, http.StatusTooManyRequests, "too many failed token checks from this address; try again later")
 		return nil, false
-	}
-	if capability == capNone {
-		// The login: nobody yet, but a locked-out address stays out.
-		return &principal{mode: mode}, true
 	}
 	var p *principal
 	var why error
@@ -732,6 +729,21 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		return p, false // the audit names who was refused
 	}
 	return p, true
+}
+
+// lockedOut answers a sign-in from an address or for a name that is
+// locked out: 429 with Retry-After, nil when neither is.
+func (s *Server) lockedOut(w http.ResponseWriter, ctx context.Context, addrKey, userKey string) error {
+	for _, k := range []struct{ key, msg string }{
+		{addrKey, "too many failed token checks from this address; try again later"},
+		{userKey, "too many failed logins for this user; try again later"},
+	} {
+		if d := s.limiter.lockedFor(ctx, k.key); d > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
+			return fail(http.StatusTooManyRequests, "%s", k.msg)
+		}
+	}
+	return nil
 }
 
 // issueTicket handles POST /cubes/{sn}/events/ticket: a single-use

@@ -824,6 +824,21 @@ change in place of `password`.
 One's own password change proves the current one with a sign-in whose finish
 answers a proof, good once for five minutes, in place of a session.
 
+A user of version 1 moves to version 2 at the next sign-in in the browser.
+The browser cannot know a user's version, and the start does not say it,
+so the start of a user of version 1 is answered from a fake record and the
+browser cannot finish it;
+while the box takes the password sign-in, the browser then sends the password,
+over TLS, with the start's login, which the sign-in takes over,
+so the attempt counts once.
+The answer adds a proof, good once,
+and the browser registers the same password and sets the record with it:
+the hash is gone, and the password crosses no more.
+That is the one time an existing password crosses;
+the other is a mistyped password of a user of version 2,
+which the browser cannot tell from one of version 1 while the box takes the
+password sign-in.
+
 ### The commands
 
 `massimo user add <name> -role owner|operator|viewer|integration`

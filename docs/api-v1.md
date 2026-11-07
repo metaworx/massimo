@@ -331,6 +331,15 @@ password change (`docs/store.md` section 6, "The lockout").
 `409` on a server without users, where the first owner is created with
 `POST /api/v1/users` or `massimo user add`,
 and on one without a store (`serve -addr`), which takes the API token.
+`login` names a sign-in by OPAQUE for the name, started from the same address,
+that the client could not finish (below):
+the password sign-in takes it over, so the attempt, counted at its start,
+counts once, and the address it holds is this request's;
+for another name or address it is `400`.
+For a user still of `auth_version` 1, the answer then adds `upgrade`,
+a proof good once for five minutes,
+with which the client sets the user's own record (`PUT /api/v1/users/{name}`
+with `record`, `ksf` and `proof`) without the password.
 
 `POST /api/v1/logout` revokes the session that makes the call, `{"ok": true}`.
 An API key answers `400`; a key is revoked under the user's tokens.
@@ -386,7 +395,9 @@ the lockout its own start set included.
 The address is held from the start to the finish, at most the minute:
 a start or a `POST /api/v1/login` from it meanwhile is `429` with `Retry-After: 1`.
 `v1` says whether the box still takes `POST /api/v1/login`,
-for a client whose finish fails.
+for a client whose finish fails:
+the web UI then signs in with the password and `login`,
+and upgrades a user of version 1 at once.
 A bad KE1 is `400`; the name's lockout `429`, as for the login.
 
 `POST /api/v1/login/finish` with `{"login": "…", "ke3": "…"}`

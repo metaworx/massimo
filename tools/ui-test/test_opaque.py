@@ -64,9 +64,12 @@ def test_sign_in_by_opaque(new_context, case, watch, guard):
         assert page.evaluate("state.me.user.name") == name and page.evaluate("state.me.user.auth_version") == 2, "signed in as the user"
         signed = [u for u, body in posts if "opaque-pass" in body]
         assert not signed, f"the password went to the server: {signed}"
+        # The wrong password: a start, then the password sign-in that takes
+        # it over while the server takes that; the right one: a start and
+        # its finish.
         finishes = [i for i, (u, _) in enumerate(posts) if u.endswith("/api/v1/login/finish")]
-        assert len(finishes) == 2, f"a finish per sign-in, not {len(finishes)}"
-        right = [u for u, _ in posts[finishes[1] + 1:] if u.endswith("/api/v1/login")]
+        assert len(finishes) == 1, f"one finish, the right password's, not {len(finishes)}"
+        right = [u for u, _ in posts[finishes[0] + 1:] if u.endswith("/api/v1/login")]
         assert not right, "the right password needs no password sign-in"
         print(f"\n{case.width}-{case.lang}: the sign-in by OPAQUE took {took:.2f} s in the browser")
     finally:
@@ -156,3 +159,36 @@ def test_a_record_of_the_command_line_opens_in_the_browser(new_context, case, gu
         assert not [u for u in posts if u.endswith("/api/v1/login")], "without the password sign-in"
     finally:
         ctx.close()
+
+
+def test_a_user_of_version_1_is_upgraded(new_context, case, guard):
+    """A user whose password the server hashes (set through the API)
+    signs in through the dialog: by the password, once, after the start
+    by OPAQUE, and is upgraded at once; the next sign-in is by OPAQUE
+    alone."""
+    name = f"old-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "old-pass"})
+    ctx = new_context()
+    try:
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        posts = []
+        page.on("request", lambda r: posts.append((r.method, r.url, r.post_data or "")) if r.method in ("POST", "PUT") else None)
+        page.goto(URL)
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
+        page.locator("#login-user").fill(name)
+        page.locator("#login-password").fill("old-pass")
+        page.locator("#login-form button[type=submit]").click()
+        page.wait_for_selector(".room", timeout=10000)
+        user = api_call("GET", f"api/v1/users/{name}")
+        assert user["auth_version"] == 2 and user["has_password"], f"upgraded: {user}"
+        crossed = [u for _, u, body in posts if "old-pass" in body]
+        assert len(crossed) == 1 and crossed[0].endswith("/api/v1/login"), f"the password crosses once, at the upgrade: {crossed}"
+        assert any(m == "PUT" and u.endswith(f"/api/v1/users/{name}") and '"record"' in body for m, u, body in posts), "the record is sent"
+        posts.clear()
+        assert sign_in_in(page, name, "old-pass"), "the next sign-in"
+        assert not [u for _, u, _ in posts if u.endswith("/api/v1/login")], "by OPAQUE alone"
+    finally:
+        ctx.close()
+        api_call("DELETE", f"api/v1/users/{name}")

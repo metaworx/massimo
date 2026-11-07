@@ -15,7 +15,9 @@ the page signs in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE"),
 running argon2id itself, and the button says "Signing in…" meanwhile,
 a fraction of a second on a laptop, more on an old phone.
 A user whose password the server still hashes (`auth_version` 1) is signed in
-with the password after the OPAQUE attempt, while the server takes that.
+with the password after the OPAQUE attempt, while the server takes that,
+and the page registers the password by OPAQUE at once:
+it is the last time that password goes to the server.
 The dialog sends one sign-in at a time;
 a submit while the server checks the password does nothing.
 A server without users shows the form that creates the first owner to a
