@@ -123,6 +123,20 @@ def assert_busy(page, selector, what):
     assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
 
 
+def open_user_menu(page):
+    """The 👤 menu in the header, open."""
+    menu = page.locator("#user-menu")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    page.locator("#user-menu .menu-items").wait_for(state="visible")
+
+
+def sign_out(page):
+    """Sign out (or Forget key) from the 👤 menu."""
+    open_user_menu(page)
+    page.locator("#logout-btn").click()
+
+
 def open_settings(page):
     """The settings page, opened with the cog in the header."""
     page.locator("#view-settings").click()

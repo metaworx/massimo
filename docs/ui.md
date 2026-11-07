@@ -9,7 +9,7 @@ and follows the system's light or dark mode.
 The page asks who you are: a name and a password,
 or an API key pasted into the second field,
 and keeps the session in the browser for 30 days from its last use;
-Settings → Log out ends it.
+👤 → Sign out ends it.
 A server without users shows the form that creates the first owner to a
 browser on the local network; until then everything is open.
 Its name is checked as a new user's is (Settings → Users).
@@ -43,6 +43,15 @@ so the session never appears in a URL.
   and in the log.
 - **The Cube's clock** and the time of the last update.
 - **↻** asks the server for the current state now.
+- **👤** drops down who is signed in, with the role,
+  or the API key and whose it is;
+  **My settings**, which opens Settings,
+  and **Sign out**, which ends the session.
+  An API key or the server's token is only forgotten in this browser
+  (**Forget key**),
+  and an open server says that it is open to everyone and has nothing to sign out of.
+  Escape, a click outside and a choice close the menu,
+  as they close a room's **⋯**.
 - The three page buttons, a house, a sheet and a cog,
   switch between **Rooms**, **Log** and **Settings**.
 - When the server was updated, a button offers to reload the page.
@@ -201,7 +210,7 @@ Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
 keeps that setting's value in this browser instead,
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
-Log out takes your settings and schemes out of the browser,
+Sign out takes your settings and schemes out of the browser,
 a change made just before still reaching the server,
 so that the next one to sign in there starts from the defaults
 and does not take yours into its account;
@@ -334,9 +343,8 @@ without the switches.
   and **Add a role**; the owner cannot be changed.
   **Capabilities for every role** (with `capabilities`) switches a capability
   off for every role but the owner.
-- **Change password** and **Log out**:
-  the own password, with the current one, and the end of the session
-  (an API key is only forgotten).
+- **Change password**:
+  the own password, with the current one.
 - **Software**:
   the running version, the update channel and whether a newer release is out.
   On a box with the update helper installed (packaging/README.md, "Updating"),

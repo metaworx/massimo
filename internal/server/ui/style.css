@@ -119,6 +119,25 @@ body:not(.expert) .expert-only { display: none !important; }
 .nav { display: inline-flex; gap: 4px; }
 .nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 36px; padding: 0; }
 .nav-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+/* The header's menus (👤): the summary drawn as a page button, the items
+   dropping down from the header's right edge, so that they fit a phone. */
+.nav { position: relative; }
+.menu.nav-menu { position: static; }
+.menu.nav-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+}
+.menu.nav-menu > summary:hover, .menu.nav-menu[open] > summary { border-color: var(--accent); }
+.nav-menu .menu-items { width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
+.menu-line { margin: 0 0 4px; padding: 6px 10px 10px; color: var(--muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .brand { display: flex; align-items: baseline; gap: 10px; }

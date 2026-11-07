@@ -429,3 +429,33 @@ function filePicker(accept, onFile) {
   });
   return input;
 }
+
+// dropdown makes a <details class="menu"> a menu that drops down: one
+// open at a time, closed by a choice of one of its items, by Escape
+// (the focus back on its summary) and by a click outside it. The room
+// tiles' ⋯ and the header's 👤 and ☰ are such menus.
+function dropdown(details) {
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+    for (const other of document.querySelectorAll("details.menu[open]")) {
+      if (other !== details) other.open = false;
+    }
+  });
+  details.addEventListener("click", (ev) => {
+    if (ev.target.closest(".menu-items button")) details.open = false;
+  });
+  return details;
+}
+
+document.addEventListener("click", (ev) => {
+  for (const m of document.querySelectorAll("details.menu[open]")) {
+    if (!m.contains(ev.target)) m.open = false;
+  }
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  for (const m of document.querySelectorAll("details.menu[open]")) {
+    m.open = false;
+    if (m.contains(document.activeElement)) m.querySelector("summary").focus();
+  }
+});

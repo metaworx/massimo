@@ -107,8 +107,8 @@ a second header line shows the server version, the Cube's firmware,
 IP address and radio address, the duty cycle, free slots,
 queued and pending commands and the Cube clock,
 and the tiles show radio addresses and device types),
-whether the Cube clock is shown in the browser's time zone or the Cube's own,
-and Log out.
+and whether the Cube clock is shown in the browser's time zone or the Cube's own;
+the header's 👤 menu says who is signed in and signs out.
 In the tiles a thermometer marks the measured temperature (IS) and a target the
 setpoint (SET);
 AUTO and MANU close an open holiday panel and drop a pending stepper value.

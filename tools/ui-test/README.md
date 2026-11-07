@@ -77,7 +77,8 @@ with the page's DOM, console and network at every step.
   and the page is handed over before the stream is open again.
 
 `helpers.py` holds the texts the tests expect in both languages,
-the stubbed answers, `wait_until`, `named_buttons` and `found_text`.
+the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
+and `open_user_menu` and `sign_out` for the header's 👤 menu.
 
 The four cases share the one server,
 so a test that changes the server's store puts it back;
@@ -101,6 +102,13 @@ what a test stores in the browser goes with its context.
   and the tile is drawn with the new state once the focus leaves;
   a switch point's time typed part by part keeps the focus,
   marks the day as changed, and Send right after it sends the time (stubbed).
+- `test_header.py`:
+  the Log button's symbol is a sheet, taller than wide;
+  the 👤 menu names the owner by the suite's key and offers Forget key,
+  fits the window, and closes on Escape, on a click outside and on a choice,
+  My settings opening the settings;
+  on an open server (`/me` stubbed) it says so, without Sign out;
+  a room's ⋯ and 👤 are one open at a time.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
@@ -158,8 +166,9 @@ what a test stores in the browser goes with its context.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,
-  and Log out brings the dialog back and forgets the token;
-  a sign-in at the page's start, and again after Log out,
+  and is named in the 👤 menu, whose Sign out brings the dialog back and
+  forgets the token;
+  a sign-in at the page's start, and again after Sign out,
   starts the page once: one stream ticket and one read of `/me` each.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
@@ -167,7 +176,7 @@ what a test stores in the browser goes with its context.
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
   password `guest-pass`) has no switches, and its poll stays in the browser;
-  the operator's poll and scheme, changed just before Log out,
+  the operator's poll and scheme, changed just before Sign out,
   reach the operator's account and leave the browser,
   and the owner signing in next with its key gets neither;
   a scheme deleted in one browser stays deleted when another that had it loads.

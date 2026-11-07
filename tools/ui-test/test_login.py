@@ -5,14 +5,14 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import URL
-from helpers import named_buttons, wait_until
+from helpers import named_buttons, open_user_menu, sign_out, wait_until
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
     """The sign-in dialog opens without a token and refuses a wrong
     password; the operator signs in, sees the tiles and no Settings →
-    Users, Roles or Cubes; Log out forgets the token and brings the
-    dialog back."""
+    Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
+    forgets the token and brings the dialog back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
     page = ctx.new_page()
     guard.page = page
@@ -38,11 +38,16 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     assert not page.locator(".users-settings").is_visible(), "no Settings → Users for an operator"
     assert not page.locator(".roles-settings").is_visible(), "no Settings → Roles for an operator"
     assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no Settings → Cubes for an operator"
-    assert "operator" in page.locator("#me-line").inner_text(), "the settings say who is signed in"
     named_buttons(page, "the settings as an operator")
+    open_user_menu(page)
+    assert "operator" in page.locator("#me-line").inner_text(), "the 👤 menu says who is signed in"
+    assert page.locator("#logout-btn").inner_text() == SIGN_OUT[case.lang], "a session is signed out"
     page.locator("#logout-btn").click()
-    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Log out brings the dialog back"
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "the token is forgotten"
+
+
+SIGN_OUT = {"en": "Sign out", "de": "Abmelden"}
 
 
 def sign_in(page, user, password):
@@ -71,12 +76,10 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     page.goto(URL)
     sign_in(page, "operator", "op-pass")
     assert (len(tickets), len(mes)) == (1, 1), f"one start after the sign-in at the page's start: {len(tickets)} ticket(s), {len(mes)} /me"
-    page.locator("#view-settings").click()
-    page.locator("#logout-btn").click()
+    sign_out(page)
     sign_in(page, "operator", "op-pass")
     assert (len(tickets), len(mes)) == (2, 2), f"one start after the sign-in after Log out: {len(tickets)} ticket(s), {len(mes)} /me"
-    page.locator("#view-settings").click()
-    page.locator("#logout-btn").click()
+    sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
 
 
@@ -115,6 +118,5 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
     assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "signed in as the operator"
     assert not page.evaluate("document.querySelector('#login-form button[type=submit]').classList.contains('busy')"), \
         "Sign in stops turning once the answer is in"
-    page.locator("#view-settings").click()
-    page.locator("#logout-btn").click()
+    sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"

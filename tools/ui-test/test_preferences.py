@@ -10,7 +10,7 @@ import json
 import urllib.request
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import wait_until
+from helpers import sign_out, wait_until
 
 
 def server_ui():
@@ -137,8 +137,8 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
         page.locator("#poll-input").fill("37")
         page.locator("#poll-input").dispatch_event("change")
         page.evaluate("putCustomScheme('Operator only', schemeById('massimo').light, schemeById('massimo').dark)")
-        page.locator("#logout-btn").click()  # within the second the change waits
-        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Log out brings the dialog back"
+        sign_out(page)  # within the second the change waits
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
         assert page.evaluate("localStorage.getItem('massimo.poll')") is None, "the operator's poll is forgotten"
         assert page.evaluate("localStorage.getItem('massimo.schemes')") is None, "the operator's schemes are forgotten"
         assert json.loads(page.evaluate("localStorage.getItem('massimo.device')") or "{}") == {"clock": "browser"}, \

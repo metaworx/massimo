@@ -383,6 +383,8 @@ function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   $("view-log").addEventListener("click", () => showView("log"));
   $("view-settings").addEventListener("click", () => showView("settings"));
+  $("menu-prefs").addEventListener("click", () => showView("settings"));
+  dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
     renderLog();

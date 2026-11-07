@@ -22,6 +22,9 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- The web UI's header has a 👤 menu: who is signed in, My settings and
+  Sign out, which leave the settings page (`docs/ui.md`, "Header").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

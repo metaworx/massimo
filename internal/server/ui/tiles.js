@@ -468,14 +468,7 @@ function renderMenu(el, room) {
   } else {
     del.classList.add("hidden");
   }
-  el.querySelector(".menu").addEventListener("toggle", (ev) => {
-    // One open menu at a time.
-    if (ev.target.open) {
-      for (const other of document.querySelectorAll("details.menu[open]")) {
-        if (other !== ev.target) other.open = false;
-      }
-    }
-  });
+  dropdown(el.querySelector(".menu"));
 }
 
 // renderTools wires the info and cog buttons of the mode row: the device
@@ -1054,10 +1047,9 @@ async function houseRequests() {
   loadCubes().catch(() => {});
 }
 
-// closePanels closes every open menu and inline panel (vacation, delete
-// confirm, House), for the Escape key.
+// closePanels closes every inline panel (vacation, delete confirm,
+// House), for the Escape key; dropdown (components.js) closes the menus.
 function closePanels() {
-  for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
   if (!housePanel().classList.contains("hidden")) closeHouse();
   for (const room of state.rooms) {
     const ui = state.ui[room.id];
@@ -1097,11 +1089,8 @@ function initTiles() {
     closePanels();
   });
   document.addEventListener("click", (ev) => {
-    // Clicking outside closes an open menu, and the House panel once
-    // it has sent.
-    if (!ev.target.closest("details.menu")) {
-      for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
-    }
+    // Clicking outside closes the House panel once it has sent (and an
+    // open menu, dropdown in components.js).
     const panel = housePanel();
     if (!panel.classList.contains("hidden") && !ev.target.closest("#house") && !$("house-result").classList.contains("hidden")) {
       closeHouse();

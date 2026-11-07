@@ -83,7 +83,10 @@ function applyCaps() {
   renderMe();
 }
 
-// renderMe says in the settings who is signed in, and what Log out does.
+// renderMe says in the 👤 menu who is signed in, and what Sign out
+// does: a session ends, an API key or the token is only forgotten (Forget
+// key), and an open server or one without authentication has nothing to
+// end, so the menu offers My settings alone.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -94,21 +97,21 @@ function renderMe() {
     text = t("me.signedIn", { name: me.user.display_name || me.user.name, role: roleLabel(me.role.key, me.role.name) });
     if (me.token && me.token.kind === "api") {
       text = t("me.withKey", { name: me.user.name, label: me.token.label || "" });
-      label = t("settings.forgetKey");
+      label = t("me.forgetKey");
     } else {
-      label = t("settings.logout");
+      label = t("me.signOut");
     }
   } else if (me && me.mode === "open") {
     text = t("me.open");
   } else if (me && me.mode === "token") {
     text = t("me.token");
-    label = t("settings.forgetKey");
+    label = t("me.forgetKey");
   } else if (me) {
     text = t("me.none");
   }
   line.textContent = text;
   line.classList.toggle("hidden", !text);
-  btn.textContent = label || t("settings.logout");
+  btn.textContent = label || t("me.signOut");
   btn.classList.toggle("hidden", !label);
   $("me-password").classList.toggle("hidden", !(me && me.mode === "users" && me.user && me.user.has_password));
 }
