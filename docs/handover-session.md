@@ -44,7 +44,8 @@ then this file.
 ## Where things run
 
 - **The house Cube**
-  (its serial in the Pi's `/etc/massimo/env`) is on the M7 network (`Altocumulus`) at .118 by DHCP, not reserved.
+  (its serial in the Pi's `/etc/massimo/env`)
+  is on the M7 network (`Altocumulus`) at .118 by DHCP, not reserved.
 - **The Raspberry Pi 1**
   (Raspberry Pi OS Lite 32-bit) runs `massimo serve` as a systemd service on the
   alpha channel: **.200** is the API and web UI on port 80,

@@ -15,10 +15,11 @@ and record what happened.
 - `serve` running on the Mint box with both Cubes, the UI reachable,
   `-log serve.log` (or `MASSIMO_LOG` in `.env`) so every device state
   change and every passed command is on file.
-- Work on the live house Cube, with `SN` set to its serial (in the Pi's
-  `/etc/massimo/env`), in a room with one radiator
-  thermostat and no wall thermostat, for example Halle 1 (room 1,
-  thermostat 07631e) or Küche (room 2, thermostat 05cdc6).
+- Work on the live house Cube,
+  with `SN` set to its serial (in the Pi's `/etc/massimo/env`),
+  in a room with one radiator thermostat and no wall thermostat,
+  for example Halle 1 (room 1, thermostat 07631e) or Küche (room 2,
+  thermostat 05cdc6).
 - Everything below also works through the proxy: `status` and `backup`
   use the proxy automatically with `MASSIMO_CUBE_<SN>_PROXY` set.
 
