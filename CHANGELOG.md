@@ -8,6 +8,8 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.10.0-alpha.1] - 2026-11-07
+
 ### Added
 
 - The store keeps the Cubes' events (migration 0004), written in
