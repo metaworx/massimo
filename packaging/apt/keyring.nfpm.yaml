@@ -18,6 +18,10 @@ description: |
   The key apt verifies the Massimo repository with, for the Signed-By line
   of /etc/apt/sources.list.d/massimo.sources.
 contents:
+  # Readable by everyone: apt reads it as the user _apt, and the exported
+  # key is a temporary file of mode 0600 that nfpm would copy as it is.
   - src: ${KEYRING}
     dst: /usr/share/keyrings/massimo-archive-keyring.gpg
     expand: true
+    file_info:
+      mode: 0644

@@ -122,6 +122,10 @@ for pool in "$apt"/pool/*/; do
 		$NFPM package -f "$root/packaging/apt/keyring.nfpm.yaml" -p deb \
 		-t "$pool/massimo-archive-keyring_${keyring_version}_all.deb" >/dev/null
 done
+# The same package under a name that does not change, for a box's first
+# install, before apt knows the repository (packaging/README.md).
+pools=("$apt"/pool/*/)
+cp "${pools[0]}massimo-archive-keyring_${keyring_version}_all.deb" "$apt/massimo-archive-keyring.deb"
 
 # 3. The suites: Packages per architecture (a package for every
 # architecture is listed in each), Release, InRelease.
@@ -161,17 +165,21 @@ for pool in "$apt"/pool/*/; do
 	sign "$dist/Release" "$dist/Release.gpg" --detach-sign
 done
 
-# 4. The snippet and the page.
+# 4. The snippet and the page. Signed-By names the keyring package's
+# file, so that the key apt verifies with is the one the newest keyring
+# package carries; the box installs that package first.
 suites=$(for pool in "$apt"/pool/*/; do basename "$pool"; done | tr '\n' ' ')
 cat >"$apt/massimo.sources" <<EOF
 # The Massimo apt repository (https://github.com/metaworx/massimo,
 # packaging/README.md, "The apt repository"): one suite per update
-# channel (${suites% }); the key goes to /etc/apt/keyrings/massimo.asc.
+# channel (${suites% }); the key comes with the package
+# massimo-archive-keyring, installed first from
+# $base_url/massimo-archive-keyring.deb.
 Types: deb
 URIs: $base_url
 Suites: ${suites%% *}
 Components: main
-Signed-By: /etc/apt/keyrings/massimo.asc
+Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
 EOF
 cat >"$out/index.html" <<EOF
 <!DOCTYPE html>
@@ -179,7 +187,9 @@ cat >"$out/index.html" <<EOF
 <body><h1>Massimo apt repository</h1>
 <p>The Debian packages of <a href="https://github.com/metaworx/massimo">Massimo</a>, one suite per update channel: ${suites% }.
 See <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#the-apt-repository">packaging/README.md</a>
-for the sources snippet; the key is <a href="apt/massimo.asc">apt/massimo.asc</a>.</p>
+for the sources snippet and the keyring package to install first,
+<a href="apt/massimo-archive-keyring.deb">apt/massimo-archive-keyring.deb</a>;
+the key itself is <a href="apt/massimo.asc">apt/massimo.asc</a>.</p>
 </body></html>
 EOF
 echo "publish.sh: $out holds the suites ${suites% }"

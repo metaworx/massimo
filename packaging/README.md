@@ -268,16 +268,17 @@ later `beta` and `stable`),
 the same for every Debian and Ubuntu release since the binary is static,
 signed with the repository's own OpenPGP key (RSA 4096;
 not the Ed25519 release key of the manifest, which apt cannot use).
-To follow a channel:
+To follow a channel, install the keyring package first, then the sources:
 
 ```bash
-sudo curl -fsSLo /etc/apt/keyrings/massimo.asc https://metaworx.github.io/massimo/apt/massimo.asc
+curl -fsSLo /tmp/massimo-archive-keyring.deb https://metaworx.github.io/massimo/apt/massimo-archive-keyring.deb
+sudo apt install /tmp/massimo-archive-keyring.deb
 sudo tee /etc/apt/sources.list.d/massimo.sources <<'EOF'
 Types: deb
 URIs: https://metaworx.github.io/massimo/apt
 Suites: alpha
 Components: main
-Signed-By: /etc/apt/keyrings/massimo.asc
+Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
 EOF
 sudo apt update && sudo apt install massimo
 ```
@@ -287,10 +288,14 @@ and `apt install massimo=0.6.0~alpha.1` goes back to one still in the pool.
 `unattended-upgrades` upgrades Debian's own origins only;
 `"origin=Massimo";` in its `Unattended-Upgrade::Origins-Pattern` adds this repository.
 The package `massimo-archive-keyring` carries the key as
-`/usr/share/keyrings/massimo-archive-keyring.gpg`;
-with `Signed-By:` pointing there instead of the downloaded file,
-an extended key arrives through apt (the package's version is the time of the publish,
-so it only goes up).
+`/usr/share/keyrings/massimo-archive-keyring.gpg`, the file `Signed-By:` names,
+and is in the suite as well,
+so that apt verifies with the key of the newest keyring package,
+and an extended key arrives through apt.
+Its version is the time of the publish, so it only goes up.
+The first download is the one trusted through HTTPS alone,
+as a downloaded key would be;
+the key itself is on the site too, as `massimo.asc`, for a check by hand.
 A new key would reach the boxes only through a keyring package carrying both
 keys on a site the old key still signs, which `publish.sh` does not make:
 it signs with one key.
@@ -301,7 +306,8 @@ the keyring package by nfpm) and deployed with `actions/deploy-pages`;
 it has no state of its own,
 so a release that is deleted on GitHub leaves the pool at the next release.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease`, and installs from it in a container,
+verifies `InRelease`,
+and installs from it in a container as the snippet above does,
 as CI does on trixie and on bookworm (`make apt-test`).
 Until the owner has made the key and set the secrets,
 the workflow skips the steps.

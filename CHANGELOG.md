@@ -47,6 +47,9 @@ the next minor, a fix counts the suffix up.
 - The apt repository's keyring package is versioned by the time of the
   publish, so that its version only goes up, whatever the key's dates.
 
+- The apt snippet's Signed-By names the keyring package's key, installed
+  first, so that an extended key reaches the boxes (packaging/README.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
