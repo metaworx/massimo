@@ -761,8 +761,13 @@ which took 4.5 s a hash and 64 MiB an attempt on a Raspberry Pi 1 (one core,
 426 MB, measured on 2026-11-07);
 the new ones take about 55 % of that time and 30 % of that memory
 (`BenchmarkPassword` in `internal/store`, on one core).
-The PHC string carries the parameters, so an old hash still verifies;
-a stored string that asks for more than 256 MiB, 16 passes or 16 lanes
+The PHC string carries the parameters, so an old hash still verifies,
+and a sign-in that matches one hashes the password again with these:
+an old hash goes at its user's next sign-in, at the cost of one hash more then.
+Only `password_hash` is written, as `last_login_at` is,
+and only where it is still the old one;
+the row keeps its version and update time, since the password is the same.
+A stored string that asks for more than 256 MiB, 16 passes or 16 lanes
 is refused rather than allocated.
 
 ### The commands

@@ -220,3 +220,57 @@ func heapObjects() uint64 {
 	metrics.Read(m)
 	return m[0].Value.Uint64()
 }
+
+// A sign-in against a hash of the old parameters replaces it by one of
+// the current ones, without counting as an edit of the user; a wrong
+// password, a current hash, a hash changed meanwhile and a read-only
+// store keep the hash they have.
+func TestRehashAtSignIn(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	ctx := t.Context()
+	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := func() string {
+		var h string
+		s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id = ?`, anna.ID).Scan(&h)
+		return h
+	}
+	old, _ := hashWith("correct horse", oldArgonTime, oldArgonMemory, oldArgonThreads)
+	if _, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, old, anna.ID); err != nil {
+		t.Fatal(err)
+	}
+	before, _, _ := s.User(ctx, "anna")
+
+	if err := s.CheckPassword(ctx, "anna", "wrong"); !errors.Is(err, ErrBadPassword) || stored() != old {
+		t.Fatalf("a wrong password: %v, hash changed %v", err, stored() != old)
+	}
+	ro, err := OpenReadOnly(dir, Options{Version: "test", Logger: quiet()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	if err := ro.CheckPassword(ctx, "anna", "correct horse"); err != nil || stored() != old {
+		t.Fatalf("a read-only store: %v, hash changed %v", err, stored() != old)
+	}
+
+	if err := s.CheckPassword(ctx, "anna", "correct horse"); err != nil {
+		t.Fatal(err)
+	}
+	fresh := stored()
+	if !strings.HasPrefix(fresh, "$argon2id$v=19$m=19456,t=2,p=1$") || !VerifyPassword(fresh, "correct horse") || stale(fresh) {
+		t.Fatalf("after the sign-in: %q", fresh)
+	}
+	if after, _, _ := s.User(ctx, "anna"); after.Version != before.Version || !after.UpdatedAt.Equal(before.UpdatedAt) || after.AuthVersion != 1 {
+		t.Fatalf("the rehash is an edit: %+v, before %+v", after, before)
+	}
+	if err := s.CheckPassword(ctx, "anna", "correct horse"); err != nil || stored() != fresh {
+		t.Fatalf("a current hash: %v, rehashed %v", err, stored() != fresh)
+	}
+	s.rehash(ctx, anna.ID, old, "correct horse")
+	if stored() != fresh {
+		t.Fatal("a hash changed meanwhile was overwritten")
+	}
+}

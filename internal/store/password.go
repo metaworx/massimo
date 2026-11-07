@@ -180,6 +180,13 @@ func parseHash(hash string) (phc, bool) {
 	return h, true
 }
 
+// stale reports whether a hash that parses was made with parameters
+// other than a new hash's.
+func stale(hash string) bool {
+	h, ok := parseHash(hash)
+	return ok && (h.memory != argonMemory || h.time != argonTime || h.threads != argonThreads || len(h.key) != argonKeyLen || len(h.salt) != argonSaltLen)
+}
+
 // VerifyPassword reports whether password matches the PHC string hash;
 // an empty or malformed hash, or one beyond the ceiling, never matches.
 func VerifyPassword(hash, password string) bool {

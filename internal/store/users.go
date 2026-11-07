@@ -314,15 +314,17 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 
 // CheckPassword verifies a user's password; ErrBadPassword when it is
 // wrong or the user has none. The check costs the same time either way,
-// in a slot of the store's gate (ErrBusy when there is none).
+// in a slot of the store's gate (ErrBusy when there is none). A match
+// against a stale hash rehashes the password (rehash).
 func (s *Store) CheckPassword(ctx context.Context, name, password string) error {
 	leave, err := s.hashes.enter(ctx)
 	if err != nil {
 		return err
 	}
 	defer leave()
+	var id int64
 	var hash string
-	err = s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&hash)
+	err = s.db.QueryRowContext(ctx, `SELECT id, password_hash FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&id, &hash)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && hash == "" {
 		DummyVerify(password)
 		return ErrBadPassword
@@ -333,7 +335,32 @@ func (s *Store) CheckPassword(ctx context.Context, name, password string) error 
 	if !VerifyPassword(hash, password) {
 		return ErrBadPassword
 	}
+	s.rehash(ctx, id, hash, password)
 	return nil
+}
+
+// rehash replaces a stale hash, whose password has just matched, by one
+// of the current parameters, in the caller's slot. Only the hash is
+// written, as the last login is: the password is the same, so the row
+// keeps its version and update time. A hash changed meanwhile is left
+// alone, and so is the hash of a read-only store; a failure is logged,
+// since the old hash still verifies.
+func (s *Store) rehash(ctx context.Context, id int64, old, password string) {
+	if !stale(old) || s.writable() != nil {
+		return
+	}
+	fresh, err := HashPassword(password)
+	var res sql.Result
+	if err == nil {
+		res, err = s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?`, fresh, id, old)
+	}
+	if err != nil {
+		s.log.Warn("store: password not rehashed", "user", id, "error", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 1 {
+		s.log.Info("store: password rehashed with the current parameters", "user", id)
+	}
 }
 
 // NoteLogin records a login at now.
