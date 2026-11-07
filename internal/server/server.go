@@ -22,7 +22,11 @@
 //	                                                 {"mode":"vacation","temp":17,"until":"2026-11-10 12:00"}
 //	PUT  /api/v1/cubes/{sn}/rooms/{id}/setpoint      same body, addressed to the whole room
 //	GET  /api/v1/cubes/{sn}/backup?format=yaml|json  a backup file
-//	POST /api/v1/cubes/{sn}/restore/plan             what restoring the backup in the body would send
+//	GET  /api/v1/cubes/{sn}/backups                  the stored backups (backups_api.go)
+//	POST /api/v1/cubes/{sn}/backups                  take one now
+//	GET  /api/v1/cubes/{sn}/backups/{id}             a stored backup's file
+//	DELETE /api/v1/cubes/{sn}/backups/{id}           remove one
+//	POST /api/v1/cubes/{sn}/restore/plan             what restoring the backup in the body (or backup=<id>) would send
 //	POST /api/v1/cubes/{sn}/restore?plan=<hash>      send it; progress as restore_step events
 //	GET  /api/v1/cubes/{sn}/restore                  how the last restore went
 //	GET  /api/v1/cubes/{sn}/events                   server-sent events: connection and state changes
@@ -152,6 +156,10 @@ type Options struct {
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address.
 	DiscoverInterval time.Duration
+	// BackupMinute is the unit of backups.auto_min and backups.auto_max
+	// and how often a Cube's configuration is looked at for its
+	// automatic backup (backups.go); 0 is a minute. The tests shorten it.
+	BackupMinute time.Duration
 	// DiscoveryWait is how long a run waits for answers (default
 	// DefaultDiscoveryWait). DiscoveryAddr, the local address of the
 	// discovery socket (default ":23272"), and DiscoveryTargets, where
@@ -282,6 +290,10 @@ type runtime struct {
 	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
 	logMu  sync.Mutex
 	events []event // the last logSize events, for GET …/log
+
+	// bk is the Cube's configuration against its newest backup, for the
+	// automatic backup (backups.go).
+	bk backupWatch
 
 	// restore is the Cube's last restore, running or over, see
 	// restore_api.go.
@@ -437,6 +449,8 @@ func (s *Server) Run(ctx context.Context) error {
 		wctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 		stopWriter = cancel
 		go func() { defer close(writerDone); st.RunEvents(wctx) }()
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.pruneBackupsDaily(ctx, st) }()
 	} else {
 		close(writerDone)
 	}
@@ -563,6 +577,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.seedLearned(ctx, rt)
 				}
 				s.learnStoreID(ctx, rt)
+			}
+			switch e.Kind {
+			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
+				rt.bk.touch() // the configuration may have changed (backups.go)
 			}
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
@@ -793,6 +811,10 @@ func (s *Server) routes() {
 	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", "structure", s.deleteRoom)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", "lock", s.setDeviceLock)
 	api("GET /api/v1/cubes/{sn}/backup", "backup", s.getBackup)
+	api("GET /api/v1/cubes/{sn}/backups", "backup", s.listBackups)
+	api("POST /api/v1/cubes/{sn}/backups", "backup", s.postBackup)
+	api("GET /api/v1/cubes/{sn}/backups/{id}", "backup", s.getStoredBackup)
+	api("DELETE /api/v1/cubes/{sn}/backups/{id}", "restore", s.deleteBackup)
 	api("POST /api/v1/cubes/{sn}/restore/plan", "restore", s.planRestore)
 	api("POST /api/v1/cubes/{sn}/restore", "restore", s.startRestore)
 	api("GET /api/v1/cubes/{sn}/restore", "read", s.getRestore)

@@ -12,6 +12,8 @@
 package backup
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -200,6 +202,38 @@ func (f *File) RoomName(id uint8) string {
 		}
 	}
 	return ""
+}
+
+// ConfigHash is the SHA-256, hex, of the Cube's configuration in the
+// file: its own configuration, the rooms and the devices without their
+// live state, and without the wall thermostat's display choice, which
+// the file takes from the live state. The time, the tool, the NTP servers
+// and the raw lines are left out, so that two backups of a Cube whose
+// configuration did not change have the same hash: the server takes its
+// automatic backup when the hash leaves the newest backup's
+// (docs/store.md section 9 (e)).
+func ConfigHash(f *File) string {
+	devices := make([]Device, len(f.Devices))
+	for i, d := range f.Devices {
+		d.State = nil
+		if d.Wall != nil {
+			w := *d.Wall
+			w.DisplayActual = nil
+			d.Wall = &w
+		}
+		devices[i] = d
+	}
+	rooms := f.Rooms
+	if rooms == nil {
+		rooms = []cube.RoomMeta{}
+	}
+	data, _ := json.Marshal(struct {
+		CubeConfig *cube.CubeConfig `json:"cube_config"`
+		Rooms      []cube.RoomMeta  `json:"rooms"`
+		Devices    []Device         `json:"devices"`
+	}{f.CubeConfig, rooms, devices})
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // Messages re-parses the raw lines.

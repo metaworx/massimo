@@ -210,6 +210,10 @@ func (s *Store) Created() bool { return s.created }
 // SchemaVersion returns the file's schema version and its min_reader.
 func (s *Store) SchemaVersion() (version, minReader int) { return s.schema, s.minReader }
 
+// ReadOnly reports whether the store was opened read-only, so that
+// nothing may be written.
+func (s *Store) ReadOnly() bool { return s.readOnly }
+
 // formatTime writes t as the store keeps times.
 func formatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
 

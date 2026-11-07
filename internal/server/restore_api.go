@@ -32,6 +32,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 // Limits and costs of a restore.
@@ -125,7 +126,7 @@ func (s *Server) planRestore(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	p, _, err := s.makeRestorePlan(w, r, rt)
+	p, _, _, err := s.makeRestorePlan(w, r, rt)
 	if err != nil {
 		return err
 	}
@@ -148,7 +149,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 	if run := rt.restoring(); run != nil {
 		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running (%s)", run.ID)
 	}
-	v, p, err := s.makeRestorePlan(w, r, rt)
+	v, p, src, err := s.makeRestorePlan(w, r, rt)
 	if err != nil {
 		return err
 	}
@@ -157,6 +158,23 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	if v.RadioCommands > 0 && v.Budget.DutyCyclePct > maxRestoreDutyPct {
 		return s.refuseRestore(rt, http.StatusConflict, "radio duty cycle at %d %%, above %d %%; wait for the hourly reset", v.Budget.DutyCyclePct, maxRestoreDutyPct)
+	}
+	// A Cube with a row in the store keeps its configuration before the
+	// restore, and the file the restore was sent (docs/store.md 9 (e)).
+	if rt.store != nil && rt.storeID.Load() != 0 {
+		user := userIDOf(r)
+		if _, _, err := s.takeBackup(r.Context(), rt, store.ReasonBeforeRestore, user, ""); err != nil {
+			return s.refuseRestore(rt, http.StatusServiceUnavailable, "the backup before the restore was not stored: %v", err)
+		}
+		if src.data != nil {
+			format := "json"
+			if src.yaml {
+				format = "yaml"
+			}
+			if _, err := rt.store.AddBackup(r.Context(), store.Backup{CubeID: rt.storeID.Load(), Reason: store.ReasonUpload, Format: format, Tool: src.file.Tool, UserID: user}, src.data); err != nil {
+				s.log.Warn("the file of the restore was not stored", "cube", rt.serial, "error", err)
+			}
+		}
 	}
 	run := &restoreRun{ID: restoreID(), State: "running", Plan: v.Plan, Started: time.Now(), Steps: v.Steps, RadioCommands: v.RadioCommands}
 	if !rt.startRestore(run) {
@@ -175,6 +193,14 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 			defer s.wg.Done()
 		}
 		s.runRestore(ctx, rt, run, p, commandOf(r.Context()))
+		rt.restoreMu.Lock()
+		done := run.State == "done"
+		rt.restoreMu.Unlock()
+		if done {
+			// The file restored is the reference now: the next look says
+			// whether the Cube took all of it (backups.go).
+			rt.bk.restored(backup.ConfigHash(src.file))
+		}
 	}()
 	writeJSON(w, http.StatusAccepted, restoreAnswer(run.ID, len(p.Steps)))
 	return nil
@@ -209,29 +235,76 @@ func (s *Server) refuseRestore(rt *runtime, status int, format string, args ...a
 	return err
 }
 
+// restoreSource is the backup a plan or a restore is made from: a
+// stored one (backup=<id>), or the file in the body as it came.
+type restoreSource struct {
+	file   *backup.File
+	data   []byte // the body as sent; nil for a stored backup
+	yaml   bool
+	stored int64 // the stored backup's id; 0 for a body
+}
+
+// readRestoreSource reads the backup of a plan or restore request: the
+// stored backup backup=<id> names, else the file in the body.
+func (s *Server) readRestoreSource(w http.ResponseWriter, r *http.Request, rt *runtime) (*restoreSource, error) {
+	q := r.URL.Query().Get("backup")
+	if q == "" {
+		f, data, yaml, err := readBackup(w, r)
+		if err != nil {
+			return nil, err
+		}
+		return &restoreSource{file: f, data: data, yaml: yaml}, nil
+	}
+	if rt.store == nil || rt.storeID.Load() == 0 {
+		return nil, errNoHistory
+	}
+	id, err := strconv.ParseInt(q, 10, 64)
+	if err != nil || id < 1 {
+		return nil, fail(http.StatusBadRequest, "backup=%q is not a backup's id", q)
+	}
+	cubeID := rt.storeID.Load()
+	b, ok, err := rt.store.StoredBackup(r.Context(), cubeID, id)
+	if err != nil {
+		return nil, fail(http.StatusInternalServerError, "%v", err)
+	}
+	if !ok {
+		return nil, fail(http.StatusNotFound, "no backup %d of cube %s", id, rt.serial)
+	}
+	body, ok, err := rt.store.BackupBody(r.Context(), cubeID, id)
+	if err != nil || !ok {
+		return nil, fail(http.StatusInternalServerError, "backup %d: %v", id, err)
+	}
+	f, err := backup.Unmarshal(body, b.Format == "yaml")
+	if err != nil {
+		return nil, fail(http.StatusInternalServerError, "backup %d: %v", id, err)
+	}
+	return &restoreSource{file: f, yaml: b.Format == "yaml", stored: id}, nil
+}
+
 // makeRestorePlan reads the backup and the options of a plan or restore
 // request and computes the plan, with the checks both requests share:
 // the Cube is connected, the backup is this Cube's, the file and the
 // options are good.
-func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *runtime) (restorePlan, *backup.Plan, error) {
+func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *runtime) (restorePlan, *backup.Plan, *restoreSource, error) {
 	opts, err := restoreOptions(r.URL.Query())
 	if err != nil {
-		return restorePlan{}, nil, err
+		return restorePlan{}, nil, nil, err
 	}
-	f, err := readBackup(w, r)
+	src, err := s.readRestoreSource(w, r, rt)
 	if err != nil {
-		return restorePlan{}, nil, err
+		return restorePlan{}, nil, nil, err
 	}
+	f := src.file
 	snap := rt.client.Snapshot()
 	h := snap.Hello()
 	if h == nil || !rt.client.Connected() {
-		return restorePlan{}, nil, fail(http.StatusServiceUnavailable, "cube not connected")
+		return restorePlan{}, nil, nil, fail(http.StatusServiceUnavailable, "cube not connected")
 	}
 	if f.Cube.Serial == "" {
-		return restorePlan{}, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup names no cube; this is cube %s", h.Serial)
+		return restorePlan{}, nil, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup names no cube; this is cube %s", h.Serial)
 	}
 	if !strings.EqualFold(f.Cube.Serial, h.Serial) {
-		return restorePlan{}, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup is from cube %s, this is cube %s", f.Cube.Serial, h.Serial)
+		return restorePlan{}, nil, nil, s.refuseRestore(rt, http.StatusBadRequest, "the backup is from cube %s, this is cube %s", f.Cube.Serial, h.Serial)
 	}
 	opts.Hidden, opts.ShowHidden = rt.config().Hidden, rt.showHidden
 	cur := backup.Current{Snapshot: snap}
@@ -241,12 +314,12 @@ func (s *Server) makeRestorePlan(w http.ResponseWriter, r *http.Request, rt *run
 	}
 	p, err := backup.NewPlan(f, cur, opts)
 	if err != nil {
-		return restorePlan{}, nil, fail(http.StatusBadRequest, "bad backup file: %v", err)
+		return restorePlan{}, nil, nil, fail(http.StatusBadRequest, "bad backup file: %v", err)
 	}
 	if ntpErr != nil {
 		p.Notes = append(p.Notes, "the cube's NTP servers were not read ("+ntpErr.Error()+"); they are not compared")
 	}
-	return planView(p, rt.client.Budget()), p, nil
+	return planView(p, rt.client.Budget()), p, src, nil
 }
 
 // readNTP asks the Cube for its NTP servers through the queue, ahead of
@@ -266,25 +339,26 @@ func (s *Server) readNTP(ctx context.Context, rt *runtime) ([]string, error) {
 
 // readBackup reads the backup file from the body: JSON, or YAML when
 // the Content-Type says so or the body does not start with a brace.
-func readBackup(w http.ResponseWriter, r *http.Request) (*backup.File, error) {
+func readBackup(w http.ResponseWriter, r *http.Request) (*backup.File, []byte, bool, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBackupBytes)
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return nil, fail(http.StatusRequestEntityTooLarge, "backup larger than %d bytes", maxBackupBytes)
+			return nil, nil, false, fail(http.StatusRequestEntityTooLarge, "backup larger than %d bytes", maxBackupBytes)
 		}
-		return nil, fail(http.StatusBadRequest, "reading the body: %v", err)
+		return nil, nil, false, fail(http.StatusBadRequest, "reading the body: %v", err)
 	}
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
-		return nil, fail(http.StatusBadRequest, "the body must be a backup file, JSON or YAML")
+		return nil, nil, false, fail(http.StatusBadRequest, "the body must be a backup file, JSON or YAML")
 	}
-	f, err := backup.Unmarshal(data, isYAML(r.Header.Get("Content-Type")) || trimmed[0] != '{')
+	yaml := isYAML(r.Header.Get("Content-Type")) || trimmed[0] != '{'
+	f, err := backup.Unmarshal(data, yaml)
 	if err != nil {
-		return nil, fail(http.StatusBadRequest, "bad backup file: %v", err)
+		return nil, nil, false, fail(http.StatusBadRequest, "bad backup file: %v", err)
 	}
-	return f, nil
+	return f, data, yaml, nil
 }
 
 // isYAML reports whether a Content-Type names YAML.

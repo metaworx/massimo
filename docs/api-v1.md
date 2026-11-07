@@ -838,6 +838,18 @@ a number, 0 for ever, and applies at once;
 `log.keep_days` how many days the Cubes' events are kept (see `GET …/log`),
 30 by default, 0 for ever, at most 3650, and applies at once:
 a lower value removes the older events within moments.
+The backups' settings are whole numbers that apply at once (see Backups):
+`backups.auto_min`,
+the minutes without a change before the automatic backup (60, 1 to 10080),
+`backups.auto_max`, the minutes after the first change at the latest (120,
+1 to 10080),
+a request that leaves `backups.auto_min` above `backups.auto_max` answering
+`400` with nothing written; `backups.keep_days_auto`,
+the days an automatic backup is kept (90), `backups.keep_days_manual`,
+the days the others are kept (365), 0 for ever and at most 3650,
+and `backups.keep_newest`,
+how many of a Cube's newest backups are kept whatever their age (10, 0 to 1000);
+a change of the last three prunes at once.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
@@ -1296,6 +1308,76 @@ devices with configuration and state, Cube settings, NTP servers,
 plus the raw protocol lines.
 YAML comes as an attachment named `massimo-backup-<serial>-<time>.yaml`.
 
+### Backups
+
+The server keeps a history of each Cube's backups in its store
+(docs/store.md section 9 (e)), gzip, a few kilobytes each.
+It takes one by itself after a change of the Cube's configuration (`auto`):
+the rooms, names, device settings and week programmes,
+not the live state and not the NTP servers,
+compared with the newest backup's by a hash;
+the backup follows once `backups.auto_min` minutes passed without a further change,
+at the latest `backups.auto_max` minutes after the first,
+and a Cube that has none gets one at its first connection.
+Changes made outside Massimo count as well, once the Cube reports them,
+at the latest at the six-hourly refresh.
+A restore keeps the Cube's configuration before its first step (`before_restore`)
+and the file it was sent (`upload`);
+a backup taken by hand is `manual`.
+The settings of the section Settings decide how long they are kept:
+a Cube's newest `backups.keep_newest` whatever their age,
+of the others an automatic one for `backups.keep_days_auto` days and the rest for
+`backups.keep_days_manual`.
+A Cube without a row in the store (`serve -addr`) has no history:
+these routes answer `503`, and `GET …/backup` works as before.
+
+#### GET /api/v1/cubes/{sn}/backups
+
+The history, newest first, and,
+while the configuration differs from the newest backup's,
+when it last changed and when the automatic backup follows:
+
+```json
+{
+  "backups": [
+    {"id": 12, "taken_at": "2026-11-07T09:14:03.120Z", "reason": "manual", "format": "json",
+     "tool": "v0.10.0", "size": 23994, "sha256": "4c1f…", "user": "owner", "note": "before the holidays"},
+    {"id": 11, "taken_at": "2026-11-06T18:02:44.871Z", "reason": "auto", "format": "json",
+     "tool": "v0.10.0", "size": 23990, "sha256": "9ab0…"}
+  ],
+  "changed": "2026-11-07T09:30:12Z",
+  "due": "2026-11-07T10:30:12Z"
+}
+```
+
+`size` is the file's, before the store compresses it; `user` is absent for the
+server's own backups.
+Capability `backup`.
+
+#### POST /api/v1/cubes/{sn}/backups
+
+Take a backup now, as `GET …/backup` takes it,
+and keep it as `manual` with the user and an optional note,
+`{"note": "before the holidays"}` (at most 200 characters;
+another field answers `400`).
+`201` with the backup as the list shows it;
+`503` while the Cube is not connected.
+Capability `backup`, audited as `backup.take`.
+
+#### GET /api/v1/cubes/{sn}/backups/{id}?format=json|yaml
+
+The backup's file as an attachment named `massimo-backup-<serial>-<time>.<format>`,
+as it was stored, or converted to the format asked for.
+`404` for an id the Cube does not have.
+Capability `backup`.
+
+#### DELETE /api/v1/cubes/{sn}/backups/{id}
+
+Remove a backup from the history (`204`);
+the store keeps a tombstone without the file until the retention removes it.
+Capability `restore`, so that an operator cannot erase the history;
+audited as `backup.delete`.
+
 ### POST /api/v1/cubes/{sn}/restore/plan
 
 What restoring a backup would send, the dry run of `massimo restore`.
@@ -1304,6 +1386,8 @@ JSON with `Content-Type: application/json`,
 YAML with `application/yaml` or `text/yaml`;
 a body that does not start with `{` is read as YAML whatever the header says.
 At most 1 MB.
+`backup=<id>` takes a stored backup (see Backups) in place of the body,
+which is then left empty; `404` for an id the Cube does not have.
 The options are query parameters, the flags of the command:
 `portal` also restores the portal URL and whether the Cube polls it,
 `state` also re-applies each thermostat's mode and setpoint from the backup,
@@ -1375,6 +1459,12 @@ As the command, the restore stops at the first step the Cube refused or that fai
 the steps after it are not sent and the state is `failed`.
 After radio writes the server follows up the devices' configurations as after
 `PUT …/devices/{rf}/config`.
+A Cube with a row in the store first keeps a backup of its configuration
+(`before_restore`; the restore is refused with `503` when it cannot be stored)
+and the file of the body (`upload`), both with the user;
+a stored backup restored by `backup=<id>` is not stored again.
+After the restore the file restored is what the next automatic backup compares
+with, so a restore that wrote everything leaves nothing to back up.
 
 Refused with `409` while a restore is running on this Cube,
 when the plan has changed since it was made (another client wrote to the Cube,

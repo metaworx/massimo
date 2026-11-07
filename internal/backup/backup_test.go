@@ -422,3 +422,46 @@ func TestPlanMovesDeviceBetweenRooms(t *testing.T) {
 		}
 	}
 }
+
+// The configuration hash ignores the time, the tool, the NTP servers,
+// the raw lines and the live state, and changes with a name or a
+// setting.
+func TestConfigHash(t *testing.T) {
+	_, _, _, f := take(t)
+	copyOf := func() *File {
+		t.Helper()
+		data, err := f.Marshal(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, err := Unmarshal(data, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	base := ConfigHash(f)
+	g := copyOf()
+	g.TakenAt, g.Tool, g.NTP, g.Lines = g.TakenAt.Add(time.Hour), "other", []string{"ntp.example.org"}, nil
+	for i := range g.Devices {
+		g.Devices[i].State = nil
+	}
+	if ConfigHash(g) != base {
+		t.Fatal("the hash follows the time, the tool, the NTP servers, the lines or the state")
+	}
+	g = copyOf()
+	g.Rooms[0].Name = "Renamed"
+	if ConfigHash(g) == base {
+		t.Fatal("a room's name does not change the hash")
+	}
+	g = copyOf()
+	for i := range g.Devices {
+		if g.Devices[i].Thermostat != nil {
+			g.Devices[i].Thermostat.EcoTemp += 0.5
+			break
+		}
+	}
+	if ConfigHash(g) == base {
+		t.Fatal("a setting does not change the hash")
+	}
+}
