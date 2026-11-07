@@ -533,7 +533,8 @@ and the page works under a path prefix such as `/massimo/`
 ([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
 including every device state change, to a file as well.
-A restart from the API stops the server as SIGTERM does and exits with status 75,
+A restart from the API (`POST /api/v1/restart`, for the capability `restart`)
+stops the server as SIGTERM does and exits with status 75,
 which systemd, launchd and Homebrew answer with a start;
 a Windows service runs `massimo restart` instead,
 which stops and starts the service through the service manager.

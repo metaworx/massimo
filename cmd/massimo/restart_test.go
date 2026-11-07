@@ -4,13 +4,25 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/packaging"
 )
 
@@ -100,5 +112,96 @@ func TestUnitRestartsOnExitRestart(t *testing.T) {
 		if !strings.Contains(string(b), "\n"+line+"\n") {
 			t.Errorf("massimo.service lacks %s", line)
 		}
+	}
+}
+
+// A restart from the API, end to end: an open server asked from the box
+// answers 202, stops, closes its store with the request's audit row in
+// it, and exits with exitRestart for its service manager.
+func TestServeRestartsThroughTheAPI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Windows service restarts through massimo restart")
+	}
+	if testing.Short() {
+		t.Skip("builds the binary")
+	}
+	bin := filepath.Join(t.TempDir(), "massimo")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	data := t.TempDir()
+	cmd := exec.Command(bin, "-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0")
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "MASSIMO_") && !strings.HasPrefix(kv, "INVOCATION_ID=") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	cmd.Env = append(cmd.Env, "MASSIMO_ENV_FILE="+os.DevNull, restartVar+"="+restartExit)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	addr := make(chan string, 1)
+	var log strings.Builder
+	var logMu sync.Mutex
+	scanned := make(chan struct{})
+	go func() {
+		defer close(scanned)
+		sc := bufio.NewScanner(stderr)
+		for sc.Scan() {
+			logMu.Lock()
+			log.WriteString(sc.Text() + "\n")
+			logMu.Unlock()
+			if m := regexp.MustCompile(`msg="api listening" addr=(\S+) .*restart=exit`).FindStringSubmatch(sc.Text()); m != nil {
+				addr <- m[1]
+			}
+		}
+	}()
+	var base string
+	select {
+	case a := <-addr:
+		base = "http://" + a
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not start, or not with -restart exit")
+	}
+	resp, err := http.Post(base+"/api/v1/restart", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted || !strings.Contains(string(body), `"by": "exit"`) {
+		t.Fatalf("POST: %d %s", resp.StatusCode, body)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) || ee.ExitCode() != exitRestart {
+			t.Fatalf("serve ended with %v, want exit status %d", err, exitRestart)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("serve did not end for the restart")
+	}
+	<-scanned
+	if !strings.Contains(log.String(), `msg="stopped for a restart"`) || strings.Contains(log.String(), "error:") {
+		t.Fatalf("the log:\n%s", log.String())
+	}
+	if _, err := os.Stat(filepath.Join(data, "massimo.db-wal")); err == nil {
+		t.Fatal("the store was not closed: its -wal file is left")
+	}
+	st, err := store.Open(data, store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	rows, err := st.AuditList(t.Context(), time.Time{}, 10, "")
+	if err != nil || len(rows) == 0 || rows[0].Action != "server.restart" {
+		t.Fatalf("the audit after the restart: %+v %v", rows, err)
 	}
 }

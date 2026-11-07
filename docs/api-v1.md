@@ -1729,6 +1729,39 @@ in the moment between the start of the helper and its first status);
 `500` on Windows when the helper could not be started (the request is withdrawn);
 `502` when GitHub could not be asked.
 
+### GET /api/v1/restart, POST /api/v1/restart
+
+`GET` says whether this caller's `POST` would restart the server now,
+and who starts it again:
+`{"available": true, "by": "systemd"}`,
+or `{"available": false, "blocked": "<why>"}`.
+`by` is `systemd`, `launchd` (also Homebrew's job), `windows`
+(the Windows service manager) or `exit` (`serve -restart exit`:
+whatever runs the server, told by the exit status).
+
+`POST` restarts the server.
+It stops as on SIGTERM once this request is answered and its audit row written,
+and exits with status 75, which systemd, launchd and Homebrew answer with a start;
+a Windows service runs `massimo restart` instead,
+which stops and starts the service through the service manager.
+Answers `202` with `{"ok": true, "by": "systemd"}`;
+`GET /healthz` then reports a new `started_at` once the server is back.
+Sends nothing to a Cube, and a retry with the same `Idempotency-Key`
+is answered with the first `202` rather than restarting again.
+
+An open server, with no users or without a token (see "Authentication"),
+takes the `POST` only from the box itself:
+a loopback peer with no `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header,
+so that nobody on the LAN, and no client of a reverse proxy on the box,
+can restart it;
+anyone else gets `403` with the reason.
+`403` also without the capability `restart`;
+`409` when no service manager would start the server again
+(`serve` in a terminal, or `-restart off`),
+while a restart is under way,
+or while an update runs, which restarts the server itself;
+`500` when the restart could not be started (on Windows, the helper).
+
 ## The LAN proxy
 
 Besides the API, `massimo serve` answers as a Cube on TCP port 62910 and UDP discovery,

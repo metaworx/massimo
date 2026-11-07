@@ -22,12 +22,13 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
-- The capability `restart`, held by owner and manager (migration 0006;
-  `docs/api-v1.md`, "Authentication").
+- `POST /api/v1/restart` restarts the server for the capability
+  `restart` of owner and manager (migration 0006), an open server only
+  from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
 
 - `serve -restart` (`MASSIMO_RESTART`) says when the server restarts
-  for the API, stopping and exiting 75 for its service manager, and
-  `massimo restart` restarts the installed server (`README.md`, "Server").
+  for the API, stopping and exiting 75 for its service manager; `massimo
+  restart` restarts the installed server (`README.md`, "Server").
 
 ### Changed
 

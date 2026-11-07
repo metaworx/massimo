@@ -37,6 +37,8 @@
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
+//	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
+//	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
 //	POST /api/v1/logout                              end the session
 //	GET  /api/v1/me                                  who the caller is and what the caller may do
@@ -251,6 +253,8 @@ type Server struct {
 	updates updateCheck
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
+	// restartGate lets one restart through (restart_api.go).
+	restartGate restartGate
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -843,6 +847,8 @@ func (s *Server) routes() {
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
+	api("GET /api/v1/restart", "restart", s.getRestart)
+	api("POST /api/v1/restart", "restart", s.startRestart)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
