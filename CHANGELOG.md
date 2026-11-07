@@ -138,6 +138,10 @@ the next minor, a fix counts the suffix up.
   every retry, and its return logged with how long it was down
   (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
 
+- A metadata block without bytes after its device list, as a LAN client
+  may send it, gets none added when the server or the proxy writes it
+  back (`internal/protocol/cube`).
+
 ### Security
 
 - A server that asks for no key answers only its local network, a

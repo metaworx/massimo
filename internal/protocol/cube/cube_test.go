@@ -732,3 +732,19 @@ func TestIsThermostat(t *testing.T) {
 		}
 	}
 }
+
+// A metadata block without bytes after its device list encodes without
+// them: Encode adds the default 0x01 only to metadata built, not read.
+func TestMetadataWithoutTrailingBytes(t *testing.T) {
+	b := []byte{'V', 2, 0, 0}
+	m, err := DecodeMetadata(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back, err := m.Encode(); err != nil || !bytes.Equal(back, b) {
+		t.Fatalf("encoded as %x, want %x (%v)", back, b, err)
+	}
+	if back, _ := (&Metadata{}).Encode(); !bytes.Equal(back, []byte{'V', 2, 0, 0, 1}) {
+		t.Fatalf("built metadata encoded as %x", back)
+	}
+}
