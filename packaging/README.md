@@ -178,6 +178,9 @@ Infomaniak (its name servers, not merely registered there):
 it needs `curl` and `jq`,
 and a token with the DNS scope from the API section of the Infomaniak
 manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
+It hands the token to `curl` on its standard input, never on its command line,
+which every local user can read,
+and gives each call 30 seconds.
 It is untested against the real API until the owner's day;
 the test runs it against a fake one.
 

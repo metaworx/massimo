@@ -55,6 +55,9 @@ the next minor, a fix counts the suffix up.
 - A user added under a removed user's name no longer inherits that
   user's settings and colour schemes (docs/api-v1.md).
 
+- The Infomaniak hook hands its token to curl on standard input, not on
+  the command line, and gives each call 30 seconds (packaging/README.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
