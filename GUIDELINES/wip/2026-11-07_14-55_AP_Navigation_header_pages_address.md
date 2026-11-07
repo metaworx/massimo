@@ -1,4 +1,4 @@
-# AP Navigation v1.0: Header, user menu, pages in the address
+# AP Navigation v1.1: Header, user menu, pages in the address
 
 ## TL;DR
 
@@ -19,7 +19,8 @@ No server change.
 - below 600 px → `👤 🏠 ☰`, ☰ holding what does not fit
 - Home without a connected Cube → a notice: address, last data,
   what to check, a button to System settings → Cubes
-- order at full width: D3, open
+- full width (D3-B) → left `Massimo <version> · updated <time> ↻`, the Cube's clock;
+  right the connection pill, the Cube choice, `👤 🏠 📄 ⚙`
 
 ### Blocks
 
@@ -27,7 +28,7 @@ No server change.
 2. The 👤 menu; Settings loses who is signed in and Log out
 3. My profile, My settings, System settings
 4. The page in the address; back and forward
-5. ☰ on a narrow screen; the tests switch pages through `show_view`
+5. The header's order (D3-B), ☰ on a narrow screen; the tests switch pages through `show_view`
 6. The Home notice without a connected Cube
 7. Full screenshot set, branch pushed, pull request
 
@@ -52,9 +53,20 @@ Windows service, passed on by a teammate session:
   Home is empty under a header reading only "updated 12:06:38".
 
 Settled, by the owner or as recommended at the TL;DR gates of 2026-11-07
-(`PLAN++ SendButtons` took the recommendations it did not name):
+(`PLAN++ SendButtons` took the recommendations it did not name,
+and the owner's `PLAN++` after it took D3-B, recommended):
 
 - **D3, narrow: the owner's.** `👤 🏠 ☰`, the user left of Home.
+- **D3-B, full width: the owner's alternative.**
+  The left line reads `Massimo <version> · updated <time> ↻`,
+  refresh beside the time it renews, then the Cube's clock;
+  the connection pill moves in front of the Cube choice,
+  its label kept for screen readers only,
+  and the Cube choice to the right, beside `👤 🏠 📄 ⚙`.
+  ☰ folds only Log and System settings, and the Cube choice keeps its place,
+  on a line of its own below 600 px.
+  (A, the header as now with `👤 🏠 📄 ⚙ ↻` at the right, and C,
+  B with the Cube choice centred in the free space, were not taken.)
 - **D4-A.** The header folds at a CSS breakpoint below 600 px,
   predictable and testable at 390 and 1100 px; no measuring in JS.
 - **D5, the owner's.** The 👤 menu holds who is signed in
@@ -74,20 +86,6 @@ Settled, by the owner or as recommended at the TL;DR gates of 2026-11-07
   "sign out my other browsers" without an administrator.
   The API already allows it (`targetUser(r, st, true)`, the own-name access
   of `auth.go`).
-
-Open, for this plan's gate:
-
-- **D3. The header at full width.**
-  - **A.** `👤 🏠 📄 ⚙ ↻` at the right, the left line as now:
-    ☰ then folds the right end of the row.
-  - **B (recommended), the owner's alternative.**
-    The left line reads `Massimo <version> · updated <time> ↻`,
-    refresh beside the time it renews;
-    the connection pill moves in front of the Cube choice,
-    and the Cube choice to the right, beside `👤 🏠 📄 ⚙`.
-    ☰ then folds only Log and System settings, and the Cube choice keeps its place.
-  - **C.** As B, with the Cube choice centred in the free space;
-    it moves whenever the time or the name beside it changes width.
 
 ## Analysis
 
@@ -119,10 +117,16 @@ Open, for this plan's gate:
 
 ## Implementation Plan
 
-The gate of every block as AP SendButtons states it,
-`make ui-test` at 1100 and 390 px in English and German.
-The branch starts from AP SendButtons' and merges `origin/main` before its pull request.
-Each block is one functional commit citing `AP Navigation v1.0, Block <n>`,
+Every block ends with the contract's test gate for what it touched:
+`MASSIMO_ENV_FILE=/dev/null go test ./...` (`-race` for `internal/server`),
+`make cross`, `make ui-test` at 1100 and 390 px in English and German
+(from a worktree: `UI_TEST_PYTHON` to the main venv, free `UI_TEST_*_PORT`s),
+`gofmt -l .` empty, `go vet ./...` for linux, windows and darwin,
+and `GUIDELINES/shared/tools/changelog.sh check`.
+Nothing reaches a Cube: the tests use the fake Cube with the recorded greeting.
+The branch starts from `claude/send-buttons` (pull request 89),
+whose busy helpers it uses, and merges `origin/main` before its pull request.
+Each block is one functional commit citing `AP Navigation v1.1, Block <n>`,
 with its CHANGELOG bullet, `docs/ui.md` moving with it.
 
 ### Block 1: LogSheet
@@ -156,7 +160,8 @@ with its CHANGELOG bullet, `docs/ui.md` moving with it.
    `#profile`, `#prefs` and `#system`; `uiPartials` split by page.
 2. My profile: the display name and password (Change password moves here),
    the own sessions and keys with Revoke and Create key,
-   built from `users.js`' panel parts; Save busy through AP SendButtons' helper.
+   built from `users.js`' panel parts; Save busy through `whileBusy`
+   and off while unchanged through `sendWhenChanged` (`components.js`).
 3. My settings: language, appearance, poll, expert, clock,
    the "only on this device" switches, the sync and reload notes.
 4. System settings: Cubes, backups, users, roles, software;
@@ -180,13 +185,16 @@ with its CHANGELOG bullet, `docs/ui.md` moving with it.
 
 ### Block 5: NarrowHeader
 
-1. `index.html`: `details#nav-menu.menu` (☰) with labelled items
+1. `index.html`, `style.css`: the header in D3-B's order, a grid of
+   the left line, the Cube choice and the navigation, the Cube choice
+   on a line of its own below 600 px.
+2. `index.html`: `details#nav-menu.menu` (☰) with labelled items
    for what folds; `style.css` below 600 px hides the folded buttons
    and shows ☰, highlighted while one of its pages is open.
-2. `tools/ui-test/helpers.py`: `show_view(page, view)` clicks the button
+3. `tools/ui-test/helpers.py`: `show_view(page, view)` clicks the button
    or opens ☰ first; every direct header click in the tests
    and `screenshots.py` goes through it.
-3. Tests: at 390 px ☰ is shown and the folded buttons hidden, at 1100 the reverse;
+4. Tests: the order of the header at 1100 px; at 390 px ☰ is shown and the folded buttons hidden, at 1100 the reverse;
    each item opens its page; no horizontal scroll.
 
 **Verification:** the gate, all four cases.
@@ -222,7 +230,7 @@ Block 2, for the form the others follow:
 ```text
 feat(ui): Say who is signed in, in a user menu in the header
 
-The header's user menu shows the name and role, and holds My profile, My settings and Sign out, which leave Settings (AP Navigation v1.0, Block 2).
+The header's user menu shows the name and role, and holds My profile, My settings and Sign out, which leave Settings (AP Navigation v1.1, Block 2).
 
 Key changes:
 - internal/server/ui/index.html, components.js: the user menu, closing as the room menus do.
@@ -239,3 +247,7 @@ Assisted-by: claude-code:claude-opus-5-5
 - v1.0 (2026-11-07): The first revision, from the TL;DR gates of 2026-11-07:
   D3 narrow and D5 the owner's, D4-A, D6-A, D7-A, D12-A, D13-A, D14-A;
   D3 at full width open, with the owner's alternative as B.
+- v1.1 (2026-11-07): D3-B settled by the owner's `PLAN++`, recommended;
+  Block 5 lays the header out in its order;
+  the block gate and the branch's start stated here,
+  no longer cited from AP SendButtons, which retires.
