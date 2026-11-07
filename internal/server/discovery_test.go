@@ -29,7 +29,7 @@ func freeUDP(t *testing.T, ip string) string {
 	return pc.LocalAddr().String()
 }
 
-// startDiscovering starts a server over the fake Cube KEQ0537249 with the
+// startDiscovering starts a server over the fake Cube KEQ0000100 with the
 // given options for discovery.
 func startDiscovering(t *testing.T, opts Options) (*httptest.Server, *Server) {
 	t.Helper()
@@ -43,7 +43,7 @@ func startDiscovering(t *testing.T, opts Options) (*httptest.Server, *Server) {
 		t.Fatal(err)
 	}
 	if opts.Cubes == nil {
-		opts.Cubes = []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}
+		opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}
 	}
 	opts.Queue = engine.Options{Gap: time.Millisecond}
 	if opts.DiscoveryWait == 0 {
@@ -90,7 +90,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	if getJSON(t, ts, "", "/api/v1/cubes", &cubes) != 200 || len(cubes) != 2 {
 		t.Fatalf("cubes %v", cubes)
 	}
-	if cubes[0]["serial"] != "KEQ0537249" || cubes[0]["configured"] != true {
+	if cubes[0]["serial"] != "KEQ0000100" || cubes[0]["configured"] != true {
 		t.Fatalf("configured cube %v", cubes[0])
 	}
 	for k := range cubes[1] {
@@ -107,7 +107,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	// cube_found once per new serial, not on later runs.
 	postDiscovery(t, ts)
 	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log", &evs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 	n := 0
 	for _, e := range evs {
 		if e.Kind == "cube_found" {
@@ -177,7 +177,7 @@ func TestDiscoveryDHCPFlag(t *testing.T) {
 		t.Fatalf("listed %v", got)
 	}
 	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log", &evs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 	for _, e := range evs {
 		if e.Kind != "cube_found" {
 			continue
@@ -227,7 +227,7 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	// Wait for the proxy's greeting data, without which it answers nothing.
 	eventually(t, "the cube", func() bool {
 		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	_, out := postDiscovery(t, ts)
 	found, _ := out["found"].([]any)
@@ -270,19 +270,19 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 		t.Skipf("cannot listen on 127.0.0.3: %v", err)
 	}
 	defer second.Close()
-	at2, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0537249", 0x0b9573)
+	at2, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0b9573)
 	if err != nil {
 		t.Skip(err)
 	}
 	defer at2.Close()
-	at3, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0537249", 0x0b9573)
+	at3, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0b9573)
 	if err != nil {
 		t.Skip(err)
 	}
 	defer at3.Close()
 	at3.SetSilent(true)
 
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0537249"}}, CubePort: port,
+	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port,
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at2.Addr(), at3.Addr()}})
 	// The first run at the start finds it; no interval is needed for that.
 	cube := func() map[string]any {

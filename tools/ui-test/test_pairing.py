@@ -23,9 +23,9 @@ from helpers import named_buttons, scroll_width, wait_until
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/").rstrip("/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
 SERVE_LOG = os.environ.get("UI_TEST_SERVE_LOG", "")
-CUBE = "/api/v1/cubes/KEQ0537249"
+CUBE = "/api/v1/cubes/KEQ0000100"
 DEV = "0abcde"
-PANEL = ".cube-panel[data-serial='KEQ0537249']"
+PANEL = ".cube-panel[data-serial='KEQ0000100']"
 ENDED = {"en": "Pairing ended; 1 device joined.", "de": "Anlernen beendet; 1 Gerät hat sich gemeldet."}
 LEFT = {"en": "s left", "de": "noch"}
 IN_ROOM = "state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"

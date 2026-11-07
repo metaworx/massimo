@@ -269,7 +269,7 @@ def step(page, which):
         found.locator(".env-lines").wait_for(state="visible")
     elif which == "cubes":
         page.locator("#view-settings").click()
-        panel = page.locator(".cube-panel[data-serial='KEQ0537249']")
+        panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
         panel.locator("summary").click()
         panel.locator("form.cube-form").wait_for(state="visible")
         page.locator(".cube-found-row[data-serial='KEQ0000000']").wait_for(state="visible")

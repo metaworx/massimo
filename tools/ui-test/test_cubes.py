@@ -12,7 +12,7 @@ import pytest
 
 from helpers import named_buttons, scroll_width, wait_until
 
-PANEL = ".cube-panel[data-serial='KEQ0537249']"
+PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
 
 def open_panel(page):
@@ -33,13 +33,13 @@ def test_name_saved_and_taken_back(page, case):
     named_buttons(page, "a Cube's panel")
     form.locator("input[name=name]").fill("Renamed")
     form.locator("button[type=submit]").click()
-    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.name === 'Renamed')", 5), "the new name is saved"
-    assert "Renamed" in page.locator("#cube-select option[value='KEQ0537249']").inner_text(), "the header shows the new name"
+    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Renamed')", 5), "the new name is saved"
+    assert "Renamed" in page.locator("#cube-select option[value='KEQ0000100']").inner_text(), "the header shows the new name"
     take = panel.locator(".take-file[data-field=name]")
-    assert take.count() == 1 and "MASSIMO_CUBE_KEQ0537249_NAME" in panel.locator(".cube-differs").inner_text(), \
+    assert take.count() == 1 and "MASSIMO_CUBE_KEQ0000100_NAME" in panel.locator(".cube-differs").inner_text(), \
         "the settings file's name is offered"
     take.click()
-    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.name === 'Fake Cube')", 5), "the file's value taken"
+    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Fake Cube')", 5), "the file's value taken"
     assert panel.locator(".cube-differs").count() == 0, "no difference left"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the Cube's panel"
 
@@ -65,7 +65,7 @@ def test_hidden_devices(page, case):
         form.locator(".cube-hidden-list button").first.click()
     form.locator("button[type=submit]").click()
     assert wait_until(page, "!(" + gone + ")", 5), "showing them again brings the room back"
-    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0537249' && c.hidden.length === 0)", 5), "nothing hidden any more"
+    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.hidden.length === 0)", 5), "nothing hidden any more"
     assert scroll_width(page) <= case.width, "no horizontal scroll in Settings → Cubes"
     page.locator("#view-tiles").click()
 
@@ -85,7 +85,7 @@ def test_found_cube_added_and_removed(page):
     assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in Settings → Cubes"
     found.locator("button").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add serves the found Cube"
-    assert page.evaluate("state.serial") == "KEQ0537249", "the selected Cube stays"
+    assert page.evaluate("state.serial") == "KEQ0000100", "the selected Cube stays"
     other = page.locator(".cube-panel[data-serial='KEQ0000000']")
     other.locator("summary").click()
     other.locator(".remove-cube").click()
@@ -109,11 +109,11 @@ def test_redraw_of_an_open_panel_loads_nothing(page, case):
     assert wait_until(page, "!!document.querySelector(%r)" % (PANEL + " .pair-open"), 5), "the pairing is drawn"
     page.wait_for_timeout(500)  # the panel's own loads are in
     held = []
-    page.route("**/api/v1/cubes/KEQ0537249/pairing", lambda route: held.append(route))
+    page.route("**/api/v1/cubes/KEQ0000100/pairing", lambda route: held.append(route))
     try:
         page.evaluate("renderCubes()")
         panel.locator(".pair-open").click()
-        seconds = "pair-seconds-KEQ0537249"
+        seconds = "pair-seconds-KEQ0000100"
         assert wait_until(page, "document.activeElement && document.activeElement.id === %r" % seconds, 5), "the time has the focus"
         page.keyboard.press("End")
         page.keyboard.type("5")
@@ -126,7 +126,7 @@ def test_redraw_of_an_open_panel_loads_nothing(page, case):
         assert page.locator("#" + seconds).input_value() == "6050", "every key typed is in the time"
         assert asked == 0, f"a redraw asks for the pairing again: {asked} request(s)"
     finally:
-        page.unroute("**/api/v1/cubes/KEQ0537249/pairing")
+        page.unroute("**/api/v1/cubes/KEQ0000100/pairing")
     page.locator("#view-tiles").click()
 
 
@@ -147,5 +147,5 @@ def test_hide_and_show_keep_what_is_typed(page, case):
     assert wait_until(page, "!document.querySelector(%r)" % (PANEL + " .cube-hidden-list button"), 5), "Show again takes it off the list"
     assert form.locator("input[name=name]").input_value() == "Typed, not saved", "the name typed stays after Show again"
     assert form.locator("input[name=proxy]").input_value() == "127.0.0.1:62999", "the proxy typed stays after Show again"
-    assert page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0537249').name") == "Fake Cube", "nothing saved"
+    assert page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100').name") == "Fake Cube", "nothing saved"
     page.locator("#view-tiles").click()

@@ -67,7 +67,7 @@ func TestTakeMatchesFixture(t *testing.T) {
 			t.Fatalf("line %d:\n got %s\nwant %s", i, f.Lines[i], want[i].String())
 		}
 	}
-	if f.Cube.Serial != "KEQ0537249" || f.Cube.Firmware != "1.1.3" {
+	if f.Cube.Serial != "KEQ0000100" || f.Cube.Firmware != "1.1.3" {
 		t.Fatalf("cube info %+v", f.Cube)
 	}
 	if len(f.Rooms) != 6 || len(f.Devices) != 6 || f.CubeConfig == nil {

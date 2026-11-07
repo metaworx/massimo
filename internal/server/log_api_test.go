@@ -26,7 +26,7 @@ import (
 func logOf(t *testing.T, ts *httptest.Server, query string) (int, []event) {
 	t.Helper()
 	var evs []event
-	code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log"+query, &evs)
+	code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log"+query, &evs)
 	return code, evs
 }
 
@@ -35,7 +35,7 @@ func logOf(t *testing.T, ts *httptest.Server, query string) (int, []event) {
 func rawLog(t *testing.T, ts *httptest.Server, query string) []map[string]any {
 	t.Helper()
 	var evs []map[string]any
-	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log"+query, &evs); code != 200 {
+	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log"+query, &evs); code != 200 {
 		t.Fatalf("log%s: %d", query, code)
 	}
 	return evs
@@ -138,7 +138,7 @@ func TestLogFromStore(t *testing.T) {
 	})
 	// The device view has its received times; the stored copy not.
 	var dev map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", &dev)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/1514b6", &dev)
 	if dev["received"] == nil {
 		t.Fatalf("the device view without received: %v", dev)
 	}
@@ -172,7 +172,7 @@ func TestLogSurvivesRestart(t *testing.T) {
 	}
 	defer fc.Close()
 	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0537249", Configured: true, Address: addr, Source: store.SourceEnv})
+	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
 	run := func() (*httptest.Server, func()) {
 		cfg, _ := CubeFromRow(row)
 		s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
@@ -180,7 +180,7 @@ func TestLogSurvivesRestart(t *testing.T) {
 		done := make(chan struct{})
 		go func() { s.Run(ctx); close(done) }()
 		ts := httptest.NewServer(s.Handler())
-		waitConnected(t, ts, "KEQ0537249")
+		waitConnected(t, ts, "KEQ0000100")
 		return ts, func() { ts.Close(); cancel(); <-done }
 	}
 	ts, stop := run()
@@ -215,7 +215,7 @@ func TestLogLastEvents(t *testing.T) {
 	}
 	defer fc.Close()
 	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0537249", Configured: true, Address: addr, Source: store.SourceEnv})
+	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
 	cfg, _ := CubeFromRow(row)
 	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -223,7 +223,7 @@ func TestLogLastEvents(t *testing.T) {
 	go func() { s.Run(ctx); close(done) }()
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
-	waitConnected(t, ts, "KEQ0537249")
+	waitConnected(t, ts, "KEQ0000100")
 	tctx := s.track()
 	if tctx == nil {
 		t.Fatal("Run tracks nothing")
@@ -290,7 +290,7 @@ func TestLogWithoutStore(t *testing.T) {
 		t.Fatalf("limit=1001: %d", code)
 	}
 	var raw json.RawMessage
-	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log?kind=nothing", &raw); code != 200 || string(raw) != "[]" {
+	if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=nothing", &raw); code != 200 || string(raw) != "[]" {
 		t.Fatalf("an empty page: %d %s", code, raw)
 	}
 }

@@ -39,6 +39,10 @@ the next minor, a fix counts the suffix up.
   room's settings, as the original software does, with `configure`;
   `"copy": false` skips it (docs/api-v1.md).
 
+- The recorded greeting that the tests and CI's fake Cube load, and its
+  UI-test copy, carry placeholder serials
+  (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
+
 ### Fixed
 
 - A Debian package built between two tags holds the version its file

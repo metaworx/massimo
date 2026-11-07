@@ -47,8 +47,8 @@ func detailOf(t *testing.T, row auditView) map[string]any {
 func TestAuditOfEveryWrite(t *testing.T) {
 	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	// A read and the stream ticket leave no row.
-	callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0537249/rooms", "secret", "")
-	ticketFor(t, ts, "secret", "KEQ0537249")
+	callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/rooms", "secret", "")
+	ticketFor(t, ts, "secret", "KEQ0000100")
 	if n := len(auditRows(t, ts, "secret", "?limit=1000")); n != 0 {
 		t.Fatalf("a read or a ticket left a row: %d", n)
 	}
@@ -103,7 +103,7 @@ func TestAuditOfEveryWrite(t *testing.T) {
 		if want != "login.failed" && row.User != store.BootstrapUser || want == "login.failed" && row.User != "" {
 			t.Errorf("%s %s: user %q", r.method, r.path, row.User)
 		}
-		if strings.Contains(r.path, "{sn}") && row.Cube != "KEQ0537249" {
+		if strings.Contains(r.path, "{sn}") && row.Cube != "KEQ0000100" {
 			t.Errorf("%s %s: cube %q", r.method, r.path, row.Cube)
 		}
 		d := detailOf(t, row)
@@ -122,14 +122,14 @@ func TestAuditDetails(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
 	viewer := userToken(t, st, "vi", store.RoleViewer)
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", "secret", `{"mode":"auto"}`)
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/1514B6/lock", "secret", `{"locked":false}`)
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", viewer, `{"mode":"auto"}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/1514B6/lock", "secret", `{"locked":false}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", viewer, `{"mode":"auto"}`)
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"Zed","password":"pw","role":"viewer"}`)
 	callAPI(t, ts, "POST", "/api/v1/roles", "secret", `{"key":"night"}`)
 	callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"Zed","password":"wrong"}`)
 	callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"zed","password":"pw"}`)
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", "secret", `{"mode":"boost"}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"boost"}`)
 	rows := auditRows(t, ts, "secret", "")
 	if len(rows) != 8 {
 		t.Fatalf("%d rows", len(rows))
@@ -215,7 +215,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	body := strings.Repeat(`{"mode":"auto"}`, 1000)
 	codes := map[int]int{}
 	for i := 0; i < 20; i++ {
-		r := httptest.NewRequest("PUT", "/api/v1/cubes/KEQ0537249/rooms/6/setpoint", countingBody{strings.NewReader(body), &read})
+		r := httptest.NewRequest("PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", countingBody{strings.NewReader(body), &read})
 		r.RemoteAddr = "192.0.2.10:4321"
 		if i%2 == 1 {
 			r.Header.Set("Authorization", "Bearer wrong")
@@ -243,7 +243,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	var d map[string]any
 	json.Unmarshal(row.Detail, &d)
 	statuses, _ := d["statuses"].(map[string]any)
-	if row.Result != store.ResultRefused || row.Remote != "192.0.2.10" || row.Action != "setpoint" || row.Cube != "KEQ0537249" || row.UserID != 0 ||
+	if row.Result != store.ResultRefused || row.Remote != "192.0.2.10" || row.Action != "setpoint" || row.Cube != "KEQ0000100" || row.UserID != 0 ||
 		d["count"] != float64(20) || statuses["401"] != float64(10) || statuses["429"] != float64(10) || d["body"] != nil || d["bytes"] != nil {
 		t.Fatalf("row %+v, detail %v", row, d)
 	}

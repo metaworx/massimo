@@ -94,7 +94,7 @@ func TestUIServed(t *testing.T) {
 	if code, _, _ := get("/api/v1/cubes?token=secret"); code != 401 {
 		t.Fatalf("GET /api/v1/cubes?token=secret: %d, want 401", code)
 	}
-	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events?token=secret", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events?token=secret", nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
@@ -105,7 +105,7 @@ func TestUIServed(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		t.Fatalf("events?token=secret: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
-	req, _ = http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events?token=wrong", nil)
+	req, _ = http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events?token=wrong", nil)
 	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
 		t.Fatal(err)

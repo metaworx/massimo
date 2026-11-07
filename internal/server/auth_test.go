@@ -58,26 +58,26 @@ func TestAuthLimiter(t *testing.T) {
 func TestTicketStore(t *testing.T) {
 	clock := &fakeClock{t: time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)}
 	s := newTicketStore(clock.now)
-	id, exp, err := s.issue("keq0537249", nil)
+	id, exp, err := s.issue("keq0000100", nil)
 	if err != nil || len(id) != 48 || !exp.Equal(clock.t.Add(TicketLifetime)) {
 		t.Fatalf("issue %q %v %v", id, exp, err)
 	}
-	if _, ok := s.redeem(id, "jeq0192422"); ok {
+	if _, ok := s.redeem(id, "keq0000200"); ok {
 		t.Fatal("ticket valid for another cube")
 	}
-	id, _, _ = s.issue("keq0537249", nil)
-	if _, ok := s.redeem(id, "keq0537249"); !ok {
+	id, _, _ = s.issue("keq0000100", nil)
+	if _, ok := s.redeem(id, "keq0000100"); !ok {
 		t.Fatal("fresh ticket refused")
 	}
-	if _, ok := s.redeem(id, "keq0537249"); ok {
+	if _, ok := s.redeem(id, "keq0000100"); ok {
 		t.Fatal("ticket used twice")
 	}
-	id, _, _ = s.issue("keq0537249", nil)
+	id, _, _ = s.issue("keq0000100", nil)
 	clock.t = clock.t.Add(TicketLifetime)
-	if _, ok := s.redeem(id, "keq0537249"); ok {
+	if _, ok := s.redeem(id, "keq0000100"); ok {
 		t.Fatal("expired ticket accepted")
 	}
-	if _, ok := s.redeem("", "keq0537249"); ok {
+	if _, ok := s.redeem("", "keq0000100"); ok {
 		t.Fatal("empty ticket accepted")
 	}
 }
@@ -121,14 +121,14 @@ func ticketFor(t *testing.T, ts *httptest.Server, token, sn string) string {
 
 func TestEventStreamTicket(t *testing.T) {
 	_, ts, _ := start(t, "secret")
-	events := ts.URL + "/api/v1/cubes/KEQ0537249/events"
-	if r := send(t, "POST", ts.URL+"/api/v1/cubes/KEQ0537249/events/ticket", ""); r.StatusCode != 401 {
+	events := ts.URL + "/api/v1/cubes/KEQ0000100/events"
+	if r := send(t, "POST", ts.URL+"/api/v1/cubes/KEQ0000100/events/ticket", ""); r.StatusCode != 401 {
 		t.Fatalf("ticket without the token: %d", r.StatusCode)
 	}
 	if r := send(t, "POST", ts.URL+"/api/v1/cubes/NOPE/events/ticket", "secret"); r.StatusCode != 404 {
 		t.Fatalf("ticket for an unknown cube: %d", r.StatusCode)
 	}
-	tk := ticketFor(t, ts, "secret", "keq0537249")
+	tk := ticketFor(t, ts, "secret", "keq0000100")
 	if r := send(t, "GET", events+"?ticket="+tk, ""); r.StatusCode != 200 || r.Header.Get("Deprecation") != "" {
 		t.Fatalf("stream with a ticket: %d %v", r.StatusCode, r.Header)
 	}
@@ -136,8 +136,8 @@ func TestEventStreamTicket(t *testing.T) {
 		t.Fatalf("ticket reused: %d", r.StatusCode)
 	}
 	// A ticket opens only the event stream.
-	tk = ticketFor(t, ts, "secret", "KEQ0537249")
-	if r := send(t, "GET", ts.URL+"/api/v1/cubes/KEQ0537249/devices?ticket="+tk, ""); r.StatusCode != 401 {
+	tk = ticketFor(t, ts, "secret", "KEQ0000100")
+	if r := send(t, "GET", ts.URL+"/api/v1/cubes/KEQ0000100/devices?ticket="+tk, ""); r.StatusCode != 401 {
 		t.Fatalf("ticket on another route: %d", r.StatusCode)
 	}
 	// The old way still works, marked deprecated.
@@ -166,7 +166,7 @@ func TestFailedTokensLockTheAddressOut(t *testing.T) {
 	}
 	// Wrong stream tickets count as failures too, and the lockout covers
 	// the stream.
-	if r := send(t, "GET", cubes+"/KEQ0537249/events?ticket=nope", ""); r.StatusCode != 429 {
+	if r := send(t, "GET", cubes+"/KEQ0000100/events?ticket=nope", ""); r.StatusCode != 429 {
 		t.Fatalf("stream during the lockout: %d", r.StatusCode)
 	}
 	// Without a token configured nothing is limited.

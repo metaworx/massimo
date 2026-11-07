@@ -46,16 +46,16 @@ func sLines(fc *fakecube.Server) [][]byte {
 
 func TestConfigEndpoints(t *testing.T) {
 	fc, ts, s := start(t, "")
-	rt := s.cubes["keq0537249"]
+	rt := s.cubes["keq0000100"]
 	snap := rt.client.Snapshot()
 	const rf = "1514b6" // radiator thermostat in room 6 of the fixture
 	dev := cube.RFAddress(0x1514b6)
 
 	// Rename a room and a device: metadata writes, mirrored into the snapshot.
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6", `{"name":"Renamed"}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`); code != 200 {
 		t.Fatalf("rename room: %d", code)
 	}
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf, `{"name":"New name"}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+rf, `{"name":"New name"}`); code != 200 {
 		t.Fatalf("rename device: %d", code)
 	}
 	if countType(fc, 'm') != 2 {
@@ -78,7 +78,7 @@ func TestConfigEndpoints(t *testing.T) {
 		{"/rooms/42", `{"name":"x"}`},
 		{"/devices/" + rf, `{"room_id":0}`},
 	} {
-		if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249"+c.path, c.body); code != 400 && code != 404 {
+		if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100"+c.path, c.body); code != 400 && code != 404 {
 			t.Fatalf("PUT %s %s: %d", c.path, c.body, code)
 		}
 	}
@@ -86,7 +86,7 @@ func TestConfigEndpoints(t *testing.T) {
 	// Device configuration: wakeup of the room, one 0x11 with the merged
 	// values, then a c: refresh.
 	before := len(fc.Received())
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf+"/config", `{"eco_temp":16.5}`); code != 200 || out["ok"] != true {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+rf+"/config", `{"eco_temp":16.5}`); code != 200 || out["ok"] != true {
 		t.Fatalf("device config: %d %v", code, out)
 	}
 	got := fc.Received()[before:]
@@ -105,29 +105,29 @@ func TestConfigEndpoints(t *testing.T) {
 	}
 	// Validation and device type checks.
 	for _, body := range []string{`{"eco_temp":40}`, `{"temp_offset":1.2}`, `{"boost_minutes":7}`, `{"decalc_day":"funday"}`, `{"display_actual":true}`, `{}`} {
-		if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf+"/config", body); code != 400 {
+		if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+rf+"/config", body); code != 400 {
 			t.Fatalf("config %s: %d, want 400", body, code)
 		}
 	}
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/config", `{"temp_offset":1}`); code != 400 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/config", `{"temp_offset":1}`); code != 400 {
 		t.Fatalf("room config with offset: %d", code)
 	}
 
 	// Room configuration: every thermostat of the room, per-device results.
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/config", `{"boost_minutes":10}`); code != 200 || out["ok"] != true || len(out["devices"].([]any)) != 1 {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/config", `{"boost_minutes":10}`); code != 200 || out["ok"] != true || len(out["devices"].([]any)) != 1 {
 		t.Fatalf("room config: %d %v", code, out)
 	}
 	// GET room config and programme.
-	if code, out := do(t, ts, "GET", "/api/v1/cubes/KEQ0537249/rooms/6/config", ""); code != 200 || out["source"] != rf || len(out["devices"].([]any)) != 1 {
+	if code, out := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/rooms/6/config", ""); code != 200 || out["source"] != rf || len(out["devices"].([]any)) != 1 {
 		t.Fatalf("room config view: %d %v", code, out)
 	}
-	if code, out := do(t, ts, "GET", "/api/v1/cubes/KEQ0537249/rooms/6/program", ""); code != 200 || out["source"] != rf || out["monday"] == nil {
+	if code, out := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/rooms/6/program", ""); code != 200 || out["source"] != rf || out["monday"] == nil {
 		t.Fatalf("room programme view: %d %v", code, out)
 	}
 
 	// Room week programme: a group radiogram per day (flags 04, room id).
 	nS := len(sLines(fc))
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/program", `{"monday":[{"temp":17,"until":"07:00"},{"temp":21,"until":"24:00"}]}`); code != 200 || out["ok"] != true {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/program", `{"monday":[{"temp":17,"until":"07:00"},{"temp":21,"until":"24:00"}]}`); code != 200 || out["ok"] != true {
 		t.Fatalf("room programme: %d %v", code, out)
 	}
 	lines := sLines(fc)
@@ -138,12 +138,12 @@ func TestConfigEndpoints(t *testing.T) {
 	if l[1] != 0x04 || l[2] != cube.RFSetWeekProgram || l[9] != 6 || l[10] != byte(cube.Monday) {
 		t.Fatalf("room programme line % x", l)
 	}
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/rooms/6/program", `{"monday":[{"temp":17,"until":"07:00"}]}`); code != 400 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/program", `{"monday":[{"temp":17,"until":"07:00"}]}`); code != 400 {
 		t.Fatalf("programme not ending at 24:00 accepted: %d", code)
 	}
 	// Device week programme: direct, two days.
 	nS = len(sLines(fc))
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf+"/program", `{"saturday":[{"temp":18,"until":"24:00"}],"sunday":[{"temp":18,"until":"24:00"}]}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+rf+"/program", `{"saturday":[{"temp":18,"until":"24:00"}],"sunday":[{"temp":18,"until":"24:00"}]}`); code != 200 {
 		t.Fatalf("device programme: %d", code)
 	}
 	lines = sLines(fc)
@@ -157,7 +157,7 @@ func TestConfigEndpoints(t *testing.T) {
 	// (TestAddCopiesTheRoomsSettings and those after it).
 	nS = len(sLines(fc))
 	nM := countType(fc, 'm')
-	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf, `{"room_id":1,"copy":false}`); code != 200 {
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+rf, `{"room_id":1,"copy":false}`); code != 200 {
 		t.Fatalf("move: %d %v", code, out)
 	}
 	lines = sLines(fc)
@@ -271,14 +271,14 @@ func startCopyCube(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	waitFor(t, "the cube", func() bool {
 		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c) == 200 && c.Connected
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	return fc, ts, s
 }
@@ -329,7 +329,7 @@ func roomTemps(t *testing.T, rf cube.RFAddress, offset float64) string {
 // differ followed by 0x11 again.
 func TestAddCopiesTheRoomsSettings(t *testing.T) {
 	fc, ts, s := startCopyCube(t, nil)
-	const base = "/api/v1/cubes/KEQ0537249"
+	const base = "/api/v1/cubes/KEQ0000100"
 	before := len(fc.Received())
 	code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"Neu","room_id":1}`)
 	if code != 200 {
@@ -349,7 +349,7 @@ func TestAddCopiesTheRoomsSettings(t *testing.T) {
 		"z:1e,G,01", roomTemps(t, 0x14d08e, 0), roomTemps(t, copyNew, 0), roomTemps(t, copyWall, -0.5),
 		"z:1e,G,01", valve.String(),
 		"z:1e,G,01"}
-	prog := s.cubes["keq0537249"].client.Snapshot().Config(0x14d08e).Thermostat.WeekProgram
+	prog := s.cubes["keq0000100"].client.Snapshot().Config(0x14d08e).Thermostat.WeekProgram
 	for _, d := range []cube.Weekday{cube.Monday, cube.Tuesday, cube.Wednesday, cube.Thursday, cube.Friday} {
 		ls, err := cube.CmdSetDayProgram(cube.Target{RFAddress: copyNew}, d, prog[d])
 		if err != nil {
@@ -374,7 +374,7 @@ func TestAddCopiesTheRoomsSettings(t *testing.T) {
 func TestAddWithoutCopy(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, nil)
 	before := len(fc.Received())
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1,"copy":false}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", `{"room_id":1,"copy":false}`)
 	if code != 200 || out["copied"] != nil {
 		t.Fatalf("add without copy: %d %v", code, out)
 	}
@@ -391,7 +391,7 @@ func TestAddWithoutCopy(t *testing.T) {
 func TestAddContactCopiesNothing(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, nil)
 	before := len(fc.Received())
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0d0e0f", `{"name":"Fenster","room_id":1}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0d0e0f", `{"name":"Fenster","room_id":1}`)
 	if code != 200 || out["copied"] != nil {
 		t.Fatalf("add a contact: %d %v", code, out)
 	}
@@ -410,7 +410,7 @@ func TestAddContactCopiesNothing(t *testing.T) {
 func TestMoveCopiesTheNewRoomsSettings(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, nil)
 	before := len(fc.Received())
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/1514b6", `{"room_id":1}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/1514b6", `{"room_id":1}`)
 	if code != 200 {
 		t.Fatalf("move: %d %v", code, out)
 	}
@@ -454,7 +454,7 @@ func TestCopyStopsAtADiscard(t *testing.T) {
 			return m.Type == 's' && err == nil && rc.Command == cube.RFSetTemperatures
 		}
 	})
-	const base = "/api/v1/cubes/KEQ0537249"
+	const base = "/api/v1/cubes/KEQ0000100"
 	code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"room_id":1}`)
 	if msg, _ := out["error"].(string); code != 502 || !strings.Contains(msg, "device 0a0b0c is in room 1, but copying the room's settings stopped") {
 		t.Fatalf("a discarded 0x11: %d %v", code, out)
@@ -486,7 +486,7 @@ func withConfigRoom(t *testing.T, greeting []cube.Message, rf cube.RFAddress, ro
 func logKinds(t *testing.T, ts *httptest.Server, n int) []string {
 	t.Helper()
 	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/log?limit=500", &evs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
 	var kinds []string
 	for i, e := range evs {
 		if i >= n {
@@ -510,12 +510,12 @@ func hasKind(kinds []string, kind string) bool {
 func listedRF(t *testing.T, ts *httptest.Server, rf string) (device, inRoom bool) {
 	t.Helper()
 	var devs []map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs)
 	for _, d := range devs {
 		device = device || d["rf_address"] == rf
 	}
 	var rooms []map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/rooms", &rooms)
 	for _, r := range rooms {
 		for _, d := range r["devices"].([]any) {
 			inRoom = inRoom || d.(map[string]any)["rf_address"] == rf
@@ -531,7 +531,7 @@ func listedRF(t *testing.T, ts *httptest.Server, rf string) (device, inRoom bool
 // devices, the rooms and the counts, and the metadata event came.
 func TestRemoveListedDevice(t *testing.T) {
 	fc, ts, s := startCopyCube(t, nil)
-	const base = "/api/v1/cubes/KEQ0537249"
+	const base = "/api/v1/cubes/KEQ0000100"
 	var before cubeView
 	getJSON(t, ts, "", base, &before)
 	events := len(logKinds(t, ts, 0))
@@ -544,7 +544,7 @@ func TestRemoveListedDevice(t *testing.T) {
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e}, false, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(0x14d08e, 1, true).String(),
 		"t:01,1,FNCO", "m:"})
-	for _, d := range s.cubes["keq0537249"].client.Snapshot().Metadata().Devices {
+	for _, d := range s.cubes["keq0000100"].client.Snapshot().Metadata().Devices {
 		if d.RFAddress == 0x14d08e {
 			t.Fatal("the metadata still lists the device")
 		}
@@ -571,7 +571,7 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, nil)
 	events := len(logKinds(t, ts, 0))
 	sent := len(fc.Received())
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", ""); code != 200 {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", ""); code != 200 {
 		t.Fatalf("remove: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"t:01,1,CgsM"})
@@ -587,7 +587,7 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, 1) })
 	sent := len(fc.Received())
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/0d0e0f", ""); code != 200 {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0d0e0f", ""); code != 200 {
 		t.Fatalf("remove: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
@@ -603,9 +603,9 @@ func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
 // refused, and nothing reaches the Cube.
 func TestRemoveRefused(t *testing.T) {
 	fc, ts, s := start(t, "")
-	s.cubes["keq0537249"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x1514b6} })
+	s.cubes["keq0000100"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x1514b6} })
 	for path, want := range map[string]int{"1514b6": 404, "0b9573": 400, "zz": 400, "0f0f0f": 404} {
-		if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/"+path, ""); code != want {
+		if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/"+path, ""); code != want {
 			t.Fatalf("DELETE %s: %d %v, want %d", path, code, out, want)
 		}
 	}
@@ -624,7 +624,7 @@ func TestCopyAfterADiscardedMode(t *testing.T) {
 			return m.Type == 's' && err == nil && rc.Command == cube.RFSetTemperature
 		}
 	})
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", `{"room_id":1}`)
 	copied, _ := out["copied"].(map[string]any)
 	if code != 200 || copied["mode_not_set"] != true || copied["valve"] != true || copied["days"] != float64(5) {
 		t.Fatalf("add with a discarded 0x40: %d %v", code, out)
@@ -638,9 +638,9 @@ func TestCopyAfterADiscardedMode(t *testing.T) {
 // given the room's temperatures, nor taken for the room's reference.
 func TestCopyKeepsAwayFromHiddenDevices(t *testing.T) {
 	fc, ts, s := startCopyCube(t, nil)
-	s.cubes["keq0537249"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
+	s.cubes["keq0000100"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
 	before := len(fc.Received())
-	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1}`)
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", `{"room_id":1}`)
 	if code != 200 {
 		t.Fatalf("add: %d %v", code, out)
 	}
@@ -664,7 +664,7 @@ func TestConcurrentAddsIntoOneRoom(t *testing.T) {
 	answers := make(chan map[string]any, 2)
 	for _, rf := range []string{"0a0b0c", "0b0c0d"} {
 		go func() {
-			code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/"+rf, `{"room_id":1}`)
+			code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+rf, `{"room_id":1}`)
 			if code != 200 {
 				out = map[string]any{"code": code, "answer": out}
 			}
@@ -677,7 +677,7 @@ func TestConcurrentAddsIntoOneRoom(t *testing.T) {
 		}
 	}
 	listed := 0
-	for _, d := range s.cubes["keq0537249"].client.Snapshot().Metadata().Devices {
+	for _, d := range s.cubes["keq0000100"].client.Snapshot().Metadata().Devices {
 		if (d.RFAddress == copyNew || d.RFAddress == copyNew2) && d.RoomID == 1 {
 			listed++
 		}
@@ -698,14 +698,14 @@ func TestConcurrentAddsIntoOneRoom(t *testing.T) {
 // at all.
 func TestRemoveLeavesHiddenDevicesAlone(t *testing.T) {
 	fc, ts, s := startCopyCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, cube.HiddenRoom) })
-	s.cubes["keq0537249"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
+	s.cubes["keq0000100"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
 	sent := len(fc.Received())
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/14d08e", ""); code != 200 {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/14d08e", ""); code != 200 {
 		t.Fatalf("remove 14d08e: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01", cube.CmdSetGroup(0x14d08e, 1, true).String(), "t:01,1,FNCO", "m:"})
 	sent = len(fc.Received())
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/0d0e0f", ""); code != 200 {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0d0e0f", ""); code != 200 {
 		t.Fatalf("remove 0d0e0f: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"t:01,1,DQ4P"})
@@ -724,7 +724,7 @@ func TestRemoveListedOnly(t *testing.T) {
 		fc.Greeting = kept
 	})
 	sent := len(fc.Received())
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/151495", ""); code != 200 {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/151495", ""); code != 200 {
 		t.Fatalf("remove: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"m:"})
@@ -737,10 +737,10 @@ func TestRemoveListedOnly(t *testing.T) {
 // Cube's next device list does not bring it back, the next greeting does.
 func TestRemovedDeviceTheCubeKeeps(t *testing.T) {
 	_, ts, s := startCopyCube(t, func(fc *fakecube.Server) { fc.Keep = map[cube.RFAddress]bool{0x14d08e: true} })
-	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/14d08e", ""); code != 200 {
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/14d08e", ""); code != 200 {
 		t.Fatalf("remove: %d %v", code, out)
 	}
-	rt := s.cubes["keq0537249"]
+	rt := s.cubes["keq0000100"]
 	if _, err := rt.client.Send(t.Context(), cube.CmdList); err != nil {
 		t.Fatal(err)
 	}
@@ -750,7 +750,7 @@ func TestRemovedDeviceTheCubeKeeps(t *testing.T) {
 	if res := rt.queue.Enqueue(engine.Command{Reconnect: true}).Wait(t.Context()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	waitFor(t, "the device after the greeting", func() bool { return getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/14d08e", nil) == 200 })
+	waitFor(t, "the device after the greeting", func() bool { return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/14d08e", nil) == 200 })
 }
 
 // A removal and an add at once: each reads the metadata the other wrote,
@@ -759,11 +759,11 @@ func TestRemoveAndAddAtOnce(t *testing.T) {
 	_, ts, s := startCopyCube(t, nil)
 	codes := make(chan int, 2)
 	go func() {
-		code, _ := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0537249/devices/14d08e", "")
+		code, _ := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/14d08e", "")
 		codes <- code
 	}()
 	go func() {
-		code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0537249/devices/0a0b0c", `{"room_id":1,"copy":false}`)
+		code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", `{"room_id":1,"copy":false}`)
 		codes <- code
 	}()
 	for range 2 {
@@ -772,7 +772,7 @@ func TestRemoveAndAddAtOnce(t *testing.T) {
 		}
 	}
 	added, removed := false, true
-	for _, d := range s.cubes["keq0537249"].client.Snapshot().Metadata().Devices {
+	for _, d := range s.cubes["keq0000100"].client.Snapshot().Metadata().Devices {
 		added = added || d.RFAddress == copyNew && d.RoomID == 1
 		removed = removed && d.RFAddress != 0x14d08e
 	}

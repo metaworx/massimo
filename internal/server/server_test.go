@@ -53,7 +53,7 @@ func startWith(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts.Cubes = []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}
+	opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}
 	opts.Queue = engine.Options{Gap: time.Millisecond}
 	s := New(opts)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,16 +96,16 @@ func getJSON(t *testing.T, ts *httptest.Server, token, path string, v any) int {
 func TestServerReadsAndSetpoints(t *testing.T) {
 	fc, ts, s := start(t, "")
 	var c cubeView
-	if getJSON(t, ts, "", "/api/v1/cubes/keq0537249", &c) != 200 || c.Rooms != 6 || c.Devices != 6 || c.Firmware != "1.1.3" || len(c.RoomList) != 6 {
+	if getJSON(t, ts, "", "/api/v1/cubes/keq0000100", &c) != 200 || c.Rooms != 6 || c.Devices != 6 || c.Firmware != "1.1.3" || len(c.RoomList) != 6 {
 		t.Fatalf("cube %+v", c)
 	}
 	var devs []view.Device
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices", &devs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs)
 	if len(devs) != 6 || devs[0].Name == "" {
 		t.Fatalf("devices %+v", devs)
 	}
 	var rooms []view.Room
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/rooms", &rooms)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/rooms", &rooms)
 	if len(rooms) != 6 {
 		t.Fatalf("rooms %+v", rooms)
 	}
@@ -117,16 +117,16 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		}
 	}
 	var d deviceDetail
-	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", &d) != 200 || d.Thermostat == nil || d.Thermostat.ComfortTemp != 21.5 || d.RoomID != 6 {
+	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/1514b6", &d) != 200 || d.Thermostat == nil || d.Thermostat.ComfortTemp != 21.5 || d.RoomID != 6 {
 		t.Fatalf("device %+v", d)
 	}
-	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/abcdef", nil) != 404 {
+	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/abcdef", nil) != 404 {
 		t.Fatal("unknown device not 404")
 	}
 	// Setpoint on a device, then on a room.
 	for _, c := range []struct{ path, body, want string }{
-		{"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", `{"mode":"manual","temp":21.5}`, "s:AARAAAAAFRS2Bms="},
-		{"/api/v1/cubes/KEQ0537249/rooms/6/setpoint", `{"mode":"auto"}`, "s:AARAAAAAFRS2BgA="},
+		{"/api/v1/cubes/KEQ0000100/devices/1514b6/setpoint", `{"mode":"manual","temp":21.5}`, "s:AARAAAAAFRS2Bms="},
+		{"/api/v1/cubes/KEQ0000100/rooms/6/setpoint", `{"mode":"auto"}`, "s:AARAAAAAFRS2BgA="},
 	} {
 		req, _ := http.NewRequest("PUT", ts.URL+c.path, strings.NewReader(c.body))
 		resp, err := http.DefaultClient.Do(req)
@@ -150,7 +150,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		}
 	}
 	// Key lock: wakeup of the room, then radiogram 0x80 to the device.
-	req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0537249/devices/1514b6/lock", strings.NewReader(`{"locked":false}`))
+	req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/1514b6/lock", strings.NewReader(`{"locked":false}`))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -171,7 +171,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	for _, c := range []struct {
 		path string
 		want int
-	}{{"/api/v1/cubes/KEQ0537249/rooms/6", 409}, {"/api/v1/cubes/KEQ0537249/rooms/42", 404}} {
+	}{{"/api/v1/cubes/KEQ0000100/rooms/6", 409}, {"/api/v1/cubes/KEQ0000100/rooms/42", 404}} {
 		req, _ = http.NewRequest("DELETE", ts.URL+c.path, nil)
 		resp, _ = http.DefaultClient.Do(req)
 		resp.Body.Close()
@@ -179,32 +179,32 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 			t.Fatalf("DELETE %s: %d, want %d", c.path, resp.StatusCode, c.want)
 		}
 	}
-	rt := s.cubes["keq0537249"]
+	rt := s.cubes["keq0000100"]
 	withRoom := *rt.client.Snapshot().Metadata()
 	withRoom.Rooms = append(append([]cube.RoomMeta(nil), withRoom.Rooms...), cube.RoomMeta{ID: 7, Name: "Empty"})
 	cmds, _ := cube.WriteMetadataCommands(&withRoom)
 	_, data, _ := strings.Cut(cmds[0].Data, ",")
 	rt.client.ApplyLocal(cube.Message{Type: 'M', Data: "00,01," + data})
 	before := countType(fc, 'm')
-	req, _ = http.NewRequest("DELETE", ts.URL+"/api/v1/cubes/KEQ0537249/rooms/7", nil)
+	req, _ = http.NewRequest("DELETE", ts.URL+"/api/v1/cubes/KEQ0000100/rooms/7", nil)
 	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || countType(fc, 'm') != before+1 || len(rt.client.Snapshot().Metadata().Rooms) != 6 {
 		t.Fatalf("DELETE empty room: %d, m lines %d→%d, rooms %d", resp.StatusCode, before, countType(fc, 'm'), len(rt.client.Snapshot().Metadata().Rooms))
 	}
 	// Bad requests.
-	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0537249/devices/1514b6/setpoint", strings.NewReader(`{"mode":"boost"}`))
+	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/1514b6/setpoint", strings.NewReader(`{"mode":"boost"}`))
 	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Fatalf("boost accepted: %d", resp.StatusCode)
 	}
 	// Backup download.
-	resp, _ = http.Get(ts.URL + "/api/v1/cubes/KEQ0537249/backup?format=yaml")
+	resp, _ = http.Get(ts.URL + "/api/v1/cubes/KEQ0000100/backup?format=yaml")
 	body := make([]byte, 200)
 	n, _ := resp.Body.Read(body)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || !strings.Contains(string(body[:n]), "serial: KEQ0537249") {
+	if resp.StatusCode != 200 || !strings.Contains(string(body[:n]), "serial: KEQ0000100") {
 		t.Fatalf("backup %d %q", resp.StatusCode, body[:n])
 	}
 }
@@ -247,7 +247,7 @@ func TestPeriodicRefreshReconnects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, RefreshInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, RefreshInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	t.Cleanup(func() { cancel(); fc.Close() })
@@ -276,26 +276,26 @@ func TestDeviceValueTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := time.Now().Add(-time.Second)
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0537249", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
+	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	var c cubeView
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !c.Connected; time.Sleep(20 * time.Millisecond) {
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249", &c)
+		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c)
 	}
 	if !c.Connected || c.ObservedSince.Before(before) {
 		t.Fatalf("cube %+v", c)
 	}
 	var d map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/1514b6", &d)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/1514b6", &d)
 	rec, _ := d["received"].(map[string]any)
 	if d["last_seen"] == nil || rec["setpoint"] == nil || rec["valve_pct"] == nil || d["stale"] != nil {
 		t.Fatalf("device %v", d)
 	}
 	var u map[string]any
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0537249/devices/14d08e", &u)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/14d08e", &u)
 	if _, ok := u["last_seen"]; ok || u["rf_address"] != "14d08e" {
 		t.Fatalf("unreported device has times: %v", u)
 	}
@@ -393,7 +393,7 @@ func TestLockoutBehindProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0537249/events", nil)
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

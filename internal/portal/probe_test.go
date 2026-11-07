@@ -10,7 +10,7 @@ import (
 )
 
 func hello(slots int) []cube.Message {
-	return []cube.Message{{Type: 'H', Data: "KEQ0537249,0b9573,0113,00000000,53c00ada,00," + hexByte(slots) + ",1a0b04,091e,03,0000"}}
+	return []cube.Message{{Type: 'H', Data: "KEQ0000100,0b9573,0113,00000000,53c00ada,00," + hexByte(slots) + ",1a0b04,091e,03,0000"}}
 }
 
 func hexByte(n int) string {
@@ -24,17 +24,17 @@ func TestProberJudgesBySlots(t *testing.T) {
 		Default:  "i:x\r\n",
 		ILine:    "000051b1,00000000,ffffffff",
 	}
-	text, lines := p.Reply("KEQ0537249", hello(50))
+	text, lines := p.Reply("KEQ0000100", hello(50))
 	if text != "i:000051b1,00000000,ffffffff\r\ns:AAA=\r\n" || len(lines) != 2 || lines[1] != `s:AAA=\r\n` {
 		t.Fatalf("first reply %q %v", text, lines)
 	}
 	// Second poll: slots dropped → variant a accepted; variant b goes out.
-	text, _ = p.Reply("KEQ0537249", hello(49))
+	text, _ = p.Reply("KEQ0000100", hello(49))
 	if text != "s:AAA=\n" {
 		t.Fatalf("second reply %q", text)
 	}
 	// Third poll: slots unchanged → b had no effect; default from now on.
-	text, _ = p.Reply("KEQ0537249", hello(49))
+	text, _ = p.Reply("KEQ0000100", hello(49))
 	if text != "i:x\r\n" || !p.Done() {
 		t.Fatalf("third reply %q done=%v", text, p.Done())
 	}
