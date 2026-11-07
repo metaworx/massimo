@@ -61,6 +61,8 @@ var actions = map[string]string{
 	"PUT /api/v1/cubes/{sn}/devices/{rf}/program":  "device.program",
 	"POST /api/v1/cubes/{sn}/restore/plan":         "restore.plan",
 	"POST /api/v1/cubes/{sn}/restore":              "restore.start",
+	"POST /api/v1/cubes/{sn}/backups":              "backup.take",
+	"DELETE /api/v1/cubes/{sn}/backups/{id}":       "backup.delete",
 	"POST /api/v1/cubes/{sn}/events/ticket":        "", // a read in disguise
 	"POST /api/v1/cubes/{sn}/pairing":              "pairing.start",
 	"DELETE /api/v1/cubes/{sn}/pairing":            "pairing.stop",

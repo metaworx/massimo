@@ -11,8 +11,12 @@ the next minor, a fix counts the suffix up.
 ### Added
 
 - The store keeps each Cube's backups, gzip, pruned by reason and age
-  with the newest of a Cube kept (migration 0005; `docs/store.md`
+  as the `backups.*` settings say (migration 0005; `docs/store.md`
   section 9).
+
+- The server takes a Cube's backup after a change of its configuration,
+  by hand and before every restore; `…/backups` lists, downloads and
+  deletes them, and a restore takes `backup=<id>` (`docs/api-v1.md`).
 
 - The store keeps the Cubes' events (migration 0004), written in
   batches and pruned daily by `log.keep_days` in `/api/v1/settings`
