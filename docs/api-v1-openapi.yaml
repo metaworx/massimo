@@ -402,7 +402,9 @@ paths:
     post:
       summary: Create an API key for the user
       x-capability: users
-      description: The key is shown once, in token; the store keeps its hash. It never expires.
+      description: >-
+        The key is shown once, in token; the store keeps its hash. It never expires. A retry with the same
+        Idempotency-Key answers 201 without token.
       parameters: [{$ref: "#/components/parameters/name"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true

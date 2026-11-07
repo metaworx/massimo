@@ -39,6 +39,11 @@ the next minor, a fix counts the suffix up.
   room's settings, as the original software does, with `configure`;
   `"copy": false` skips it (docs/api-v1.md).
 
+### Fixed
+
+- A new API key is no longer kept in its command's result, nor given
+  out again by a replay of its `Idempotency-Key` (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

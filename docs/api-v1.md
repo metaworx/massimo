@@ -412,6 +412,10 @@ and answers `201` with the key once:
 {"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
 ```
 
+The key is kept nowhere but in this answer:
+the command of the request keeps the answer without `token`,
+and a retry with its `Idempotency-Key` answers `201` without it too.
+
 `DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
 a token of another user is `404`.
 
@@ -620,6 +624,8 @@ the path, the query or the body differ) is `422`,
 and one whose request is still running `409`.
 A page that lost the connection while a setpoint was on its way retries
 with the key and learns the outcome without a second radio command.
+A command keeps its answer without `password`, `current_password` and `token`,
+so the replay of a new API key's creation answers without the key.
 The login, the logout, the stream ticket and the preferences take no key
 and are no commands.
 
