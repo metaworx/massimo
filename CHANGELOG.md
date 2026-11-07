@@ -59,6 +59,9 @@ the next minor, a fix counts the suffix up.
   configured: the address tried, the last data and what to check
   (`docs/ui.md`, "Rooms").
 
+- `GET /api/v1/cubes/{sn}/log` takes `since`, an RFC 3339 time, for the
+  events at or after it (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/log").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

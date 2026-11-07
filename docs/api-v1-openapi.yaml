@@ -1543,6 +1543,7 @@ paths:
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {name: before, in: query, description: "An event's id for the page before it, or an RFC 3339 time for the events before that time", schema: {type: string, example: "4711"}}
+        - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
         - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
         - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
         - {name: device, in: query, description: Only events of this radio address, schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: 0abcde}}

@@ -69,13 +69,15 @@ func (s *Server) learnStoreID(ctx context.Context, rt *runtime) {
 type logQuery struct {
 	beforeID int64
 	before   time.Time
+	since    time.Time
 	kind     string
 	device   string
 	limit    int
 }
 
-// parseLogQuery reads before (an event's id, or an RFC 3339 time), limit
-// (1 to 1000, 200 by default), kind and device (a radio address).
+// parseLogQuery reads before (an event's id, or an RFC 3339 time), since
+// (an RFC 3339 time, not after a before time), limit (1 to 1000, 200 by
+// default), kind and device (a radio address).
 func parseLogQuery(r *http.Request) (logQuery, error) {
 	q := r.URL.Query()
 	lq := logQuery{limit: defaultLogPage, kind: q.Get("kind")}
@@ -90,6 +92,16 @@ func parseLogQuery(r *http.Request) (logQuery, error) {
 		} else {
 			return lq, fail(http.StatusBadRequest, "bad before %q: an event's id, or a time such as 2026-11-06T20:00:00Z", v)
 		}
+	}
+	if v := q.Get("since"); v != "" {
+		t, err := time.Parse(time.RFC3339Nano, v)
+		if err != nil {
+			return lq, fail(http.StatusBadRequest, "bad since %q: a time such as 2026-11-06T20:00:00Z", v)
+		}
+		if !lq.before.IsZero() && t.After(lq.before) {
+			return lq, fail(http.StatusBadRequest, "since %s is after before %s", v, q.Get("before"))
+		}
+		lq.since = t
 	}
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -109,7 +121,8 @@ func parseLogQuery(r *http.Request) (logQuery, error) {
 }
 
 // getLog handles GET /cubes/{sn}/log: the page of the Cube's events
-// before the cursor, of a kind and a device where asked, at most limit,
+// before the cursor and since a time, of a kind and a device where asked,
+// at most limit,
 // oldest first, the same objects the event stream sends; from the store,
 // with each event's id, or from the ring.
 func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
@@ -139,7 +152,7 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 	if err := st.FlushEvents(ctx); err != nil {
 		s.log.Warn("api: the log's pending events not written", "error", err)
 	}
-	rows, err := st.Events(ctx, store.EventQuery{CubeID: cubeID, BeforeID: lq.beforeID, Before: lq.before, Kind: lq.kind, Device: lq.device, Limit: lq.limit})
+	rows, err := st.Events(ctx, store.EventQuery{CubeID: cubeID, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since, Kind: lq.kind, Device: lq.device, Limit: lq.limit})
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -157,7 +170,8 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 }
 
 // filterEvents is a page of the ring, oldest first: the events before the
-// time, of the kind and the device, the last limit of them. The ring's
+// time and not before since, of the kind and the device, the last limit
+// of them. The ring's
 // events have no id, so none lies before one.
 func filterEvents(all []event, lq logQuery) []event {
 	out := []event{}
@@ -165,7 +179,8 @@ func filterEvents(all []event, lq logQuery) []event {
 		return out
 	}
 	for _, ev := range all {
-		if !lq.before.IsZero() && !ev.Time.Before(lq.before) || lq.kind != "" && ev.Kind != lq.kind || lq.device != "" && ev.Device != lq.device {
+		if !lq.before.IsZero() && !ev.Time.Before(lq.before) || !lq.since.IsZero() && ev.Time.Before(lq.since) ||
+			lq.kind != "" && ev.Kind != lq.kind || lq.device != "" && ev.Device != lq.device {
 			continue
 		}
 		out = append(out, ev)
