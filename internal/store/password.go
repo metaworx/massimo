@@ -4,8 +4,8 @@
 package store
 
 // Passwords are hashed with argon2id (docs/store.md section 6) and
-// stored as PHC strings, which carry the parameters, so that a later
-// release can raise them and verify the old hashes meanwhile.
+// stored as PHC strings, which carry the parameters, so that a release
+// can change them and verify the old hashes meanwhile.
 
 import (
 	"crypto/rand"
@@ -20,71 +20,103 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// The parameters of a new hash: the library's recommended time and
-// memory (64 MiB), four lanes, a 16-byte salt and a 32-byte key.
+// The parameters of a new hash: OWASP's argon2id configuration of
+// 19 MiB, two passes and one lane, which a Raspberry Pi 1 computes in
+// about 60 % of the time the library's 64 MiB and one pass took, with
+// a 16-byte salt and a 32-byte key.
 const (
-	argonTime    = 1
-	argonMemory  = 64 * 1024
-	argonThreads = 4
+	argonTime    = 2
+	argonMemory  = 19 * 1024 // KiB
+	argonThreads = 1
 	argonKeyLen  = 32
 	argonSaltLen = 16
 )
 
+// The largest parameters a stored hash may ask for: a row beyond them
+// is refused rather than allocated. A release that raises the
+// parameters above them raises these first.
+const (
+	maxArgonMemory  = 256 * 1024 // KiB
+	maxArgonTime    = 16
+	maxArgonThreads = 16
+)
+
 // HashPassword returns the argon2id hash of password as a PHC string.
 func HashPassword(password string) (string, error) {
+	return hashWith(password, argonTime, argonMemory, argonThreads)
+}
+
+// hashWith hashes with the parameters given; HashPassword's, or old
+// ones for the tests.
+func hashWith(password string, time, memory uint32, threads uint8) (string, error) {
 	salt := make([]byte, argonSaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("store: salt: %w", err)
 	}
-	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+	key := argon2.IDKey([]byte(password), salt, time, memory, threads, argonKeyLen)
 	enc := base64.RawStdEncoding
-	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, argonMemory, argonTime, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
+	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, memory, time, threads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
 }
 
-// VerifyPassword reports whether password matches the PHC string hash;
-// an empty or malformed hash never matches.
-func VerifyPassword(hash, password string) bool {
+// phc is a parsed argon2id PHC string.
+type phc struct {
+	memory, time uint32
+	threads      uint8
+	salt, key    []byte
+}
+
+// parseHash reads a PHC string of argon2id; false for an empty or
+// malformed one, or one whose parameters exceed the ceiling.
+func parseHash(hash string) (phc, bool) {
+	var h phc
 	parts := strings.Split(hash, "$")
 	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
-		return false
+		return h, false
 	}
-	var memory, time uint32
-	var threads uint8
 	for _, kv := range strings.Split(parts[3], ",") {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
-			return false
+			return h, false
 		}
 		n, err := strconv.ParseUint(v, 10, 32)
 		if err != nil {
-			return false
+			return h, false
 		}
 		switch k {
 		case "m":
-			memory = uint32(n)
+			h.memory = uint32(n)
 		case "t":
-			time = uint32(n)
+			h.time = uint32(n)
 		case "p":
-			if n > 255 {
-				return false
+			if n > maxArgonThreads {
+				return h, false
 			}
-			threads = uint8(n)
+			h.threads = uint8(n)
 		}
 	}
-	if memory == 0 || time == 0 || threads == 0 {
-		return false
+	if h.memory == 0 || h.time == 0 || h.threads == 0 || h.memory > maxArgonMemory || h.time > maxArgonTime {
+		return h, false
 	}
 	enc := base64.RawStdEncoding
-	salt, err := enc.DecodeString(parts[4])
-	if err != nil {
+	var err error
+	if h.salt, err = enc.DecodeString(parts[4]); err != nil {
+		return h, false
+	}
+	if h.key, err = enc.DecodeString(parts[5]); err != nil || len(h.key) == 0 {
+		return h, false
+	}
+	return h, true
+}
+
+// VerifyPassword reports whether password matches the PHC string hash;
+// an empty or malformed hash, or one beyond the ceiling, never matches.
+func VerifyPassword(hash, password string) bool {
+	h, ok := parseHash(hash)
+	if !ok {
 		return false
 	}
-	want, err := enc.DecodeString(parts[5])
-	if err != nil || len(want) == 0 {
-		return false
-	}
-	got := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(want)))
-	return subtle.ConstantTimeCompare(got, want) == 1
+	got := argon2.IDKey([]byte(password), h.salt, h.time, h.memory, h.threads, uint32(len(h.key)))
+	return subtle.ConstantTimeCompare(got, h.key) == 1
 }
 
 var (

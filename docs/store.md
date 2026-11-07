@@ -752,9 +752,18 @@ Sessions last 30 days and are extended on use (`expires_at` moved,
 at most once an hour);
 the owner sees every session and key under Settings → Users and revokes them there.
 Passwords are hashed with argon2id from `golang.org/x/crypto`, pure Go,
-one more module;
-the parameters are the library's recommended ones and are stored in the PHC
-string so they can rise later.
+one more module,
+with OWASP's parameters on every box:
+19 MiB, two passes, one lane (`m=19456,t=2,p=1`),
+so that a hash costs the same wherever the store goes.
+The first releases used the library's 64 MiB and one pass on four lanes,
+which took 4.5 s a hash and 64 MiB an attempt on a Raspberry Pi 1 (one core,
+426 MB, measured on 2026-11-07);
+the new ones take about 55 % of that time and 30 % of that memory
+(`BenchmarkPassword` in `internal/store`, on one core).
+The PHC string carries the parameters, so an old hash still verifies;
+a stored string that asks for more than 256 MiB, 16 passes or 16 lanes
+is refused rather than allocated.
 
 ### The commands
 

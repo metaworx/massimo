@@ -24,6 +24,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- Passwords are hashed with argon2id at 19 MiB and two passes on one
+  lane, about 55 % of the time and 30 % of the memory of the 64 MiB
+  before; old hashes still verify (`docs/store.md` section 6).
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
