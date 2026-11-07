@@ -8,6 +8,8 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.11.0-alpha.1] - 2026-11-08
+
 ### Added
 
 - The web UI's log has a choice of how far back: the last 20 events by
