@@ -94,15 +94,10 @@ function addCube(serial) {
 // removeCube asks in the panel, in place of its actions, whether to stop
 // serving the Cube; Keep puts the actions back.
 function removeCube(serial, actions) {
-  const box = confirmBox(t("cubes.removeConfirm", { serial }), { yes: t("cubes.remove"), no: t("action.keep") }, () => {
+  confirmInPlace(actions, t("cubes.removeConfirm", { serial }), { yes: t("cubes.remove"), no: t("action.keep") }, () => {
     cubesUI.open.delete(serial);
-    cubeAction(() => api("DELETE", "api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
-  }, () => {
-    box.replaceWith(actions);
-    actions.querySelector(".remove-cube").focus();
-  });
-  actions.replaceWith(box);
-  box.focusFirst();
+    return cubeAction(() => api("DELETE", "api/v1/cubes/" + encodeURIComponent(serial)), t("cubes.removed", { serial }), serial);
+  }, ".remove-cube");
 }
 
 // fillHiddenEditor fills the template's list of hidden devices (box,

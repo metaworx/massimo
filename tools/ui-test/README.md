@@ -142,7 +142,9 @@ what a test stores in the browser goes with its context.
   lists every token once and sends one POST per click,
   and the test revokes its keys again;
   a guest made with an end date that has seconds is saved without the end date
-  when its display name alone changes, and Save without a change sends nothing.
+  when its display name alone changes, and Save without a change sends nothing;
+  a user's Remove asks in the panel, Keep gives the focus back to Remove,
+  and a double click on Yes sends one DELETE and says it worked.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,

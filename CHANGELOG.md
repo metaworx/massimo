@@ -84,6 +84,9 @@ the next minor, a fix counts the suffix up.
 - Saving a user with an end date no longer sends the end date again,
   cut to the minute, when it did not change.
 
+- A double click on Yes of a removal sends one request, and the page
+  says it worked instead of reporting the second as failed.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

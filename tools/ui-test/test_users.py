@@ -105,3 +105,36 @@ def test_an_unchanged_end_date_is_not_sent(page, case):
     finally:
         remove_user(name)
     page.locator("#view-tiles").click()
+
+
+def test_a_double_click_on_yes_removes_once(page, case):
+    """Remove asks in the panel, and a double click on its Yes sends one
+    DELETE: Yes is off while the removal runs, so the message says the
+    user is removed, not that a second DELETE found nobody. The test
+    makes the user."""
+    name = f"rm-{case.width}-{case.lang}"
+    remove_user(name)
+    api_call("POST", "api/v1/users", {"name": name, "role": "viewer", "password": "rm-pass"})
+    deletes = []
+    page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and r.url.endswith("/users/" + name) else None)
+    try:
+        page.locator("#view-settings").click()
+        panel = page.locator(".user-panel[data-name='%s']" % name)
+        panel.wait_for()
+        panel.locator("summary").click()
+        panel.locator(".remove-user").click()
+        box = panel.locator(".confirm-box")
+        assert box.is_visible() and panel.locator(".remove-user").count() == 0, "Remove asks in the panel"
+        box.locator(".confirm-no").click()
+        assert panel.locator(".confirm-box").count() == 0 and \
+            page.evaluate("document.activeElement && document.activeElement.classList.contains('remove-user')"), \
+            "Keep takes the question back and the focus to Remove"
+        panel.locator(".remove-user").click()
+        panel.locator(".confirm-box .confirm-yes").dblclick()
+        assert wait_until(page, "!document.querySelector(\".user-panel[data-name='%s']\")" % name, 5), "the user is removed"
+        page.wait_for_timeout(300)
+        assert len(deletes) == 1, f"one DELETE for a double click: {len(deletes)}"
+        assert "ok" in page.locator("#users-msg").get_attribute("class"), "the message says it worked"
+    finally:
+        remove_user(name)
+    page.locator("#view-tiles").click()

@@ -386,7 +386,7 @@ function renderDeviceForm(room, c, d) {
     const text = t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id });
     form.appendChild(confirmBox(text, { yes: t("cfg.move"), no: t("action.keep") }, () => {
       e.confirmMove = false;
-      sendDevice(room, c, d, true);
+      return sendDevice(room, c, d, true);
     }, () => {
       e.confirmMove = false;
       e.room_id = room.id;
@@ -401,7 +401,7 @@ function renderDeviceForm(room, c, d) {
   if (e.confirmRemove) {
     form.appendChild(confirmBox(t("device.removeConfirm", { device: label }), { yes: t("device.remove"), no: t("action.keep") }, () => {
       e.confirmRemove = false;
-      removeDeviceOfRoom(room, c, d);
+      return removeDeviceOfRoom(room, c, d);
     }, () => {
       e.confirmRemove = false;
       rerenderRoom(room);

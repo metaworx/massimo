@@ -520,7 +520,7 @@ function renderDeleteConfirm(el, room) {
   if (!ui.confirm) return;
   el.querySelector(".room-confirm").appendChild(confirmBox(t("room.deleteConfirm"), { yes: t("action.delete"), no: t("action.keep") }, () => {
     ui.confirm = false;
-    deleteRoom(room);
+    return deleteRoom(room);
   }, () => {
     ui.confirm = false;
     rerenderRoom(room);

@@ -114,15 +114,10 @@ function userBadges(u) {
 
 // removeUser asks in the panel, in place of its actions.
 function removeUser(u, actions) {
-  const box = confirmBox(t("users.removeConfirm", { name: u.name }), { yes: t("users.remove"), no: t("action.keep") }, () => {
+  confirmInPlace(actions, t("users.removeConfirm", { name: u.name }), { yes: t("users.remove"), no: t("action.keep") }, () => {
     usersUI.open.delete(u.name);
-    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name)), t("users.removed", { name: u.name }), u.name);
-  }, () => {
-    box.replaceWith(actions);
-    actions.querySelector(".remove-user").focus();
-  });
-  actions.replaceWith(box);
-  box.focusFirst();
+    return userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name)), t("users.removed", { name: u.name }), u.name);
+  }, ".remove-user");
 }
 
 // tokenRow is one session or key of a user, from its template, with

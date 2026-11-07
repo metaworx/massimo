@@ -250,7 +250,9 @@ function showResult(el, text, ok) {
 
 // confirmBox asks in the page whether to go on: the question, No and
 // Yes (yes and no their labels, Yes the primary), Escape for No. The
-// caller puts it where the action was asked for, and may focus it.
+// caller puts it where the action was asked for, and may focus it. Yes
+// is off from its click until the promise onYes returns has settled, so
+// that a double click sends one request.
 function confirmBox(text, { yes, no }, onYes, onNo) {
   const box = document.createElement("div");
   box.className = "panel confirm-box";
@@ -259,7 +261,13 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
   q.id = "confirm-" + ++fieldSeq;
   box.setAttribute("aria-labelledby", q.id);
   const noBtn = button(no || t("action.cancel"), "confirm-no", onNo);
-  const yesBtn = button(yes, "confirm-yes primary", onYes);
+  const yesBtn = button(yes, "confirm-yes primary", () => {
+    if (yesBtn.disabled) return;
+    yesBtn.disabled = true;
+    Promise.resolve(onYes && onYes()).finally(() => {
+      yesBtn.disabled = false;
+    });
+  });
   const actions = document.createElement("div");
   actions.className = "actions";
   actions.append(noBtn, yesBtn);
@@ -271,6 +279,21 @@ function confirmBox(text, { yes, no }, onYes, onNo) {
     if (onNo) onNo();
   });
   box.focusFirst = () => noBtn.focus();
+  return box;
+}
+
+// confirmInPlace asks in place of a row of actions, as a panel's Remove
+// does: the question takes the row's place, Yes runs onYes (which
+// returns the removal's promise, see confirmBox), and No and Escape put
+// the row back with the focus on the element of focusSelector in it.
+function confirmInPlace(actions, text, labels, onYes, focusSelector) {
+  const box = confirmBox(text, labels, onYes, () => {
+    box.replaceWith(actions);
+    const el = focusSelector && actions.querySelector(focusSelector);
+    if (el) el.focus();
+  });
+  actions.replaceWith(box);
+  box.focusFirst();
   return box;
 }
 
