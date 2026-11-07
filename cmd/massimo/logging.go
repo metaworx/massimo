@@ -4,7 +4,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -36,8 +35,9 @@ func parseLogLevel(s string) (slog.Level, error) {
 	return 0, fmt.Errorf("unknown log level %q, want %s", s, logLevelNames)
 }
 
-// setLogLevelVar checks a level given with -log-level and puts it into
-// MASSIMO_LOG_LEVEL, which then wins over the settings file's.
+// setLogLevelVar checks a level given with the global -log-level and
+// puts it into MASSIMO_LOG_LEVEL, where it wins over the settings
+// file's line, as -data does over MASSIMO_DATA's.
 func setLogLevelVar(v string) error {
 	if _, err := parseLogLevel(v); err != nil {
 		return err
@@ -45,19 +45,18 @@ func setLogLevelVar(v string) error {
 	return os.Setenv(env.LogLevel, v)
 }
 
-// logLevelFlag registers -log-level on a command's flag set, so that
-// both "massimo -log-level debug serve" and "massimo serve -log-level
-// debug" work.
-func logLevelFlag(fs *flag.FlagSet) {
-	fs.Func("log-level", "log at this level and above: "+logLevelNames+" (default "+env.LogLevel+", else info)", setLogLevelVar)
+// newLogger returns a text logger on w at the level of MASSIMO_LOG_LEVEL,
+// else info; an unknown level is an error.
+func newLogger(w io.Writer) (*slog.Logger, error) {
+	return newLoggerAt(w, os.Getenv(env.LogLevel), env.LogLevel)
 }
 
-// newLogger returns a text logger on w at the level of MASSIMO_LOG_LEVEL
-// (set by -log-level), else info; an unknown level is an error.
-func newLogger(w io.Writer) (*slog.Logger, error) {
-	l, err := parseLogLevel(os.Getenv(env.LogLevel))
+// newLoggerAt is newLogger at level, which what names in an error: serve
+// takes it from its -log-level, whose default is MASSIMO_LOG_LEVEL.
+func newLoggerAt(w io.Writer, level, what string) (*slog.Logger, error) {
+	l, err := parseLogLevel(level)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", env.LogLevel, err)
+		return nil, fmt.Errorf("%s: %w", what, err)
 	}
 	logLevel.Set(l)
 	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: &logLevel})), nil

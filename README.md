@@ -535,8 +535,10 @@ and the page works under a path prefix such as `/massimo/`
 including every device state change, to a file as well.
 `-log-level debug` (or `MASSIMO_LOG_LEVEL`; `info`, the default,
 `warn` and `error`) adds the Debug lines,
-such as every command the proxy passes on to the Cube;
-the level is read at the start, so a service takes a new one at its restart.
+such as every failed attempt to reach a lost Cube
+and every command the proxy passes on to it;
+the level is read at the start,
+and a change in the settings file waits for the next restart, as listed below.
 Every other command takes `-log-level` before its name,
 `massimo -log-level debug watch`.
 A restart from the API (`POST /api/v1/restart`, for the capability `restart`)

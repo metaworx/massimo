@@ -38,7 +38,8 @@ Every service starts `serve` with `-env <settings file>`,
 so a line there reaches it without a change to its command line.
 `MASSIMO_LOG_LEVEL=debug` adds the Debug lines to the log
 from the service's next restart,
-such as every command the proxy passes on to the Cube;
+such as every failed attempt to reach a lost Cube
+and every command the proxy passes on to it;
 the log then grows faster, so remove the line again after the diagnosis.
 `env.template` does not carry it:
 the package and `install` start the service only once the settings file

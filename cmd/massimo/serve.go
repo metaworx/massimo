@@ -51,7 +51,7 @@ func runServe(args []string) error {
 	})
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
 	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr (default MASSIMO_LOG)")
-	logLevelFlag(fs)
+	logLevelFlag := fs.String("log-level", os.Getenv(env.LogLevel), "log at this level and above: "+logLevelNames+" (default "+env.LogLevel+", else info)")
 	var proxies []string
 	fs.Func("proxy", "answer as a Cube on this address, for this run (repeatable; default the store's proxy address per Cube, else :62910 with a single Cube; \"off\" disables; with several Cubes give <serial>=<addr>)", func(v string) error {
 		proxies = append(proxies, v)
@@ -92,7 +92,7 @@ func runServe(args []string) error {
 		defer f.Close()
 		logOut = io.MultiWriter(os.Stderr, f)
 	}
-	logger, err := newLogger(logOut)
+	logger, err := newLoggerAt(logOut, *logLevelFlag, "-log-level or "+env.LogLevel)
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

@@ -84,7 +84,8 @@ func TestNewLoggerLevel(t *testing.T) {
 }
 
 // The global -log-level sets MASSIMO_LOG_LEVEL, which then wins over the
-// settings file's line, and refuses an unknown level.
+// settings file's line as the environment does (env.LoadFile, tested
+// there), and refuses an unknown level.
 func TestGlobalLogLevel(t *testing.T) {
 	resetLogLevel(t)
 	rest, err := globalOptions([]string{"-log-level", "debug", "watch", "-addr", "x"})
@@ -93,16 +94,6 @@ func TestGlobalLogLevel(t *testing.T) {
 	}
 	if v := os.Getenv(env.LogLevel); v != "debug" {
 		t.Fatalf("%s = %q, want debug", env.LogLevel, v)
-	}
-	file := filepath.Join(t.TempDir(), "env")
-	if err := os.WriteFile(file, []byte(env.LogLevel+"=error\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := env.LoadFile(file); err != nil {
-		t.Fatal(err)
-	}
-	if v := os.Getenv(env.LogLevel); v != "debug" {
-		t.Fatalf("after the settings file, %s = %q, want the option's debug", env.LogLevel, v)
 	}
 	if _, err := globalOptions([]string{"--log-level=loud", "watch"}); err == nil || !strings.Contains(err.Error(), "-log-level") {
 		t.Fatalf("unknown level: %v", err)
@@ -143,4 +134,28 @@ func TestServeLogLevelFlagWins(t *testing.T) {
 		t.Errorf("logged at %q, want DEBUG", a["level"])
 	}
 	s.stop(t)
+}
+
+// A MASSIMO_LOG_LEVEL the settings file changes while serve runs waits
+// for the next start (GET /api/v1/restart lists it), unless serve's
+// -log-level fixed the level.
+func TestReloadListsTheLogLevel(t *testing.T) {
+	resetLogLevel(t)
+	unsetForTest(t, env.LogLevel)
+	p := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(p, nil, 0o600)
+	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
+	start := settings()
+	free := newSettingsReloader(p, quietLog(), nil, start, map[string]bool{})
+	fixed := newSettingsReloader(p, quietLog(), nil, start, map[string]bool{"log-level": true})
+	os.WriteFile(p, []byte(env.LogLevel+"=debug\n"), 0o600)
+	if _, err := env.ReloadFile(p); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(free.pending(), ","); got != env.LogLevel {
+		t.Errorf("pending %q, want %s", got, env.LogLevel)
+	}
+	if got := fixed.pending(); len(got) != 0 {
+		t.Errorf("with -log-level, pending %v", got)
+	}
 }

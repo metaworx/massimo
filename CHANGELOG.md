@@ -41,8 +41,8 @@ the next minor, a fix counts the suffix up.
   restart` restarts the installed server (`README.md`, "Server").
 
 - `-log-level debug|info|warn|error` or `MASSIMO_LOG_LEVEL` sets the
-  level the commands log at, `info` by default; `serve` takes the flag
-  after its name too (`README.md`, "Server").
+  level the commands log at, `info` by default; a change in `serve`'s
+  settings file waits for its restart (`README.md`, "Server").
 
 ### Changed
 
