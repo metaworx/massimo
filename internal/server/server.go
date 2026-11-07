@@ -261,6 +261,9 @@ type Server struct {
 	// token is the one token without a store (auth.go, legacyToken).
 	tokenMu sync.RWMutex
 	token   string
+	// streamKeepAlive is the event streams' keep-alive in nanoseconds,
+	// at which each also asks whether its caller is still let in.
+	streamKeepAlive atomic.Int64
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -438,6 +441,7 @@ func New(opts Options) *Server {
 	if s.authLockout <= 0 {
 		s.authLockout = DefaultAuthLockout
 	}
+	s.streamKeepAlive.Store(int64(30 * time.Second))
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	if opts.Store != nil {
@@ -1321,8 +1325,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 		writeEvent(w, event{Kind: "state", Device: d.RFAddress, State: d, Time: time.Now()})
 	}
 	fl.Flush()
-	keep := time.NewTicker(30 * time.Second)
+	keep := time.NewTicker(time.Duration(s.streamKeepAlive.Load()))
 	defer keep.Stop()
+	p := principalOf(r)
 	// The stream ends with the server's run too, so that a stop does not
 	// wait out the HTTP server's grace for a client that stays.
 	stopped := s.runContext().Done()
@@ -1336,6 +1341,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 			writeEvent(w, ev)
 			fl.Flush()
 		case <-keep.C:
+			// The caller asked again: a stream outlives neither a key
+			// revoked nor the first user of an open server (auth.go).
+			if !s.stillAdmitted(r.Context(), p) {
+				s.log.Info("event stream ended: its caller is not let in any more", "cube", rt.cubeSerial(), "remote", s.clientIP(r))
+				return nil
+			}
 			fmt.Fprint(w, ": keep-alive\n\n")
 			fl.Flush()
 		}

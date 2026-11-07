@@ -100,6 +100,9 @@ type principal struct {
 	user  store.User
 	token store.Token
 	caps  map[string]bool
+	// legacyToken is the one token a server without a store had when it
+	// let the principal in, "" for none (stillAdmitted).
+	legacyToken string
 }
 
 // has reports whether the principal holds a capability; outside users
@@ -594,16 +597,15 @@ func forbidden(format string, args ...any) error {
 // resolve turns a presented token into a principal, or says why not.
 func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) (*principal, error) {
 	if mode == modeLegacy {
-		if tokenMatches(s.legacyToken(), secret) {
-			return &principal{mode: modeLegacy}, nil
+		if want := s.legacyToken(); tokenMatches(want, secret) {
+			return &principal{mode: modeLegacy, legacyToken: want}, nil
 		}
 		return nil, errBadToken
 	}
 	if secret == "" {
 		return nil, errBadToken
 	}
-	st := s.opts.Store
-	tok, ok, err := st.TokenByHash(ctx, store.HashToken(secret))
+	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(secret))
 	if err != nil {
 		return nil, err
 	}
@@ -611,6 +613,19 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	if !ok || tok.Expired(now) {
 		return nil, errBadToken
 	}
+	p, err := s.principalFor(ctx, tok, now)
+	if err != nil {
+		return nil, err
+	}
+	s.touch(ctx, tok, ip, now)
+	return p, nil
+}
+
+// principalFor is the principal of a live token: its user, who must be
+// enabled and not past its end, and the capabilities of the user's
+// role, which must be enabled.
+func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Time) (*principal, error) {
+	st := s.opts.Store
 	u, ok, err := st.UserByID(ctx, tok.UserID)
 	if err != nil {
 		return nil, err
@@ -635,8 +650,36 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	for _, c := range caps {
 		p.caps[c] = true
 	}
-	s.touch(ctx, tok, ip, now)
 	return p, nil
+}
+
+// stillAdmitted reports whether the caller an event stream was opened
+// for would be let in now: an open server still open, the one token of a
+// server without a store unchanged, a user's token neither revoked nor
+// expired, its user and role still allowed and holding read. A store
+// that cannot be read ends the stream, as authorize fails closed. The
+// stream asks at each keep-alive (server.go, events).
+func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
+	if p == nil {
+		return false
+	}
+	mode := s.authMode(ctx)
+	switch p.mode {
+	case modeOpen:
+		return mode == modeOpen
+	case modeLegacy:
+		return mode == modeLegacy && p.legacyToken == s.legacyToken()
+	}
+	if mode != modeUsers {
+		return false
+	}
+	now := time.Now()
+	tok, ok, err := s.opts.Store.Token(ctx, p.token.ID)
+	if err != nil || !ok || !tok.RevokedAt.IsZero() || tok.Expired(now) {
+		return false
+	}
+	np, err := s.principalFor(ctx, tok, now)
+	return err == nil && np.has("read")
 }
 
 // touch records a token's use at most once an hour, and moves a

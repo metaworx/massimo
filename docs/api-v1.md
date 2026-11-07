@@ -1664,6 +1664,13 @@ for example its window-open temperature after the contact.
 
 With a token configured the stream needs `?ticket=<ticket>` (below) or the bearer header;
 `?token=<token>` still works, deprecated.
+At each keep-alive, every 30 seconds,
+the server asks whether the stream's caller would be let in now,
+and ends the stream when not:
+a key revoked or expired, a user or role disabled,
+a server that was open when the stream opened and has a user since,
+or, without a store, another token.
+The client's next ticket then asks it to sign in.
 
 ### POST /api/v1/cubes/{sn}/events/ticket
 

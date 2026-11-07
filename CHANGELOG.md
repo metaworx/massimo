@@ -54,6 +54,10 @@ the next minor, a fix counts the suffix up.
 
 ### Security
 
+- An event stream ends within 30 s once its caller would not be let in
+  any more, such as a revoked key or an open server's first user
+  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+
 - The server refuses a write that another site's page sent, which an
   open server served: such a page could create the first owner
   (`docs/api-v1.md`, "Authentication").
