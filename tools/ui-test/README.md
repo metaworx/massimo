@@ -126,6 +126,11 @@ what a test stores in the browser goes with its context.
   with the Cube's panel open,
   English and then German chosen in the settings redraw its labels,
   cloned from a template, in that language, and the panel stays open.
+- `test_backup.py`, Settings → Backup and restore against the fake Cube's store:
+  the Cube's backup downloads as YAML,
+  one taken by hand shows in the list as "by hand" and downloads,
+  its plan says the Cube holds it already,
+  it compares with the one before when there is one, and it is deleted again.
 - `test_users.py`, Settings → Users and Roles as the owner:
   the owner and the operator the runner creates (`massimo user add operator`,
   password `op-pass`) are listed with the operator's tokens,
