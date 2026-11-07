@@ -86,7 +86,18 @@ function applyCaps() {
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
   $("setup").classList.toggle("hidden", !(me && me.setup));
+  renderOpenBanner();
   renderMe();
+}
+
+// renderOpenBanner warns under the header while the server asks for no
+// key: a store without users, or no store and no token. It cannot be
+// dismissed, and goes once the server asks who is there.
+function renderOpenBanner() {
+  const mode = state.me && state.me.mode;
+  const open = mode === "open" || mode === "none";
+  $("open-banner").classList.toggle("hidden", !open);
+  if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
 // renderMe says in the settings who is signed in, and what Log out does.

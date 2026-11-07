@@ -317,6 +317,34 @@ func localPeer(ip string) bool {
 	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast()
 }
 
+// openRefused is what a server that asks for no key answers a client
+// beyond its local network.
+const openRefused = "this server is open and answers only its local network; create a user or set MASSIMO_API_TOKEN"
+
+// openAllowed reports whether a server that asks for no key, a store
+// without users or no store and no token, answers a request: only a
+// client on the local network (localPeer), and a request that names a
+// client in a forwarding header only through a trusted proxy, since a
+// reverse proxy on the box would otherwise pass the internet through as
+// itself.
+func (s *Server) openAllowed(r *http.Request) bool {
+	if forwarded(r) && !s.trustedProxy(peerIP(r.RemoteAddr)) {
+		return false
+	}
+	return localPeer(s.clientIP(r))
+}
+
+// forwarded reports whether a request carries a header that names
+// another client than its TCP peer.
+func forwarded(r *http.Request) bool {
+	for _, h := range []string{"X-Forwarded-For", "X-Real-IP", "Forwarded"} {
+		if len(r.Header.Values(h)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // failureLimiter counts failed checks per key and locks a key out: in
 // memory without a store, in auth_failures with one.
 type failureLimiter interface {
@@ -723,11 +751,13 @@ func (s *Server) allowed(p *principal, capability string, r *http.Request) bool 
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability string) (*principal, bool) {
 	ctx := r.Context()
 	mode := s.authMode(ctx)
-	switch {
-	case mode == modeOpen:
-		return &principal{mode: modeOpen}, true
-	case mode == modeLegacy && s.legacyToken() == "":
-		return &principal{mode: modeLegacy}, true
+	if mode == modeOpen || mode == modeLegacy && s.legacyToken() == "" {
+		// A server that asks for no key answers its local network only.
+		if !s.openAllowed(r) {
+			writeError(w, http.StatusForbidden, openRefused)
+			return nil, false
+		}
+		return &principal{mode: mode}, true
 	}
 	ip := s.clientIP(r)
 	key := store.LockoutAddr(ip)

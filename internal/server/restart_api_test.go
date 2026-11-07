@@ -150,19 +150,33 @@ func TestRestartBlocked(t *testing.T) {
 // An open server restarts only for a request from the box itself: a
 // loopback peer without a forwarding header. Anyone else, the LAN and a
 // reverse proxy's client, is refused with the reason, and another
-// site's page is refused before that.
+// site's page is refused before that; through a proxy it does not
+// trust, the open server answers nothing at all.
 func TestRestartOpenServer(t *testing.T) {
 	c := &restartCounter{}
 	opts := storeOptions(t, t.TempDir(), "")
 	opts.Restart = RestartOptions{By: "exit", Restart: c.restart}
 	_, ts, s := startWith(t, opts)
+	trusted, err := ParseTrustedProxies("127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts = storeOptions(t, t.TempDir(), "")
+	opts.Restart = RestartOptions{By: "exit", Restart: c.restart}
+	opts.TrustedProxies = trusted
+	_, proxied, _ := startWith(t, opts)
 	path := "/api/v1/restart"
 	for _, h := range []map[string]string{{"X-Forwarded-For": "192.168.1.20"}, {"X-Real-IP": "192.168.1.20"}, {"Forwarded": "for=192.168.1.20"}} {
-		if code, text := sendWith(t, ts, "GET", path, "", h); code != 200 || decodeRestart(t, text).Available || decodeRestart(t, text).Blocked != openRestartRefused {
-			t.Errorf("GET %v: %d %s", h, code, text)
+		for _, m := range []string{"GET", "POST"} {
+			if code, text := sendWith(t, ts, m, path, "{}", h); code != 403 || errorOf(text) != openRefused {
+				t.Errorf("%s %v, a proxy not trusted: %d %s", m, h, code, text)
+			}
 		}
-		if code, text := sendWith(t, ts, "POST", path, "{}", h); code != 403 || errorOf(text) != openRestartRefused {
-			t.Errorf("POST %v: %d %s", h, code, text)
+		if code, text := sendWith(t, proxied, "GET", path, "", h); code != 200 || decodeRestart(t, text).Available || decodeRestart(t, text).Blocked != openRestartRefused {
+			t.Errorf("GET %v, a trusted proxy: %d %s", h, code, text)
+		}
+		if code, text := sendWith(t, proxied, "POST", path, "{}", h); code != 403 || errorOf(text) != openRestartRefused {
+			t.Errorf("POST %v, a trusted proxy: %d %s", h, code, text)
 		}
 	}
 	if code, text := sendWith(t, ts, "POST", path, "{}", map[string]string{"Sec-Fetch-Site": "cross-site", "Content-Type": "text/plain"}); code != 403 || errorOf(text) != "cross-origin request refused" {

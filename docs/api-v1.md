@@ -150,13 +150,24 @@ The server authenticates in one of three ways, by what it has:
   A disabled user, a guest past its end date or a disabled role is `403` too,
   with the reason.
 - **Open**, a store without users, the state before the first owner:
-  every request may do everything,
-  which is only acceptable on the default localhost listener.
+  every request from the local network may do everything,
+  as the original software can on the LAN.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
 - **Token**, no store (`serve -addr`):
   `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
-  without it the API is open.
+  without it the API is open as in open mode.
+
+An open server answers its local network only:
+the box itself, the private ranges (RFC 1918),
+IPv6 unique local and link-local addresses.
+A client beyond them gets `403` with
+`this server is open and answers only its local network; …`,
+and so does a request whose forwarding header names a client,
+`X-Forwarded-For`, `X-Real-IP` or `Forwarded`,
+unless it comes from a proxy of `-trusted-proxies`, whose client then decides:
+a reverse proxy on the box would otherwise pass the internet through as itself.
+`/healthz` stays open.
 
 `/healthz` is always open.
 The errors say which: `401` is a missing, wrong, revoked or expired token,

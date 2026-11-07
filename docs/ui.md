@@ -13,7 +13,11 @@ which is open from the start once the page has seen the server ask for no key
 and keeps the session in the browser for 30 days from its last use;
 Settings → Log out ends it.
 A server without users shows the form that creates the first owner to a
-browser on the local network; until then everything is open.
+browser on the local network; until then everything is open,
+and a warning under the header's rule says so and what closes it:
+the first owner, or `MASSIMO_API_TOKEN` in the server's settings file
+(`-token` for a server without a store).
+It cannot be dismissed, and goes once the server asks who is there.
 What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,

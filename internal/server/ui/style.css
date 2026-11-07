@@ -222,6 +222,17 @@ body.expert #clock-plain { display: none; }
   margin: 0 0 12px;
   width: 100%;
 }
+/* The warning under the header while the server is open (login.js). */
+.open-banner {
+  background: var(--notice-bg);
+  color: var(--notice-fg);
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
 .message {
   padding: 10px 14px;
   border-radius: 8px;

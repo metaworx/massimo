@@ -22,6 +22,9 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- The web UI warns under its header while the server is open, and says
+  what closes it (`docs/ui.md`).
+
 - `POST /api/v1/restart` restarts the server for the capability
   `restart` of owner and manager (migration 0006), an open server only
   from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
@@ -53,6 +56,10 @@ the next minor, a fix counts the suffix up.
   (`docs/store.md` section 3).
 
 ### Security
+
+- A server that asks for no key answers only its local network, a
+  reverse proxy's clients only with `-trusted-proxies`
+  (`docs/api-v1.md`, "Authentication").
 
 - An event stream ends within 30 s once its caller would not be let in
   any more, such as a revoked key or an open server's first user
