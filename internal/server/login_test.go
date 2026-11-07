@@ -5,6 +5,8 @@ package server
 
 import (
 	"encoding/json"
+	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -126,6 +128,48 @@ func TestLoginLockout(t *testing.T) {
 	}
 	if code, _ := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"pw"}`); code != 429 {
 		t.Fatalf("login while locked: %d", code)
+	}
+}
+
+// An address signs in once at a time: while its sign-in runs another is
+// 429 with Retry-After and counts as no failure; once it is done the
+// next goes through. A full set of addresses signing in is 503.
+func TestLoginOneAtATime(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.AuthFailures = 2
+	_, ts, s := startWith(t, opts)
+	s.opts.Store.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleViewer}, "pw", 0)
+	login := func(password string) *http.Response {
+		t.Helper()
+		resp, err := http.Post(ts.URL+"/api/v1/login", "application/json", strings.NewReader(`{"user":"anna","password":"`+password+`"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp
+	}
+	key := store.LockoutAddr("127.0.0.1")
+	if ok, _ := s.signIns.claim(key); !ok {
+		t.Fatal("the address is signing in already")
+	}
+	for range 3 {
+		if r := login("wrong"); r.StatusCode != 429 || r.Header.Get("Retry-After") != "1" {
+			t.Fatalf("a second sign-in: %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
+		}
+	}
+	s.signIns.release(key)
+	if r := login("pw"); r.StatusCode != 200 {
+		t.Fatalf("once the first is done: %d", r.StatusCode)
+	}
+	if len(s.signIns.keys) != 0 {
+		t.Fatalf("claims kept after the sign-in: %v", s.signIns.keys)
+	}
+
+	for i := range maxTracked {
+		s.signIns.claim("addr:192.0.2." + strconv.Itoa(i))
+	}
+	if r := login("pw"); r.StatusCode != 503 || r.Header.Get("Retry-After") == "" {
+		t.Fatalf("with every slot of the set taken: %d", r.StatusCode)
 	}
 }
 

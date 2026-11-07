@@ -229,6 +229,7 @@ type Server struct {
 
 	limiter     failureLimiter
 	authLockout time.Duration // the lockout in effect, for the log
+	signIns     signIns       // the addresses with a login running
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).

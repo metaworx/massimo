@@ -10,7 +10,7 @@ from helpers import named_buttons, wait_until
 
 def test_sign_in_and_out(new_context, case, watch, guard):
     """The sign-in dialog opens without a token and refuses a wrong
-    password; the operator signs in, sees the tiles and no Settings →
+    password, and two submits send one sign-in; the operator signs in, sees the tiles and no Settings →
     Users, Roles or Cubes; Log out forgets the token and brings the
     dialog back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
@@ -26,6 +26,12 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#login-form button[type=submit]").click()
     assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused in the dialog"
     assert page.evaluate("document.getElementById('login-dialog').open"), "the dialog stays open"
+    logins = []
+    page.on("request", lambda r: logins.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/login") else None)
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/login")):
+        page.evaluate("() => { const f = document.getElementById('login-form'); f.requestSubmit(); f.requestSubmit(); }")
+    page.wait_for_timeout(300)
+    assert len(logins) == 1, f"two submits send one sign-in, not {len(logins)}"
     page.locator("#login-password").fill("op-pass")
     page.locator("#login-form button[type=submit]").click()
     page.wait_for_selector(".room", timeout=10000)

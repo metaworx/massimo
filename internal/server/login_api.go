@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
@@ -91,6 +92,39 @@ func viewToken(t store.Token) tokenView {
 	return tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom}
 }
 
+// signIns holds the addresses with a login running, so that an address
+// checks one password at a time and the lockout counts each of its
+// attempts before the next one starts.
+type signIns struct {
+	mu   sync.Mutex
+	keys map[string]bool
+}
+
+// claim marks a key as signing in: false when it already is, and full
+// when maxTracked keys are.
+func (s *signIns) claim(key string) (ok, full bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case s.keys[key]:
+		return false, false
+	case len(s.keys) >= maxTracked:
+		return false, true
+	}
+	if s.keys == nil {
+		s.keys = map[string]bool{}
+	}
+	s.keys[key] = true
+	return true, false
+}
+
+// release ends a key's sign-in.
+func (s *signIns) release(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.keys, key)
+}
+
 // loginRequest is the body of POST /api/v1/login.
 type loginRequest struct {
 	User     string `json:"user"`
@@ -101,7 +135,8 @@ type loginRequest struct {
 }
 
 // login handles POST /api/v1/login: a session for a name and a
-// password. A wrong pair counts against the address and the name.
+// password. A wrong pair counts against the address and the name; an
+// address signs in once at a time.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	switch s.authMode(ctx) {
@@ -123,6 +158,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
 		return fail(http.StatusTooManyRequests, "too many failed logins for this user; try again later")
 	}
+	switch ok, full := s.signIns.claim(addrKey); {
+	case full:
+		return passwordBusy(store.ErrBusy)
+	case !ok:
+		return &httpError{status: http.StatusTooManyRequests, msg: "a sign-in from this address is already running; try again when it is done", retryAfter: 1}
+	}
+	defer s.signIns.release(addrKey)
 	if err := st.CheckPassword(ctx, name, req.Password); err != nil {
 		if busy := passwordBusy(err); busy != nil {
 			return busy

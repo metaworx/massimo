@@ -38,6 +38,10 @@ the next minor, a fix counts the suffix up.
   eight wait; a sign-in, user add or password change beyond them is
   `503` with `Retry-After` (`docs/store.md` section 6, "The lockout").
 
+- An address signs in once at a time: a login while its previous one
+  is checked is `429` with `Retry-After: 1`, and the web UI's dialog
+  sends one sign-in at a time (`docs/api-v1.md`, "POST /api/v1/login").
+
 ## [0.10.0-alpha.1] - 2026-11-07
 
 ### Added

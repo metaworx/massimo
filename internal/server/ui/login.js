@@ -154,8 +154,13 @@ function askLogin() {
       loginPromise = null;
       resolve(ok);
     };
+    // One sign-in at a time: the server refuses a second one from the
+    // same address while the first is checked, so a submit meanwhile is
+    // ignored.
+    let signing = false;
     form.onsubmit = async (ev) => {
       ev.preventDefault();
+      if (signing) return;
       const key = $("login-token").value.trim();
       if (key) {
         setToken(key);
@@ -169,6 +174,7 @@ function askLogin() {
         showResult(error, t("login.missing"), false);
         return;
       }
+      signing = true;
       try {
         const session = await signIn(user, password);
         setToken(session.token);
@@ -177,6 +183,8 @@ function askLogin() {
       } catch (e) {
         showResult(error, t("login.failed", { error: e.message }), false);
         $("login-password").focus();
+      } finally {
+        signing = false;
       }
     };
     dlg.onclose = () => done(false);

@@ -49,8 +49,11 @@ paths:
         Answers a session token, good for 30 days from its last use,
         which the client sends as the bearer header. A wrong pair counts
         against the address and the user name (429 after ten in a
-        minute). 409 on a server without users (create the first owner
-        with POST /api/v1/users) or without a store (the API token).
+        minute). An address signs in once at a time: a login while
+        another from the same address is checked is 429 with
+        Retry-After 1, not counted as a failure. 409 on a server without
+        users (create the first owner with POST /api/v1/users) or
+        without a store (the API token).
       security: []
       requestBody:
         required: true
@@ -75,7 +78,17 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
-        "429": {$ref: "#/components/responses/LockedOut"}
+        "429":
+          description: >-
+            The address or the user name is locked out (ten failed logins
+            within a minute), or a sign-in from this address is running
+          headers:
+            Retry-After:
+              description: Seconds until the lockout ends, or 1
+              schema: {type: integer}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "503": {$ref: "#/components/responses/Busy"}
   /api/v1/logout:
     post:

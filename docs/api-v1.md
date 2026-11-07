@@ -319,6 +319,9 @@ its end and its last use are written at most once an hour.
 Case does not matter in the name.
 A wrong name or password is `401` and counts against the address and the name
 (ten in a minute lock either for five minutes, `429`);
+an address signs in once at a time,
+so a login while another from the same address is being checked
+is `429` with `Retry-After: 1`, and counts as no failure;
 a disabled user or a guest past its end date is `403`;
 a user whose role is disabled logs in and is then refused every route.
 The server hashes at most one password a core at once, four at the most,

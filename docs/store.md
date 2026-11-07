@@ -789,8 +789,13 @@ The counters survive a restart,
 which closes the loophole where a restart cleared them.
 
 The counters see a failure only once its hash is done,
-so attempts sent together all pass them;
-the hashes are bounded besides.
+so attempts sent together would all pass them.
+An address therefore signs in once at a time:
+a login from an address whose sign-in is still being checked is `429`
+with `Retry-After: 1`, which counts as no failure,
+so that the lockout counts each attempt before the next one starts;
+the web UI's dialog sends one at a time.
+And the hashes are bounded besides.
 At most one a core, four at the most, run at once, and eight more wait;
 a check, a user add or a password change beyond them
 is answered `503` with `Retry-After: 5`.
