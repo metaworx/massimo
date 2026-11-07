@@ -162,7 +162,6 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		duration *time.Duration // a duration setting
 		number   *int           // a whole-number setting
 		clear    bool
-		d        *durationSetting
 	}
 	var writes []write
 	keys := make([]string, 0, len(req))
@@ -184,7 +183,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		if d != nil {
 			if isNull {
-				writes = append(writes, write{key: k, clear: true, d: d})
+				writes = append(writes, write{key: k, clear: true})
 				continue
 			}
 			var text string
@@ -195,7 +194,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
-			writes = append(writes, write{key: k, duration: &v, d: d})
+			writes = append(writes, write{key: k, duration: &v})
 			continue
 		}
 		var n *intSetting

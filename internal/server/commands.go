@@ -126,7 +126,7 @@ func (o *stepObserver) enqueued(cmd engine.Command) {
 	case cmd.Target != 0:
 		target = "device:" + cmd.Target.String()
 	case cmd.RoomID != 0:
-		target = "room:" + itoa(int(cmd.RoomID))
+		target = "room:" + strconv.Itoa(int(cmd.RoomID))
 	}
 	step, err := o.s.opts.Store.AddStep(ctx, parent, store.Command{Target: target, Request: req})
 	if err != nil {
@@ -213,8 +213,6 @@ func (w *serialWorker) flush(timeout time.Duration) {
 	case <-time.After(timeout):
 	}
 }
-
-func itoa(n int) string { return strconv.Itoa(n) }
 
 // fingerprint is what a retried request must repeat for its
 // Idempotency-Key: the method, the path with its query and the body.
