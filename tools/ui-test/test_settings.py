@@ -7,7 +7,7 @@ without System settings' capabilities has no ⚙."""
 import json
 
 from conftest import api_call
-from helpers import PANEL_TEXTS, assert_busy, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import PANEL_TEXTS, VIEWER, assert_busy, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 
 def test_settings_open(page, case):
@@ -120,10 +120,6 @@ def test_my_profile_lists_and_creates_own_keys(page, case):
     row.locator(".revoke-token").click()
     assert wait_until(page, "document.querySelectorAll('#profile-tokens .user-tokens li').length === %d" % before, 5), "Revoke takes it"
     show_view(page, "tiles")
-
-
-VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_password": True},
-          "role": {"key": "viewer"}, "capabilities": ["read", "preferences"], "token": {"kind": "session"}}
 
 
 def test_no_system_settings_without_their_capabilities(page, case):

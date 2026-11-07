@@ -1056,8 +1056,11 @@ async function init() {
   });
   initTiles();
   initLog();
+  const hadSerial = !!state.serial;
+  showView(viewOfHash(location.hash), "replace"); // log.js: the page the address names
   refresh().then(() => {
     store("massimo.serial", state.serial);
+    if (isShown("log") && !hadSerial) loadLog(); // it had no Cube to load from yet
     connectEvents();
   });
   setInterval(refreshAges, 60000);

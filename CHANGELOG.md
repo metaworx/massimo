@@ -29,6 +29,10 @@ the next minor, a fix counts the suffix up.
   password and keys, My settings, and System settings behind ⚙
   (`docs/ui.md`, "My profile", "My settings", "System settings").
 
+- The web UI keeps the page shown in the address, so that a reload opens
+  it again and back and forward move between pages (`docs/ui.md`,
+  "Header").
+
 ### Changed
 
 - The recorded greeting that the tests and CI's fake Cube load, and its

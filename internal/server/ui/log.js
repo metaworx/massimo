@@ -362,10 +362,28 @@ function logCubeChanged() {
 // ("system"), each with its section and, where it has one, its button in
 // the header; My profile and My settings open from the 👤 menu, which is
 // highlighted while one of them is shown. The tiles keep their state
-// while hidden. The page is kept in memory only.
+// while hidden. The page shown is in the address (VIEW_HASH), Rooms
+// without one, so that a reload opens it again and the browser's back
+// and forward move between the pages.
 const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", system: "system" };
 const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", system: "view-settings" };
+const VIEW_HASH = { tiles: "", log: "#log", profile: "#profile", prefs: "#prefs", system: "#system" };
 let currentView = "tiles";
+
+// viewOfHash is the page an address names, Rooms for none or another.
+function viewOfHash(hash) {
+  return Object.keys(VIEW_HASH).find((v) => VIEW_HASH[v] && VIEW_HASH[v] === hash) || "tiles";
+}
+
+// setAddress puts a page's hash into the address: as a new entry of the
+// browser's history ("push"), in place of the current one ("replace"),
+// or not at all ("none", for a page shown from the address).
+function setAddress(hash, how) {
+  if (how === "none" || location.hash === hash) return;
+  const url = location.pathname + location.search + hash;
+  if (how === "replace") history.replaceState(null, "", url);
+  else history.pushState(null, "", url);
+}
 
 // mayShow reports whether the signed-in user may open a page: System
 // settings with one of its capabilities, My profile as a user.
@@ -381,9 +399,15 @@ function isShown(view) {
 }
 
 // showView shows a page, Rooms in place of one the user may not open,
-// and tells the scripts that load what it shows (onView).
-function showView(view) {
-  if (!mayShow(view)) view = "tiles";
+// puts it into the address as address says (setAddress, a new entry by
+// default; Rooms in place of a page refused), and tells the scripts that
+// load what it shows (onView).
+function showView(view, address = "push") {
+  if (!mayShow(view)) {
+    view = "tiles";
+    address = "replace";
+  }
+  setAddress(VIEW_HASH[view], address);
   currentView = view;
   logState.open = view === "log";
   for (const id of ["house", "rooms", "unlisted"]) {
@@ -419,6 +443,8 @@ function initLog() {
   $("view-settings").addEventListener("click", () => showView("system"));
   $("menu-profile").addEventListener("click", () => showView("profile"));
   $("menu-prefs").addEventListener("click", () => showView("prefs"));
+  // back and forward, and a page named in the address bar
+  window.addEventListener("popstate", () => showView(viewOfHash(location.hash), "none"));
   dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;

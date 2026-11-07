@@ -137,6 +137,12 @@ def sign_out(page):
     page.locator("#logout-btn").click()
 
 
+# /me of a viewer signed in, for a test that stubs it: no capability of
+# System settings.
+VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_password": True},
+          "role": {"key": "viewer"}, "capabilities": ["read", "preferences"], "token": {"kind": "session"}}
+
+
 # The pages of the main area: how a user opens each, and the section it
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}

@@ -96,7 +96,7 @@ function applyCaps() {
   body.classList.toggle("no-system", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderMe();
-  if (!mayShow(currentView)) showView("tiles"); // log.js: a page the user signed in now may not open
+  if (!mayShow(currentView)) showView("tiles", "replace"); // log.js: a page the user signed in now may not open
 }
 
 // renderMe says in the 👤 menu who is signed in, and what Sign out
@@ -252,7 +252,7 @@ async function logout() {
   state.me = null;
   if (synced) await forgetUserSettings(); // app.js
   closeEvents();
-  showView("tiles");
+  showView("tiles", "replace");
   await loadMeAndPreferences();
   refresh().then(connectEvents);
 }

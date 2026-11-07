@@ -111,7 +111,10 @@ what a test stores in the browser goes with its context.
   fits the window, and closes on Escape, on a click outside and on a choice,
   My settings opening the settings;
   on an open server (`/me` stubbed) it says so, without Sign out;
-  a room's ⋯ and 👤 are one open at a time.
+  a room's ⋯ and 👤 are one open at a time;
+  each page puts its name into the address, back and forward move between
+  them, and a reload opens the log and My profile again with the header in view;
+  System settings in a viewer's address (`/me` stubbed) shows Rooms.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

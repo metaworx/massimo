@@ -54,6 +54,12 @@ so the session never appears in a URL.
   as they close a room's **⋯**.
 - The three page buttons, a house, a sheet and a cog,
   switch between **Rooms**, **Log** and **System settings**.
+- The page shown is in the address, Rooms without one:
+  `#log`, `#profile` (My profile), `#prefs` (My settings) and `#system`
+  (System settings),
+  so that a reload opens it again, the browser's back and forward move between
+  the pages, and an address can be kept as a bookmark.
+  A page the role may not open shows Rooms instead.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and none of the settings pages.
