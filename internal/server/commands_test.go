@@ -4,16 +4,20 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -275,4 +279,49 @@ func TestTokenCreationKeepsNoSecret(t *testing.T) {
 	if resp2.StatusCode != 201 || resp2.Header.Get("Idempotent-Replayed") != "true" || again.Token != nil || again.ID != made.ID {
 		t.Errorf("replay: %d %q %s", resp2.StatusCode, resp2.Header.Get("Idempotent-Replayed"), text2)
 	}
+}
+
+// The step observer never makes the queue wait on the store: with the
+// store's write lock held by another connection, as an events batch or
+// a slow handler holds it, its calls still return at once, and the step
+// rows are written once the lock is free.
+func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	stores[ts] = s.opts.Store
+	st := s.opts.Store
+	parent, err := st.AddCommand(t.Context(), store.Command{Action: "setpoint"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := sql.Open("sqlite", "file:"+filepath.ToSlash(st.File())+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	conn, err := other.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(t.Context(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	o := s.newObserver()
+	cmd := engine.Command{ID: parent.UUID, Seq: 1, Lines: []cube.Message{{Type: 's', Data: "AARAAAAAFRS2Bms="}}}
+	start := time.Now()
+	o.Enqueued(cmd)
+	o.Started(cmd)
+	o.Finished(cmd, engine.Result{})
+	took := time.Since(start)
+	conn.ExecContext(t.Context(), "ROLLBACK")
+	conn.Close()
+	if took > 500*time.Millisecond {
+		t.Fatalf("the observer waited %s on the store's lock", took)
+	}
+	var c store.Command
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if c, _, _ = st.Command(t.Context(), parent.ID); len(c.Steps) == 1 && c.Steps[0].State == store.StateAcknowledged {
+			return
+		}
+	}
+	t.Fatalf("steps after the lock: %+v", c.Steps)
 }

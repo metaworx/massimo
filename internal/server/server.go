@@ -222,7 +222,9 @@ type Server struct {
 	authLockout time.Duration // the lockout in effect, for the log
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
-	updates     updateCheck
+	// steps writes the queues' step rows in order (commands.go).
+	steps   serialWorker
+	updates updateCheck
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -455,6 +457,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.mu.Unlock()
 	s.wg.Wait()
+	s.steps.flush(5 * time.Second) // the drained commands' steps, before the store closes
 	s.refusals.close()
 	stopWriter()
 	<-writerDone

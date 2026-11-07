@@ -64,12 +64,17 @@ func (rt *runtime) writerOf(ctx context.Context) cubeio.Writer {
 	return w
 }
 
-// stepObserver writes the step rows of a Cube's queue.
+// stepObserver writes the step rows of a Cube's queue. The queue calls
+// it under its lock and from its Run (engine.Observer), so every call
+// only hands its write to the server's one ordered worker (s.steps),
+// which writes them in the order the queue reported them: a command's
+// row exists for its Started and Finished, and no radio command waits
+// on the store's one connection.
 type stepObserver struct {
 	s       *Server
 	mu      sync.Mutex
 	parents map[string]int64 // parent row id by uuid
-	steps   map[uint64]int64 // step row id by the queue's Seq
+	steps   map[uint64]int64 // step row id by the queue's Seq; only the worker uses it
 }
 
 func (s *Server) newObserver() engine.Observer {
@@ -100,7 +105,15 @@ func (o *stepObserver) parentOf(ctx context.Context, uuid string) int64 {
 	return c.ID
 }
 
-func (o *stepObserver) Enqueued(cmd engine.Command) {
+func (o *stepObserver) Enqueued(cmd engine.Command) { o.s.steps.do(func() { o.enqueued(cmd) }) }
+
+func (o *stepObserver) Started(cmd engine.Command) { o.s.steps.do(func() { o.started(cmd) }) }
+
+func (o *stepObserver) Finished(cmd engine.Command, res engine.Result) {
+	o.s.steps.do(func() { o.finished(cmd, res) })
+}
+
+func (o *stepObserver) enqueued(cmd engine.Command) {
 	ctx := context.Background()
 	parent := o.parentOf(ctx, cmd.ID)
 	if parent == 0 {
@@ -120,15 +133,11 @@ func (o *stepObserver) Enqueued(cmd engine.Command) {
 		o.s.log.Error("commands: step not written", "command", cmd.ID, "error", err)
 		return
 	}
-	o.mu.Lock()
 	o.steps[cmd.Seq] = step.ID
-	o.mu.Unlock()
 }
 
-func (o *stepObserver) Started(cmd engine.Command) {
-	o.mu.Lock()
+func (o *stepObserver) started(cmd engine.Command) {
 	id, ok := o.steps[cmd.Seq]
-	o.mu.Unlock()
 	if !ok {
 		return
 	}
@@ -137,11 +146,9 @@ func (o *stepObserver) Started(cmd engine.Command) {
 	}
 }
 
-func (o *stepObserver) Finished(cmd engine.Command, res engine.Result) {
-	o.mu.Lock()
+func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 	id, ok := o.steps[cmd.Seq]
 	delete(o.steps, cmd.Seq)
-	o.mu.Unlock()
 	if !ok {
 		return
 	}
@@ -157,6 +164,53 @@ func (o *stepObserver) Finished(cmd engine.Command, res engine.Result) {
 	raw, _ := json.Marshal(result)
 	if err := o.s.opts.Store.SetCommandState(context.Background(), id, state, 0, raw); err != nil {
 		o.s.log.Error("commands: step not finished", "step", id, "error", err)
+	}
+}
+
+// serialWorker runs functions one at a time in the order they were
+// handed to it, on a goroutine of its own that lives while there is
+// work; do never blocks.
+type serialWorker struct {
+	mu      sync.Mutex
+	jobs    []func()
+	running bool
+}
+
+// do hands f to the worker.
+func (w *serialWorker) do(f func()) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.jobs = append(w.jobs, f)
+	if !w.running {
+		w.running = true
+		go w.run()
+	}
+}
+
+func (w *serialWorker) run() {
+	for {
+		w.mu.Lock()
+		if len(w.jobs) == 0 {
+			w.running = false
+			w.mu.Unlock()
+			return
+		}
+		f := w.jobs[0]
+		w.jobs[0] = nil
+		w.jobs = w.jobs[1:]
+		w.mu.Unlock()
+		f()
+	}
+}
+
+// flush waits until everything handed to the worker before it ran, or
+// until timeout.
+func (w *serialWorker) flush(timeout time.Duration) {
+	done := make(chan struct{})
+	w.do(func() { close(done) })
+	select {
+	case <-done:
+	case <-time.After(timeout):
 	}
 }
 
@@ -277,6 +331,7 @@ func (s *Server) finishCommand(uuid string, ok bool, result any) {
 	if err != nil || !found {
 		return
 	}
+	s.steps.flush(2 * time.Second) // the run's steps before its end
 	state := store.StateAcknowledged
 	if !ok {
 		state = store.StateFailed

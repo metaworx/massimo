@@ -118,6 +118,9 @@ the next minor, a fix counts the suffix up.
 - A command's step in `GET /api/v1/commands/{id}` no longer stays
   `queued` when the queue ran it at once (docs/api-v1.md).
 
+- A radio command no longer waits for the store to record its step,
+  which a busy SD card could delay by up to five seconds.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

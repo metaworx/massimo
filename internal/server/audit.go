@@ -289,6 +289,11 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 		}
 	}
 	raw, _ := json.Marshal(detail)
+	if a.commandID != 0 {
+		// The command's steps are written first, so that whoever reads
+		// the row reads its steps.
+		s.steps.flush(2 * time.Second)
+	}
 	e := store.AuditEntry{Time: a.started, Remote: remote, Action: a.action, CubeID: a.cubeID, Target: a.target, Detail: raw, Result: result, CommandID: a.commandID}
 	if a.p.named() {
 		e.UserID, e.TokenID = a.p.user.ID, a.p.token.ID
