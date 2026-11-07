@@ -70,7 +70,7 @@ type EventKind int
 
 const (
 	EventConnected      EventKind = iota // greeting received, snapshot complete
-	EventDisconnected                    // connection lost; the client reconnects on its own
+	EventDisconnected                    // connection lost, once per loss (Run); the client reconnects on its own
 	EventHello                           // new H line (duty cycle, free slots, clock)
 	EventMetadata                        // rooms or devices changed
 	EventConfig                          // a device configuration arrived

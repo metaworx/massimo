@@ -160,6 +160,8 @@ the header says how many are pending.
 Shows the Cube's newest 200 events and new ones as they arrive: device states,
 configuration and name changes, connections to the Cube, pairing,
 restores and errors.
+A lost connection is one line, however often the server tries again
+until the Cube is back.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
