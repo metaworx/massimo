@@ -584,7 +584,7 @@ and a step row per engine command beneath it, with `parent_id`,
 `idempotency_key`, `state`, `status`, `request` and `result`;
 NOTE StoreUsers v1.0 of the plan: one table, `commands.keep_days` the retention)
 and `audit.command_id`, additively.
-`0006_opaque.sql` adds `users.opaque_record` and `users.opaque_ksf`,
+`0007_opaque.sql` adds `users.opaque_record` and `users.opaque_ksf`,
 the record of a password of `auth_version` 2 and its key stretching (section 6,
 "The sign-in by OPAQUE"), additively:
 a binary of before reads such a user as one with keys only.
@@ -678,9 +678,11 @@ The default roles, as seeded.
 | `backup` | ✓ | ✓ | | | |
 | `restore` | ✓ | | | | |
 | `guests` | ✓ | | | | |
+| `restart` | ✓ | | | | |
 | `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `audit` | | | | | |
 
-So `manager` is `operator` plus guests, pairing, names, structure and restore;
+So `manager` is `operator` plus guests, pairing, names, structure, restore
+and the server's restart (migration 0006, 2026-11-07);
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;
@@ -728,11 +730,13 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   Every client that sends the token today,
   the Pi's scripts and the web UI with its stored token among them,
   keeps working with full rights, which is what the token means today.
-- At every later start, a `MASSIMO_API_TOKEN` whose hash is not in `tokens` is
+- At every later start, and whenever `serve` reads the file again while it runs
+  (every five seconds it looks, and on SIGHUP),
+  a `MASSIMO_API_TOKEN` whose hash is not in `tokens` is
   added to the owner's keys with the same label,
   and one that was removed from the file is revoked.
   The file stays the way to recover an owner who lost the password:
-  put a token into the file, restart, log in with it, set a password.
+  put a token into the file, log in with it, set a password.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,

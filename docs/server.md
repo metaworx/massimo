@@ -436,7 +436,7 @@ They are small; together they are a day in stages (a) and (b) of docs/store.md.
    Cost: one column and the `auth_version` check at login.
    Saves: every user re-enrolling.
    Done: `auth_version` 2 is the sign-in by OPAQUE (docs/store.md section 6),
-   the record in `users.opaque_record` (migration 0006),
+   the record in `users.opaque_record` (migration 0007),
    and a user of version 1 moves to 2 at the next sign-in in the browser.
 7. **`commands` in stage (b) of docs/store.md** with `Idempotency-Key` on the
    write routes and `GET /api/v1/commands/{id}`:

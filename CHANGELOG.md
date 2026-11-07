@@ -22,9 +22,27 @@ the next minor, a fix counts the suffix up.
   server's backups with compare, restore and delete, and a restore from
   a file that shows its plan first (`docs/ui.md`, "Settings").
 
+- The web UI warns under its header while the server is open, and says
+  what closes it (`docs/ui.md`).
+
+- `POST /api/v1/restart` restarts the server for the capability
+  `restart` of owner and manager (migration 0006), an open server only
+  from the box itself (`docs/api-v1.md`, "POST /api/v1/restart").
+
+- Settings → Software restarts the server, follows it until it is back,
+  and lists the settings that wait for a restart (`docs/ui.md`).
+
+- `serve` reads its settings file again when it changes and on SIGHUP
+  (`-sighup`), so `MASSIMO_API_TOKEN` applies without a restart
+  (`README.md`, "Server").
+
+- `serve -restart` (`MASSIMO_RESTART`) says when the server restarts
+  for the API, stopping and exiting 75 for its service manager; `massimo
+  restart` restarts the installed server (`README.md`, "Server").
+
 - A sign-in by OPAQUE (RFC 9807) that sends no password, and the
   registration that sets one: `POST /api/v1/login/start` and `…/finish`
-  (migration 0006, `opaque.key`; `docs/api-v1.md`).
+  (migration 0007, `opaque.key`; `docs/api-v1.md`).
 
 - The web UI signs in by OPAQUE, the password kept in the browser, with
   `@serenity-kit/opaque` 1.1.0 in `ui/vendor/`; a user of version 1 is
@@ -56,6 +74,10 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+- CI runs the web UI's suite on a pull request only when it changes the
+  UI, the suite or `ci.yml`, and then on two of its four cases; a push to
+  `main` runs all of it (`GUIDELINES/project/CI.md`, section 2).
+
 ### Fixed
 
 - A request still being answered when `serve` stops is finished, and
@@ -65,7 +87,23 @@ the next minor, a fix counts the suffix up.
   while another program has it open, and logs `store closed`
   (`docs/store.md` section 3).
 
+- A lost Cube is logged and stored as `disconnected` once, not at
+  every retry, and its return logged with how long it was down
+  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+
 ### Security
+
+- A server that asks for no key answers only its local network, a
+  reverse proxy's clients only with `-trusted-proxies`
+  (`docs/api-v1.md`, "Authentication").
+
+- An event stream ends within 30 s once its caller would not be let in
+  any more, such as a revoked key or an open server's first user
+  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+
+- The server refuses a write that another site's page sent, which an
+  open server served: such a page could create the first owner
+  (`docs/api-v1.md`, "Authentication").
 
 - Password hashes run at most one a core at once, four at the most, and
   eight wait; a sign-in, user add or password change beyond them is

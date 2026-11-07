@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.10.1)
+# Massimo — CI Conventions (v1.11.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -33,7 +33,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers, and on two of the suite's four cases); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
@@ -61,6 +61,28 @@ and the set committed under `docs/screenshots/` is the one taken there:
 the runner's fonts give other pixels,
 so the artifact is for looking at,
 and nothing compares it with the committed set.
+
+The Screenshots job is the run's longest, about 7½ minutes,
+6½ of them for the suite's 204 cases (51 tests,
+each at 1100 and 390 px, in English and German);
+the screenshot set takes half a minute.
+A pull request therefore runs it only when it changes `internal/server/ui/`,
+`tools/ui-test/` or `.github/workflows/ci.yml`,
+the paths the contract asks `make ui-test` for and the job's own definition,
+and then on the cases 1100-en and 390-de (`PYTEST_ADDOPTS`),
+both widths and both languages, half the cases.
+The job Changed paths answers that from the pull request's merge commit,
+whose first parent is the base branch.
+The condition sits on the job, not on the workflow's trigger:
+"Screenshots" is a required check on `main`,
+and a job skipped by its `if:` counts as passed,
+while a workflow that a path filter never starts leaves the check waiting.
+Only an answer of `false` skips the job,
+so a Changed paths job that fails runs it rather than letting the pull request
+through untested.
+A push to `main` runs all four cases,
+so a change elsewhere that breaks the page shows on the merge commit's run.
+
 Hardware is never touched by CI;
 the Windows and macOS jobs run against the fake Cube.
 

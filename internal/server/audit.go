@@ -75,6 +75,7 @@ var actions = map[string]string{
 	"POST /api/v1/cubes/{sn}/pairing":              "pairing.start",
 	"DELETE /api/v1/cubes/{sn}/pairing":            "pairing.stop",
 	"POST /api/v1/update":                          "update.start",
+	"POST /api/v1/restart":                         "server.restart",
 	"POST /api/v1/users":                           "user.add",
 	"PUT /api/v1/users/{name}":                     "user.update",
 	"DELETE /api/v1/users/{name}":                  "user.remove",
