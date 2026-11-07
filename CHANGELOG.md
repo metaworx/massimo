@@ -122,7 +122,7 @@ the next minor, a fix counts the suffix up.
   which a busy SD card could delay by up to five seconds.
 
 - A retry with the `Idempotency-Key` of a request the server's restart
-  cut off answers 503, instead of closing the connection (docs/api-v1.md).
+  cut off answers 503, not a closed connection (docs/api-v1.md).
 
 - A replay of a restore's `Idempotency-Key` answers the first `202`, no
   longer the run's outcome (docs/api-v1.md).
@@ -137,7 +137,8 @@ the next minor, a fix counts the suffix up.
   meanwhile stops, instead of taking its place beside it.
 
 - A `t:` deleting several devices waits for the Cube's `A:` of each, so
-  the next command no longer takes a late one as its reply (docs/proxy.md).
+  the next command no longer takes a late one as its reply
+  (docs/proxy.md).
 
 - A Cube's new address from discovery is dialled at once, no longer after
   the minute of backoff the old address built up.
