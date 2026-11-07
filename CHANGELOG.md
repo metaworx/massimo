@@ -73,6 +73,9 @@ the next minor, a fix counts the suffix up.
 - A colour scheme deleted in one browser no longer comes back from
   another that still had it (docs/ui.md, "Settings").
 
+- A room's state arriving while its configuration is typed in no longer
+  draws the tile again under the typing; it shows once the focus leaves.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
