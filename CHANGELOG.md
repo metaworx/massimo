@@ -28,6 +28,10 @@ the next minor, a fix counts the suffix up.
   55 % of the time and 30 % of the memory of the 64 MiB before; an old
   hash is replaced at the next sign-in (`docs/store.md` section 6).
 
+- A user add of a taken name or an unknown role, and a password set for
+  a user that is not there, answer at once rather than after a hash
+  (`docs/store.md` section 6).
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).

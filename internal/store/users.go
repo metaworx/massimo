@@ -181,6 +181,18 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 	}
 	hash := ""
 	if password != "" {
+		// A hash is the cost of the call: the answers that need none
+		// come first, and the transaction checks again for a race.
+		if _, err := s.roleID(ctx, s.db, u.Role); err != nil {
+			return User{}, err
+		}
+		var deleted sql.NullString
+		switch err := s.db.QueryRowContext(ctx, `SELECT deleted_at FROM users WHERE name = ?`, u.Name).Scan(&deleted); {
+		case err == nil && !deleted.Valid:
+			return User{}, fmt.Errorf("%w: %s", ErrUserExists, u.Name)
+		case err != nil && !errors.Is(err, sql.ErrNoRows):
+			return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
+		}
 		var err error
 		if hash, err = s.hashPassword(ctx, password); err != nil {
 			return User{}, err
@@ -296,6 +308,14 @@ func (s *Store) SetPassword(ctx context.Context, name, password string, by int64
 	}
 	hash := ""
 	if password != "" {
+		// No hash for a user that is not there.
+		var live int
+		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&live); err != nil {
+			return fmt.Errorf("store: user %s: %w", name, err)
+		}
+		if live == 0 {
+			return fmt.Errorf("%w: %s", ErrNoUser, NormalName(name))
+		}
 		var err error
 		if hash, err = s.hashPassword(ctx, password); err != nil {
 			return err

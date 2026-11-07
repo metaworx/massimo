@@ -274,3 +274,41 @@ func TestRehashAtSignIn(t *testing.T) {
 		t.Fatal("a hash changed meanwhile was overwritten")
 	}
 }
+
+// A user add of a taken name or an unknown role, and a password set for
+// a user that is not there, answer without a hash; a removed user's
+// name is taken over with one.
+func TestNoHashForAKnownAnswer(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := t.Context()
+	if _, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "pw", 0); err != nil {
+		t.Fatal(err)
+	}
+	s.AddUser(ctx, User{Name: "gone", Role: RoleViewer}, "", 0)
+	s.DeleteUser(ctx, "gone", 0)
+	var hashes atomic.Int32
+	real := argonKey
+	argonKey = func(password, salt []byte, time, memory uint32, threads uint8, keyLen uint32) []byte {
+		hashes.Add(1)
+		return real(password, salt, time, memory, threads, keyLen)
+	}
+	t.Cleanup(func() { argonKey = real })
+	if _, err := s.AddUser(ctx, User{Name: " Anna ", Role: RoleViewer}, "pw", 0); !errors.Is(err, ErrUserExists) {
+		t.Fatalf("a taken name: %v", err)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "bert", Role: "nosuch"}, "pw", 0); !errors.Is(err, ErrNoRole) {
+		t.Fatalf("an unknown role: %v", err)
+	}
+	if err := s.SetPassword(ctx, "nobody", "pw", 0); !errors.Is(err, ErrNoUser) {
+		t.Fatalf("a password for nobody: %v", err)
+	}
+	if err := s.SetPassword(ctx, "gone", "pw", 0); !errors.Is(err, ErrNoUser) {
+		t.Fatalf("a password for a removed user: %v", err)
+	}
+	if n := hashes.Load(); n != 0 {
+		t.Fatalf("%d hashes for answers that need none", n)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "gone", Role: RoleViewer}, "pw", 0); err != nil || hashes.Load() != 1 {
+		t.Fatalf("a removed user's name: %v, %d hashes", err, hashes.Load())
+	}
+}

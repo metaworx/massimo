@@ -769,6 +769,9 @@ and only where it is still the old one;
 the row keeps its version and update time, since the password is the same.
 A stored string that asks for more than 256 MiB, 16 passes or 16 lanes
 is refused rather than allocated.
+A hash is the cost of the call, so the answers that need none come first:
+a user add finds a taken name or an unknown role,
+and a password change a user that is not there, before it hashes.
 
 ### The commands
 
