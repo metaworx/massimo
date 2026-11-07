@@ -43,7 +43,8 @@ so the session never appears in a URL.
   and in the log.
 - **The Cube's clock** and the time of the last update.
 - **↻** asks the server for the current state now.
-- The three page buttons switch between **Rooms**, **Log** and **Settings**.
+- The three page buttons, a house, a sheet and a cog,
+  switch between **Rooms**, **Log** and **Settings**.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and not the settings page.

@@ -28,6 +28,9 @@ the next minor, a fix counts the suffix up.
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
+- The web UI's Log button shows a sheet, since three lines alone read as
+  a menu (`docs/ui.md`, "Header").
+
 ### Fixed
 
 - The web UI keeps a button that sends off, with a spinner, until the

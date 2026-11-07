@@ -22,7 +22,9 @@
   <symbol id="icon-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/></symbol>
   <!-- navigation -->
   <symbol id="icon-house" viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-6h4v6"/></symbol>
-  <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <!-- the log: a sheet with a folded corner and its lines, so that it
+       does not read as a menu (three lines alone) -->
+  <symbol id="icon-log" viewBox="0 0 24 24"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4.5"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <header class="top">
@@ -45,7 +47,7 @@
       <button type="button" id="refresh-btn" class="icon-btn" aria-label="refresh" title="Refresh now" data-i18n-attr="aria-label:header.refresh title:header.refreshTitle">↻</button>
       <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
         <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-        <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></button>
+        <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
         <button type="button" id="view-settings" class="icon-btn nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
       </nav>
     </div>
