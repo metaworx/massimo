@@ -41,6 +41,58 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- A Debian package built between two tags holds the version its file
+  name shows (`make packages`).
+
+- The apt repository's keyring package is versioned by the time of the
+  publish, so that its version only goes up, whatever the key's dates.
+
+- The apt snippet's Signed-By names the keyring package's key, installed
+  first, so that an extended key reaches the boxes (packaging/README.md).
+
+- The release workflow pushes the Homebrew formula to the tap itself:
+  the release it creates never started publish.yml (CI.md, section 6).
+
+- The apt repository's setup names the `github-pages` environment's rule
+  for the tags `v*`, without which every deploy is refused.
+
+- Settings → Users shows a key just created, lists each token once, and
+  one click on Create key makes one key.
+
+- A redraw of Settings → Cubes no longer reloads an open Cube's pairing,
+  which took the focus out of the pairing form being typed in.
+
+- Hide and Show again in a Cube's panel keep what is typed in its form.
+
+- A sign-in as the page starts, or after Log out, starts the page once,
+  with one event stream instead of two.
+
+- Log out takes the user's settings and colour schemes out of the
+  browser, so that the next user neither sees nor inherits them.
+
+- A colour scheme deleted in one browser no longer comes back from
+  another that still had it (docs/ui.md, "Settings").
+
+- A room's state arriving while its configuration is typed in no longer
+  draws the tile again under the typing; it shows once the focus leaves.
+
+- A switch point's time can be typed in full from the keyboard in the
+  week programme; the editor no longer redraws after its first part.
+
+- The log keeps the live events that come while it loads a page.
+
+- Saving a user with an end date no longer sends the end date again,
+  cut to the minute, when it did not change.
+
+- A double click on Yes of a removal sends one request, and the page
+  says it worked instead of reporting the second as failed.
+
+- A language load that a newer choice has superseded no longer shows
+  its error on the page in the newer language.
+
+- An event that makes the page load again no longer leaves a failed
+  load as an uncaught error in the browser's console.
+
 - A new API key is no longer kept in its command's result, nor given
   out again by a replay of its `Idempotency-Key` (docs/api-v1.md).
 
