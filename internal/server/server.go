@@ -253,8 +253,14 @@ type Server struct {
 	updates updateCheck
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
-	// restartGate lets one restart through (restart_api.go).
+	// restartGate lets one restart through (restart_api.go), and
+	// pending lists what applies only at the next one.
 	restartGate restartGate
+	pendingMu   sync.Mutex
+	pending     []string
+	// token is the one token without a store (auth.go, legacyToken).
+	tokenMu sync.RWMutex
+	token   string
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -426,7 +432,7 @@ func New(opts Options) *Server {
 	if opts.PollInterval == 0 {
 		opts.PollInterval = time.Minute
 	}
-	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{},
+	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{}, token: opts.Token,
 		limiter: newLimiter(opts, opts.Logger), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
 	if s.authLockout <= 0 {

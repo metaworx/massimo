@@ -29,6 +29,9 @@ RestartSec=10s
 # 75, which is started again and not counted as a failure.
 RestartForceExitStatus=75
 SuccessExitStatus=75
+# systemctl reload massimo: the settings file read again, MASSIMO_API_TOKEN
+# applied at once, and the store checkpointed.
+ExecReload=/bin/kill -HUP $MAINPID
 WorkingDirectory=/var/lib/massimo
 StateDirectory=massimo
 LogsDirectory=massimo

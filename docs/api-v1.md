@@ -179,11 +179,12 @@ at the first start with the variable set and no user,
 the server creates the user `owner` with the role `owner`,
 no password and the token as its API key (label `MASSIMO_API_TOKEN`),
 so every client that sends the token keeps working with full rights.
-At every later start, a token in the file that the store does not know is
-added to an enabled owner's keys,
+At every later start, and whenever the server reads the file again while it runs
+(it looks every five seconds, and on SIGHUP; see README.md, "Server"),
+a token in the file that the store does not know is added to an enabled owner's keys,
 and a key with that label whose secret is not the file's any more is revoked.
 The file stays the way to recover an owner who lost the password:
-put a token into it, restart, log in with it, set a password.
+put a token into it, log in with it, set a password; no restart is needed.
 
 The capabilities, what each allows and the routes it guards;
 the OpenAPI file carries each operation's as `x-capability`:
@@ -1734,7 +1735,11 @@ in the moment between the start of the helper and its first status);
 `GET` says whether this caller's `POST` would restart the server now,
 and who starts it again:
 `{"available": true, "by": "systemd"}`,
-or `{"available": false, "blocked": "<why>"}`.
+or `{"available": false, "blocked": "<why>"}`;
+`pending`, where there is any,
+names the settings of the settings file that changed since the start
+and apply only at the next one,
+such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).

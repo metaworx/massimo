@@ -167,7 +167,7 @@ func (s *Server) AuthMode() string {
 	case modeUsers:
 		return "users"
 	}
-	if s.opts.Token != "" {
+	if s.legacyToken() != "" {
 		return "token"
 	}
 	return "none"
@@ -182,7 +182,37 @@ func (s *Server) authenticated(ctx context.Context) bool {
 	case modeOpen:
 		return false
 	}
-	return s.opts.Token != ""
+	return s.legacyToken() != ""
+}
+
+// legacyToken is the one token of a server without a store: Options.Token
+// at the start, or what SetToken gave it since.
+func (s *Server) legacyToken() string {
+	s.tokenMu.RLock()
+	defer s.tokenMu.RUnlock()
+	return s.token
+}
+
+// SetToken applies a MASSIMO_API_TOKEN that the settings file gained,
+// changed or lost while the server runs, as a start would (docs/store.md
+// section 6): with a store it becomes an owner's key, or the first owner
+// with it, and a key the file's token was before is revoked; without a
+// store it is the one token. "" is none.
+func (s *Server) SetToken(ctx context.Context, token string) error {
+	s.tokenMu.Lock()
+	s.token = token
+	s.tokenMu.Unlock()
+	st := s.opts.Store
+	if st == nil {
+		s.log.Info("api token changed", "auth", s.AuthMode())
+		return nil
+	}
+	res, err := st.Bootstrap(ctx, token)
+	if err != nil {
+		return err
+	}
+	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "auth", s.AuthMode())
+	return nil
 }
 
 // tokenMatches compares a presented token with the configured one in
@@ -564,7 +594,7 @@ func forbidden(format string, args ...any) error {
 // resolve turns a presented token into a principal, or says why not.
 func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) (*principal, error) {
 	if mode == modeLegacy {
-		if tokenMatches(s.opts.Token, secret) {
+		if tokenMatches(s.legacyToken(), secret) {
 			return &principal{mode: modeLegacy}, nil
 		}
 		return nil, errBadToken
@@ -653,7 +683,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	switch {
 	case mode == modeOpen:
 		return &principal{mode: modeOpen}, true
-	case mode == modeLegacy && s.opts.Token == "":
+	case mode == modeLegacy && s.legacyToken() == "":
 		return &principal{mode: modeLegacy}, true
 	}
 	ip := s.clientIP(r)

@@ -726,11 +726,13 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   Every client that sends the token today,
   the Pi's scripts and the web UI with its stored token among them,
   keeps working with full rights, which is what the token means today.
-- At every later start, a `MASSIMO_API_TOKEN` whose hash is not in `tokens` is
+- At every later start, and whenever `serve` reads the file again while it runs
+  (every five seconds it looks, and on SIGHUP),
+  a `MASSIMO_API_TOKEN` whose hash is not in `tokens` is
   added to the owner's keys with the same label,
   and one that was removed from the file is revoked.
   The file stays the way to recover an owner who lost the password:
-  put a token into the file, restart, log in with it, set a password.
+  put a token into the file, log in with it, set a password.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,

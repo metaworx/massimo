@@ -27,6 +27,24 @@ type restartView struct {
 	Available bool   `json:"available"`
 	By        string `json:"by,omitempty"`
 	Blocked   string `json:"blocked,omitempty"`
+	// Pending names the settings that changed since the start and
+	// apply only at the next one.
+	Pending []string `json:"pending,omitempty"`
+}
+
+// SetPendingRestart says which settings changed since the start and
+// apply only at the next one: names, never values (cmd/massimo, the
+// settings file's reload).
+func (s *Server) SetPendingRestart(names []string) {
+	s.pendingMu.Lock()
+	s.pending = append([]string(nil), names...)
+	s.pendingMu.Unlock()
+}
+
+func (s *Server) pendingRestart() []string {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	return append([]string(nil), s.pending...)
 }
 
 // openRestartRefused is the reason an open server gives a request that
@@ -83,6 +101,7 @@ func (s *Server) restartState(r *http.Request) (v restartView, open bool) {
 
 func (s *Server) getRestart(w http.ResponseWriter, r *http.Request) error {
 	v, _ := s.restartState(r)
+	v.Pending = s.pendingRestart()
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }

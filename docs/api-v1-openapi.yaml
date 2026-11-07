@@ -2299,6 +2299,10 @@ components:
         available: {type: boolean, description: Whether this caller's POST would restart the server now}
         by: {type: string, enum: [systemd, launchd, windows, exit], description: Who starts the server again; absent when nobody would}
         blocked: {type: string, description: Why the restart is not available}
+        pending:
+          type: array
+          items: {type: string}
+          description: The settings file's variables that changed since the start and apply only at the next one; names, never values
     UpdateInfo:
       type: object
       properties:
