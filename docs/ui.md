@@ -208,7 +208,8 @@ the header says how many are pending.
 
 ## Log
 
-Shows the Cube's newest 200 events and new ones as they arrive: device states,
+Shows the Cube's last 20 events, newest first, and new ones on top as they
+arrive: device states,
 configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
@@ -216,7 +217,16 @@ until the Cube is back.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
-**Older events** above the lines loads the 200 before the oldest shown,
+A view scrolled down keeps its place when a new line comes in on top.
+The choice of how far back, beside the kind and the device,
+shows the **last 20 events** (the default), the **last 10 minutes**,
+the **last hour**, **today**, **this week** (from Monday), **this month**
+or **all events**; it rolls with the time:
+the last 20 keep the newest 20 as events come in,
+and a time range drops a line once it falls out, checked each minute.
+A line of another day shows its date.
+For a time range and for all events,
+**Older events** under the lines loads the 200 before the oldest shown, within the range,
 the view staying where it was,
 until the server has nothing older ("No older events").
 The pages fetched stay while new events come in, with room for 2000 more lines;
@@ -233,7 +243,8 @@ The two choices in the head show one kind of event (all kinds by default)
 and one device (all devices); the server answers what matches,
 and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
-**Clear** empties the view only; the server keeps its log.
+**Clear** sets the filter, the kind and the device back to all
+and loads the log again, the range staying; it is off while none of them is set.
 
 ## My profile
 

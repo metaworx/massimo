@@ -1662,7 +1662,7 @@ also as the event's `error`.
 `error`.
 Both are in `GET …/log`.
 
-### GET /api/v1/cubes/{sn}/log?before=&limit=&kind=&device=
+### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&device=
 
 A page of the Cube's events, oldest first,
 the same objects the event stream sends (`kind`, `device`, `state`, `error`,
@@ -1685,6 +1685,10 @@ Each event carries `id`, its place in the log, which the stream's events do not.
 Without parameters the answer is the newest 200 events; `limit` takes 1 to 1000,
 `before` an event's `id` for the page before it (`?before=4711`),
 or an RFC 3339 time for the events before that time;
+`since` an RFC 3339 time for the events at or after it
+(`?since=2026-11-06T20:00:00Z`, not after a `before` time),
+so that a view of the last hour or of today is one request,
+with `before` as the cursor within it;
 `kind` keeps one kind (`state`, `config`, `connected`,
 …) and `device` one radio address.
 A client pages back with `before` set to the `id` of the oldest event it has,
@@ -1696,13 +1700,15 @@ the event's own `time` is the log's.
 A Cube served for this run only, without a row in the store (`serve -addr`,
 or `-sn` before discovery noted it), keeps its last 500 events in memory,
 without `id`, as before the store;
-`before` then takes a time, and an `id` answers an empty page.
+`before` then takes a time, and an `id` answers an empty page;
+`since` works there as in the store.
 Such a Cube that gains its row while it runs, as discovery notes it,
 answers from the store from then on,
 and the events it kept in memory leave the log.
 A device hidden later keeps its events in the log until `log.keep_days` removes them.
 A page before a time first looks up the newest event before it,
 which reads the Cube's times up to there: an `id` is the quicker cursor.
+A page since a time looks up the oldest event at or after it the same way.
 `400` for a bad `before`, `limit` or `device`.
 
 ### GET /api/v1/cubes/{sn}/events

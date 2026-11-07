@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The web UI's log has a choice of how far back: the last 20 events by
+  default, 10 minutes, an hour, today, this week, this month or all
+  (`docs/ui.md`, "Log").
+
 - The store keeps each Cube's backups, gzip, pruned by reason and age
   as the `backups.*` settings say (migration 0005; `docs/store.md`
   section 9).
@@ -71,6 +75,9 @@ the next minor, a fix counts the suffix up.
   settings → Users: off, `POST /api/v1/login` is `403` and users sign
   in by OPAQUE alone (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
 
+- `GET /api/v1/cubes/{sn}/log` takes `since`, an RFC 3339 time, for the
+  events at or after it (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/log").
+
 ### Changed
 
 - Passwords are hashed with argon2id at 19 MiB and two passes, about
@@ -89,6 +96,9 @@ the next minor, a fix counts the suffix up.
   once: the password crosses that once more and the hash goes
   (`docs/store.md` section 6).
 
+- The web UI's log reads newest first, new events coming in on top and
+  Older events at the bottom (`docs/ui.md`, "Log").
+
 - The recorded greeting that the tests and CI's fake Cube load, and its
   UI-test copy, carry placeholder serials
   (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
@@ -101,6 +111,9 @@ the next minor, a fix counts the suffix up.
   a menu (`docs/ui.md`, "Header").
 
 ### Fixed
+
+- The web UI's Clear in the log sets the filter, the kind and the device
+  back to all, in place of emptying the view (`docs/ui.md`, "Log").
 
 - The web UI keeps a button that sends off, with a spinner, until the
   answer, and a Send off while nothing changed, so a second click sends

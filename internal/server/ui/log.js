@@ -2,10 +2,12 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, log view: the selected Cube's events from
-// GET …/log, a page at a time with "Older" back through the server's
-// log, then the live events of the stream, one line each, with a text
-// filter, a choice of kind and of device, and a clear that only empties
-// the view. Uses the state, api and helpers of app.js and tiles.js.
+// GET …/log, newest first, a page at a time with "Older" at the bottom
+// back through the server's log, the live events of the stream coming in
+// at the top, one line each, with a text
+// filter, a choice of kind, of device and of how far back (the range),
+// and Clear, which sets the first three back.
+// Uses the state, api and helpers of app.js and tiles.js.
 "use strict";
 
 const LOG_MAX_LINES = 2000;
@@ -19,9 +21,17 @@ const LOG_PAGE = 200;
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
   "device_forgotten", "cube_found", "restore_step", "restore_done"];
 
+// LOG_RANGES are the choices of how far back the log goes: the newest
+// LOG_COUNT events, the last 10 minutes, the last hour, today, this week
+// (from Monday), this month, or all; LOG_COUNT_RANGE by default.
+const LOG_RANGES = ["20", "10m", "1h", "today", "week", "month", "all"];
+const LOG_COUNT_RANGE = "20";
+const LOG_COUNT = 20;
+
 const logState = {
   open: false,
-  lines: [], // {id, time, at, kind, device, text}
+  range: LOG_COUNT_RANGE, // one of LOG_RANGES
+  lines: [], // {id, time, at, kind, device, text}, oldest first; drawn newest first
   filter: "",
   kind: "", // the kind chosen, "" for all
   device: "", // the radio address chosen, "" for all
@@ -30,7 +40,7 @@ const logState = {
   loading: false, // a page is on its way
   gen: 0, // raised by a new log, Clear and a Cube switch: an answer of an older one is dropped
   room: 0, // the lines live events may grow the log to before the oldest go (LOG_MAX_LINES at least)
-  stick: true, // auto-scroll to the bottom unless the user scrolled up
+  stick: true, // keep the newest line in view at the top unless the user scrolled down
   liveSeq: 0, // counts the live lines, so that loadLog finds the ones that came while it waited
 };
 
@@ -149,9 +159,39 @@ function logKind(kind) {
   return s === key ? kind : s;
 }
 
+// fmtLogTime is a line's time, with its date when it is not today's.
 function fmtLogTime(d) {
   const pad = (n) => String(n).padStart(2, "0");
-  return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "2-digit" }).format(d) + " " + time;
+}
+
+// logRangeStart is where a time range starts, seen from now; null for the
+// count and for all.
+function logRangeStart(range, now = new Date()) {
+  switch (range) {
+    case "10m":
+      return new Date(now.getTime() - 10 * 60000);
+    case "1h":
+      return new Date(now.getTime() - 3600000);
+    case "today":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    case "week": {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      return d;
+    }
+    case "month":
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  return null;
+}
+
+// logInQuery reports whether a line is of the kind and the device chosen,
+// as the server answers them.
+function logInQuery(line) {
+  return (!logState.kind || line.kind === logState.kind) && (!logState.device || line.device === logState.device);
 }
 
 function logLineMatches(line) {
@@ -185,22 +225,26 @@ function renderLogLine(line) {
   return row;
 }
 
+// renderLog draws the lines that match, newest first.
 function renderLog() {
   const box = $("log-lines");
   clear(box);
-  for (const line of logState.lines) {
+  for (let i = logState.lines.length - 1; i >= 0; i--) {
+    const line = logState.lines[i];
     if (logLineMatches(line)) box.appendChild(renderLogLine(line));
   }
-  if (logState.stick) box.scrollTop = box.scrollHeight;
+  if (logState.stick) box.scrollTop = 0;
   renderOlder();
 }
 
-// renderOlder shows whether Older can page further back.
+// renderOlder shows whether Older can page further back; the newest
+// LOG_COUNT have no Older, a time range pages back within it.
 function renderOlder() {
   const btn = $("log-older");
   const can = logState.more && logState.cursor !== null;
   btn.disabled = !can || logState.loading;
   btn.textContent = t(can ? "log.older" : "log.noOlder");
+  btn.parentElement.classList.toggle("hidden", logState.range === LOG_COUNT_RANGE);
 }
 
 // logCursor is where the next older page starts: the oldest line's id,
@@ -212,10 +256,13 @@ function logCursor() {
   return first.id ? String(first.id) : first.at || null;
 }
 
-// logQuery is the query of a page: the size, the kind and the device
+// logQuery is the query of a page: the size (LOG_COUNT for the count,
+// else LOG_PAGE), the start of a time range, the kind and the device
 // chosen, and where it starts.
 function logQuery(before) {
-  let q = "?limit=" + LOG_PAGE;
+  let q = "?limit=" + (logState.range === LOG_COUNT_RANGE ? LOG_COUNT : LOG_PAGE);
+  const start = logRangeStart(logState.range);
+  if (start) q += "&since=" + encodeURIComponent(start.toISOString());
   if (logState.kind) q += "&kind=" + encodeURIComponent(logState.kind);
   if (logState.device) q += "&device=" + encodeURIComponent(logState.device);
   if (before) q += "&before=" + encodeURIComponent(before);
@@ -223,29 +270,45 @@ function logQuery(before) {
 }
 
 // appendLogEvent adds a live event; the view is updated in place when
-// it is open. Past the room the oldest lines go: after Older, the room
-// holds the pages fetched and LOG_MAX_LINES more, so that a live event
-// does not take back a page just fetched.
+// it is open, the line on top, and a view scrolled down keeps the lines
+// it shows where they are. The oldest lines go, at the bottom: with the
+// count, those past the newest LOG_COUNT of the kind and the device
+// chosen; else those past the room: after Older, the room holds the pages
+// fetched and LOG_MAX_LINES more, so that a live event does not take back
+// a page just fetched.
 function appendLogEvent(ev) {
   const line = logLine(ev);
   line.seq = ++logState.liveSeq;
   logState.lines.push(line);
-  const room = Math.max(logState.room, LOG_MAX_LINES);
+  let cut = 0;
+  if (logState.range === LOG_COUNT_RANGE) {
+    for (let i = logState.lines.length - 1, n = 0; i >= 0; i--) {
+      if (logInQuery(logState.lines[i]) && ++n > LOG_COUNT) {
+        cut = i + 1;
+        break;
+      }
+    }
+  } else {
+    const room = Math.max(logState.room, LOG_MAX_LINES);
+    if (logState.lines.length > room) cut = logState.lines.length - room;
+  }
   let gone = [];
-  if (logState.lines.length > room) {
-    gone = logState.lines.splice(0, logState.lines.length - room);
+  if (cut) {
+    gone = logState.lines.splice(0, cut);
     logState.cursor = logCursor(); // Older goes on from the oldest line kept
-    logState.more = true;
+    logState.more = logState.range !== LOG_COUNT_RANGE;
   }
   if (!logState.open) return;
   const box = $("log-lines");
   for (const old of gone) {
-    if (logLineMatches(old) && box.firstChild) box.removeChild(box.firstChild); // the view drops them too
+    if (logLineMatches(old) && box.lastChild) box.removeChild(box.lastChild); // the view drops them too
   }
   if (gone.length) renderOlder();
   if (logLineMatches(line)) {
-    box.appendChild(renderLogLine(line));
-    if (logState.stick) box.scrollTop = box.scrollHeight;
+    const height = box.scrollHeight;
+    box.insertBefore(renderLogLine(line), box.firstChild);
+    if (logState.stick) box.scrollTop = 0;
+    else box.scrollTop += box.scrollHeight - height;
   }
 }
 
@@ -277,7 +340,7 @@ async function loadLog() {
   } else {
     logState.lines = evs.map(logLine);
     logState.cursor = logCursor();
-    logState.more = evs.length >= LOG_PAGE;
+    logState.more = logState.range !== LOG_COUNT_RANGE && evs.length >= LOG_PAGE;
   }
   const page = logState.lines.slice();
   for (const l of live) {
@@ -288,7 +351,7 @@ async function loadLog() {
   renderLog();
 }
 
-// loadOlder puts the page before the oldest line above the lines, the
+// loadOlder puts the page before the oldest line under the lines, the
 // view staying where it was; an answer that comes after a Clear, another
 // choice or a Cube switch is dropped.
 async function loadOlder() {
@@ -297,7 +360,6 @@ async function loadOlder() {
   logState.loading = true;
   renderOlder();
   const box = $("log-lines");
-  const height = box.scrollHeight;
   const top = box.scrollTop;
   let evs = null;
   let failed = null;
@@ -319,8 +381,42 @@ async function loadOlder() {
   const stick = logState.stick;
   logState.stick = false;
   renderLog();
-  box.scrollTop = top + (box.scrollHeight - height);
-  logState.stick = stick && box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+  box.scrollTop = top; // the older lines came in below
+  logState.stick = stick;
+}
+
+// pruneLogRange drops the lines a time range no longer holds, now or at
+// the time given; the age timer of app.js calls it every minute. Every
+// event of the range is then in the view, so Older has nothing more.
+function pruneLogRange(now = new Date()) {
+  const start = logRangeStart(logState.range, now);
+  if (!start) return;
+  const keep = logState.lines.findIndex((l) => l.kind === "error" || l.time >= start);
+  const cut = keep === -1 ? logState.lines.length : keep;
+  if (!cut) return;
+  logState.lines.splice(0, cut);
+  logState.cursor = logCursor();
+  logState.more = false;
+  if (logState.open) renderLog();
+}
+
+// renderLogClear turns Clear off while nothing narrows the log: no text
+// filter, every kind and every device.
+function renderLogClear() {
+  $("log-clear").disabled = !(logState.filter || logState.kind || logState.device);
+}
+
+// clearLogFilter sets the text filter, the kind and the device back to
+// all and loads the log again; a page on its way is dropped (loadLog).
+function clearLogFilter() {
+  logState.filter = "";
+  logState.kind = "";
+  logState.device = "";
+  $("log-filter").value = "";
+  $("log-kind").value = "";
+  $("log-device").value = "";
+  renderLogClear();
+  loadLog();
 }
 
 // fillLogSelects fills the choice of kind, every kind the server sends,
@@ -333,10 +429,12 @@ function fillLogSelects() {
   for (const r of state.rooms) for (const d of r.devices) devs.push(d);
   for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
   devs.sort((a, b) => (a.name || a.rf_address).localeCompare(b.name || b.rf_address));
+  fillOptions($("log-range"), LOG_RANGES.map((r) => [r, t("log.range." + r)])).value = logState.range;
   const sel = fillOptions($("log-device"), [["", t("log.allDevices")]].concat(devs.map((d) => [d.rf_address, d.name ? d.name + " · " + d.rf_address : d.rf_address])));
   const gone = logState.device !== "" && !devs.some((d) => d.rf_address === logState.device);
   if (gone) logState.device = "";
   sel.value = logState.device;
+  renderLogClear();
   return gone;
 }
 
@@ -351,6 +449,7 @@ function logCubeChanged() {
   logState.more = false;
   logState.loading = false;
   logState.room = LOG_MAX_LINES;
+  renderLogClear();
   if (!logState.open) return;
   $("log-device").value = "";
   renderLog();
@@ -453,28 +552,28 @@ function initLog() {
   dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
+    renderLogClear();
     renderLog();
   });
-  $("log-clear").addEventListener("click", () => {
-    logState.gen++; // a page on its way is dropped
-    logState.lines = [];
-    logState.cursor = null;
-    logState.more = false;
-    logState.loading = false;
-    logState.room = LOG_MAX_LINES;
-    renderLog();
-  });
+  $("log-clear").addEventListener("click", clearLogFilter);
   $("log-kind").addEventListener("change", (ev) => {
     logState.kind = ev.target.value;
+    renderLogClear();
     loadLog();
   });
   $("log-device").addEventListener("change", (ev) => {
     logState.device = ev.target.value;
+    renderLogClear();
     loadLog();
   });
+  $("log-range").addEventListener("change", (ev) => {
+    logState.range = LOG_RANGES.includes(ev.target.value) ? ev.target.value : LOG_COUNT_RANGE;
+    loadLog();
+  });
+  renderLogClear();
   $("log-older").addEventListener("click", loadOlder);
   const box = $("log-lines");
   box.addEventListener("scroll", () => {
-    logState.stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+    logState.stick = box.scrollTop <= 8;
   });
 }

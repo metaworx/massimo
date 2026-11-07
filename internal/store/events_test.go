@@ -206,6 +206,23 @@ func TestEventsPaged(t *testing.T) {
 			t.Fatalf("event at %v not before %v", e.Time, cut)
 		}
 	}
+	since, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Since: cut, Limit: 1000})
+	if len(since) != 200 {
+		t.Fatalf("since a time: %d, want 200", len(since))
+	}
+	for _, e := range since {
+		if e.Time.Before(cut) {
+			t.Fatalf("event at %v before %v", e.Time, cut)
+		}
+	}
+	upTo := t0.Add(40 * time.Minute) // events 100 to 199 lie from cut up to it
+	between, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Since: cut, Before: upTo, Limit: 1000})
+	if len(between) != 50 {
+		t.Fatalf("since and before: %d, want 50", len(between))
+	}
+	if after, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Since: t0.Add(2 * time.Hour), Limit: 1000}); len(after) != 0 {
+		t.Fatalf("since a time after every event: %d", len(after))
+	}
 	configs, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Kind: "config", Limit: 1000})
 	if len(configs) != 125 {
 		t.Fatalf("config events of cube a: %d, want 125", len(configs))
@@ -344,6 +361,9 @@ func TestEventsPageQuery(t *testing.T) {
 		{"device", EventQuery{CubeID: a.ID, Device: "0abc07"}},
 		{"kind and device", EventQuery{CubeID: a.ID, Kind: "state", Device: "0abc07"}},
 		{"time and device", EventQuery{CubeID: a.ID, Device: "0abc07", Before: mid}},
+		{"since", EventQuery{CubeID: a.ID, Since: mid}},
+		{"since and kind", EventQuery{CubeID: a.ID, Kind: "connected", Since: mid}},
+		{"since and before", EventQuery{CubeID: a.ID, Since: start.Add(24 * time.Hour), Before: mid}},
 		{"the other Cube", EventQuery{CubeID: b.ID}},
 	}
 	for _, sh := range shapes {
@@ -377,6 +397,7 @@ func TestEventsPageQuery(t *testing.T) {
 		for i, e := range page {
 			if e.CubeID != q.CubeID || (q.Kind != "" && e.Kind != q.Kind) || (q.Device != "" && e.Device != q.Device) ||
 				(q.BeforeID > 0 && e.ID >= q.BeforeID) || (!q.Before.IsZero() && !e.Time.Before(q.Before)) ||
+				(!q.Since.IsZero() && e.Time.Before(q.Since)) ||
 				(i > 0 && e.ID >= page[i-1].ID) {
 				t.Fatalf("%s: event %d: %+v", sh.name, i, e)
 			}

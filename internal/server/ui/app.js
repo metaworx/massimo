@@ -376,6 +376,7 @@ function fillAge(el) {
 // refreshAges updates every age on the page; it runs once a minute.
 function refreshAges() {
   for (const el of document.querySelectorAll(".age[data-at]")) fillAge(el);
+  pruneLogRange(); // log.js: the lines a time range no longer holds
 }
 
 function isThermostat(d) {
