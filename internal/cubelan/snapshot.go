@@ -42,6 +42,21 @@ func newSnapshot() *Snapshot {
 	}
 }
 
+// SnapshotOf builds a snapshot from a greeting's lines (H, M, C…, L), as
+// a connection builds it: a backup's raw lines give the Cube as it was
+// when the backup was taken, for the diff of two backups (docs/store.md
+// section 9 (e)). now is the time the snapshot records the lines at.
+func SnapshotOf(msgs []cube.Message, now time.Time) (*Snapshot, error) {
+	s := newSnapshot()
+	s.beginGreeting()
+	for _, m := range msgs {
+		if _, err := s.apply(m, now); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
 // Event describes a change the client noticed.
 type Event struct {
 	Kind   EventKind

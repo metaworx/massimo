@@ -26,6 +26,7 @@
 //	POST /api/v1/cubes/{sn}/backups                  take one now
 //	GET  /api/v1/cubes/{sn}/backups/{id}             a stored backup's file
 //	DELETE /api/v1/cubes/{sn}/backups/{id}           remove one
+//	GET  /api/v1/cubes/{sn}/backups/{id}/diff        what would turn another into it
 //	POST /api/v1/cubes/{sn}/restore/plan             what restoring the backup in the body (or backup=<id>) would send
 //	POST /api/v1/cubes/{sn}/restore?plan=<hash>      send it; progress as restore_step events
 //	GET  /api/v1/cubes/{sn}/restore                  how the last restore went
@@ -815,6 +816,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes/{sn}/backups", "backup", s.postBackup)
 	api("GET /api/v1/cubes/{sn}/backups/{id}", "backup", s.getStoredBackup)
 	api("DELETE /api/v1/cubes/{sn}/backups/{id}", "restore", s.deleteBackup)
+	api("GET /api/v1/cubes/{sn}/backups/{id}/diff", "backup", s.diffBackups)
 	api("POST /api/v1/cubes/{sn}/restore/plan", "restore", s.planRestore)
 	api("POST /api/v1/cubes/{sn}/restore", "restore", s.startRestore)
 	api("GET /api/v1/cubes/{sn}/restore", "read", s.getRestore)
