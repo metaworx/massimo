@@ -70,6 +70,9 @@ the next minor, a fix counts the suffix up.
 - A DNS-01 order that ran out of time still clears its TXT record, and
   a clear that fails is always logged.
 
+- An authenticated request writes the store's lockout only where its
+  address or user name had failed checks, no longer on every request.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added

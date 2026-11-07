@@ -397,10 +397,15 @@ func (l *authLimiter) pruneLocked(now time.Time) {
 }
 
 // storeLimiter is the limiter on auth_failures; an error of the store
-// is logged, and counts as not locked.
+// is logged, and counts as not locked. It keeps the keys that have a
+// row in memory, so that the success of every authenticated request
+// writes the store only for an address that failed.
 type storeLimiter struct {
 	l   *store.Lockout
 	log *slog.Logger
+
+	mu     sync.Mutex
+	failed map[string]bool // keys with failures in the store, up to maxTracked
 }
 
 func (l *storeLimiter) lockedFor(ctx context.Context, key string) time.Duration {
@@ -416,13 +421,31 @@ func (l *storeLimiter) fail(ctx context.Context, key string) bool {
 	if err != nil {
 		l.log.Error("api: failure not counted", "error", err)
 	}
+	l.mu.Lock()
+	if l.failed == nil {
+		l.failed = map[string]bool{}
+	}
+	if len(l.failed) < maxTracked {
+		l.failed[key] = true
+	}
+	l.mu.Unlock()
 	return locked
 }
 
 func (l *storeLimiter) succeed(ctx context.Context, key string) {
+	l.mu.Lock()
+	had := l.failed[key]
+	l.mu.Unlock()
+	if !had {
+		return
+	}
 	if err := l.l.Succeed(ctx, key); err != nil {
 		l.log.Error("api: failures not forgotten", "error", err)
+		return
 	}
+	l.mu.Lock()
+	delete(l.failed, key)
+	l.mu.Unlock()
 }
 
 // newLimiter picks the limiter of the options: on the store when there
@@ -441,7 +464,18 @@ func newLimiter(opts Options, log *slog.Logger) failureLimiter {
 	if lockout <= 0 {
 		lockout = DefaultAuthLockout
 	}
-	return &storeLimiter{l: opts.Store.Lockout(max, window, lockout), log: log}
+	l := &storeLimiter{l: opts.Store.Lockout(max, window, lockout), log: log, failed: map[string]bool{}}
+	// The failures from before a restart go with the next success too.
+	keys, err := l.l.Keys(context.Background())
+	if err != nil {
+		log.Error("api: lockout not read", "error", err)
+	}
+	for _, k := range keys {
+		if len(l.failed) < maxTracked {
+			l.failed[k] = true
+		}
+	}
+	return l
 }
 
 // ticketStore holds the stream tickets: random, single-use, bound to one

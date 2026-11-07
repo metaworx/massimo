@@ -4,12 +4,18 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 type fakeClock struct{ t time.Time }
@@ -232,5 +238,43 @@ func TestClientIP(t *testing.T) {
 	r.Header.Add("X-Forwarded-For", "192.0.2.10")
 	if got := trusting.clientIP(r); got != "192.0.2.10" {
 		t.Errorf("two X-Forwarded-For lines: %q, want the proxy's 192.0.2.10", got)
+	}
+}
+
+// A success writes the store only for an address that has failures: an
+// authenticated request from an address without any writes nothing (a
+// read-only store makes a write show as an error in the log). Failures
+// still go with a success, also those from before a restart.
+func TestStoreLimiterWritesOnlyAfterFailures(t *testing.T) {
+	dir := t.TempDir()
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	st := testStore(t, dir)
+	ctx := context.Background()
+	key := store.LockoutAddr("192.0.2.10")
+	l := newLimiter(Options{Store: st, AuthFailures: 3}, quiet)
+	l.fail(ctx, key)
+	l.fail(ctx, key)
+	l.succeed(ctx, key)
+	if l.fail(ctx, key) || l.fail(ctx, key) {
+		t.Fatal("a success did not forget the failures")
+	}
+	// A restart: the failures in the store go with the next success.
+	again := newLimiter(Options{Store: st, AuthFailures: 3}, quiet)
+	again.succeed(ctx, key)
+	if again.fail(ctx, key) {
+		t.Fatal("a success after a restart did not forget the failures")
+	}
+	ro, err := store.OpenReadOnly(dir, store.Options{Version: "test", Logger: quiet})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	var buf bytes.Buffer
+	rl := newLimiter(Options{Store: ro}, slog.New(slog.NewTextHandler(&buf, nil)))
+	for i := 0; i < 3; i++ {
+		rl.succeed(ctx, store.LockoutAddr("192.0.2.11"))
+	}
+	if strings.Contains(buf.String(), "not forgotten") {
+		t.Fatalf("a success without failures wrote the store:\n%s", buf.String())
 	}
 }
