@@ -163,7 +163,8 @@ the box itself, the private ranges (RFC 1918),
 IPv6 unique local and link-local addresses.
 A client beyond them gets `403` with
 `this server is open and answers only its local network; …`,
-and so does a request that names a client in `X-Forwarded-For`, `X-Real-IP` or `Forwarded`,
+and so does a request whose forwarding header names a client,
+`X-Forwarded-For`, `X-Real-IP` or `Forwarded`,
 unless it comes from a proxy of `-trusted-proxies`, whose client then decides:
 a reverse proxy on the box would otherwise pass the internet through as itself.
 `/healthz` stays open.
