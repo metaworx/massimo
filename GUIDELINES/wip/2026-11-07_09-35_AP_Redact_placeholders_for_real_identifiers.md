@@ -1,29 +1,25 @@
-# AP Redact v1.1: placeholders for real identifiers
+# AP Redact v1.2: placeholders for real identifiers
 
 ## TL;DR
 
-The recorded greeting, its UI-test copy, and the tests, CI and documents
-around them carried the owner's real Cube serials and the recorded room and
-device names.
-They become placeholders: both greetings re-encoded in their decoded bytes,
-every expectation, document and screenshot following;
-history stays as it is.
+The recorded greeting, its UI-test copy, and the tests, CI, documents and
+screenshots around them carried the owner's real Cube serials.
+They become placeholders, written over in the greetings' decoded bytes,
+every expectation, document and screenshot following.
 
 - spare Cube → `KEQ0000100`, in every case and derived form the tests use;
   its thermostats → `MEQ0000101`–`MEQ0000106`, by room;
   house Cube → `KEQ0000200`
-- rooms → `Düne`, `Fels 1`, `Fels 2`, `Küste`, `Meeresstrand`, `Wattenmeer`;
-  thermostats → `Radiator <room>`, room 3's `Radiator Strandkorb 1`;
-  the UI copy's window contact → `Fenster Fels 1`
-- every line keeps its length: same byte lengths, umlauts and sort order
+- every line keeps its length and stays valid
 - guard: a test fails on a greeting serial that is not a placeholder
-- screenshots: taken from the old UI-test greeting → retaken from the new
-- kept: RF addresses, LAN details, the public protocol examples,
+- screenshots: retaken from the new greeting
+- kept: the room and device names, invented for the recording (D2, v1.2),
+  RF addresses, LAN details, the public protocol examples,
   the captured ciphertexts
-- history: not rewritten; two pull request descriptions edited once this
-  plan's pull request is open
+- history: not rewritten; two pull request descriptions edited
 
-Blocks 1 and 2 ran under v1.0; v1.1 adds Block 3 (D8).
+v1.2 keeps the recorded names and amends Blocks 1 and 3 in place,
+the pull request's branch rebuilt and force-pushed.
 
 ### Blocks
 
@@ -37,7 +33,8 @@ Blocks 1 and 2 ran under v1.0; v1.1 adds Block 3 (D8).
 ## Discussion
 
 Seven decisions, settled by the owner at the TL;DR gate as recommended,
-and an eighth at v1.0's completion gate.
+an eighth at v1.0's completion gate;
+D2 revised by the owner at v1.1's completion gate.
 
 ### D1. Placeholder serials: A
 
@@ -48,12 +45,15 @@ and an eighth at v1.0's completion gate.
 - B. `KEQ0000000` for the fake Cube: the contract's example, but it clashes
   with those tests.
 
-### D2. Room and device names: A
+### D2. Room and device names: C, kept (v1.2)
 
-- **A (chosen).** Invented names, each of the byte length, umlaut count and
-  sort position of the name it replaces (Analysis §2):
-  the M line keeps its size, the UTF-8 cases stay,
-  and a test that picks by order still picks the same room.
+- **C (chosen in v1.2).** Kept as recorded.
+  The owner, at v1.1's completion gate: the recorded names were invented for
+  the recording (`TestRealCubeGreeting` called them anonymised) and are
+  generic, better suited than the replacements; Blocks 1 and 3 are amended
+  in place to keep them.
+- A (chosen in v1.0 and v1.1, replaced). Invented names of the old byte
+  lengths, umlauts and sort order (a coast's: `Düne`, `Fels 1`, …).
 - B. `Room 1`–`Room 6`, ASCII: loses the UTF-8 cases and reorders the rooms.
 
 ### D3. The greeting's RF addresses: A, kept
@@ -107,7 +107,7 @@ and an eighth at v1.0's completion gate.
   (Analysis §7).
   Every image changes, and this machine's fonts may draw other pixels than
   the set's last machine.
-- B. Left: `main` would keep showing the old names and the serial in pictures.
+- B. Left: `main` would keep showing the serial in pictures.
 
 ## Analysis
 
@@ -131,31 +131,28 @@ The inventory, file by file and with every identifier masked, is
 - **Names:** 9 test lines name a greeting's room or device
   (`cube_test.go:513`, `backup_test.go:77,118,141,389`,
   `tools/ui-test/README.md:13`, `screenshots.py:14,251`, `test_rooms.py:39`).
-  `cube_test.go`'s `metadataExample` and the documents use common room
-  words of their own; they stay.
+  They were invented for the recording and stay (D2, v1.2).
 
 ### 2. The mapping
 
 Keyed by room id, which each thermostat has to itself, and by RF address,
 which ties a C line to its M entry; both greetings get the same values.
 
-| Room | Room name | Thermostat serial | Thermostat name |
-|------|-----------|-------------------|-----------------|
-| 1 | `Wattenmeer` | `MEQ0000101` | `Radiator Wattenmeer` |
-| 2 | `Düne` | `MEQ0000102` | `Radiator Düne` |
-| 3 | `Küste` | `MEQ0000103` | `Radiator Strandkorb 1` |
-| 4 | `Fels 2` | `MEQ0000104` | `Radiator Fels 2` |
-| 5 | `Fels 1` | `MEQ0000105` | `Radiator Fels 1` |
-| 6 | `Meeresstrand` | `MEQ0000106` | `Radiator Meeresstrand` |
+| Room | Thermostat serial |
+|------|-------------------|
+| 1 | `MEQ0000101` |
+| 2 | `MEQ0000102` |
+| 3 | `MEQ0000103` |
+| 4 | `MEQ0000104` |
+| 5 | `MEQ0000105` |
+| 6 | `MEQ0000106` |
 
 - The Cube: `KEQ0000100`, in the H line and its C line.
-- The UI copy's window contact, room 5: `Fenster Fels 1`;
-  its serial, `MEQ0000001`, is a placeholder already.
-- Each new name has its old one's byte length,
-  the umlauts sit in the same names,
-  and both byte order and locale order are the old ones:
-  rooms `Düne < Fels 1 < Fels 2 < Küste < Meeresstrand < Wattenmeer`,
-  devices from `Fenster Fels 1` to `Radiator Wattenmeer`.
+- The UI copy's window contact, room 5: its serial, `MEQ0000001`,
+  is a placeholder already.
+- The names stay as recorded (D2, v1.2);
+  v1.0 and v1.1 replaced them with a coast's, of the same byte lengths,
+  umlauts and order.
 
 ### 3. Rewriting the greetings
 
@@ -164,8 +161,9 @@ A one-off script, `GUIDELINES/temp/redact-greeting.py`, not committed:
 - reads each greeting, splits its lines, keeps its line ends;
 - decodes the H, M and C lines as `ParseHello`, `DecodeMetadata` and
   `DecodeConfig` lay them out;
-- refuses unless each old name has its new name's byte length and each old
-  serial ten bytes, so the new bytes go over the old at the same offsets;
+- refuses unless each old serial has ten bytes,
+  so the new bytes go over the old at the same offsets;
+  in v1.2 it leaves the names as they are;
 - encodes base64 again (same length), writes to a temporary file and moves it
   over the greeting (`/AGENTS.md` §1.5);
 - decodes the result once more and checks the mapping and that no old value
@@ -180,10 +178,9 @@ document.
 - the serial in upper case → `KEQ0000100`, in lower case → `keq0000100`;
   `XEQ`, `leq` and `LEQ` before its digits → the same prefix before `0000100`;
 - the house Cube's serial in `internal/server/auth_test.go` → `keq0000200`;
-- the names at the nine lines of §1 → their new names,
-  including the renamed `Heizung <room>` of `backup_test.go`;
+- the names at the nine lines of §1 stay (D2, v1.2);
 - `TestRealCubeGreeting`'s comment, "(room and device names anonymised,
-  everything else verbatim)", says which values are placeholders;
+  everything else verbatim)", adds that the serials are placeholders;
 - the comment in `internal/portal/portalcrypto/portalcrypto_test.go` quoting
   the captured plaintext's first block names the serial by role:
   the ciphertexts are the spare Cube's, and stay;
@@ -212,8 +209,6 @@ document.
 ### 6. Risks
 
 - An expectation missed: the test gate and `make ui-test` fail on it.
-- A test matching a name by substring:
-  `Fels 1` is in no other room's name, as the old name was in none.
 - The guard reads `tools/ui-test/greeting.txt` from `internal/protocol/cube`,
   three directories up; a move of either file fails it loudly.
 - The serials stay public in history and in the two descriptions' edit
@@ -224,8 +219,8 @@ document.
 Found during Blocks 1 and 2
 ([NOTE Redact v1.0](2026-11-07_09-51_NOTE_Redact_v1.0_how_the_run_went.md)):
 the 28 images of `docs/screenshots/` are taken from `tools/ui-test/greeting.txt`
-by `tools/ui-test/screenshots.py`, so they show the old room and device names,
-and the Cube choice and Settings → Cubes show the spare Cube's serial.
+by `tools/ui-test/screenshots.py`, so the Cube choice and Settings → Cubes
+show the spare Cube's serial (and, under v1.1, the names it had replaced).
 A text search cannot see them.
 
 - `make ui-screenshots` (`tools/ui-test/run.sh screenshots`) removes the old
@@ -249,14 +244,14 @@ A text search cannot see them.
    and bring that test's comment and expectations to the new values.
 3. Replace the serial in every form of §4 in the Go tests,
    `.github/workflows/ci.yml` and `tools/ui-test/`,
-   the house Cube's serial in `auth_test.go`, and the names at the nine lines.
+   and the house Cube's serial in `auth_test.go`;
+   the names stay (v1.2).
 4. Add the CHANGELOG bullet under `[Unreleased]` → `Changed`.
 
 **Verification:**
 
 - a masked search of every tracked file outside `docs/`:
-  neither real serial in any case or derived form,
-  no old name but `metadataExample`'s coinciding words;
+  neither real serial in any case or derived form;
 - `gofmt -l .` prints nothing;
   `go vet ./...`, and again with `GOOS=windows` and `GOOS=darwin`, exit 0;
 - `MASSIMO_ENV_FILE=/dev/null go test ./...` passes,
@@ -288,10 +283,35 @@ Commit (Proposed commit message, Block 2).
 
 - the same 28 file names in `docs/screenshots/`, none missing, none new;
 - the rooms shots and Settings → Cubes, looked at:
-  the new names and `KEQ0000100`, no old name or serial;
+  `KEQ0000100` and the recorded names, no real serial;
 - the slideshow's frames are the new shots.
 
 Commit (Proposed commit message, Block 3).
+
+### v1.2: Blocks 1 and 3 amended
+
+The owner asked for the recorded names back and the commits amended,
+with #78 open.
+The branch is rebuilt from its base, `main` as of
+`chore(aps): +NOTE Pages v1.0`:
+
+1. the plan's v1.0 commit, as it was;
+2. Block 1 again, the greetings' serials only (§3), the name edits of its
+   test files undone, its comment, bullet and message without the names;
+3. Block 2, the NOTE and v1.1, as they were;
+4. this revision, v1.2;
+5. Block 3 again, from the greeting of step 2;
+6. the merge of `origin/main`, its bullet moved to `[Unreleased]` again;
+7. the `style(docs)` commit, as it was.
+
+**Verification:**
+
+- against the branch before the rebuild, the tree differs only in the two
+  greetings' M lines, the name lines of five test files, the comment, the
+  bullet, the screenshots and this plan;
+- the test gate as after the blocks, and `make ui-test`;
+- then `git push --force-with-lease` to the pull request's branch,
+  whose title and description lose the names.
 
 ### After the blocks
 
@@ -327,12 +347,12 @@ Assisted-by: claude-code:claude-opus-5-5
 Block 1:
 
 ```
-test(fixtures): Placeholders for the recorded Cube's serials and names
+test(fixtures): Placeholders for the recorded Cube's serials
 
-The recorded greeting and its UI-test copy carried the spare Cube's serial, its six thermostats' serials and the room and device names of a real installation; they now carry placeholders, written over the old bytes so that every line keeps its length and stays valid, and every test, CI and UI-test expectation follows (AP Redact v1.0, Block 1).
+The recorded greeting and its UI-test copy carried the spare Cube's serial and its six thermostats' serials; they now carry placeholders, written over the old bytes so that every line keeps its length and stays valid, and every test, CI and UI-test expectation follows (AP Redact v1.0, Block 1). The room and device names stay as recorded: they were invented for the recording.
 
 Key changes:
-- internal/protocol/cube/testdata/cube-fw0113-greeting.txt and tools/ui-test/greeting.txt: the Cube is KEQ0000100 and its thermostats MEQ0000101 to MEQ0000106 by room; rooms and devices are named after a coast, in the old names' byte lengths, umlauts and order.
+- internal/protocol/cube/testdata/cube-fw0113-greeting.txt and tools/ui-test/greeting.txt: the Cube is KEQ0000100 and its thermostats MEQ0000101 to MEQ0000106 by room.
 - internal/protocol/cube: TestGreetingsUsePlaceholders fails when a greeting's H, M or C line carries a serial other than a placeholder.
 - The Go tests, CI's fake-Cube variables and the UI test name the placeholders, in every case and derived form they used; the second real serial in a test becomes keq0000200.
 - CHANGELOG.md: the bullet under Changed.
@@ -367,12 +387,23 @@ File-revision-v1: GUIDELINES/wip/2026-11-07_09-35_AP_Redact_placeholders_for_rea
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+The revision v1.2:
+
+```
+chore(aps): +Redact v1.2
+
+The recorded room and device names stay: they were invented for the recording and are generic, so D2 keeps them, at the owner's word after pull request 78 opened; Blocks 1 and 3 are amended in place and the branch rebuilt.
+
+File-revision-v1: GUIDELINES/wip/2026-11-07_09-35_AP_Redact_placeholders_for_real_identifiers.md::v1.2::2026-11-07::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::D2 revised, the recorded names kept; Blocks 1 and 3 amended
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 Block 3:
 
 ```
 docs(ui): Retake the screenshots from the placeholder greeting
 
-The screenshot set and the slideshow were taken from the UI test's greeting while it carried the old room and device names and the spare Cube's serial; they are taken again from the placeholder greeting (AP Redact v1.1, Block 3).
+The screenshot set and the slideshow were taken from the UI test's greeting while it carried the spare Cube's serial; they are taken again from the placeholder greeting (AP Redact v1.2, Block 3).
 
 Key changes:
 - docs/screenshots/*.png: retaken with make ui-screenshots, the same 28 files.
@@ -401,3 +432,7 @@ Assisted-by: claude-code:claude-opus-5-5
   completion gate after Blocks 1 and 2 had run);
   "After the blocks" spells out the merge of `origin/main` and its
   `CHANGELOG.md` conflict.
+- v1.2 (2026-11-07): D2 revised to keep the recorded room and device names,
+  invented for the recording, at the owner's word at v1.1's completion gate
+  with #78 open; Blocks 1 and 3 amended in place, the branch rebuilt from
+  its base and force-pushed ("v1.2: Blocks 1 and 3 amended").
