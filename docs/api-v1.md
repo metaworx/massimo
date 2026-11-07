@@ -608,7 +608,8 @@ command with its key, discarded by the Cube, or the server stopped);
 at a start of the server every command still `queued` or `sent` is `dropped`,
 since the queue it was in is gone.
 A restore's command is `sent` with its `202` and takes `acknowledged` or
-`failed` from its run, with the run's id, state and counts as its result.
+`failed` from its run, with the run's id, state and counts as its result,
+and the `202`'s answer under `answer`, which a replay of its key answers.
 
 `GET /api/v1/commands/{id}` is one command with its steps:
 

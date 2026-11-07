@@ -176,8 +176,14 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		}
 		s.runRestore(ctx, rt, run, p, commandOf(r.Context()))
 	}()
-	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "steps": len(p.Steps)})
+	writeJSON(w, http.StatusAccepted, restoreAnswer(run.ID, len(p.Steps)))
 	return nil
+}
+
+// restoreAnswer is the 202 a restore's start answers, which its command
+// keeps for a replay.
+func restoreAnswer(id string, steps int) map[string]any {
+	return map[string]any{"id": id, "steps": steps}
 }
 
 // getRestore handles GET …/restore: the last restore of the Cube, or
@@ -491,7 +497,8 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	done := restoreProgress{ID: run.ID, Steps: len(run.Steps), OK: err == nil, Error: run.Error, State: run.State, Sent: run.Sent}
 	rt.restoreMu.Unlock()
 	rt.emit(event{Kind: "restore_done", Error: done.Error, Time: finished, Restore: &done})
-	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error})
+	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error},
+		restoreAnswer(run.ID, len(p.Steps)))
 	if err != nil {
 		s.log.Warn("restore failed", "cube", rt.serial, "id", run.ID, "sent", done.Sent, "steps", done.Steps, "error", err)
 		return

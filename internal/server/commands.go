@@ -265,7 +265,7 @@ func (s *Server) beginCommand(w http.ResponseWriter, r *http.Request, a *auditIn
 			w.Header().Set("Idempotent-Replayed", "true")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
-			w.Write(row.Result)
+			w.Write(firstAnswer(row))
 		}
 		return true
 	}
@@ -325,9 +325,30 @@ func withoutSecrets(answer []byte) []byte {
 	return out
 }
 
+// firstAnswer is the body a replay answers: what the first request
+// answered, which a run keeps under "answer" beside its outcome
+// (finishCommand), and which endCommand keeps as the text of "answer"
+// when it was not JSON.
+func firstAnswer(row store.Command) []byte {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(row.Result, &m) != nil || m["answer"] == nil {
+		return row.Result
+	}
+	var text string
+	if len(m) == 1 && json.Unmarshal(m["answer"], &text) == nil {
+		return []byte(text)
+	}
+	if row.Status == http.StatusAccepted {
+		return m["answer"]
+	}
+	return row.Result
+}
+
 // finishCommand ends a parent that was answered 202, from its run: the
-// restore's end.
-func (s *Server) finishCommand(uuid string, ok bool, result any) {
+// restore's end. The result is the run's outcome, with the 202's answer
+// under "answer" for a replay; the run may end before endCommand has
+// stored that answer, which a final row then no longer takes.
+func (s *Server) finishCommand(uuid string, ok bool, result map[string]any, answer any) {
 	st := s.opts.Store
 	if st == nil || uuid == "" {
 		return
@@ -342,7 +363,11 @@ func (s *Server) finishCommand(uuid string, ok bool, result any) {
 	if !ok {
 		state = store.StateFailed
 	}
-	raw, _ := json.Marshal(result)
+	outcome := map[string]any{"answer": answer}
+	for k, v := range result {
+		outcome[k] = v
+	}
+	raw, _ := json.Marshal(outcome)
 	if err := st.SetCommandState(ctx, c.ID, state, -1, raw); err != nil {
 		s.log.Error("commands: run not recorded", "command", uuid, "error", err)
 	}

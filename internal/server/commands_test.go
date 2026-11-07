@@ -355,3 +355,59 @@ func TestReplayOfADroppedCommand(t *testing.T) {
 		t.Fatalf("the replay: %d %q %s", resp.StatusCode, resp.Header.Get("Idempotent-Replayed"), b)
 	}
 }
+
+// A replay answers what the first request answered: a restore's 202
+// with its id and steps, also once its run has finished the command.
+func TestReplayOfARestoreKeepsItsAnswer(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	stores[ts] = s.opts.Store
+	_, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0537249/backup", "secret", "")
+	f, err := backup.Unmarshal([]byte(data), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := f.Marshal(false)
+	_, text := callAPI(t, ts, "POST", restoreBase+"/plan", "secret", string(body))
+	var plan restorePlan
+	json.Unmarshal([]byte(text), &plan)
+	headers := map[string]string{"Idempotency-Key": "restore-1"}
+	resp, first := callWith(t, ts, "POST", restoreBase+"?plan="+plan.Plan, "secret", string(body), headers)
+	if resp.StatusCode != 202 {
+		t.Fatalf("restore: %d %s", resp.StatusCode, first)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	var c commandView
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if c = commandOfRow(t, ts, "secret", rows[0]); store.Final(c.State) {
+			break
+		}
+	}
+	if !store.Final(c.State) || !strings.Contains(string(c.Result), `"state"`) {
+		t.Fatalf("the run did not finish the command: %+v", c)
+	}
+	resp2, again := callWith(t, ts, "POST", restoreBase+"?plan="+plan.Plan, "secret", string(body), headers)
+	var a, b map[string]any
+	json.Unmarshal([]byte(first), &a)
+	json.Unmarshal([]byte(again), &b)
+	if resp2.StatusCode != 202 || resp2.Header.Get("Idempotent-Replayed") != "true" || len(b) != len(a) || b["id"] != a["id"] || b["steps"] != a["steps"] {
+		t.Fatalf("the replay: %d %s, first %s", resp2.StatusCode, again, first)
+	}
+}
+
+// firstAnswer replays an answer that was not JSON as its text, a run's
+// 202 as its answer, and any other result as it is.
+func TestFirstAnswer(t *testing.T) {
+	for _, c := range []struct {
+		status       int
+		result, want string
+	}{
+		{500, `{"answer":"plain text"}`, "plain text"},
+		{202, `{"answer":{"id":"r1","steps":2},"id":"r1","state":"done"}`, `{"id":"r1","steps":2}`},
+		{200, `{"ok":true}`, `{"ok":true}`},
+		{200, `{"answer":{"x":1},"other":2}`, `{"answer":{"x":1},"other":2}`},
+	} {
+		if got := string(firstAnswer(store.Command{Status: c.status, Result: json.RawMessage(c.result)})); got != c.want {
+			t.Errorf("%d %s: %s, want %s", c.status, c.result, got, c.want)
+		}
+	}
+}

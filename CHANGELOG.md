@@ -124,6 +124,9 @@ the next minor, a fix counts the suffix up.
 - A retry with the `Idempotency-Key` of a request the server's restart
   cut off answers 503, instead of closing the connection (docs/api-v1.md).
 
+- A replay of a restore's `Idempotency-Key` answers the first `202`, no
+  longer the run's outcome (docs/api-v1.md).
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
