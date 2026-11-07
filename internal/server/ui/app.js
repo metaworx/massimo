@@ -203,15 +203,17 @@ function base() {
   return "api/v1/cubes/" + encodeURIComponent(state.serial);
 }
 
-async function api(method, path, body) {
+// apiRequest sends one request and returns the answer's JSON, null for
+// an empty one; an answer that is not ok is thrown as an Error with the
+// server's error (or the status), its status and its data. The token
+// goes along unless auth is false; keepalive lets the request outlive
+// the page. api() adds the sign-in on a 401; the sign-in itself and the
+// last preferences sent as the page is left use it as it is (login.js).
+async function apiRequest(method, path, body, { auth = true, keepalive = false } = {}) {
   const headers = {};
-  if (state.token) headers.Authorization = "Bearer " + state.token;
+  if (auth && state.token) headers.Authorization = "Bearer " + state.token;
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  if (resp.status === 401) {
-    if (await askLogin()) return api(method, path, body); // login.js
-    throw new Error(t("api.badToken"));
-  }
+  const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
   let data = null;
   const text = await resp.text();
   if (text) {
@@ -223,10 +225,23 @@ async function api(method, path, body) {
   }
   if (!resp.ok) {
     const err = new Error((data && data.error) || resp.status + " " + resp.statusText);
+    err.status = resp.status;
     err.data = data;
     throw err;
   }
   return data;
+}
+
+// api is apiRequest with the token, asking for a sign-in on a 401 and
+// sending the request again once one is in.
+async function api(method, path, body) {
+  try {
+    return await apiRequest(method, path, body);
+  } catch (e) {
+    if (e.status !== 401) throw e;
+    if (await askLogin()) return api(method, path, body); // login.js
+    throw new Error(t("api.badToken"));
+  }
 }
 
 // deviceDetail fetches and caches a device's configuration.
@@ -991,8 +1006,7 @@ async function init() {
   initSettings();
   applySettings();
   checkVersion();
-  await loadMe(); // login.js: who is signed in, or the sign-in dialog
-  await loadPreferences(); // login.js: the user's settings from the server
+  await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
   $("cube-select").addEventListener("change", (ev) => {
     if (ev.target.value !== DISCOVER) return selectCube(ev.target.value);
     ev.target.value = state.serial || "";

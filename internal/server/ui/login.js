@@ -117,6 +117,24 @@ function renderMe() {
 
 let loginPromise = null;
 
+// startWaits counts the starts that wait for who is in, the page's own
+// and Log out's (loadMeAndPreferences): each goes on by itself after a
+// sign-in, with the settings, the data and the stream, so the dialog
+// starts nothing beside it (afterLogin), which would start the page twice.
+let startWaits = 0;
+
+// loadMeAndPreferences reads who is in, through the sign-in dialog where
+// the server asks for one, then the user's settings from the server.
+async function loadMeAndPreferences() {
+  startWaits++;
+  try {
+    await loadMe();
+  } finally {
+    startWaits--;
+  }
+  await loadPreferences();
+}
+
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed.
 function askLogin() {
@@ -142,7 +160,7 @@ function askLogin() {
       if (key) {
         setToken(key);
         done(true);
-        afterLogin();
+        if (!startWaits) afterLogin();
         return;
       }
       const user = $("login-user").value.trim();
@@ -155,7 +173,7 @@ function askLogin() {
         const session = await signIn(user, password);
         setToken(session.token);
         done(true);
-        afterLogin();
+        if (!startWaits) afterLogin();
       } catch (e) {
         showResult(error, t("login.failed", { error: e.message }), false);
         $("login-password").focus();
@@ -168,21 +186,15 @@ function askLogin() {
   return loginPromise;
 }
 
-// signIn posts the login and returns the session; the answer's error is
-// thrown.
-async function signIn(user, password) {
-  const resp = await fetch("api/v1/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user, password }) });
-  let data = null;
-  try {
-    data = await resp.json();
-  } catch (e) {
-    // no JSON: the status says enough
-  }
-  if (!resp.ok) throw new Error((data && data.error) || resp.status + " " + resp.statusText);
-  return data;
+// signIn posts the login, without a token and without the dialog's
+// retry, and returns the session; the answer's error is thrown.
+function signIn(user, password) {
+  return apiRequest("POST", "api/v1/login", { user, password }, { auth: false });
 }
 
-// afterLogin reads who is in, and starts the stream and the data again.
+// afterLogin reads who is in, and starts the stream and the data again,
+// for a sign-in that no start waited for: a session that ended while the
+// page ran, a key pasted, the first owner.
 function afterLogin() {
   loadMe()
     .then(loadPreferences)
@@ -206,7 +218,7 @@ async function logout() {
   state.me = null;
   closeEvents();
   showView("tiles");
-  await loadMe();
+  await loadMeAndPreferences();
   refresh().then(connectEvents);
 }
 
@@ -264,9 +276,7 @@ function flushPreferences() {
   prefsSync.keys.clear();
   for (const key of keys) {
     const body = key === "ui" ? storedSettings() : schemesDocument();
-    const headers = { "Content-Type": "application/json" };
-    if (state.token) headers.Authorization = "Bearer " + state.token;
-    fetch("api/v1/me/preferences/" + key, { method: "PUT", headers, body: JSON.stringify(body), keepalive: true }).catch(() => {});
+    apiRequest("PUT", "api/v1/me/preferences/" + key, body, { keepalive: true }).catch(() => {});
   }
 }
 

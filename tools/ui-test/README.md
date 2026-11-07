@@ -140,7 +140,9 @@ what a test stores in the browser goes with its context.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens, refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,
-  and Log out brings the dialog back and forgets the token.
+  and Log out brings the dialog back and forgets the token;
+  a sign-in at the page's start, and again after Log out,
+  starts the page once: one stream ticket and one read of `/me` each.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,

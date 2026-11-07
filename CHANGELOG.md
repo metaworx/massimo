@@ -64,6 +64,9 @@ the next minor, a fix counts the suffix up.
 
 - Hide and Show again in a Cube's panel keep what is typed in its form.
 
+- A sign-in as the page starts, or after Log out, starts the page once,
+  with one event stream instead of two.
+
 ## [0.9.0-alpha.1] - 2026-11-06
 
 ### Added
