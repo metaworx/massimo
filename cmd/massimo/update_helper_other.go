@@ -12,3 +12,9 @@ import "log/slog"
 func updateHelperStarter(log *slog.Logger, exe, request, status, health, logPath string) (start func() error, blocked string) {
 	return nil, ""
 }
+
+// restartHelperStarter returns nil: outside Windows the service manager
+// starts the server again once it exits for a restart (restart.go).
+func restartHelperStarter(log *slog.Logger, exe string) (start func() error, blocked string) {
+	return nil, ""
+}

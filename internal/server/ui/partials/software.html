@@ -1,5 +1,6 @@
-<!-- System settings → Software, for a role with update: the update check and the update, update.js. -->
-<div class="update needs-update" aria-live="polite">
+<!-- System settings → Software: the update check and the update, and the
+     server's restart, update.js. -->
+<div class="update" aria-live="polite">
   <span class="muted" data-i18n="update.title">Software</span>
   <p id="update-text">–</p>
   <p><a id="update-link" class="hidden" target="_blank" rel="noopener noreferrer"></a></p>
@@ -7,5 +8,11 @@
   <div class="actions">
     <button type="button" id="update-check" data-i18n="update.check">Check for updates</button>
     <button type="button" id="update-btn" class="primary needs-update hidden" data-i18n="update.button">Update</button>
+  </div>
+</div>
+<div class="restart needs-restart" aria-live="polite">
+  <p id="restart-text" class="muted small hidden"></p>
+  <div class="actions">
+    <button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button>
   </div>
 </div>

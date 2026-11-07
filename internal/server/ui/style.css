@@ -266,6 +266,17 @@ body.expert #clock-plain { display: none; }
   margin: 0 0 12px;
   width: 100%;
 }
+/* The warning under the header while the server is open (login.js). */
+.open-banner {
+  background: var(--notice-bg);
+  color: var(--notice-fg);
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
 .message {
   padding: 10px 14px;
   border-radius: 8px;
@@ -296,9 +307,10 @@ body.expert #clock-plain { display: none; }
 .lang-note span + span { margin-top: 4px; font-style: italic; }
 .settings .settings-note { margin: 4px 0 8px; }
 .settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
-.settings .update p { margin: 4px 0; overflow-wrap: anywhere; }
+.settings .update p, .settings .restart p { margin: 4px 0; overflow-wrap: anywhere; }
+.settings .restart { padding-top: 6px; }
 
-/* Settings → Cubes (cubes.js) */
+/* System settings → Cubes (cubes.js) */
 .settings .cubes-settings { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
 .cubes-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .cubes-head .help-text { flex-basis: 100%; }
@@ -308,7 +320,7 @@ body.expert #clock-plain { display: none; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
-/* Settings → Backup and restore (backup.js): the stored backups, each
+/* System settings → Backup and restore (backup.js): the stored backups, each
    a row with its actions, and a restore's plan */
 .backups-list { margin: 8px 0 14px; }
 .backup-row { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
@@ -992,11 +1004,12 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
-.no-settings .needs-settings, .no-update .needs-update, .no-sync .needs-sync, .no-system .needs-system,
+.no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-sync .needs-sync,
+.no-system .needs-system,
 .no-cubes.no-pair .needs-cubes-or-pair { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
-/* the sign-in dialog, the first-owner form, Settings → Users and Roles */
+/* the sign-in dialog, the first-owner form, System settings → Users and Roles */
 .login-token summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
 #login-error.bad { color: var(--bad); }
 .setup { margin-bottom: 16px; }

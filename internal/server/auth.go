@@ -64,7 +64,7 @@ const (
 // rows of the store.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit",
+	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit",
 }
 
 // Two more values a route may be registered with, which no role holds:
@@ -100,6 +100,9 @@ type principal struct {
 	user  store.User
 	token store.Token
 	caps  map[string]bool
+	// legacyToken is the one token a server without a store had when it
+	// let the principal in, "" for none (stillAdmitted).
+	legacyToken string
 }
 
 // has reports whether the principal holds a capability; outside users
@@ -167,7 +170,7 @@ func (s *Server) AuthMode() string {
 	case modeUsers:
 		return "users"
 	}
-	if s.opts.Token != "" {
+	if s.legacyToken() != "" {
 		return "token"
 	}
 	return "none"
@@ -182,7 +185,37 @@ func (s *Server) authenticated(ctx context.Context) bool {
 	case modeOpen:
 		return false
 	}
-	return s.opts.Token != ""
+	return s.legacyToken() != ""
+}
+
+// legacyToken is the one token of a server without a store: Options.Token
+// at the start, or what SetToken gave it since.
+func (s *Server) legacyToken() string {
+	s.tokenMu.RLock()
+	defer s.tokenMu.RUnlock()
+	return s.token
+}
+
+// SetToken applies a MASSIMO_API_TOKEN that the settings file gained,
+// changed or lost while the server runs, as a start would (docs/store.md
+// section 6): with a store it becomes an owner's key, or the first owner
+// with it, and a key the file's token was before is revoked; without a
+// store it is the one token. "" is none.
+func (s *Server) SetToken(ctx context.Context, token string) error {
+	s.tokenMu.Lock()
+	s.token = token
+	s.tokenMu.Unlock()
+	st := s.opts.Store
+	if st == nil {
+		s.log.Info("api token changed", "auth", s.AuthMode())
+		return nil
+	}
+	res, err := st.Bootstrap(ctx, token)
+	if err != nil {
+		return err
+	}
+	s.log.Info("api token applied", "owner_created", res.OwnerCreated, "key_added", res.TokenAdded, "revoked", res.Revoked, "auth", s.AuthMode())
+	return nil
 }
 
 // tokenMatches compares a presented token with the configured one in
@@ -282,6 +315,34 @@ func localPeer(ip string) bool {
 		return false
 	}
 	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast()
+}
+
+// openRefused is what a server that asks for no key answers a client
+// beyond its local network.
+const openRefused = "this server is open and answers only its local network; create a user or set MASSIMO_API_TOKEN"
+
+// openAllowed reports whether a server that asks for no key, a store
+// without users or no store and no token, answers a request: only a
+// client on the local network (localPeer), and a request that names a
+// client in a forwarding header only through a trusted proxy, since a
+// reverse proxy on the box would otherwise pass the internet through as
+// itself.
+func (s *Server) openAllowed(r *http.Request) bool {
+	if forwarded(r) && !s.trustedProxy(peerIP(r.RemoteAddr)) {
+		return false
+	}
+	return localPeer(s.clientIP(r))
+}
+
+// forwarded reports whether a request carries a header that names
+// another client than its TCP peer.
+func forwarded(r *http.Request) bool {
+	for _, h := range []string{"X-Forwarded-For", "X-Real-IP", "Forwarded"} {
+		if len(r.Header.Values(h)) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // failureLimiter counts failed checks per key and locks a key out: in
@@ -564,16 +625,15 @@ func forbidden(format string, args ...any) error {
 // resolve turns a presented token into a principal, or says why not.
 func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) (*principal, error) {
 	if mode == modeLegacy {
-		if tokenMatches(s.opts.Token, secret) {
-			return &principal{mode: modeLegacy}, nil
+		if want := s.legacyToken(); tokenMatches(want, secret) {
+			return &principal{mode: modeLegacy, legacyToken: want}, nil
 		}
 		return nil, errBadToken
 	}
 	if secret == "" {
 		return nil, errBadToken
 	}
-	st := s.opts.Store
-	tok, ok, err := st.TokenByHash(ctx, store.HashToken(secret))
+	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(secret))
 	if err != nil {
 		return nil, err
 	}
@@ -581,6 +641,19 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	if !ok || tok.Expired(now) {
 		return nil, errBadToken
 	}
+	p, err := s.principalFor(ctx, tok, now)
+	if err != nil {
+		return nil, err
+	}
+	s.touch(ctx, tok, ip, now)
+	return p, nil
+}
+
+// principalFor is the principal of a live token: its user, who must be
+// enabled and not past its end, and the capabilities of the user's
+// role, which must be enabled.
+func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Time) (*principal, error) {
+	st := s.opts.Store
 	u, ok, err := st.UserByID(ctx, tok.UserID)
 	if err != nil {
 		return nil, err
@@ -605,8 +678,36 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	for _, c := range caps {
 		p.caps[c] = true
 	}
-	s.touch(ctx, tok, ip, now)
 	return p, nil
+}
+
+// stillAdmitted reports whether the caller an event stream was opened
+// for would be let in now: an open server still open, the one token of a
+// server without a store unchanged, a user's token neither revoked nor
+// expired, its user and role still allowed and holding read. A store
+// that cannot be read ends the stream, as authorize fails closed. The
+// stream asks at each keep-alive (server.go, events).
+func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
+	if p == nil {
+		return false
+	}
+	mode := s.authMode(ctx)
+	switch p.mode {
+	case modeOpen:
+		return mode == modeOpen
+	case modeLegacy:
+		return mode == modeLegacy && p.legacyToken == s.legacyToken()
+	}
+	if mode != modeUsers {
+		return false
+	}
+	now := time.Now()
+	tok, ok, err := s.opts.Store.Token(ctx, p.token.ID)
+	if err != nil || !ok || !tok.RevokedAt.IsZero() || tok.Expired(now) {
+		return false
+	}
+	np, err := s.principalFor(ctx, tok, now)
+	return err == nil && np.has("read")
 }
 
 // touch records a token's use at most once an hour, and moves a
@@ -650,11 +751,13 @@ func (s *Server) allowed(p *principal, capability string, r *http.Request) bool 
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability string) (*principal, bool) {
 	ctx := r.Context()
 	mode := s.authMode(ctx)
-	switch {
-	case mode == modeOpen:
-		return &principal{mode: modeOpen}, true
-	case mode == modeLegacy && s.opts.Token == "":
-		return &principal{mode: modeLegacy}, true
+	if mode == modeOpen || mode == modeLegacy && s.legacyToken() == "" {
+		// A server that asks for no key answers its local network only.
+		if !s.openAllowed(r) {
+			writeError(w, http.StatusForbidden, openRefused)
+			return nil, false
+		}
+		return &principal{mode: mode}, true
 	}
 	ip := s.clientIP(r)
 	key := store.LockoutAddr(ip)

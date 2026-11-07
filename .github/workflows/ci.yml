@@ -4,8 +4,11 @@ name: CI
 # branch), never both. Formatting, vet, the tests, a cross build of every
 # release binary (so that a tag finds nothing new to fail on),
 # govulncheck, the Debian package in a container, and the Windows service
-# on a Windows runner. A push to a release branch (alpha) runs nothing: it
-# is a fast-forward of a commit main has tested; the tag runs release.yml.
+# on a Windows runner. A pull request runs the web UI's suite only when
+# it changes the UI, the suite or this file, and on two of its four cases;
+# a push to main runs all of it. A push to a release branch (alpha) runs
+# nothing: it is a fast-forward of a commit main has tested; the tag runs
+# release.yml.
 on:
   push:
     branches: [ main ]
@@ -63,6 +66,34 @@ jobs:
       - name: Cross build
         run: make cross
 
+  # What a pull request changes, for the Screenshots job: ui is true when
+  # it touches the web UI, its suite or this file (GUIDELINES/project/CI.md,
+  # section 2). The run checks out the pull request's merge commit, whose
+  # first parent is the base branch. The list is taken before it is
+  # matched, so that grep -q ending the pipe early cannot fail the step
+  # under pipefail; a step that fails anyway leaves ui empty, and the
+  # Screenshots job then runs. A push to main skips this job.
+  changes:
+    name: Changed paths
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      ui: ${{ steps.paths.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2 # the merge commit and its parents
+
+      - name: Paths
+        id: paths
+        run: |
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          if grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ui=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # The web UI in Chromium against the fake Cube: the pytest suite, then
   # the screenshot set, uploaded as the artifact ui-screenshots
   # (tools/ui-test/README.md). Nothing is compared with the committed
@@ -75,9 +106,13 @@ jobs:
   # version and the pip pin below move together (GUIDELINES/project/CI.md,
   # section 3). The image has no make: the steps run what the make
   # targets run. The slideshow is built and committed with the set, not
-  # here.
+  # here. It runs for every push to main and for a pull request whose
+  # changes job did not answer false; skipped by this condition, the
+  # required check counts as passed.
   screenshots:
     name: Screenshots
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.ui != 'false') }}
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
@@ -100,10 +135,13 @@ jobs:
 
       # UI_TEST_REQUIRED: a missing Playwright, pytest or
       # pytest-playwright fails the job instead of skipping the suite.
+      # PYTEST_ADDOPTS: a pull request runs two of the four cases, both
+      # widths and both languages; a push to main runs all four.
       - name: Smoke test
         run: tools/ui-test/run.sh
         env:
           UI_TEST_REQUIRED: 1
+          PYTEST_ADDOPTS: ${{ github.event_name == 'pull_request' && '-k "1100-en or 390-de"' || '' }}
 
       - name: Screenshots
         run: tools/ui-test/run.sh screenshots

@@ -38,6 +38,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     assert not page.locator(".users-settings").is_visible(), "no System settings → Users for an operator"
     assert not page.locator(".roles-settings").is_visible(), "no System settings → Roles for an operator"
     assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no System settings → Cubes for an operator"
+    assert not page.locator(".restart.needs-restart").is_visible(), "no restart for an operator"
     named_buttons(page, "the settings as an operator")
     open_user_menu(page)
     assert "operator" in page.locator("#me-line").inner_text(), "the 👤 menu says who is signed in"

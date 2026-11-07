@@ -1,7 +1,7 @@
 # Updates from the web UI on Windows
 
 The design for starting a software update of the Windows service from
-the web UI (Settings → Software, the Update button) and from the API
+the web UI (System settings → Software, the Update button) and from the API
 (`POST /api/v1/update`), the way it works on Linux and macOS.
 
 Status: implemented on 2026-11-06 as option A with the nine positions of section
@@ -21,6 +21,9 @@ and the CI test's second POST, which must be refused,
 goes on the first's connection from the same curl,
 since in stage 2 the helper stops the service before a second curl process
 is up (GUIDELINES/project/CI.md, "Runner Constraints").
+Since 2026-11-07 the restart from the API (`POST /api/v1/restart`)
+uses the same starter for `massimo restart -service massimo`, detached,
+its output in `service.log`.
 
 The text below is the design as written before it.
 Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/update,
@@ -819,7 +822,7 @@ the command line shown by `sc.exe qc` ends in
 Note the time.
 
 Then, in a browser on this machine, http://127.0.0.1:8099/ with the token,
-Settings → Software:
+System settings → Software:
 
 1. "Check for updates": the text names the newest release as out and the button
    "Update to v…" is there.

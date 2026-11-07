@@ -13,7 +13,7 @@
 // "Authentication"); each hides, as a class needs-<capability> in the
 // markup, what it alone allows.
 const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-  "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "audit"];
+  "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice
 // that cannot read the roles.
@@ -39,10 +39,10 @@ function canManageUsers() {
 }
 
 // hasSystem reports whether the signed-in user sees System settings: one
-// of the capabilities of its panels, Cubes, backups, users, roles and the
-// software update.
+// of the capabilities of its panels, Cubes, backups, users, roles, and
+// the software's update and the server's restart.
 function hasSystem() {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "update"].some(hasCap) || canManageUsers();
+  return ["cubes", "pair", "backup", "roles", "capabilities", "update", "restart"].some(hasCap) || canManageUsers();
 }
 
 // hasProfile reports whether the page is signed in as a user, who has My
@@ -71,6 +71,11 @@ function setToken(token) {
   store("massimo.token", token);
 }
 
+// sawOpen is set once the page has seen the server ask for no key: the
+// sign-in dialog then opens its API-key part, since the owner made from
+// MASSIMO_API_TOKEN has no password.
+let sawOpen = false;
+
 // loadMe reads who the page is signed in as and applies it; a server
 // that refuses opens the sign-in dialog through api().
 async function loadMe() {
@@ -79,6 +84,7 @@ async function loadMe() {
   } catch (e) {
     state.me = null;
   }
+  if (state.me && (state.me.mode === "open" || state.me.mode === "none")) sawOpen = true;
   applyCaps();
   return state.me;
 }
@@ -95,8 +101,19 @@ function applyCaps() {
   body.classList.toggle("no-sync", !canSync());
   body.classList.toggle("no-system", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
+  renderOpenBanner();
   renderMe();
   if (!mayShow(currentView)) showView("tiles", "replace"); // log.js: a page the user signed in now may not open
+}
+
+// renderOpenBanner warns under the header while the server asks for no
+// key: a store without users, or no store and no token. It cannot be
+// dismissed, and goes once the server asks who is there.
+function renderOpenBanner() {
+  const mode = state.me && state.me.mode;
+  const open = mode === "open" || mode === "none";
+  $("open-banner").classList.toggle("hidden", !open);
+  if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
 // renderMe says in the 👤 menu who is signed in, and what Sign out
@@ -166,6 +183,7 @@ function askLogin() {
     $("login-user").value = "";
     $("login-password").value = "";
     $("login-token").value = "";
+    $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
     const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {

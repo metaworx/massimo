@@ -4,11 +4,15 @@
 package cubelan
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -495,5 +499,227 @@ func TestGreetingCLineAnsweringASend(t *testing.T) {
 	}
 	if c.Snapshot().Config(first) == nil {
 		t.Fatalf("device %s dropped at the end of the greeting", first)
+	}
+}
+
+// logLines captures a client's log, Debug included, for the tests that
+// count its lines.
+type logLines struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logLines) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *logLines) logger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(l, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+// lines are the lines of msg at level, as slog's text handler writes them.
+func (l *logLines) lines(level, msg string) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []string
+	for _, line := range strings.Split(l.buf.String(), "\n") {
+		if strings.Contains(line, " level="+level+" ") && strings.Contains(line, ` msg="`+msg+`"`) {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func (l *logLines) count(level, msg string) int { return len(l.lines(level, msg)) }
+
+// eventCount counts a client's events by kind, reading them as they
+// come so that none is dropped.
+type eventCount struct {
+	mu sync.Mutex
+	n  map[EventKind]int
+}
+
+func countEvents(ctx context.Context, c *Client) *eventCount {
+	ec := &eventCount{n: map[EventKind]int{}}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e := <-c.Events():
+				ec.mu.Lock()
+				ec.n[e.Kind]++
+				ec.mu.Unlock()
+			}
+		}
+	}()
+	return ec
+}
+
+func (ec *eventCount) get(k EventKind) int {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+	return ec.n[k]
+}
+
+// eventually waits up to five seconds for cond.
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s within 5 s", what)
+		}
+	}
+}
+
+// A Cube that goes away is reported once, however often the client
+// retries, and its return once, with how long it was down; the next
+// loss is reported again.
+func TestALostCubeIsReportedOnce(t *testing.T) {
+	srv, addr := startFake(t)
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+
+	srv.Close()
+	eventually(t, "three failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 3 })
+	srv2 := &fakecube.Server{Greeting: srv.Greeting}
+	if _, err := srv2.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv2.Close() })
+	eventually(t, "greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
+	if n := logs.count("WARN", "cube connection lost"); n != 1 {
+		t.Errorf("%d cube connection lost lines, want 1", n)
+	}
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+	if back := logs.lines("INFO", "cube connection re-established"); len(back) != 1 || !strings.Contains(back[0], " down_for=") {
+		t.Errorf("re-established lines: %q", back)
+	}
+	if n := logs.count("INFO", "cube connected"); n != 1 {
+		t.Errorf("%d cube connected lines, want the first connection's only", n)
+	}
+	if n := logs.count("WARN", "cube still unreachable"); n != 0 {
+		t.Errorf("%d reminders within a day", n)
+	}
+
+	srv2.Close()
+	eventually(t, "second disconnected event", func() bool { return evs.get(EventDisconnected) == 2 })
+	if n := logs.count("WARN", "cube connection lost"); n != 2 {
+		t.Errorf("%d cube connection lost lines after the second loss, want 2", n)
+	}
+}
+
+// A Cube never reached since the start is reported once, at the first
+// failed attempt, and the first greeting says it is back.
+func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
+	addr := freeAddr(t)
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "four failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 4 })
+	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], " retry_in=") {
+		t.Errorf("cube connection lost lines: %q", lost)
+	}
+
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakecube.Server{Greeting: greeting}
+	if _, err := srv.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Close() })
+	eventually(t, "greeting", func() bool { return evs.get(EventConnected) == 1 })
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+	if n := logs.count("WARN", "cube connection lost"); n != 1 {
+		t.Errorf("%d cube connection lost lines, want 1", n)
+	}
+	if n := logs.count("INFO", "cube connection re-established"); n != 1 {
+		t.Errorf("%d re-established lines, want 1", n)
+	}
+	if n := logs.count("INFO", "cube connected"); n != 0 {
+		t.Errorf("%d cube connected lines after a loss", n)
+	}
+}
+
+// A Cube that stays unreachable is warned of again every RemindEvery,
+// with how long it has been down, and without another event.
+func TestAReminderWhileTheCubeStaysDown(t *testing.T) {
+	addr := freeAddr(t)
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, RemindEvery: 100 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "two reminders", func() bool { return logs.count("WARN", "cube still unreachable") >= 2 })
+	for _, line := range logs.lines("WARN", "cube still unreachable") {
+		if !strings.Contains(line, " down_for=") {
+			t.Errorf("reminder without down_for: %s", line)
+		}
+	}
+	if n := logs.count("WARN", "cube connection lost"); n != 1 {
+		t.Errorf("%d cube connection lost lines, want 1", n)
+	}
+	eventually(t, "disconnected event", func() bool { return evs.get(EventDisconnected) > 0 })
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+}
+
+// A deliberate Reconnect whose dial then fails is a loss like any
+// other: reported once, and its end once.
+func TestAFailedReconnectIsALoss(t *testing.T) {
+	_, addr := startFake(t)
+	var refuse atomic.Bool
+	dial := func(ctx context.Context, a string) (net.Conn, error) {
+		if refuse.Load() {
+			return nil, errors.New("refused by the test")
+		}
+		return (&net.Dialer{}).DialContext(ctx, "tcp", a)
+	}
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Dialer: dial, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+
+	refuse.Store(true)
+	rctx, stop := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer stop()
+	if err := c.Reconnect(rctx); err == nil {
+		t.Fatal("Reconnect succeeded with every dial refused")
+	}
+	eventually(t, "two failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 2 })
+	refuse.Store(false)
+	eventually(t, "greeting after the reconnect", func() bool { return evs.get(EventConnected) == 2 })
+	if n := logs.count("INFO", "cube reconnecting"); n != 1 {
+		t.Errorf("%d cube reconnecting lines, want 1", n)
+	}
+	if n := logs.count("WARN", "cube connection lost"); n != 1 {
+		t.Errorf("%d cube connection lost lines, want 1", n)
+	}
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+	if n := logs.count("INFO", "cube connection re-established"); n != 1 {
+		t.Errorf("%d re-established lines, want 1", n)
 	}
 }

@@ -8,11 +8,17 @@ and follows the system's light or dark mode.
 
 The page asks who you are: a name and a password,
 or an API key pasted into the second field,
+which is open from the start once the page has seen the server ask for no key
+(the owner made from `MASSIMO_API_TOKEN` has no password),
 and keeps the session in the browser for 30 days from its last use;
 👤 → Sign out ends it.
 A server without users shows the form that creates the first owner to a
-browser on the local network; until then everything is open.
-Its name is checked as a new user's is (System settings → Users).
+browser on the local network; until then everything is open,
+and a warning under the header's rule says so and what closes it:
+the first owner, or `MASSIMO_API_TOKEN` in the server's settings file
+(`-token` for a server without a store).
+It cannot be dismissed, and goes once the server asks who is there.
+The first owner's name is checked as a new user's is (System settings → Users).
 What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
@@ -196,6 +202,8 @@ the header says how many are pending.
 Shows the Cube's newest 200 events and new ones as they arrive: device states,
 configuration and name changes, connections to the Cube, pairing,
 restores and errors.
+A lost connection is one line, however often the server tries again
+until the Cube is back.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
@@ -389,13 +397,24 @@ a role with none of them (the viewer's, a guest's) has no cog.
   and **Add a role**; the owner cannot be changed.
   **Capabilities for every role** (with `capabilities`) switches a capability
   off for every role but the owner.
-- **Software** (with `update`):
+- **Software**:
   the running version, the update channel and whether a newer release is out.
   On a box with the update helper installed (packaging/README.md, "Updating"),
-  **Update** installs it and restarts the server.
+  **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
+  **Restart the server**, with the capability `restart`,
+  asks in the section and restarts the server through its service manager
+  (`docs/api-v1.md`, "POST /api/v1/restart");
+  the page then asks `/healthz` every two seconds until the server reports a new start,
+  reads the data again and says when it started,
+  or says after two minutes that it has not come back.
+  Where the server cannot be restarted from this page the button is missing
+  and the server's reason is shown,
+  such as a server in a terminal or an open server asked from elsewhere than the box.
+  The settings of the settings file that changed since the start and apply only
+  at the next one are listed under it, by name.
 
 ## How the page is built
 
