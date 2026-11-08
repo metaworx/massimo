@@ -191,7 +191,9 @@ func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// deleteBackup handles DELETE …/backups/{id}.
+// deleteBackup handles DELETE …/backups/{id}. Deleting the newest
+// makes the automatic backup forget its reference, read again from the
+// one now newest at the next look; with none left, one follows at once.
 func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
 	rt, st, cubeID, err := s.backupHistory(r)
 	if err != nil {
@@ -201,7 +203,16 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// The newest, the delete and forget() in one step against
+	// takeBackup, which stores a row and makes it the reference under
+	// the same lock; a newest not readable forgets as well.
+	rt.bk.rows.Lock()
+	newest, has, newestErr := st.NewestBackup(r.Context(), cubeID)
 	ok, err := st.DeleteBackup(r.Context(), cubeID, id)
+	if ok && (newestErr != nil || !has || newest.ID == id) {
+		rt.bk.forget()
+	}
+	rt.bk.rows.Unlock()
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}

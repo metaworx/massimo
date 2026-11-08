@@ -1431,7 +1431,8 @@ not the live state and not the NTP servers,
 compared with the newest backup's by a hash;
 the backup follows once `backups.auto_min` minutes passed without a further change,
 at the latest `backups.auto_max` minutes after the first,
-and a Cube that has none gets one at its first connection.
+and a Cube that has none gets one at once:
+at its first connection, or once its last backup is deleted.
 Changes made outside Massimo count as well, once the Cube reports them,
 at the latest at the six-hourly refresh.
 A restore keeps the Cube's configuration before its first step (`before_restore`)
@@ -1488,6 +1489,10 @@ Capability `backup`.
 
 Remove a backup from the history (`204`);
 the store keeps a tombstone without the file until the retention removes it.
+Deleting the newest makes the one now newest the reference of the automatic backup:
+from the next look, within a minute,
+`changed` and `due` show a configuration that differs from it.
+Deleting the last has the server take a new one at once.
 Capability `restore`, so that an operator cannot erase the history;
 audited as `backup.delete`.
 

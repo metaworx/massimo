@@ -13,6 +13,10 @@ the next minor, a fix counts the suffix up.
 - The backup list no longer shows a pending change next to the backup
   that has just covered it (`docs/api-v1.md`, "GET …/backups").
 
+- Deleting a Cube's newest backup makes the one now newest the
+  reference of its automatic backup, and deleting its last one takes a
+  new one at once, without a restart of `serve`.
+
 ## [0.11.0-alpha.1] - 2026-11-08
 
 ### Added
