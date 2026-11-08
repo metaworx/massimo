@@ -11,10 +11,11 @@ package server
 // restored. A Cube whose hash differs is dirty from the first change;
 // its backup is taken once no change has come for backups.auto_min
 // minutes, and at the latest backups.auto_max minutes after it became
-// dirty. A Cube without a backup gets one at once. The comparison runs
-// once a minute after a connection or a configuration event; the
-// reference lives in memory, read from the newest backup at the first
-// look.
+// dirty. A Cube without a backup gets one at once, also once its last
+// is deleted or pruned. The comparison runs once a minute after a
+// connection or a configuration event; the reference lives in memory,
+// read from the newest backup at the first look and again once the
+// newest is deleted or pruned.
 
 import (
 	"context"
@@ -42,7 +43,11 @@ type backupWatch struct {
 
 	// rows makes a backup's row and the clean state one step for the
 	// list: takeBackup holds it to store the row and call stored(),
-	// listBackups shares it to read the rows and state(). Taken before
+	// listBackups shares it to read the rows and state(). deleteBackup
+	// holds it to find whether the row is the newest, delete it and
+	// forget(), pruneBackups to forget() after a prune that may have
+	// removed it; the first look shares it to read the reference, so that
+	// it never keeps the hash of a row deleted meanwhile. Taken before
 	// mu, never while mu is held.
 	rows sync.RWMutex
 
@@ -66,6 +71,18 @@ func (w *backupWatch) stored(hash string) {
 	defer w.mu.Unlock()
 	w.known, w.none, w.ref, w.cur = true, false, hash, hash
 	w.dirtySince, w.lastChange, w.retryAt = time.Time{}, time.Time{}, time.Time{}
+}
+
+// forget drops the reference once the newest backup is gone: the next
+// look reads it again from the backup now newest, or finds none, and
+// compares the configuration with it afresh, which needs the hash of
+// the last look cleared as well. The caller holds rows.
+func (w *backupWatch) forget() {
+	w.mu.Lock()
+	w.known, w.none, w.ref = false, false, ""
+	w.cur, w.dirtySince, w.lastChange = "", time.Time{}, time.Time{}
+	w.mu.Unlock()
+	w.touch()
 }
 
 // restored makes the file a restore sent the reference; the next look
@@ -133,15 +150,17 @@ func (s *Server) backupCheck(ctx context.Context, rt *runtime, now time.Time) {
 	known := w.known
 	w.mu.Unlock()
 	if !known {
+		w.rows.RLock() // against a delete and its forget() in between
 		ref, none, err := s.newestBackupHash(ctx, st, cubeID)
-		if err != nil {
-			s.log.Warn("backup: the newest backup is not readable; the next is taken as after a change", "cube", rt.serial, "error", err)
-		}
 		w.mu.Lock()
 		if !w.known {
 			w.known, w.none, w.ref = true, none, ref
 		}
 		w.mu.Unlock()
+		w.rows.RUnlock()
+		if err != nil {
+			s.log.Warn("backup: the newest backup is not readable; the next is taken as after a change", "cube", rt.serial, "error", err)
+		}
 		w.touch()
 	}
 	if w.touched.Swap(false) {
@@ -241,10 +260,35 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 		return store.Backup{}, nil, fail(http.StatusInternalServerError, "%v", err)
 	}
 	s.log.Info("backup taken", "cube", rt.serial, "id", b.ID, "reason", reason, "bytes", b.Size)
-	if _, err := st.PruneBackups(ctx, time.Now()); err != nil {
-		s.log.Warn("backups not pruned", "error", err)
-	}
+	s.pruneBackups(ctx, st, time.Now())
 	return b, f, nil
+}
+
+// pruneBackups prunes the store's backups as of now. With
+// backups.keep_newest 0 a prune may remove a Cube's newest backup, and
+// the store does not say whose: where rows went, every Cube's watch
+// forgets its reference, which its next look reads again.
+func (s *Server) pruneBackups(ctx context.Context, st *store.Store, now time.Time) {
+	n, err := st.PruneBackups(ctx, now)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.log.Warn("backups not pruned", "error", err)
+		}
+		return
+	}
+	if n == 0 {
+		return
+	}
+	if set, err := st.BackupSettings(ctx); err == nil && set.KeepNewest > 0 {
+		return
+	}
+	for _, rt := range s.runtimes() {
+		if rt.store == st {
+			rt.bk.rows.Lock()
+			rt.bk.forget()
+			rt.bk.rows.Unlock()
+		}
+	}
 }
 
 // pruneBackupsDaily prunes the backups at the start and once a day,
@@ -256,9 +300,7 @@ func (s *Server) pruneBackupsDaily(ctx context.Context, st *store.Store) {
 	t := time.NewTicker(backupPruneEvery)
 	defer t.Stop()
 	for {
-		if _, err := st.PruneBackups(ctx, time.Now()); err != nil && ctx.Err() == nil {
-			s.log.Warn("backups not pruned", "error", err)
-		}
+		s.pruneBackups(ctx, st, time.Now())
 		select {
 		case <-ctx.Done():
 			return

@@ -33,6 +33,13 @@ the next minor, a fix counts the suffix up.
 - The backup list no longer shows a pending change next to the backup
   that has just covered it (`docs/api-v1.md`, "GET …/backups").
 
+- Deleting a Cube's newest backup makes the one now newest the
+  reference of its automatic backup, and deleting its last one takes a
+  new one at once, without a restart of `serve`.
+
+- A prune that removes a Cube's newest backup, as `backups.keep_newest`
+  0 allows, does the same.
+
 - A metadata block without bytes after its device list, as a LAN client
   may send it, gets none added when the server or the proxy writes it
   back (`internal/protocol/cube`).
