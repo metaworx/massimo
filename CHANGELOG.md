@@ -54,6 +54,10 @@ the next minor, a fix counts the suffix up.
   their updates and the Go modules' monthly, its commit messages left
   unchecked (`GUIDELINES/project/CI.md`, "Dependabot").
 
+- Dependencies updated: actions/checkout v7.0.1, setup-go v7.0.0,
+  upload-artifact v7.0.2, download-artifact v8.0.2,
+  upload-pages-artifact v5.0.0 and deploy-pages v5.0.1.
+
 - The update check and an update's download try again twice, after 2
   and 5 seconds, when GitHub answers 502, 503 or 504 or the connection
   fails before an answer.
