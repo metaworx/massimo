@@ -10,6 +10,38 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- Fuzz targets for the parsers of untrusted bytes, their seeds run by
+  `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
+  (`GUIDELINES/project/CI.md`, section 2).
+
+### Changed
+
+- The tests' fixtures and the recorded greeting carry placeholder radio
+  addresses too, and `tools/identifiers` fails `go test` on a real
+  serial, MAC or radio address in the tree (`AGENTS.md`).
+
+- CI runs the race detector on `internal/server`, `store`, `cubelan` and
+  `proxy` in a Race job beside Vet and test; `make race` runs it
+  locally (`GUIDELINES/project/CI.md`, section 2).
+
+- The workflows pin their actions by commit SHA; Dependabot proposes
+  their updates and the Go modules' monthly
+  (`GUIDELINES/project/CI.md`, "Dependabot").
+
+### Fixed
+
+- A metadata block without bytes after its device list, as a LAN client
+  may send it, gets none added when the server or the proxy writes it
+  back (`internal/protocol/cube`).
+
+- A stored password hash of another argon2 version, or with a salt under
+  8 bytes, is refused as malformed, as one over the ceiling is
+  (`docs/store.md` section 6).
+
+## [0.11.0-alpha.1] - 2026-11-08
+
+### Added
+
 - The web UI's log has a choice of how far back: the last 20 events by
   default, 10 minutes, an hour, today, this week, this month or all
   (`docs/ui.md`, "Log").
@@ -22,9 +54,9 @@ the next minor, a fix counts the suffix up.
   restore, and `…/backups` lists, downloads, compares and deletes the
   backups, which a restore takes by id (`docs/api-v1.md`, "Backups").
 
-- Settings → Backup and restore in the web UI: the download, the
+- System settings → Backup and restore in the web UI: the download, the
   server's backups with compare, restore and delete, and a restore from
-  a file that shows its plan first (`docs/ui.md`, "Settings").
+  a file that shows its plan first (`docs/ui.md`, "System settings").
 
 - The web UI warns under its header while the server is open, and says
   what closes it (`docs/ui.md`).
@@ -44,8 +76,8 @@ the next minor, a fix counts the suffix up.
   for the API, stopping and exiting 75 for its service manager; `massimo
   restart` restarts the installed server (`README.md`, "Server").
 
-- The web UI's header has a 👤 menu: who is signed in, My settings and
-  Sign out, which leave the settings page (`docs/ui.md`, "Header").
+- The web UI's header has a 👤 menu: who is signed in, My profile, My
+  settings and Sign out (`docs/ui.md`, "Header").
 
 - The web UI's settings are three pages: My profile with the own name,
   password and keys, My settings, and System settings behind ⚙
@@ -82,10 +114,6 @@ the next minor, a fix counts the suffix up.
   level the commands log at, `info` by default; a change in `serve`'s
   settings file waits for its restart (`README.md`, "Server").
 
-- Fuzz targets for the parsers of untrusted bytes, their seeds run by
-  `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
-  (`GUIDELINES/project/CI.md`, section 2).
-
 ### Changed
 
 - Passwords are hashed with argon2id at 19 MiB and two passes, about
@@ -107,9 +135,9 @@ the next minor, a fix counts the suffix up.
 - The web UI's log reads newest first, new events coming in on top and
   Older events at the bottom (`docs/ui.md`, "Log").
 
-- The tests' fixtures and the recorded greeting carry placeholder
-  serials and radio addresses, which `tools/identifiers` checks in every
-  `go test` (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
+- The recorded greeting that the tests and CI's fake Cube load, and its
+  UI-test copy, carry placeholder serials
+  (`internal/protocol/cube/testdata/`, `tools/ui-test/`).
 
 - CI runs the web UI's suite on a pull request only when it changes the
   UI, the suite or `ci.yml`, and then on two of its four cases; a push to
@@ -118,14 +146,6 @@ the next minor, a fix counts the suffix up.
 - The web UI's Log button shows a sheet, since three lines alone read as
   a menu (`docs/ui.md`, "Header").
 
-- CI runs the race detector on `internal/server`, `store`, `cubelan` and
-  `proxy` in a Race job beside Vet and test; `make race` runs it
-  locally (`GUIDELINES/project/CI.md`, section 2).
-
-- The workflows pin their actions by commit SHA; Dependabot proposes
-  their updates and the Go modules' monthly
-  (`GUIDELINES/project/CI.md`, "Dependabot").
-
 ### Fixed
 
 - The web UI's Clear in the log sets the filter, the kind and the device
@@ -133,11 +153,11 @@ the next minor, a fix counts the suffix up.
 
 - The web UI keeps a button that sends off, with a spinner, until the
   answer, and a Send off while nothing changed, so a second click sends
-  nothing (`docs/ui.md`, "Rooms", "Settings").
+  nothing (`docs/ui.md`, "Rooms", "How the page is built").
 
 - The web UI checks a new user's name while it is typed, and the users
   and roles routes refuse without the store's `store: ` prefix
-  (`docs/ui.md`, "Settings").
+  (`docs/ui.md`, "System settings").
 
 - A request still being answered when `serve` stops is finished, and
   its audit row written, before the store closes (`cmd/massimo`).
@@ -149,14 +169,6 @@ the next minor, a fix counts the suffix up.
 - A lost Cube is logged and stored as `disconnected` once, not at
   every retry, and its return logged with how long it was down
   (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
-
-- A metadata block without bytes after its device list, as a LAN client
-  may send it, gets none added when the server or the proxy writes it
-  back (`internal/protocol/cube`).
-
-- A stored password hash of another argon2 version, or with a salt under
-  8 bytes, is refused as malformed, as one over the ceiling is
-  (`docs/store.md` section 6).
 
 ### Security
 
