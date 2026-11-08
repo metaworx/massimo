@@ -30,6 +30,9 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- The backup list no longer shows a pending change next to the backup
+  that has just covered it (`docs/api-v1.md`, "GET …/backups").
+
 - A metadata block without bytes after its device list, as a LAN client
   may send it, gets none added when the server or the proxy writes it
   back (`internal/protocol/cube`).
