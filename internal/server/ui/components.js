@@ -595,9 +595,29 @@ function backToTop(page) {
   btn.addEventListener("click", () => {
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    settleAtTop();
     const first = nav.querySelector(".toc-link");
     if (first) first.focus({ preventScroll: true });
   });
+}
+
+// settleAtTop keeps a scroll to the top from ending a few pixels short:
+// on a CI runner the page reached the top and was moved back 3 px as the
+// header grew back (stickyHeader), and stayed there. For 3 s a scroll
+// that leaves the page above 0 and under 8 px, where the header counts it
+// at the top, is taken the rest of the way; one from 8 px on is the
+// user's and is left alone.
+function settleAtTop() {
+  const until = performance.now() + 3000;
+  const settle = () => {
+    if (performance.now() > until) {
+      removeEventListener("scroll", settle);
+      return;
+    }
+    const y = window.scrollY;
+    if (y > 0 && y < 8) window.scrollTo({ top: 0 });
+  };
+  addEventListener("scroll", settle, { passive: true });
 }
 
 // deviceIds is a device's serial number and radio address, as
