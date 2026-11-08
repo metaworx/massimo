@@ -89,6 +89,33 @@ func TestParseSendResult(t *testing.T) {
 	}
 }
 
+// TestCountersUpToFFFF: the H and S messages' counters read 16 bits, so
+// one past ffff is refused on every platform rather than read as a
+// negative number where int has 32 bits.
+func TestCountersUpToFFFF(t *testing.T) {
+	h, err := ParseHello("KMD0000505,0a0106,0113,00000000,477719c0,ffff,ffff")
+	if err != nil || h.DutyCycle != 0xffff || h.FreeMemorySlots != 0xffff {
+		t.Fatalf("H with ffff: %+v %v", h, err)
+	}
+	r, err := ParseSendResult("ffff,0,ffff")
+	if err != nil || r.DutyCycle != 0xffff || r.FreeMemorySlots != 0xffff {
+		t.Fatalf("S with ffff: %+v %v", r, err)
+	}
+	for _, line := range []string{
+		"KMD0000505,0a0106,0113,00000000,477719c0,10000,32",
+		"KMD0000505,0a0106,0113,00000000,477719c0,00,80000000",
+	} {
+		if _, err := ParseHello(line); err == nil || !strings.Contains(err.Error(), "up to ffff") {
+			t.Errorf("ParseHello(%q): %v, want refused", line, err)
+		}
+	}
+	for _, data := range []string{"10000,0,31", "00,0,80000000"} {
+		if _, err := ParseSendResult(data); err == nil || !strings.Contains(err.Error(), "up to ffff") {
+			t.Errorf("ParseSendResult(%q): %v, want refused", data, err)
+		}
+	}
+}
+
 func TestParseNewDevice(t *testing.T) {
 	d, err := ParseNewDevice("Aw4VzExFUTAwMTUzNDD/")
 	if err != nil {

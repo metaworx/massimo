@@ -48,6 +48,10 @@ the next minor, a fix counts the suffix up.
   8 bytes, is refused as malformed, as one over the ceiling is
   (`docs/store.md` section 6).
 
+- A Cube's duty cycle or free memory slots over `ffff` are refused
+  rather than read as negative on a 32-bit system, as code scanning
+  warned (`internal/protocol/cube`).
+
 ## [0.11.0-alpha.1] - 2026-11-08
 
 ### Added

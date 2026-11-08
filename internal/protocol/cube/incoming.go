@@ -72,10 +72,14 @@ func firmwareVersion(raw string) string {
 	return strings.Join(strings.Split(s, ""), ".")
 }
 
+// parseHexInt reads one of the H and S messages' counters, which the Cube
+// sends as two hex digits. It reads 16 bits, so that every value it
+// accepts fits an int on every platform; read at 32 bits, one past
+// 7fffffff turned negative where int has 32 bits, as on armv6 and armv7.
 func parseHexInt(field, s string) (int, error) {
-	v, err := strconv.ParseUint(strings.TrimSpace(s), 16, 32)
+	v, err := strconv.ParseUint(strings.TrimSpace(s), 16, 16)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %q is not hex", field, s)
+		return 0, fmt.Errorf("%s: %q is not a hex number up to ffff", field, s)
 	}
 	return int(v), nil
 }
