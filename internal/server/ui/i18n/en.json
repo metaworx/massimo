@@ -25,6 +25,7 @@
 
   "header.serverVersion": "server version",
   "header.cube": "Cube",
+  "header.cubeChoice": "Cube {name}, {state}",
   "header.updatedTitle": "time of the last successful poll",
   "header.updated": "updated {time}",
   "header.refresh": "refresh",
@@ -32,7 +33,6 @@
   "header.reload": "New version on the server, reload",
   "header.connected": "connected",
   "header.disconnected": "disconnected",
-  "header.cubeDisconnected": "{name} (disconnected)",
   "header.cubeTime": "cube time",
   "header.pending": "{n} pending, states may still change",
   "header.pendingExpert.one": "{n} radiogram not yet acknowledged, states may still change",
@@ -66,6 +66,7 @@
   "home.noCubeAsk": "Ask the server's owner to add one.",
   "home.notConnected": "Cube {name} is not connected.",
   "home.address": "The server tries to reach it at {address}.",
+  "home.serial": "Serial number {serial}.",
   "home.noAddress": "The server knows no address for it yet; it waits for the Cube to answer discovery.",
   "home.lastData": "Its last data came at {time}.",
   "home.lastSeen": "It last answered discovery at {time}.",

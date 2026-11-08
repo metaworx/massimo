@@ -13,7 +13,9 @@ from conftest import TOKEN
 from helpers import wait_until
 
 DOWN_URL = os.environ.get("UI_TEST_DOWN_URL", "")
-NOT_CONNECTED = {"en": "Cube Cellar Cube (KEQ0000200) is not connected.", "de": "Cube Cellar Cube (KEQ0000200) ist nicht verbunden."}
+# the Cube named by its name, its serial in the detail (D5-B)
+NOT_CONNECTED = {"en": "Cube Cellar Cube is not connected.", "de": "Cube Cellar Cube ist nicht verbunden."}
+SERIAL = {"en": "Serial number KEQ0000200.", "de": "Seriennummer KEQ0000200."}
 NO_CUBE = {"en": "No Cube is configured.", "de": "Es ist kein Cube eingerichtet."}
 NO_DATA = {"en": "No data has come from it", "de": "keine Daten von ihm"}
 LAST_DATA = {"en": "Its last data came at", "de": "Seine letzten Daten kamen um"}
@@ -42,6 +44,7 @@ def test_a_cube_not_connected_says_why_rooms_are_empty(context, case, watch, gua
     assert notice_text(page, "title") == NOT_CONNECTED[case.lang], "it names the Cube"
     detail = notice_text(page, "detail")
     assert "127.0.0.1:9" in detail and NO_DATA[case.lang] in detail, f"the address, and no data yet: {detail}"
+    assert SERIAL[case.lang] in detail, f"the serial of the Cube named: {detail}"
     assert notice_text(page, "check"), "what to check"
     assert page.locator("#rooms .room").count() == 0, "no rooms"
     page.locator("#home-notice-cubes").click()
@@ -78,7 +81,10 @@ def test_a_cube_that_dropped_keeps_its_rooms_under_the_notice(page, case):
     try:
         page.evaluate("loadCubes()")
         assert wait_until(page, NOTICE_SHOWN, 5), "the notice shows"
-        assert "KEQ0000100" in notice_text(page, "title"), "it names the Cube"
+        # its name, or its serial without one; the serial in the detail when named
+        name = page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100').name") or "KEQ0000100"
+        assert name in notice_text(page, "title"), "it names the Cube"
+        assert "KEQ0000100" in notice_text(page, "title") + notice_text(page, "detail"), "with its serial"
         assert LAST_DATA[case.lang] in notice_text(page, "detail"), "with when its last data came"
         notice = page.locator("#home-notice").bounding_box()
         first = page.locator(".room").first

@@ -129,6 +129,23 @@ def css_hidden(page, selector):
     return page.locator(selector).evaluate("(e) => getComputedStyle(e).display === 'none'")
 
 
+CUBE_ITEM = "#cube-menu .menu-items button[data-value='%s']"
+
+
+def cube_item(page, value):
+    """An entry of the Cube choice by its value: a Cube's serial,
+    found:<serial>, or __discover; in the page whether open or not."""
+    return page.locator(CUBE_ITEM % value)
+
+
+def choose_cube(page, value):
+    """The Cube choice opened and an entry chosen, as a user does."""
+    menu = page.locator("#cube-menu")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    cube_item(page, value).click()
+
+
 def open_user_menu(page):
     """The 👤 menu in the header, open."""
     menu = page.locator("#user-menu")

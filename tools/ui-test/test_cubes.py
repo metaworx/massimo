@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from helpers import assert_busy, busy_state, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -34,7 +34,7 @@ def test_name_saved_and_taken_back(page, case):
     form.locator("input[name=name]").fill("Renamed")
     form.locator("button[type=submit]").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Renamed')", 5), "the new name is saved"
-    assert "Renamed" in page.locator("#cube-select option[value='KEQ0000100']").inner_text(), "the header shows the new name"
+    assert "Renamed" in cube_item(page, "KEQ0000100").text_content(), "the Cube choice shows the new name"
     take = panel.locator(".take-file[data-field=name]")
     assert take.count() == 1 and "MASSIMO_CUBE_KEQ0000100_NAME" in panel.locator(".cube-differs").inner_text(), \
         "the settings file's name is offered"
@@ -76,7 +76,7 @@ def test_found_cube_added_and_removed(page):
     asking in the panel, lists it as found again. The server keeps what a
     search found; where nothing was searched yet, this test searches."""
     if not page.evaluate("state.found.some((c) => c.serial === 'KEQ0000000')"):
-        page.locator("#cube-select").select_option("__discover")
+        choose_cube(page, "__discover")
         wait_until(page, "!discovery.running", 10)
     show_view(page, "system")
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
@@ -183,3 +183,31 @@ def test_save_is_off_until_a_change_and_turns(page, case):
         page.unroute("**/api/v1/cubes/KEQ0000100")
     assert busy_state(page, PANEL + " form.cube-form button[type=submit]")[0], "the Cube's name as it was: nothing differs"
     show_view(page, "tiles")
+
+
+def test_cube_choice_menu(page, case):
+    """The Cube choice is a menu of the page: closed the chosen Cube's
+    plug and name, its tooltip the serial, address and connection; open a
+    plug, the name and under it the serial and address per Cube, the chosen
+    one marked and focused, the arrow keys moving between the entries;
+    choosing the Cube shown closes it and keeps it."""
+    summary = page.locator("#cube-choice")
+    assert summary.locator(".conn.ok").count() == 1, "the chosen Cube connected, a green plug"
+    assert summary.locator(".conn").get_attribute("aria-label"), "the plug named for a screen reader"
+    title = summary.get_attribute("title") or ""
+    assert "KEQ0000100" in title and "127.0.0.1" in title, f"the tooltip has the serial and the address ({title!r})"
+    summary.click()
+    item = cube_item(page, "KEQ0000100")
+    assert item.get_attribute("aria-current") == "true", "the chosen Cube marked"
+    assert wait_until(page, "document.activeElement === document.querySelector(\"#cube-menu button[data-value='KEQ0000100']\")", 3), \
+        "the focus on the chosen Cube"
+    assert "KEQ0000100" in item.locator(".menu-item-sub").inner_text(), "under the name, the serial and the address"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.closest('#cube-menu') !== null && document.activeElement.tagName === 'BUTTON'"), \
+        "ArrowDown moves within the list"
+    if case.width >= 600:
+        widths = page.evaluate("[document.querySelector('#cube-menu .menu-items').offsetWidth, document.querySelector('#cube-choice').offsetWidth]")
+        assert widths[0] >= widths[1], f"the list at least as wide as the closed choice ({widths})"
+    item.click()
+    assert page.locator("#cube-menu").get_attribute("open") is None, "a choice closes the menu"
+    assert page.evaluate("state.serial") == "KEQ0000100", "the Cube stays chosen"

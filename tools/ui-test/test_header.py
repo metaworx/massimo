@@ -149,24 +149,21 @@ def active(page, selector):
 def test_header_order_and_the_narrow_header(page, case):
     """At full width the brand and the time of the last update with ↻
     beside it at the left (the time under the brand where a long version
-    leaves no room), then on the first line the connection and the Cube
-    choice, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰ beside the
-    brand and the connection with the Cube choice on a line of their own
-    under them; ☰ holds Log and System settings, opens each, and is
+    leaves no room), then on the first line the Cube choice with the plug
+    of its connection, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
+    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and System settings, opens each, and is
     highlighted while one of them is shown."""
-    order = ["h1", "#updated", "#refresh-btn", "#connection", "#cube-select", "#view-tiles", "#user-menu summary"]
+    order = ["h1", "#updated", "#refresh-btn", "#cube-choice", "#view-tiles", "#user-menu summary"]
     b = {sel: box(page, sel) for sel in order}
     assert b["#updated"]["x"] < b["#refresh-btn"]["x"], "↻ after the time it renews"
-    assert b["#connection"]["x"] < b["#cube-select"]["x"], f"the connection in front of the Cube choice: {b}"
-    assert abs(b["#connection"]["y"] + b["#connection"]["height"] / 2 - b["#cube-select"]["y"] - b["#cube-select"]["height"] / 2) < 8, \
-        f"on one line: {b}"
+    assert page.locator("#cube-choice .picker-icon .conn").count() == 1, "the connection, a plug in the Cube choice"
     assert b["#view-tiles"]["x"] < b["#user-menu summary"]["x"], "🏠 left of 👤"
     if case.width >= 600:
-        right = ["#connection", "#cube-select", "#view-tiles", "#user-menu summary", "#view-log", "#view-settings"]
+        right = ["#cube-choice", "#view-tiles", "#user-menu summary", "#view-log", "#view-settings"]
         b.update({sel: box(page, sel) for sel in ("#view-log", "#view-settings")})
         xs = [b[sel]["x"] for sel in right]
         assert xs == sorted(xs), f"left to right in this order: {right}"
-        assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#connection"]["x"], \
+        assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#cube-choice"]["x"], \
             f"the brand and the time left of the Cube choice: {b}"
         first_line = b["h1"]["y"] + b["h1"]["height"]
         assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
@@ -176,7 +173,7 @@ def test_header_order_and_the_narrow_header(page, case):
     assert page.locator("#nav-menu").is_visible(), "☰ shown"
     assert page.locator("#view-log").is_hidden() and page.locator("#view-settings").is_hidden(), "📄 and ⚙ in it"
     assert b["#user-menu summary"]["x"] < box(page, "#nav-menu summary")["x"], "🏠 👤 ☰"
-    assert b["#cube-select"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
+    assert b["#cube-choice"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
     for view, section in (("log", "#logview"), ("system", "#system")):
         page.locator("#nav-menu summary").click()
         page.locator("#menu-" + view).click()

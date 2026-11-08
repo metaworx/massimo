@@ -600,6 +600,85 @@ function backToTop(page) {
   });
 }
 
+// --- a choice of one in a menu (the Cube choice) -----------------------
+
+// connIcon is a connection as a plug: joined and green while connected,
+// apart and red while not (icon-plug-on, icon-plug-off), named for a
+// screen reader, since shape and colour alone say nothing to one.
+function connIcon(connected) {
+  const svg = iconEl(connected ? "icon-plug-on" : "icon-plug-off", "ni conn " + (connected ? "ok" : "bad"));
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", t(connected ? "header.connected" : "header.disconnected"));
+  return svg;
+}
+
+// menuItem is an item of a dropdown's list: a button with its icon (a
+// symbol's name, or an element such as connIcon; with blank and no icon
+// an empty place of an icon's width, so that the labels line up), its
+// label and, under it in grey, a second line (sub).
+function menuItem({ icon, label, sub, blank }, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  if (icon) b.appendChild(typeof icon === "string" ? iconEl(icon, "ni") : icon);
+  else if (blank) b.appendChild(elem("span", "menu-icon-none"));
+  const name = textEl("span", label, "menu-item-label");
+  b.appendChild(sub ? elem("span", "menu-item-text", name, textEl("span", sub, "menu-item-sub")) : name);
+  if (onClick) b.addEventListener("click", onClick);
+  return b;
+}
+
+// pickerMenu makes a dropdown (details.menu, its summary holding a
+// .picker-icon and a .picker-label, and a .menu-items) the choice of one
+// item, a menu of the page where a select could not show the chosen
+// item's name alone while its list shows more. The summary shows
+// shown's icon and label, its title and aria-label; the list the items:
+// { value, label, sub, icon, disabled } (menuItem, the chosen value
+// marked aria-current), { group: heading } or { separator: true }.
+// A click on an item calls onPick with its value; the arrow keys move
+// between the items, and opening puts the focus on the chosen one.
+function pickerMenu(details, { items, value, onPick, shown }) {
+  const sum = details.querySelector("summary");
+  const icon = sum.querySelector(".picker-icon");
+  clear(icon);
+  if (shown.icon) icon.appendChild(shown.icon);
+  sum.querySelector(".picker-label").textContent = shown.label;
+  sum.title = shown.title || shown.label;
+  sum.setAttribute("aria-label", shown.aria || shown.label);
+  const list = details.querySelector(".menu-items");
+  clear(list);
+  const blank = items.some((it) => it.icon);
+  for (const it of items) {
+    if (it.group) list.appendChild(textEl("p", it.group, "menu-group"));
+    else if (it.separator) list.appendChild(elem("hr", "menu-sep"));
+    else {
+      const b = menuItem({ icon: it.icon, label: it.label, sub: it.sub, blank }, () => onPick(it.value));
+      b.dataset.value = it.value;
+      b.disabled = !!it.disabled;
+      if (it.value === value) b.setAttribute("aria-current", "true");
+      list.appendChild(b);
+    }
+  }
+  if (details.dataset.picker) return;
+  details.dataset.picker = "1";
+  dropdown(details);
+  const enabled = () => [...details.querySelectorAll(".menu-items button:not(:disabled)")];
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+    const b = details.querySelector(".menu-items button[aria-current='true']") || enabled()[0];
+    if (b) b.focus();
+  });
+  details.addEventListener("keydown", (ev) => {
+    if (!details.open || (ev.key !== "ArrowDown" && ev.key !== "ArrowUp")) return;
+    const bs = enabled();
+    if (!bs.length) return;
+    ev.preventDefault();
+    const i = bs.indexOf(document.activeElement);
+    const next = ev.key === "ArrowDown" ? (i + 1) % bs.length : (i <= 0 ? bs.length - 1 : i - 1);
+    bs[next].focus();
+  });
+}
+
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, closed by a choice of one of its items, by Escape
 // (the focus back on its summary) and by a click outside it. The room

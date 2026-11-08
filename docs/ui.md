@@ -51,8 +51,13 @@ at its top, the button that reloads a new version apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 - **Cube**:
-  chooses the Cube when the server has several.
-  In front of it you see whether the server is connected to that Cube.
+  a menu that chooses the Cube when the server has several.
+  Closed it shows the chosen Cube's name (its serial where it has none)
+  and whether the server is connected to it, as a plug:
+  joined and green while connected, apart and red while not;
+  its tooltip adds the serial and the address.
+  Open, each Cube has its plug, its name and under it its serial and
+  address, the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
@@ -111,7 +116,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 ## Rooms
 
-When the Cube chosen is not connected, a notice above the rooms says so:
+When the Cube chosen is not connected, a notice above the rooms says so,
+naming it by its name and giving its serial:
 the address the server tries, when the Cube last sent data
 (or last answered discovery),
 and what to check, a Cube serving one client at a time;
@@ -393,7 +399,8 @@ to the top of the page.
   at the next one are listed under it, by name.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
-  each in a panel that opens with a click: its connection,
+  each in a panel whose head shows the name, the serial and the address,
+  and opens with a click: its connection,
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),
@@ -520,6 +527,8 @@ its heading's `button.section-fold` folding it):
 `pageContents` fills the page's row of section buttons from them,
 `pageBar` the sections menu of its title's row kept at the top,
 and `backToTop` wires the page's ↑;
+`pickerMenu` makes a dropdown the choice of one item (the Cube choice),
+its items `menuItem`s, a Cube's connection a `connIcon`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`

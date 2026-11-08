@@ -556,7 +556,7 @@ function cubePanel(c) {
   const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
-  const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
+  const d = detailsPanel({ name: c.name || undefined, mono: c.address ? c.serial + " · " + c.address : c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
     fromTemplate("tpl-cube-panel"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");

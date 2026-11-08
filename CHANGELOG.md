@@ -20,6 +20,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The Cube choice is a menu: closed the Cube's name and its connection
+  as a plug, open each Cube's serial and address; the "connected" label
+  is gone (`docs/ui.md`, "Header").
+
 - The 👤 and ☰ menus show an icon per item, and the 👤 button's tooltip
   names who is signed in (`docs/ui.md`, "Header").
 

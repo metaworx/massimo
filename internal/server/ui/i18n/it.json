@@ -26,6 +26,7 @@
 
   "header.serverVersion": "versione del server",
   "header.cube": "Cube",
+  "header.cubeChoice": "Cube {name}, {state}",
   "header.updatedTitle": "ora dell'ultima interrogazione riuscita",
   "header.updated": "aggiornato {time}",
   "header.refresh": "aggiorna",
@@ -33,7 +34,6 @@
   "header.reload": "Nuova versione sul server, ricarica",
   "header.connected": "connesso",
   "header.disconnected": "disconnesso",
-  "header.cubeDisconnected": "{name} (disconnesso)",
   "header.cubeTime": "ora del Cube",
   "header.pending": "{n} in sospeso, gli stati possono ancora cambiare",
   "header.pendingExpert.one": "{n} radiotelegramma non ancora confermato, gli stati possono ancora cambiare",
@@ -68,6 +68,7 @@
   "home.noCubeAsk": "Chiedi al proprietario del server di aggiungerne uno.",
   "home.notConnected": "Il Cube {name} non è connesso.",
   "home.address": "Il server prova a raggiungerlo all'indirizzo {address}.",
+  "home.serial": "Numero di serie {serial}.",
   "home.noAddress": "Il server non conosce ancora il suo indirizzo; aspetta che il Cube risponda alla ricerca.",
   "home.lastData": "I suoi ultimi dati sono arrivati alle {time}.",
   "home.lastSeen": "Ha risposto alla ricerca l'ultima volta alle {time}.",

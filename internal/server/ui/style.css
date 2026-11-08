@@ -171,10 +171,47 @@ body:not(.expert) .expert-only { display: none !important; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
-#cube-select { max-width: min(100%, 320px); min-width: 0; }
-@media (max-width: 599px) {
-  #cube-select { flex: 1 1 160px; max-width: 100%; }
+/* The Cube choice, a menu of the page (components.js pickerMenu): closed
+   the chosen Cube's plug and name, open as wide as its entries need, each
+   a plug, the name and under it the serial and the address. */
+.cube-menu { position: relative; min-width: 0; }
+.menu.cube-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  max-width: min(100%, 320px);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 1rem;
+  line-height: 1.2;
 }
+.menu.cube-menu > summary:hover, .menu.cube-menu[open] > summary { border-color: var(--accent); }
+.picker-icon { display: inline-flex; flex: none; }
+.picker-icon:empty { display: none; }
+.picker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cube-menu .caret { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
+.cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
+@media (max-width: 599px) {
+  .cube-menu { flex: 1 1 160px; }
+  .menu.cube-menu > summary { width: 100%; max-width: 100%; }
+}
+/* a connection (components.js connIcon): green joined, red apart */
+.ni.conn { width: 18px; height: 18px; }
+.ni.conn.ok, .menu-items button > .ni.conn.ok { color: var(--ok); }
+.ni.conn.bad, .menu-items button > .ni.conn.bad { color: var(--bad); }
+.menu-items button > .ni.conn { width: 20px; height: 20px; }
+/* a menu item of two lines (components.js menuItem), a group's heading,
+   a separator, the item chosen */
+.menu-item-text { display: flex; flex-direction: column; min-width: 0; }
+.menu-item-sub { font-family: var(--mono); font-size: 0.8rem; font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
+.menu-icon-none { width: 20px; flex: none; }
+.menu-group { margin: 8px 10px 2px; font-size: 0.8rem; color: var(--muted); }
+.menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
+.menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
 /* Cubes found on the LAN but not configured, with the env lines */
 .cube-found { margin-top: 8px; font-size: 0.9rem; max-width: 100%; }
@@ -364,7 +401,6 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .menu.sec-menu > summary:hover, .menu.sec-menu[open] > summary { border-color: var(--accent); }
 .sec-menu .menu-items { min-width: 210px; }
-.sec-menu .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 .toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
 .section-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }

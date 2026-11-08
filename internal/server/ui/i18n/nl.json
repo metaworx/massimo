@@ -26,6 +26,7 @@
 
   "header.serverVersion": "serverversie",
   "header.cube": "Cube",
+  "header.cubeChoice": "Cube {name}, {state}",
   "header.updatedTitle": "tijdstip van de laatste geslaagde opvraging",
   "header.updated": "bijgewerkt {time}",
   "header.refresh": "vernieuwen",
@@ -33,7 +34,6 @@
   "header.reload": "Nieuwe versie op de server, opnieuw laden",
   "header.connected": "verbonden",
   "header.disconnected": "niet verbonden",
-  "header.cubeDisconnected": "{name} (niet verbonden)",
   "header.cubeTime": "Cube-tijd",
   "header.pending": "{n} in behandeling, toestanden kunnen nog veranderen",
   "header.pendingExpert.one": "{n} radiotelegram nog niet bevestigd, toestanden kunnen nog veranderen",
@@ -67,6 +67,7 @@
   "home.noCubeAsk": "Vraag de eigenaar van de server er een toe te voegen.",
   "home.notConnected": "Cube {name} is niet verbonden.",
   "home.address": "De server probeert hem te bereiken op {address}.",
+  "home.serial": "Serienummer {serial}.",
   "home.noAddress": "De server kent nog geen adres voor hem; hij wacht tot de Cube op de zoekopdracht antwoordt.",
   "home.lastData": "Zijn laatste gegevens kwamen om {time}.",
   "home.lastSeen": "Hij antwoordde voor het laatst om {time} op de zoekopdracht.",
