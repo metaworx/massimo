@@ -37,14 +37,15 @@ def test_restart_not_offered(page):
 
 
 def test_restart_asks_in_the_page(page):
-    """The button asks in the Software section, and Cancel takes the
-    question back without a request."""
+    """The button asks in System settings → Maintenance, and Cancel takes
+    the question back without a request."""
     posts = []
     stub_restart(page, AVAILABLE, posts)
     show_view(page, "system")
     btn = page.locator("#restart-btn")
     btn.wait_for(state="visible")
-    assert page.locator("#restart-text").is_hidden(), "nothing to explain"
+    want = page.evaluate("t('maint.restartText')")
+    assert page.locator("#restart-text").inner_text() == want, "what a restart does"
     btn.click()
     box = page.locator(".restart .confirm-box")
     assert box.is_visible() and btn.is_hidden(), "the restart asks in the page"
@@ -87,15 +88,44 @@ def test_restart_follows_the_server_back(page):
 
 def test_restart_lists_what_waits(page):
     """The settings of the settings file that wait for the next start are
-    listed under the button, by name."""
+    listed under the restart, by name, and counted in the card's badge."""
     posts = []
     stub_restart(page, '{"available": true, "by": "systemd", "pending": ["MASSIMO_LISTEN", "MASSIMO_TLS"]}', posts)
     show_view(page, "system")
     page.locator("#restart-btn").wait_for(state="visible")
     want = page.evaluate("t('restart.pending', {names: 'MASSIMO_LISTEN, MASSIMO_TLS'})")
-    assert wait_until(page, f"document.getElementById('restart-text').textContent === {json.dumps(want)}", 5), \
+    assert wait_until(page, f"document.getElementById('restart-pending').textContent === {json.dumps(want)}", 5), \
         "what applies at the next restart"
+    badge = page.evaluate("tn('maint.badge.pending', 2)")
+    assert page.locator("#sys-maint .section-badges").inner_text() == badge, "counted in the card's badge"
     page.unroute("**/api/v1/restart")
+
+
+def test_reload_settings(page):
+    """Maintenance names the settings file and when it was read; Reload
+    now asks the server to read it again (POST /api/v1/reload, stubbed:
+    the route has its Go test) and says what changed."""
+    posts = []
+    stub_restart(page, '{"available": true, "by": "systemd", "file": "/etc/massimo/env", "read_at": "2026-11-08T19:52:00Z"}', posts)
+    reloads = []
+
+    def reload(route):
+        reloads.append(route.request.method)
+        route.fulfill(status=200, content_type="application/json",
+                      body='{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "read_at": "2026-11-08T20:00:00Z"}')
+    page.route("**/api/v1/reload", reload)
+    try:
+        show_view(page, "system")
+        assert wait_until(page, "document.getElementById('settings-file-text').textContent.includes('/etc/massimo/env')", 5), \
+            "the settings file named, with when it was read"
+        page.locator("#settings-reload").click()
+        want = page.evaluate("t('maint.reloaded', {names: 'MASSIMO_LISTEN'})")
+        assert wait_until(page, f"document.getElementById('settings-reload-msg').textContent === {json.dumps(want)}", 5), \
+            "what changed"
+        assert reloads == ["POST"], f"one POST /api/v1/reload ({reloads})"
+    finally:
+        page.unroute("**/api/v1/reload")
+        page.unroute("**/api/v1/restart")
 
 
 def test_sign_in_offers_the_key_after_an_open_server(page):

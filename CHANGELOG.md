@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `POST /api/v1/reload` reads the settings file again at once, as SIGHUP
+  does; System settings → Maintenance holds it and the restart
+  (`docs/api-v1.md`, "POST /api/v1/reload").
+
 - Fuzz targets for the parsers of untrusted bytes, their seeds run by
   `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
   (`GUIDELINES/project/CI.md`, section 2).

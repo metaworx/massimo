@@ -558,7 +558,9 @@ such as Docker's `--restart`;
 it looks at it every five seconds,
 and reads it once a change has held for one more look,
 and on Unix also on SIGHUP (`systemctl reload massimo`),
-which checkpoints the store too.
+which checkpoints the store too;
+`POST /api/v1/reload` does what SIGHUP does, on every system
+(System settings → Maintenance → **Reload now** in the web UI).
 `MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
 every other setting that changed is listed by `GET /api/v1/restart`
 as applying at the next restart.

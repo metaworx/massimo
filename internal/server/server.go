@@ -39,6 +39,7 @@
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
+//	POST /api/v1/reload                              read the settings file again at once, as SIGHUP does
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
 //	POST /api/v1/login/start, /login/finish          a session by OPAQUE, no password sent (opaque_api.go)
 //	POST /api/v1/logout                              end the session
@@ -262,6 +263,11 @@ type Server struct {
 	restartGate restartGate
 	pendingMu   sync.Mutex
 	pending     []string
+	// the settings file, when it was last read, and what reads it again
+	// (restart_api.go, SetReloader)
+	settingsFile string
+	settingsRead time.Time
+	reloader     func(context.Context) (ReloadResult, error)
 	// token is the one token without a store (auth.go, legacyToken).
 	tokenMu sync.RWMutex
 	token   string
@@ -869,6 +875,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/update", "update", s.startUpdate)
 	api("GET /api/v1/restart", "restart", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
+	api("POST /api/v1/reload", "restart", s.reloadSettings)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux

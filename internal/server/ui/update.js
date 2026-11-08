@@ -151,15 +151,38 @@ function showRestartText(text) {
   p.classList.toggle("hidden", !text);
 }
 
-// renderRestart shows the button while GET /api/v1/restart says this
-// page may restart the server, and otherwise why not; and the settings
-// that changed in the settings file and wait for the next start.
+// renderRestart draws System settings → Maintenance from GET
+// /api/v1/restart: the restart's button while this page may restart the
+// server, and otherwise why not; the settings that changed in the
+// settings file and wait for the next start, also as the card's badge;
+// the settings file and when it was last read.
 function renderRestart(v) {
   $("restart-btn").classList.toggle("hidden", !(v && v.available));
-  const parts = [];
-  if (v && v.pending && v.pending.length) parts.push(t("restart.pending", { names: v.pending.join(", ") }));
-  if (v && !v.available && v.blocked) parts.push(t("restart.unavailable", { reason: v.blocked }));
-  showRestartText(parts.join(" "));
+  showRestartText(v && !v.available && v.blocked ? t("restart.unavailable", { reason: v.blocked }) : v ? t("maint.restartText") : "");
+  const pending = (v && v.pending) || [];
+  const p = $("restart-pending");
+  p.textContent = pending.length ? t("restart.pending", { names: pending.join(", ") }) : "";
+  p.classList.toggle("hidden", !pending.length);
+  sectionBadges($("sys-maint"), pending.length ? [badgeEl(tn("maint.badge.pending", pending.length), "warn")] : []);
+  const file = [];
+  if (v && v.file) file.push(t("maint.fileText", { file: v.file }));
+  if (v && v.read_at) file.push(t("maint.lastRead", { time: fmtInstant(new Date(Date.parse(v.read_at))) }));
+  $("settings-file-text").textContent = file.join(" ");
+}
+
+// reloadSettings reads the settings file again at once (POST
+// /api/v1/reload), says what changed, and draws the card again.
+async function reloadSettings(ev) {
+  const msg = $("settings-reload-msg");
+  await whileBusy(ev.currentTarget, async () => {
+    try {
+      const r = await api("POST", "api/v1/reload", {});
+      showResult(msg, r.changed && r.changed.length ? t("maint.reloaded", { names: r.changed.join(", ") }) : t("maint.reloadedNone"), true);
+    } catch (e) {
+      showResult(msg, t("maint.reloadFailed", { error: e.message }), false);
+    }
+    await loadRestart();
+  });
 }
 
 // loadRestart asks whether the server can be restarted from here, for a
@@ -251,6 +274,7 @@ function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
   $("restart-btn").addEventListener("click", startRestart);
+  $("settings-reload").addEventListener("click", reloadSettings);
   onView("system", () => {
     loadUpdate(false);
     loadRestart();

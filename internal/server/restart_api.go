@@ -11,11 +11,18 @@ package server
 // with no users or without a token, takes the POST only from the box
 // itself, so that nobody on the LAN can restart it; the cross-origin
 // protection of the handler keeps other sites' pages out (server.go).
+//
+// POST /api/v1/reload reads the settings file again at once, as SIGHUP
+// does, with what cmd/massimo hands the server (SetReloader); the server
+// reads it by itself within seconds of a change anyway. GET
+// /api/v1/restart names the file and when it was last read.
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/update"
 )
@@ -30,6 +37,60 @@ type restartView struct {
 	// Pending names the settings that changed since the start and
 	// apply only at the next one.
 	Pending []string `json:"pending,omitempty"`
+	// File is the settings file, ReadAt when it was last read: at the
+	// start, or again since.
+	File   string     `json:"file,omitempty"`
+	ReadAt *time.Time `json:"read_at,omitempty"`
+}
+
+// ReloadResult is what reading the settings file again found: the
+// variables that changed (names, never values), those that now differ
+// from the start and apply only at the next one, and when it was read.
+type ReloadResult struct {
+	Changed []string  `json:"changed"`
+	Pending []string  `json:"pending"`
+	ReadAt  time.Time `json:"read_at"`
+}
+
+// SetReloader hands the server the settings file and what reads it again
+// as SIGHUP does (cmd/massimo); without one POST /api/v1/reload answers
+// 409. It also counts as the file's read at the start.
+func (s *Server) SetReloader(file string, reload func(context.Context) (ReloadResult, error)) {
+	s.pendingMu.Lock()
+	s.settingsFile, s.reloader = file, reload
+	s.pendingMu.Unlock()
+}
+
+// SetSettingsRead says when the settings file was last read.
+func (s *Server) SetSettingsRead(at time.Time) {
+	s.pendingMu.Lock()
+	s.settingsRead = at
+	s.pendingMu.Unlock()
+}
+
+func (s *Server) settingsState() (file string, at *time.Time, reload func(context.Context) (ReloadResult, error)) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	if !s.settingsRead.IsZero() {
+		t := s.settingsRead
+		at = &t
+	}
+	return s.settingsFile, at, s.reloader
+}
+
+// reloadSettings reads the settings file again at once and answers what
+// changed; it sends nothing to a Cube, so a retry is harmless.
+func (s *Server) reloadSettings(w http.ResponseWriter, r *http.Request) error {
+	_, _, reload := s.settingsState()
+	if reload == nil {
+		return fail(http.StatusConflict, "this server reads no settings file")
+	}
+	res, err := reload(r.Context())
+	if err != nil {
+		return fail(http.StatusInternalServerError, "reading the settings file: %v", err)
+	}
+	writeJSON(w, http.StatusOK, res)
+	return nil
 }
 
 // SetPendingRestart says which settings changed since the start and
@@ -102,6 +163,7 @@ func (s *Server) restartState(r *http.Request) (v restartView, open bool) {
 func (s *Server) getRestart(w http.ResponseWriter, r *http.Request) error {
 	v, _ := s.restartState(r)
 	v.Pending = s.pendingRestart()
+	v.File, v.ReadAt, _ = s.settingsState()
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }

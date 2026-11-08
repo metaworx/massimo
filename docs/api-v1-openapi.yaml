@@ -1940,6 +1940,35 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/reload:
+    post:
+      summary: Read the settings file again at once, as SIGHUP does
+      x-capability: restart
+      description: |
+        Reads the settings file again and applies MASSIMO_API_TOKEN at once, as
+        SIGHUP does, and checkpoints the store; every other setting that
+        changed applies at the next start. The server also reads the file by
+        itself within seconds of a change. Sends nothing to a Cube, so a
+        retry is harmless.
+      responses:
+        "200":
+          description: What reading the file again found
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ReloadResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "409":
+          description: The server reads no settings file
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "500":
+          description: The settings file could not be read
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
 components:
   securitySchemes:
     bearer:
@@ -2520,6 +2549,21 @@ components:
           type: array
           items: {type: string}
           description: The settings file's variables that changed since the start and apply only at the next one; names, never values
+        file: {type: string, description: The settings file serve reads}
+        read_at: {type: string, format: date-time, description: When the settings file was last read, at the start or since}
+    ReloadResult:
+      type: object
+      required: [changed, pending, read_at]
+      properties:
+        changed:
+          type: array
+          items: {type: string}
+          description: The variables that changed in this read; names, never values
+        pending:
+          type: array
+          items: {type: string}
+          description: The variables that differ from the start and apply only at the next one
+        read_at: {type: string, format: date-time}
     UpdateInfo:
       type: object
       properties:

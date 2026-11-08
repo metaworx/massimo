@@ -125,25 +125,36 @@ func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, star
 }
 
 // reload reads the file again and applies what changed; why says what
-// asked for it, for the log.
-func (r *settingsReloader) reload(ctx context.Context, why string) {
+// asked for it, for the log. It returns the variables that changed and
+// those that apply only at the next start (POST /api/v1/reload).
+func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pending []string, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	changed, err := env.ReloadFile(r.path)
+	changed, err = env.ReloadFile(r.path)
 	if err != nil {
 		r.log.Warn("settings file not read again", "file", r.path, "why", why, "error", err)
-		return
+		return nil, nil, err
 	}
+	r.srv.SetSettingsRead(time.Now())
 	if slices.Contains(changed, tokenVar) && !r.fixed[tokenVar] {
 		if err := r.srv.SetToken(ctx, os.Getenv(tokenVar)); err != nil {
 			r.log.Error("api token from the settings file not applied", "error", err)
 		}
 	}
-	pending := r.pending()
+	pending = r.pending()
 	r.srv.SetPendingRestart(pending)
-	if len(changed) > 0 || why == "SIGHUP" {
+	if len(changed) > 0 || why != "the settings file changed" {
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
 	}
+	return changed, pending, nil
+}
+
+// nonNil is a list as JSON shows an empty one: [], not null.
+func nonNil(names []string) []string {
+	if names == nil {
+		return []string{}
+	}
+	return names
 }
 
 // pending are the variables whose value differs from the start and that

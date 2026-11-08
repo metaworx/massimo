@@ -367,7 +367,7 @@ each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no cog.
 
 The page is a card per part, as wide as the page:
-Software update first, then Cubes, Users, Roles,
+Software update first, then Maintenance, Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -390,7 +390,8 @@ to the top of the page.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-  **Restart the server**, with the capability `restart`,
+- **Maintenance** (with `restart`):
+  **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
   the page then asks `/healthz` every two seconds until the server reports a new start,
@@ -400,7 +401,11 @@ to the top of the page.
   and the server's reason is shown,
   such as a server in a terminal or an open server asked from elsewhere than the box.
   The settings of the settings file that changed since the start and apply only
-  at the next one are listed under it, by name.
+  at the next one are listed under it, by name, and counted in the card's head.
+  **Settings file** names the file and when the server last read it;
+  **Reload now** reads it again at once, as SIGHUP does
+  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
+  From 900 px Software update and Maintenance share a row.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
   each in a panel whose head shows the name, the serial and the address,
