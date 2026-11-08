@@ -38,7 +38,7 @@ so the session never appears in a URL.
 The header's line reads, from the left:
 **Massimo** with the server's version, the time of the last update with **↻**,
 the Cube's clock;
-then whether the server is connected to the Cube, and the Cube choice;
+then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
 and **☰** beside the house and 👤 holds **Log** and **System settings**,
