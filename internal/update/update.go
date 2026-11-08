@@ -157,12 +157,14 @@ type Client struct {
 // would cut off, while a stalled one should not wait for ever.
 const DownloadIdle = time.Minute
 
-// TokenVar names an optional GitHub token for the release list. Without
-// one GitHub allows 60 API requests an hour per address, which a shared
-// address (a CI runner, a large NAT) can use up; a token of any kind,
-// with no rights at all, raises that. It only lifts the limit: what is
-// installed is still decided by the signature against the compiled-in
-// key.
+// TokenVar names an optional GitHub token. Without one GitHub allows 60
+// API requests an hour per address, which a shared address (a CI runner,
+// a large NAT) can use up; a token of any kind, with no rights at all,
+// raises that. With one a release's files come through the API too, as
+// its list does, rather than from github.com's download pages, which on
+// 2026-11-08 held requests without a token until the check gave up. It
+// changes only the way: what is installed is still decided by the
+// signature against the compiled-in key.
 const TokenVar = "MASSIMO_GITHUB_TOKEN"
 
 // APIVar names the API base to use instead of https://api.github.com,
@@ -192,8 +194,14 @@ type ghRelease struct {
 	Assets          []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
+		API  string `json:"url"` // the API's, which fileAccept gets the bytes of
 	} `json:"assets"`
 }
+
+// fileAccept asks for a release file's bytes: of the API's asset URL,
+// which answers its description in JSON otherwise; a download URL sends
+// the bytes either way.
+const fileAccept = "application/octet-stream"
 
 // retryWaits are the pauses before a request is sent again, when GitHub
 // answered 502, 503 or 504 or the connection failed before an answer
@@ -310,20 +318,27 @@ func attempts(n int) string {
 	return fmt.Sprintf(" (%d attempts)", n)
 }
 
+// request makes a GET of url for ctx, asking for accept where set. Only
+// one to the API carries the token: the API answers a release file with
+// a redirect to the file host, which net/http sends without it, another
+// host.
+func (c *Client) request(ctx context.Context, url, accept string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	if c.Token != "" && strings.HasPrefix(url, c.API+"/") {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	return req, nil
+}
+
 func (c *Client) get(ctx context.Context, url string, limit int64, accept string) ([]byte, error) {
 	resp, n, err := do(ctx, c.HTTP, func(actx context.Context) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(actx, http.MethodGet, url, nil)
-		if err != nil {
-			return nil, err
-		}
-		if accept != "" {
-			req.Header.Set("Accept", accept)
-		}
-		// Only to the API: the release files come from other hosts.
-		if c.Token != "" && strings.HasPrefix(url, c.API+"/") {
-			req.Header.Set("Authorization", "Bearer "+c.Token)
-		}
-		return req, nil
+		return c.request(actx, url, accept)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w%s", err, attempts(n))
@@ -363,15 +378,20 @@ func (c *Client) verify(ctx context.Context, gr ghRelease) (*Release, error) {
 	r := &Release{URL: gr.HTMLURL, assets: map[string]string{}}
 	for _, a := range gr.Assets {
 		r.assets[a.Name] = a.URL
+		// With a token through the API, as the list came (TokenVar); an
+		// address elsewhere is not taken, since the API's alone gets it.
+		if c.Token != "" && strings.HasPrefix(a.API, c.API+"/") {
+			r.assets[a.Name] = a.API
+		}
 	}
 	if r.assets[ManifestName] == "" || r.assets[SignatureName] == "" {
 		return nil, fmt.Errorf("release %s has %w", gr.TagName, errNoManifest)
 	}
-	manifest, err := c.get(ctx, r.assets[ManifestName], maxManifestSize, "")
+	manifest, err := c.get(ctx, r.assets[ManifestName], maxManifestSize, fileAccept)
 	if err != nil {
 		return nil, err
 	}
-	sig, err := c.get(ctx, r.assets[SignatureName], 4<<10, "")
+	sig, err := c.get(ctx, r.assets[SignatureName], 4<<10, fileAccept)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +548,7 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 	// hangs first.
 	resp, tries, err := do(ctx, &hc, func(actx context.Context) (*http.Request, error) {
 		stall.Reset(idle)
-		return http.NewRequestWithContext(actx, http.MethodGet, url, nil)
+		return c.request(actx, url, fileAccept)
 	})
 	if err != nil {
 		return stalled(fmt.Errorf("%w%s", err, attempts(tries)))

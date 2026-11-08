@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -98,6 +99,9 @@ type fakeGitHub struct {
 	releases []map[string]any
 	files    map[string][]byte
 	auth     map[string]string // path → Authorization header seen
+	// redirect, where set, is the file host the API's asset URLs send
+	// their bytes from, at /dl/ as here.
+	redirect string
 
 	mu   sync.Mutex
 	fail map[string][]int // path → statuses answered first, in turn
@@ -157,7 +161,21 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 			json.NewEncoder(w).Encode(f.releases)
 			return
 		}
-		b, ok := f.files[r.URL.Path]
+		// An asset's API URL: its bytes for fileAccept, its description
+		// otherwise, as GitHub's.
+		file := r.URL.Path
+		if rest, ok := strings.CutPrefix(file, "/repos/"+Repo+"/releases/assets/"); ok {
+			switch {
+			case r.Header.Get("Accept") != fileAccept:
+				json.NewEncoder(w).Encode(map[string]string{"name": rest})
+				return
+			case f.redirect != "":
+				http.Redirect(w, r, f.redirect+"/dl/"+rest, http.StatusFound)
+				return
+			}
+			file = "/dl/" + rest
+		}
+		b, ok := f.files[file]
 		if !ok {
 			http.NotFound(w, r)
 			return
@@ -177,7 +195,7 @@ func (f *fakeGitHub) add(t *testing.T, key ed25519.PrivateKey, tag, channel stri
 		sum := sha256.Sum256(b)
 		m.Assets[name] = hex.EncodeToString(sum[:])
 		f.files["/dl/"+tag+"/"+name] = b
-		assets = append(assets, map[string]any{"name": name, "browser_download_url": f.srv.URL + "/dl/" + tag + "/" + name})
+		assets = append(assets, f.asset(tag, name))
 	}
 	mb, _ := json.Marshal(m)
 	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(key, mb)) + "\n"
@@ -187,9 +205,19 @@ func (f *fakeGitHub) add(t *testing.T, key ed25519.PrivateKey, tag, channel stri
 	f.files["/dl/"+tag+"/"+ManifestName] = mb
 	f.files["/dl/"+tag+"/"+SignatureName] = []byte(sig)
 	for _, n := range []string{ManifestName, SignatureName} {
-		assets = append(assets, map[string]any{"name": n, "browser_download_url": f.srv.URL + "/dl/" + tag + "/" + n})
+		assets = append(assets, f.asset(tag, n))
 	}
 	f.releases = append(f.releases, map[string]any{"tag_name": tag, "html_url": "https://example/" + tag, "assets": assets})
+}
+
+// asset is a release file as the list names it: its download URL, and
+// the API's, which the fake keys by tag and name where GitHub has an id.
+func (f *fakeGitHub) asset(tag, name string) map[string]any {
+	return map[string]any{
+		"name":                 name,
+		"browser_download_url": f.srv.URL + "/dl/" + tag + "/" + name,
+		"url":                  f.srv.URL + "/repos/" + Repo + "/releases/assets/" + tag + "/" + name,
+	}
 }
 
 func testKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
@@ -459,6 +487,71 @@ func TestTokenGoesToTheAPIOnly(t *testing.T) {
 	if _, err := c.get(context.Background(), other.URL+"/file", 10, ""); err != nil || got != "" {
 		t.Fatalf("other host: %v %q", err, got)
 	}
+}
+
+// With a token a release's manifest, signature and binary come through
+// the API's asset URLs with it, and the file host the API redirects to
+// gets none; without a token, or for an asset URL off the API, they come
+// from the download URLs.
+func TestTokenFetchesFilesThroughTheAPI(t *testing.T) {
+	pub, priv := testKey(t)
+	const tag, bin = "v1.0.0", "massimo-linux-amd64"
+	files := []string{ManifestName, SignatureName, bin}
+	fake := func() *fakeGitHub {
+		gh := newFakeGitHub(t)
+		gh.add(t, priv, tag, "main", map[string][]byte{bin: []byte("the binary")}, nil)
+		return gh
+	}
+	fetch := func(c *Client) {
+		t.Helper()
+		r, err := c.ByTag(context.Background(), tag)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		if err := c.Download(context.Background(), r, bin, &buf); err != nil || buf.String() != "the binary" {
+			t.Fatalf("%q %v", buf.String(), err)
+		}
+	}
+	// requests checks each file's requests on its API and download paths,
+	// and the token each was sent.
+	requests := func(gh *fakeGitHub, onAPI, onDL int, apiAuth, dlAuth string) {
+		t.Helper()
+		for _, name := range files {
+			api, dl := "/repos/"+Repo+"/releases/assets/"+tag+"/"+name, "/dl/"+tag+"/"+name
+			if gh.count(api) != onAPI || gh.count(dl) != onDL || gh.auth[api] != apiAuth || gh.auth[dl] != dlAuth {
+				t.Errorf("%s: %d on the API with %q, %d downloads with %q", name, gh.count(api), gh.auth[api], gh.count(dl), gh.auth[dl])
+			}
+		}
+	}
+
+	gh := fake()
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub})
+	requests(gh, 0, 1, "", "")
+
+	gh = fake()
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, Token: "t0k"})
+	requests(gh, 1, 0, "Bearer t0k", "")
+
+	// The API sends the bytes from another host, as GitHub's file host;
+	// the client reaches it, whatever its name, at the fake.
+	gh = fake()
+	gh.redirect = "http://release-assets.example"
+	addr := gh.srv.Listener.Addr().String()
+	hc := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}}
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: hc, Key: pub, Token: "t0k"})
+	requests(gh, 1, 1, "Bearer t0k", "")
+
+	// An asset URL that is not the API's is not taken. (The fake's
+	// download URLs are on the API's host, so they get the token here.)
+	gh = fake()
+	for _, a := range gh.releases[0]["assets"].([]map[string]any) {
+		a["url"] = "http://elsewhere.example/assets/" + a["name"].(string)
+	}
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, Token: "t0k"})
+	requests(gh, 0, 1, "", "Bearer t0k")
 }
 
 // A channel without a release is no error, also beside a release from

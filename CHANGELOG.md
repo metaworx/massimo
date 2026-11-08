@@ -73,6 +73,10 @@ the next minor, a fix counts the suffix up.
   and 5 seconds, when GitHub answers 502, 503 or 504, gives no answer
   within 10 seconds or the connection fails before an answer.
 
+- With `MASSIMO_GITHUB_TOKEN` set, a release's manifest, signature and
+  binary come through GitHub's API as its list does, not from
+  github.com's download pages (`packaging/README.md`, "Updating").
+
 ### Fixed
 
 - A user's or role's head in System settings shows the name and the
