@@ -29,10 +29,22 @@ so Cube 2 keeps running the house.
 - Standard ARM 20-pin pinout: 1 VTref (3.3 V), 2 Vsupply, 3 nTRST,
   5 TDI, 7 TMS, 9 TCK, 11 RTCK, 13 TDO, 15 nSRST, 17 DBGRQ, 19 DBGACK;
   every even pin 4 to 20 is GND.
-- Which end is pin 1 is **not yet known**.
-  Find it with a multimeter, Cube powered:
-  the row where every pad beeps to ground is the even row;
-  on the other row the pad at 3.3 V at one end is pin 1.
+- **Pin 1 was found on 2026-11-08** on Cube 1, with "Finding pin 1" below:
+  it is the pad next to ST1, pin 19 the one towards J1.
+  The odd row read, Cube powered, against ground:
+  3.3 V on 1, 3, 5, 7, 9, 11 and 15;
+  1.0 to 1.4 V, varying, on 13 (TDO);
+  nothing on 17 and 19.
+  Pin 2 (Vsupply) is open: nothing against ground and nothing against pin 1,
+  the usual case, and the adapter takes no power from the Cube anyway.
+  So VTref is there, TDI, TMS and TCK sit at their pull-ups,
+  TDO floats as a tri-stated output does while the TAP is idle,
+  and nSRST is on the header and pulled up,
+  so pin 15 can hold the MCU in reset for the DataFlash read.
+  The SAM7X has no nTRST and no RTCK pin,
+  so 3 and 11 are the board's pull-ups or ties;
+  OpenOCD's wiring uses neither.
+  DBGRQ and DBGACK are unconnected, as usual.
 - Chip side (photo 2026-11-04): the MCU is IC2,
   the large 100-pin square package marked ATMEL **AT91SAM7X256-AU** (date code 1322),
   18.432 MHz crystal at Q1.
@@ -54,6 +66,72 @@ so Cube 2 keeps running the house.
   OpenOCD reports it, see below.
   If it is set, the only way in is a full erase, which we do not do;
   the DataFlash is readable with the clip regardless.
+
+## Finding pin 1
+
+ST3 is the standard ARM 20-pin footprint, two rows of ten pads.
+The odd pins run along one row, called row 1 here,
+the even pins along the other, row 2;
+1 and 2 sit at one end, 19 and 20 at the other.
+Bold: the five wired to the FT232H (the table under "Adapter").
+
+| signal, row 1 | pin, row 1 | pin, row 2 | signal, row 2 |
+|---------------|-----------:|:-----------|---------------|
+| VTref, 3.3 V  |  1 | 2  | Vsupply |
+| nTRST         |  3 | 4  | GND     |
+| **TDI**       |  * 5 | 6  | **GND** |
+| **TMS**       |  * 7 | 8  | **GND** |
+| **TCK**       |  * 9 | 10 | **GND** |
+| RTCK          | 11 | 12 | **GND** |
+| **TDO**       | ** 13 | 14 | **GND** |
+| nSRST         | 15 | 16 | **GND** |
+| DBGRQ         | 17 | 18 | **GND** |
+| DBGACK        | 19 | 20 | **GND** |
+
+Nothing on the board says which end is pin 1, so it is measured,
+with a multimeter, on Cube 1 only, one pad at a time,
+the probe tip held still so that it cannot bridge two pads,
+and the meter set before the probe touches anything.
+A slipped probe between VTref and GND restarts the Cube;
+between Vsupply and a signal pin it can kill that pin.
+Done on Cube 1 on 2026-11-08; the result is under "Hardware facts".
+
+1. **The ground reference**, Cube unpowered, meter in continuity (beep) mode.
+   Take the ground contact of the power socket;
+   on a USB socket its metal shell beeps to it.
+   Any second ground-looking point that beeps to it confirms it.
+   Clip the black lead there for everything that follows.
+2. **The even row**, still unpowered, still continuity.
+   Touch each of the twenty pads.
+   Expected: on one row nine pads beep and the tenth, at one end, does not.
+   That row is row 2, the silent pad is pin 2 (Vsupply),
+   and the pad beside it in the other row is pin 1.
+   Row 1 has no grounded pad, or one: RTCK (11) is tied to ground on boards
+   that do not use it; it never has nine.
+   If both rows or neither have nine grounded pads,
+   the footprint is not what the standard says:
+   stop and follow the traces instead.
+3. **Pin 1**, Cube powered, meter in DC volts (the 20 V range),
+   black lead on the ground reference.
+   Never continuity mode on a powered board, it drives current into the pins.
+   Measure the two end pads of row 1:
+   pin 1 (VTref) reads a steady 3.3 V,
+   the other end (DBGACK, 19) reads 0 or drifts.
+   Then pin 2 beside it: Vsupply reads 3.3 V, 5 V or floats,
+   any of which is right; it must not read as ground.
+   Pin 1 is confirmed when the 3.3 V end of row 1 is the end where step 2
+   found the silent pad.
+   If the two steps disagree, nothing is connected until they do.
+4. **The signals**, optional, powered, DC volts:
+   nTRST (3) and nSRST (15), if the board wires them,
+   read 3.3 V while the Cube runs, pulled up by its reset circuit;
+   TDI, TMS and TCK read 3.3 V or 0 as the chip's pull resistors decide
+   and prove nothing about the orientation.
+   A pad that reads neither 0 nor 3.3 V nor 5 V points at a series resistor
+   or a shared net, which "Not yet checked" above is waiting for.
+
+Mark pin 1 on the board (a dot of paint, or a photo with a note),
+and write the result into "Hardware facts" above with the date.
 
 ## Adapter
 
@@ -106,7 +184,8 @@ and the target halting is not needed yet.
 Leave it running and continue in a second terminal with `telnet localhost 4444`,
 or stop it (Ctrl-C) and use the one-shot form below.
 
-If no TAP is found: check pin 1, swap TDI/TDO (the two most common mistakes),
+If no TAP is found: check pin 1 ("Finding pin 1" above),
+swap TDI/TDO (the two most common mistakes),
 lower the speed to 100, confirm the ground wire.
 If the TAP is found but the target cannot be halted or examined,
 the security bit is probably set; `flash info 0` in step 2 says so.
