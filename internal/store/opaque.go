@@ -142,21 +142,27 @@ func formatKSF(memory, time uint32, threads uint8) string {
 // passes at least what the current parameters spend.
 func ParseKSF(ksf string) (memory, time uint32, threads uint8, err error) {
 	bad := fmt.Errorf("%w: key stretching %q, want m=<KiB>,t=<passes>,p=<lanes>", ErrBadMessage, ksf)
-	var v [3]uint64
 	parts := strings.Split(ksf, ",")
 	if len(parts) != 3 {
 		return 0, 0, 0, bad
 	}
+	var digits [3]string
 	for i, k := range []string{"m=", "t=", "p="} {
-		n, perr := strconv.ParseUint(strings.TrimPrefix(parts[i], k), 10, 32)
-		if !strings.HasPrefix(parts[i], k) || perr != nil || n == 0 {
+		d, ok := strings.CutPrefix(parts[i], k)
+		if !ok {
 			return 0, 0, 0, bad
 		}
-		v[i] = n
+		digits[i] = d
 	}
-	// Named, so that code scanning sees the bound on each before it is
-	// converted: it follows a variable, not an array's element.
-	m, t, p := v[0], v[1], v[2]
+	// Each read at the size it is returned in, the lanes at 8 bits, so
+	// that the conversions below are safe without a bound: code scanning
+	// does not take the switch's for one.
+	m, merr := strconv.ParseUint(digits[0], 10, 32)
+	t, terr := strconv.ParseUint(digits[1], 10, 32)
+	p, perr := strconv.ParseUint(digits[2], 10, 8)
+	if merr != nil || terr != nil || perr != nil || m == 0 || t == 0 || p == 0 {
+		return 0, 0, 0, bad
+	}
 	switch {
 	case m > maxArgonMemory || t > maxArgonTime || p > maxArgonThreads:
 		return 0, 0, 0, fmt.Errorf("%w: key stretching %q is over m=%d,t=%d,p=%d", ErrBadMessage, ksf, maxArgonMemory, maxArgonTime, maxArgonThreads)
