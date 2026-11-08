@@ -555,8 +555,8 @@ such as Docker's `--restart`;
 `off` never.
 `sudo massimo restart` restarts the installed server from a prompt as well.
 `-allow-reboot` (or `MASSIMO_REBOOT=on`) lets the owner reboot the computer
-`serve` runs on from the API and the web UI
-(`POST /api/v1/reboot`, for the capability `reboot`, which only `owner` has),
+`serve` runs on from the API and the web UI (`POST /api/v1/reboot`,
+for the capability `reboot`, which only `owner` has),
 60 seconds after the request or after the delay it names, 0 to 3600:
 under systemd and launchd through the root helper
 that `sudo massimo install -reboot-helper` installs

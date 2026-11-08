@@ -276,8 +276,8 @@ but leave the install to `sudo apt update && sudo apt install massimo`
 `-tls` and its options into the settings as "Install with `massimo install`" puts them,
 `-listen` as the listen drop-in there (the package has no update helper,
 so no health drop-in),
-`-reboot-helper` and `-no-reboot-helper` as the package's path unit enabled
-or disabled, then a restart.
+`-reboot-helper` and `-no-reboot-helper` as the package's path unit enabled or disabled,
+then a restart.
 `massimo install -remove` points at `apt remove massimo`;
 `apt purge massimo` takes the settings, the store, the logs and the user too,
 as `-remove -purge` does.
@@ -663,8 +663,8 @@ and the sandbox stays as it is.
 As for updates, the server only asks:
 once the delay is over it writes `/var/lib/massimo/reboot-request`,
 the path unit (on macOS launchd's `WatchPaths`) starts the helper,
-and the helper removes the request and reboots
-(`systemctl reboot`, on macOS `shutdown -r now`).
+and the helper removes the request and reboots (`systemctl reboot`,
+on macOS `shutdown -r now`).
 It reads nothing, not even the request,
 so a compromised server can at most reboot the box,
 and only where the owner switched that on and root installed the helper.

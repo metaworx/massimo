@@ -1959,7 +1959,8 @@ and answers `202` with `{"ok": true, "by": "systemd", "at": "2026-11-08T15:20:00
 The server waits the delay itself:
 a reboot that waits ends with the server, and `DELETE` takes it back.
 Then on Linux and macOS it writes `/var/lib/massimo/reboot-request`,
-which starts the root helper (`massimo-reboot.path`, `ch.metaworx.massimo-reboot`);
+which starts the root helper (`massimo-reboot.path`,
+`ch.metaworx.massimo-reboot`);
 the helper removes it and reboots,
 and reads nothing the server's user can write.
 A request the helper has not taken within 30 s is removed,

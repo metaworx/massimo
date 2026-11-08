@@ -393,7 +393,8 @@ to the top of the page.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-- **Maintenance** (with `restart`, `reboot` for its reboot, or `settings` for its last two parts):
+- **Maintenance** (with `restart`, `reboot` for its reboot,
+  or `settings` for its last two parts):
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -410,11 +411,12 @@ to the top of the page.
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
   **Reboot the computer** (with `reboot`, the owner's) has a delay in seconds,
   60 to begin with, 0 to 3600, and asks in the section,
-  naming the delay, before it asks the server
-  (`docs/api-v1.md`, "GET /api/v1/reboot, …");
+  naming the delay, before it asks the server (`docs/api-v1.md`,
+  "GET /api/v1/reboot, …");
   while the reboot waits the row says when it comes,
   and **Take the reboot back** takes it back;
-  from its time the page follows `/healthz` as for the restart, for up to five minutes,
+  from its time the page follows `/healthz` as for the restart,
+  for up to five minutes,
   and says when the computer is back, that it has not come back,
   or why the reboot failed while the old server still answers.
   Where the computer cannot be rebooted from here
