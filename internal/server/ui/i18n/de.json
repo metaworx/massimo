@@ -100,6 +100,7 @@
   "settings.language": "Sprache",
   "settings.thisDevice": "nur auf diesem Gerät",
   "settings.thisDeviceFor": "{setting}: nur auf diesem Gerät",
+  "settings.thisDeviceTitle": "Eine hier eingeschaltete Einstellung behält ihren Wert in diesem Browser; ausgeschaltet gilt wieder Ihr Wert.",
   "settings.syncNote": "Deine Einstellungen folgen dir in jeden Browser, in dem du dich anmeldest. Eine Einstellung mit „nur auf diesem Gerät“ behält stattdessen hier ihren Wert.",
   "prefs.saveFailed": "Einstellungen nicht auf dem Server gespeichert: {error}",
   "settings.reloadNote": "Solange diese Seite offen ist, lädt eine neue Server-Version die Seite nicht selbst neu; stattdessen erscheint oben die Schaltfläche zum Neuladen.",

@@ -101,6 +101,7 @@
   "settings.language": "Taal",
   "settings.thisDevice": "alleen op dit apparaat",
   "settings.thisDeviceFor": "{setting}: alleen op dit apparaat",
+  "settings.thisDeviceTitle": "Een hier ingeschakelde instelling houdt haar waarde in deze browser; uitgeschakeld geldt weer uw waarde.",
   "settings.syncNote": "Je instellingen volgen je naar elke browser waarin je je aanmeldt. Een instelling op ‘alleen op dit apparaat’ houdt hier in plaats daarvan haar waarde.",
   "prefs.saveFailed": "Instellingen niet op de server bewaard: {error}",
   "settings.reloadNote": "Zolang deze pagina open is, laadt een nieuwe serverversie de pagina niet vanzelf opnieuw; in plaats daarvan verschijnt bovenaan de knop om opnieuw te laden.",

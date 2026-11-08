@@ -204,7 +204,9 @@ function renderDeviceSwitches() {
   for (const input of document.querySelectorAll("input[data-device-only]")) {
     const key = input.dataset.deviceOnly;
     input.checked = deviceOnly(key);
-    input.setAttribute("aria-label", t("settings.thisDeviceFor", { setting: t(SETTING_LABELS[key]) }));
+    const label = t("settings.thisDeviceFor", { setting: t(SETTING_LABELS[key]) });
+    input.setAttribute("aria-label", label);
+    input.closest("label").title = label; // the column's switch has no text of its own
   }
 }
 

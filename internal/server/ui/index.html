@@ -144,46 +144,61 @@
     </form>
   </section>
 
-  <section id="profile" class="tile settings hidden" aria-labelledby="profile-title">
+  <section id="profile" class="tile settings profile-page hidden" aria-labelledby="profile-title">
     <header class="tile-head"><h2 id="profile-title" data-i18n="nav.profile">My profile</h2></header>
     <div class="settings-body">
       <!-- partials: profile -->
     </div>
   </section>
 
-  <section id="prefs" class="tile settings hidden" aria-labelledby="prefs-title">
+  <!-- My settings: a row per setting, the switch that keeps it only on
+       this device in a column of its own at the right (no column where
+       the settings do not follow the user: no-sync) -->
+  <section id="prefs" class="tile settings prefs-page hidden" aria-labelledby="prefs-title">
     <header class="tile-head"><h2 id="prefs-title" data-i18n="nav.prefs">My settings</h2></header>
     <div class="settings-body">
-      <div class="field">
-        <label for="poll-input" data-i18n="settings.poll">Poll every</label>
-        <span data-help="poll" data-help-label="settings.poll"></span>
-        <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+      <div class="dev-head needs-sync">
+        <span></span>
+        <span class="dev-cell dev-colhead" title="A setting switched on here keeps its value in this browser; switched off, your value applies again." data-i18n="settings.thisDevice" data-i18n-attr="title:settings.thisDeviceTitle">only on this device</span>
       </div>
-      <div class="field">
-        <label class="switch">
-          <input type="checkbox" id="expert-toggle">
-          <span class="slider" aria-hidden="true"></span>
-          <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
-        </label>
-        <span data-help="expert" data-help-label="settings.expertShort"></span>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+      <div class="dev-row">
+        <div class="field">
+          <label for="poll-input" data-i18n="settings.poll">Poll every</label>
+          <span data-help="poll" data-help-label="settings.poll"></span>
+          <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span></label></span>
       </div>
-      <div class="field wide">
-        <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
-        <span data-help="clock" data-help-label="settings.clock"></span>
-        <select id="clock-select" class="field-control">
-          <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
-          <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
-        </select>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+      <div class="dev-row">
+        <div class="field">
+          <label class="switch">
+            <input type="checkbox" id="expert-toggle">
+            <span class="slider" aria-hidden="true"></span>
+            <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
+          </label>
+          <span data-help="expert" data-help-label="settings.expertShort"></span>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span></label></span>
       </div>
-      <div class="field wide">
-        <label for="lang-select" data-i18n="settings.language">Language</label>
-        <span data-help="language" data-help-label="settings.language"></span>
-        <select id="lang-select" class="field-control"></select>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
-        <p id="lang-note" class="muted small lang-note hidden"></p>
+      <div class="dev-row">
+        <div class="field wide">
+          <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
+          <span data-help="clock" data-help-label="settings.clock"></span>
+          <select id="clock-select" class="field-control">
+            <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
+            <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
+          </select>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span></label></span>
+      </div>
+      <div class="dev-row">
+        <div class="field wide">
+          <label for="lang-select" data-i18n="settings.language">Language</label>
+          <span data-help="language" data-help-label="settings.language"></span>
+          <select id="lang-select" class="field-control"></select>
+          <p id="lang-note" class="muted small lang-note hidden"></p>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span></label></span>
       </div>
       <!-- partials: prefs -->
     </div>

@@ -100,6 +100,7 @@
   "settings.language": "Language",
   "settings.thisDevice": "only on this device",
   "settings.thisDeviceFor": "{setting}: only on this device",
+  "settings.thisDeviceTitle": "A setting switched on here keeps its value in this browser; switched off, your value applies again.",
   "settings.syncNote": "Your settings follow you to every browser you sign in on. A setting switched to “only on this device” keeps its value here instead.",
   "prefs.saveFailed": "Settings not kept on the server: {error}",
   "settings.reloadNote": "While this page is open, a new server version does not reload the page by itself; the reload button appears in the header instead.",

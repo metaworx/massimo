@@ -20,6 +20,9 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- My settings keeps "only on this device" in a column of its own at
+  the right end of the settings' rows (`docs/ui.md`, "My settings").
+
 - Expert mode shows a device's serial number beside its radio address,
   "S/N … · RF …", in the rooms, a room's configuration, pairing and the
   hidden devices (`docs/ui.md`, "Rooms").

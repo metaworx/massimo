@@ -536,8 +536,6 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .unlisted-msg { margin: 0; padding: 0 14px 12px; }
 
 /* appearance: mode and colour scheme (theme.js), the scheme editor */
-.settings .appearance { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
-.settings .appearance > .muted { display: block; margin-bottom: 8px; }
 .scheme-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
 .scheme-msg { margin: 0 0 10px; }
 .scheme-msg.ok { color: var(--ok); }
@@ -1239,6 +1237,20 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .cap-grid .switch { align-items: center; }
 .cap-grid .flag { margin-left: 4px; }
 
-/* "only on this device" under a setting: login.js shows it where the
-   settings follow the user (no-sync otherwise) */
-.field > .switch.device-only { flex: 1 1 100%; font-size: 0.85rem; color: var(--muted); }
+/* My settings: a row per setting, the switch that keeps it only on this
+   device in a column of its own at the right, a band headed "only on this
+   device", each row's line running through it; no column where the
+   settings do not follow the user (no-sync). My settings and My profile
+   keep a reading width. */
+.settings.prefs-page, .settings.profile-page { max-width: 640px; }
+.settings.prefs-page:has(.scheme-editor:not(.hidden)) { max-width: 760px; }
+.dev-head, .dev-row, .dev-group { display: grid; grid-template-columns: minmax(0, 1fr) 76px; column-gap: 12px; }
+.no-sync .dev-row, .no-sync .dev-group { grid-template-columns: minmax(0, 1fr); }
+.dev-row, .dev-group { border-top: 1px solid var(--line); }
+.dev-cell { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.dev-colhead { padding: 6px 4px; border-radius: 8px 8px 0 0; font-size: 0.75rem; line-height: 1.2; text-align: center; color: var(--muted); cursor: help; }
+.dev-last > .dev-cell { border-radius: 0 0 8px 8px; }
+.settings .dev-row > .field { margin: 0; padding: 10px 0; }
+.dev-row > .scheme-actions { margin: 0; padding: 10px 0; }
+.dev-group > span:first-child { padding: 12px 0 2px; color: var(--muted); font-weight: 600; }
+.dev-last { margin-bottom: 10px; }

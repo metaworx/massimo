@@ -302,11 +302,13 @@ and every browser you sign in on takes them at sign-in,
 the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
-Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
-**Language**, **Mode** and **Colour scheme** a switch **only on this device**
-keeps that setting's value in this browser instead,
+Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
+**Language**, **Mode** and **Colour scheme**, in a column of its own at the
+right headed **only on this device**, a switch keeps that setting's value in
+this browser instead (its tooltip names the setting),
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
+My settings and My profile are at most 640 px wide.
 Sign out takes your settings and schemes out of the browser,
 a change made just before still reaching the server,
 so that the next one to sign in there starts from the defaults
