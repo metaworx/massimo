@@ -205,13 +205,31 @@ manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
 It hands the token to `curl` on its standard input, never on its command line,
 which every local user can read,
 and gives each call 30 seconds.
-It is untested against the real API until the owner's day;
+It ran against the real API on 2026-11-08;
 the test runs it against a fake one.
 
 ```bash
 sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/infomaniak.sh /usr/local/lib/massimo/infomaniak.sh
 sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/infomaniak.sh
+```
+
+`packaging/acme-dns-hooks/cloudflare.sh` is the script for a zone at Cloudflare,
+with the same needs and the same care for its token:
+an API token with the permission Zone → DNS → Edit on the zone,
+made from the template "Edit zone DNS" under My Profile → API Tokens,
+in `/etc/massimo/cloudflare.token` (owned by `massimo`, mode 0600).
+It finds the zone by name;
+where the token may not list it,
+a line `CLOUDFLARE_ZONE_ID=<id>` in `/etc/massimo/env` names it
+(the id is on the zone's overview page):
+the script gets every variable of the settings file but the `MASSIMO_` ones.
+The test runs it against a fake of Cloudflare's API.
+
+```bash
+sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/cloudflare.sh /usr/local/lib/massimo/cloudflare.sh
+sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.token <<< "$CLOUDFLARE_TOKEN"
+sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/cloudflare.sh
 ```
 
 Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:

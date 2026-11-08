@@ -149,3 +149,174 @@ func TestInfomaniakHook(t *testing.T) {
 		t.Fatalf("wrong token accepted: %q", out)
 	}
 }
+
+// fakeCloudflare answers the calls of packaging/acme-dns-hooks/cloudflare.sh
+// as API v4 does for one zone, example.net, with the id zone-1; a record's
+// content comes back in the quotes Cloudflare may add to TXT content.
+type fakeCloudflare struct {
+	mu      sync.Mutex
+	seq     int
+	lookups int
+	records map[string]map[string]any
+}
+
+func (f *fakeCloudflare) serve(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	reply := func(v any) {
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "errors": []any{}, "result": v})
+	}
+	refuse := func(status, code int, msg string) {
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]any{{"code": code, "message": msg}}, "result": nil})
+	}
+	if r.Header.Get("Authorization") != "Bearer test-token" {
+		refuse(http.StatusForbidden, 10000, "Authentication error")
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if r.URL.Path == "/zones" && r.Method == "GET" {
+		f.lookups++
+		if r.URL.Query().Get("name") == "example.net" {
+			reply([]map[string]any{{"id": "zone-1", "name": "example.net"}})
+		} else {
+			reply([]map[string]any{})
+		}
+		return
+	}
+	rest, ok := strings.CutPrefix(r.URL.Path, "/zones/zone-1/dns_records")
+	if !ok {
+		refuse(http.StatusNotFound, 7003, "Could not route to "+r.URL.Path)
+		return
+	}
+	switch {
+	case rest == "" && r.Method == "POST":
+		var rec map[string]any
+		json.NewDecoder(r.Body).Decode(&rec)
+		f.seq++
+		rec["id"] = "rec-" + strconv.Itoa(f.seq)
+		f.records[rec["id"].(string)] = rec
+		reply(rec)
+	case rest == "" && r.Method == "GET":
+		q := r.URL.Query()
+		list := []map[string]any{}
+		for _, rec := range f.records {
+			if rec["type"] == q.Get("type") && rec["name"] == q.Get("name") {
+				shown := map[string]any{}
+				for k, v := range rec {
+					shown[k] = v
+				}
+				shown["content"] = `"` + rec["content"].(string) + `"`
+				list = append(list, shown)
+			}
+		}
+		reply(list)
+	case strings.HasPrefix(rest, "/") && r.Method == "DELETE":
+		id := strings.TrimPrefix(rest, "/")
+		delete(f.records, id)
+		reply(map[string]any{"id": id})
+	default:
+		refuse(http.StatusNotFound, 7003, "Could not route to "+r.URL.Path)
+	}
+}
+
+func (f *fakeCloudflare) record(id string) (map[string]any, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rec, ok := f.records[id]
+	return rec, ok
+}
+
+func (f *fakeCloudflare) counts() (records, lookups int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.records), f.lookups
+}
+
+func TestCloudflareHook(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script")
+	}
+	for _, tool := range []string{"sh", "curl", "jq"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is not installed", tool)
+		}
+	}
+	fake := &fakeCloudflare{records: map[string]map[string]any{}}
+	srv := httptest.NewServer(http.HandlerFunc(fake.serve))
+	defer srv.Close()
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	os.WriteFile(tokenFile, []byte("test-token\n"), 0o600)
+	script, _ := filepath.Abs("../../packaging/acme-dns-hooks/cloudflare.sh")
+	// As for the Infomaniak hook: a curl in front of the real one writes
+	// down its arguments, which must hold neither token, and every call
+	// has a time limit.
+	realCurl, _ := exec.LookPath("curl")
+	bin := t.TempDir()
+	argv := filepath.Join(t.TempDir(), "argv")
+	os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \""+argv+"\"\nexec \""+realCurl+"\" \"$@\"\n"), 0o755)
+	run := func(extra []string, args ...string) (string, error) {
+		cmd := exec.Command(script, args...)
+		cmd.Env = append(hookEnv(os.Environ()), "CLOUDFLARE_ENDPOINT="+srv.URL, "CLOUDFLARE_TOKEN_FILE="+tokenFile, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		cmd.Env = append(cmd.Env, extra...)
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	defer func() {
+		b, _ := os.ReadFile(argv)
+		calls := strings.Split(strings.TrimSpace(string(b)), "\n")
+		if len(calls) < 8 {
+			t.Errorf("%d curl calls recorded", len(calls))
+		}
+		for _, c := range calls {
+			if strings.Contains(c, "test-token") || strings.Contains(c, "wrong") {
+				t.Errorf("the token on curl's command line: %s", c)
+			}
+			if !strings.Contains(c, "--max-time") {
+				t.Errorf("a curl call without --max-time: %s", c)
+			}
+		}
+	}()
+
+	// Below the zone: massimo.example.net is no zone, example.net is.
+	out, err := run(nil, "set", "_acme-challenge.massimo.example.net", "value-one")
+	if err != nil || out != "rec-1" {
+		t.Fatalf("set: %v %q", err, out)
+	}
+	if rec, _ := fake.record("rec-1"); rec["type"] != "TXT" || rec["name"] != "_acme-challenge.massimo.example.net" || rec["content"] != "value-one" || rec["ttl"] != float64(120) {
+		t.Fatalf("record %v", rec)
+	}
+	if _, lookups := fake.counts(); lookups != 2 {
+		t.Fatalf("%d zone lookups, want 2", lookups)
+	}
+	// At the zone's apex, the full name as well.
+	out, err = run(nil, "set", "_acme-challenge.example.net", "value-two")
+	if rec, _ := fake.record("rec-2"); err != nil || out != "rec-2" || rec["name"] != "_acme-challenge.example.net" {
+		t.Fatalf("set at the apex: %v %q %v", err, out, rec)
+	}
+	// clear removes the records of that name and value, quoted by the
+	// API, and no other.
+	if out, err = run(nil, "clear", "_acme-challenge.massimo.example.net", "value-one"); err != nil {
+		t.Fatalf("clear: %v %q", err, out)
+	}
+	if _, left := fake.record("rec-1"); left {
+		t.Fatal("rec-1 left after clear")
+	}
+	if n, _ := fake.counts(); n != 1 {
+		t.Fatalf("records after clear: %d, want 1", n)
+	}
+	// CLOUDFLARE_ZONE_ID needs no lookup.
+	_, before := fake.counts()
+	out, err = run([]string{"CLOUDFLARE_ZONE_ID=zone-1"}, "set", "_acme-challenge.massimo.example.net", "value-three")
+	if _, after := fake.counts(); err != nil || out != "rec-3" || after != before {
+		t.Fatalf("with CLOUDFLARE_ZONE_ID: %v %q, lookups %d then %d", err, out, before, after)
+	}
+	// A name in no zone here, and a wrong token, fail and say why.
+	if out, err = run(nil, "set", "_acme-challenge.other.example.org", "x"); err == nil || !strings.Contains(out, "CLOUDFLARE_ZONE_ID") {
+		t.Fatalf("unknown zone: %v %q", err, out)
+	}
+	os.WriteFile(tokenFile, []byte("wrong\n"), 0o600)
+	if out, err = run(nil, "set", "_acme-challenge.example.net", "x"); err == nil || !strings.Contains(out, "Authentication error") {
+		t.Fatalf("wrong token: %v %q", err, out)
+	}
+}

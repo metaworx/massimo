@@ -516,7 +516,8 @@ so experiments use its staging directory
 the server asks the script to set and clear a TXT record under `_acme-challenge.<name>`,
 so no port has to be open, the name may point at the box's LAN address,
 and wildcards (`-tls-names '*.example.net,example.net'`) work;
-`packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone at Infomaniak,
+`packaging/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh` are the scripts
+for a zone at Infomaniak or at Cloudflare,
 and any other provider's API fits in a dozen lines (see
 [packaging/README.md](packaging/README.md)).
 A certificate that ends within two weeks, or an order that has not succeeded,

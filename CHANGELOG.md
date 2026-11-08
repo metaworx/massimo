@@ -45,6 +45,10 @@ the next minor, a fix counts the suffix up.
   that a reload, a bookmark or a link opens the log with them
   (`docs/ui.md`, "Log").
 
+- `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
+  `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
+  `/etc/massimo/cloudflare.token` (`packaging/README.md`).
+
 ### Changed
 
 - My settings keeps "only on this device" in a column of its own at
