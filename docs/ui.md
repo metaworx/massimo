@@ -83,6 +83,8 @@ highlighted while one of them is shown.
   (System settings),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
+  The log's range, kind and device follow its page,
+  as in `#log?range=today&kind=state&device=0a0101` (see Log).
   A page the role may not open shows Rooms instead.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
@@ -245,6 +247,16 @@ and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
 **Clear** sets the filter, the kind and the device back to all
 and loads the log again, the range staying; it is off while none of them is set.
+The range, the kind and the device are in the address after `#log`,
+each left out at its default:
+`range=` one of `10m`, `1h`, `today`, `week`, `month` and `all`,
+`kind=` an event's kind and `device=` a radio address,
+so that a reload, a bookmark or a link opens the log with them,
+and the log's button opens it with the choices it had.
+A choice changes the address in place, so back still leaves the log.
+A value the page does not know is dropped from the address,
+and so is a device the Cube does not have, once its devices are loaded.
+The filter's text is not in the address.
 
 ## My profile
 

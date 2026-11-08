@@ -2,8 +2,9 @@
 # Copyright (C) 2026 The Massimo Authors
 """The log: it opens, newest first, a state event with changes shows what
 changed, the kind and the device chosen narrow it, Clear sets them back,
-the range limits it by count or by time, Older pages back, and an answer
-that comes late or fails leaves the log as it should be."""
+the range limits it by count or by time, the address holds the range,
+the kind and the device, Older pages back, and an answer that comes late
+or fails leaves the log as it should be."""
 import json
 import re
 import time
@@ -392,4 +393,92 @@ def test_log_range_by_time(page, case):
         page.unroute(LOG_ROUTE)
     times = page.evaluate("[...document.querySelectorAll('#log-lines .log-time')].map((e) => e.textContent)")
     assert len(times[0]) == 8 and len(times[1]) > 8, f"today's time alone, another day's with its date: {times}"
+    show_view(page, "tiles")
+
+
+def log_shown(page):
+    return wait_until(page, "!document.getElementById('logview').classList.contains('hidden')", 10)
+
+
+def choices(page):
+    """The log's range, kind and device as its choices show them."""
+    return [page.locator(sel).input_value() for sel in ("#log-range", "#log-kind", "#log-device")]
+
+
+def devices_loaded(page):
+    return wait_until(page, "state.roomsOf === state.serial", 10)
+
+
+def test_log_choices_in_the_address(page, case):
+    """The range, the kind and the device chosen are in the address after
+    the log's page, in place of its entry, so that back still leaves the
+    log; a reload opens the log with them, asked of the server; Clear
+    takes the kind and the device out; another page and back, or Rooms
+    and the log again, keep the range; the last 20 again is the plain
+    page."""
+    show_view(page, "log")
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    length = page.evaluate("history.length")
+    page.locator("#log-range").select_option("1h")
+    page.locator("#log-kind").select_option("state")
+    page.locator("#log-device").select_option(rf)
+    want = "#log?range=1h&kind=state&device=" + rf
+    assert wait_until(page, "location.hash === %r" % want, 5), f"the choices in the address: {page.evaluate('location.hash')}"
+    assert page.evaluate("history.length") == length, "in place of the log's entry"
+    with page.expect_request(lambda r: "/log?" in r.url) as asked:
+        page.reload()
+    q = parse_qs(urlparse(asked.value.url).query)
+    assert q.get("kind") == ["state"] and q.get("device") == [rf] and "since" in q, f"the reload asks for them: {q}"
+    assert log_shown(page) and devices_loaded(page), "the log again, the Cube's devices loaded"
+    assert choices(page) == ["1h", "state", rf] and page.evaluate("location.hash") == want, "the choices kept"
+    page.locator("#log-clear").click()
+    assert wait_until(page, "location.hash === '#log?range=1h'", 5), "Clear takes the kind and the device out, the range stays"
+    show_view(page, "system")
+    page.go_back()
+    assert log_shown(page) and page.evaluate("location.hash") == "#log?range=1h", "back: the log"
+    assert choices(page) == ["1h", "", ""], "with its range"
+    show_view(page, "tiles")
+    show_view(page, "log")
+    assert page.evaluate("location.hash") == "#log?range=1h", "the log again: its range in the address"
+    page.locator("#log-range").select_option("20")
+    assert wait_until(page, "location.hash === '#log'", 5), "the last 20: the plain page"
+    show_view(page, "tiles")
+
+
+def test_log_from_a_link(page, case):
+    """A link to the log with its choices, in any order, opens the log
+    with them, asked of the server, and the address in its own order;
+    another address typed in its place shows its choices, the others at
+    their defaults."""
+    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    page.evaluate("(h) => history.replaceState(null, '', location.pathname + h)", f"#log?device={rf}&kind=state&range=today")
+    with page.expect_request(lambda r: "/log?" in r.url) as asked:
+        page.reload()
+    q = parse_qs(urlparse(asked.value.url).query)
+    assert q.get("kind") == ["state"] and q.get("device") == [rf] and "since" in q and q.get("limit") == ["200"], \
+        f"the link's choices asked of the server: {q}"
+    assert log_shown(page) and devices_loaded(page), "the log, the Cube's devices loaded"
+    assert choices(page) == ["today", "state", rf], "the link's choices"
+    assert page.evaluate("location.hash") == f"#log?range=today&kind=state&device={rf}", "the address in its order"
+    page.evaluate("location.hash = '#log?range=week'")
+    assert wait_until(page, "logState.range === 'week' && !logState.kind && !logState.device", 5), "the address typed"
+    assert choices(page) == ["week", "", ""], "its range, every kind and device"
+    show_view(page, "tiles")
+
+
+def test_log_address_with_unknown_values(page, case):
+    """Unknown values in the log's address fall back to their defaults and
+    the address drops them; a device the Cube does not have goes once its
+    devices are loaded, and the log is asked for every device."""
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/log?" in r.url else None)
+    page.evaluate("history.replaceState(null, '', location.pathname + '#log?range=year&kind=nope&device=0a0fff&x=1')")
+    page.reload()
+    assert log_shown(page) and devices_loaded(page), "the log, the Cube's devices loaded"
+    assert wait_until(page, "location.hash === '#log'", 5), f"the address drops them: {page.evaluate('location.hash')}"
+    assert choices(page) == ["20", "", ""], "the last 20 events, every kind and device"
+    end = time.time() + 5
+    while not (asked and "device=" not in asked[-1]) and time.time() < end:
+        page.wait_for_timeout(100)
+    assert asked and "device=" not in asked[-1] and "kind=" not in asked[-1], f"the log asked for every device: {asked}"
     show_view(page, "tiles")

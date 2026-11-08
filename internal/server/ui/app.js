@@ -16,6 +16,7 @@ const state = {
   serial: null,
   rooms: [],
   unlisted: [],
+  roomsOf: null, // the Cube whose rooms and devices rooms and unlisted hold, once loaded
   token: null,
   me: null, // GET /api/v1/me: the mode, the user, the role, the capabilities, setup (login.js)
   events: null,
@@ -650,11 +651,13 @@ async function loadTimeZone(serial) {
 
 async function loadRooms() {
   if (!state.serial) return;
+  const serial = state.serial;
   const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms"), api("GET", base() + "/devices")]);
   state.rooms = rooms || [];
   state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
+  state.roomsOf = serial;
   renderRooms();
-  if (logState.open && fillLogSelects()) loadLog(); // the device chosen is gone
+  if (logState.open && fillLogSelects()) logChoicesChanged(); // log.js: the device chosen is gone
 }
 
 async function refresh() {
@@ -1103,7 +1106,7 @@ async function init() {
   initTiles();
   initLog();
   const hadSerial = !!state.serial;
-  showView(viewOfHash(location.hash), "replace"); // log.js: the page the address names
+  showAddress(); // log.js: the page the address names, the log with its choices
   refresh().then(() => {
     store("massimo.serial", state.serial);
     if (isShown("log") && !hadSerial) loadLog(); // it had no Cube to load from yet

@@ -233,7 +233,16 @@ what a test stores in the browser goes with its context.
   without Older, and keep the newest 20 as live events come;
   the last hour asks since an hour ago and pages back within it,
   a line out of the hour goes at the minute's check,
-  and with all events a line of another day shows its date.
+  and with all events a line of another day shows its date;
+  the range, the kind and the device chosen are in the address,
+  in place of its entry, and a reload asks for them again,
+  Clear takes the kind and the device out,
+  and back from another page and the log's button keep the range;
+  a link with them in another order opens the log with them,
+  the address in its own order,
+  and an address typed in its place shows its choices;
+  unknown values and a device the Cube does not have leave a plain `#log`,
+  and the log is asked for every device.
 - `test_pairing.py`, pairing and removal:
   in System settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,

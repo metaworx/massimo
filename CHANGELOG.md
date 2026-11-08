@@ -14,6 +14,10 @@ the next minor, a fix counts the suffix up.
   `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
   (`GUIDELINES/project/CI.md`, section 2).
 
+- The log's range, kind and device are in the address after `#log`, so
+  that a reload, a bookmark or a link opens the log with them
+  (`docs/ui.md`, "Log").
+
 ### Changed
 
 - The tests' fixtures and the recorded greeting carry placeholder radio
