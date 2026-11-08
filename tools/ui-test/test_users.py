@@ -29,6 +29,34 @@ def test_users_and_roles(page, case):
     show_view(page, "tiles")
 
 
+PANEL_HEAD = """(sel) => {
+    const s = document.querySelector(sel + ' > summary');
+    const box = (q) => s.querySelector(q).getBoundingClientRect();
+    const name = box('.panel-name'), key = box('.mono'), badges = box('.panel-badges');
+    return {
+        gap: key.left - name.right,
+        sameLine: Math.abs(key.top - name.top) < 4,
+        right: s.getBoundingClientRect().right - badges.right,
+    };
+}"""
+
+
+def test_panel_heads(page, case):
+    """A user's and a role's head (components.js detailsPanel): the name
+    and the login or key apart, the badges at the right edge, and on the
+    signed-in owner's own panel the you badge first."""
+    show_view(page, "system")
+    assert wait_until(page, "document.querySelectorAll('.user-panel').length >= 2 && "
+                            "document.querySelectorAll('.role-panel').length >= 6", 5), "the users and roles are listed"
+    for sel in (".user-panel[data-name='operator']", ".role-panel[data-key='operator']", ".user-panel[data-name='owner']"):
+        geo = page.evaluate(PANEL_HEAD, sel)
+        assert geo["gap"] >= 6 or not geo["sameLine"], f"{sel}: the name and the key apart ({geo})"
+        assert geo["right"] <= 1, f"{sel}: the badges at the right edge ({geo})"
+    first = page.locator(".user-panel[data-name='owner'] .panel-badges > :first-child")
+    assert "ok" in (first.get_attribute("class") or ""), "you is the first of the owner's badges"
+    show_view(page, "tiles")
+
+
 def revoke_keys(prefix):
     """The operator's API keys whose label starts with prefix are
     revoked, so that the four cases leave the server as they found it."""

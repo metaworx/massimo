@@ -88,8 +88,15 @@ h3 { margin: 0 0 12px; }
 .tls-fp { word-break: break-all; }
 body:not(.expert) .expert-only { display: none !important; }
 
-/* header */
+/* header, kept at the top on every page (components.js stickyHeader):
+   once scrolled it drops the time of the last update, the clock and the
+   lines under its first one, the reload button for a new version
+   staying; on a phone the Cube choice then takes the brand's line */
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
   display: flex;
   flex-wrap: wrap;
   gap: 12px 24px;
@@ -162,12 +169,49 @@ body:not(.expert) .expert-only { display: none !important; }
 .menu-line { margin: 0 0 4px; padding: 6px 10px 10px; color: var(--muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
-#cube-select { max-width: min(100%, 320px); min-width: 0; }
-@media (max-width: 599px) {
-  #cube-select { flex: 1 1 160px; max-width: 100%; }
+/* The Cube choice, a menu of the page (components.js pickerMenu): closed
+   the chosen Cube's plug and name, open as wide as its entries need, each
+   a plug, the name and under it the serial and the address. */
+.cube-menu { position: relative; min-width: 0; }
+.menu.cube-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  max-width: min(100%, 320px);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 1rem;
+  line-height: 1.2;
 }
+.menu.cube-menu > summary:hover, .menu.cube-menu[open] > summary { border-color: var(--accent); }
+.picker-icon { display: inline-flex; flex: none; }
+.picker-icon:empty { display: none; }
+.picker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cube-menu .caret { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
+.cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
+@media (max-width: 599px) {
+  .cube-menu { flex: 1 1 160px; }
+  .menu.cube-menu > summary { width: 100%; max-width: 100%; }
+}
+/* a connection (components.js connIcon): green joined, red apart */
+.ni.conn { width: 18px; height: 18px; }
+.ni.conn.ok, .menu-items button > .ni.conn.ok { color: var(--ok); }
+.ni.conn.bad, .menu-items button > .ni.conn.bad { color: var(--bad); }
+.menu-items button > .ni.conn { width: 20px; height: 20px; }
+/* a menu item of two lines (components.js menuItem), a group's heading,
+   a separator, the item chosen */
+.menu-item-text { display: flex; flex-direction: column; min-width: 0; }
+.menu-item-sub { font-family: var(--mono); font-size: 0.8rem; font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
+.menu-icon-none { width: 20px; flex: none; }
+.menu-group { margin: 8px 10px 2px; font-size: 0.8rem; color: var(--muted); }
+.menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
+.menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
 /* Cubes found on the LAN but not configured, with the env lines */
 .cube-found { margin-top: 8px; font-size: 0.9rem; max-width: 100%; }
@@ -194,6 +238,16 @@ body:not(.expert) .expert-only { display: none !important; }
 body.expert #clock-plain { display: none; }
 #updated { font-variant-numeric: tabular-nums; font-size: 0.9rem; }
 #version { white-space: nowrap; }
+/* the version on one line, cut with … where a long one (a build between
+   releases) leaves no room beside the page buttons */
+#version-short { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+body.scrolled .top { padding: 8px 0; }
+body.scrolled .top .updated-line, body.scrolled #clock-plain, body.scrolled #tls-notice,
+body.scrolled #cube-found, body.scrolled #budget, body.scrolled #pending { display: none !important; }
+@media (max-width: 599px) {
+  body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
+  body.scrolled .top-left { display: none; }
+}
 #server-started .age-exact { display: none; }
 
 /* slide toggle: a checkbox styled as a switch, keyboard accessible */
@@ -306,27 +360,143 @@ body.expert #clock-plain { display: none; }
 .lang-note span { display: block; }
 .lang-note span + span { margin-top: 4px; font-style: italic; }
 .settings .settings-note { margin: 4px 0 8px; }
-.settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
 .settings .update p, .settings .restart p { margin: 4px 0; overflow-wrap: anywhere; }
 .settings .restart { padding-top: 6px; }
 
-/* System settings → Cubes (cubes.js) */
-.settings .cubes-settings { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
-.cubes-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-.cubes-head .help-text { flex-basis: 100%; }
+/* System settings: the page at full width, its parts section cards in a
+   grid (components.js sectionCards, pageContents, backToTop); a card is
+   as wide as the grid, a .half card shares a row where there is room;
+   Users, Roles and Capabilities flow in two columns there, none split,
+   the break where their heights put it. */
+.settings.settings-page { max-width: none; }
+/* the page's row kept at the top under the header (components.js
+   pageBar): the title and, at its right end, the sections menu */
+.page-bar {
+  position: sticky;
+  top: var(--top-h, 0px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid transparent; /* there before it shows, so that the page keeps its length */
+  background: var(--bg);
+}
+body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
+.page-bar h2 { font-size: 1.25rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu.sec-menu { margin-left: auto; }
+.menu.sec-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  line-height: 1;
+}
+.menu.sec-menu > summary:hover, .menu.sec-menu[open] > summary { border-color: var(--accent); }
+.sec-menu .menu-items { min-width: 210px; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
+.section-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.section-flow { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (min-width: 900px) {
+  .section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-grid > * { grid-column: 1 / -1; }
+  .section-grid > .half { grid-column: auto; }
+  .section-flow { display: block; columns: 2; column-gap: 16px; }
+  .section-flow > .section-card { break-inside: avoid; margin-bottom: 16px; }
+  .section-flow .cap-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  /* Users alone, for a role without roles and capabilities: one column */
+  .no-roles.no-capabilities .section-flow { columns: 1; }
+}
+/* A card's head: its name larger than a label, a button that folds it
+   (the disclosure pattern: a heading holding a button with
+   aria-expanded), what it holds as badges, and its help. */
+.section-card { min-width: 0; scroll-margin-top: calc(var(--top-h, 0px) + var(--bar-h, 0px) + 10px); }
+.section-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 10px 8px 12px; }
+.section-head h3 { flex: 1 1 11em; min-width: 0; margin: 0; font-size: 1.08rem; }
+.section-head .help-text { flex-basis: 100%; }
+.section-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
+.section-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+.section-fold:hover { color: var(--accent); }
+.fold-i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+.section-fold[aria-expanded="true"] .fold-i { transform: rotate(90deg); }
+.section-card.folded > .tile-head { border-bottom-color: transparent; border-radius: 11px; }
+.section-body { padding: 12px 14px 4px; min-width: 0; }
+/* back to top: round, at the bottom right of the page's column */
+.icon-btn.to-top {
+  position: fixed;
+  right: max(16px, calc((100vw - 1100px) / 2 + 16px));
+  bottom: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fold-i { transition: none; }
+}
+
+/* System settings → Cubes (cubes.js): a Cube's panel in two columns where
+   there is room, its own settings at the left, the pairing and the
+   hidden devices at the right; one column on a phone, the pairing first.
+   The form lends its parts to the grid (display: contents). */
 .cube-panel { margin-bottom: 8px; padding: 8px 12px; }
-.cube-panel summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; overflow-wrap: anywhere; }
-.cube-panel[open] summary { margin-bottom: 10px; }
+.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "pair" "fields" "hidden" "actions"; gap: 4px 28px; }
+.cube-cols > .cube-form { display: contents; }
+.cube-cols > .cube-pairing { grid-area: pair; }
+.cube-cols .cube-fields { grid-area: fields; }
+.cube-cols .cube-hidden { grid-area: hidden; }
+.cube-cols .cube-form > .actions { grid-area: actions; }
+.cube-cols > .cube-differs, .cube-cols > p { grid-column: 1 / -1; }
+@media (min-width: 760px) {
+  .cube-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "fields pair" "fields hidden" "actions actions"; align-items: start; }
+  .no-cubes .cube-cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pair"; }
+}
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
 /* System settings → Backup and restore (backup.js): the stored backups, each
    a row with its actions, and a restore's plan */
+.backup-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
+.settings .backup-bar .field { margin: 0; }
 .backups-list { margin: 8px 0 14px; }
 .backup-row { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
 .backup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .backup-note { margin: 2px 0 0; }
 .settings .backup-actions { margin: 4px 0 0; gap: 6px; justify-content: flex-start; }
+/* full width: each backup's actions at the right of its row */
+@media (min-width: 760px) {
+  .backup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: center; }
+  .backup-row > .backup-head { grid-column: 1; grid-row: 1; }
+  .backup-row > .backup-note { grid-column: 1; grid-row: 2; }
+  .settings .backup-row > .backup-actions { grid-column: 2; grid-row: 1 / span 2; margin: 0; justify-content: flex-end; }
+  .backup-row > .backup-detail { grid-column: 1 / -1; grid-row: 3; }
+}
 .backup-diff ul, .restore-steps, .restore-notes { margin: 4px 0; padding-left: 1.4em; overflow-wrap: anywhere; }
 .backup-diff p { margin: 4px 0 0; }
 .restore-plan { margin-top: 10px; padding: 8px 12px; }
@@ -366,8 +536,6 @@ body.expert #clock-plain { display: none; }
 .unlisted-msg { margin: 0; padding: 0 14px 12px; }
 
 /* appearance: mode and colour scheme (theme.js), the scheme editor */
-.settings .appearance { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
-.settings .appearance > .muted { display: block; margin-bottom: 8px; }
 .scheme-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
 .scheme-msg { margin: 0 0 10px; }
 .scheme-msg.ok { color: var(--ok); }
@@ -404,9 +572,39 @@ body.expert #clock-plain { display: none; }
 .scheme-name .inline { flex-wrap: wrap; }
 .scheme-name input[type="text"] { flex: 1 1 10em; min-width: 0; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-/* the summary of a details panel (components.js detailsPanel, the Cube panel's template) */
+/* A details panel's head (components.js detailsPanel: the Cubes, the
+   users, the roles): a chevron, the name, the key or serial apart from
+   it in grey, the badges at the right edge, wrapping under on a phone. */
+.panel > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  overflow-wrap: anywhere;
+}
+.panel > summary::-webkit-details-marker { display: none; }
+.panel > summary::before {
+  content: "";
+  flex: none;
+  width: 0.42em;
+  height: 0.42em;
+  margin: 0 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.panel[open] > summary::before { transform: rotate(45deg); }
+.panel[open] > summary { margin-bottom: 10px; }
+.panel > summary > .mono { color: var(--muted); }
 .panel-name { font-weight: 600; }
-.panel-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.panel-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
+.user-panel, .role-panel { margin-bottom: 8px; padding: 8px 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .panel > summary::before { transition: none; }
+}
 .panel-row {
   display: flex;
   flex-wrap: wrap;
@@ -516,6 +714,10 @@ button.subtle { color: var(--muted); }
   padding: 8px 10px;
 }
 .menu-items button:hover { background: var(--card-head); }
+/* a menu item with its icon (the 👤 and ☰ menus) */
+.menu-items button { display: flex; align-items: center; gap: 10px; }
+.menu-items button > .ni { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.menu-items button:hover > .ni { color: var(--accent); }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
 /* Rooms without a connected Cube (app.js renderHomeNotice) */
@@ -709,6 +911,10 @@ button.subtle { color: var(--muted); }
 .device-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
 .device-sub { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0 6px; }
 .device-sub .device-type::after { content: " ·"; }
+/* a device's serial and radio address (components.js deviceIds) */
+.device-ids > span { white-space: pre-wrap; }
+.hidden-device { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.hidden-device > .device-ids { color: var(--muted); font-size: 0.85rem; }
 .device-vals {
   display: grid;
   grid-template-columns: auto auto;
@@ -1030,8 +1236,21 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }
 .cap-grid .switch { align-items: center; }
 .cap-grid .flag { margin-left: 4px; }
-.caps-settings { margin-top: 12px; }
 
-/* "only on this device" under a setting: login.js shows it where the
-   settings follow the user (no-sync otherwise) */
-.field > .switch.device-only { flex: 1 1 100%; font-size: 0.85rem; color: var(--muted); }
+/* My settings: a row per setting, the switch that keeps it only on this
+   device in a column of its own at the right, a band headed "only on this
+   device", each row's line running through it; no column where the
+   settings do not follow the user (no-sync). My settings and My profile
+   keep a reading width. */
+.settings.prefs-page, .settings.profile-page { max-width: 640px; }
+.settings.prefs-page:has(.scheme-editor:not(.hidden)) { max-width: 760px; }
+.dev-head, .dev-row, .dev-group { display: grid; grid-template-columns: minmax(0, 1fr) 76px; column-gap: 12px; }
+.no-sync .dev-row, .no-sync .dev-group { grid-template-columns: minmax(0, 1fr); }
+.dev-row, .dev-group { border-top: 1px solid var(--line); }
+.dev-cell { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.dev-colhead { padding: 6px 4px; border-radius: 8px 8px 0 0; font-size: 0.75rem; line-height: 1.2; text-align: center; color: var(--muted); cursor: help; }
+.dev-last > .dev-cell { border-radius: 0 0 8px 8px; }
+.settings .dev-row > .field { margin: 0; padding: 10px 0; }
+.dev-row > .scheme-actions { margin: 0; padding: 10px 0; }
+.dev-group > span:first-child { padding: 12px 0 2px; color: var(--muted); font-weight: 600; }
+.dev-last { margin-bottom: 10px; }

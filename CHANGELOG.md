@@ -20,6 +20,28 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- My settings keeps "only on this device" in a column of its own at
+  the right end of the settings' rows (`docs/ui.md`, "My settings").
+
+- Expert mode shows a device's serial number beside its radio address,
+  "S/N … · RF …", in the rooms, a room's configuration, pairing and the
+  hidden devices (`docs/ui.md`, "Rooms").
+
+- The Cube choice is a menu: closed the Cube's name and its connection
+  as a plug, open each Cube's serial and address; the "connected" label
+  is gone (`docs/ui.md`, "Header").
+
+- The 👤 and ☰ menus show an icon per item, and the 👤 button's tooltip
+  names who is signed in (`docs/ui.md`, "Header").
+
+- The header stays at the top while the page scrolls, compacted, and
+  System settings' title stays under it with a menu of its sections
+  (`docs/ui.md`, "Header").
+
+- System settings is a card per part at full width, Software update
+  first, with a row of section buttons, cards that fold and stay folded,
+  and ↑ (`docs/ui.md`, "System settings").
+
 - The tests' fixtures and the recorded greeting carry placeholder radio
   addresses too, and `tools/identifiers` fails `go test` on a real
   serial, MAC or radio address in the tree (`AGENTS.md`).
@@ -33,6 +55,10 @@ the next minor, a fix counts the suffix up.
   unchecked (`GUIDELINES/project/CI.md`, "Dependabot").
 
 ### Fixed
+
+- A user's or role's head in System settings shows the name and the
+  login or key apart, and the badges at the right edge, `you` first
+  (`docs/ui.md`, "System settings").
 
 - The backup list no longer shows a pending change next to the backup
   that has just covered it (`docs/api-v1.md`, "GET …/backups").

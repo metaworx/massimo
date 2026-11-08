@@ -201,3 +201,24 @@ def test_a_deleted_scheme_stays_deleted(page, new_context, case):
         other.context.close()
     finally:
         clear_preferences()
+
+
+def test_device_column(page, case):
+    """My settings: every "only on this device" switch in one column at
+    the right end of its row, headed at the top, its tooltip naming its
+    setting; the page at most 640 px wide."""
+    assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the owner's settings follow the owner"
+    show_view(page, "prefs")
+    cells = page.evaluate("""[...document.querySelectorAll('#prefs .dev-row > .dev-cell')]
+        .map((c) => [Math.round(c.getBoundingClientRect().left), Math.round(c.getBoundingClientRect().right)])""")
+    assert len(cells) == 7 and len({c[0] for c in cells}) == 1, f"one column, a cell per row ({cells})"
+    head = page.evaluate("document.querySelector('#prefs .dev-colhead').getBoundingClientRect().left")
+    assert round(head) == cells[0][0], "the column headed at the top"
+    body = page.evaluate("document.querySelector('#prefs .settings-body').getBoundingClientRect().right "
+                         "- parseFloat(getComputedStyle(document.querySelector('#prefs .settings-body')).paddingRight)")
+    assert abs(cells[0][1] - body) <= 1, "at the right end of the rows"
+    for sw in page.locator("#prefs input[data-device-only]").all():
+        title = sw.evaluate("(i) => i.closest('label').title")
+        assert title and title == sw.get_attribute("aria-label"), f"the tooltip names the setting ({title!r})"
+    assert page.evaluate("document.getElementById('prefs').getBoundingClientRect().width") <= 640, "My settings at most 640 px"
+    show_view(page, "tiles")

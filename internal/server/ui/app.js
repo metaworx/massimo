@@ -204,7 +204,9 @@ function renderDeviceSwitches() {
   for (const input of document.querySelectorAll("input[data-device-only]")) {
     const key = input.dataset.deviceOnly;
     input.checked = deviceOnly(key);
-    input.setAttribute("aria-label", t("settings.thisDeviceFor", { setting: t(SETTING_LABELS[key]) }));
+    const label = t("settings.thisDeviceFor", { setting: t(SETTING_LABELS[key]) });
+    input.setAttribute("aria-label", label);
+    input.closest("label").title = label; // the column's switch has no text of its own
   }
 }
 
@@ -507,9 +509,7 @@ function clockText(cube) {
 // --- header -----------------------------------------------------------
 
 function renderHeader(cube) {
-  const conn = $("connection");
-  conn.textContent = t(cube.connected ? "header.connected" : "header.disconnected");
-  conn.className = "pill " + (cube.connected ? "ok" : "bad");
+  renderCubeSelect(); // the chosen Cube's connection, its plug
   const b = cube.budget || {};
   $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
   $("slots").textContent = b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots);
@@ -547,20 +547,49 @@ function renderUpdated() {
   el.textContent = t("header.updated", { time: pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds()) });
 }
 
-// renderCubeSelect fills the Cube choice: the configured Cubes, then
-// those found on the LAN but not configured (shown, not selectable),
-// then the entry that searches the LAN for new ones.
+// renderCubeSelect fills the Cube choice (components.js pickerMenu): the
+// configured Cubes, each with its connection as a plug, its name (its
+// serial without one) and under it its serial and address; then those
+// found on the LAN but not configured, shown, not selectable; then the
+// entry that searches the LAN for new ones. Closed it shows the chosen
+// Cube's plug and name, its tooltip the serial, the address and the
+// connection. An open choice is left as it is, so that a poll does not
+// take the focus from it; a pick closes it first.
 function renderCubeSelect() {
-  const options = state.cubes.map((c) => {
-    const name = c.name ? c.name + " (" + c.serial + ")" : c.serial;
-    return [c.serial, c.connected ? name : t("header.cubeDisconnected", { name })];
-  });
+  const menu = $("cube-menu");
+  if (menu.open) return;
+  const items = state.cubes.map((c) => ({
+    value: c.serial,
+    label: c.name || c.serial,
+    sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
+    icon: connIcon(c.connected),
+  }));
   if (state.found.length) {
-    options.push({ group: t("discover.group"), options: state.found.map((c) => ["found:" + c.serial, c.serial + (c.address ? " · " + c.address : ""), true]) });
+    items.push({ group: t("discover.group") });
+    for (const c of state.found) items.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: true });
   }
-  if (hasCap("discover")) options.push([DISCOVER, t(discovery.running ? "discover.searching" : "discover.search"), discovery.running]);
-  const sel = fillOptions($("cube-select"), options);
-  sel.value = state.serial || "";
+  if (hasCap("discover")) {
+    items.push({ separator: true });
+    items.push({ value: DISCOVER, label: t(discovery.running ? "discover.searching" : "discover.search"), disabled: discovery.running });
+  }
+  const cube = state.cubes.find((c) => c.serial === state.serial);
+  const name = cube ? cube.name || cube.serial : t("header.cube");
+  const conn = cube ? t(cube.connected ? "header.connected" : "header.disconnected") : "";
+  pickerMenu(menu, {
+    items,
+    value: state.serial || "",
+    onPick: (v) => {
+      menu.open = false;
+      if (v === DISCOVER) discoverCubes();
+      else selectCube(v);
+    },
+    shown: {
+      icon: cube ? connIcon(cube.connected) : null,
+      label: name,
+      title: cube ? [name, cube.name ? cube.serial : "", cube.address || "", conn].filter(Boolean).join(" · ") : name,
+      aria: cube ? t("header.cubeChoice", { name, state: conn }) : name,
+    },
+  });
 }
 
 function applySettings() {
@@ -624,8 +653,10 @@ function renderHomeNotice() {
     detail.textContent = t(hasCap("cubes") ? "home.noCubeAdd" : "home.noCubeAsk");
     check.textContent = "";
   } else {
-    title.textContent = t("home.notConnected", { name: cube.name ? cube.name + " (" + cube.serial + ")" : cube.serial });
+    // its name where it has one, its serial in the detail (as on its label)
+    title.textContent = t("home.notConnected", { name: cube.name || cube.serial });
     const parts = [cube.address ? t("home.address", { address: cube.address }) : t("home.noAddress")];
+    if (cube.name) parts.push(t("home.serial", { serial: cube.serial }));
     const data = timeOf(cube.updated);
     const seen = timeOf(cube.last_seen);
     if (data) parts.push(t("home.lastData", { time: fmtInstant(data) }));
@@ -1066,6 +1097,8 @@ function showLanguageError() {
 function applyLanguage() {
   if (I18N.en) applyI18n(document);
   initHelpSlots();
+  pageBar($("system"));
+  pageContents($("system"));
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
@@ -1094,15 +1127,18 @@ async function init() {
   if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
+  // the header kept at the top; System settings' row there with its
+  // sections menu, its cards that fold, its section buttons, back to top
+  stickyHeader();
+  const system = $("system");
+  sectionCards(system);
+  pageBar(system);
+  pageContents(system);
+  backToTop(system);
   initSettings();
   applySettings();
   checkVersion();
   await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
-  $("cube-select").addEventListener("change", (ev) => {
-    if (ev.target.value !== DISCOVER) return selectCube(ev.target.value);
-    ev.target.value = state.serial || "";
-    discoverCubes();
-  });
   initTiles();
   initLog();
   const hadSerial = !!state.serial;

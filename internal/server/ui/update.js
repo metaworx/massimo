@@ -55,6 +55,9 @@ function renderUpdate(u) {
     link.textContent = t("update.notes", { version: u.latest });
   }
   $("update-helper").textContent = u.helper ? t("update.last", { state: helperText(u.helper) }) : "";
+  // the card's badge, also while it is folded: up to date, or what is out
+  const known = !u.check_error && u.channel && u.latest;
+  sectionBadges($("sys-software"), known ? [u.available ? badgeEl(t("update.badge.available", { version: u.latest }), "warn") : badgeEl(t("update.badge.upToDate"), "ok")] : []);
   const btn = $("update-btn");
   btn.classList.toggle("hidden", !u.can_update);
   btn.textContent = t("update.to", { version: u.latest });

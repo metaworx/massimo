@@ -69,6 +69,7 @@ function renderBackups() {
   const pending = $("backup-pending");
   pending.textContent = backupUI.changed && backupUI.due ? t("backup.pending", { changed: fmtWhen(backupUI.changed), due: fmtWhen(backupUI.due) }) : "";
   pending.classList.toggle("hidden", !(backupUI.changed && backupUI.due));
+  sectionBadges($("sys-backup"), backupUI.history ? [badgeEl(tn("backup.badge.kept", backupUI.list.length), "mode")] : []);
   if (!backupUI.history) {
     box.appendChild(textEl("p", t("backup.noHistory"), "muted small"));
     return;

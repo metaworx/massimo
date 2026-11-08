@@ -1,26 +1,36 @@
-<!-- My settings → Appearance: the mode and the colour scheme, theme.js; the editor is drawn into #scheme-editor from scheme.html. -->
+<!-- My settings → Appearance: the mode and the colour scheme in the rows of My settings, theme.js; the editor is drawn into #scheme-editor from scheme.html. -->
 <div class="appearance">
-  <span class="muted" data-i18n="appearance.title">Appearance</span>
-  <div class="field">
-    <label for="theme-select" data-i18n="appearance.mode">Mode</label>
-    <span data-help="theme" data-help-label="appearance.mode"></span>
-    <select id="theme-select" class="field-control">
-      <option value="system" data-i18n="appearance.modeSystem">as the system</option>
-      <option value="light" data-i18n="appearance.modeLight">light</option>
-      <option value="dark" data-i18n="appearance.modeDark">dark</option>
-    </select>
-    <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="theme"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+  <div class="dev-group">
+    <span data-i18n="appearance.title">Appearance</span>
+    <span class="dev-cell needs-sync"></span>
   </div>
-  <div class="field wide">
-    <label for="scheme-select" data-i18n="appearance.scheme">Colour scheme</label>
-    <span data-help="scheme" data-help-label="appearance.scheme"></span>
-    <select id="scheme-select" class="field-control"></select>
-    <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="scheme"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+  <div class="dev-row">
+    <div class="field">
+      <label for="theme-select" data-i18n="appearance.mode">Mode</label>
+      <span data-help="theme" data-help-label="appearance.mode"></span>
+      <select id="theme-select" class="field-control">
+        <option value="system" data-i18n="appearance.modeSystem">as the system</option>
+        <option value="light" data-i18n="appearance.modeLight">light</option>
+        <option value="dark" data-i18n="appearance.modeDark">dark</option>
+      </select>
+    </div>
+    <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="theme"><span class="slider" aria-hidden="true"></span></label></span>
   </div>
-  <div class="scheme-actions">
-    <button type="button" id="scheme-customise" aria-expanded="false" aria-controls="scheme-editor" data-i18n="appearance.customise">Customise…</button>
-    <button type="button" id="scheme-export" data-i18n="appearance.export">Export</button>
-    <button type="button" id="scheme-import" data-i18n="appearance.import">Import…</button>
+  <div class="dev-row">
+    <div class="field wide">
+      <label for="scheme-select" data-i18n="appearance.scheme">Colour scheme</label>
+      <span data-help="scheme" data-help-label="appearance.scheme"></span>
+      <select id="scheme-select" class="field-control"></select>
+    </div>
+    <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="scheme"><span class="slider" aria-hidden="true"></span></label></span>
+  </div>
+  <div class="dev-row dev-last">
+    <div class="scheme-actions">
+      <button type="button" id="scheme-customise" aria-expanded="false" aria-controls="scheme-editor" data-i18n="appearance.customise">Customise…</button>
+      <button type="button" id="scheme-export" data-i18n="appearance.export">Export</button>
+      <button type="button" id="scheme-import" data-i18n="appearance.import">Import…</button>
+    </div>
+    <span class="dev-cell needs-sync"></span>
   </div>
   <p id="scheme-msg" class="small scheme-msg hidden" role="status"></p>
   <div id="scheme-editor" class="panel scheme-editor hidden" role="region" aria-labelledby="scheme-editor-title"></div>

@@ -669,7 +669,9 @@ function renderDevice(d) {
   // without a name keeps its address, the only way to tell it apart.
   el.querySelector(".device-name").textContent = d.name || t("device.unnamed") + " · " + d.rf_address;
   el.querySelector(".device-type").textContent = typeName(d.type);
-  el.querySelector(".device-rf").textContent = d.rf_address;
+  const ids = el.querySelector(".device-rf");
+  clear(ids);
+  ids.appendChild(deviceIds(d.serial, d.rf_address));
   const badges = el.querySelector(".device-badges");
   for (const [label, kind, at] of deviceBadges(d)) {
     const b = badgeEl(label, kind);

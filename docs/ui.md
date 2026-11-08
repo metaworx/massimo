@@ -44,9 +44,20 @@ On a screen narrower than 600 px the Cube choice takes a line of its own,
 and **☰** beside the house and 👤 holds **Log** and **System settings**,
 highlighted while one of them is shown.
 
+The header stays at the top while the page scrolls.
+Scrolled, it keeps its first line without the time of the last update
+and the Cube's clock, and the lines under it go until the page is back
+at its top, the button that reloads a new version apart;
+narrower than 600 px the Cube choice then takes the line of **Massimo**.
+
 - **Cube**:
-  chooses the Cube when the server has several.
-  In front of it you see whether the server is connected to that Cube.
+  a menu that chooses the Cube when the server has several.
+  Closed it shows the chosen Cube's name (its serial where it has none)
+  and whether the server is connected to it, as a plug:
+  joined and green while connected, apart and red while not;
+  its tooltip adds the serial and the address.
+  Open, each Cube has its plug, its name and under it its serial and
+  address, the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
@@ -70,7 +81,9 @@ highlighted while one of them is shown.
 - **👤** drops down who is signed in, with the role,
   or the API key and whose it is;
   **My profile** and **My settings**, which open those pages,
-  and **Sign out**, which ends the session.
+  and **Sign out**, which ends the session, each with its icon;
+  its tooltip names who is signed in, by display name and login.
+  The items of **☰** have the icons of their pages.
   An API key or the server's token is only forgotten in this browser
   (**Forget key**),
   and an open server says that it is open to everyone and has nothing to sign out of.
@@ -103,7 +116,8 @@ highlighted while one of them is shown.
 
 ## Rooms
 
-When the Cube chosen is not connected, a notice above the rooms says so:
+When the Cube chosen is not connected, a notice above the rooms says so,
+naming it by its name and giving its serial:
 the address the server tries, when the Cube last sent data
 (or last answered discovery),
 and what to check, a Cube serving one client at a time;
@@ -146,7 +160,9 @@ Every room has a tile:
 - The room name or the **i** button opens the device list:
   every device with its values (valve, set and measured temperature,
   offset) and badges for battery, transmission errors, lock, window and mode.
-  Expert mode adds each device's type and radio address.
+  Expert mode adds each device's type, serial number and radio address,
+  as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
+  the radio address is not.
   Valve, measured temperature, window and a low battery show how old they are;
   in expert mode also the exact time, and when the device was last heard from.
   A device that has not been heard from for more than 24 hours has a "Not seen
@@ -286,11 +302,13 @@ and every browser you sign in on takes them at sign-in,
 the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
-Under each of **Poll every**, **Expert mode**, **Cube clock shown in**,
-**Language**, **Mode** and **Colour scheme** a switch **only on this device**
-keeps that setting's value in this browser instead,
+Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
+**Language**, **Mode** and **Colour scheme**, in a column of its own at the
+right headed **only on this device**, a switch keeps that setting's value in
+this browser instead (its tooltip names the setting),
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
+My settings and My profile are at most 640 px wide.
 Sign out takes your settings and schemes out of the browser,
 a change made just before still reaching the server,
 so that the next one to sign in there starts from the defaults
@@ -348,9 +366,45 @@ The cog in the header, **System settings**, holds what is the server's,
 each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no cog.
 
+The page is a card per part, as wide as the page:
+Software update first, then Cubes, Users, Roles,
+**Capabilities for every role**, and Backup and restore last;
+from 900 px Users, Roles and Capabilities flow in two columns,
+none split, the break where their heights put it.
+The title stays under the header while the page scrolls,
+with **Sections** at its right end (a bulleted list, apart from ☰):
+it lists the cards, marks the one in view and brings the one chosen into view.
+A row of buttons under the title names the cards the role sees,
+each bringing its card into view, opened.
+A card folds with the button in its heading,
+which also says what it holds at a glance (**up to date**, **1 served**,
+**2 users**, **all on**, **3 kept**), also while it is folded;
+the browser keeps which cards are folded.
+Once the row of buttons is out of sight, **↑** at the bottom right goes back
+to the top of the page.
+
+- **Software update**:
+  the running version, the update channel and whether a newer release is out.
+  On a box with the update helper installed (packaging/README.md, "Updating"),
+  **Update** (with `update`) installs it and restarts the server.
+  If the new version does not come up, the old one is put back.
+  While the helper works, **Check for updates** and **Update** are greyed out,
+  also after a reload of the page, until it reports that it is done.
+  **Restart the server**, with the capability `restart`,
+  asks in the section and restarts the server through its service manager
+  (`docs/api-v1.md`, "POST /api/v1/restart");
+  the page then asks `/healthz` every two seconds until the server reports a new start,
+  reads the data again and says when it started,
+  or says after two minutes that it has not come back.
+  Where the server cannot be restarted from this page the button is missing
+  and the server's reason is shown,
+  such as a server in a terminal or an open server asked from elsewhere than the box.
+  The settings of the settings file that changed since the start and apply only
+  at the next one are listed under it, by name.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
-  each in a panel that opens with a click: its connection,
+  each in a panel whose head shows the name, the serial and the address,
+  and opens with a click: its connection,
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),
@@ -358,7 +412,8 @@ a role with none of them (the viewer's, a guest's) has no cog.
   **Proxy address** (the address of this server other programs connect to for this Cube;
   empty: :62910 when it is the only Cube) and **Serial in discovery replies**.
   **Hidden devices** lists the devices hidden besides those of room 255,
-  each with **Show again**; **Hide** takes a radio address,
+  each with its name, serial number and radio address and **Show again**;
+  **Hide** takes a radio address,
   with the Cube's devices to choose from.
   **Save**, off while nothing differs from the Cube's settings,
   sends the changes, which apply at once:
@@ -373,12 +428,15 @@ a role with none of them (the viewer's, a guest's) has no cog.
   which serves a found Cube at once (also in the list of found Cubes under the header).
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 
-  **Pair a device**, at the top of the Cube's panel,
+  From 760 px a Cube's panel has two columns: its settings at the left,
+  the pairing and the hidden devices at the right.
+  **Pair a device**, at the top of the Cube's panel on a phone,
   shows the pairing time (60 seconds, at most 600) and **Start**,
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.
   A countdown with **Stop** runs while the Cube pairs,
-  and each device that joins is listed with its type and serial and a form:
+  and each device that joins is listed with its type and serial
+  (in expert mode also its radio address) and a form:
   **Name**, **Room** (one of the Cube's rooms),
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
@@ -392,27 +450,11 @@ a role with none of them (the viewer's, a guest's) has no cog.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
-- **Backup and restore** (with `backup`):
-  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
-  The server keeps the Cube's backups in its store,
-  listed newest first with why each was taken (after a change, by hand,
-  before a restore, or the file a restore was sent), its size and who asked:
-  one follows by itself an hour after the Cube's configuration last changed,
-  at the latest two hours after the first change (the settings `backups.*`,
-  docs/api-v1.md, "Backups"), and a line says when while one is pending.
-  **Take a backup now** keeps one by hand.
-  Each row has **Download**, **Compare with the one before**,
-  which lists what changed as the restore would send it,
-  and, with `restore`, **Restore…** and **Delete**, which asks first.
-  **Restore from file…** (with `restore`) takes a backup file instead.
-  A restore first shows its plan, the steps with the radio ones marked,
-  the notes and what the radio commands cost of the hourly budget,
-  and sends nothing until **Send N commands**;
-  then each step is marked as the Cube took it, and the end is said.
-  A Cube that is not in the server's store (a run with `-addr`) has no list;
-  its download and the restore from a file work as before.
 - **Users** (with `users`, or `guests` for the guests alone):
-  every user in a panel with its display name, role, whether it is disabled,
+  every user in a panel whose head shows the display name, the login apart
+  from it and, at the right edge, the badges: **you** first, the role,
+  the state and **keys only**;
+  in the panel the display name, role, whether it is disabled,
   a guest's end, and a new password, which ends the user's sessions and,
   as every password the page sets,
   is registered by OPAQUE in the browser and never sent;
@@ -436,26 +478,27 @@ a role with none of them (the viewer's, a guest's) has no cog.
   **Save**, off while nothing differs from the role,
   **Disable** (with `roles.disable`), **Remove** for a created role nobody has,
   and **Add a role**; the owner cannot be changed.
-  **Capabilities for every role** (with `capabilities`) switches a capability
-  off for every role but the owner.
-- **Software**:
-  the running version, the update channel and whether a newer release is out.
-  On a box with the update helper installed (packaging/README.md, "Updating"),
-  **Update** (with `update`) installs it and restarts the server.
-  If the new version does not come up, the old one is put back.
-  While the helper works, **Check for updates** and **Update** are greyed out,
-  also after a reload of the page, until it reports that it is done.
-  **Restart the server**, with the capability `restart`,
-  asks in the section and restarts the server through its service manager
-  (`docs/api-v1.md`, "POST /api/v1/restart");
-  the page then asks `/healthz` every two seconds until the server reports a new start,
-  reads the data again and says when it started,
-  or says after two minutes that it has not come back.
-  Where the server cannot be restarted from this page the button is missing
-  and the server's reason is shown,
-  such as a server in a terminal or an open server asked from elsewhere than the box.
-  The settings of the settings file that changed since the start and apply only
-  at the next one are listed under it, by name.
+- **Capabilities for every role** (with `capabilities`):
+  a switch per capability, which switches it off for every role but the owner.
+- **Backup and restore** (with `backup`):
+  **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
+  The server keeps the Cube's backups in its store,
+  listed newest first with why each was taken (after a change, by hand,
+  before a restore, or the file a restore was sent), its size and who asked:
+  one follows by itself an hour after the Cube's configuration last changed,
+  at the latest two hours after the first change (the settings `backups.*`,
+  docs/api-v1.md, "Backups"), and a line says when while one is pending.
+  **Take a backup now** keeps one by hand.
+  Each row has **Download**, **Compare with the one before**,
+  which lists what changed as the restore would send it,
+  and, with `restore`, **Restore…** and **Delete**, which asks first.
+  **Restore from file…** (with `restore`) takes a backup file instead.
+  A restore first shows its plan, the steps with the radio ones marked,
+  the notes and what the radio commands cost of the hourly budget,
+  and sends nothing until **Send N commands**;
+  then each step is marked as the Cube took it, and the end is said.
+  A Cube that is not in the server's store (a run with `-addr`) has no list;
+  its download and the restore from a file work as before.
 
 ## How the page is built
 
@@ -465,11 +508,14 @@ The page is plain HTML, CSS and JavaScript under `internal/server/ui/`,
 embedded in the binary, with no build step.
 `index.html` is the skeleton: the head, the icons, the header, the sections,
 the sign-in dialog, the first-owner form and the scripts,
-with two marker comments.
-At start the server replaces `<!-- partials: settings -->` with the settings
-panels and `<!-- partials: templates -->` with the templates,
+with marker comments.
+At start the server replaces each marker, such as `<!-- partials: prefs -->`,
+with its partials, the panels of the settings pages and at the end
+`<!-- partials: templates -->` with the templates,
 from the files in `ui/partials/` in the order `uiPartials` in
-`internal/server/ui.go` lists them, and serves the result at `/`.
+`internal/server/ui.go` lists them, and serves the result at `/`;
+System settings' cards fill three markers,
+before, in and after the cards that flow in two columns.
 A partial is a file per feature,
 and its first line names the script that uses it.
 What a script builds again and again, a Cube's panel, a log line, a scheme row,
@@ -477,6 +523,20 @@ is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
+A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
+its head the name, the serial, login or key, and the badges,
+its body the form cloned from the feature's template.
+A long page is a grid of section cards (`section.section-card`,
+its heading's `button.section-fold` folding it):
+`sectionCards` makes them fold and keeps the fold in the browser,
+`sectionBadges` shows what a card holds in its head,
+`pageContents` fills the page's row of section buttons from them,
+`pageBar` the sections menu of its title's row kept at the top,
+and `backToTop` wires the page's ↑;
+`pickerMenu` makes a dropdown the choice of one item (the Cube choice),
+its items `menuItem`s, a Cube's connection a `connIcon`;
+a device's serial and radio address are a `deviceIds`;
+`stickyHeader` keeps the header at the top and compacts it once scrolled.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),

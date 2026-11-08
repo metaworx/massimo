@@ -27,6 +27,20 @@
   <symbol id="icon-log" viewBox="0 0 24 24"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4.5"/></symbol>
   <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
   <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <!-- the 👤 menu's items: My profile, My settings, Sign out, Forget key -->
+  <symbol id="icon-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16.2a3.3 3.3 0 0 1 6.4 0"/><path d="M14.5 10h4M14.5 13.5h3"/></symbol>
+  <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+  <symbol id="icon-signout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></symbol>
+  <symbol id="icon-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M16 7l2 2"/><path d="M14 9l2 2"/></symbol>
+  <!-- a Cube's connection: a plug joined, and apart; the Cube choice's arrow -->
+  <symbol id="icon-plug-on" viewBox="0 0 24 24"><path d="M1 12h3.5"/><path d="M4.5 8.5H11v7H5.5a1 1 0 0 1-1-1z"/><path d="M11 7.5h4.5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H11z"/><path d="M16.5 12H23"/></symbol>
+  <symbol id="icon-plug-off" viewBox="0 0 24 24"><path d="M0.5 12h2"/><path d="M2.5 8.5h4a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-4z"/><path d="M17 10.5h-3.5M17 13.5h-3.5"/><path d="M17 7.5h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3z"/><path d="M21 12h2.5"/></symbol>
+  <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <!-- a section card's fold, and back to the top of a page -->
+  <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
+  <!-- a page's sections menu: a bulleted list, apart from the header's ☰ -->
+  <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5"/><circle cx="4.75" cy="6" r="1.4" fill="currentColor"/><circle cx="4.75" cy="12" r="1.4" fill="currentColor"/><circle cx="4.75" cy="18" r="1.4" fill="currentColor"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <header class="top">
@@ -43,20 +57,24 @@
       <span id="clock-plain" class="muted" title=""></span>
     </div>
     <div class="cube">
-      <span id="connection" class="pill"></span>
-      <label for="cube-select" class="visually-hidden" data-i18n="header.cube">Cube</label>
-      <select id="cube-select"></select>
+      <!-- the Cube choice, a menu of the page (components.js pickerMenu):
+           the chosen Cube's connection as a plug and its name; the list
+           each Cube with its serial and address -->
+      <details id="cube-menu" class="menu cube-menu">
+        <summary id="cube-choice" class="cube-choice" aria-label="Cube" data-i18n-attr="aria-label:header.cube"><span class="picker-icon"></span><span class="picker-label"></span><svg class="ni caret" aria-hidden="true"><use href="#icon-chevron-down"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
       <span id="cube-search" class="muted small hidden" role="status"></span>
     </div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
       <details id="user-menu" class="menu nav-menu">
-        <summary class="nav-btn" aria-label="who is signed in" title="Who is signed in" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></summary>
+        <summary id="user-menu-btn" class="nav-btn" aria-label="who is signed in" title="Who is signed in" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></summary>
         <div class="menu-items">
           <p id="me-line" class="menu-line small"></p>
-          <button type="button" id="menu-profile" data-i18n="nav.profile">My profile</button>
-          <button type="button" id="menu-prefs" data-i18n="nav.prefs">My settings</button>
-          <button type="button" id="logout-btn" data-i18n="me.signOut">Sign out</button>
+          <button type="button" id="menu-profile"><svg class="ni" aria-hidden="true"><use href="#icon-id"/></svg><span data-i18n="nav.profile">My profile</span></button>
+          <button type="button" id="menu-prefs"><svg class="ni" aria-hidden="true"><use href="#icon-sliders"/></svg><span data-i18n="nav.prefs">My settings</span></button>
+          <button type="button" id="logout-btn"><svg class="ni" aria-hidden="true"><use id="logout-icon" href="#icon-signout"/></svg><span id="logout-label" data-i18n="me.signOut">Sign out</span></button>
         </div>
       </details>
       <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
@@ -64,8 +82,8 @@
       <details id="nav-menu" class="menu nav-menu">
         <summary class="nav-btn" aria-label="more pages" title="More pages" data-i18n-attr="aria-label:nav.more title:nav.moreTitle"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
         <div class="menu-items">
-          <button type="button" id="menu-log" data-i18n="nav.logTitle">Log</button>
-          <button type="button" id="menu-system" class="needs-system" data-i18n="nav.settingsTitle">System settings</button>
+          <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
+          <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
         </div>
       </details>
     </nav>
@@ -126,56 +144,88 @@
     </form>
   </section>
 
-  <section id="profile" class="tile settings hidden" aria-labelledby="profile-title">
+  <section id="profile" class="tile settings profile-page hidden" aria-labelledby="profile-title">
     <header class="tile-head"><h2 id="profile-title" data-i18n="nav.profile">My profile</h2></header>
     <div class="settings-body">
       <!-- partials: profile -->
     </div>
   </section>
 
-  <section id="prefs" class="tile settings hidden" aria-labelledby="prefs-title">
+  <!-- My settings: a row per setting, the switch that keeps it only on
+       this device in a column of its own at the right (no column where
+       the settings do not follow the user: no-sync) -->
+  <section id="prefs" class="tile settings prefs-page hidden" aria-labelledby="prefs-title">
     <header class="tile-head"><h2 id="prefs-title" data-i18n="nav.prefs">My settings</h2></header>
     <div class="settings-body">
-      <div class="field">
-        <label for="poll-input" data-i18n="settings.poll">Poll every</label>
-        <span data-help="poll" data-help-label="settings.poll"></span>
-        <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+      <div class="dev-head needs-sync">
+        <span></span>
+        <span class="dev-cell dev-colhead" title="A setting switched on here keeps its value in this browser; switched off, your value applies again." data-i18n="settings.thisDevice" data-i18n-attr="title:settings.thisDeviceTitle">only on this device</span>
       </div>
-      <div class="field">
-        <label class="switch">
-          <input type="checkbox" id="expert-toggle">
-          <span class="slider" aria-hidden="true"></span>
-          <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
-        </label>
-        <span data-help="expert" data-help-label="settings.expertShort"></span>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+      <div class="dev-row">
+        <div class="field">
+          <label for="poll-input" data-i18n="settings.poll">Poll every</label>
+          <span data-help="poll" data-help-label="settings.poll"></span>
+          <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span></label></span>
       </div>
-      <div class="field wide">
-        <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
-        <span data-help="clock" data-help-label="settings.clock"></span>
-        <select id="clock-select" class="field-control">
-          <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
-          <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
-        </select>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
+      <div class="dev-row">
+        <div class="field">
+          <label class="switch">
+            <input type="checkbox" id="expert-toggle">
+            <span class="slider" aria-hidden="true"></span>
+            <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
+          </label>
+          <span data-help="expert" data-help-label="settings.expertShort"></span>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span></label></span>
       </div>
-      <div class="field wide">
-        <label for="lang-select" data-i18n="settings.language">Language</label>
-        <span data-help="language" data-help-label="settings.language"></span>
-        <select id="lang-select" class="field-control"></select>
-        <label class="switch device-only needs-sync"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="settings.thisDevice">only on this device</span></label>
-        <p id="lang-note" class="muted small lang-note hidden"></p>
+      <div class="dev-row">
+        <div class="field wide">
+          <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
+          <span data-help="clock" data-help-label="settings.clock"></span>
+          <select id="clock-select" class="field-control">
+            <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
+            <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
+          </select>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span></label></span>
+      </div>
+      <div class="dev-row">
+        <div class="field wide">
+          <label for="lang-select" data-i18n="settings.language">Language</label>
+          <span data-help="language" data-help-label="settings.language"></span>
+          <select id="lang-select" class="field-control"></select>
+          <p id="lang-note" class="muted small lang-note hidden"></p>
+        </div>
+        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span></label></span>
       </div>
       <!-- partials: prefs -->
     </div>
   </section>
 
-  <section id="system" class="tile settings hidden" aria-labelledby="system-title">
-    <header class="tile-head"><h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2></header>
-    <div class="settings-body">
-      <!-- partials: system -->
+  <!-- System settings: its row kept at the top under the header, with
+       the sections menu (components.js pageBar), the row of section
+       buttons, and section cards in a grid (sectionCards, pageContents,
+       backToTop), Users, Roles and Capabilities flowing in two columns
+       where there is room. -->
+  <section id="system" class="settings settings-page hidden" aria-labelledby="system-title">
+    <div class="page-bar">
+      <h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2>
+      <details class="menu sec-menu">
+        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
     </div>
+    <nav class="toc" aria-label="sections" data-i18n-attr="aria-label:page.sections"></nav>
+    <div class="section-grid">
+      <!-- partials: system -->
+      <div class="section-flow">
+        <!-- partials: system-flow -->
+      </div>
+      <!-- partials: system-end -->
+    </div>
+    <button type="button" class="icon-btn to-top hidden" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
   </section>
 
   <section id="house" class="tile house needs-setpoint hidden">

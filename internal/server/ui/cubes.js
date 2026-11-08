@@ -19,6 +19,7 @@ const cubesUI = {
   open: new Set(), // serials of the open panels
   edits: {}, // per serial: the hidden list being edited
   names: {}, // radio address → device name, from the device lists seen
+  serials: {}, // radio address → device serial, from the device lists seen
   devices: {}, // per serial: the Cube's visible devices, for the hide choice
   rooms: {}, // per serial: the rooms of a Cube that is not the one shown
   pairing: {}, // per serial: the pairing flow, see pairingOf
@@ -58,7 +59,10 @@ async function loadCubeDevices(serial) {
   try {
     const devs = (await api("GET", "api/v1/cubes/" + encodeURIComponent(serial) + "/devices")) || [];
     cubesUI.devices[serial] = devs;
-    for (const d of devs) if (d.name) cubesUI.names[d.rf_address] = d.name;
+    for (const d of devs) {
+      if (d.name) cubesUI.names[d.rf_address] = d.name;
+      if (d.serial) cubesUI.serials[d.rf_address] = d.serial;
+    }
   } catch (e) {
     cubesUI.devices[serial] = [];
   }
@@ -150,7 +154,12 @@ function fillHiddenList(serial, box, input) {
       fillHiddenList(serial, box, input);
       input.focus();
     });
-    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
+    // the name where known, the serial and the radio address, which the
+    // Hide field takes, shown always
+    const name = cubesUI.names[rf];
+    const who = elem("span", "hidden-device", deviceIds(cubesUI.serials[rf], rf, { rf: "always" }));
+    if (name) who.prepend(textEl("span", name));
+    ul.appendChild(elem("li", "", who, show));
   }
   fillDatalist(box.querySelector("datalist"), serial, list);
   // The list is part of what Save sends: its form checks again (sendWhenChanged).
@@ -427,8 +436,7 @@ function pairedRow(serial, d) {
   const p = pairingOf(serial);
   const e = p.edits[d.rf_address] || (p.edits[d.rf_address] = {});
   const row = elem("div", "pair-device",
-    elem("div", "pair-device-head", textEl("span", typeName(d.type), "pair-device-type"), textEl("span", d.serial || "", "mono muted"),
-      textEl("span", d.rf_address, "mono muted expert-only")));
+    elem("div", "pair-device-head", textEl("span", typeName(d.type), "pair-device-type"), deviceIds(d.serial, d.rf_address)));
   row.dataset.rf = d.rf_address;
   if (e.done) {
     const done = textEl("p", "", "small pair-result");
@@ -542,27 +550,24 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   return form;
 }
 
-// cubePanel is one configured Cube, from its template (tpl-cube-panel):
-// the summary with the name, the serial and the badges; a notice per
-// line of the settings file that differs (tpl-cube-differs); the
-// pairing (pairingSection); the form with the fields, the hidden devices
-// and Remove and Save. A Cube served from serve's command line has a
+// cubePanel is one configured Cube, a detailsPanel: the head with the
+// name, the serial and the badges; a notice per line of the settings
+// file that differs (tpl-cube-differs); the pairing (pairingSection);
+// the form (tpl-cube-panel) with the fields, the hidden devices and
+// Remove and Save. A Cube served from serve's command line has a
 // note instead of the form. The panel's loads run when the user opens it
 // (or opens the settings, initCubes): the toggle event that a panel
 // built open queues finds the serial in cubesUI.open and asks for
 // nothing, so that a redraw does not redraw the pairing again when the
 // answers come, under what the user is typing there.
 function cubePanel(c) {
-  const d = fromTemplate("tpl-cube-panel");
-  d.dataset.serial = c.serial;
-  d.open = cubesUI.open.has(c.serial);
-  const sum = d.querySelector("summary");
-  sum.querySelector(".panel-name").textContent = c.name ? c.name + " " : "";
-  sum.querySelector(".mono").textContent = c.serial;
   const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
-  sum.querySelector(".panel-badges").append(...badges);
+  const d = detailsPanel({ name: c.name || undefined, mono: c.address ? c.serial + " · " + c.address : c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
+    fromTemplate("tpl-cube-panel"));
+  d.dataset.serial = c.serial;
+  const sum = d.querySelector("summary");
   d.addEventListener("toggle", () => {
     if (d.open) {
       if (cubesUI.open.has(c.serial)) return; // built open by a redraw
@@ -575,9 +580,10 @@ function cubePanel(c) {
       delete cubesUI.edits[c.serial];
     }
   });
-  sum.after(pairingSection(c.serial));
-
+  // two columns where there is room (style.css .cube-cols): the Cube's
+  // fields at the left, the pairing and the hidden devices at the right
   const form = d.querySelector("form.cube-form");
+  sum.after(elem("div", "cube-cols", pairingSection(c.serial), form));
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
     return d;
@@ -679,6 +685,11 @@ function renderCubes() {
   clear(box);
   if (!state.cubes.length) box.appendChild(textEl("p", t("cubes.none"), "muted small"));
   for (const c of state.cubes) box.appendChild(cubePanel(c));
+  const off = state.cubes.filter((c) => !c.connected).length;
+  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
+  if (off) badges.push(badgeEl(tn("cubes.badge.disconnected", off), "bad"));
+  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
+  sectionBadges($("sys-cubes"), badges);
   if (state.found.length) {
     box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title needs-cubes"));
     const ul = elem("ul", "cube-found-list needs-cubes");

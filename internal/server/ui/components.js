@@ -430,6 +430,268 @@ function filePicker(accept, onFile) {
   return input;
 }
 
+// --- a page of section cards -------------------------------------------
+//
+// A long page (System settings) is a grid of cards, each a
+// section.section-card with an id: its head an h3 holding a
+// button.section-fold (aria-controls its body) with the title in a
+// span.section-title, then a span.section-badges and its help; its body
+// the element the button controls. The card's needs-* classes say who
+// sees it, as everywhere on the page.
+
+// foldCard folds a card or opens it: the body hidden, the head with its
+// badges still shown.
+function foldCard(card, folded) {
+  const btn = card.querySelector(".section-fold");
+  btn.setAttribute("aria-expanded", folded ? "false" : "true");
+  document.getElementById(btn.getAttribute("aria-controls")).classList.toggle("hidden", folded);
+  card.classList.toggle("folded", folded);
+}
+
+// sectionCards makes the cards of root fold from the button in their
+// heading, each card's fold kept in this browser (massimo.fold.<card
+// id>, app.js store) and taken up again at the next load. Cards wired
+// once are left alone, so it may be called again.
+function sectionCards(root) {
+  for (const card of root.querySelectorAll(".section-card")) {
+    const btn = card.querySelector(".section-fold");
+    if (!btn || btn.dataset.wired) continue;
+    btn.dataset.wired = "1";
+    foldCard(card, readStored("massimo.fold." + card.id) === "1");
+    btn.addEventListener("click", () => {
+      const folded = btn.getAttribute("aria-expanded") === "true";
+      foldCard(card, folded);
+      store("massimo.fold." + card.id, folded ? "1" : null);
+    });
+  }
+}
+
+// sectionBadges shows what a card holds at a glance in its head, also
+// while it is folded: badges (badgeEl) in place of the ones it had.
+function sectionBadges(card, badges) {
+  const box = card && card.querySelector(".section-badges");
+  if (!box) return;
+  clear(box);
+  box.append(...badges);
+}
+
+// showCard brings a card into view, opened, with the focus on its
+// heading's button.
+function showCard(card) {
+  if (card.classList.contains("folded")) {
+    foldCard(card, false);
+    store("massimo.fold." + card.id, null);
+  }
+  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+  card.querySelector(".section-fold").focus({ preventScroll: true });
+}
+
+// pageContents fills a page's row of section buttons (its nav.toc)
+// from its cards, a button each, named by the card's data-toc key or
+// else its title, and hidden where the card is (its needs-* classes);
+// a button brings its card into view (showCard). Called again after a
+// change of language.
+function pageContents(page) {
+  const nav = page.querySelector(".toc");
+  if (!nav) return;
+  clear(nav);
+  for (const b of sectionButtons(page)) nav.appendChild(b);
+}
+
+// sectionButtons are a button per card of a page, named by the card's
+// data-toc key or else its title, hidden where the card is (its needs-*
+// classes), each bringing its card into view (showCard); data-target is
+// the card's id.
+function sectionButtons(page) {
+  return [...page.querySelectorAll(".section-card")].map((card) => {
+    const name = card.dataset.toc ? t(card.dataset.toc) : card.querySelector(".section-title").textContent;
+    const b = button(name, "toc-link", () => showCard(card));
+    b.dataset.target = card.id;
+    for (const c of card.classList) if (c.startsWith("needs-")) b.classList.add(c);
+    return b;
+  });
+}
+
+// pageBar fills a page's row kept at the top (its .page-bar) with the
+// sections menu (a dropdown of sectionButtons), marking the card in
+// view as the page scrolls (aria-current), and keeps the row's height
+// in --bar-h for the cards' scroll margin. Called again after a change
+// of language; it wires the page once.
+function pageBar(page) {
+  const bar = page.querySelector(".page-bar");
+  const menu = bar && bar.querySelector(".sec-menu");
+  if (!menu) return;
+  const items = menu.querySelector(".menu-items");
+  clear(items);
+  items.append(...sectionButtons(page));
+  if (bar.dataset.wired) return;
+  bar.dataset.wired = "1";
+  dropdown(menu);
+  new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", bar.offsetHeight + "px")).observe(bar);
+  // the card in view: the lowest top that has passed under the header
+  // and this row; of cards side by side, the first
+  const mark = () => {
+    const line = bar.getBoundingClientRect().bottom + 24;
+    let best = null;
+    let bestTop = -Infinity;
+    for (const card of page.querySelectorAll(".section-card")) {
+      if (!card.offsetParent) continue; // not shown to this role
+      const y = Math.round(card.getBoundingClientRect().top);
+      if (y <= line && y > bestTop) {
+        best = card.id;
+        bestTop = y;
+      }
+    }
+    for (const b of items.querySelectorAll(".toc-link")) {
+      if (b.dataset.target === best) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    }
+  };
+  addEventListener("scroll", mark, { passive: true });
+  menu.addEventListener("toggle", mark);
+}
+
+// stickyHeader keeps the page's header at the top (style.css .top): its
+// height in --top-h, for the page's row under it, and the class
+// scrolled on the body once the page has scrolled, which compacts the
+// header. The compacted header keeps the height it gave up as its
+// bottom margin, so that the page is as long scrolled as not: a page
+// little taller than the window would otherwise become too short to stay
+// scrolled, the header grow back, and the page jump to and fro.
+// Scrolled from 96 px down, not again under 8 px.
+function stickyHeader() {
+  const top = document.querySelector(".top");
+  // the border box: compacting changes the padding, which the content
+  // box does not see
+  const height = () => document.documentElement.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
+  new ResizeObserver(height).observe(top, { box: "border-box" });
+  const set = (on) => {
+    if (on === document.body.classList.contains("scrolled")) return;
+    top.style.marginBottom = "";
+    const whole = top.getBoundingClientRect().height;
+    const margin = parseFloat(getComputedStyle(top).marginBottom) || 0;
+    document.body.classList.toggle("scrolled", on);
+    if (on) top.style.marginBottom = margin + whole - top.getBoundingClientRect().height + "px";
+    height();
+  };
+  const onScroll = () => {
+    const y = window.scrollY;
+    if (y > 96) set(true);
+    else if (y < 8) set(false);
+  };
+  addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+}
+
+// backToTop shows a page's .to-top button once the page's row of
+// section buttons is out of sight, and takes the page back to its top,
+// the focus on the row's first button.
+function backToTop(page) {
+  const btn = page.querySelector(".to-top");
+  const nav = page.querySelector(".toc");
+  if (!btn || !nav) return;
+  new IntersectionObserver(([e]) => btn.classList.toggle("hidden", e.isIntersecting)).observe(nav);
+  btn.addEventListener("click", () => {
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    const first = nav.querySelector(".toc-link");
+    if (first) first.focus({ preventScroll: true });
+  });
+}
+
+// deviceIds is a device's serial number and radio address, as
+// "S/N MEQ0000103 · RF 0a0103": the serial as the API has it (a device
+// may have none) and printed on the device; the radio address, which is
+// not, in expert mode only (rf: "always" shows it always, where it is
+// what the user types, as when hiding a device). The dot between them is
+// the radio address's, so that it goes where that does.
+function deviceIds(serial, rf, { rf: show } = {}) {
+  const box = elem("span", "device-ids mono");
+  if (serial) box.appendChild(textEl("span", t("device.sn", { serial })));
+  if (rf) box.appendChild(textEl("span", (serial ? " · " : "") + t("device.rf", { rf }), show === "always" ? "" : "expert-only"));
+  return box;
+}
+
+// --- a choice of one in a menu (the Cube choice) -----------------------
+
+// connIcon is a connection as a plug: joined and green while connected,
+// apart and red while not (icon-plug-on, icon-plug-off), named for a
+// screen reader, since shape and colour alone say nothing to one.
+function connIcon(connected) {
+  const svg = iconEl(connected ? "icon-plug-on" : "icon-plug-off", "ni conn " + (connected ? "ok" : "bad"));
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", t(connected ? "header.connected" : "header.disconnected"));
+  return svg;
+}
+
+// menuItem is an item of a dropdown's list: a button with its icon (a
+// symbol's name, or an element such as connIcon; with blank and no icon
+// an empty place of an icon's width, so that the labels line up), its
+// label and, under it in grey, a second line (sub).
+function menuItem({ icon, label, sub, blank }, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  if (icon) b.appendChild(typeof icon === "string" ? iconEl(icon, "ni") : icon);
+  else if (blank) b.appendChild(elem("span", "menu-icon-none"));
+  const name = textEl("span", label, "menu-item-label");
+  b.appendChild(sub ? elem("span", "menu-item-text", name, textEl("span", sub, "menu-item-sub")) : name);
+  if (onClick) b.addEventListener("click", onClick);
+  return b;
+}
+
+// pickerMenu makes a dropdown (details.menu, its summary holding a
+// .picker-icon and a .picker-label, and a .menu-items) the choice of one
+// item, a menu of the page where a select could not show the chosen
+// item's name alone while its list shows more. The summary shows
+// shown's icon and label, its title and aria-label; the list the items:
+// { value, label, sub, icon, disabled } (menuItem, the chosen value
+// marked aria-current), { group: heading } or { separator: true }.
+// A click on an item calls onPick with its value; the arrow keys move
+// between the items, and opening puts the focus on the chosen one.
+function pickerMenu(details, { items, value, onPick, shown }) {
+  const sum = details.querySelector("summary");
+  const icon = sum.querySelector(".picker-icon");
+  clear(icon);
+  if (shown.icon) icon.appendChild(shown.icon);
+  sum.querySelector(".picker-label").textContent = shown.label;
+  sum.title = shown.title || shown.label;
+  sum.setAttribute("aria-label", shown.aria || shown.label);
+  const list = details.querySelector(".menu-items");
+  clear(list);
+  const blank = items.some((it) => it.icon);
+  for (const it of items) {
+    if (it.group) list.appendChild(textEl("p", it.group, "menu-group"));
+    else if (it.separator) list.appendChild(elem("hr", "menu-sep"));
+    else {
+      const b = menuItem({ icon: it.icon, label: it.label, sub: it.sub, blank }, () => onPick(it.value));
+      b.dataset.value = it.value;
+      b.disabled = !!it.disabled;
+      if (it.value === value) b.setAttribute("aria-current", "true");
+      list.appendChild(b);
+    }
+  }
+  if (details.dataset.picker) return;
+  details.dataset.picker = "1";
+  dropdown(details);
+  const enabled = () => [...details.querySelectorAll(".menu-items button:not(:disabled)")];
+  details.addEventListener("toggle", () => {
+    if (!details.open) return;
+    const b = details.querySelector(".menu-items button[aria-current='true']") || enabled()[0];
+    if (b) b.focus();
+  });
+  details.addEventListener("keydown", (ev) => {
+    if (!details.open || (ev.key !== "ArrowDown" && ev.key !== "ArrowUp")) return;
+    const bs = enabled();
+    if (!bs.length) return;
+    ev.preventDefault();
+    const i = bs.indexOf(document.activeElement);
+    const next = ev.key === "ArrowDown" ? (i + 1) % bs.length : (i <= 0 ? bs.length - 1 : i - 1);
+    bs[next].focus();
+  });
+}
+
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, closed by a choice of one of its items, by Escape
 // (the focus back on its summary) and by a click outside it. The room

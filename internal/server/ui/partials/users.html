@@ -1,21 +1,24 @@
-<!-- System settings → Users: the users of the store with their sessions and keys, users.js draws into #users-list. -->
-<div class="users-settings needs-users-admin" aria-live="polite">
-  <div class="cubes-head">
-    <span class="muted" data-i18n="users.title">Users</span>
+<!-- System settings → Users, a section card: the users of the store with their sessions and keys, users.js draws into #users-list. -->
+<section id="sys-users" class="tile section-card users-settings needs-users-admin" aria-labelledby="sys-users-h">
+  <header class="tile-head section-head">
+    <h3 id="sys-users-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-users-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="users.title">Users</span></button></h3>
+    <span class="section-badges"></span>
     <span data-help="users" data-help-label="users.title"></span>
-  </div>
-  <div class="password-login needs-settings">
-    <div class="field">
-      <label class="switch">
-        <input type="checkbox" id="password-login">
-        <span class="slider" aria-hidden="true"></span>
-        <span class="switch-label" data-i18n="users.passwordLogin">Password sign-in</span>
-      </label>
+  </header>
+  <div id="sys-users-body" class="section-body" aria-live="polite">
+    <div class="password-login needs-settings">
+      <div class="field">
+        <label class="switch">
+          <input type="checkbox" id="password-login">
+          <span class="slider" aria-hidden="true"></span>
+          <span class="switch-label" data-i18n="users.passwordLogin">Password sign-in</span>
+        </label>
+      </div>
+      <p id="password-login-hint" class="muted small"></p>
     </div>
-    <p id="password-login-hint" class="muted small"></p>
+    <div id="users-list"></div>
+    <div id="user-new"></div>
+    <div class="actions"><span class="actions-left"><button type="button" id="user-add" data-i18n="users.add">Add a user</button></span></div>
+    <p id="users-msg" class="small cubes-msg hidden" role="status"></p>
   </div>
-  <div id="users-list"></div>
-  <div id="user-new"></div>
-  <div class="actions"><span class="actions-left"><button type="button" id="user-add" data-i18n="users.add">Add a user</button></span></div>
-  <p id="users-msg" class="small cubes-msg hidden" role="status"></p>
-</div>
+</section>

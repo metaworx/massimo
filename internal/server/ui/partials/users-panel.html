@@ -1,42 +1,39 @@
-<!-- A user of System settings → Users, the form that adds one, a user's sessions and keys with a row each, and My profile's form, users.js. -->
+<!-- A user's form in System settings → Users (detailsPanel puts its head around it), the form that adds one, a user's sessions and keys with a row each, and My profile's form, users.js. -->
 <template id="tpl-user-panel">
-  <details class="panel user-panel">
-    <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
-    <form class="user-form">
-      <div class="field wide">
-        <label data-i18n="users.displayName">Display name</label>
-        <input type="text" name="display_name" class="field-control" autocomplete="off" spellcheck="false" maxlength="64">
-      </div>
-      <div class="field wide admin-only">
-        <label data-i18n="users.role">Role</label>
-        <select name="role" class="field-control"></select>
-      </div>
-      <div class="field admin-only">
-        <label class="switch">
-          <input type="checkbox" name="disabled">
-          <span class="slider" aria-hidden="true"></span>
-          <span class="switch-label" data-i18n="users.disabled">Disabled</span>
-        </label>
-      </div>
-      <div class="field wide admin-only">
-        <label data-i18n="users.expires">End (guests)</label>
-        <input type="datetime-local" name="expires" class="field-control" step="60">
-        <p class="muted small field-hint" data-i18n="users.expiresHint">Empty: no end. From then on the user is refused everything.</p>
-      </div>
-      <div class="field wide">
-        <label data-i18n="users.password">New password</label>
-        <input type="password" name="password" class="field-control" autocomplete="new-password" placeholder="empty: unchanged" data-i18n-attr="placeholder:users.passwordHint">
-      </div>
-      <div class="field wide field-current">
-        <label data-i18n="users.currentPassword">Current password</label>
-        <input type="password" name="current_password" class="field-control" autocomplete="current-password">
-      </div>
-      <div class="actions">
-        <span class="actions-left"><button type="button" class="remove-user" data-i18n="users.remove">Remove</button></span>
-        <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
-      </div>
-    </form>
-  </details>
+  <form class="user-form">
+    <div class="field wide">
+      <label data-i18n="users.displayName">Display name</label>
+      <input type="text" name="display_name" class="field-control" autocomplete="off" spellcheck="false" maxlength="64">
+    </div>
+    <div class="field wide admin-only">
+      <label data-i18n="users.role">Role</label>
+      <select name="role" class="field-control"></select>
+    </div>
+    <div class="field admin-only">
+      <label class="switch">
+        <input type="checkbox" name="disabled">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="users.disabled">Disabled</span>
+      </label>
+    </div>
+    <div class="field wide admin-only">
+      <label data-i18n="users.expires">End (guests)</label>
+      <input type="datetime-local" name="expires" class="field-control" step="60">
+      <p class="muted small field-hint" data-i18n="users.expiresHint">Empty: no end. From then on the user is refused everything.</p>
+    </div>
+    <div class="field wide">
+      <label data-i18n="users.password">New password</label>
+      <input type="password" name="password" class="field-control" autocomplete="new-password" placeholder="empty: unchanged" data-i18n-attr="placeholder:users.passwordHint">
+    </div>
+    <div class="field wide field-current">
+      <label data-i18n="users.currentPassword">Current password</label>
+      <input type="password" name="current_password" class="field-control" autocomplete="current-password">
+    </div>
+    <div class="actions">
+      <span class="actions-left"><button type="button" class="remove-user" data-i18n="users.remove">Remove</button></span>
+      <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
+    </div>
+  </form>
 </template>
 
 <template id="tpl-user-new">
