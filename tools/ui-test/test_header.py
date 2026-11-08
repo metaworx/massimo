@@ -185,3 +185,19 @@ def test_header_order_and_the_narrow_header(page, case):
         assert active(page, "#nav-menu summary"), f"☰ highlighted while {view} is shown"
     show_view(page, "tiles")
     assert not active(page, "#nav-menu summary"), "and not on Rooms"
+
+
+def test_menu_icons_and_user_title(page, case):
+    """The 👤 menu's items and ☰'s each show their icon; Forget key a key's;
+    the 👤 button's tooltip names who is signed in, here the owner of the
+    test's API key."""
+    open_user_menu(page)
+    for sel in ("#menu-profile", "#menu-prefs", "#logout-btn"):
+        assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"
+    assert page.locator("#logout-icon").get_attribute("href") == "#icon-key", "Forget key shows a key"
+    title = page.locator("#user-menu-btn").get_attribute("title") or ""
+    assert "owner" in title, f"the 👤 tooltip names the user ({title!r})"
+    assert page.locator("#user-menu-btn").get_attribute("aria-label") == title, "and says it to a screen reader"
+    page.keyboard.press("Escape")
+    for sel in ("#menu-log", "#menu-system"):
+        assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"

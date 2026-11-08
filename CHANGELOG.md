@@ -20,6 +20,9 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The 👤 and ☰ menus show an icon per item, and the 👤 button's tooltip
+  names who is signed in (`docs/ui.md`, "Header").
+
 - The header stays at the top while the page scrolls, compacted, and
   System settings' title stays under it with a menu of its sections
   (`docs/ui.md`, "Header").

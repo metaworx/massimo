@@ -57,6 +57,7 @@
   "nav.settingsTitle": "Systeeminstellingen",
   "nav.user": "wie is aangemeld",
   "nav.userTitle": "Wie is aangemeld",
+  "nav.userNamed": "Wie is aangemeld: {name}",
   "nav.prefs": "Mijn instellingen",
   "nav.profile": "Mijn profiel",
   "nav.more": "meer pagina's",

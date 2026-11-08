@@ -76,7 +76,9 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 - **👤** drops down who is signed in, with the role,
   or the API key and whose it is;
   **My profile** and **My settings**, which open those pages,
-  and **Sign out**, which ends the session.
+  and **Sign out**, which ends the session, each with its icon;
+  its tooltip names who is signed in, by display name and login.
+  The items of **☰** have the icons of their pages.
   An API key or the server's token is only forgotten in this browser
   (**Forget key**),
   and an open server says that it is open to everyone and has nothing to sign out of.

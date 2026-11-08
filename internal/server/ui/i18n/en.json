@@ -56,6 +56,7 @@
   "nav.settingsTitle": "System settings",
   "nav.user": "who is signed in",
   "nav.userTitle": "Who is signed in",
+  "nav.userNamed": "Who is signed in: {name}",
   "nav.prefs": "My settings",
   "nav.profile": "My profile",
   "nav.more": "more pages",

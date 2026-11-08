@@ -119,8 +119,9 @@ function renderOpenBanner() {
 
 // renderMe says in the 👤 menu who is signed in, and what Sign out
 // does: a session ends, an API key or the token is only forgotten (Forget
-// key), and an open server or one without authentication has nothing to
-// end and no profile, so the menu offers My settings alone.
+// key, with a key's icon), and an open server or one without
+// authentication has nothing to end and no profile, so the menu offers
+// My settings alone. The 👤 button's tooltip names the user.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -145,8 +146,15 @@ function renderMe() {
   }
   line.textContent = text;
   line.classList.toggle("hidden", !text);
-  btn.textContent = label || t("me.signOut");
+  $("logout-label").textContent = label || t("me.signOut");
+  const keyOnly = !!me && ((me.token && me.token.kind === "api") || me.mode === "token"); // Forget key
+  $("logout-icon").setAttribute("href", keyOnly ? "#icon-key" : "#icon-signout");
   btn.classList.toggle("hidden", !label);
+  // the 👤 button names who is signed in, in its tooltip and to a screen reader
+  const who = me && me.user ? (me.user.display_name && me.user.display_name !== me.user.name ? me.user.display_name + " (" + me.user.name + ")" : me.user.name) : "";
+  const sum = $("user-menu-btn");
+  sum.title = who ? t("nav.userNamed", { name: who }) : t("nav.userTitle");
+  sum.setAttribute("aria-label", who ? t("nav.userNamed", { name: who }) : t("nav.user"));
   $("menu-profile").classList.toggle("hidden", !hasProfile());
   $("me-password").classList.toggle("hidden", !(me && me.mode === "users" && me.user && me.user.has_password));
 }

@@ -680,6 +680,10 @@ button.subtle { color: var(--muted); }
   padding: 8px 10px;
 }
 .menu-items button:hover { background: var(--card-head); }
+/* a menu item with its icon (the 👤 and ☰ menus) */
+.menu-items button { display: flex; align-items: center; gap: 10px; }
+.menu-items button > .ni { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.menu-items button:hover > .ni { color: var(--accent); }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
 /* Rooms without a connected Cube (app.js renderHomeNotice) */

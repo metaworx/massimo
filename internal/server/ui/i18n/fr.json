@@ -58,6 +58,7 @@
   "nav.settingsTitle": "Réglages du système",
   "nav.user": "qui est connecté",
   "nav.userTitle": "Qui est connecté",
+  "nav.userNamed": "Qui est connecté : {name}",
   "nav.prefs": "Mes réglages",
   "nav.profile": "Mon profil",
   "nav.more": "autres pages",
