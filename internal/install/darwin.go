@@ -36,6 +36,7 @@ import (
 const (
 	Label          = "ch.metaworx.massimo"
 	HelperLabel    = "ch.metaworx.massimo-update"
+	RebootLabel    = "ch.metaworx.massimo-reboot"
 	DaemonDir      = "/Library/LaunchDaemons"
 	DarwinUser     = "_massimo"
 	StateDir       = "/var/lib/massimo"

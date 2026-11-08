@@ -38,6 +38,14 @@ const (
 // without the helper it is left out.
 const updateFlag = " -update-request /var/lib/massimo/update-request"
 
+// The reboot helper: the request file the server writes and the helper
+// watches, on Linux and macOS alike, and on Linux the link that enabling
+// massimo-reboot.path makes, by which serve knows the helper is there.
+const (
+	RebootRequest  = "/var/lib/massimo/reboot-request"
+	RebootPathWant = "/etc/systemd/system/paths.target.wants/massimo-reboot.path"
+)
+
 // Options configure an install.
 type Options struct {
 	// Root prefixes every path; "" is the running system. Set for tests,

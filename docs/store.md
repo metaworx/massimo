@@ -237,6 +237,7 @@ Stays in `.env`, because it is needed before the store is open, or is a secret:
 | `MASSIMO_DATA`, `-data` | names the store |
 | `MASSIMO_ENV_FILE`, `-env` | names the file |
 | `MASSIMO_UPDATE_REQUEST`, `MASSIMO_UPDATE_CHANNEL`, `MASSIMO_GITHUB_TOKEN` | the update helper's contract with root and a secret |
+| `MASSIMO_REBOOT`, `-allow-reboot` | the owner's switch for the reboot of the computer, which the API must not be able to turn on (`docs/api-v1.md`, "GET /api/v1/reboot, …") |
 | `MASSIMO_CUBE_SN` | selects a Cube for the commands, which do not open the store |
 
 Moves into the store, editable in the UI and through the API afterwards:

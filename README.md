@@ -554,6 +554,18 @@ which stops and starts the service through the service manager.
 such as Docker's `--restart`;
 `off` never.
 `sudo massimo restart` restarts the installed server from a prompt as well.
+`-allow-reboot` (or `MASSIMO_REBOOT=on`) lets the owner reboot the computer
+`serve` runs on from the API and the web UI
+(`POST /api/v1/reboot`, for the capability `reboot`, which only `owner` has),
+60 seconds after the request or after the delay it names, 0 to 3600:
+under systemd and launchd through the root helper
+that `sudo massimo install -reboot-helper` installs,
+as the Windows service by itself,
+and never in a terminal, in Docker or as Homebrew's service
+([packaging/README.md](packaging/README.md), "Rebooting from the web UI").
+The switch is the owner's, off by default;
+`serve` applies a change of `MASSIMO_REBOOT` in the settings file at once,
+unless `-allow-reboot` was given.
 `serve` reads its settings file again while it runs:
 it looks at it every five seconds,
 and reads it once a change has held for one more look,

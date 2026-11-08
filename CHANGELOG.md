@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `serve -allow-reboot`, or `MASSIMO_REBOOT=on` in the settings file,
+  lets the owner reboot the computer: under systemd and launchd through
+  a root helper, as the Windows service by itself (README, "serve").
+
 - `GET`/`POST`/`DELETE /api/v1/reboot` reboot the computer after a
   delay, for the capability `reboot`, which only the owner holds
   (`docs/api-v1.md`, "GET /api/v1/reboot, …").
