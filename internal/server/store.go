@@ -47,7 +47,7 @@ func (s *Server) loadFound() {
 			continue // never answered discovery
 		}
 		s.found[c.Serial] = &foundCube{Serial: c.Serial, Address: c.DiscoveredAddress, MAC: c.MAC, RFAddress: c.RFAddress, Firmware: c.Firmware,
-			Configured: c.Configured, FoundAt: c.FirstSeen, LastSeen: c.LastSeen}
+			FoundAt: c.FirstSeen, LastSeen: c.LastSeen}
 	}
 }
 

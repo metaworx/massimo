@@ -47,7 +47,12 @@ type foundCube struct {
 	// DHCP says whether the Cube takes its address by DHCP, from its
 	// answer to c in this process's latest discovery that had one; nil
 	// until then. It is kept in memory only, not in the store.
-	DHCP       *bool     `json:"dhcp,omitempty"`
+	DHCP *bool `json:"dhcp,omitempty"`
+	// Configured says whether the server serves the Cube when the copy
+	// is handed out. It is set on the copies only, never kept on the
+	// entry, since a Cube is added and removed without discovery
+	// hearing it: a flag kept from the last answer, or from the store at
+	// the start, listed a removed Cube as configured.
 	Configured bool      `json:"configured"`
 	FoundAt    time.Time `json:"found_at"`
 	LastSeen   time.Time `json:"last_seen"`
@@ -233,8 +238,8 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 		dhcp := *d.DHCP
 		f.DHCP = &dhcp
 	}
-	f.Configured = rt != nil
 	cp := *f
+	cp.Configured = rt != nil
 	s.foundMu.Unlock()
 	if s.opts.Store != nil {
 		if _, _, err := s.opts.Store.NoteDiscovered(ctx, store.Discovered{Serial: serial, Address: cp.Address, MAC: cp.MAC, RFAddress: cp.RFAddress, Firmware: cp.Firmware, At: now}); err != nil {
@@ -288,7 +293,9 @@ func (s *Server) unconfigured() []foundCube {
 	var out []foundCube
 	for _, f := range s.found {
 		if s.configured(f.Serial) == nil {
-			out = append(out, *f)
+			c := *f
+			c.Configured = false
+			out = append(out, c)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Serial < out[j].Serial })

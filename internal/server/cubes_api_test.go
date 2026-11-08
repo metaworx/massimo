@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -235,6 +236,167 @@ func TestAddFoundCube(t *testing.T) {
 			t.Fatalf("the added cube is still listed as found: %v", cubes)
 		}
 	}
+}
+
+// serveRows starts a server over the store's configured rows, as serve
+// does at a start; stop ends it and waits for its end, as a restart
+// would.
+func serveRows(t *testing.T, st *store.Store, opts Options) (ts *httptest.Server, s *Server, stop func()) {
+	t.Helper()
+	rows, err := st.Cubes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if !row.Configured {
+			continue
+		}
+		cfg, err := CubeFromRow(row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		opts.Cubes = append(opts.Cubes, cfg)
+	}
+	opts.Store = st
+	opts.Queue = engine.Options{Gap: time.Millisecond}
+	s = New(opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	ts = httptest.NewServer(s.Handler())
+	var once bool
+	stop = func() {
+		if once {
+			return
+		}
+		once = true
+		ts.Close()
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the server did not stop")
+		}
+	}
+	t.Cleanup(stop)
+	return ts, s, stop
+}
+
+// removedListed removes the Cube of serial through the API and reports
+// how often it is listed then: never as a configured Cube, which the
+// web UI would draw as one that is disconnected.
+func removedListed(t *testing.T, ts *httptest.Server, serial string) int {
+	t.Helper()
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/"+serial, ""); code != 200 {
+		t.Fatalf("delete %d %v", code, out)
+	}
+	if code := getJSON(t, ts, "", "/api/v1/cubes/"+serial, nil); code != 404 {
+		t.Fatalf("the removed cube answered %d", code)
+	}
+	return listedFound(t, ts, serial)
+}
+
+// listedFound reports how often GET /cubes lists serial, failing on an
+// entry that is not a found Cube.
+func listedFound(t *testing.T, ts *httptest.Server, serial string) int {
+	t.Helper()
+	var cubes []map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+	n := 0
+	for _, c := range cubes {
+		if c["serial"] != serial {
+			continue
+		}
+		n++
+		if _, has := c["connected"]; has || c["configured"] != false {
+			t.Fatalf("the removed cube is listed as configured: %v", c)
+		}
+	}
+	if n > 1 {
+		t.Fatalf("the removed cube is listed %d times: %v", n, cubes)
+	}
+	return n
+}
+
+// A removed Cube is listed as found, never as a configured Cube without
+// a connection, whichever way it was configured: from the discovery
+// list, from its own variable in the settings file, or from the plain
+// MASSIMO_CUBE_ADDRESS. Its found entry had known it as served: from
+// the store after a restart, or from a discovery answer while it was
+// served. That answer comes from 192.0.2.10 straight into note: the
+// Cube's address is fixed, so nothing is sent there.
+func TestRemovedCubeIsListedAsFound(t *testing.T) {
+	ctx := context.Background()
+	lan := cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("192.0.2.10"), RFAddress: 0x0a0b0c, Firmware: "1.1.3"}
+
+	t.Run("discovery list", func(t *testing.T) {
+		disc, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0b0c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer disc.Close()
+		greeting, _ := fakecube.LoadGreeting(fixture)
+		fc := &fakecube.Server{Greeting: greeting}
+		addr, err := fc.Start("127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer fc.Close()
+		_, port, _ := net.SplitHostPort(addr)
+		p, _ := strconv.Atoi(port)
+		opts := Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{disc.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p}
+		st := testStore(t, "")
+		ts, _, stop := serveRows(t, st, opts)
+		if code, _ := postDiscovery(t, ts); code != 200 {
+			t.Fatal(code)
+		}
+		if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000100"}`); code != 201 {
+			t.Fatalf("add the found cube %d %v", code, out)
+		}
+		waitConnected(t, ts, "KEQ0000100")
+		stop()
+
+		ts, _, _ = serveRows(t, st, opts)
+		removedListed(t, ts, "KEQ0000100")
+		postDiscovery(t, ts)
+		if n := listedFound(t, ts, "KEQ0000100"); n != 1 {
+			t.Fatalf("the removed cube is not found after a search: %d", n)
+		}
+	})
+
+	t.Run("settings file", func(t *testing.T) {
+		_, ts, s, _ := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
+		s.note(ctx, lan, time.Now())
+		if n := removedListed(t, ts, "KEQ0000100"); n != 1 {
+			t.Fatalf("the removed cube is listed %d times", n)
+		}
+	})
+
+	t.Run("plain address", func(t *testing.T) {
+		greeting, _ := fakecube.LoadGreeting(fixture)
+		fc := &fakecube.Server{Greeting: greeting}
+		addr, err := fc.Start("127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer fc.Close()
+		st := testStore(t, "")
+		plain := store.FileCube{Values: map[string]store.FileValue{store.FieldAddress: {Variable: "MASSIMO_CUBE_ADDRESS", Value: addr}}}
+		ts, s, _ := serveRows(t, st, Options{Cubes: []CubeConfig{{Addr: addr, Source: store.SourceEnv, SeedFromFile: true}}, FileCubes: map[string]store.FileCube{"": plain},
+			DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+			if row, ok, _ := st.Cube(ctx, "KEQ0000100"); ok && row.Configured {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the plain address's cube was not seeded")
+			}
+		}
+		s.note(ctx, lan, time.Now())
+		if n := removedListed(t, ts, "KEQ0000100"); n != 1 {
+			t.Fatalf("the removed cube is listed %d times", n)
+		}
+	})
 }
 
 // Without a store the Cube and settings routes say so.
