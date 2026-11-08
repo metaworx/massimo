@@ -41,6 +41,16 @@ func reasons(l backupList) string {
 	return strings.Join(out, ",")
 }
 
+// within reports whether cond holds before d has passed.
+func within(d time.Duration, cond func() bool) bool {
+	for deadline := time.Now().Add(d); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if cond() {
+			return true
+		}
+	}
+	return cond()
+}
+
 // The server takes a Cube's first backup at once, none while nothing
 // changes, one after a change once it has been quiet for
 // backups.auto_min, and one backups.auto_max after the first change
@@ -86,6 +96,104 @@ func TestBackupAutomatic(t *testing.T) {
 	})
 	if took := time.Since(began); took > 5*time.Second {
 		t.Fatalf("the latest backup came after %v", took)
+	}
+}
+
+// Deleting the newest backup makes the one before it the reference: the
+// configuration differs from it, so changed and due appear.
+func TestBackupDeleteNewest(t *testing.T) {
+	_, ts, s, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	ctx := context.Background()
+	st.SetSetting(ctx, store.BackupsAutoMinKey, 3)
+	st.SetSetting(ctx, store.BackupsAutoMaxKey, 10)
+	var l backupList
+	eventually(t, "the first backup", func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto"
+	})
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`); code != 200 {
+		t.Fatalf("rename: %d", code)
+	}
+	eventually(t, "the backup after the change", func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto,auto" && l.Changed == nil
+	})
+	// No automatic backup from here on but the one a Cube without any gets.
+	st.SetSetting(ctx, store.BackupsAutoMinKey, 1000)
+	st.SetSetting(ctx, store.BackupsAutoMaxKey, 1000)
+	if code, _ := do(t, ts, "DELETE", backupsBase+"/"+strconv.FormatInt(l.Backups[0].ID, 10), ""); code != 204 {
+		t.Fatalf("delete: %d", code)
+	}
+	// The configuration differs from the backup now newest.
+	older, ok, err := st.NewestBackup(ctx, s.cubes["keq0000100"].storeID.Load())
+	if err != nil || !ok || older.ID != l.Backups[1].ID {
+		t.Fatalf("the newest after the delete: %+v %v %v", older, ok, err)
+	}
+	body, _, _ := st.BackupBody(ctx, older.CubeID, older.ID)
+	f, err := backup.Unmarshal(body, false)
+	if err != nil || backup.ConfigHash(f) == backup.ConfigHash(backupOf(t, ts)) {
+		t.Fatalf("the configuration is the one of the backup now newest (%v)", err)
+	}
+	if !within(time.Second, func() bool {
+		_, l = historyOf(t, ts.URL)
+		return l.Changed != nil && l.Due != nil
+	}) {
+		t.Fatalf("after deleting the newest backup: %s, changed %v, due %v", reasons(l), l.Changed, l.Due)
+	}
+	if reasons(l) != "auto" {
+		t.Fatalf("a backup before backups.auto_min: %s", reasons(l))
+	}
+}
+
+// Deleting all of a Cube's backups leaves it without one, so it gets one
+// at once.
+func TestBackupDeleteAll(t *testing.T) {
+	_, ts, _, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	ctx := context.Background()
+	var l backupList
+	eventually(t, "the first backup", func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto"
+	})
+	first := l.Backups[0].ID
+	st.SetSetting(ctx, store.BackupsAutoMinKey, 1000)
+	st.SetSetting(ctx, store.BackupsAutoMaxKey, 1000)
+	if code, _ := do(t, ts, "DELETE", backupsBase+"/"+strconv.FormatInt(first, 10), ""); code != 204 {
+		t.Fatalf("delete: %d", code)
+	}
+	if !within(time.Second, func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto" && l.Backups[0].ID != first
+	}) {
+		t.Fatalf("after deleting every backup: %q, changed %v", reasons(l), l.Changed)
+	}
+}
+
+// With backups.keep_newest 0 a prune can remove a Cube's only backup,
+// and the Cube then gets one at once, as after a delete.
+func TestBackupPruneNewest(t *testing.T) {
+	_, ts, s, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	ctx := context.Background()
+	var l backupList
+	eventually(t, "the first backup", func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto"
+	})
+	first := l.Backups[0]
+	st.SetSetting(ctx, store.BackupsAutoMinKey, 1000)
+	st.SetSetting(ctx, store.BackupsAutoMaxKey, 1000)
+	st.SetSetting(ctx, store.BackupsKeepNewestKey, 0)
+	st.SetSetting(ctx, store.BackupsKeepDaysAutoKey, 1)
+	s.pruneBackups(ctx, st, time.Now().Add(48*time.Hour))
+	if _, ok, err := st.StoredBackup(ctx, s.cubes["keq0000100"].storeID.Load(), first.ID); ok || err != nil {
+		t.Fatalf("the first backup is not pruned (%v)", err)
+	}
+	// The prune removes the row, so the next may get its id: the time tells them apart.
+	if !within(time.Second, func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto" && l.Backups[0].TakenAt.After(first.TakenAt)
+	}) {
+		t.Fatalf("after pruning the only backup: %q, changed %v", reasons(l), l.Changed)
 	}
 }
 

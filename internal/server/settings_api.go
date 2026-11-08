@@ -317,9 +317,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", s.clientIP(r))
 	}
 	if pruneBackups {
-		if _, err := st.PruneBackups(r.Context(), time.Now()); err != nil {
-			s.log.Warn("backups not pruned", "error", err)
-		}
+		s.pruneBackups(r.Context(), st, time.Now())
 	}
 	return s.getSettings(w, r)
 }
