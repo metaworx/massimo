@@ -20,6 +20,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- System settings is a card per part at full width, Software update
+  first, with a row of section buttons, cards that fold and stay folded,
+  and ↑ (`docs/ui.md`, "System settings").
+
 - The tests' fixtures and the recorded greeting carry placeholder radio
   addresses too, and `tools/identifiers` fails `go test` on a real
   serial, MAC or radio address in the tree (`AGENTS.md`).

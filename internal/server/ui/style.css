@@ -306,25 +306,113 @@ body.expert #clock-plain { display: none; }
 .lang-note span { display: block; }
 .lang-note span + span { margin-top: 4px; font-style: italic; }
 .settings .settings-note { margin: 4px 0 8px; }
-.settings .update { border-top: 1px solid var(--line); padding-top: 10px; }
 .settings .update p, .settings .restart p { margin: 4px 0; overflow-wrap: anywhere; }
 .settings .restart { padding-top: 6px; }
 
-/* System settings → Cubes (cubes.js) */
-.settings .cubes-settings { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
-.cubes-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-.cubes-head .help-text { flex-basis: 100%; }
+/* System settings: the page at full width, its parts section cards in a
+   grid (components.js sectionCards, pageContents, backToTop); a card is
+   as wide as the grid, a .half card shares a row where there is room;
+   Users, Roles and Capabilities flow in two columns there, none split,
+   the break where their heights put it. */
+.settings.settings-page { max-width: none; }
+.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
+.page-head h2 { font-size: 1.25rem; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
+.section-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.section-flow { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (min-width: 900px) {
+  .section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-grid > * { grid-column: 1 / -1; }
+  .section-grid > .half { grid-column: auto; }
+  .section-flow { display: block; columns: 2; column-gap: 16px; }
+  .section-flow > .section-card { break-inside: avoid; margin-bottom: 16px; }
+  .section-flow .cap-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  /* Users alone, for a role without roles and capabilities: one column */
+  .no-roles.no-capabilities .section-flow { columns: 1; }
+}
+/* A card's head: its name larger than a label, a button that folds it
+   (the disclosure pattern: a heading holding a button with
+   aria-expanded), what it holds as badges, and its help. */
+.section-card { min-width: 0; }
+.section-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 10px 8px 12px; }
+.section-head h3 { flex: 1 1 11em; min-width: 0; margin: 0; font-size: 1.08rem; }
+.section-head .help-text { flex-basis: 100%; }
+.section-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
+.section-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+.section-fold:hover { color: var(--accent); }
+.fold-i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+.section-fold[aria-expanded="true"] .fold-i { transform: rotate(90deg); }
+.section-card.folded > .tile-head { border-bottom-color: transparent; border-radius: 11px; }
+.section-body { padding: 12px 14px 4px; min-width: 0; }
+/* back to top: round, at the bottom right of the page's column */
+.icon-btn.to-top {
+  position: fixed;
+  right: max(16px, calc((100vw - 1100px) / 2 + 16px));
+  bottom: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fold-i { transition: none; }
+}
+
+/* System settings → Cubes (cubes.js): a Cube's panel in two columns where
+   there is room, its own settings at the left, the pairing and the
+   hidden devices at the right; one column on a phone, the pairing first.
+   The form lends its parts to the grid (display: contents). */
 .cube-panel { margin-bottom: 8px; padding: 8px 12px; }
+.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "pair" "fields" "hidden" "actions"; gap: 4px 28px; }
+.cube-cols > .cube-form { display: contents; }
+.cube-cols > .cube-pairing { grid-area: pair; }
+.cube-cols .cube-fields { grid-area: fields; }
+.cube-cols .cube-hidden { grid-area: hidden; }
+.cube-cols .cube-form > .actions { grid-area: actions; }
+.cube-cols > .cube-differs, .cube-cols > p { grid-column: 1 / -1; }
+@media (min-width: 760px) {
+  .cube-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "fields pair" "fields hidden" "actions actions"; align-items: start; }
+  .no-cubes .cube-cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pair"; }
+}
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
 /* System settings → Backup and restore (backup.js): the stored backups, each
    a row with its actions, and a restore's plan */
+.backup-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
+.settings .backup-bar .field { margin: 0; }
 .backups-list { margin: 8px 0 14px; }
 .backup-row { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
 .backup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .backup-note { margin: 2px 0 0; }
 .settings .backup-actions { margin: 4px 0 0; gap: 6px; justify-content: flex-start; }
+/* full width: each backup's actions at the right of its row */
+@media (min-width: 760px) {
+  .backup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: center; }
+  .backup-row > .backup-head { grid-column: 1; grid-row: 1; }
+  .backup-row > .backup-note { grid-column: 1; grid-row: 2; }
+  .settings .backup-row > .backup-actions { grid-column: 2; grid-row: 1 / span 2; margin: 0; justify-content: flex-end; }
+  .backup-row > .backup-detail { grid-column: 1 / -1; grid-row: 3; }
+}
 .backup-diff ul, .restore-steps, .restore-notes { margin: 4px 0; padding-left: 1.4em; overflow-wrap: anywhere; }
 .backup-diff p { margin: 4px 0 0; }
 .restore-plan { margin-top: 10px; padding: 8px 12px; }
@@ -1058,7 +1146,6 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }
 .cap-grid .switch { align-items: center; }
 .cap-grid .flag { margin-left: 4px; }
-.caps-settings { margin-top: 12px; }
 
 /* "only on this device" under a setting: login.js shows it where the
    settings follow the user (no-sync otherwise) */

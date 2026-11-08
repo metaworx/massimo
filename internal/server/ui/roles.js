@@ -188,6 +188,8 @@ function renderCapabilities() {
     grid.appendChild(sw);
   }
   box.appendChild(grid);
+  const off = rolesUI.capabilities.filter((c) => c.disabled).length;
+  sectionBadges($("sys-caps"), [off ? badgeEl(tn("roles.badge.off", off), "warn") : badgeEl(t("roles.badge.allOn"), "ok")]);
 }
 
 // renderRoles draws System settings → Roles from rolesUI.
@@ -196,6 +198,7 @@ function renderRoles() {
   if (!box || !hasCap("roles")) return;
   clear(box);
   for (const r of rolesUI.roles) box.appendChild(rolePanel(r));
+  sectionBadges($("sys-roles"), [badgeEl(tn("roles.badge.count", rolesUI.roles.length), "mode")]);
   renderCapabilities();
 }
 

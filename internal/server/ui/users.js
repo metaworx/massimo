@@ -492,6 +492,7 @@ function renderUsers() {
   clear(box);
   if (!usersUI.users.length) box.appendChild(textEl("p", t("users.none"), "muted small"));
   for (const u of usersUI.users) box.appendChild(userPanel(u));
+  sectionBadges($("sys-users"), [badgeEl(tn("roles.users", usersUI.users.length), "mode")]);
 }
 
 function initUsers() {

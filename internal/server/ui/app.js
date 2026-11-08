@@ -1066,6 +1066,7 @@ function showLanguageError() {
 function applyLanguage() {
   if (I18N.en) applyI18n(document);
   initHelpSlots();
+  pageContents($("system"));
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
@@ -1094,6 +1095,11 @@ async function init() {
   if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
+  // System settings' cards fold, its row of section buttons, back to top
+  const system = $("system");
+  sectionCards(system);
+  pageContents(system);
+  backToTop(system);
   initSettings();
   applySettings();
   checkVersion();

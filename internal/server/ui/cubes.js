@@ -572,9 +572,10 @@ function cubePanel(c) {
       delete cubesUI.edits[c.serial];
     }
   });
-  sum.after(pairingSection(c.serial));
-
+  // two columns where there is room (style.css .cube-cols): the Cube's
+  // fields at the left, the pairing and the hidden devices at the right
   const form = d.querySelector("form.cube-form");
+  sum.after(elem("div", "cube-cols", pairingSection(c.serial), form));
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
     return d;
@@ -676,6 +677,11 @@ function renderCubes() {
   clear(box);
   if (!state.cubes.length) box.appendChild(textEl("p", t("cubes.none"), "muted small"));
   for (const c of state.cubes) box.appendChild(cubePanel(c));
+  const off = state.cubes.filter((c) => !c.connected).length;
+  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
+  if (off) badges.push(badgeEl(tn("cubes.badge.disconnected", off), "bad"));
+  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
+  sectionBadges($("sys-cubes"), badges);
   if (state.found.length) {
     box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title needs-cubes"));
     const ul = elem("ul", "cube-found-list needs-cubes");

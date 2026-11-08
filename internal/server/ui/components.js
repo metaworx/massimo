@@ -430,6 +430,97 @@ function filePicker(accept, onFile) {
   return input;
 }
 
+// --- a page of section cards -------------------------------------------
+//
+// A long page (System settings) is a grid of cards, each a
+// section.section-card with an id: its head an h3 holding a
+// button.section-fold (aria-controls its body) with the title in a
+// span.section-title, then a span.section-badges and its help; its body
+// the element the button controls. The card's needs-* classes say who
+// sees it, as everywhere on the page.
+
+// foldCard folds a card or opens it: the body hidden, the head with its
+// badges still shown.
+function foldCard(card, folded) {
+  const btn = card.querySelector(".section-fold");
+  btn.setAttribute("aria-expanded", folded ? "false" : "true");
+  document.getElementById(btn.getAttribute("aria-controls")).classList.toggle("hidden", folded);
+  card.classList.toggle("folded", folded);
+}
+
+// sectionCards makes the cards of root fold from the button in their
+// heading, each card's fold kept in this browser (massimo.fold.<card
+// id>, app.js store) and taken up again at the next load. Cards wired
+// once are left alone, so it may be called again.
+function sectionCards(root) {
+  for (const card of root.querySelectorAll(".section-card")) {
+    const btn = card.querySelector(".section-fold");
+    if (!btn || btn.dataset.wired) continue;
+    btn.dataset.wired = "1";
+    foldCard(card, readStored("massimo.fold." + card.id) === "1");
+    btn.addEventListener("click", () => {
+      const folded = btn.getAttribute("aria-expanded") === "true";
+      foldCard(card, folded);
+      store("massimo.fold." + card.id, folded ? "1" : null);
+    });
+  }
+}
+
+// sectionBadges shows what a card holds at a glance in its head, also
+// while it is folded: badges (badgeEl) in place of the ones it had.
+function sectionBadges(card, badges) {
+  const box = card && card.querySelector(".section-badges");
+  if (!box) return;
+  clear(box);
+  box.append(...badges);
+}
+
+// showCard brings a card into view, opened, with the focus on its
+// heading's button.
+function showCard(card) {
+  if (card.classList.contains("folded")) {
+    foldCard(card, false);
+    store("massimo.fold." + card.id, null);
+  }
+  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+  card.querySelector(".section-fold").focus({ preventScroll: true });
+}
+
+// pageContents fills a page's row of section buttons (its nav.toc)
+// from its cards, a button each, named by the card's data-toc key or
+// else its title, and hidden where the card is (its needs-* classes);
+// a button brings its card into view (showCard). Called again after a
+// change of language.
+function pageContents(page) {
+  const nav = page.querySelector(".toc");
+  if (!nav) return;
+  clear(nav);
+  for (const card of page.querySelectorAll(".section-card")) {
+    const name = card.dataset.toc ? t(card.dataset.toc) : card.querySelector(".section-title").textContent;
+    const b = button(name, "toc-link", () => showCard(card));
+    b.dataset.target = card.id;
+    for (const c of card.classList) if (c.startsWith("needs-")) b.classList.add(c);
+    nav.appendChild(b);
+  }
+}
+
+// backToTop shows a page's .to-top button once the page's row of
+// section buttons is out of sight, and takes the page back to its top,
+// the focus on the row's first button.
+function backToTop(page) {
+  const btn = page.querySelector(".to-top");
+  const nav = page.querySelector(".toc");
+  if (!btn || !nav) return;
+  new IntersectionObserver(([e]) => btn.classList.toggle("hidden", e.isIntersecting)).observe(nav);
+  btn.addEventListener("click", () => {
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    const first = nav.querySelector(".toc-link");
+    if (first) first.focus({ preventScroll: true });
+  });
+}
+
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, closed by a choice of one of its items, by Escape
 // (the focus back on its summary) and by a click outside it. The room

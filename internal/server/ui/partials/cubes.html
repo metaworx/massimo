@@ -1,9 +1,12 @@
-<!-- System settings → Cubes: the list cubes.js draws into #cubes-list, for a role with cubes or with pair (which sees the pairing only). -->
-<div class="cubes-settings needs-cubes-or-pair" aria-live="polite">
-  <div class="cubes-head">
-    <span class="muted" data-i18n="cubes.title">Cubes</span>
+<!-- System settings → Cubes, a section card: the list cubes.js draws into #cubes-list, for a role with cubes or with pair (which sees the pairing only). -->
+<section id="sys-cubes" class="tile section-card cubes-settings needs-cubes-or-pair" aria-labelledby="sys-cubes-h">
+  <header class="tile-head section-head">
+    <h3 id="sys-cubes-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-cubes-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="cubes.title">Cubes</span></button></h3>
+    <span class="section-badges"></span>
     <span data-help="cubes" data-help-label="cubes.title"></span>
+  </header>
+  <div id="sys-cubes-body" class="section-body" aria-live="polite">
+    <div id="cubes-list"></div>
+    <p id="cubes-msg" class="small cubes-msg hidden" role="status"></p>
   </div>
-  <div id="cubes-list"></div>
-  <p id="cubes-msg" class="small cubes-msg hidden" role="status"></p>
-</div>
+</section>
