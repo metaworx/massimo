@@ -178,9 +178,14 @@ with `-data /var/lib/massimo`); browsers warn once per device.
 After a move to another address,
 `sudo -u massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
 served at the next connection.
-`-tls acme -tls-names <name> [-acme-email <address>] [-tls-http :80]` sets
-`MASSIMO_TLS=acme` with the name, the contact and the helper address:
-the server orders the certificate from Let's Encrypt at its start,
+`-tls acme -tls-names <name> [-acme-email <address>] [-acme-directory <url>] [-tls-http :80]` sets
+`MASSIMO_TLS=acme` with the name, the contact,
+the CA's directory and the helper address:
+the server orders the certificate from Let's Encrypt at its start
+(from its staging directory with
+`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`,
+the way to a first try,
+since the production one allows five failed orders an hour),
 into `/var/lib/massimo/tls/acme/`, and renews it by itself.
 The name must resolve to the box's public address and the router forward
 port 443 to the service's port (`-listen :443` with the capability,
@@ -248,7 +253,8 @@ so the token goes into the credentials file or the unit's `Environment=`.
 `INFOMANIAK_ACCESS_TOKEN` is the other way.
 An install with another `-tls` mode removes the variables of the one before
 (`MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`,
-`MASSIMO_ACME_EMAIL`, `MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`)
+`MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`,
+`MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`)
 and sets those the new one is given;
 an install without `-tls` keeps them all.
 `-tls off` switches it off again;

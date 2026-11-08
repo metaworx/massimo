@@ -53,6 +53,10 @@ the next minor, a fix counts the suffix up.
   Cloudflare as `/usr/share/massimo/acme-dns-hooks/*.sh`
   (`packaging/README.md`, "Debian package").
 
+- `massimo install -acme-directory <url>` sets the CA's directory for
+  `-tls acme`, such as Let's Encrypt's staging one for a first try
+  (`packaging/README.md`, "Install with `massimo install`").
+
 ### Changed
 
 - My settings keeps "only on this device" in a column of its own at

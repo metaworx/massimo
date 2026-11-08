@@ -6,6 +6,7 @@ package install
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"runtime"
 	"slices"
@@ -22,13 +23,14 @@ import (
 // where the settings say the server has TLS.
 const (
 	// The variables serve reads, named once in internal/env.
-	tlsVar      = env.TLS
-	tlsCertVar  = env.TLSCert
-	tlsKeyVar   = env.TLSKey
-	tlsNamesVar = env.TLSNames
-	acmeEmail   = env.ACMEEmail
-	tlsHTTPVar  = env.TLSHTTP
-	acmeDNSHook = env.ACMEDNSHook
+	tlsVar        = env.TLS
+	tlsCertVar    = env.TLSCert
+	tlsKeyVar     = env.TLSKey
+	tlsNamesVar   = env.TLSNames
+	acmeEmail     = env.ACMEEmail
+	acmeDirectory = env.ACMEDirectory
+	tlsHTTPVar    = env.TLSHTTP
+	acmeDNSHook   = env.ACMEDNSHook
 	// The owner's files beside the settings.
 	certName = "cert.pem"
 	keyName  = "key.pem"
@@ -75,6 +77,11 @@ func (o Options) checkTLS() error {
 		if o.TLSNames == "" {
 			return errors.New("-tls acme needs -tls-names, the DNS name the certificate is for")
 		}
+		if o.ACMEDirectory != "" {
+			if u, err := url.Parse(o.ACMEDirectory); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+				return fmt.Errorf("-acme-directory %q: want the directory's URL, such as https://acme-staging-v02.api.letsencrypt.org/directory", o.ACMEDirectory)
+			}
+		}
 		if o.TLSHTTP != "" {
 			if _, _, err := splitListen(o.TLSHTTP); err != nil {
 				return fmt.Errorf("-tls-http: %v", err)
@@ -101,7 +108,7 @@ func (o Options) checkTLS() error {
 // modeVars are the TLS variables an install's -tls sets; it removes the
 // others, so that a variable of the mode before (-tls-http, a DNS hook,
 // which serve refuses outside acme) does not outlive a switch.
-var modeVars = []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, acmeEmail, tlsHTTPVar, acmeDNSHook}
+var modeVars = []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, acmeEmail, acmeDirectory, tlsHTTPVar, acmeDNSHook}
 
 // tlsFiles installs the TLS options: the files copied to certDst and
 // keyDst (system paths; owned by the service user where chown is set,
@@ -127,6 +134,9 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 		vars := [][2]string{{tlsVar, "acme"}, {tlsNamesVar, in.TLSNames}}
 		if in.ACMEEmail != "" {
 			vars = append(vars, [2]string{acmeEmail, in.ACMEEmail})
+		}
+		if in.ACMEDirectory != "" {
+			vars = append(vars, [2]string{acmeDirectory, in.ACMEDirectory})
 		}
 		if in.TLSHTTP != "" {
 			vars = append(vars, [2]string{tlsHTTPVar, in.TLSHTTP})

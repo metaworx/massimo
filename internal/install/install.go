@@ -110,6 +110,9 @@ type Options struct {
 	// address, and the plain helper address (:80) for HTTP-01.
 	ACMEEmail string
 	TLSHTTP   string
+	// ACMEDirectory, with "acme", is the CA's directory URL, such as Let's
+	// Encrypt's staging one for a first try; empty is the server's default.
+	ACMEDirectory string
 	// ACMEDNSHook, with "acme", is the executable of the DNS-01 challenge.
 	ACMEDNSHook string
 	// DryRun only says what would be done.

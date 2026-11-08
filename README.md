@@ -511,7 +511,8 @@ the update helper's health check among them),
 gets the certificate of the first name.
 Let's Encrypt allows five failed orders an hour per name,
 so experiments use its staging directory
-(`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`).
+(`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`,
+which `massimo install` takes too and writes into the settings).
 `-acme-dns-hook <script>` takes the DNS-01 challenge instead:
 the server asks the script to set and clear a TXT record under `_acme-challenge.<name>`,
 so no port has to be open, the name may point at the box's LAN address,
