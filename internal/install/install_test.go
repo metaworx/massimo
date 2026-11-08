@@ -183,7 +183,7 @@ func TestRemove(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, EnvPath)); err != nil {
 		t.Fatal("settings removed without -purge")
 	}
-	if !rec.has("systemctl disable --now massimo-update.path massimo.service") || rec.has("userdel") {
+	if !rec.has("systemctl disable --now massimo-update.path massimo-reboot.path massimo.service") || rec.has("userdel") {
 		t.Fatalf("%q", rec.cmds)
 	}
 	rec = &recorder{}

@@ -30,7 +30,8 @@ import (
 // service is the LaunchDaemon ch.metaworx.massimo, run by launchd as the
 // hidden system user _massimo; the update helper is a second one,
 // ch.metaworx.massimo-update, run as root when the server writes the
-// update request. Both property lists are embedded from
+// update request, and the reboot helper, ch.metaworx.massimo-reboot,
+// installed only on request. The property lists are embedded from
 // packaging/launchd/. Nothing here needs macOS to build, so the tests
 // run everywhere with Options.Root.
 const (
@@ -43,6 +44,7 @@ const (
 	HelperStateDir = "/var/lib/massimo-update"
 	LogDir         = "/var/log/massimo"
 	HelperLog      = "/var/log/massimo-update.log"
+	RebootLog      = "/var/log/massimo-reboot.log"
 	DarwinLog      = LogDir + "/serve.log"
 
 	launchctl      = "/bin/launchctl"
@@ -208,6 +210,26 @@ func InstallDarwin(o Options) error {
 		if err := in.load(HelperLabel, changed, false); err != nil {
 			return err
 		}
+	}
+	_, err = os.Lstat(in.path(PlistPath(RebootLabel)))
+	if in.rebootWanted(err == nil) {
+		b, err := readPlist(RebootLabel)
+		if err != nil {
+			return err
+		}
+		changed, err := in.plist(RebootLabel, b)
+		if err != nil {
+			return err
+		}
+		// A request left from before would be taken at once.
+		in.remove(RebootRequest, false)
+		if err := in.load(RebootLabel, changed, false); err != nil {
+			return err
+		}
+		in.rebootHint(EnvPath)
+	} else if in.NoRebootHelper {
+		in.unload(RebootLabel)
+		in.remove(PlistPath(RebootLabel), false)
 	}
 	changed, err := in.plist(Label, serve)
 	if err != nil {
@@ -461,7 +483,7 @@ func RemoveDarwin(o Options, purge bool) error {
 	}
 	in := newInstaller(o)
 	in.svcUser = DarwinUser
-	for _, l := range []string{HelperLabel, Label} {
+	for _, l := range []string{HelperLabel, RebootLabel, Label} {
 		in.unload(l)
 		in.remove(PlistPath(l), false)
 	}
@@ -477,7 +499,7 @@ func RemoveDarwin(o Options, purge bool) error {
 		fmt.Fprintf(in.Out, "kept %s, %s, %s and the user %s (remove them with -purge)\n", EnvDir, StateDir, LogDir, DarwinUser)
 		return nil
 	}
-	for _, p := range []string{EnvDir, StateDir, HelperStateDir, LogDir, HelperLog} {
+	for _, p := range []string{EnvDir, StateDir, HelperStateDir, LogDir, HelperLog, RebootLog} {
 		in.remove(p, true)
 	}
 	if in.Root == "" && in.Run(dscl, ".", "-read", "/Users/"+DarwinUser) != nil {

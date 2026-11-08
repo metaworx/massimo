@@ -1,0 +1,29 @@
+# The reboot helper: started by massimo-reboot.path, it removes the
+# request and reboots the computer. It reads nothing, not even the
+# request, so the server's user can tell it nothing but "now". The
+# request goes first, so that a reboot never starts the next one; where it
+# cannot be removed, nothing is rebooted. The sandbox is the update
+# helper's, which runs systemctl as well, without the network.
+
+[Unit]
+Description=Massimo reboot helper
+Documentation=https://go.metaworx.ch/massimo
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/rm -f /var/lib/massimo/reboot-request
+ExecStart=/bin/systemctl reboot
+# No .env file is read: the working directory is / and this one does not exist.
+Environment=MASSIMO_ENV_FILE=/nonexistent/.env
+WorkingDirectory=/
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/massimo
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX

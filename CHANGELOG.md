@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `massimo install -reboot-helper` installs the root helper that
+  reboots the computer; the Debian package ships it disabled
+  (`packaging/README.md`, "Rebooting from the web UI").
+
 - `serve -allow-reboot`, or `MASSIMO_REBOOT=on` in the settings file,
   lets the owner reboot the computer: under systemd and launchd through
   a root helper, as the Windows service by itself (README, "serve").

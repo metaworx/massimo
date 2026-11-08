@@ -1,0 +1,18 @@
+# Starts massimo-reboot.service when the server (running unprivileged as
+# massimo) asks for a reboot of this computer by creating
+# /var/lib/massimo/reboot-request, as POST /api/v1/reboot does once its
+# delay is over. `massimo install -reboot-helper` installs and enables it;
+# the Debian package ships it disabled (packaging/README.md, "Rebooting
+# from the web UI"). The server offers the reboot while this unit is
+# enabled and its settings say MASSIMO_REBOOT=on.
+
+[Unit]
+Description=Reboot requests from the Massimo server
+Documentation=https://go.metaworx.ch/massimo
+
+[Path]
+PathExists=/var/lib/massimo/reboot-request
+Unit=massimo-reboot.service
+
+[Install]
+WantedBy=paths.target

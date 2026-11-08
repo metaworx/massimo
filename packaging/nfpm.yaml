@@ -34,6 +34,11 @@ contents:
       mode: 0755
   - src: dist/deb/massimo.service
     dst: /usr/lib/systemd/system/massimo.service
+  # The reboot helper, disabled until `massimo install -reboot-helper`.
+  - src: packaging/systemd/massimo-reboot.path
+    dst: /usr/lib/systemd/system/massimo-reboot.path
+  - src: packaging/systemd/massimo-reboot.service
+    dst: /usr/lib/systemd/system/massimo-reboot.service
   - src: packaging/logrotate/massimo
     dst: /etc/logrotate.d/massimo
     type: config

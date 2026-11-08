@@ -139,6 +139,8 @@ which install never touches.
 `-no-update-helper` leaves the helper out,
 and on a box an earlier install gave it disables `massimo-update.path`
 and removes both units and their drop-in, as macOS unloads its own;
+`-reboot-helper` adds the reboot helper and `-no-reboot-helper` takes it out
+again (see "Rebooting from the web UI");
 `-no-start` only enables.
 
 `-listen <addr>` moves the API and web UI off `:8099`,
@@ -252,7 +254,9 @@ sudo apt install ./massimo_<version>_arm64.deb
 It installs the release binary as `/usr/bin/massimo`,
 the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
 that path and without the update helper),
-the log rotation and the marker `/usr/share/massimo/packaged`;
+the log rotation and the marker `/usr/share/massimo/packaged`,
+and the reboot helper's `massimo-reboot.path` and `.service`, disabled
+(see "Rebooting from the web UI");
 its scripts create the user `massimo` and `/etc/massimo/env` from the template
 when they are missing, enable the service,
 and start it once the file differs from the template,
@@ -271,7 +275,9 @@ but leave the install to `sudo apt update && sudo apt install massimo`
 `-settings` over a settings file that is still the template,
 `-tls` and its options into the settings as "Install with `massimo install`" puts them,
 `-listen` as the listen drop-in there (the package has no update helper,
-so no health drop-in), then a restart.
+so no health drop-in),
+`-reboot-helper` and `-no-reboot-helper` as the package's path unit enabled
+or disabled, then a restart.
 `massimo install -remove` points at `apt remove massimo`;
 `apt purge massimo` takes the settings, the store, the logs and the user too,
 as `-remove -purge` does.
@@ -625,6 +631,77 @@ a secret of the repository's `signing` environment that only `v*` tags can use;
 its public half is `internal/update/release-key.pem`.
 A new key needs a release built with the new public key before releases signed
 with it are accepted.
+
+## Rebooting from the web UI
+
+The owner can reboot the computer from System settings → Maintenance
+(`POST /api/v1/reboot`, for the capability `reboot`, which only `owner` has),
+60 seconds after asking or after the delay given there, 0 to 3600,
+and take the reboot back meanwhile.
+Two things make it so, and both are the owner's:
+`MASSIMO_REBOOT=on` in the settings file (or `serve -allow-reboot`),
+which `serve` applies at once,
+and on Linux and macOS a root helper that only root installs:
+
+```bash
+sudo massimo install -reboot-helper
+```
+
+| Where `serve` runs | Who reboots | Needs |
+|---|---|---|
+| Linux, systemd's service (`massimo install`, the Debian package, Raspberry Pi OS) | `massimo-reboot.path`, which starts `massimo-reboot.service` as root | `install -reboot-helper` and the switch |
+| macOS, `massimo install`'s LaunchDaemon | the LaunchDaemon `ch.metaworx.massimo-reboot`, as root | `install -reboot-helper` and the switch |
+| the Windows service | the service itself (LocalSystem), `shutdown.exe /r` | the switch |
+| Homebrew's service, a terminal, Docker, Linux without systemd | nobody | – |
+
+Where something is missing the page says what, as `GET /api/v1/reboot` does.
+
+**Why a helper, and no sudo.**
+`massimo.service` runs with `NoNewPrivileges=yes`,
+so `sudo` cannot raise privileges from it whatever sudoers says,
+and the sandbox stays as it is.
+As for updates, the server only asks:
+once the delay is over it writes `/var/lib/massimo/reboot-request`,
+the path unit (on macOS launchd's `WatchPaths`) starts the helper,
+and the helper removes the request and reboots
+(`systemctl reboot`, on macOS `shutdown -r now`).
+It reads nothing, not even the request,
+so a compromised server can at most reboot the box,
+and only where the owner switched that on and root installed the helper.
+The request goes before the reboot, so a reboot never starts the next one;
+`serve` removes a request the helper has not taken within 30 seconds,
+and one it finds at its start.
+`serve` knows the helper is there by the link that enabling the path unit makes,
+`/etc/systemd/system/paths.target.wants/massimo-reboot.path`,
+and on macOS by `/Library/LaunchDaemons/ch.metaworx.massimo-reboot.plist`;
+both are root's.
+Windows needs no helper: the service runs as LocalSystem,
+which may shut the computer down,
+and only SYSTEM and the Administrators write its settings file.
+
+**By hand**, as for the update helper:
+
+```bash
+sudo install -m 0644 massimo-reboot.path massimo-reboot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now massimo-reboot.path
+```
+
+The Debian package ships both units in `/usr/lib/systemd/system/`, disabled;
+`sudo massimo install -reboot-helper` enables the path unit
+(`sudo systemctl enable --now massimo-reboot.path` does the same),
+and an upgrade keeps it enabled.
+`-no-reboot-helper` disables it again, and on a hand install removes the units;
+installing again without either flag keeps what is there.
+The helper's log is `journalctl -u massimo-reboot`,
+on macOS `/var/log/massimo-reboot.log`.
+
+The system stops the service as at every shutdown,
+so the store is closed as at every stop;
+the thermostats keep their programmes meanwhile,
+and the Cube is connected again once the box is back.
+A box that does not come back (a failing SD card, a kernel update half done)
+needs someone at it: there is no rollback for a reboot.
 
 ## Windows
 

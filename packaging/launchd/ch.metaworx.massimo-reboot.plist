@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The reboot helper on macOS, the counterpart of massimo-reboot.path and
+  .service: launchd starts it when the server (running as _massimo)
+  creates /var/lib/massimo/reboot-request, as POST /api/v1/reboot does
+  once its delay is over, and again when the file goes, which it leaves
+  alone. It reads nothing, not even the request: it removes it, and only
+  then reboots, so that a reboot never starts the next one; where the
+  request cannot be removed, nothing is rebooted. `massimo install
+  -reboot-helper` installs it (packaging/README.md, "Rebooting from the
+  web UI"). Its log is outside /var/log/massimo, which _massimo owns.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ch.metaworx.massimo-reboot</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>r=/var/lib/massimo/reboot-request; [ -e "$r" ] || [ -L "$r" ] || exit 0; /bin/rm -f "$r" || exit 1; exec /sbin/shutdown -r now "Massimo: reboot requested from the web UI"</string>
+	</array>
+	<key>WatchPaths</key>
+	<array>
+		<string>/var/lib/massimo/reboot-request</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/</string>
+	<key>StandardOutPath</key>
+	<string>/var/log/massimo-reboot.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/massimo-reboot.log</string>
+</dict>
+</plist>

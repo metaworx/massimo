@@ -559,7 +559,8 @@ such as Docker's `--restart`;
 (`POST /api/v1/reboot`, for the capability `reboot`, which only `owner` has),
 60 seconds after the request or after the delay it names, 0 to 3600:
 under systemd and launchd through the root helper
-that `sudo massimo install -reboot-helper` installs,
+that `sudo massimo install -reboot-helper` installs
+(and `-no-reboot-helper` takes out again),
 as the Windows service by itself,
 and never in a terminal, in Docker or as Homebrew's service
 ([packaging/README.md](packaging/README.md), "Rebooting from the web UI").
