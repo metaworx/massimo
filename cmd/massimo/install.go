@@ -26,6 +26,7 @@ func runInstall(args []string) error {
 	tlsKey := fs.String("tls-key", "", "its private key, PEM")
 	tlsNames := fs.String("tls-names", "", "with -tls self-signed, names and addresses the certificate holds besides the box's own; with -tls acme, the DNS name the certificate is for; comma-separated")
 	acmeEmail := fs.String("acme-email", "", "with -tls acme, the account's contact address")
+	acmeDirectory := fs.String("acme-directory", "", "with -tls acme, the CA's directory URL, such as Let's Encrypt's staging one, https://acme-staging-v02.api.letsencrypt.org/directory, for a first try (default: Let's Encrypt's)")
 	tlsHTTP := fs.String("tls-http", "", "with -tls acme, also listen on this plain address, such as :80, for the HTTP-01 challenge and the redirect to https://")
 	acmeDNSHook := fs.String("acme-dns-hook", "", "with -tls acme, get the certificate by the DNS-01 challenge through this executable (packaging/acme-dns-hooks/), readable and executable by the service user; no port, wildcards allowed")
 	dryRun := fs.Bool("dry-run", false, "only show what would be done")
@@ -34,7 +35,7 @@ func runInstall(args []string) error {
 	root := fs.String("root", "", "Linux and macOS: install below this directory instead of / and run no commands (for images and tests)")
 	fs.Usage = func() {
 		win := install.WindowsPaths("", "")
-		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>] | -tls acme -tls-names <name> [-acme-email <addr>] [-tls-http :80 | -acme-dns-hook <script>]] [-no-update-helper] [-reboot-helper | -no-reboot-helper] [-no-start] [-dry-run]
+		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>] | -tls acme -tls-names <name> [-acme-email <addr>] [-acme-directory <url>] [-tls-http :80 | -acme-dns-hook <script>]] [-no-update-helper] [-reboot-helper | -no-reboot-helper] [-no-start] [-dry-run]
        massimo install -remove [-purge]
 
 Install this binary and massimo serve as a service, or update both when
@@ -84,7 +85,7 @@ See packaging/README.md.
 	if *rebootHelper && *noRebootHelper {
 		return errors.New("-reboot-helper and -no-reboot-helper exclude each other")
 	}
-	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, RebootHelper: *rebootHelper, NoRebootHelper: *noRebootHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook}
+	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, RebootHelper: *rebootHelper, NoRebootHelper: *noRebootHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, ACMEDirectory: *acmeDirectory, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook}
 	switch runtime.GOOS {
 	case "linux":
 		if *remove {

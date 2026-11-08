@@ -358,11 +358,12 @@ func TestInstallTLSFiles(t *testing.T) {
 
 	// -tls acme with its names, the contact and the port-80 helper, which
 	// needs the capability although the listener does not.
-	if err := Install(Options{Root: root, Binary: bin, TLS: "acme", TLSNames: "massimo.example.net", ACMEEmail: "owner@example.net", TLSHTTP: ":80", Out: &out, Run: rec.run}); err != nil {
+	staging := "https://acme-staging-v02.api.letsencrypt.org/directory"
+	if err := Install(Options{Root: root, Binary: bin, TLS: "acme", TLSNames: "massimo.example.net", ACMEEmail: "owner@example.net", ACMEDirectory: staging, TLSHTTP: ":80", Out: &out, Run: rec.run}); err != nil {
 		t.Fatal(err)
 	}
 	env = read(t, filepath.Join(root, EnvPath))
-	for _, want := range []string{"MASSIMO_TLS=acme\n", "MASSIMO_TLS_NAMES=massimo.example.net\n", "MASSIMO_ACME_EMAIL=owner@example.net\n", "MASSIMO_TLS_HTTP=:80\n"} {
+	for _, want := range []string{"MASSIMO_TLS=acme\n", "MASSIMO_TLS_NAMES=massimo.example.net\n", "MASSIMO_ACME_EMAIL=owner@example.net\n", "MASSIMO_ACME_DIRECTORY=" + staging + "\n", "MASSIMO_TLS_HTTP=:80\n"} {
 		if strings.Count(env, want) != 1 {
 			t.Errorf("settings after -tls acme lack %q:\n%s", want, env)
 		}
@@ -376,6 +377,9 @@ func TestInstallTLSFiles(t *testing.T) {
 	}
 	if !strings.Contains(read(t, filepath.Join(root, ListenDropIn)), "CAP_NET_BIND_SERVICE") {
 		t.Fatal("capability lost")
+	}
+	if !strings.Contains(read(t, filepath.Join(root, EnvPath)), "MASSIMO_ACME_DIRECTORY="+staging+"\n") {
+		t.Fatal("the ACME directory lost by an install without -tls")
 	}
 
 	// -tls acme with a DNS-01 hook: the variable set, the hook checked.
@@ -391,9 +395,11 @@ func TestInstallTLSFiles(t *testing.T) {
 	os.WriteFile(noExec, []byte("#!/bin/sh\n"), 0o644)
 
 	// Refused: a missing file, -tls off with files, acme without names, a
-	// hook that is not there, a hook with the port-80 helper.
+	// hook that is not there, a hook with the port-80 helper, a directory
+	// that is no http or https URL.
 	for _, o := range []Options{{TLSCert: filepath.Join(src, "none.pem"), TLSKey: key}, {TLS: "off", TLSCert: cert, TLSKey: key}, {TLS: "files"}, {TLS: "self-signed", TLSCert: cert, TLSKey: key}, {TLS: "acme"}, {TLS: "acme", TLSNames: "a.example.net", TLSHTTP: "80"},
-		{TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: filepath.Join(src, "none.sh")}, {TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: hook, TLSHTTP: ":80"}, {TLS: "yes"}} {
+		{TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: filepath.Join(src, "none.sh")}, {TLS: "acme", TLSNames: "a.example.net", ACMEDNSHook: hook, TLSHTTP: ":80"}, {TLS: "yes"},
+		{TLS: "acme", TLSNames: "a.example.net", ACMEDirectory: "staging"}, {TLS: "acme", TLSNames: "a.example.net", ACMEDirectory: "ftp://acme.example.net/directory"}, {TLS: "acme", TLSNames: "a.example.net", ACMEDirectory: "https://"}} {
 		o.Root, o.Binary, o.Out, o.Run = root, bin, &bytes.Buffer{}, rec.run
 		if err := Install(o); err == nil {
 			t.Errorf("%+v accepted", o)
@@ -542,7 +548,7 @@ func TestInstallSwitchesTLSMode(t *testing.T) {
 		}
 		return vars
 	}
-	install(Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEEmail: "owner@example.net", TLSHTTP: ":80"})
+	install(Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEEmail: "owner@example.net", ACMEDirectory: "https://acme.example.net/directory", TLSHTTP: ":80"})
 	f, _ := os.OpenFile(env, os.O_APPEND|os.O_WRONLY, 0)
 	f.WriteString("MASSIMO_API_TOKEN=kept\n")
 	f.Close()
@@ -550,8 +556,8 @@ func TestInstallSwitchesTLSMode(t *testing.T) {
 		o          Options
 		want, gone []string
 	}{
-		{Options{TLS: "off"}, []string{"MASSIMO_TLS=off"}, []string{"MASSIMO_TLS_HTTP", "MASSIMO_TLS_NAMES", "MASSIMO_ACME_EMAIL"}},
-		{Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEDNSHook: hook}, []string{"MASSIMO_TLS=acme", "MASSIMO_ACME_DNS_HOOK=" + hook}, []string{"MASSIMO_TLS_HTTP"}},
+		{Options{TLS: "off"}, []string{"MASSIMO_TLS=off"}, []string{"MASSIMO_TLS_HTTP", "MASSIMO_TLS_NAMES", "MASSIMO_ACME_EMAIL", "MASSIMO_ACME_DIRECTORY"}},
+		{Options{TLS: "acme", TLSNames: "massimo.example.net", ACMEDirectory: "https://acme.example.net/directory", ACMEDNSHook: hook}, []string{"MASSIMO_TLS=acme", "MASSIMO_ACME_DIRECTORY=https://acme.example.net/directory", "MASSIMO_ACME_DNS_HOOK=" + hook}, []string{"MASSIMO_TLS_HTTP"}},
 		{Options{TLS: "acme", TLSNames: "massimo.example.net", TLSHTTP: ":80"}, []string{"MASSIMO_TLS_HTTP=:80"}, []string{"MASSIMO_ACME_DNS_HOOK"}},
 		{Options{TLSCert: cert, TLSKey: key}, []string{"MASSIMO_TLS=files", "MASSIMO_TLS_CERT=/etc/massimo/cert.pem"}, []string{"MASSIMO_TLS_HTTP", "MASSIMO_TLS_NAMES"}},
 		{Options{TLS: "self-signed", TLSNames: "nas.lan"}, []string{"MASSIMO_TLS=self-signed", "MASSIMO_TLS_NAMES=nas.lan"}, []string{"MASSIMO_TLS_CERT", "MASSIMO_TLS_KEY"}},

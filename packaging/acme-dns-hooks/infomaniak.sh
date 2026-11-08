@@ -20,8 +20,8 @@
 # The token reaches curl on its standard input (-K -), never on its
 # command line, which every local user can read; every call ends after
 # 30 seconds, within the server's two minutes for one run of the hook.
-# Untested against the real API until the owner's day; the test runs it
-# against a fake one (internal/certs/hooks_test.go).
+# Run against the real API on 2026-11-08 (set and clear); the test runs
+# it against a fake one (internal/certs/hooks_test.go).
 set -eu
 
 verb=${1:?usage: $0 set|clear <record> <value>}

@@ -335,6 +335,43 @@ func TestForgetDevice(t *testing.T) {
 	}
 }
 
+// Send returns once an L or C reply is in the snapshot, also when the
+// reader is slow to apply it, so that a read right after sees the reply.
+func TestSendReturnsWithTheReplyApplied(t *testing.T) {
+	_, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	// Every L and C line waits before it goes into the snapshot: a Send
+	// that returned before the apply would find its reply missing.
+	c.beforeApply = func(m cube.Message) {
+		if m.Type == 'L' || m.Type == 'C' {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	go c.Run(ctx)
+	waitEvent(t, c, EventConnected)
+	const rf cube.RFAddress = 0x0a010d
+	c.ForgetDevice(rf)
+	waitEvent(t, c, EventForgotten)
+	s := c.Snapshot()
+	if s.Config(rf) != nil {
+		t.Fatal("config kept after ForgetDevice")
+	}
+	if line, err := c.Send(ctx, cube.Message{Type: 'c', Data: rf.String()}); err != nil || line.Type != 'C' {
+		t.Fatalf("c: %s %v", line, err)
+	}
+	if s.Config(rf) == nil {
+		t.Fatal("Send returned before its C reply was in the snapshot")
+	}
+	if _, err := c.Send(ctx, cube.CmdList); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.State(rf); !ok {
+		t.Fatal("Send returned before its L reply was in the snapshot")
+	}
+}
+
 // A t: naming several devices is answered with an A line for each, and
 // Send returns only after the last, so that the next command's reply is
 // its own and not a late A of the deletion.

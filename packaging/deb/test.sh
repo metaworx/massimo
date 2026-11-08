@@ -38,6 +38,12 @@ done
 [ ! -e /etc/systemd/system/paths.target.wants/massimo-reboot.path ] || fail "the reboot helper is enabled"
 [ "$(head -n 1 /usr/share/massimo/packaged)" = apt ] || fail "the marker does not say apt"
 [ -f /usr/share/doc/massimo/copyright ] || fail "no copyright file"
+# The DNS-01 hooks, for -acme-dns-hook; the purge below takes them along.
+for hook in infomaniak cloudflare; do
+	f=/usr/share/massimo/acme-dns-hooks/$hook.sh
+	[ "$(stat -c %a:%U:%G "$f")" = 755:root:root ] || fail "$f is $(stat -c %a:%U:%G "$f")"
+	sh -n "$f" || fail "$f does not parse"
+done
 grep -q '^massimo ' <<<"$(massimo version)" || fail "massimo version"
 
 # On a packaged box massimo install only configures, and refuses to remove.

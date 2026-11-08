@@ -178,9 +178,14 @@ with `-data /var/lib/massimo`); browsers warn once per device.
 After a move to another address,
 `sudo -u massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
 served at the next connection.
-`-tls acme -tls-names <name> [-acme-email <address>] [-tls-http :80]` sets
-`MASSIMO_TLS=acme` with the name, the contact and the helper address:
-the server orders the certificate from Let's Encrypt at its start,
+`-tls acme -tls-names <name> [-acme-email <address>] [-acme-directory <url>] [-tls-http :80]` sets
+`MASSIMO_TLS=acme` with the name, the contact,
+the CA's directory and the helper address:
+the server orders the certificate from Let's Encrypt at its start
+(from its staging directory with
+`-acme-directory https://acme-staging-v02.api.letsencrypt.org/directory`,
+the way to a first try,
+since the production one allows five failed orders an hour),
 into `/var/lib/massimo/tls/acme/`, and renews it by itself.
 The name must resolve to the box's public address and the router forward
 port 443 to the service's port (`-listen :443` with the capability,
@@ -205,7 +210,7 @@ manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
 It hands the token to `curl` on its standard input, never on its command line,
 which every local user can read,
 and gives each call 30 seconds.
-It is untested against the real API until the owner's day;
+It ran against the real API on 2026-11-08;
 the test runs it against a fake one.
 
 ```bash
@@ -213,6 +218,29 @@ sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/infomania
 sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/infomaniak.sh
 ```
+
+`packaging/acme-dns-hooks/cloudflare.sh` is the script for a zone at Cloudflare,
+with the same needs and the same care for its token:
+an API token with the permission Zone → DNS → Edit on the zone,
+made from the template "Edit zone DNS" under My Profile → API Tokens,
+in `/etc/massimo/cloudflare.token` (owned by `massimo`, mode 0600).
+It finds the zone by name;
+where the token may not list it,
+a line `CLOUDFLARE_ZONE_ID=<id>` in `/etc/massimo/env` names it
+(the id is on the zone's overview page):
+the script gets every variable of the settings file but the `MASSIMO_` ones.
+The test runs it against a fake of Cloudflare's API.
+
+```bash
+sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/cloudflare.sh /usr/local/lib/massimo/cloudflare.sh
+sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.token <<< "$CLOUDFLARE_TOKEN"
+sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/cloudflare.sh
+```
+
+A box with the Debian package has both scripts already,
+as `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`:
+there the token file and the `massimo install` line are all it takes,
+with `-acme-dns-hook /usr/share/massimo/acme-dns-hooks/<provider>.sh`.
 
 Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:
 `certbot certonly --authenticator dns-infomaniak -d massimo.example.net` with
@@ -225,7 +253,8 @@ so the token goes into the credentials file or the unit's `Environment=`.
 `INFOMANIAK_ACCESS_TOKEN` is the other way.
 An install with another `-tls` mode removes the variables of the one before
 (`MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`,
-`MASSIMO_ACME_EMAIL`, `MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`)
+`MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`,
+`MASSIMO_TLS_HTTP`, `MASSIMO_ACME_DNS_HOOK`)
 and sets those the new one is given;
 an install without `-tls` keeps them all.
 `-tls off` switches it off again;
@@ -255,6 +284,8 @@ It installs the release binary as `/usr/bin/massimo`,
 the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
 that path and without the update helper),
 the log rotation and the marker `/usr/share/massimo/packaged`,
+the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
+(see `-acme-dns-hook` above),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
 its scripts create the user `massimo` and `/etc/massimo/env` from the template
