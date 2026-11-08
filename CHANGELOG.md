@@ -50,7 +50,7 @@ the next minor, a fix counts the suffix up.
 
 - A Cube's duty cycle or free memory slots over `ffff` are refused
   rather than read as negative on a 32-bit system, as code scanning
-  warned (`internal/protocol/cube`).
+  warned; the sign-in's key stretching passes the same check too.
 
 ## [0.11.0-alpha.1] - 2026-11-08
 

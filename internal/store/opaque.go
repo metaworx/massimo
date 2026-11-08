@@ -154,13 +154,16 @@ func ParseKSF(ksf string) (memory, time uint32, threads uint8, err error) {
 		}
 		v[i] = n
 	}
+	// Named, so that code scanning sees the bound on each before it is
+	// converted: it follows a variable, not an array's element.
+	m, t, p := v[0], v[1], v[2]
 	switch {
-	case v[0] > maxArgonMemory || v[1] > maxArgonTime || v[2] > maxArgonThreads:
+	case m > maxArgonMemory || t > maxArgonTime || p > maxArgonThreads:
 		return 0, 0, 0, fmt.Errorf("%w: key stretching %q is over m=%d,t=%d,p=%d", ErrBadMessage, ksf, maxArgonMemory, maxArgonTime, maxArgonThreads)
-	case v[0]*v[1] < argonMemory*argonTime:
+	case m*t < argonMemory*argonTime:
 		return 0, 0, 0, fmt.Errorf("%w: key stretching %q costs less than %s", ErrBadMessage, ksf, OpaqueKSF)
 	}
-	return uint32(v[0]), uint32(v[1]), uint8(v[2]), nil
+	return uint32(m), uint32(t), uint8(p), nil
 }
 
 // OpaqueRegistration answers a client's registration request for a
