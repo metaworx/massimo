@@ -39,6 +39,9 @@ type userView struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	// May is what the caller may do with the user, in the users routes'
+	// answers (users_api.go); absent elsewhere.
+	May *userMay `json:"may,omitempty"`
 }
 
 // roleRef is the role of a user as GET /api/v1/me shows it.

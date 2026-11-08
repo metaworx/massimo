@@ -463,8 +463,12 @@ to the top of the page.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
-- **Users** (with `users`, or `guests` for the guests alone):
-  every user in a panel whose head shows the display name, the login apart
+- **Users** (with `users`, `passwords`, or `guests` for the guests alone):
+  a user changes only users whose role has no capability its own lacks,
+  so nobody but an owner changes an owner, whose panel says so,
+  and with `passwords` alone (a manager's) a panel offers the password alone;
+  the role choice offers no owner but to an owner.
+  Every user in a panel whose head shows the display name, the login apart
   from it and, at the right edge, the badges: **you** first, the role,
   the state and **keys only**;
   in the panel the display name, role, whether it is disabled,

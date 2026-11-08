@@ -36,7 +36,7 @@ function hasCap(c) {
 
 // canManageUsers: the users routes, with users or with guests.
 function canManageUsers() {
-  return hasCap("users") || hasCap("guests");
+  return hasCap("users") || hasCap("guests") || hasCap("passwords");
 }
 
 // hasSystem reports whether the signed-in user sees System settings: one

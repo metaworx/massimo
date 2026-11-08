@@ -215,11 +215,19 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
 | `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
+| `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
+
+A user changes only users whose role has no capability its own lacks,
+and gives only such roles: an owner changes everyone,
+nobody but an owner changes an owner or gives the role `owner`,
+and a role made with `users` but without, say, `restore` changes no manager.
+The users routes say what the caller may do with each user they list
+(`"may": {"manage": true, "password": true}`).
 | `update` | start a software update | `POST /api/v1/update` |
 | `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
 | `audit` | read the audit | `GET /api/v1/audit` |

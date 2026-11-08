@@ -90,6 +90,12 @@ the next minor, a fix counts the suffix up.
   rather than read as negative on a 32-bit system, as code scanning
   warned; the sign-in's key stretching reads its lanes at 8 bits too.
 
+### Security
+
+- A user changes only users whose role has no capability its own lacks,
+  so nobody but an owner changes an owner; a manager sets other users'
+  passwords with `passwords` (`docs/api-v1.md`, "Authentication").
+
 ## [0.11.0-alpha.1] - 2026-11-08
 
 ### Added

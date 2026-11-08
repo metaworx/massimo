@@ -3,8 +3,8 @@
 """System settings → Users and Roles as the owner (the test token is the
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
-from conftest import api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from conftest import URL, api_call
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, sign_out, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -303,3 +303,39 @@ def test_first_owner_name_checked(page, case):
         page.unroute("**/api/v1/me")
         page.evaluate("loadMe()")
     assert wait_until(page, "document.getElementById('setup').classList.contains('hidden')", 5), "the form goes again"
+
+
+def test_manager_sets_passwords_but_not_the_owners(new_context, case, watch, guard):
+    """A manager (guests and passwords) sees every user under System
+    settings → Users: the owner's panel says that only an owner changes an
+    owner and offers nothing, an operator's offers its password alone,
+    and the role choice offers no owner."""
+    from test_login import sign_in
+    name = f"mgr-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": name, "role": "manager", "password": "mgr-pass-1"})
+    try:
+        ctx = new_context()
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        sign_in(page, name, "mgr-pass-1")
+        show_view(page, "system")
+        owner = page.locator(".user-panel[data-name='owner']")
+        owner.wait_for()
+        owner.locator("summary").click()
+        want = page.evaluate("t('users.ownerOnly')")
+        assert owner.locator("form").is_hidden() and want in owner.inner_text(), "only an owner changes an owner"
+        op = page.locator(".user-panel[data-name='operator']")
+        op.locator("summary").click()
+        form = op.locator("form")
+        assert form.locator("input[name=password]").is_visible(), "the operator's password offered"
+        assert form.locator("input[name=display_name]").is_hidden() and form.locator("select[name=role]").is_hidden(), \
+            "nothing else of it"
+        assert op.locator(".user-tokens-box").is_hidden(), "nor its keys"
+        options = page.evaluate("roleOptions('viewer').map((o) => o[0])")
+        assert "owner" not in options, f"no owner role to give ({options})"
+        sign_out(page)
+    finally:
+        api_call("DELETE", "api/v1/users/" + name)
