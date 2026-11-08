@@ -248,6 +248,105 @@ func TestDiscoveryWithoutThePort(t *testing.T) {
 	}
 }
 
+// listedSerials are the serials of the found Cubes GET /cubes lists.
+func listedSerials(t *testing.T, ts *httptest.Server) []string {
+	t.Helper()
+	var cubes []map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+	var out []string
+	for _, c := range cubes {
+		if c["configured"] == false {
+			out = append(out, c["serial"].(string))
+		}
+	}
+	return out
+}
+
+// foundEvents counts the cube_found events per serial in the log of
+// the configured Cube KEQ0000100.
+func foundEvents(t *testing.T, ts *httptest.Server) map[string]int {
+	t.Helper()
+	var evs []event
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
+	out := map[string]int{}
+	for _, e := range evs {
+		if e.Kind == "cube_found" && e.Cube != nil {
+			out[e.Cube.Serial]++
+		}
+	}
+	return out
+}
+
+// A search lists the Cubes that answered it: one that no longer answers
+// leaves the list, its row keeping when it was last seen, and is found
+// and announced again when it answers again.
+func TestSearchListsOnlyCubesThatAnswered(t *testing.T) {
+	a, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	b, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000001", 0x0a0b0d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bAddr := b.Addr()
+	st := testStore(t, "")
+	ts, _ := startDiscovering(t, Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr(), bAddr}})
+
+	postDiscovery(t, ts)
+	if got := listedSerials(t, ts); len(got) != 2 || got[0] != "KEQ0000000" || got[1] != "KEQ0000001" {
+		t.Fatalf("listed after the first search %v", got)
+	}
+	b.Close()
+	_, out := postDiscovery(t, ts)
+	if found, _ := out["found"].([]any); len(found) != 1 {
+		t.Fatalf("the second search answered %v", out["found"])
+	}
+	if got := listedSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000000" {
+		t.Fatalf("listed once KEQ0000001 is gone %v", got)
+	}
+	if row, ok, err := st.Cube(t.Context(), "KEQ0000001"); err != nil || !ok || row.Configured || row.LastSeen.IsZero() {
+		t.Fatalf("the gone cube's row %+v %v %v", row, ok, err)
+	}
+	if n := foundEvents(t, ts); n["KEQ0000000"] != 1 || n["KEQ0000001"] != 1 {
+		t.Fatalf("cube_found events %v", n)
+	}
+
+	b, err = fakecube.StartDiscovery(bAddr, "KEQ0000001", 0x0a0b0d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	postDiscovery(t, ts)
+	if got := listedSerials(t, ts); len(got) != 2 {
+		t.Fatalf("listed once KEQ0000001 is back %v", got)
+	}
+	if n := foundEvents(t, ts); n["KEQ0000000"] != 1 || n["KEQ0000001"] != 2 {
+		t.Fatalf("cube_found events once it is back %v", n)
+	}
+}
+
+// A run that fails cannot tell a Cube gone from one not heard: the list
+// stays as it was.
+func TestFailedRunChangesNothing(t *testing.T) {
+	a, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts, s := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr()}})
+	postDiscovery(t, ts)
+	a.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := s.discoverOnce(ctx); err == nil {
+		t.Fatal("a cancelled run did not fail")
+	}
+	if got := listedSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000000" {
+		t.Fatalf("listed after a failed run %v", got)
+	}
+}
+
 // A Cube configured by serial only is connected at the address it
 // answers discovery from, and follows it when it changes.
 func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {

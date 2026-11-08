@@ -836,8 +836,14 @@ To use it, add it with `POST /api/v1/cubes` (below),
 or configure it in the settings file (its address,
 or its serial with `-sn` or a `_NAME`, see the README) and restart serve.
 The answers of serve's own proxies (docs/proxy.md) are not listed.
-Found Cubes are kept in the server's store,
-so they are listed again after a restart, with their first and latest sighting.
+A found Cube is listed while it answers:
+from its first answer until a complete run of discovery does not hear it,
+a search or the periodic one alike;
+a run that fails, such as one without the discovery port, changes nothing.
+Its row stays in the server's store with its first and latest sighting
+(the latest is written once per server run, or when an answer changes the row),
+so that a restart does not announce it again;
+after a restart it is listed once a run has heard it.
 
 `source` says where a configured Cube's configuration comes from:
 `env` (taken over from the settings file into the store),
@@ -923,7 +929,7 @@ The answer is the Cube object.
 `DELETE /api/v1/cubes/{sn}` stops serving the Cube:
 its connection and its proxy stop,
 and its row stays in the store with `configured` off, with its history.
-Discovery lists it as found again, `POST` adds it back,
+Discovery lists it as found while it answers, `POST` adds it back,
 and a line in the settings file does not bring it back by itself.
 
 A Cube served by serial for this run only (`-sn` without a row)
@@ -1010,12 +1016,18 @@ the only one the Cubes answer to), for example because another program holds it.
 `0` for on request only),
 and every minute while a Cube configured by serial has no address yet.
 The first time a Cube that is not configured answers,
-every Cube's event stream sends `cube_found`, once per serial and server run:
+and again when it answers after a complete run without it,
+every Cube's event stream sends `cube_found`; a Cube found before a restart
+is not announced again after it:
 
 ```
 event: cube_found
 data: {"kind":"cube_found","cube":{"serial":"KEQ0000000","configured":false,"address":"192.168.1.23",…},"time":"…"}
 ```
+
+A found Cube that does not answer a complete run leaves the list of `GET /api/v1/cubes`,
+and serve's log says "cube gone from the LAN";
+the stream sends nothing for it.
 
 A configured Cube that answers from another address than configured is logged;
 one configured by serial only, without an address,
