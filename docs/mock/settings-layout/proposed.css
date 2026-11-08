@@ -1,0 +1,304 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 The Massimo Authors */
+
+/* SettingsLayout: the rules this mock adds to internal/server/ui/style.css,
+   which index.html loads first, unchanged. Each would move into
+   style.css as it stands here; every colour is a token of style.css, so
+   light, dark and the colour schemes apply. The D-numbers are the
+   decisions of the owner's gate. */
+
+/* System settings, full width (D1): the page a heading, the table of
+   contents and its sections, each a card of its own in a grid. */
+.settings.settings-page { max-width: none; }
+.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
+.page-head h2 { font-size: 1.25rem; }
+
+/* The table of contents (D2): buttons, not links, since the address
+   already holds the page (#system); each scrolls to its section and
+   opens it when it is folded. */
+.toc { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
+
+.sys-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 900px) {
+  .sys-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "software maint"
+      "cubes cubes"
+      "flow flow"
+      "backup backup";
+  }
+  #sec-software { grid-area: software; }
+  #sec-maint { grid-area: maint; }
+  #sec-cubes { grid-area: cubes; }
+  #sec-backup { grid-area: backup; }
+  /* Users, Roles and Capabilities flow in two columns, none of them split:
+     the break falls after Users where Users is the taller of it and
+     Capabilities, after Roles otherwise (owner, 2026-11-08) */
+  .flow { grid-area: flow; columns: 2; column-gap: 16px; }
+  .flow > .sys-section { break-inside: avoid; margin-bottom: 16px; }
+  /* in a column the capabilities are a line each */
+  #sec-caps .cap-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+
+/* A section's head: its name larger than a label, on the tile head's
+   colour, a button that folds it (the disclosure pattern: a heading
+   holding a button with aria-expanded), what it holds at a glance as
+   badges, and its help. */
+.sys-section { min-width: 0; }
+.sys-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 10px 8px 12px; }
+.sys-head h3 { flex: 1 1 11em; min-width: 0; margin: 0; font-size: 1.08rem; }
+.sys-head > .sys-badges { margin-left: auto; }
+.sys-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+}
+.sys-fold:hover { color: var(--accent); }
+.fold-i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+.sys-fold[aria-expanded="true"] .fold-i { transform: rotate(90deg); }
+.sys-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.sys-section.folded > .tile-head { border-bottom-color: transparent; border-radius: 11px; }
+.sys-body { padding: 12px 14px 4px; min-width: 0; }
+.sys-lead { margin: 0 0 8px; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  .fold-i { transition: none; }
+}
+
+/* Back to top (D2): round, at the bottom right of the page's column,
+   once the table of contents is out of sight. */
+.to-top {
+  position: fixed;
+  right: max(16px, calc((100vw - 1100px) / 2 + 16px));
+  bottom: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+
+/* A panel's head, for the Cubes, the users and the roles alike: a
+   chevron, the name, the login or key apart from it in grey, and the
+   badges at the right edge (owner's list). */
+.panel > summary, .sys-sub > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  overflow-wrap: anywhere;
+}
+.panel > summary::-webkit-details-marker, .sys-sub > summary::-webkit-details-marker { display: none; }
+.panel > summary::before, .sys-sub > summary::before {
+  content: "";
+  flex: none;
+  width: 0.42em;
+  height: 0.42em;
+  margin: 0 2px 0 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.panel[open] > summary::before, .sys-sub[open] > summary::before { transform: rotate(45deg); }
+.panel[open] > summary { margin-bottom: 10px; }
+.panel > summary > .mono { color: var(--muted); }
+.panel > summary > .panel-badges { margin-left: auto; justify-content: flex-end; }
+.user-panel, .role-panel { margin-bottom: 8px; padding: 8px 12px; }
+
+/* Inside a Cube's panel two columns where there is room (owner's list):
+   the Cube's own settings at the left, the pairing and the hidden
+   devices at the right; one column on a phone, the pairing first as
+   today. */
+.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "pair" "fields" "hidden" "actions"; gap: 4px 28px; }
+.cube-cols > .cube-fields { grid-area: fields; }
+.cube-cols > .cube-pairing { grid-area: pair; }
+.cube-cols > .cube-hidden { grid-area: hidden; }
+.cube-cols > .actions { grid-area: actions; }
+@media (min-width: 760px) {
+  .cube-cols {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "fields pair" "fields hidden" "actions actions";
+    align-items: start;
+  }
+}
+.cube-col-title { display: block; color: var(--muted); margin: 0 0 6px; }
+.cube-hidden-list li > span { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; min-width: 0; }
+.cube-hidden-list li > button { flex: none; white-space: nowrap; }
+.pairing-form .field input[type="number"] { width: 5em; }
+
+/* The Cubes found on the LAN, under the served ones */
+.cube-found-list li .muted { font-size: 0.85rem; }
+
+/* Maintenance (D3, D4): a row per action with what it does, then what
+   the store and the settings file hold, folded. */
+.maint-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+.maint-row:first-child { border-top: none; padding-top: 0; }
+.maint-row > div { flex: 1 1 16em; min-width: 0; }
+.maint-row p { margin: 0; overflow-wrap: anywhere; }
+.maint-title { font-weight: 600; }
+.maint-pending { margin: 0 0 10px; font-size: 0.9rem; }
+.sys-sub { border-top: 1px solid var(--line); padding: 8px 0; }
+.sys-sub > summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.sys-sub > summary > .muted { font-size: 0.85rem; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 8px 0 4px; font-size: 0.9rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 0 14px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.kv-rows li { display: flex; justify-content: space-between; gap: 6px; border-bottom: 1px dotted var(--line); }
+.kv-rows li span:first-child { color: var(--muted); }
+@media (max-width: 480px) {
+  .kv { grid-template-columns: minmax(0, 1fr); }
+  .kv dd { margin-bottom: 4px; }
+}
+
+/* Backup and restore, full width: the format and the three buttons on
+   one line, and each backup's actions at the right of its row. */
+.backup-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
+.backup-bar .field { margin: 0 !important; }
+@media (min-width: 760px) {
+  .backup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: center; }
+  .backup-row > .backup-head, .backup-row > .backup-note { grid-column: 1; }
+  .settings .backup-row > .backup-actions { grid-column: 2; grid-row: 1 / span 2; margin: 0; justify-content: flex-end; }
+}
+
+/* The 👤 menu with an icon per item (owner's list) */
+.menu-items button { display: flex; align-items: center; gap: 10px; }
+.menu-items button > .ni { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.menu-items button:hover > .ni { color: var(--accent); }
+
+/* The Cube choice as a menu of the page (D6): the closed control the
+   Cube's name, the list as wide as its entries need, each a name and,
+   under it, the serial and the address; the connection is a plug in
+   front of the name (below). */
+.cube-menu { position: relative; min-width: 0; }
+.menu.cube-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  max-width: min(100%, 320px);
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+.menu.cube-menu > summary:hover, .menu.cube-menu[open] > summary { border-color: var(--accent); }
+.cube-choice-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cube-choice .ni { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
+.cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
+.cube-menu .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.cube-opt-meta { font-family: var(--mono); font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+.cube-opt-meta .bad { color: var(--bad); font-family: inherit; }
+.menu-group { margin: 8px 10px 2px; font-size: 0.8rem; color: var(--muted); }
+.menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
+@media (max-width: 599px) {
+  .cube-menu { flex: 1 1 160px; }
+  .menu.cube-menu > summary { width: 100%; max-width: 100%; }
+}
+
+/* My settings and My profile keep a reading width (D10) */
+.settings.prefs-page, .settings.profile-page { max-width: 640px; }
+
+/* "only on this device" as a column of its own (D9): the settings at the
+   left, the switches in a band at the right, labelled at its top and in
+   each switch's tooltip. */
+.dev-table { margin-bottom: 10px; }
+.dev-head, .dev-row, .dev-group { display: grid; grid-template-columns: minmax(0, 1fr) 76px; column-gap: 12px; }
+.dev-cell { display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.dev-colhead {
+  padding: 6px 4px;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--muted);
+  cursor: help;
+}
+.dev-head > span:first-child { align-self: end; }
+.dev-row, .dev-group { border-top: 1px solid var(--line); }
+.settings .dev-row > .field { margin: 0; padding: 10px 0; }
+.dev-row > .scheme-actions { margin: 0; padding: 10px 0; }
+.dev-group > span:first-child { padding: 12px 0 2px; color: var(--muted); font-weight: 600; }
+.dev-table > :last-child > .dev-cell { border-radius: 0 0 8px 8px; }
+.dev-cell .switch { gap: 0; }
+
+/* My profile: the own password, offered to a user with keys only as
+   "Set a password" (D8) */
+.profile-page details > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.profile-page details[open] > summary { margin-bottom: 6px; }
+.profile-page .pw-form { display: flex; flex-direction: column; gap: 6px; }
+.profile-section { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+
+/* The header and the page's row kept at the top (D2, D12, D13): the
+   header's first line on every page, the page's row with its sections
+   menu under it; once scrolled, the header drops the time of the last
+   update and the clock, and on a phone the Cube choice takes the
+   brand's place. */
+.top { position: sticky; top: 0; z-index: 6; background: var(--bg); }
+#version-short { white-space: nowrap; }
+body.scrolled .top { padding: 8px 0; }
+body.scrolled .top .updated-line, body.scrolled #clock-plain { display: none; }
+.page-bar {
+  position: sticky;
+  top: var(--top-h, 0px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 6px;
+  padding: 8px 0;
+  background: var(--bg);
+}
+body.scrolled .page-bar { border-bottom: 1px solid var(--line); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
+.page-bar h2 { font-size: 1.25rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sec-menu { margin-left: auto; position: relative; }
+/* the sections menu: a bulleted list, apart from the header's ☰ (D12) */
+.menu.sec-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  line-height: 1;
+}
+.menu.sec-menu > summary:hover, .menu.sec-menu[open] > summary { border-color: var(--accent); }
+.sec-menu .menu-items { right: 0; min-width: 210px; }
+.sec-menu .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.sys-section { scroll-margin-top: calc(var(--top-h, 0px) + var(--bar-h, 0px) + 10px); }
+/* the Cube's connection, a plug in the Cube choice and its list */
+.cube-choice .conn { width: 18px; height: 18px; margin-left: 0; }
+.conn.ok, .menu-items button > .conn.ok { color: var(--ok); }
+.conn.bad, .menu-items button > .conn.bad { color: var(--bad); }
+.cube-menu .menu-items button { flex-direction: row; align-items: center; gap: 10px; }
+.cube-menu .menu-items button > .conn { width: 20px; height: 20px; }
+.opt-text { display: flex; flex-direction: column; }
+.conn-none { width: 20px; flex: none; }
+/* a phone, scrolled (D13): the Cube choice takes the brand's place */
+@media (max-width: 599px) {
+  body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
+  body.scrolled .top-left { display: none; }
+}
