@@ -230,6 +230,7 @@ The users routes say what the caller may do with each user they list
 (`"may": {"manage": true, "password": true}`).
 | `update` | start a software update | `POST /api/v1/update` |
 | `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
+| `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 
 The default roles and their sets are those of docs/store.md section 6:
@@ -1921,6 +1922,69 @@ It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
 `500` when the file could not be read.
+
+### GET /api/v1/reboot, POST /api/v1/reboot, DELETE /api/v1/reboot
+
+The reboot of the computer the server runs on, for the capability `reboot`,
+which no default role but `owner` has:
+restarting the server is not rebooting a computer that may run other services.
+It needs the owner's switch, `MASSIMO_REBOOT=on` in the settings file
+or `serve -allow-reboot` (README, "serve"),
+and on Linux and macOS the root helper that `massimo install -reboot-helper`
+installs (packaging/README.md, "Rebooting from the web UI");
+the Windows service reboots by itself.
+`serve` in a terminal, in Docker, as Homebrew's service
+or on Linux without systemd does not reboot.
+
+`GET` says whether this caller's `POST` would reboot the computer now,
+and who does:
+`{"available": true, "by": "systemd"}`,
+or `{"available": false, "by": "systemd", "blocked": "<why>"}`;
+`at`, while a reboot waits or has begun, is when it is asked for,
+`begun` is `true` once the delay is over and the helper was asked,
+and `error` says why the last one failed.
+`by` is `systemd` or `launchd`, their root helper,
+or `windows`, the service itself.
+The reasons come in this order:
+the server cannot reboot its computer at all,
+the switch is off,
+the helper is not installed,
+a reboot has begun or waits,
+a restart is under way,
+an update is running.
+
+`POST` with `{"delay": 60}` asks for the reboot after that many seconds,
+0 to 3600, 60 when the body names none,
+and answers `202` with `{"ok": true, "by": "systemd", "at": "2026-11-08T15:20:00Z"}`.
+The server waits the delay itself:
+a reboot that waits ends with the server, and `DELETE` takes it back.
+Then on Linux and macOS it writes `/var/lib/massimo/reboot-request`,
+which starts the root helper (`massimo-reboot.path`,
+`ch.metaworx.massimo-reboot`);
+the helper removes it and reboots,
+and reads nothing the server's user can write.
+A request the helper has not taken within 30 s is removed,
+and `GET` reports it as the `error`;
+so it does when the server still runs two minutes after the helper took it,
+since the system stops the server within seconds of a reboot;
+the next reboot may then be asked for.
+The Windows service runs `shutdown.exe /r` instead.
+The system stops the server as at every shutdown;
+`GET /healthz` reports a new `started_at` once the computer is back.
+It sends nothing to a Cube, and a retry with the same `Idempotency-Key`
+is answered with the first `202`.
+While a reboot waits the restart is refused,
+and switching the reboot off takes it back.
+
+`DELETE` takes back a reboot that waits: `200` with `{"ok": true}`,
+`409` once it has begun or when none waits.
+
+An open server takes the `POST` and the `DELETE` only from the box itself,
+as the restart (above).
+`400` for a delay outside 0 to 3600 seconds;
+`403` without the capability `reboot`;
+`409` with the reason `GET` gives.
+Both are audit rows, `server.reboot` and `server.reboot.cancel`.
 
 ### GET /api/v1/store, GET /api/v1/config
 

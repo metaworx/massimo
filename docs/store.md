@@ -237,6 +237,7 @@ Stays in `.env`, because it is needed before the store is open, or is a secret:
 | `MASSIMO_DATA`, `-data` | names the store |
 | `MASSIMO_ENV_FILE`, `-env` | names the file |
 | `MASSIMO_UPDATE_REQUEST`, `MASSIMO_UPDATE_CHANNEL`, `MASSIMO_GITHUB_TOKEN` | the update helper's contract with root and a secret |
+| `MASSIMO_REBOOT`, `-allow-reboot` | the owner's switch for the reboot of the computer, which the API must not be able to turn on (`docs/api-v1.md`, "GET /api/v1/reboot, …") |
 | `MASSIMO_CUBE_SN` | selects a Cube for the commands, which do not open the store |
 
 Moves into the store, editable in the UI and through the API afterwards:
@@ -661,6 +662,7 @@ The capabilities, what each allows, and the routes it guards:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
 | `update` | start a software update | `POST /api/v1/update` |
+| `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 
 The default roles, as seeded.
@@ -682,11 +684,13 @@ The default roles, as seeded.
 | `guests` | ✓ | | | | |
 | `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | |
-| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `audit` | | | | | |
+| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `reboot`, `audit` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07)
 and the passwords of other users (migration 0008, 2026-11-08);
+`reboot` is seeded for no role (2026-11-08): restarting the server is not
+rebooting a computer that may run other services too;
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;

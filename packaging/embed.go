@@ -13,5 +13,6 @@ import "embed"
 //
 //go:embed env.template
 //go:embed systemd/massimo.service systemd/massimo-update.path systemd/massimo-update.service logrotate/massimo
+//go:embed systemd/massimo-reboot.path systemd/massimo-reboot.service launchd/ch.metaworx.massimo-reboot.plist
 //go:embed launchd/ch.metaworx.massimo.plist launchd/ch.metaworx.massimo-update.plist
 var Files embed.FS

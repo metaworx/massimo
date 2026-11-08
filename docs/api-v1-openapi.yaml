@@ -1969,6 +1969,92 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/reboot:
+    get:
+      summary: Whether the server can reboot the computer it runs on from here, and who does
+      x-capability: reboot
+      responses:
+        "200":
+          description: The reboot's state for this caller
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RebootInfo"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+    post:
+      summary: Reboot the computer the server runs on, after a delay
+      x-capability: reboot
+      description: |
+        Needs the owner's switch (MASSIMO_REBOOT=on in the settings file, or
+        serve -allow-reboot) and, on Linux and macOS, the root helper that
+        massimo install -reboot-helper installs; the Windows service reboots
+        by itself. The server waits the delay, then asks the helper; the
+        system stops the server as at every shutdown. DELETE takes back a
+        reboot that still waits. An open server (no users, or no token
+        without a store) takes it only from the box itself.
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                delay: {type: integer, minimum: 0, maximum: 3600, default: 60, description: Seconds until the reboot}
+      responses:
+        "202":
+          description: The reboot waits its delay
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  by: {type: string, enum: [systemd, launchd, windows]}
+                  at: {type: string, format: date-time, description: When the reboot is asked for}
+        "400":
+          description: The body is not JSON, or the delay is not 0 to 3600 seconds
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "403":
+          description: The caller's role lacks reboot, another site's page sent it, or an open server was asked from elsewhere than the box
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The server cannot reboot its computer, the reboot is switched off, no helper is installed, a reboot waits or has begun, a restart is under way, or an update is running
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+    delete:
+      summary: Take back a reboot that waits
+      x-capability: reboot
+      parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: The reboot is taken back
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "403":
+          description: The caller's role lacks reboot, or an open server was asked from elsewhere than the box
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: No reboot waits, or the reboot has begun
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/store:
     get:
       summary: The store as massimo store info shows it
@@ -2590,6 +2676,16 @@ components:
           description: The settings file's variables that changed since the start and apply only at the next one; names, never values
         file: {type: string, description: The settings file serve reads}
         read_at: {type: string, format: date-time, description: When the settings file was last read, at the start or since}
+    RebootInfo:
+      type: object
+      required: [available]
+      properties:
+        available: {type: boolean, description: Whether this caller's POST would reboot the computer now}
+        by: {type: string, enum: [systemd, launchd, windows], description: Who reboots; absent when nobody can}
+        blocked: {type: string, description: Why the reboot is not available}
+        at: {type: string, format: date-time, description: When a reboot that waits, or has begun, is asked for}
+        begun: {type: boolean, description: The delay is over and the helper or the system was asked}
+        error: {type: string, description: Why the last reboot failed}
     ReloadResult:
       type: object
       required: [changed, pending, read_at]

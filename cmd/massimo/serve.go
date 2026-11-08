@@ -74,6 +74,8 @@ func runServe(args []string) error {
 	acmeDNSHook := fs.String("acme-dns-hook", os.Getenv(acmeDNSHookVar), "with -tls acme, get the certificate by the DNS-01 challenge through this executable, run as '<hook> set <record> <txt>' and '<hook> clear <record> <txt>' (packaging/acme-dns-hooks/); no port needed, wildcards allowed (default "+acmeDNSHookVar+")")
 	sighupMode := fs.String("sighup", os.Getenv(sighupVar), "what SIGHUP does on Unix: reload reads the settings file again, applying MASSIMO_API_TOKEN at once, and checkpoints the store; stop stops as SIGTERM does; auto reloads under a service manager and where SIGHUP was ignored at the start (nohup), and stops in a terminal, where SIGHUP means it closed (default "+sighupVar+", else auto)")
 	restartMode := fs.String("restart", os.Getenv(restartVar), "what a restart from the API and the web UI does: auto offers it under a service manager that starts the server again (systemd, launchd, Homebrew, the Windows service); exit stops and exits with status 75 for whatever runs serve, such as Docker's --restart; off never offers it (default "+restartVar+", else auto)")
+	rebootDefault, rebootErr := parseSwitch(rebootVar, os.Getenv(rebootVar))
+	allowReboot := fs.Bool("allow-reboot", rebootDefault, "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", on or off, else off)")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
@@ -122,6 +124,9 @@ func runServe(args []string) error {
 	settingsRead := time.Now() // the settings file as the start read it
 	given := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
+	if rebootErr != nil && !given["allow-reboot"] {
+		return fmt.Errorf("serve: %w", rebootErr)
+	}
 	src, err := tlsSource(tlsOptions{mode: *tlsFlag, certPath: *tlsCert, keyPath: *tlsKey, names: *tlsNames, listen: *listen, dataDir: dataDir(),
 		email: *acmeEmail, directory: *acmeDirectory, httpAddr: *tlsHTTP, hook: *acmeDNSHook}, logger)
 	if err != nil {
@@ -185,6 +190,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	reboot := serveReboot(logger, *allowReboot)
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
 		upd.Managed = m.String()
@@ -196,7 +202,7 @@ func runServe(args []string) error {
 	}
 	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
 		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd, TLS: src, HSTSDays: hsts, TrustedProxies: trusted,
-		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}})
+		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, Reboot: reboot})
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		return err
@@ -212,7 +218,7 @@ func runServe(args []string) error {
 	if restartAttr == "" {
 		restartAttr = "none"
 	}
-	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "restart", restartAttr, "sighup", hup, "tls", "off"}
+	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "restart", restartAttr, "reboot", rebootAttr(reboot), "sighup", hup, "tls", "off"}
 	hs := &http.Server{Handler: srv.Handler()}
 	if src != nil {
 		hs.TLSConfig = certs.Config(src)
@@ -293,6 +299,36 @@ func runServe(args []string) error {
 		logger.Info("stopped for a restart", "by", restartFor, "exit", exitRestart)
 	}
 	return rs.result(err)
+}
+
+// serveReboot finds who reboots this server's computer (reboot.go) and
+// what asks for it; a request a helper never took is removed first.
+func serveReboot(log *slog.Logger, allowed bool) server.RebootOptions {
+	by, blocked, helper := rebootBy(currentProcess(), "")
+	o := server.RebootOptions{By: by, Blocked: blocked, Allowed: allowed, Helper: helper}
+	switch by {
+	case byWindows:
+		o.Reboot = windowsRebooter()
+	case bySystemd, byLaunchd:
+		removeStaleReboot(install.RebootRequest, log)
+		o.Reboot = rebootRequester(install.RebootRequest)
+	}
+	return o
+}
+
+// rebootAttr is the reboot in serve's first log line: who reboots, off
+// while the owner's switch is, no-helper while one is missing, none
+// where nobody can.
+func rebootAttr(o server.RebootOptions) string {
+	switch {
+	case o.By == "":
+		return "none"
+	case !o.Allowed:
+		return "off"
+	case o.Helper != nil && o.Helper() != "":
+		return "no-helper"
+	}
+	return o.By
 }
 
 // defaultUpdateStatus is the helper's status file where install puts it:

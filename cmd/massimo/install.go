@@ -17,6 +17,8 @@ func runInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	settings := fs.String("settings", "", "copy this settings file (a .env) as the service's settings when there are none yet")
 	noHelper := fs.Bool("no-update-helper", false, "leave out the update helper (Linux and macOS: its units or LaunchDaemon; Windows: the service's -update-request); the web UI then cannot start updates")
+	rebootHelper := fs.Bool("reboot-helper", false, "Linux and macOS: install the root helper that reboots the computer when the web UI asks (massimo-reboot.path and .service, the LaunchDaemon "+install.RebootLabel+"); the server offers the reboot once MASSIMO_REBOOT=on is in its settings; kept by later installs")
+	noRebootHelper := fs.Bool("no-reboot-helper", false, "take the reboot helper out again")
 	noStart := fs.Bool("no-start", false, "enable the service without starting it")
 	listen := fs.String("listen", "", "serve the API and web UI on this address, such as :80 (default :8099; kept by later installs)")
 	tlsMode := fs.String("tls", "", "serve over TLS: files for -tls-cert and -tls-key, self-signed for a certificate the server makes, or off; written into the settings and kept by later installs (default: what the settings say)")
@@ -32,7 +34,7 @@ func runInstall(args []string) error {
 	root := fs.String("root", "", "Linux and macOS: install below this directory instead of / and run no commands (for images and tests)")
 	fs.Usage = func() {
 		win := install.WindowsPaths("", "")
-		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>] | -tls acme -tls-names <name> [-acme-email <addr>] [-tls-http :80 | -acme-dns-hook <script>]] [-no-update-helper] [-no-start] [-dry-run]
+		fmt.Fprintf(os.Stderr, `usage: massimo install [-settings <.env>] [-listen <addr>] [-tls-cert <pem> -tls-key <pem> | -tls self-signed [-tls-names <list>] | -tls acme -tls-names <name> [-acme-email <addr>] [-tls-http :80 | -acme-dns-hook <script>]] [-no-update-helper] [-reboot-helper | -no-reboot-helper] [-no-start] [-dry-run]
        massimo install -remove [-purge]
 
 Install this binary and massimo serve as a service, or update both when
@@ -52,21 +54,25 @@ refuse http:// for a year.
 
 - Linux with systemd: the binary as %s, the user massimo, %s,
   the units massimo.service and the update helper
-  massimo-update.path/.service, and the log rotation; a unit edited by
-  hand is kept as .bak. Needs root.
+  massimo-update.path/.service, with -reboot-helper the reboot helper
+  massimo-reboot.path/.service, and the log rotation; a unit edited by
+  hand is kept as .bak. On a box with the Debian package only the
+  settings, the listen address and the reboot helper. Needs root.
 - Windows: the binary as %s, settings and log in %s
   (SYSTEM and Administrators only), the service "massimo" (automatic
   start, restarted on failure) and a firewall rule for private and
   domain networks; the server starts the update helper itself when the
-  web UI asks for an update. Needs an administrator prompt.
+  web UI asks for an update, and reboots the computer itself, needing
+  no helper. Needs an administrator prompt.
 - macOS: the binary as %s, the hidden user %s, %s, the
-  LaunchDaemons %s and the update helper %s in
-  %s, loaded with launchctl. Needs root.
+  LaunchDaemons %s and the update helper %s, with
+  -reboot-helper the reboot helper %s, in %s, loaded with
+  launchctl. Needs root.
 
 See packaging/README.md.
 
 `, install.BinPath, install.EnvPath, win.Bin, win.DataDir,
-			install.BinPath, install.DarwinUser, install.EnvPath, install.Label, install.HelperLabel, install.DaemonDir)
+			install.BinPath, install.DarwinUser, install.EnvPath, install.Label, install.HelperLabel, install.RebootLabel, install.DaemonDir)
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -75,7 +81,10 @@ See packaging/README.md.
 	if *purge && !*remove {
 		return errors.New("-purge goes with -remove")
 	}
-	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook}
+	if *rebootHelper && *noRebootHelper {
+		return errors.New("-reboot-helper and -no-reboot-helper exclude each other")
+	}
+	o := install.Options{Root: *root, Settings: *settings, NoUpdateHelper: *noHelper, RebootHelper: *rebootHelper, NoRebootHelper: *noRebootHelper, NoStart: *noStart, DryRun: *dryRun, Listen: *listen, TLS: *tlsMode, TLSCert: *tlsCert, TLSKey: *tlsKey, TLSNames: *tlsNames, ACMEEmail: *acmeEmail, TLSHTTP: *tlsHTTP, ACMEDNSHook: *acmeDNSHook}
 	switch runtime.GOOS {
 	case "linux":
 		if *remove {
@@ -88,6 +97,9 @@ See packaging/README.md.
 		}
 		if *remove {
 			return install.RemoveWindows(o, *purge)
+		}
+		if *rebootHelper {
+			fmt.Printf("Windows needs no reboot helper: the service reboots the computer itself once MASSIMO_REBOOT=on is in %s\n", install.WindowsPaths(os.Getenv("ProgramFiles"), os.Getenv("ProgramData")).Env)
 		}
 		return install.InstallWindows(o)
 	case "darwin":
