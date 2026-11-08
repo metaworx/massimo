@@ -54,6 +54,10 @@ the next minor, a fix counts the suffix up.
   their updates and the Go modules' monthly, its commit messages left
   unchecked (`GUIDELINES/project/CI.md`, "Dependabot").
 
+- The update check and an update's download try again twice, after 2
+  and 5 seconds, when GitHub answers 502, 503 or 504 or the connection
+  fails before an answer.
+
 ### Fixed
 
 - A user's or role's head in System settings shows the name and the

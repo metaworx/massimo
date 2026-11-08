@@ -13,13 +13,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -95,11 +98,40 @@ type fakeGitHub struct {
 	releases []map[string]any
 	files    map[string][]byte
 	auth     map[string]string // path → Authorization header seen
+
+	mu   sync.Mutex
+	fail map[string][]int // path → statuses answered first, in turn
+	hits map[string]int   // path → requests
+}
+
+// failFirst has path answer each of codes in turn before it serves as usual.
+func (f *fakeGitHub) failFirst(path string, codes ...int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fail[path] = codes
+}
+
+// count is the number of requests path has had.
+func (f *fakeGitHub) count(path string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.hits[path]
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
-	f := &fakeGitHub{files: map[string][]byte{}, auth: map[string]string{}}
+	f := &fakeGitHub{files: map[string][]byte{}, auth: map[string]string{}, fail: map[string][]int{}, hits: map[string]int{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.hits[r.URL.Path]++
+		var code int
+		if codes := f.fail[r.URL.Path]; len(codes) > 0 {
+			code, f.fail[r.URL.Path] = codes[0], codes[1:]
+		}
+		f.mu.Unlock()
+		if code != 0 {
+			http.Error(w, http.StatusText(code), code)
+			return
+		}
 		f.auth[r.URL.Path] = r.Header.Get("Authorization")
 		if r.URL.Path == "/repos/"+Repo+"/releases" {
 			json.NewEncoder(w).Encode(f.releases)
@@ -543,5 +575,126 @@ func TestLatestSkipsOtherChannelsUnfetched(t *testing.T) {
 	}
 	if got := fetched(); len(got) != 2 {
 		t.Errorf("stable fetched %v, want v0.2.0's alone", got)
+	}
+}
+
+// fastRetries makes the waits between attempts short for one test.
+func fastRetries(t *testing.T) {
+	old := retryWaits
+	retryWaits = []time.Duration{time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { retryWaits = old })
+}
+
+// A manifest answered 504 and 502 first is fetched on the third attempt.
+func TestRetriesGatewayErrors(t *testing.T) {
+	fastRetries(t)
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": []byte("the binary")}, nil)
+	manifest := "/dl/v1.0.0/" + ManifestName
+	gh.failFirst(manifest, http.StatusGatewayTimeout, http.StatusBadGateway)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	if _, err := c.ByTag(context.Background(), "v1.0.0"); err != nil || gh.count(manifest) != 3 {
+		t.Fatalf("after a 504 and a 502: %v, %d requests", err, gh.count(manifest))
+	}
+}
+
+// A list that keeps answering 503 is given up after three attempts,
+// and the error says so.
+func TestRetryGivesUp(t *testing.T) {
+	fastRetries(t)
+	pub, _ := testKey(t)
+	gh := newFakeGitHub(t)
+	list := "/repos/" + Repo + "/releases"
+	gh.failFirst(list, 503, 503, 503, 503)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	_, err := c.Latest(context.Background(), "alpha")
+	if err == nil || !strings.Contains(err.Error(), "503 Service Unavailable (3 attempts)") || gh.count(list) != 3 {
+		t.Fatalf("got %v after %d requests", err, gh.count(list))
+	}
+}
+
+// An answer is not asked again: a rate limit, a missing file.
+func TestNoRetryOfAnAnswer(t *testing.T) {
+	fastRetries(t)
+	pub, _ := testKey(t)
+	list := "/repos/" + Repo + "/releases"
+	for _, code := range []int{http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		gh := newFakeGitHub(t)
+		gh.failFirst(list, code)
+		c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+		_, err := c.Latest(context.Background(), "alpha")
+		if err == nil || strings.Contains(err.Error(), "attempts") || gh.count(list) != 1 {
+			t.Errorf("%d: %v after %d requests", code, err, gh.count(list))
+		}
+	}
+}
+
+// A wait between attempts ends with the context, and the answer that
+// came is the error.
+func TestRetryWaitEndsWithTheContext(t *testing.T) {
+	old := retryWaits
+	retryWaits = []time.Duration{time.Minute, time.Minute}
+	t.Cleanup(func() { retryWaits = old })
+	pub, _ := testKey(t)
+	gh := newFakeGitHub(t)
+	list := "/repos/" + Repo + "/releases"
+	gh.failFirst(list, 503, 503, 503)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := c.Latest(ctx, "alpha")
+	if err == nil || !strings.Contains(err.Error(), "503") || time.Since(start) > 5*time.Second || gh.count(list) != 1 {
+		t.Fatalf("got %v after %s and %d requests", err, time.Since(start), gh.count(list))
+	}
+}
+
+// A binary answered 503 first is downloaded on the second attempt and
+// verifies.
+func TestDownloadRetriesItsStart(t *testing.T) {
+	fastRetries(t)
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": []byte("the binary")}, nil)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	r, err := c.ByTag(context.Background(), "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := "/dl/v1.0.0/massimo-linux-amd64"
+	gh.failFirst(bin, http.StatusServiceUnavailable)
+	var buf bytes.Buffer
+	if err := c.Download(context.Background(), r, "massimo-linux-amd64", &buf); err != nil || buf.String() != "the binary" || gh.count(bin) != 2 {
+		t.Fatalf("%q %v after %d requests", buf.String(), err, gh.count(bin))
+	}
+}
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "timed out" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
+
+// What is sent again: a gateway's state, a connection that failed
+// before an answer; not a timeout, nor the end of the context.
+func TestRetryable(t *testing.T) {
+	ctx := context.Background()
+	for code, want := range map[int]bool{200: false, 403: false, 404: false, 429: false, 500: false, 502: true, 503: true, 504: true} {
+		if got := retryable(ctx, &http.Response{StatusCode: code}, nil); got != want {
+			t.Errorf("%d: %v", code, got)
+		}
+	}
+	dropped := &url.Error{Op: "Get", URL: "https://example/", Err: io.ErrUnexpectedEOF}
+	if !retryable(ctx, nil, dropped) {
+		t.Error("a dropped connection is not sent again")
+	}
+	if retryable(ctx, nil, &url.Error{Op: "Get", URL: "https://example/", Err: timeoutError{}}) {
+		t.Error("a timeout is sent again")
+	}
+	ended, cancel := context.WithCancel(ctx)
+	cancel()
+	if retryable(ended, nil, dropped) {
+		t.Error("a request is sent again after the context's end")
 	}
 }
