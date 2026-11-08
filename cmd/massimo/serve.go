@@ -257,6 +257,9 @@ func runServe(args []string) error {
 		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), ReadAt: time.Now()}, nil
 	})
 	srv.SetSettingsRead(settingsRead)
+	// GET /api/v1/config: the settings in effect, as massimo config shows
+	tlsInEffect := tlsMode(*tlsFlag, *tlsCert, *tlsKey)
+	srv.SetConfigView(func() server.ConfigView { return configView(*listen, tlsInEffect) })
 	if hup == sighupReload {
 		hups := make(chan os.Signal, 1)
 		signal.Notify(hups, syscall.SIGHUP)

@@ -1969,6 +1969,45 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/store:
+    get:
+      summary: The store as massimo store info shows it
+      x-capability: settings
+      responses:
+        "200":
+          description: The store's file, schema, identities and rows per table
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StoreInfo"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server has no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/config:
+    get:
+      summary: The settings in effect, as massimo config shows them
+      x-capability: settings
+      description: |
+        A key's, an IV's, a token's or a password's value never leaves the
+        server: the variable is listed with secret true and no value.
+      responses:
+        "200":
+          description: The settings in effect
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConfigView"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503":
+          description: The server does not show its settings
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
 components:
   securitySchemes:
     bearer:
@@ -2564,6 +2603,39 @@ components:
           items: {type: string}
           description: The variables that differ from the start and apply only at the next one
         read_at: {type: string, format: date-time}
+    StoreInfo:
+      type: object
+      properties:
+        file: {type: string, description: The store's file}
+        schema: {type: integer, description: The file's schema version}
+        min_reader: {type: integer, description: The oldest schema version that still reads it}
+        binary: {type: integer, description: The schema version this server is built for}
+        node: {type: string}
+        tenant: {type: string}
+        rows:
+          type: object
+          additionalProperties: {type: integer}
+          description: Rows per table
+    ConfigView:
+      type: object
+      properties:
+        version: {type: string}
+        file: {type: string, description: The settings file}
+        file_found: {type: boolean}
+        data_dir: {type: string}
+        listen: {type: string}
+        tls: {type: string, enum: ["off", files, self-signed, acme]}
+        log_level: {type: string, description: The level and where it came from}
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              name: {type: string}
+              value: {type: string, description: Absent for a secret}
+              secret: {type: boolean}
+              source: {type: string, description: Where the value came from, the environment or the settings file}
+              unknown: {type: boolean, description: A name Massimo does not know, perhaps a typo}
     UpdateInfo:
       type: object
       properties:

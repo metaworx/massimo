@@ -197,6 +197,61 @@ async function loadRestart() {
   }
 }
 
+// --- the store and the settings in effect (with settings) -------------
+
+const infoState = { store: null, config: null, error: "" };
+
+// renderServerInfo draws Maintenance's Store and Settings in effect, from
+// GET /api/v1/store and GET /api/v1/config; a secret is "set, not shown".
+function renderServerInfo() {
+  const s = infoState.store;
+  const c = infoState.config;
+  const sbody = $("store-info-body");
+  const cbody = $("config-info-body");
+  clear(sbody);
+  clear(cbody);
+  if (infoState.error) sbody.appendChild(textEl("p", t("maint.cannotAsk", { error: infoState.error }), "small cubes-msg bad"));
+  if (s) {
+    const rows = Object.values(s.rows || {}).reduce((a, b) => a + b, 0);
+    $("store-info-sum").textContent = t("maint.storeSum", { file: s.file.split(/[\\/]/).pop(), schema: s.schema, rows: fmtNum(rows, 0) });
+    sbody.append(kvList([
+      [t("maint.storeFile"), s.file, true],
+      [t("maint.storeSchema"), t("maint.storeSchemaValue", { schema: s.schema, min: s.min_reader, binary: s.binary })],
+      [t("maint.node"), s.node, true],
+      [t("maint.tenant"), s.tenant, true],
+    ]), countList(s.rows || {}));
+  }
+  if (c) {
+    $("config-info-sum").textContent = c.file;
+    cbody.appendChild(kvList([
+      [t("maint.cfgVersion"), c.version || "–"],
+      [t("maint.file"), c.file + " (" + t(c.file_found ? "maint.fileFound" : "maint.fileMissing") + ")", true],
+      [t("maint.cfgData"), c.data_dir, true],
+      [t("maint.cfgListen"), c.listen, true],
+      [t("maint.cfgTLS"), c.tls],
+      [t("maint.cfgLog"), c.log_level],
+    ]));
+    if (c.variables && c.variables.length) {
+      cbody.appendChild(textEl("p", t("maint.cfgVars"), "muted small"));
+      cbody.appendChild(kvList(c.variables.map((v) => [v.name,
+        (v.secret ? t("maint.secretSet") : v.value) + " (" + v.source + ")" + (v.unknown ? " · " + t("maint.varUnknown") : ""), !v.secret])));
+    }
+  }
+}
+
+// loadServerInfo asks for the store and the settings in effect, for a
+// holder of settings; the others see neither.
+async function loadServerInfo() {
+  if (!hasCap("settings")) return; // login.js
+  infoState.error = "";
+  try {
+    [infoState.store, infoState.config] = await Promise.all([api("GET", "api/v1/store"), api("GET", "api/v1/config")]);
+  } catch (e) {
+    infoState.error = e.message;
+  }
+  renderServerInfo();
+}
+
 // startedAt is the server's start from /healthz, "" when it does not
 // answer; /healthz is always open, so it needs no sign-in.
 async function startedAt() {
@@ -278,6 +333,7 @@ function initUpdate() {
   onView("system", () => {
     loadUpdate(false);
     loadRestart();
+    loadServerInfo();
   });
 }
 

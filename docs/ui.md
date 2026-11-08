@@ -390,7 +390,7 @@ to the top of the page.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-- **Maintenance** (with `restart`):
+- **Maintenance** (with `restart`, or `settings` for its last two parts):
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -405,6 +405,14 @@ to the top of the page.
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
+  **Store** (with `settings`) opens to what `massimo store info` shows:
+  the file, the schema version, the node and tenant and the rows per table,
+  its head the file, the schema and the rows in all;
+  **Settings in effect** to what `massimo config` shows: the version, the
+  settings file, the data directory, the listen address, TLS, the log level
+  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
+  token or a password as "set, not shown"
+  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
   From 900 px Software update and Maintenance share a row.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
@@ -541,6 +549,8 @@ and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's connection a `connIcon`;
 a device's serial and radio address are a `deviceIds`;
+a list of facts is a `kvList`, of counts a `countList`;
+an action with what it does and its button is an `.action-row`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`

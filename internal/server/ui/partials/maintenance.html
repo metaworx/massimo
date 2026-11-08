@@ -1,19 +1,19 @@
-<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again, update.js. -->
-<section id="sys-maint" class="tile section-card half maint-settings needs-restart" aria-labelledby="sys-maint-h">
+<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again (with restart), the store and the settings in effect (with settings), update.js. -->
+<section id="sys-maint" class="tile section-card half maint-settings needs-restart-or-settings" aria-labelledby="sys-maint-h">
   <header class="tile-head section-head">
     <h3 id="sys-maint-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-maint-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="maint.title">Maintenance</span></button></h3>
     <span class="section-badges"></span>
   </header>
   <div id="sys-maint-body" class="section-body" aria-live="polite">
-    <div class="action-row restart">
+    <div class="action-row restart needs-restart">
       <div>
         <p class="action-title" data-i18n="maint.restart">Restart</p>
         <p id="restart-text" class="muted small hidden"></p>
       </div>
       <div class="actions"><button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button></div>
     </div>
-    <p id="restart-pending" class="notice small hidden"></p>
-    <div class="action-row">
+    <p id="restart-pending" class="notice small hidden needs-restart"></p>
+    <div class="action-row needs-restart">
       <div>
         <p class="action-title" data-i18n="maint.file">Settings file</p>
         <p id="settings-file-text" class="muted small"></p>
@@ -21,5 +21,13 @@
       </div>
       <div class="actions"><button type="button" id="settings-reload" data-i18n="maint.reload">Reload now</button></div>
     </div>
+    <details id="store-info" class="sys-sub needs-settings">
+      <summary><span data-i18n="maint.store">Store</span><span id="store-info-sum" class="muted"></span></summary>
+      <div id="store-info-body"></div>
+    </details>
+    <details id="config-info" class="sys-sub needs-settings">
+      <summary><span data-i18n="maint.config">Settings in effect</span><span id="config-info-sum" class="muted"></span></summary>
+      <div id="config-info-body"></div>
+    </details>
   </div>
 </section>

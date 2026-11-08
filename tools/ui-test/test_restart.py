@@ -5,7 +5,7 @@
 so the test server never restarts."""
 import json
 
-from conftest import api_call
+from conftest import TOKEN, api_call
 from helpers import show_view, wait_until
 
 AVAILABLE = '{"available": true, "by": "systemd"}'
@@ -144,3 +144,21 @@ def test_sign_in_offers_the_key_after_an_open_server(page):
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens again"
     assert page.evaluate("document.getElementById('login-token').closest('details').open"), "the API-key part is open"
     page.evaluate("document.getElementById('login-dialog').close()")
+
+
+def test_store_and_settings_in_effect(page):
+    """Maintenance, for a holder of settings: the store with its schema
+    and rows per table, and the settings in effect, the API token listed
+    as set without its value."""
+    show_view(page, "system")
+    assert wait_until(page, "document.getElementById('store-info-sum').textContent.includes('massimo.db')", 5), \
+        "the store's file in the head of its part"
+    page.locator("#store-info summary").click()
+    assert page.locator("#store-info-body .kv-rows li").count() >= 5, "the rows per table"
+    page.locator("#config-info summary").click()
+    body = page.locator("#config-info-body").inner_text()
+    secret = page.evaluate("t('maint.secretSet')")
+    assert "MASSIMO_API_TOKEN" in body and secret in body, "the token listed as set"
+    assert TOKEN and TOKEN not in page.content(), "its value nowhere in the page"
+    page.locator("#store-info summary").click()
+    page.locator("#config-info summary").click()

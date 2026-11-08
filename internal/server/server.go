@@ -40,6 +40,8 @@
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/reload                              read the settings file again at once, as SIGHUP does
+//	GET  /api/v1/store                               the store's file, schema and rows, as store info shows (serverinfo_api.go)
+//	GET  /api/v1/config                              the settings in effect, as massimo config shows, secrets as set
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
 //	POST /api/v1/login/start, /login/finish          a session by OPAQUE, no password sent (opaque_api.go)
 //	POST /api/v1/logout                              end the session
@@ -268,6 +270,7 @@ type Server struct {
 	settingsFile string
 	settingsRead time.Time
 	reloader     func(context.Context) (ReloadResult, error)
+	configView   func() ConfigView // serverinfo_api.go, SetConfigView
 	// token is the one token without a store (auth.go, legacyToken).
 	tokenMu sync.RWMutex
 	token   string
@@ -876,6 +879,8 @@ func (s *Server) routes() {
 	api("GET /api/v1/restart", "restart", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
 	api("POST /api/v1/reload", "restart", s.reloadSettings)
+	api("GET /api/v1/store", "settings", s.getStore)
+	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux

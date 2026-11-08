@@ -753,7 +753,9 @@ also while `serve` runs (copying `massimo.db` alone can miss the last writes,
 which are in `massimo.db-wal` until a checkpoint,
 at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
-and `store info` prints its schema version, node and row counts.
+and `store info` prints its schema version, node and row counts
+(also in the web UI, System settings → Maintenance → Store, as
+`massimo config`'s settings are under Settings in effect, secrets left out).
 The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,

@@ -219,7 +219,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
-| `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
+| `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
 | `update` | start a software update | `POST /api/v1/update` |
 | `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
 | `audit` | read the audit | `GET /api/v1/audit` |
@@ -1910,6 +1910,28 @@ It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
 `500` when the file could not be read.
+
+### GET /api/v1/store, GET /api/v1/config
+
+What `massimo store info` and `massimo config` show, for the capability
+`settings` (System settings → Maintenance in the web UI).
+`GET /api/v1/store` answers the store's file, its schema version, the
+oldest that still reads it, the version this server is built for, the node
+and tenant identities and the rows per table:
+
+```json
+{"file": "/var/lib/massimo/massimo.db", "schema": 7, "min_reader": 1, "binary": 7,
+ "node": "…", "tenant": "…", "rows": {"audit": 412, "users": 5}}
+```
+
+`GET /api/v1/config` answers the version, the settings file and whether it
+was found, the data directory, the address `serve` listens on, its TLS mode,
+the log level and every `MASSIMO_*` variable in effect with where it came
+from (`environment` or the settings file).
+A key's, an IV's, a token's or a password's value never leaves the server:
+such a variable has `"secret": true` and no `value`;
+a name Massimo does not know has `"unknown": true`.
+`503` when the server has no store, or does not show its settings.
 
 ## The LAN proxy
 

@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `GET /api/v1/store` and `GET /api/v1/config` show what `store info`
+  and `config` print, secrets left out; System settings → Maintenance
+  shows them (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+
 - `POST /api/v1/reload` reads the settings file again at once, as SIGHUP
   does; System settings → Maintenance holds it and the restart
   (`docs/api-v1.md`, "POST /api/v1/reload").
