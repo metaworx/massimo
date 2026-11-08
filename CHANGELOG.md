@@ -10,6 +10,9 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- A user with keys only sets its first password in My profile, without
+  a current one (`docs/ui.md`, "My profile").
+
 - `GET /api/v1/store` and `GET /api/v1/config` show what `store info`
   and `config` print, secrets left out; System settings → Maintenance
   shows them (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").

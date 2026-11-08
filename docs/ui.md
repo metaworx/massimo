@@ -285,6 +285,9 @@ nor with the server's API token):
   the own password, with the current one,
   which a sign-in by OPAQUE proves without sending it;
   the new one is registered by OPAQUE, as every password the page sets.
+  A user with keys only, such as the owner made from `MASSIMO_API_TOKEN`,
+  has **Set a password** instead, without a current one, and a line saying
+  that it lets the user sign in by name in any browser.
 - **Sessions and keys**: the own sessions and API keys,
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;

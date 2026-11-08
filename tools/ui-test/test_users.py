@@ -339,3 +339,19 @@ def test_manager_sets_passwords_but_not_the_owners(new_context, case, watch, gua
         sign_out(page)
     finally:
         api_call("DELETE", "api/v1/users/" + name)
+
+
+def test_profile_offers_a_first_password(page, case):
+    """My profile of a user with keys only (the owner made from the API
+    token) offers Set a password, says what it adds, and asks for no
+    current password, which the user has not."""
+    assert page.evaluate("state.me.user && !state.me.user.has_password"), "the test's owner has keys only"
+    show_view(page, "profile")
+    box = page.locator("#me-password")
+    assert box.is_visible(), "the own password offered"
+    assert page.locator("#me-password-title").inner_text() == page.evaluate("t('me.setPassword')"), "as Set a password"
+    box.locator("summary").click()
+    assert page.locator("#me-password-hint").is_visible(), "what a password adds"
+    assert page.locator("#me-current").is_hidden() and page.locator("#me-new").is_visible(), "no current password asked"
+    box.locator("summary").click()
+    show_view(page, "tiles")

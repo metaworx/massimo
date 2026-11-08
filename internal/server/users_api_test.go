@@ -478,3 +478,24 @@ func TestRankRule(t *testing.T) {
 		t.Errorf("users, removing a manager: %d %s", code, text)
 	}
 }
+
+// A user with keys only sets its first password as itself, without a
+// current one it has not; the next change asks for the current one, as
+// for every user.
+func TestFirstOwnPassword(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	_, ts, s := startWith(t, opts)
+	key := userToken(t, s.opts.Store, "keysonly", store.RoleViewer)
+	path := "/api/v1/users/keysonly"
+	code, text := callAPI(t, ts, "PUT", path, key, `{"password":"first-pass-1"}`)
+	var v userView
+	if err := json.Unmarshal([]byte(text), &v); err != nil || code != 200 || !v.HasPassword {
+		t.Fatalf("the first password: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1"}`); code != 403 || errorOf(text) != "current_password is wrong" {
+		t.Fatalf("the second without the current one: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1","current_password":"first-pass-1"}`); code != 200 {
+		t.Fatalf("the second with the current one: %d %s", code, text)
+	}
+}

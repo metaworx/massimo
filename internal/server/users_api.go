@@ -432,8 +432,9 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 // putUser handles PUT /api/v1/users/{name}: the display name, the
 // role, disabled, the end date and the password, of version 1 or 2. A
 // user changes its own display name and password, the latter with
-// current_password or a proof from a sign-in by OPAQUE; a password set
-// by someone else ends the user's sessions.
+// current_password or a proof from a sign-in by OPAQUE, a user with keys
+// only its first one without; a password set by someone else ends the
+// user's sessions.
 func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -465,9 +466,11 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	if setsPassword && !a.self && !a.maySetPassword(u) {
 		return a.rankFail(u.Role, "passwords")
 	}
-	if setsPassword && a.self && !a.all {
+	if setsPassword && a.self && !a.all && u.HasPassword {
 		// One's own password: the current one proves the caller is the
-		// user, not someone at an unlocked browser.
+		// user, not someone at an unlocked browser. A user with keys
+		// only has none, and sets its first one as itself: its key could
+		// as well make another key.
 		if req.Proof != "" {
 			if !s.logins.redeemProof(req.Proof, u.ID, time.Now()) {
 				return fail(http.StatusForbidden, "proof is wrong, used or too old: sign in again to prove the current password")

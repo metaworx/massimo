@@ -488,7 +488,10 @@ From then on the server is in users mode (Authentication).
 absent fields stay, an unknown one is `400`.
 A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
-the rest needs `users` (`guests` for a guest).
+a user with keys only (`has_password` false) sets its first one without,
+as its key could as well make another key;
+the rest needs `users` (`guests` for a guest), a password `passwords` too,
+each for a user the caller outranks ("Authentication").
 A password set by someone else ends the user's sessions;
 an empty password removes it.
 

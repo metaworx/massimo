@@ -156,7 +156,14 @@ function renderMe() {
   sum.title = who ? t("nav.userNamed", { name: who }) : t("nav.userTitle");
   sum.setAttribute("aria-label", who ? t("nav.userNamed", { name: who }) : t("nav.user"));
   $("menu-profile").classList.toggle("hidden", !hasProfile());
-  $("me-password").classList.toggle("hidden", !(me && me.mode === "users" && me.user && me.user.has_password));
+  // the own password: Change password, or for a user with keys only Set
+  // a password, without the current one it has not
+  const named = !!(me && me.mode === "users" && me.user);
+  const hasPw = named && me.user.has_password;
+  $("me-password").classList.toggle("hidden", !named);
+  $("me-password-title").textContent = t(hasPw ? "me.changePassword" : "me.setPassword");
+  $("me-password-hint").classList.toggle("hidden", !named || hasPw);
+  document.querySelector("#me-password-form .me-current-field").classList.toggle("hidden", !hasPw);
 }
 
 // --- the sign-in dialog -----------------------------------------------
@@ -492,12 +499,13 @@ async function changeOwnPassword(ev) {
   if (!password) return showResult(msg, t("login.missing"), false);
   try {
     const me = state.me.user;
+    const first = !me.has_password; // a user with keys only: no current one
     await whileBusy(submit, async () => {
-      const body = await currentPassword(me, current);
+      const body = first ? {} : await currentPassword(me, current);
       Object.assign(body, await registerPassword(me.name, password));
       return api("PUT", "api/v1/users/" + encodeURIComponent(me.name), body);
     });
-    showResult(msg, t("me.passwordChanged"), true);
+    showResult(msg, t(first ? "me.passwordSet" : "me.passwordChanged"), true);
     $("me-current").value = "";
     $("me-new").value = "";
     $("me-again").value = "";
