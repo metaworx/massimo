@@ -77,19 +77,16 @@ function removeRole(r, actions) {
   }, ".remove-role");
 }
 
-// rolePanel is one role, from its template (tpl-role-panel).
+// rolePanel is one role, a detailsPanel: the head with the name, the
+// key and the badges, the form (tpl-role-panel).
 function rolePanel(r) {
-  const d = fromTemplate("tpl-role-panel");
-  d.dataset.key = r.key;
-  d.open = rolesUI.open.has(r.key);
-  const sum = d.querySelector("summary");
-  sum.querySelector(".panel-name").textContent = roleLabel(r.key, r.name);
-  sum.querySelector(".mono").textContent = r.key;
   const badges = [];
   if (r.builtin) badges.push(badgeEl(t("roles.builtin"), "mode"));
   if (r.disabled) badges.push(badgeEl(t("roles.disabled"), "bad"));
   badges.push(badgeEl(tn("roles.users", r.users), "mode"));
-  sum.querySelector(".panel-badges").append(...badges);
+  const d = detailsPanel({ name: roleLabel(r.key, r.name), mono: r.key, badges, open: rolesUI.open.has(r.key), cls: "role-panel" },
+    fromTemplate("tpl-role-panel"));
+  d.dataset.key = r.key;
   d.addEventListener("toggle", () => {
     if (d.open) rolesUI.open.add(r.key);
     else rolesUI.open.delete(r.key);

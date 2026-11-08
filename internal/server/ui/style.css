@@ -315,8 +315,6 @@ body.expert #clock-plain { display: none; }
 .cubes-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .cubes-head .help-text { flex-basis: 100%; }
 .cube-panel { margin-bottom: 8px; padding: 8px 12px; }
-.cube-panel summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; overflow-wrap: anywhere; }
-.cube-panel[open] summary { margin-bottom: 10px; }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .cube-form input[type="text"] { min-width: 0; max-width: 100%; }
@@ -404,9 +402,39 @@ body.expert #clock-plain { display: none; }
 .scheme-name .inline { flex-wrap: wrap; }
 .scheme-name input[type="text"] { flex: 1 1 10em; min-width: 0; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-/* the summary of a details panel (components.js detailsPanel, the Cube panel's template) */
+/* A details panel's head (components.js detailsPanel: the Cubes, the
+   users, the roles): a chevron, the name, the key or serial apart from
+   it in grey, the badges at the right edge, wrapping under on a phone. */
+.panel > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  overflow-wrap: anywhere;
+}
+.panel > summary::-webkit-details-marker { display: none; }
+.panel > summary::before {
+  content: "";
+  flex: none;
+  width: 0.42em;
+  height: 0.42em;
+  margin: 0 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.panel[open] > summary::before { transform: rotate(45deg); }
+.panel[open] > summary { margin-bottom: 10px; }
+.panel > summary > .mono { color: var(--muted); }
 .panel-name { font-weight: 600; }
-.panel-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.panel-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
+.user-panel, .role-panel { margin-bottom: 8px; padding: 8px 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .panel > summary::before { transition: none; }
+}
 .panel-row {
   display: flex;
   flex-wrap: wrap;

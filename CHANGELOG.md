@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- A user's or role's head in System settings shows the name and the
+  login or key apart, and the badges at the right edge, `you` first
+  (`docs/ui.md`, "System settings").
+
 - The backup list no longer shows a pending change next to the backup
   that has just covered it (`docs/api-v1.md`, "GET …/backups").
 

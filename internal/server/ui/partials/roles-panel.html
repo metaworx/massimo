@@ -1,21 +1,18 @@
-<!-- A role of System settings → Roles and the form that creates one, roles.js. -->
+<!-- A role's form in System settings → Roles (detailsPanel puts its head around it) and the form that creates one, roles.js. -->
 <template id="tpl-role-panel">
-  <details class="panel role-panel">
-    <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
-    <form class="role-form">
-      <div class="field wide">
-        <label data-i18n="roles.name">Display name</label>
-        <input type="text" name="name" class="field-control" autocomplete="off" maxlength="64" placeholder="empty: the standard name" data-i18n-attr="placeholder:roles.nameHint">
-      </div>
-      <p class="muted small role-owner-note hidden" data-i18n="roles.ownerNote">The owner has every capability and cannot be changed, disabled or removed.</p>
-      <span class="muted small" data-i18n="roles.capabilities">Capabilities</span>
-      <div class="role-caps"></div>
-      <div class="actions">
-        <span class="actions-left"><button type="button" class="disable-role needs-roles-disable">Disable</button><button type="button" class="remove-role" data-i18n="roles.remove">Remove</button></span>
-        <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
-      </div>
-    </form>
-  </details>
+  <form class="role-form">
+    <div class="field wide">
+      <label data-i18n="roles.name">Display name</label>
+      <input type="text" name="name" class="field-control" autocomplete="off" maxlength="64" placeholder="empty: the standard name" data-i18n-attr="placeholder:roles.nameHint">
+    </div>
+    <p class="muted small role-owner-note hidden" data-i18n="roles.ownerNote">The owner has every capability and cannot be changed, disabled or removed.</p>
+    <span class="muted small" data-i18n="roles.capabilities">Capabilities</span>
+    <div class="role-caps"></div>
+    <div class="actions">
+      <span class="actions-left"><button type="button" class="disable-role needs-roles-disable">Disable</button><button type="button" class="remove-role" data-i18n="roles.remove">Remove</button></span>
+      <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
+    </div>
+  </form>
 </template>
 
 <template id="tpl-role-new">

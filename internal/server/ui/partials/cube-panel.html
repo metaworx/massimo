@@ -1,46 +1,43 @@
-<!-- A Cube of System settings → Cubes and its notice of a settings file line that differs, cubes.js; the form needs the capability cubes, the pairing (pairing.html) pair. -->
+<!-- A Cube's form in System settings → Cubes (detailsPanel puts its head around it) and its notice of a settings file line that differs, cubes.js; the form needs the capability cubes, the pairing (pairing.html) pair. -->
 <template id="tpl-cube-panel">
-  <details class="panel cube-panel">
-    <summary><span class="panel-name"></span><span class="mono"></span><span class="panel-badges"></span></summary>
-    <form class="cube-form needs-cubes">
-      <div class="field wide">
-        <label data-i18n="cubes.name">Name</label>
-        <input type="text" name="name" class="field-control" autocomplete="off" spellcheck="false">
+  <form class="cube-form needs-cubes">
+    <div class="field wide">
+      <label data-i18n="cubes.name">Name</label>
+      <input type="text" name="name" class="field-control" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field wide">
+      <label data-i18n="cubes.address">Address</label>
+      <input type="text" name="address" class="field-control" autocomplete="off" spellcheck="false" placeholder="host or host:port; empty: from discovery" data-i18n-attr="placeholder:cubes.addressHint">
+    </div>
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" name="follow">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="cubes.follow">Follow the address the Cube answers discovery from</span>
+      </label>
+    </div>
+    <div class="field wide">
+      <label data-i18n="cubes.proxy">Proxy address</label>
+      <input type="text" name="proxy" class="field-control" autocomplete="off" spellcheck="false" placeholder="an address of this server, host[:port]; empty: :62910 with a single Cube" data-i18n-attr="placeholder:cubes.proxyHint">
+    </div>
+    <div class="field wide">
+      <label data-i18n="cubes.proxySerial">Serial in discovery replies</label>
+      <input type="text" name="proxy_serial" class="field-control" autocomplete="off" spellcheck="false" placeholder="empty: the Cube's own" data-i18n-attr="placeholder:cubes.proxySerialHint">
+    </div>
+    <div class="cube-hidden">
+      <span class="cube-hidden-title" data-i18n="cubes.hidden">Hidden devices</span>
+      <ul class="cube-hidden-list"></ul>
+      <div class="inline cube-hide-add">
+        <input type="text" name="hide" class="mono" autocomplete="off" spellcheck="false" placeholder="0abc12" aria-label="radio address of the device to hide" data-i18n-attr="aria-label:cubes.hideLabel">
+        <datalist></datalist>
+        <button type="button" data-i18n="cubes.hide">Hide</button>
       </div>
-      <div class="field wide">
-        <label data-i18n="cubes.address">Address</label>
-        <input type="text" name="address" class="field-control" autocomplete="off" spellcheck="false" placeholder="host or host:port; empty: from discovery" data-i18n-attr="placeholder:cubes.addressHint">
-      </div>
-      <div class="field">
-        <label class="switch">
-          <input type="checkbox" name="follow">
-          <span class="slider" aria-hidden="true"></span>
-          <span class="switch-label" data-i18n="cubes.follow">Follow the address the Cube answers discovery from</span>
-        </label>
-      </div>
-      <div class="field wide">
-        <label data-i18n="cubes.proxy">Proxy address</label>
-        <input type="text" name="proxy" class="field-control" autocomplete="off" spellcheck="false" placeholder="an address of this server, host[:port]; empty: :62910 with a single Cube" data-i18n-attr="placeholder:cubes.proxyHint">
-      </div>
-      <div class="field wide">
-        <label data-i18n="cubes.proxySerial">Serial in discovery replies</label>
-        <input type="text" name="proxy_serial" class="field-control" autocomplete="off" spellcheck="false" placeholder="empty: the Cube's own" data-i18n-attr="placeholder:cubes.proxySerialHint">
-      </div>
-      <div class="cube-hidden">
-        <span class="cube-hidden-title" data-i18n="cubes.hidden">Hidden devices</span>
-        <ul class="cube-hidden-list"></ul>
-        <div class="inline cube-hide-add">
-          <input type="text" name="hide" class="mono" autocomplete="off" spellcheck="false" placeholder="0abc12" aria-label="radio address of the device to hide" data-i18n-attr="aria-label:cubes.hideLabel">
-          <datalist></datalist>
-          <button type="button" data-i18n="cubes.hide">Hide</button>
-        </div>
-      </div>
-      <div class="actions">
-        <span class="actions-left"><button type="button" class="remove-cube" data-i18n="cubes.remove">Remove</button></span>
-        <span class="actions-right"><button type="submit" class="primary" data-i18n="cubes.save">Save</button></span>
-      </div>
-    </form>
-  </details>
+    </div>
+    <div class="actions">
+      <span class="actions-left"><button type="button" class="remove-cube" data-i18n="cubes.remove">Remove</button></span>
+      <span class="actions-right"><button type="submit" class="primary" data-i18n="cubes.save">Save</button></span>
+    </div>
+  </form>
 </template>
 
 <template id="tpl-cube-differs">

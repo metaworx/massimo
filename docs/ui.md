@@ -412,7 +412,10 @@ a role with none of them (the viewer's, a guest's) has no cog.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
 - **Users** (with `users`, or `guests` for the guests alone):
-  every user in a panel with its display name, role, whether it is disabled,
+  every user in a panel whose head shows the display name, the login apart
+  from it and, at the right edge, the badges: **you** first, the role,
+  the state and **keys only**;
+  in the panel the display name, role, whether it is disabled,
   a guest's end, and a new password, which ends the user's sessions and,
   as every password the page sets,
   is registered by OPAQUE in the browser and never sent;
@@ -477,6 +480,9 @@ is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
+A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
+its head the name, the serial, login or key, and the badges,
+its body the form cloned from the feature's template.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),

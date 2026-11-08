@@ -178,13 +178,15 @@ function sameMinute(a, b) {
   return Math.floor(x / 60000) === Math.floor(y / 60000);
 }
 
+// userBadges are a user's badges in its panel's head: you first, then
+// the role, the state and keys only.
 function userBadges(u) {
-  const out = [badgeEl(roleLabel(u.role), "mode")];
+  const out = isSelf(u.name) ? [badgeEl(t("users.you"), "ok")] : [];
+  out.push(badgeEl(roleLabel(u.role), "mode"));
   if (u.disabled) out.push(badgeEl(t("users.state.disabled"), "bad"));
   else if (u.expires_at && Date.parse(u.expires_at) <= Date.now()) out.push(badgeEl(t("users.state.expired"), "bad"));
   else if (u.expires_at) out.push(badgeEl(t("users.state.until", { date: fmtShortTime(Date.parse(u.expires_at)) }), "warn"));
   if (!u.has_password) out.push(badgeEl(t("users.keysOnly"), "mode"));
-  if (isSelf(u.name)) out.push(badgeEl(t("users.you"), "ok"));
   return out;
 }
 
@@ -261,23 +263,19 @@ function wireNewKey(u, box, where) {
   });
 }
 
-// userPanel is one user, from its template (tpl-user-panel): the
-// summary with the name and the badges, the form, the tokens. A panel
+// userPanel is one user, a detailsPanel: the head with the name, the
+// login and the badges, the form (tpl-user-panel), the tokens. A panel
 // built open loads its tokens at once; the toggle event that setting
 // open queues finds the name in usersUI.open and loads nothing more, so
 // that the tokens load once and the new key, shown once, is not hidden
 // again by a second load.
 function userPanel(u) {
-  const d = fromTemplate("tpl-user-panel");
+  const d = detailsPanel({ name: u.display_name || u.name, mono: u.name, badges: userBadges(u), open: usersUI.open.has(u.name), cls: "user-panel" },
+    fromTemplate("tpl-user-panel"));
   d.dataset.name = u.name;
-  d.open = usersUI.open.has(u.name);
   const tokensBox = fromTemplate("tpl-user-tokens");
   d.appendChild(tokensBox);
   wireNewKey(u, tokensBox);
-  const sum = d.querySelector("summary");
-  sum.querySelector(".panel-name").textContent = u.display_name || u.name;
-  sum.querySelector(".mono").textContent = u.name;
-  sum.querySelector(".panel-badges").append(...userBadges(u));
   const manage = mayManage(u);
   const self = isSelf(u.name);
   d.addEventListener("toggle", () => {

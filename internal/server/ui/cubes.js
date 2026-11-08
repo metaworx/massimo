@@ -542,27 +542,24 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   return form;
 }
 
-// cubePanel is one configured Cube, from its template (tpl-cube-panel):
-// the summary with the name, the serial and the badges; a notice per
-// line of the settings file that differs (tpl-cube-differs); the
-// pairing (pairingSection); the form with the fields, the hidden devices
-// and Remove and Save. A Cube served from serve's command line has a
+// cubePanel is one configured Cube, a detailsPanel: the head with the
+// name, the serial and the badges; a notice per line of the settings
+// file that differs (tpl-cube-differs); the pairing (pairingSection);
+// the form (tpl-cube-panel) with the fields, the hidden devices and
+// Remove and Save. A Cube served from serve's command line has a
 // note instead of the form. The panel's loads run when the user opens it
 // (or opens the settings, initCubes): the toggle event that a panel
 // built open queues finds the serial in cubesUI.open and asks for
 // nothing, so that a redraw does not redraw the pairing again when the
 // answers come, under what the user is typing there.
 function cubePanel(c) {
-  const d = fromTemplate("tpl-cube-panel");
-  d.dataset.serial = c.serial;
-  d.open = cubesUI.open.has(c.serial);
-  const sum = d.querySelector("summary");
-  sum.querySelector(".panel-name").textContent = c.name ? c.name + " " : "";
-  sum.querySelector(".mono").textContent = c.serial;
   const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
-  sum.querySelector(".panel-badges").append(...badges);
+  const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
+    fromTemplate("tpl-cube-panel"));
+  d.dataset.serial = c.serial;
+  const sum = d.querySelector("summary");
   d.addEventListener("toggle", () => {
     if (d.open) {
       if (cubesUI.open.has(c.serial)) return; // built open by a redraw
