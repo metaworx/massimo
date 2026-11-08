@@ -674,7 +674,7 @@ The owner can reboot the computer from System settings → Maintenance
 and take the reboot back meanwhile.
 Two things make it so, and both are the owner's:
 `MASSIMO_REBOOT=on` in the settings file (or `serve -allow-reboot`),
-which `serve` applies at once,
+which `serve` applies at once (`true`, `yes` and `1` too, in any case),
 and on Linux and macOS a root helper that only root installs:
 
 ```bash

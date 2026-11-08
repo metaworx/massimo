@@ -22,6 +22,12 @@ the next minor, a fix counts the suffix up.
   `-tls acme`, such as Let's Encrypt's staging one for a first try
   (`packaging/README.md`, "Install with `massimo install`").
 
+### Changed
+
+- `serve -help`, the settings file's template and the READMEs list what
+  `MASSIMO_REBOOT` takes: on, true, yes or 1, and their opposites, in
+  any case (`README.md`, "Server").
+
 ### Fixed
 
 - A device list or a configuration the Cube client asked for is in its

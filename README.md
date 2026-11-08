@@ -566,7 +566,11 @@ that `sudo massimo install -reboot-helper` installs
 as the Windows service by itself,
 and never in a terminal, in Docker or as Homebrew's service
 ([packaging/README.md](packaging/README.md), "Rebooting from the web UI").
-The switch is the owner's, off by default;
+The switch is the owner's, off by default:
+`on`, `true`, `yes` or `1` switch it on,
+`off`, `false`, `no`, `0` or nothing off, in any case;
+another value stops `serve` at the start,
+and switches the reboot off with a warning when the settings file is read again.
 `serve` applies a change of `MASSIMO_REBOOT` in the settings file at once,
 unless `-allow-reboot` was given.
 `serve` reads its settings file again while it runs:
