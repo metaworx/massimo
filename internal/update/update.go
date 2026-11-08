@@ -201,15 +201,30 @@ type ghRelease struct {
 // check would otherwise keep for checkEvery. A variable for the tests.
 var retryWaits = []time.Duration{2 * time.Second, 5 * time.Second}
 
+// answerWait is how long an attempt waits for GitHub's answer, its status
+// and headers after any redirects, before it is sent again: on 2026-11-08
+// github.com held requests without a token until the server's check ran
+// out. The body has its own bounds, the client's Timeout or a download's
+// idle time: a release list of some MiB takes a Pi on a slow line longer.
+// A variable for the tests.
+var answerWait = 10 * time.Second
+
+// errNoAnswer ends an attempt whose answer did not come within answerWait.
+var errNoAnswer = errors.New("no answer")
+
 // retryable says whether a request that got resp or err is worth sending
-// again: a gateway's or server's passing state, or a connection that
-// failed before an answer. Not a timeout, which the client gave its
-// time, nor the end of ctx; and not GitHub's rate limits (403, 429),
-// where seconds do not help and a token does (TokenVar).
+// again: a gateway's or server's passing state, a connection that failed
+// before an answer, or an answer that did not come within answerWait.
+// Not a timeout of the client's, which gave the request its time, nor
+// the end of ctx; and not GitHub's rate limits (403, 429), where seconds
+// do not help and a token does (TokenVar).
 func retryable(ctx context.Context, resp *http.Response, err error) bool {
 	if err != nil {
+		if ctx.Err() != nil {
+			return false
+		}
 		var ne net.Error
-		return ctx.Err() == nil && !(errors.As(err, &ne) && ne.Timeout())
+		return errors.Is(err, errNoAnswer) || !(errors.As(err, &ne) && ne.Timeout())
 	}
 	switch resp.StatusCode {
 	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
@@ -218,16 +233,19 @@ func retryable(ctx context.Context, resp *http.Response, err error) bool {
 	return false
 }
 
-// do sends the request newReq makes, and again after each of retryWaits
-// while retryable says so. It returns the last response or error as it
-// came, and the number of attempts; a wait ends with ctx.
-func do(ctx context.Context, hc *http.Client, newReq func() (*http.Request, error)) (*http.Response, int, error) {
+// do sends the request newReq makes with an attempt's context (send),
+// and again after each of retryWaits while retryable says so. It returns
+// the last response or error as it came, and the number of attempts; a
+// wait ends with ctx.
+func do(ctx context.Context, hc *http.Client, newReq func(context.Context) (*http.Request, error)) (*http.Response, int, error) {
 	for attempt := 1; ; attempt++ {
-		req, err := newReq()
+		actx, end := context.WithCancelCause(ctx)
+		req, err := newReq(actx)
 		if err != nil {
+			end(nil)
 			return nil, attempt, err
 		}
-		resp, err := hc.Do(req)
+		resp, err := send(hc, req, end)
 		if attempt > len(retryWaits) || !retryable(ctx, resp, err) {
 			return resp, attempt, err
 		}
@@ -245,6 +263,45 @@ func do(ctx context.Context, hc *http.Client, newReq func() (*http.Request, erro
 	}
 }
 
+// send sends one attempt, req made with a context that end ends: with
+// errNoAnswer when no answer has come within answerWait, and otherwise
+// once the response's body is closed.
+func send(hc *http.Client, req *http.Request, end context.CancelCauseFunc) (*http.Response, error) {
+	late := time.AfterFunc(answerWait, func() { end(errNoAnswer) })
+	resp, err := hc.Do(req)
+	if !late.Stop() {
+		// The wait ran out, perhaps as the answer came: its body would
+		// be cut off with the context.
+		end(errNoAnswer)
+		if err == nil {
+			resp.Body.Close()
+			err = req.Context().Err()
+		}
+		if errors.Is(context.Cause(req.Context()), errNoAnswer) {
+			err = fmt.Errorf("GET %s: %w within %s", req.URL.Redacted(), errNoAnswer, answerWait)
+		}
+		return nil, err
+	}
+	if err != nil {
+		end(nil)
+		return nil, err
+	}
+	resp.Body = endingBody{resp.Body, end}
+	return resp, nil
+}
+
+// endingBody ends its attempt's context when it is closed.
+type endingBody struct {
+	io.ReadCloser
+	end context.CancelCauseFunc
+}
+
+func (b endingBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.end(nil)
+	return err
+}
+
 // attempts is what an error adds after more than one attempt.
 func attempts(n int) string {
 	if n < 2 {
@@ -254,8 +311,8 @@ func attempts(n int) string {
 }
 
 func (c *Client) get(ctx context.Context, url string, limit int64, accept string) ([]byte, error) {
-	resp, n, err := do(ctx, c.HTTP, func() (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, n, err := do(ctx, c.HTTP, func(actx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(actx, http.MethodGet, url, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -467,10 +524,11 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 	hc.Timeout = 0
 	// Sent again as do says until the body starts: from then on w holds
 	// its bytes, and a failure ends the download. The idle time counts
-	// from each attempt.
-	resp, tries, err := do(ctx, &hc, func() (*http.Request, error) {
+	// from each attempt; the answer wait, shorter, ends a start that
+	// hangs first.
+	resp, tries, err := do(ctx, &hc, func(actx context.Context) (*http.Request, error) {
 		stall.Reset(idle)
-		return http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		return http.NewRequestWithContext(actx, http.MethodGet, url, nil)
 	})
 	if err != nil {
 		return stalled(fmt.Errorf("%w%s", err, attempts(tries)))

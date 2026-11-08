@@ -70,8 +70,8 @@ the next minor, a fix counts the suffix up.
   upload-pages-artifact v5.0.0 and deploy-pages v5.0.1.
 
 - The update check and an update's download try again twice, after 2
-  and 5 seconds, when GitHub answers 502, 503 or 504 or the connection
-  fails before an answer.
+  and 5 seconds, when GitHub answers 502, 503 or 504, gives no answer
+  within 10 seconds or the connection fails before an answer.
 
 ### Fixed
 
