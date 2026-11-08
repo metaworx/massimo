@@ -8,6 +8,8 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.12.0-alpha.1] - 2026-11-08
+
 ### Added
 
 - System settings → Maintenance reboots the computer, after a delay
