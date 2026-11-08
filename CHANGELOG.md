@@ -20,6 +20,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- Expert mode shows a device's serial number beside its radio address,
+  "S/N … · RF …", in the rooms, a room's configuration, pairing and the
+  hidden devices (`docs/ui.md`, "Rooms").
+
 - The Cube choice is a menu: closed the Cube's name and its connection
   as a plug, open each Cube's serial and address; the "connected" label
   is gone (`docs/ui.md`, "Header").

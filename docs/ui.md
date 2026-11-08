@@ -160,7 +160,9 @@ Every room has a tile:
 - The room name or the **i** button opens the device list:
   every device with its values (valve, set and measured temperature,
   offset) and badges for battery, transmission errors, lock, window and mode.
-  Expert mode adds each device's type and radio address.
+  Expert mode adds each device's type, serial number and radio address,
+  as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
+  the radio address is not.
   Valve, measured temperature, window and a low battery show how old they are;
   in expert mode also the exact time, and when the device was last heard from.
   A device that has not been heard from for more than 24 hours has a "Not seen
@@ -408,7 +410,8 @@ to the top of the page.
   **Proxy address** (the address of this server other programs connect to for this Cube;
   empty: :62910 when it is the only Cube) and **Serial in discovery replies**.
   **Hidden devices** lists the devices hidden besides those of room 255,
-  each with **Show again**; **Hide** takes a radio address,
+  each with its name, serial number and radio address and **Show again**;
+  **Hide** takes a radio address,
   with the Cube's devices to choose from.
   **Save**, off while nothing differs from the Cube's settings,
   sends the changes, which apply at once:
@@ -430,7 +433,8 @@ to the top of the page.
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.
   A countdown with **Stop** runs while the Cube pairs,
-  and each device that joins is listed with its type and serial and a form:
+  and each device that joins is listed with its type and serial
+  (in expert mode also its radio address) and a form:
   **Name**, **Room** (one of the Cube's rooms),
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
@@ -529,6 +533,7 @@ its heading's `button.section-fold` folding it):
 and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's connection a `connIcon`;
+a device's serial and radio address are a `deviceIds`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`

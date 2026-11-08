@@ -27,6 +27,8 @@
   "header.serverVersion": "version du serveur",
   "header.cube": "Cube",
   "header.cubeChoice": "Cube {name}, {state}",
+  "device.sn": "S/N {serial}",
+  "device.rf": "RF {rf}",
   "header.updatedTitle": "heure de la dernière interrogation réussie",
   "header.updated": "mis à jour {time}",
   "header.refresh": "actualiser",

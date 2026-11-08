@@ -26,6 +26,8 @@
   "header.serverVersion": "server version",
   "header.cube": "Cube",
   "header.cubeChoice": "Cube {name}, {state}",
+  "device.sn": "S/N {serial}",
+  "device.rf": "RF {rf}",
   "header.updatedTitle": "time of the last successful poll",
   "header.updated": "updated {time}",
   "header.refresh": "refresh",

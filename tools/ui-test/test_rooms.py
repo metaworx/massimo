@@ -77,6 +77,8 @@ def test_stale_and_expert(page, case):
     assert tile.locator(".device .device-sub").first.is_hidden(), "no type and radio address outside expert mode"
     page.evaluate("() => { state.settings.expert = true; applySettings(); }")
     assert tile.locator(".device .device-rf").first.is_visible(), "radio address in expert mode"
+    ids = tile.locator(".device .device-rf").first.inner_text()
+    assert ids.startswith("S/N ") and " · RF 0a" in ids, f"the serial beside the radio address in expert mode ({ids!r})"
     assert tile.locator(".device-vals .age-exact").first.is_visible(), "exact times in expert mode"
     assert tile.locator(".device-seen").first.is_visible(), "last seen in expert mode"
     started = page.locator("#server-started")

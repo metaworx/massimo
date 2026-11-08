@@ -26,6 +26,8 @@
   "header.serverVersion": "Server-Version",
   "header.cube": "Cube",
   "header.cubeChoice": "Cube {name}, {state}",
+  "device.sn": "S/N {serial}",
+  "device.rf": "RF {rf}",
   "header.updatedTitle": "Zeit der letzten erfolgreichen Abfrage",
   "header.updated": "aktualisiert {time}",
   "header.refresh": "aktualisieren",

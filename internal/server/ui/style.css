@@ -913,6 +913,10 @@ button.subtle { color: var(--muted); }
 .device-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
 .device-sub { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0 6px; }
 .device-sub .device-type::after { content: " ·"; }
+/* a device's serial and radio address (components.js deviceIds) */
+.device-ids > span { white-space: pre-wrap; }
+.hidden-device { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.hidden-device > .device-ids { color: var(--muted); font-size: 0.85rem; }
 .device-vals {
   display: grid;
   grid-template-columns: auto auto;

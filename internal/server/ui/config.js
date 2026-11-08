@@ -394,7 +394,7 @@ function renderDeviceForm(room, c, d) {
   form.appendChild(elem("div", "device-main",
     textEl("span", d.name || d.rf_address, "device-name"),
     textEl("span", typeName(d.type), "muted expert-only"),
-    textEl("span", d.rf_address, "muted mono expert-only")));
+    elem("span", "muted expert-only", deviceIds(d.serial, d.rf_address))));
   const name = document.createElement("input");
   name.type = "text";
   name.value = e.name;

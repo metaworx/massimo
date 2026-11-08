@@ -600,6 +600,19 @@ function backToTop(page) {
   });
 }
 
+// deviceIds is a device's serial number and radio address, as
+// "S/N MEQ0000103 · RF 0a0103": the serial as the API has it (a device
+// may have none) and printed on the device; the radio address, which is
+// not, in expert mode only (rf: "always" shows it always, where it is
+// what the user types, as when hiding a device). The dot between them is
+// the radio address's, so that it goes where that does.
+function deviceIds(serial, rf, { rf: show } = {}) {
+  const box = elem("span", "device-ids mono");
+  if (serial) box.appendChild(textEl("span", t("device.sn", { serial })));
+  if (rf) box.appendChild(textEl("span", (serial ? " · " : "") + t("device.rf", { rf }), show === "always" ? "" : "expert-only"));
+  return box;
+}
+
 // --- a choice of one in a menu (the Cube choice) -----------------------
 
 // connIcon is a connection as a plug: joined and green while connected,

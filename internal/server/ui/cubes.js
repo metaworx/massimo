@@ -19,6 +19,7 @@ const cubesUI = {
   open: new Set(), // serials of the open panels
   edits: {}, // per serial: the hidden list being edited
   names: {}, // radio address → device name, from the device lists seen
+  serials: {}, // radio address → device serial, from the device lists seen
   devices: {}, // per serial: the Cube's visible devices, for the hide choice
   rooms: {}, // per serial: the rooms of a Cube that is not the one shown
   pairing: {}, // per serial: the pairing flow, see pairingOf
@@ -58,7 +59,10 @@ async function loadCubeDevices(serial) {
   try {
     const devs = (await api("GET", "api/v1/cubes/" + encodeURIComponent(serial) + "/devices")) || [];
     cubesUI.devices[serial] = devs;
-    for (const d of devs) if (d.name) cubesUI.names[d.rf_address] = d.name;
+    for (const d of devs) {
+      if (d.name) cubesUI.names[d.rf_address] = d.name;
+      if (d.serial) cubesUI.serials[d.rf_address] = d.serial;
+    }
   } catch (e) {
     cubesUI.devices[serial] = [];
   }
@@ -150,7 +154,12 @@ function fillHiddenList(serial, box, input) {
       fillHiddenList(serial, box, input);
       input.focus();
     });
-    ul.appendChild(elem("li", "", textEl("span", deviceLabel(rf), "mono"), show));
+    // the name where known, the serial and the radio address, which the
+    // Hide field takes, shown always
+    const name = cubesUI.names[rf];
+    const who = elem("span", "hidden-device", deviceIds(cubesUI.serials[rf], rf, { rf: "always" }));
+    if (name) who.prepend(textEl("span", name));
+    ul.appendChild(elem("li", "", who, show));
   }
   fillDatalist(box.querySelector("datalist"), serial, list);
   // The list is part of what Save sends: its form checks again (sendWhenChanged).
@@ -427,8 +436,7 @@ function pairedRow(serial, d) {
   const p = pairingOf(serial);
   const e = p.edits[d.rf_address] || (p.edits[d.rf_address] = {});
   const row = elem("div", "pair-device",
-    elem("div", "pair-device-head", textEl("span", typeName(d.type), "pair-device-type"), textEl("span", d.serial || "", "mono muted"),
-      textEl("span", d.rf_address, "mono muted expert-only")));
+    elem("div", "pair-device-head", textEl("span", typeName(d.type), "pair-device-type"), deviceIds(d.serial, d.rf_address)));
   row.dataset.rf = d.rf_address;
   if (e.done) {
     const done = textEl("p", "", "small pair-result");
