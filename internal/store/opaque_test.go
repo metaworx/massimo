@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/bytemare/opaque"
@@ -358,5 +359,22 @@ func TestOpaqueInProcess(t *testing.T) {
 	defer ro.Close()
 	if start, ke3 := newTestClient(t).login(ro, "anna", "other"); ke3 == nil || ro.FinishOpaque(start, ke3) != nil {
 		t.Error("the new password does not sign in against the store opened read-only")
+	}
+}
+
+// TestParseKSFLanes: the lanes are read at 8 bits, so that their
+// conversion needs no bound; 16 is the ceiling, 17 is over it, and a
+// number past 255 is malformed.
+func TestParseKSFLanes(t *testing.T) {
+	if _, _, p, err := ParseKSF("m=19456,t=2,p=16"); err != nil || p != 16 {
+		t.Errorf("p=16: %d %v", p, err)
+	}
+	if _, _, _, err := ParseKSF("m=19456,t=2,p=17"); !errors.Is(err, ErrBadMessage) || !strings.Contains(err.Error(), "is over") {
+		t.Errorf("p=17: %v, want over the ceiling", err)
+	}
+	for _, ksf := range []string{"m=19456,t=2,p=256", "m=19456,t=2,p=4294967296"} {
+		if _, _, _, err := ParseKSF(ksf); !errors.Is(err, ErrBadMessage) || !strings.Contains(err.Error(), "want m=") {
+			t.Errorf("%q: %v, want malformed", ksf, err)
+		}
 	}
 }

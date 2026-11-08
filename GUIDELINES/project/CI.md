@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.12.0)
+# Massimo — CI Conventions (v1.13.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -300,11 +300,24 @@ its tag's commit from `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`
 so Dependabot leaves it alone until a release has the fix.
 
 The repository's own security settings are the owner's,
-in Settings → Code security, and need no file here:
+in its Settings, and need no file here:
 code scanning by CodeQL's default setup (Go, JavaScript and TypeScript,
-Python, the workflows), secret scanning with push protection,
+Python, the workflows) on every push to `main`, every pull request and weekly,
+secret scanning with push protection,
 and Dependabot alerts and security updates.
-They were off on 2026-11-08, when this section was written.
+They are on since 2026-11-08.
+
+A code scanning alert is closed in one of two ways:
+
+- **Fixed**, in a change of the project's form;
+  the CodeQL check of its pull request shows the alert fixed there,
+  and the alert closes when the change reaches `main`.
+- **Dismissed** as "won't fix", with its reason as the comment,
+  where the code means what it does and its own comment says why:
+  `massimo update`'s health check skips verifying the certificate
+  of the box's own address, which a connection to it never leaves.
+  A false positive the code cannot be made plainer for is dismissed the same way,
+  as "false positive".
 
 ## 9. Document Governance
 
