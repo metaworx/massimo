@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -98,9 +99,13 @@ type fakeGitHub struct {
 	releases []map[string]any
 	files    map[string][]byte
 	auth     map[string]string // path → Authorization header seen
+	// redirect, where set, is the file host the API's asset URLs send
+	// their bytes from, at /dl/ as here.
+	redirect string
 
 	mu   sync.Mutex
 	fail map[string][]int // path → statuses answered first, in turn
+	hang map[string]int   // path → requests left without an answer first
 	hits map[string]int   // path → requests
 }
 
@@ -111,6 +116,14 @@ func (f *fakeGitHub) failFirst(path string, codes ...int) {
 	f.fail[path] = codes
 }
 
+// hangFirst has path leave its first n requests without an answer until
+// the client gives them up.
+func (f *fakeGitHub) hangFirst(path string, n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hang[path] = n
+}
+
 // count is the number of requests path has had.
 func (f *fakeGitHub) count(path string) int {
 	f.mu.Lock()
@@ -119,7 +132,7 @@ func (f *fakeGitHub) count(path string) int {
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
-	f := &fakeGitHub{files: map[string][]byte{}, auth: map[string]string{}, fail: map[string][]int{}, hits: map[string]int{}}
+	f := &fakeGitHub{files: map[string][]byte{}, auth: map[string]string{}, fail: map[string][]int{}, hang: map[string]int{}, hits: map[string]int{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.hits[r.URL.Path]++
@@ -127,7 +140,18 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 		if codes := f.fail[r.URL.Path]; len(codes) > 0 {
 			code, f.fail[r.URL.Path] = codes[0], codes[1:]
 		}
+		hold := f.hang[r.URL.Path] > 0
+		if hold {
+			f.hang[r.URL.Path]--
+		}
 		f.mu.Unlock()
+		if hold {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(10 * time.Second): // so that Close never waits longer
+			}
+			return
+		}
 		if code != 0 {
 			http.Error(w, http.StatusText(code), code)
 			return
@@ -137,7 +161,21 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 			json.NewEncoder(w).Encode(f.releases)
 			return
 		}
-		b, ok := f.files[r.URL.Path]
+		// An asset's API URL: its bytes for fileAccept, its description
+		// otherwise, as GitHub's.
+		file := r.URL.Path
+		if rest, ok := strings.CutPrefix(file, "/repos/"+Repo+"/releases/assets/"); ok {
+			switch {
+			case r.Header.Get("Accept") != fileAccept:
+				json.NewEncoder(w).Encode(map[string]string{"name": rest})
+				return
+			case f.redirect != "":
+				http.Redirect(w, r, f.redirect+"/dl/"+rest, http.StatusFound)
+				return
+			}
+			file = "/dl/" + rest
+		}
+		b, ok := f.files[file]
 		if !ok {
 			http.NotFound(w, r)
 			return
@@ -157,7 +195,7 @@ func (f *fakeGitHub) add(t *testing.T, key ed25519.PrivateKey, tag, channel stri
 		sum := sha256.Sum256(b)
 		m.Assets[name] = hex.EncodeToString(sum[:])
 		f.files["/dl/"+tag+"/"+name] = b
-		assets = append(assets, map[string]any{"name": name, "browser_download_url": f.srv.URL + "/dl/" + tag + "/" + name})
+		assets = append(assets, f.asset(tag, name))
 	}
 	mb, _ := json.Marshal(m)
 	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(key, mb)) + "\n"
@@ -167,9 +205,19 @@ func (f *fakeGitHub) add(t *testing.T, key ed25519.PrivateKey, tag, channel stri
 	f.files["/dl/"+tag+"/"+ManifestName] = mb
 	f.files["/dl/"+tag+"/"+SignatureName] = []byte(sig)
 	for _, n := range []string{ManifestName, SignatureName} {
-		assets = append(assets, map[string]any{"name": n, "browser_download_url": f.srv.URL + "/dl/" + tag + "/" + n})
+		assets = append(assets, f.asset(tag, n))
 	}
 	f.releases = append(f.releases, map[string]any{"tag_name": tag, "html_url": "https://example/" + tag, "assets": assets})
+}
+
+// asset is a release file as the list names it: its download URL, and
+// the API's, which the fake keys by tag and name where GitHub has an id.
+func (f *fakeGitHub) asset(tag, name string) map[string]any {
+	return map[string]any{
+		"name":                 name,
+		"browser_download_url": f.srv.URL + "/dl/" + tag + "/" + name,
+		"url":                  f.srv.URL + "/repos/" + Repo + "/releases/assets/" + tag + "/" + name,
+	}
 }
 
 func testKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
@@ -441,6 +489,71 @@ func TestTokenGoesToTheAPIOnly(t *testing.T) {
 	}
 }
 
+// With a token a release's manifest, signature and binary come through
+// the API's asset URLs with it, and the file host the API redirects to
+// gets none; without a token, or for an asset URL off the API, they come
+// from the download URLs.
+func TestTokenFetchesFilesThroughTheAPI(t *testing.T) {
+	pub, priv := testKey(t)
+	const tag, bin = "v1.0.0", "massimo-linux-amd64"
+	files := []string{ManifestName, SignatureName, bin}
+	fake := func() *fakeGitHub {
+		gh := newFakeGitHub(t)
+		gh.add(t, priv, tag, "main", map[string][]byte{bin: []byte("the binary")}, nil)
+		return gh
+	}
+	fetch := func(c *Client) {
+		t.Helper()
+		r, err := c.ByTag(context.Background(), tag)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		if err := c.Download(context.Background(), r, bin, &buf); err != nil || buf.String() != "the binary" {
+			t.Fatalf("%q %v", buf.String(), err)
+		}
+	}
+	// requests checks each file's requests on its API and download paths,
+	// and the token each was sent.
+	requests := func(gh *fakeGitHub, onAPI, onDL int, apiAuth, dlAuth string) {
+		t.Helper()
+		for _, name := range files {
+			api, dl := "/repos/"+Repo+"/releases/assets/"+tag+"/"+name, "/dl/"+tag+"/"+name
+			if gh.count(api) != onAPI || gh.count(dl) != onDL || gh.auth[api] != apiAuth || gh.auth[dl] != dlAuth {
+				t.Errorf("%s: %d on the API with %q, %d downloads with %q", name, gh.count(api), gh.auth[api], gh.count(dl), gh.auth[dl])
+			}
+		}
+	}
+
+	gh := fake()
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub})
+	requests(gh, 0, 1, "", "")
+
+	gh = fake()
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, Token: "t0k"})
+	requests(gh, 1, 0, "Bearer t0k", "")
+
+	// The API sends the bytes from another host, as GitHub's file host;
+	// the client reaches it, whatever its name, at the fake.
+	gh = fake()
+	gh.redirect = "http://release-assets.example"
+	addr := gh.srv.Listener.Addr().String()
+	hc := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}}
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: hc, Key: pub, Token: "t0k"})
+	requests(gh, 1, 1, "Bearer t0k", "")
+
+	// An asset URL that is not the API's is not taken. (The fake's
+	// download URLs are on the API's host, so they get the token here.)
+	gh = fake()
+	for _, a := range gh.releases[0]["assets"].([]map[string]any) {
+		a["url"] = "http://elsewhere.example/assets/" + a["name"].(string)
+	}
+	fetch(&Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, Token: "t0k"})
+	requests(gh, 0, 1, "", "Bearer t0k")
+}
+
 // A channel without a release is no error, also beside a release from
 // before the signed manifests; a release whose manifest does not verify
 // still is, since it may be the channel's.
@@ -670,6 +783,86 @@ func TestDownloadRetriesItsStart(t *testing.T) {
 	}
 }
 
+// shortAnswerWait makes the wait for an answer short for one test, long
+// enough for the fake's answers under -race on a busy runner.
+func shortAnswerWait(t *testing.T) {
+	old := answerWait
+	answerWait = 250 * time.Millisecond
+	t.Cleanup(func() { answerWait = old })
+}
+
+// A manifest that gets no answer twice is fetched on the third attempt.
+func TestRetriesWithoutAnAnswer(t *testing.T) {
+	fastRetries(t)
+	shortAnswerWait(t)
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": []byte("the binary")}, nil)
+	manifest := "/dl/v1.0.0/" + ManifestName
+	gh.hangFirst(manifest, 2)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	if _, err := c.ByTag(context.Background(), "v1.0.0"); err != nil || gh.count(manifest) != 3 {
+		t.Fatalf("after two requests without an answer: %v, %d requests", err, gh.count(manifest))
+	}
+}
+
+// A list that never answers is given up after three attempts, and the
+// error says why.
+func TestNoAnswerGivesUp(t *testing.T) {
+	fastRetries(t)
+	shortAnswerWait(t)
+	pub, _ := testKey(t)
+	gh := newFakeGitHub(t)
+	list := "/repos/" + Repo + "/releases"
+	gh.hangFirst(list, 4)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	_, err := c.Latest(context.Background(), "alpha")
+	if err == nil || !strings.Contains(err.Error(), "no answer within 250ms (3 attempts)") || gh.count(list) != 3 {
+		t.Fatalf("got %v after %d requests", err, gh.count(list))
+	}
+}
+
+// A binary whose first request gets no answer is downloaded on the
+// second and verifies.
+func TestDownloadRetriesWithoutAnAnswer(t *testing.T) {
+	fastRetries(t)
+	shortAnswerWait(t)
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": []byte("the binary")}, nil)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	r, err := c.ByTag(context.Background(), "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := "/dl/v1.0.0/massimo-linux-amd64"
+	gh.hangFirst(bin, 1)
+	var buf bytes.Buffer
+	if err := c.Download(context.Background(), r, "massimo-linux-amd64", &buf); err != nil || buf.String() != "the binary" || gh.count(bin) != 2 {
+		t.Fatalf("%q %v after %d requests", buf.String(), err, gh.count(bin))
+	}
+}
+
+// The answer wait ends with the answer: a body slower than it, which
+// keeps coming, is not cut off.
+func TestAnswerWaitLeavesTheBody(t *testing.T) {
+	shortAnswerWait(t)
+	pub, priv := testKey(t)
+	gh := newFakeGitHub(t)
+	body := bytes.Repeat([]byte("massimo"), 4096)
+	gh.add(t, priv, "v1.0.0", "main", map[string][]byte{"massimo-linux-amd64": body}, nil)
+	slowBinary(t, gh, "v1.0.0", "massimo-linux-amd64", body, 4, 200*time.Millisecond)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
+	r, err := c.ByTag(context.Background(), "v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := c.Download(context.Background(), r, "massimo-linux-amd64", &buf); err != nil || !bytes.Equal(buf.Bytes(), body) {
+		t.Fatalf("a body slower than the answer wait: %v, %d of %d bytes", err, buf.Len(), len(body))
+	}
+}
+
 type timeoutError struct{}
 
 func (timeoutError) Error() string   { return "timed out" }
@@ -677,7 +870,8 @@ func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
 
 // What is sent again: a gateway's state, a connection that failed
-// before an answer; not a timeout, nor the end of the context.
+// before an answer, an answer that did not come; not a timeout of the
+// client's, nor the end of the context.
 func TestRetryable(t *testing.T) {
 	ctx := context.Background()
 	for code, want := range map[int]bool{200: false, 403: false, 404: false, 429: false, 500: false, 502: true, 503: true, 504: true} {
@@ -692,9 +886,13 @@ func TestRetryable(t *testing.T) {
 	if retryable(ctx, nil, &url.Error{Op: "Get", URL: "https://example/", Err: timeoutError{}}) {
 		t.Error("a timeout is sent again")
 	}
+	noAnswer := fmt.Errorf("GET https://example/: %w within 10s", errNoAnswer)
+	if !retryable(ctx, nil, noAnswer) {
+		t.Error("a request without an answer is not sent again")
+	}
 	ended, cancel := context.WithCancel(ctx)
 	cancel()
-	if retryable(ended, nil, dropped) {
+	if retryable(ended, nil, dropped) || retryable(ended, nil, noAnswer) {
 		t.Error("a request is sent again after the context's end")
 	}
 }

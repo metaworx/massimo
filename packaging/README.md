@@ -589,6 +589,9 @@ a large NAT) the check can then fail with `403 Forbidden`;
 `MASSIMO_GITHUB_TOKEN`, a GitHub token without any rights,
 lifts the limit (in the settings for the server's check,
 in the environment for `massimo update`).
+With it the release's files, its manifest, signature and binary,
+come through the API too rather than from github.com's download pages,
+which on 2026-11-08 held requests without a token until the check gave up.
 It is sent to the API only, and changes nothing about what is installed:
 that is still decided by the signature.
 

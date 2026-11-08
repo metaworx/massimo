@@ -301,9 +301,11 @@ jobs:
       - name: Install and run the service
         shell: bash
         # Without a token GitHub allows 60 API requests an hour per
-        # address, which the shared runners use up; it only lifts that
-        # limit. It goes into the settings, so that the server's release
-        # check and the helper it starts have it.
+        # address, which the shared runners use up; with it the release
+        # files come through the API too, not from github.com's download
+        # pages, which held requests without one on 2026-11-08. It goes
+        # into the settings, so that the server's release check and the
+        # helper it starts have it.
         env:
           MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -601,7 +603,9 @@ jobs:
       - name: Install, run, update and remove the LaunchDaemons
         # Without a token GitHub allows 60 API requests an hour per address,
         # which the shared macOS runners use up (the release check then gets
-        # 403); it only lifts that limit.
+        # 403); with it the release files come through the API too, not from
+        # github.com's download pages, which held requests without one on
+        # 2026-11-08.
         env:
           MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
