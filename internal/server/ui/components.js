@@ -496,13 +496,92 @@ function pageContents(page) {
   const nav = page.querySelector(".toc");
   if (!nav) return;
   clear(nav);
-  for (const card of page.querySelectorAll(".section-card")) {
+  for (const b of sectionButtons(page)) nav.appendChild(b);
+}
+
+// sectionButtons are a button per card of a page, named by the card's
+// data-toc key or else its title, hidden where the card is (its needs-*
+// classes), each bringing its card into view (showCard); data-target is
+// the card's id.
+function sectionButtons(page) {
+  return [...page.querySelectorAll(".section-card")].map((card) => {
     const name = card.dataset.toc ? t(card.dataset.toc) : card.querySelector(".section-title").textContent;
     const b = button(name, "toc-link", () => showCard(card));
     b.dataset.target = card.id;
     for (const c of card.classList) if (c.startsWith("needs-")) b.classList.add(c);
-    nav.appendChild(b);
-  }
+    return b;
+  });
+}
+
+// pageBar fills a page's row kept at the top (its .page-bar) with the
+// sections menu (a dropdown of sectionButtons), marking the card in
+// view as the page scrolls (aria-current), and keeps the row's height
+// in --bar-h for the cards' scroll margin. Called again after a change
+// of language; it wires the page once.
+function pageBar(page) {
+  const bar = page.querySelector(".page-bar");
+  const menu = bar && bar.querySelector(".sec-menu");
+  if (!menu) return;
+  const items = menu.querySelector(".menu-items");
+  clear(items);
+  items.append(...sectionButtons(page));
+  if (bar.dataset.wired) return;
+  bar.dataset.wired = "1";
+  dropdown(menu);
+  new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", bar.offsetHeight + "px")).observe(bar);
+  // the card in view: the lowest top that has passed under the header
+  // and this row; of cards side by side, the first
+  const mark = () => {
+    const line = bar.getBoundingClientRect().bottom + 24;
+    let best = null;
+    let bestTop = -Infinity;
+    for (const card of page.querySelectorAll(".section-card")) {
+      if (!card.offsetParent) continue; // not shown to this role
+      const y = Math.round(card.getBoundingClientRect().top);
+      if (y <= line && y > bestTop) {
+        best = card.id;
+        bestTop = y;
+      }
+    }
+    for (const b of items.querySelectorAll(".toc-link")) {
+      if (b.dataset.target === best) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    }
+  };
+  addEventListener("scroll", mark, { passive: true });
+  menu.addEventListener("toggle", mark);
+}
+
+// stickyHeader keeps the page's header at the top (style.css .top): its
+// height in --top-h, for the page's row under it, and the class
+// scrolled on the body once the page has scrolled, which compacts the
+// header. The compacted header keeps the height it gave up as its
+// bottom margin, so that the page is as long scrolled as not: a page
+// little taller than the window would otherwise become too short to stay
+// scrolled, the header grow back, and the page jump to and fro.
+// Scrolled from 96 px down, not again under 8 px.
+function stickyHeader() {
+  const top = document.querySelector(".top");
+  // the border box: compacting changes the padding, which the content
+  // box does not see
+  const height = () => document.documentElement.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
+  new ResizeObserver(height).observe(top, { box: "border-box" });
+  const set = (on) => {
+    if (on === document.body.classList.contains("scrolled")) return;
+    top.style.marginBottom = "";
+    const whole = top.getBoundingClientRect().height;
+    const margin = parseFloat(getComputedStyle(top).marginBottom) || 0;
+    document.body.classList.toggle("scrolled", on);
+    if (on) top.style.marginBottom = margin + whole - top.getBoundingClientRect().height + "px";
+    height();
+  };
+  const onScroll = () => {
+    const y = window.scrollY;
+    if (y > 96) set(true);
+    else if (y < 8) set(false);
+  };
+  addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
 }
 
 // backToTop shows a page's .to-top button once the page's row of

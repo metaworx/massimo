@@ -51,7 +51,7 @@ def test_fold_kept_and_opened_from_contents(page, case):
         page.reload()
         page.locator("#system").wait_for(state="visible")
         assert page.locator("#sys-users-body").is_hidden(), "the card is still folded after a reload"
-        page.locator("#system .toc-link[data-target='sys-users']").click()
+        page.locator("#system nav.toc .toc-link[data-target='sys-users']").click()
         assert page.locator("#sys-users-body").is_visible(), "its section button opens it"
         assert wait_until(page, "document.activeElement === document.querySelector('#sys-users .section-fold')", 3), \
             "the focus on the card's heading"
@@ -87,4 +87,41 @@ def test_cube_panel_columns(page, case):
     else:
         assert pair["bottom"] <= fields["top"] + 1, f"the pairing above the settings ({pair}, {fields})"
     panel.locator("summary").click()
+    show_view(page, "tiles")
+
+
+def test_header_and_page_bar_stay(page, case):
+    """Scrolled, the header and System settings' row stay at the top, the
+    header compacted (on a phone without the brand); the sections menu
+    marks the card in view and brings the one chosen under the row."""
+    show_view(page, "system")
+    assert wait_until(page, "document.querySelectorAll('.role-panel').length >= 6", 5), "the roles are listed"
+    tall = page.evaluate("document.documentElement.scrollHeight")
+    page.evaluate("document.getElementById('sys-backup').scrollIntoView({block: 'start'})")
+    assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the page counts as scrolled"
+    assert abs(page.evaluate("document.documentElement.scrollHeight") - tall) <= 1, \
+        "the page as long scrolled as not, the compacted header keeping its height as margin"
+    geo = page.evaluate("""() => ({
+        top: document.querySelector('.top').getBoundingClientRect().top,
+        topBottom: document.querySelector('.top').getBoundingClientRect().bottom,
+        bar: document.querySelector('#system .page-bar').getBoundingClientRect().top,
+        brand: getComputedStyle(document.querySelector('.top-left')).display,
+    })""")
+    assert abs(geo["top"]) <= 1, f"the header at the top ({geo})"
+    assert abs(geo["bar"] - geo["topBottom"]) <= 2, f"the page's row under it ({geo})"
+    if case.width < 600:
+        assert geo["brand"] == "none", "on a phone the Cube choice takes the brand's line"
+    menu = page.locator("#system .sec-menu")
+    menu.locator("summary").click()
+    current = menu.locator(".toc-link[aria-current='true']")
+    assert current.count() == 1, "the menu marks the card in view"
+    menu.locator(".toc-link[data-target='sys-users']").click()
+    assert menu.get_attribute("open") is None, "a choice closes the menu"
+    assert wait_until(page, """(() => {
+        const bar = document.querySelector('#system .page-bar').getBoundingClientRect().bottom;
+        const y = document.getElementById('sys-users').getBoundingClientRect().top;
+        return y >= bar - 1 && y <= bar + 40;
+    })()""", 5), "the card chosen comes in under the row"
+    page.evaluate("window.scrollTo(0, 0)")
+    assert wait_until(page, "!document.body.classList.contains('scrolled')", 3), "at the top the header is whole again"
     show_view(page, "tiles")

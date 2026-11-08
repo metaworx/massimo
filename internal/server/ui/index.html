@@ -30,6 +30,8 @@
   <!-- a section card's fold, and back to the top of a page -->
   <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
+  <!-- a page's sections menu: a bulleted list, apart from the header's ☰ -->
+  <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5"/><circle cx="4.75" cy="6" r="1.4" fill="currentColor"/><circle cx="4.75" cy="12" r="1.4" fill="currentColor"/><circle cx="4.75" cy="18" r="1.4" fill="currentColor"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <header class="top">
@@ -174,14 +176,20 @@
     </div>
   </section>
 
-  <!-- System settings: section cards in a grid (components.js
-       sectionCards, pageContents, backToTop), Users, Roles and
-       Capabilities flowing in two columns where there is room. -->
+  <!-- System settings: its row kept at the top under the header, with
+       the sections menu (components.js pageBar), the row of section
+       buttons, and section cards in a grid (sectionCards, pageContents,
+       backToTop), Users, Roles and Capabilities flowing in two columns
+       where there is room. -->
   <section id="system" class="settings settings-page hidden" aria-labelledby="system-title">
-    <header class="page-head">
+    <div class="page-bar">
       <h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2>
-      <nav class="toc" aria-label="sections" data-i18n-attr="aria-label:page.sections"></nav>
-    </header>
+      <details class="menu sec-menu">
+        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
+    </div>
+    <nav class="toc" aria-label="sections" data-i18n-attr="aria-label:page.sections"></nav>
     <div class="section-grid">
       <!-- partials: system -->
       <div class="section-flow">

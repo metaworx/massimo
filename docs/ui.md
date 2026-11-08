@@ -44,6 +44,12 @@ On a screen narrower than 600 px the Cube choice takes a line of its own,
 and **☰** beside the house and 👤 holds **Log** and **System settings**,
 highlighted while one of them is shown.
 
+The header stays at the top while the page scrolls.
+Scrolled, it keeps its first line without the time of the last update
+and the Cube's clock, and the lines under it go until the page is back
+at its top, the button that reloads a new version apart;
+narrower than 600 px the Cube choice then takes the line of **Massimo**.
+
 - **Cube**:
   chooses the Cube when the server has several.
   In front of it you see whether the server is connected to that Cube.
@@ -353,6 +359,9 @@ Software update first, then Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
+The title stays under the header while the page scrolls,
+with **Sections** at its right end (a bulleted list, apart from ☰):
+it lists the cards, marks the one in view and brings the one chosen into view.
 A row of buttons under the title names the cards the role sees,
 each bringing its card into view, opened.
 A card folds with the button in its heading,
@@ -507,7 +516,9 @@ its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
 `pageContents` fills the page's row of section buttons from them,
-and `backToTop` wires the page's ↑.
+`pageBar` the sections menu of its title's row kept at the top,
+and `backToTop` wires the page's ↑;
+`stickyHeader` keeps the header at the top and compacts it once scrolled.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),

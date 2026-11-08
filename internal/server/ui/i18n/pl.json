@@ -48,6 +48,7 @@
   "header.certMissing": "Serwer nie ma jeszcze certyfikatu: zamówienie w Let's Encrypt nie powiodło się; zobacz dziennik serwera.",
   "nav.pages": "strony",
   "page.sections": "sekcje",
+  "page.sectionsTitle": "Sekcje",
   "page.toTop": "do góry",
   "page.toTopTitle": "Do góry",
   "nav.rooms": "pomieszczenia",

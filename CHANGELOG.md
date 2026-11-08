@@ -20,6 +20,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The header stays at the top while the page scrolls, compacted, and
+  System settings' title stays under it with a menu of its sections
+  (`docs/ui.md`, "Header").
+
 - System settings is a card per part at full width, Software update
   first, with a row of section buttons, cards that fold and stay folded,
   and ↑ (`docs/ui.md`, "System settings").

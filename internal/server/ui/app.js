@@ -1066,6 +1066,7 @@ function showLanguageError() {
 function applyLanguage() {
   if (I18N.en) applyI18n(document);
   initHelpSlots();
+  pageBar($("system"));
   pageContents($("system"));
   renderLangSelect();
   applyAppearance();
@@ -1095,9 +1096,12 @@ async function init() {
   if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
-  // System settings' cards fold, its row of section buttons, back to top
+  // the header kept at the top; System settings' row there with its
+  // sections menu, its cards that fold, its section buttons, back to top
+  stickyHeader();
   const system = $("system");
   sectionCards(system);
+  pageBar(system);
   pageContents(system);
   backToTop(system);
   initSettings();

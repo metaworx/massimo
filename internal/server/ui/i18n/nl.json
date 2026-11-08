@@ -46,6 +46,7 @@
   "header.certMissing": "De server heeft nog geen certificaat: de aanvraag bij Let's Encrypt is niet gelukt; zie het logboek van de server.",
   "nav.pages": "pagina's",
   "page.sections": "secties",
+  "page.sectionsTitle": "Secties",
   "page.toTop": "terug naar boven",
   "page.toTopTitle": "Terug naar boven",
   "nav.rooms": "ruimtes",

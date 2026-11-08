@@ -45,6 +45,7 @@
   "header.certMissing": "Der Server hat noch kein Zertifikat: die Bestellung bei Let's Encrypt ist nicht gelungen; siehe das Log des Servers.",
   "nav.pages": "Seiten",
   "page.sections": "Abschnitte",
+  "page.sectionsTitle": "Abschnitte",
   "page.toTop": "nach oben",
   "page.toTopTitle": "Nach oben",
   "nav.rooms": "Räume",

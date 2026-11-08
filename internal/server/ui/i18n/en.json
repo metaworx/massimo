@@ -45,6 +45,7 @@
   "header.certMissing": "The server has no certificate yet: the order from Let's Encrypt has not succeeded; see the server's log.",
   "nav.pages": "pages",
   "page.sections": "sections",
+  "page.sectionsTitle": "Sections",
   "page.toTop": "back to top",
   "page.toTopTitle": "Back to top",
   "nav.rooms": "rooms",

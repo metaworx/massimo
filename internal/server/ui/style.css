@@ -88,8 +88,15 @@ h3 { margin: 0 0 12px; }
 .tls-fp { word-break: break-all; }
 body:not(.expert) .expert-only { display: none !important; }
 
-/* header */
+/* header, kept at the top on every page (components.js stickyHeader):
+   once scrolled it drops the time of the last update, the clock and the
+   lines under its first one, the reload button for a new version
+   staying; on a phone the Cube choice then takes the brand's line */
 .top {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
   display: flex;
   flex-wrap: wrap;
   gap: 12px 24px;
@@ -162,7 +169,7 @@ body:not(.expert) .expert-only { display: none !important; }
 .menu-line { margin: 0 0 4px; padding: 6px 10px 10px; color: var(--muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 #cube-select { max-width: min(100%, 320px); min-width: 0; }
 @media (max-width: 599px) {
@@ -194,6 +201,16 @@ body:not(.expert) .expert-only { display: none !important; }
 body.expert #clock-plain { display: none; }
 #updated { font-variant-numeric: tabular-nums; font-size: 0.9rem; }
 #version { white-space: nowrap; }
+/* the version on one line, cut with … where a long one (a build between
+   releases) leaves no room beside the page buttons */
+#version-short { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+body.scrolled .top { padding: 8px 0; }
+body.scrolled .top .updated-line, body.scrolled #clock-plain, body.scrolled #tls-notice,
+body.scrolled #cube-found, body.scrolled #budget, body.scrolled #pending { display: none !important; }
+@media (max-width: 599px) {
+  body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
+  body.scrolled .top-left { display: none; }
+}
 #server-started .age-exact { display: none; }
 
 /* slide toggle: a checkbox styled as a switch, keyboard accessible */
@@ -315,9 +332,40 @@ body.expert #clock-plain { display: none; }
    Users, Roles and Capabilities flow in two columns there, none split,
    the break where their heights put it. */
 .settings.settings-page { max-width: none; }
-.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
-.page-head h2 { font-size: 1.25rem; }
-.toc { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+/* the page's row kept at the top under the header (components.js
+   pageBar): the title and, at its right end, the sections menu */
+.page-bar {
+  position: sticky;
+  top: var(--top-h, 0px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid transparent; /* there before it shows, so that the page keeps its length */
+  background: var(--bg);
+}
+body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
+.page-bar h2 { font-size: 1.25rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu.sec-menu { margin-left: auto; }
+.menu.sec-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  line-height: 1;
+}
+.menu.sec-menu > summary:hover, .menu.sec-menu[open] > summary { border-color: var(--accent); }
+.sec-menu .menu-items { min-width: 210px; }
+.sec-menu .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
 .section-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .section-flow { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -334,7 +382,7 @@ body.expert #clock-plain { display: none; }
 /* A card's head: its name larger than a label, a button that folds it
    (the disclosure pattern: a heading holding a button with
    aria-expanded), what it holds as badges, and its help. */
-.section-card { min-width: 0; }
+.section-card { min-width: 0; scroll-margin-top: calc(var(--top-h, 0px) + var(--bar-h, 0px) + 10px); }
 .section-head { flex-wrap: wrap; gap: 4px 8px; padding: 8px 10px 8px 12px; }
 .section-head h3 { flex: 1 1 11em; min-width: 0; margin: 0; font-size: 1.08rem; }
 .section-head .help-text { flex-basis: 100%; }
