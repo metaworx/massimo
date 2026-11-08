@@ -49,6 +49,10 @@ the next minor, a fix counts the suffix up.
   `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
   `/etc/massimo/cloudflare.token` (`packaging/README.md`).
 
+- The Debian package installs the DNS-01 hooks for Infomaniak and
+  Cloudflare as `/usr/share/massimo/acme-dns-hooks/*.sh`
+  (`packaging/README.md`, "Debian package").
+
 ### Changed
 
 - My settings keeps "only on this device" in a column of its own at

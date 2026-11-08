@@ -46,6 +46,15 @@ contents:
     dst: /usr/share/massimo/packaged
   - src: packaging/env.template
     dst: /usr/share/massimo/env.template
+  # The DNS-01 hooks of serve -acme-dns-hook (packaging/README.md).
+  - src: packaging/acme-dns-hooks/infomaniak.sh
+    dst: /usr/share/massimo/acme-dns-hooks/infomaniak.sh
+    file_info:
+      mode: 0755
+  - src: packaging/acme-dns-hooks/cloudflare.sh
+    dst: /usr/share/massimo/acme-dns-hooks/cloudflare.sh
+    file_info:
+      mode: 0755
   - src: packaging/deb/copyright
     dst: /usr/share/doc/massimo/copyright
 scripts:

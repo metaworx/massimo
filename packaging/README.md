@@ -232,6 +232,11 @@ sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.to
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/cloudflare.sh
 ```
 
+A box with the Debian package has both scripts already,
+as `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`:
+there the token file and the `massimo install` line are all it takes,
+with `-acme-dns-hook /usr/share/massimo/acme-dns-hooks/<provider>.sh`.
+
 Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:
 `certbot certonly --authenticator dns-infomaniak -d massimo.example.net` with
 the plugin `certbot-dns-infomaniak` (`pip install`) and its credentials file
@@ -273,6 +278,8 @@ It installs the release binary as `/usr/bin/massimo`,
 the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
 that path and without the update helper),
 the log rotation and the marker `/usr/share/massimo/packaged`,
+the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
+(see `-acme-dns-hook` above),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
 its scripts create the user `massimo` and `/etc/massimo/env` from the template
