@@ -29,8 +29,8 @@ the next minor, a fix counts the suffix up.
   locally (`GUIDELINES/project/CI.md`, section 2).
 
 - The workflows pin their actions by commit SHA; Dependabot proposes
-  their updates and the Go modules' monthly
-  (`GUIDELINES/project/CI.md`, "Dependabot").
+  their updates and the Go modules' monthly, its commit messages left
+  unchecked (`GUIDELINES/project/CI.md`, "Dependabot").
 
 ### Fixed
 

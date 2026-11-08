@@ -743,13 +743,14 @@ jobs:
           fetch-depth: 0
       - name: Tags
         run: git fetch --quiet --force --tags origin
-      # Without a range, check reads no commit message in a fresh checkout:
-      # a push to main, and a pull request of Dependabot's, whose messages
-      # cannot take the project's form (GUIDELINES/project/CI.md,
-      # "Dependabot"); every other check runs on them.
+      # HEAD..HEAD, an empty range, reads no commit message: a push to main,
+      # and a pull request of Dependabot's, whose messages cannot take the
+      # project's form (GUIDELINES/project/CI.md, "Dependabot"); every other
+      # check runs on them. Without a range, check reads what is not on the
+      # remote's default branch wherever the checkout has an origin/HEAD.
       - name: Checks
         if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
-        run: GUIDELINES/shared/tools/check
+        run: GUIDELINES/shared/tools/check --commit-range HEAD..HEAD
       # base..head, not ..HEAD: on a pull request HEAD is the merge commit
       # GitHub makes for the run, whose message is not ours to write; the
       # merge commits main receives are left out the same way, by running
