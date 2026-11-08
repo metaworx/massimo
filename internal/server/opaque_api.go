@@ -352,12 +352,12 @@ func (s *Server) mayRegister(r *http.Request, st *store.Store, name string) erro
 	if err != nil {
 		return userFail(err)
 	}
-	a := s.accessOf(p, name)
+	a := s.accessOf(r.Context(), p, name)
 	switch {
-	case ok && (a.mayManage(u) || a.self):
+	case ok && (a.maySetPassword(u) || a.self):
 		return nil
 	case ok:
-		return fail(http.StatusForbidden, "capability %q required", "users")
+		return a.rankFail(u.Role, "users")
 	case a.all || a.guests:
 		return nil
 	}

@@ -119,6 +119,7 @@ func runServe(args []string) error {
 	// The settings as this run started with them, for what a change of
 	// the settings file applies only at the next start (reload.go).
 	startSettings := settings()
+	settingsRead := time.Now() // the settings file as the start read it
 	given := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
 	src, err := tlsSource(tlsOptions{mode: *tlsFlag, certPath: *tlsCert, keyPath: *tlsKey, names: *tlsNames, listen: *listen, dataDir: dataDir(),
@@ -245,6 +246,20 @@ func runServe(args []string) error {
 	// also checkpoints the store.
 	reloader := newSettingsReloader(env.File(), logger, srv, startSettings, given)
 	go watchSettings(ctx, env.File(), settingsWatchEvery, func() { reloader.reload(ctx, "the settings file changed") })
+	// POST /api/v1/reload: what SIGHUP does, from System settings →
+	// Maintenance; the file counts as read at the start.
+	srv.SetReloader(env.File(), func(rctx context.Context) (server.ReloadResult, error) {
+		changed, pending, err := reloader.reload(rctx, "the API")
+		if err != nil {
+			return server.ReloadResult{}, err
+		}
+		checkpointStore(rctx, st, logger)
+		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), ReadAt: time.Now()}, nil
+	})
+	srv.SetSettingsRead(settingsRead)
+	// GET /api/v1/config: the settings in effect, as massimo config shows
+	tlsInEffect := tlsMode(*tlsFlag, *tlsCert, *tlsKey)
+	srv.SetConfigView(func() server.ConfigView { return configView(*listen, tlsInEffect) })
 	if hup == sighupReload {
 		hups := make(chan os.Signal, 1)
 		signal.Notify(hups, syscall.SIGHUP)

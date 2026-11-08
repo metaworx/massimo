@@ -360,8 +360,33 @@ body.scrolled #cube-found, body.scrolled #budget, body.scrolled #pending { displ
 .lang-note span { display: block; }
 .lang-note span + span { margin-top: 4px; font-style: italic; }
 .settings .settings-note { margin: 4px 0 8px; }
-.settings .update p, .settings .restart p { margin: 4px 0; overflow-wrap: anywhere; }
-.settings .restart { padding-top: 6px; }
+.settings .update p { margin: 4px 0; overflow-wrap: anywhere; }
+/* a row of an action, what it does at the left and its button at the
+   right (System settings → Maintenance) */
+.action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+.action-row:first-child { border-top: none; padding-top: 0; }
+.action-row > div:first-child { flex: 1 1 16em; min-width: 0; }
+.action-row p { margin: 0; overflow-wrap: anywhere; }
+.action-title { font-weight: 600; }
+.settings .action-row .actions { margin: 0; }
+.action-row + .notice { margin: 0 0 10px; }
+/* a part of a card that opens (System settings → Maintenance: the store,
+   the settings in effect), its head with the chevron of a panel's */
+.sys-sub { border-top: 1px solid var(--line); padding: 8px 0; }
+.sys-sub > summary { gap: 2px 10px; align-items: baseline; }
+.sys-sub > summary > .muted { font-size: 0.85rem; }
+.sys-sub[open] > summary { margin-bottom: 6px; }
+/* a list of facts (components.js kvList) and of counts (countList) */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 4px 0; font-size: 0.9rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.kv-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(9em, 1fr)); gap: 0 14px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.kv-rows li { display: flex; justify-content: space-between; gap: 6px; border-bottom: 1px dotted var(--line); }
+.kv-rows li > span:first-child { color: var(--muted); }
+@media (max-width: 480px) {
+  .kv { grid-template-columns: minmax(0, 1fr); }
+  .kv dd { margin-bottom: 4px; }
+}
 
 /* System settings: the page at full width, its parts section cards in a
    grid (components.js sectionCards, pageContents, backToTop); a card is
@@ -409,6 +434,8 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   .section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .section-grid > * { grid-column: 1 / -1; }
   .section-grid > .half { grid-column: auto; }
+  /* Software update alone where Maintenance is not shown */
+  .no-restart.no-settings .section-grid > #sys-software { grid-column: 1 / -1; }
   .section-flow { display: block; columns: 2; column-gap: 16px; }
   .section-flow > .section-card { break-inside: avoid; margin-bottom: 16px; }
   .section-flow .cap-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
@@ -575,7 +602,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 /* A details panel's head (components.js detailsPanel: the Cubes, the
    users, the roles): a chevron, the name, the key or serial apart from
    it in grey, the badges at the right edge, wrapping under on a phone. */
-.panel > summary {
+.panel > summary, .sys-sub > summary {
   list-style: none;
   cursor: pointer;
   display: flex;
@@ -584,8 +611,8 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   gap: 4px 10px;
   overflow-wrap: anywhere;
 }
-.panel > summary::-webkit-details-marker { display: none; }
-.panel > summary::before {
+.panel > summary::-webkit-details-marker, .sys-sub > summary::-webkit-details-marker { display: none; }
+.panel > summary::before, .sys-sub > summary::before {
   content: "";
   flex: none;
   width: 0.42em;
@@ -596,7 +623,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   transform: rotate(-45deg);
   transition: transform 0.15s;
 }
-.panel[open] > summary::before { transform: rotate(45deg); }
+.panel[open] > summary::before, .sys-sub[open] > summary::before { transform: rotate(45deg); }
 .panel[open] > summary { margin-bottom: 10px; }
 .panel > summary > .mono { color: var(--muted); }
 .panel-name { font-weight: 600; }
@@ -1215,7 +1242,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
 .no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-sync .needs-sync,
 .no-system .needs-system,
-.no-cubes.no-pair .needs-cubes-or-pair { display: none !important; }
+.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings .needs-restart-or-settings { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */

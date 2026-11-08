@@ -39,10 +39,17 @@ function usersAdmin() {
 }
 
 // mayManage reports whether a user's panel is the signed-in user's to
-// change beyond the own name and password.
+// change beyond the own name and password; mayPassword whether its
+// password is. The server says it per user (may, the rank rule: nobody
+// but an owner changes an owner); without it the capabilities decide.
 function mayManage(u) {
+  if (u.may) return u.may.manage;
   const a = usersAdmin();
   return a === "all" || (a === "guests" && u.role === "guest");
+}
+
+function mayPassword(u) {
+  return u.may ? u.may.password : mayManage(u) || isSelf(u.name);
 }
 
 async function loadUsers() {
@@ -65,6 +72,9 @@ function roleOptions(current) {
   if (usersAdmin() === "guests") keys = ["guest"];
   else if (usersUI.roles) keys = usersUI.roles.map((r) => r.key);
   else keys = [...DEFAULT_ROLES];
+  // only an owner gives the role owner (the server's rank rule)
+  const me = state.me;
+  if (!(me && me.role && me.role.key === "owner")) keys = keys.filter((k) => k !== "owner");
   if (current && !keys.includes(current)) keys.push(current);
   return keys.map((k) => {
     const r = (usersUI.roles || []).find((x) => x.key === k);
@@ -278,11 +288,19 @@ function userPanel(u) {
   wireNewKey(u, tokensBox);
   const manage = mayManage(u);
   const self = isSelf(u.name);
+  const mayPw = mayPassword(u);
+  // the keys are the manager's and the user's own; an outranked user's
+  // panel says why it cannot be changed
+  tokensBox.classList.toggle("hidden", !manage && !self);
+  if (!manage && !self && !mayPw) {
+    d.querySelector("form").classList.add("hidden");
+    d.appendChild(textEl("p", t(u.role === "owner" ? "users.ownerOnly" : "users.outranked"), "muted small"));
+  }
   d.addEventListener("toggle", () => {
     if (d.open) {
       if (usersUI.open.has(u.name)) return; // built open, loaded below
       usersUI.open.add(u.name);
-      fillTokens(u, tokensBox);
+      if (manage || self) fillTokens(u, tokensBox);
     } else {
       usersUI.open.delete(u.name);
     }
@@ -300,7 +318,10 @@ function userPanel(u) {
   field("expires").value = localDateTimeOf(u.expires_at);
   const adminOnly = form.querySelectorAll(".admin-only");
   for (const el of adminOnly) el.classList.toggle("hidden", !manage);
-  form.querySelector(".field-current").classList.toggle("hidden", manage);
+  // the name is the manager's and the user's own; with passwords alone
+  // the password is all there is
+  field("display_name").closest(".field").classList.toggle("hidden", !manage && !self);
+  form.querySelector(".field-current").classList.toggle("hidden", manage || !self);
   const actions = form.querySelector(".actions");
   const remove = actions.querySelector(".remove-user");
   remove.classList.toggle("hidden", !manage);
@@ -309,7 +330,7 @@ function userPanel(u) {
   const changes = () => {
     const body = {};
     const display = field("display_name").value.trim();
-    if (display !== (u.display_name || "")) body.display_name = display;
+    if ((manage || self) && display !== (u.display_name || "")) body.display_name = display;
     if (manage) {
       if (field("role").value !== u.role) body.role = field("role").value;
       if (field("disabled").checked !== !!u.disabled) body.disabled = field("disabled").checked;
@@ -319,7 +340,7 @@ function userPanel(u) {
     const password = field("password").value;
     if (password) {
       body.password = password;
-      if (!manage || self) body.current_password = field("current_password").value;
+      if (self && !manage) body.current_password = field("current_password").value;
     }
     return body;
   };
@@ -339,7 +360,7 @@ function userPanel(u) {
     delete body.current_password;
     const send = async () => {
       if (password) {
-        if (!manage || self) Object.assign(body, await currentPassword(u, current || ""));
+        if (self && !manage) Object.assign(body, await currentPassword(u, current || ""));
         Object.assign(body, await registerPassword(u.name, password));
       }
       return api("PUT", "api/v1/users/" + encodeURIComponent(u.name), body);
@@ -348,7 +369,7 @@ function userPanel(u) {
       if (ok && self && password) loadMe();
     });
   });
-  if (d.open) fillTokens(u, tokensBox);
+  if (d.open && (manage || self)) fillTokens(u, tokensBox);
   return d;
 }
 

@@ -123,15 +123,26 @@ func TestUsersRoutes(t *testing.T) {
 		t.Fatalf("login with the own new password: %d", code)
 	}
 
-	// A guests holder (anna is a manager) sees and manages guests and
-	// itself, nobody else.
+	// A manager (anna: guests and passwords) sees every user, manages
+	// guests and itself, and may set the password of none but those it
+	// outranks: not the owner's.
 	code, text = callAPI(t, ts, "GET", users, annaKey, "")
 	json.Unmarshal([]byte(text), &list)
-	if code != 200 || len(list) != 2 || list[0].Name != "anna" || list[1].Name != "guest1" {
+	may := map[string]userMay{}
+	for _, u := range list {
+		if u.May != nil {
+			may[u.Name] = *u.May
+		}
+	}
+	if code != 200 || len(may) < 3 || may["owner"] != (userMay{}) || may["guest1"] != (userMay{Manage: true, Password: true}) ||
+		may["anna"] != (userMay{Manage: false, Password: true}) {
 		t.Fatalf("a manager's list: %d %s", code, text)
 	}
-	if code, _ := callAPI(t, ts, "GET", users+"/owner", annaKey, ""); code != 403 {
+	if code, _ := callAPI(t, ts, "GET", users+"/owner", annaKey, ""); code != 200 {
 		t.Fatalf("a manager reads the owner: %d", code)
+	}
+	if code, text := callAPI(t, ts, "PUT", users+"/owner", annaKey, `{"password":"taken-over"}`); code != 403 || errorOf(text) != "only an owner changes an owner" {
+		t.Fatalf("a manager sets the owner's password: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "POST", users, annaKey, `{"name":"g2","role":"guest","password":"p"}`); code != 201 {
 		t.Fatalf("a manager creates a guest: %d", code)
@@ -416,5 +427,75 @@ func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
 		if strings.Contains(e.Error, "store:") || !strings.HasPrefix(e.Error, c.want) {
 			t.Errorf("%s %s: %q, want it to start with %q", c.method, c.path, e.Error, c.want)
 		}
+	}
+}
+
+// The rank rule: a user changes only users whose role has no capability
+// its own lacks, and gives only such roles; nobody but an owner changes
+// an owner. passwords, the manager's by default, sets the password of
+// such a user and nothing else.
+func TestRankRule(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	_, ts, s := startWith(t, opts)
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddRole(ctx, store.Role{Key: "keeper", Capabilities: []string{"read", "preferences", "users"}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	keeper := userToken(t, st, "keeper1", "keeper")
+	manager := userToken(t, st, "manager1", store.RoleManager)
+	userToken(t, st, "operator1", store.RoleOperator)
+	userToken(t, st, "viewer1", store.RoleViewer)
+	users := "/api/v1/users/"
+	cases := []struct {
+		what, key, path, body string
+		code                  int
+		err                   string
+	}{
+		{"users, a viewer's password", keeper, "viewer1", `{"password":"v-pass-1"}`, 200, ""},
+		{"users, a viewer's name", keeper, "viewer1", `{"display_name":"V"}`, 200, ""},
+		{"users, an operator's password", keeper, "operator1", `{"password":"o-pass-1"}`, 403, "the role operator has capabilities yours lacks"},
+		{"users, a manager's role", keeper, "manager1", `{"role":"viewer"}`, 403, "the role manager has capabilities yours lacks"},
+		{"users, giving operator", keeper, "viewer1", `{"role":"operator"}`, 403, "the role operator has capabilities yours lacks"},
+		{"users, giving owner", keeper, "viewer1", `{"role":"owner"}`, 403, "only an owner gives the role owner"},
+		{"users, the owner's password", keeper, "owner", `{"password":"x-pass-1"}`, 403, "only an owner changes an owner"},
+		{"passwords, an operator's password", manager, "operator1", `{"password":"o-pass-2"}`, 200, ""},
+		{"passwords, an operator's name", manager, "operator1", `{"display_name":"O"}`, 403, `capability "users" required`},
+		{"passwords, an operator's role", manager, "operator1", `{"role":"viewer"}`, 403, `capability "users" required`},
+		{"passwords, a keeper's password", manager, "keeper1", `{"password":"k-pass-1"}`, 403, "the role keeper has capabilities yours lacks"},
+		{"owner, a manager's password", "secret", "manager1", `{"password":"m-pass-1"}`, 200, ""},
+	}
+	for _, c := range cases {
+		code, text := callAPI(t, ts, "PUT", users+c.path, c.key, c.body)
+		if code != c.code || c.err != "" && errorOf(text) != c.err {
+			t.Errorf("%s: %d %s, want %d %q", c.what, code, text, c.code, c.err)
+		}
+	}
+	if code, text := callAPI(t, ts, "POST", "/api/v1/users", keeper, `{"name":"x1","role":"owner"}`); code != 403 || errorOf(text) != "only an owner gives the role owner" {
+		t.Errorf("users, creating an owner: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "DELETE", users+"manager1", keeper, ""); code != 403 || errorOf(text) != "the role manager has capabilities yours lacks" {
+		t.Errorf("users, removing a manager: %d %s", code, text)
+	}
+}
+
+// A user with keys only sets its first password as itself, without a
+// current one it has not; the next change asks for the current one, as
+// for every user.
+func TestFirstOwnPassword(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	_, ts, s := startWith(t, opts)
+	key := userToken(t, s.opts.Store, "keysonly", store.RoleViewer)
+	path := "/api/v1/users/keysonly"
+	code, text := callAPI(t, ts, "PUT", path, key, `{"password":"first-pass-1"}`)
+	var v userView
+	if err := json.Unmarshal([]byte(text), &v); err != nil || code != 200 || !v.HasPassword {
+		t.Fatalf("the first password: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1"}`); code != 403 || errorOf(text) != "current_password is wrong" {
+		t.Fatalf("the second without the current one: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1","current_password":"first-pass-1"}`); code != 200 {
+		t.Fatalf("the second with the current one: %d %s", code, text)
 	}
 }

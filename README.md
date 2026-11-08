@@ -558,7 +558,9 @@ such as Docker's `--restart`;
 it looks at it every five seconds,
 and reads it once a change has held for one more look,
 and on Unix also on SIGHUP (`systemctl reload massimo`),
-which checkpoints the store too.
+which checkpoints the store too;
+`POST /api/v1/reload` does what SIGHUP does, on every system
+(System settings → Maintenance → **Reload now** in the web UI).
 `MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
 every other setting that changed is listed by `GET /api/v1/restart`
 as applying at the next restart.
@@ -751,7 +753,9 @@ also while `serve` runs (copying `massimo.db` alone can miss the last writes,
 which are in `massimo.db-wal` until a checkpoint,
 at the latest at a clean stop),
 `store migrate` creates or migrates it without starting `serve`,
-and `store info` prints its schema version, node and row counts.
+and `store info` prints its schema version, node and row counts
+(also in the web UI, System settings → Maintenance → Store, as
+`massimo config`'s settings are under Settings in effect, secrets left out).
 The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,

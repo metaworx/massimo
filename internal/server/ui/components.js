@@ -613,6 +613,23 @@ function deviceIds(serial, rf, { rf: show } = {}) {
   return box;
 }
 
+// kvList is a list of facts, a name and its value each ([name, value,
+// mono]), the values in a column of their own; mono sets a value in the
+// monospaced font (a path, an identifier).
+function kvList(pairs) {
+  const dl = elem("dl", "kv");
+  for (const [name, value, mono] of pairs) dl.append(textEl("dt", name), textEl("dd", value, mono ? "mono" : ""));
+  return dl;
+}
+
+// countList is a list of counts by name ({name: n}), in columns as many
+// as there is room for, the names in grey and the numbers right-aligned.
+function countList(counts) {
+  const ul = elem("ul", "kv-rows");
+  for (const name of Object.keys(counts).sort()) ul.appendChild(elem("li", "", textEl("span", name), textEl("span", fmtNum(counts[name], 0))));
+  return ul;
+}
+
 // --- a choice of one in a menu (the Cube choice) -----------------------
 
 // connIcon is a connection as a plug: joined and green while connected,

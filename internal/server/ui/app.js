@@ -1116,6 +1116,7 @@ function applyLanguage() {
   fillLogSelects();
   renderLog();
   if (updState.info) renderUpdate(updState.info);
+  if (infoState.store || infoState.config) renderServerInfo();
 }
 
 // init starts the page once English and the chosen language are loaded.

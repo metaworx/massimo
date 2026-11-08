@@ -64,7 +64,7 @@ const (
 // rows of the store.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-	"guests", "users", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit",
+	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "audit",
 }
 
 // Two more values a route may be registered with, which no role holds:
@@ -746,14 +746,14 @@ func (s *Server) touch(ctx context.Context, tok store.Token, ip string, now time
 }
 
 // allowed reports whether a principal may call a route registered with
-// a capability. The users routes also admit a guests holder and a
-// user's own name, and the device route a structure holder; the
-// handlers narrow what those may do.
+// a capability. The users routes also admit a guests or passwords
+// holder and a user's own name, and the device route a structure
+// holder; the handlers narrow what those may do.
 func (s *Server) allowed(p *principal, capability string, r *http.Request) bool {
 	if capability == capAny || p.has(capability) {
 		return true
 	}
-	if capability == "users" && (p.has("guests") || p.named() && strings.EqualFold(r.PathValue("name"), p.user.Name)) {
+	if capability == "users" && (p.has("guests") || p.has("passwords") || p.named() && strings.EqualFold(r.PathValue("name"), p.user.Name)) {
 		return true
 	}
 	if capability == "rename" && r.Pattern == "PUT /api/v1/cubes/{sn}/devices/{rf}" && p.has("structure") {

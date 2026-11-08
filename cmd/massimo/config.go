@@ -18,6 +18,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -96,6 +97,35 @@ func runConfig(args []string) error {
 		}
 	}
 	return nil
+}
+
+// configView is what massimo config shows, for GET /api/v1/config
+// (System settings → Maintenance): the settings file, the data
+// directory, the address serve listens on, its TLS mode, the log level
+// and every MASSIMO_* variable with where it came from, a secret's value
+// left out (server.SecretVariable). The command's own text stays as it
+// is; both are made of the same helpers.
+func configView(listen, tls string) server.ConfigView {
+	file := env.File()
+	_, err := os.Stat(file)
+	v := server.ConfigView{File: file, FileFound: err == nil, DataDir: dataDir(), Listen: listen, TLS: tls, LogLevel: logLevelState()}
+	var names []string
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "MASSIMO_") {
+			names = append(names, k)
+		}
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		cv := server.ConfigVariable{Name: k, Source: env.Source(k), Unknown: !env.Known(k)}
+		if server.SecretVariable(k) {
+			cv.Secret = true
+		} else {
+			cv.Value = os.Getenv(k)
+		}
+		v.Variables = append(v.Variables, cv)
+	}
+	return v
 }
 
 // openStoreToRead opens the data directory's store read-only, or says

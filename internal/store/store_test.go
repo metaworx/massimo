@@ -155,7 +155,7 @@ func TestSeededRoles(t *testing.T) {
 	s := open(t, t.TempDir())
 	want := map[string][]string{
 		"owner":       nil,
-		"manager":     {"backup", "configure", "discover", "guests", "lock", "pair", "preferences", "read", "rename", "restart", "restore", "setpoint", "structure"},
+		"manager":     {"backup", "configure", "discover", "guests", "lock", "pair", "passwords", "preferences", "read", "rename", "restart", "restore", "setpoint", "structure"},
 		"operator":    {"backup", "configure", "discover", "lock", "preferences", "read", "setpoint"},
 		"guest":       {"configure", "read", "setpoint"},
 		"viewer":      {"preferences", "read"},

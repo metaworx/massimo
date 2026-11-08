@@ -10,6 +10,17 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- A user with keys only sets its first password in My profile, without
+  a current one (`docs/ui.md`, "My profile").
+
+- `GET /api/v1/store` and `GET /api/v1/config` show what `store info`
+  and `config` print, secrets left out; System settings → Maintenance
+  shows them (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+
+- `POST /api/v1/reload` reads the settings file again at once, as SIGHUP
+  does; System settings → Maintenance holds it and the restart
+  (`docs/api-v1.md`, "POST /api/v1/reload").
+
 - Fuzz targets for the parsers of untrusted bytes, their seeds run by
   `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
   (`GUIDELINES/project/CI.md`, section 2).
@@ -89,6 +100,12 @@ the next minor, a fix counts the suffix up.
 - A Cube's duty cycle or free memory slots over `ffff` are refused
   rather than read as negative on a 32-bit system, as code scanning
   warned; the sign-in's key stretching reads its lanes at 8 bits too.
+
+### Security
+
+- A user changes only users whose role has no capability its own lacks,
+  so nobody but an owner changes an owner; a manager sets other users'
+  passwords with `passwords` (`docs/api-v1.md`, "Authentication").
 
 ## [0.11.0-alpha.1] - 2026-11-08
 

@@ -38,7 +38,7 @@ so the session never appears in a URL.
 The header's line reads, from the left:
 **Massimo** with the server's version, the time of the last update with **↻**,
 the Cube's clock;
-then whether the server is connected to the Cube, and the Cube choice;
+then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
 and **☰** beside the house and 👤 holds **Log** and **System settings**,
@@ -285,6 +285,9 @@ nor with the server's API token):
   the own password, with the current one,
   which a sign-in by OPAQUE proves without sending it;
   the new one is registered by OPAQUE, as every password the page sets.
+  A user with keys only, such as the owner made from `MASSIMO_API_TOKEN`,
+  has **Set a password** instead, without a current one, and a line saying
+  that it lets the user sign in by name in any browser.
 - **Sessions and keys**: the own sessions and API keys,
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
@@ -367,7 +370,7 @@ each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no cog.
 
 The page is a card per part, as wide as the page:
-Software update first, then Cubes, Users, Roles,
+Software update first, then Maintenance, Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -390,7 +393,8 @@ to the top of the page.
   If the new version does not come up, the old one is put back.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
-  **Restart the server**, with the capability `restart`,
+- **Maintenance** (with `restart`, or `settings` for its last two parts):
+  **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
   the page then asks `/healthz` every two seconds until the server reports a new start,
@@ -400,7 +404,19 @@ to the top of the page.
   and the server's reason is shown,
   such as a server in a terminal or an open server asked from elsewhere than the box.
   The settings of the settings file that changed since the start and apply only
-  at the next one are listed under it, by name.
+  at the next one are listed under it, by name, and counted in the card's head.
+  **Settings file** names the file and when the server last read it;
+  **Reload now** reads it again at once, as SIGHUP does
+  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
+  **Store** (with `settings`) opens to what `massimo store info` shows:
+  the file, the schema version, the node and tenant and the rows per table,
+  its head the file, the schema and the rows in all;
+  **Settings in effect** to what `massimo config` shows: the version, the
+  settings file, the data directory, the listen address, TLS, the log level
+  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
+  token or a password as "set, not shown"
+  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+  From 900 px Software update and Maintenance share a row.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
   each in a panel whose head shows the name, the serial and the address,
@@ -450,8 +466,12 @@ to the top of the page.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.
-- **Users** (with `users`, or `guests` for the guests alone):
-  every user in a panel whose head shows the display name, the login apart
+- **Users** (with `users`, `passwords`, or `guests` for the guests alone):
+  a user changes only users whose role has no capability its own lacks,
+  so nobody but an owner changes an owner, whose panel says so,
+  and with `passwords` alone (a manager's) a panel offers the password alone;
+  the role choice offers no owner but to an owner.
+  Every user in a panel whose head shows the display name, the login apart
   from it and, at the right edge, the badges: **you** first, the role,
   the state and **keys only**;
   in the panel the display name, role, whether it is disabled,
@@ -536,6 +556,8 @@ and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's connection a `connIcon`;
 a device's serial and radio address are a `deviceIds`;
+a list of facts is a `kvList`, of counts a `countList`;
+an action with what it does and its button is an `.action-row`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`

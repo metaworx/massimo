@@ -2,9 +2,10 @@
 <div class="profile" aria-live="polite">
   <div id="profile-name"></div>
   <details id="me-password" class="hidden">
-    <summary data-i18n="me.changePassword">Change password</summary>
+    <summary id="me-password-title" data-i18n="me.changePassword">Change password</summary>
+    <p id="me-password-hint" class="muted small hidden" data-i18n="me.setPasswordHint">You sign in with API keys only. With a password you can also sign in by your name in any browser; it is registered by OPAQUE and stays in this browser.</p>
     <form id="me-password-form">
-      <div class="field wide">
+      <div class="field wide me-current-field">
         <label for="me-current" data-i18n="users.currentPassword">Current password</label>
         <input type="password" id="me-current" class="field-control" autocomplete="current-password">
       </div>

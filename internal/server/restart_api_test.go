@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
@@ -213,5 +214,58 @@ func TestFromTheBox(t *testing.T) {
 	r.Header.Set("X-Forwarded-For", "203.0.113.9")
 	if fromTheBox(r) {
 		t.Error("a proxied request counted as the box's")
+	}
+}
+
+// POST /api/v1/reload reads the settings file again through what
+// cmd/massimo hands the server: for a holder of restart it answers what
+// changed and what waits for the next start, GET /api/v1/restart then
+// names the file and when it was read, the request is an audit row and
+// no command, and the Cube is sent nothing; without restart it is
+// refused, and a server without a reloader says it reads no file.
+func TestReloadRoute(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	fc, ts, s := startWith(t, opts)
+	stores[ts] = s.opts.Store
+	st := s.opts.Store
+	manager := userToken(t, st, "manager1", store.RoleManager)
+	operator := userToken(t, st, "operator1", store.RoleOperator)
+	path := "/api/v1/reload"
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "this server reads no settings file" {
+		t.Fatalf("without a reloader: %d %s", code, text)
+	}
+	at := time.Date(2026, 11, 8, 19, 52, 0, 0, time.UTC)
+	calls := 0
+	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) {
+		calls++
+		s.SetSettingsRead(at)
+		return ReloadResult{Changed: []string{"MASSIMO_LISTEN"}, Pending: []string{"MASSIMO_LISTEN"}, ReadAt: at}, nil
+	})
+	before := len(fc.Received())
+	code, text := callAPI(t, ts, "POST", path, manager, "{}")
+	var res ReloadResult
+	if err := json.Unmarshal([]byte(text), &res); err != nil || code != 200 || calls != 1 ||
+		strings.Join(res.Changed, ",") != "MASSIMO_LISTEN" || strings.Join(res.Pending, ",") != "MASSIMO_LISTEN" || !res.ReadAt.Equal(at) {
+		t.Fatalf("POST as manager: %d %s (%d calls)", code, text, calls)
+	}
+	_, text = callAPI(t, ts, "GET", "/api/v1/restart", "secret", "")
+	if v := decodeRestart(t, text); v.File != "/etc/massimo/env" || v.ReadAt == nil || !v.ReadAt.Equal(at) {
+		t.Fatalf("GET /api/v1/restart: %s", text)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if len(rows) != 1 || rows[0].Action != "server.reload" || rows[0].User != "manager1" {
+		t.Fatalf("audit %+v", rows)
+	}
+	if code, text := callAPI(t, ts, "POST", path, operator, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
+		t.Fatalf("as operator: %d %s", code, text)
+	}
+	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) {
+		return ReloadResult{}, errors.New("permission denied")
+	})
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 500 || !strings.Contains(errorOf(text), "permission denied") {
+		t.Fatalf("a file that cannot be read: %d %s", code, text)
+	}
+	if got := fc.Received()[before:]; len(got) != 0 {
+		t.Fatalf("the reload sent the Cube %v", got)
 	}
 }

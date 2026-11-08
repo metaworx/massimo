@@ -76,6 +76,7 @@ var actions = map[string]string{
 	"DELETE /api/v1/cubes/{sn}/pairing":            "pairing.stop",
 	"POST /api/v1/update":                          "update.start",
 	"POST /api/v1/restart":                         "server.restart",
+	"POST /api/v1/reload":                          "server.reload",
 	"POST /api/v1/users":                           "user.add",
 	"PUT /api/v1/users/{name}":                     "user.update",
 	"DELETE /api/v1/users/{name}":                  "user.remove",
@@ -93,7 +94,7 @@ var actions = map[string]string{
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
-var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true}
+var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true, "server.reload": true}
 
 // secretFields are the body fields an audit row never keeps.
 var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3"}

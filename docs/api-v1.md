@@ -215,13 +215,21 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
 | `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
+| `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
 | `roles` | a role's capabilities and name, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
-| `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
+| `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
+
+A user changes only users whose role has no capability its own lacks,
+and gives only such roles: an owner changes everyone,
+nobody but an owner changes an owner or gives the role `owner`,
+and a role made with `users` but without, say, `restore` changes no manager.
+The users routes say what the caller may do with each user they list
+(`"may": {"manage": true, "password": true}`).
 | `update` | start a software update | `POST /api/v1/update` |
-| `restart` | restart the server through the service manager that runs it | `GET`/`POST /api/v1/restart` |
+| `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 
 The default roles and their sets are those of docs/store.md section 6:
@@ -480,7 +488,10 @@ From then on the server is in users mode (Authentication).
 absent fields stay, an unknown one is `400`.
 A user changes its own `display_name` and, with `current_password`
 or a `proof` from the sign-in by OPAQUE, its own `password` or `record`;
-the rest needs `users` (`guests` for a guest).
+a user with keys only (`has_password` false) sets its first one without,
+as its key could as well make another key;
+the rest needs `users` (`guests` for a guest), a password `passwords` too,
+each for a user the caller outranks ("Authentication").
 A password set by someone else ends the user's sessions;
 an empty password removes it.
 
@@ -1859,7 +1870,9 @@ or `{"available": false, "blocked": "<why>"}`;
 `pending`, where there is any,
 names the settings of the settings file that changed since the start
 and apply only at the next one,
-such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values.
+such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values;
+`file` is the settings file `serve` reads and `read_at` when it last read it,
+at the start or since.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -1887,6 +1900,49 @@ or `-restart off`),
 while a restart is under way,
 or while an update runs, which restarts the server itself;
 `500` when the restart could not be started (on Windows, the helper).
+
+### POST /api/v1/reload
+
+Reads the settings file again at once, as SIGHUP does on Unix:
+`MASSIMO_API_TOKEN` applies at once unless `-token` was given,
+every other setting that changed applies at the next start,
+and the store is checkpointed.
+`serve` also reads the file by itself within seconds of a change,
+so this is for not waiting, and for systems without SIGHUP.
+Needs the capability `restart`, and answers what it found:
+
+```json
+{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "read_at": "2026-11-08T19:52:00Z"}
+```
+
+`changed` names the variables this read changed, `pending` those that now
+differ from the start and wait for the next one; names, never values.
+It sends nothing to a Cube, and is an audit row (`server.reload`) but no
+command, so a retry is harmless.
+`409` when the server reads no settings file,
+`500` when the file could not be read.
+
+### GET /api/v1/store, GET /api/v1/config
+
+What `massimo store info` and `massimo config` show, for the capability
+`settings` (System settings → Maintenance in the web UI).
+`GET /api/v1/store` answers the store's file, its schema version, the
+oldest that still reads it, the version this server is built for, the node
+and tenant identities and the rows per table:
+
+```json
+{"file": "/var/lib/massimo/massimo.db", "schema": 7, "min_reader": 1, "binary": 7,
+ "node": "…", "tenant": "…", "rows": {"audit": 412, "users": 5}}
+```
+
+`GET /api/v1/config` answers the version, the settings file and whether it
+was found, the data directory, the address `serve` listens on, its TLS mode,
+the log level and every `MASSIMO_*` variable in effect with where it came
+from (`environment` or the settings file).
+A key's, an IV's, a token's or a password's value never leaves the server:
+such a variable has `"secret": true` and no `value`;
+a name Massimo does not know has `"unknown": true`.
+`503` when the server has no store, or does not show its settings.
 
 ## The LAN proxy
 

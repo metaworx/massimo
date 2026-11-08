@@ -72,6 +72,18 @@ BACKUPS = {"backups": [
     {"id": 1, "taken_at": "2026-11-02T18:05:00+01:00", "reason": "auto", "format": "json", "tool": VERSION, "size": 23990,
      "sha256": "1" * 64}]}
 TIME_RE = re.compile(r'"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)"')
+# System settings → Maintenance's store and settings in effect: run.sh's
+# temporary directory and ports would differ on every run, so placeholders.
+STORE = {"file": "/var/lib/massimo/massimo.db", "schema": 8, "min_reader": 1, "binary": 8,
+         "node": "00000000-0000-7000-8000-000000000001", "tenant": "00000000-0000-7000-8000-000000000002",
+         "rows": {"audit": 412, "backups": 14, "commands": 230, "cubes": 1, "events": 5520, "preferences": 3,
+                  "roles": 6, "settings": 4, "tokens": 18, "users": 3}}
+CONFIG = {"version": "v0.0.0-screenshots", "file": "/etc/massimo/env", "file_found": True, "data_dir": "/var/lib/massimo",
+          "listen": ":8099", "tls": "off", "log_level": "info (default)", "variables": [
+              {"name": "MASSIMO_API_TOKEN", "secret": True, "source": "file"},
+              {"name": "MASSIMO_CUBE_KEQ0000100_ADDRESS", "value": CUBE_ADDRESS, "source": "file"},
+              {"name": "MASSIMO_CUBE_KEQ0000100_NAME", "value": "Fake Cube", "source": "file"},
+              {"name": "MASSIMO_LISTEN", "value": ":8099", "source": "file"}]}
 
 # The pages, in the order of the set and of the slideshow, each with its
 # frame: None for the viewport, else the element the shot is about.
@@ -85,9 +97,12 @@ PAGES = {
     "house": "#house",
     "log": None,                                    # its lines run the full width
     "user-menu": None,                              # the 👤 menu open over the rooms
+    "cube-choice": None,                            # the Cube choice open over the rooms
+    "profile": "#profile",                          # My profile, the owner's with keys only
     "prefs": "#prefs",                              # My settings
     "appearance": "#prefs .appearance",
     "system": "#system",                            # System settings
+    "maintenance": "#sys-maint",                    # its Maintenance, the store and settings open
     "cube-found": "header.top",                     # the Cube choice with the found Cube under it
     "cubes": "#system .cubes-settings",
     "nav-menu": None,                               # ☰, which only a narrow screen shows
@@ -101,7 +116,7 @@ WIDE = [p for p in PAGES if p != "nav-menu"]
 SETS = [
     (1100, "light", "en", WIDE),
     (1100, "dark", "en", WIDE),
-    (390, "light", "en", ["rooms", "nav-menu", "prefs", "system"]),
+    (390, "light", "en", ["rooms", "nav-menu", "cube-choice", "prefs", "system"]),
     (1100, "light", "de", ["rooms"]),
 ]
 
@@ -145,6 +160,9 @@ class Answers:
         path = urlparse(req.url).path
         if path == "/api/v1/update":
             return route.fulfill(status=200, content_type="application/json", body=json.dumps(UPDATE))
+        if path in ("/api/v1/store", "/api/v1/config"):
+            body = STORE if path == "/api/v1/store" else CONFIG
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
         if path.endswith("/events/ticket"):
             return route.continue_()
         if path.endswith("/backups") and req.method == "GET":
@@ -223,6 +241,14 @@ def snap(page, path, frame):
     opts = dict(path=path, animations="disabled", caret="hide", scale="css")
     if frame is None:
         return page.screenshot(**opts)
+    # The header and the page's row stay at the top of the window as it
+    # scrolls, and ↑ floats over it (components.js stickyHeader, pageBar,
+    # backToTop): an element's shot is of the element alone. Through the
+    # elements' style, since the page's CSP takes no style element.
+    page.evaluate("""() => {
+      for (const e of document.querySelectorAll('.top, .page-bar')) e.style.position = 'static';
+      for (const e of document.querySelectorAll('.to-top')) e.style.display = 'none';
+    }""")
     el = page.locator(frame).first
     el.scroll_into_view_if_needed()
     b = el.evaluate("""(e) => {
@@ -277,8 +303,17 @@ def step(page, which):
     elif which == "nav-menu":
         page.locator("#nav-menu summary").click()
         page.locator("#nav-menu .menu-items").wait_for(state="visible")
-    elif which in ("prefs", "system"):
+    elif which == "cube-choice":
+        page.locator("#cube-choice").click()
+        page.locator("#cube-menu .menu-items").wait_for(state="visible")
+    elif which in ("prefs", "system", "profile"):
         show_view(page, which)
+    elif which == "maintenance":
+        show_view(page, "system")
+        wait_until(page, "document.getElementById('store-info-sum').textContent !== ''", 5)
+        page.locator("#store-info summary").click()
+        page.locator("#config-info summary").click()
+        to_top(page, page.locator("#sys-maint"))
     elif which == "appearance":
         show_view(page, "prefs")
         page.locator("#scheme-customise").click()

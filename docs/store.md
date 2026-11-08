@@ -654,6 +654,7 @@ The capabilities, what each allows, and the routes it guards:
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
 | `guests` | create, invite, disable and remove users whose role is `guest`, with an end date | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password reset, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
+| `passwords` | set the password of a user | the users routes, limited to a password |
 | `roles` | change a role's capabilities, rename a role, create and delete roles | `GET`/`POST /api/v1/roles`, `PUT`/`DELETE /api/v1/roles/{key}` |
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
@@ -679,11 +680,13 @@ The default roles, as seeded.
 | `backup` | ✓ | ✓ | | | |
 | `restore` | ✓ | | | | |
 | `guests` | ✓ | | | | |
+| `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | |
 | `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `audit` | | | | | |
 
-So `manager` is `operator` plus guests, pairing, names, structure, restore
-and the server's restart (migration 0006, 2026-11-07);
+So `manager` is `operator` plus guests, pairing, names, structure, restore,
+the server's restart (migration 0006, 2026-11-07)
+and the passwords of other users (migration 0008, 2026-11-08);
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;
@@ -695,6 +698,12 @@ that is one row of the seed.
 a guest has it not, so a guest's settings stay on its devices,
 where the defaults apply anyway (decided 2026-11-06),
 and `integration` has no page to keep settings for.
+A user changes only users whose role has no capability its own lacks,
+and gives only such roles: an owner changes everyone,
+nobody but an owner changes an owner or gives the role `owner`,
+and a role made with `users` but without, say, `restore` changes no manager.
+The rule holds for `users`, `guests` and `passwords` alike
+(docs/api-v1.md, "Authentication").
 
 Guests are users with the role `guest`,
 created by a holder of `guests` with an invitation (a one-time code or link;

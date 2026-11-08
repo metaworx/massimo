@@ -298,10 +298,13 @@ named `<page>-<width>-<theme>-<lang>.png` and listed in one place,
 `SETS` in the script:
 the Rooms page, a tile's device list, the configuration's tabs Temperatures,
 Devices, Week programme and Copy, the House panel, the log, the 👤 menu,
-My settings, the Appearance editor, System settings,
+the Cube choice open, My profile, My settings, the Appearance editor,
+System settings, its Maintenance with the store and the settings in effect
+(fixed answers: the run's temporary directory and ports differ),
 the Cube choice with a found Cube and System settings → Cubes,
 at 1100 px in light and dark (`data-theme`), in English;
-the Rooms page, ☰ open, My settings and System settings also at 390 px,
+the Rooms page, ☰ open, the Cube choice open, My settings and System
+settings also at 390 px,
 and the Rooms page in German as well.
 A shot is framed by its subject, set beside each page in `PAGES`:
 the viewport (1100 × 800,

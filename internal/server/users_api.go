@@ -142,25 +142,122 @@ func (s *Server) userStore() (*store.Store, error) {
 
 // access is what a principal may do with users.
 type access struct {
-	all    bool // users: every user
-	guests bool // guests: users whose role is guest
-	self   bool // the user's own name
+	all       bool // users: every user
+	guests    bool // guests: users whose role is guest
+	passwords bool // passwords: the password of a user it outranks
+	self      bool // the user's own name
+	// outranks is the rank rule: whether the principal's role has every
+	// capability of the role named; nil where no rank applies (an open
+	// server, the one token of a server without a store).
+	outranks func(role string) bool
 }
 
-func (s *Server) accessOf(p *principal, name string) access {
-	return access{all: p.has("users"), guests: p.has("guests"), self: p.named() && strings.EqualFold(name, p.user.Name)}
+// accessOf is what principal p may do with the user name ("" for none
+// in particular). The rank rule compares the roles' own sets, owner
+// holding every capability: an owner outranks every role, nobody else
+// outranks owner, and otherwise a role outranks one whose set is part
+// of its own. A role the store cannot read is outranked by owner alone.
+func (s *Server) accessOf(ctx context.Context, p *principal, name string) access {
+	a := access{all: p.has("users"), guests: p.has("guests"), passwords: p.has("passwords"), self: p.named() && strings.EqualFold(name, p.user.Name)}
+	if !p.named() || s.opts.Store == nil {
+		return a
+	}
+	st, own := s.opts.Store, p.user.Role
+	sets := map[string]map[string]bool{}
+	set := func(key string) map[string]bool {
+		if m, ok := sets[key]; ok {
+			return m
+		}
+		var m map[string]bool
+		if r, ok, err := st.Role(ctx, key); err == nil && ok {
+			m = map[string]bool{}
+			for _, c := range r.Capabilities {
+				m[c] = true
+			}
+		}
+		sets[key] = m
+		return m
+	}
+	a.outranks = func(role string) bool {
+		switch {
+		case own == store.RoleOwner:
+			return true
+		case role == store.RoleOwner:
+			return false
+		}
+		mine, theirs := set(own), set(role)
+		if mine == nil || theirs == nil {
+			return false
+		}
+		for c := range theirs {
+			if !mine[c] {
+				return false
+			}
+		}
+		return true
+	}
+	return a
 }
 
-// mayManage says whether a principal may change a user: with users,
-// or with guests for a guest. The own user is the handlers' question.
+// ranks reports whether the rank rule lets the principal act on a role.
+func (a access) ranks(role string) bool {
+	return a.outranks == nil || a.outranks(role)
+}
+
+// mayView says whether a principal sees a user: with users or
+// passwords every user, with guests a guest. The own user is the
+// handlers' question.
+func (a access) mayView(u store.User) bool {
+	return a.all || a.passwords || a.guests && u.Role == store.RoleGuest
+}
+
+// mayManage says whether a principal may change a user, its name, role,
+// state and keys: with users, or with guests for a guest, a user it
+// outranks.
 func (a access) mayManage(u store.User) bool {
-	return a.all || a.guests && u.Role == store.RoleGuest
+	return (a.all || a.guests && u.Role == store.RoleGuest) && a.ranks(u.Role)
 }
 
-// mayAssign says whether a principal may give a role: any with users,
-// guest alone with guests.
+// maySetPassword says whether a principal may set a user's password: as
+// it may manage it, or with passwords, a user it outranks.
+func (a access) maySetPassword(u store.User) bool {
+	return (a.all || a.passwords || a.guests && u.Role == store.RoleGuest) && a.ranks(u.Role)
+}
+
+// mayAssign says whether a principal may give a role: any it outranks
+// with users, guest alone with guests.
 func (a access) mayAssign(role string) bool {
-	return a.all || a.guests && role == store.RoleGuest
+	return (a.all || a.guests && role == store.RoleGuest) && a.ranks(role)
+}
+
+// rankFail is the refusal of a user or role the principal does not
+// outrank, or the capability it lacks.
+func (a access) rankFail(role, capability string) error {
+	switch {
+	case !a.ranks(role) && role == store.RoleOwner:
+		return fail(http.StatusForbidden, "only an owner changes an owner")
+	case !a.ranks(role):
+		return fail(http.StatusForbidden, "the role %s has capabilities yours lacks", role)
+	}
+	return fail(http.StatusForbidden, "capability %q required", capability)
+}
+
+// assignFail is the refusal of a role the principal may not give.
+func (a access) assignFail(role string) error {
+	switch {
+	case !a.ranks(role) && role == store.RoleOwner:
+		return fail(http.StatusForbidden, "only an owner gives the role owner")
+	case !a.ranks(role):
+		return fail(http.StatusForbidden, "the role %s has capabilities yours lacks", role)
+	}
+	return fail(http.StatusForbidden, "capability %q required to give the role %s", "users", role)
+}
+
+// userMay is what the caller may do with a user (userView.May): change
+// it, or set its password alone.
+type userMay struct {
+	Manage   bool `json:"manage"`
+	Password bool `json:"password"`
 }
 
 func (s *Server) viewUserOf(r *http.Request, st *store.Store, u store.User) userView {
@@ -181,15 +278,18 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	p := principalOf(r)
-	a := s.accessOf(p, "")
+	a := s.accessOf(r.Context(), p, "")
 	users, err := st.Users(r.Context())
 	if err != nil {
 		return userFail(err)
 	}
 	out := []userView{}
 	for _, u := range users {
-		if a.mayManage(u) || p.named() && u.ID == p.user.ID {
-			out = append(out, s.viewUserOf(r, st, u))
+		self := p.named() && u.ID == p.user.ID
+		if a.mayView(u) || self {
+			v := s.viewUserOf(r, st, u)
+			v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self}
+			out = append(out, v)
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -249,7 +349,10 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 		if u.Role == "" {
 			u.Role = store.RoleViewer
 		}
-		if !s.accessOf(p, "").mayAssign(u.Role) {
+		if a := s.accessOf(ctx, p, ""); !a.mayAssign(u.Role) {
+			if !a.ranks(u.Role) {
+				return a.assignFail(u.Role)
+			}
 			return fail(http.StatusForbidden, "capability %q required to create a user with the role %s", "users", u.Role)
 		}
 	}
@@ -279,10 +382,16 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// What a route needs of the user of its path (targetUser).
+const (
+	needView     = iota // see it: mayView, or its own
+	needManage          // change it: mayManage, or (with selfOK) its own
+	needPassword        // change it or its password alone, or its own
+)
+
 // targetUser finds the user of the path and checks that the principal
-// may touch it: through users, guests for a guest, or (selfOK) its own
-// name.
-func (s *Server) targetUser(r *http.Request, st *store.Store, selfOK bool) (store.User, access, error) {
+// may do what need asks of it, or (selfOK) that it is its own.
+func (s *Server) targetUser(r *http.Request, st *store.Store, selfOK bool, need ...int) (store.User, access, error) {
 	name := r.PathValue("name")
 	u, ok, err := st.User(r.Context(), name)
 	if err != nil {
@@ -291,9 +400,17 @@ func (s *Server) targetUser(r *http.Request, st *store.Store, selfOK bool) (stor
 	if !ok {
 		return store.User{}, access{}, fail(http.StatusNotFound, "no user %q", name)
 	}
-	a := s.accessOf(principalOf(r), u.Name)
-	if !a.mayManage(u) && !(selfOK && a.self) {
-		return store.User{}, access{}, fail(http.StatusForbidden, "capability %q required", "users")
+	a := s.accessOf(r.Context(), principalOf(r), u.Name)
+	n := needManage
+	if len(need) > 0 {
+		n = need[0]
+	}
+	ok = map[int]bool{needView: a.mayView(u), needManage: a.mayManage(u), needPassword: a.mayManage(u) || a.maySetPassword(u)}[n]
+	if !ok && !(selfOK && a.self) {
+		if n == needView {
+			return store.User{}, access{}, fail(http.StatusForbidden, "capability %q required", "users")
+		}
+		return store.User{}, access{}, a.rankFail(u.Role, "users")
 	}
 	return u, a, nil
 }
@@ -304,7 +421,7 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	u, _, err := s.targetUser(r, st, true)
+	u, _, err := s.targetUser(r, st, true, needView)
 	if err != nil {
 		return err
 	}
@@ -315,14 +432,15 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 // putUser handles PUT /api/v1/users/{name}: the display name, the
 // role, disabled, the end date and the password, of version 1 or 2. A
 // user changes its own display name and password, the latter with
-// current_password or a proof from a sign-in by OPAQUE; a password set
-// by someone else ends the user's sessions.
+// current_password or a proof from a sign-in by OPAQUE, a user with keys
+// only its first one without; a password set by someone else ends the
+// user's sessions.
 func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
 		return err
 	}
-	u, a, err := s.targetUser(r, st, true)
+	u, a, err := s.targetUser(r, st, true, needPassword)
 	if err != nil {
 		return err
 	}
@@ -335,17 +453,24 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	p := principalOf(r)
-	selfOnly := !a.mayManage(u)
-	if selfOnly && (req.Role != nil || req.Disabled != nil || len(req.ExpiresAt) > 0) {
-		return fail(http.StatusForbidden, "capability %q required", "users")
+	// Without mayManage a principal changes its own name and password,
+	// or with passwords another's password alone.
+	manage := a.mayManage(u)
+	if !manage && (req.Role != nil || req.Disabled != nil || len(req.ExpiresAt) > 0 || req.DisplayName != nil && !a.self) {
+		return a.rankFail(u.Role, "users")
 	}
 	if req.Role != nil && !a.mayAssign(*req.Role) {
-		return fail(http.StatusForbidden, "capability %q required to give the role %s", "users", *req.Role)
+		return a.assignFail(*req.Role)
 	}
 	setsPassword := req.Password != nil || req.Record != nil
-	if setsPassword && a.self && !a.all {
+	if setsPassword && !a.self && !a.maySetPassword(u) {
+		return a.rankFail(u.Role, "passwords")
+	}
+	if setsPassword && a.self && !a.all && u.HasPassword {
 		// One's own password: the current one proves the caller is the
-		// user, not someone at an unlocked browser.
+		// user, not someone at an unlocked browser. A user with keys
+		// only has none, and sets its first one as itself: its key could
+		// as well make another key.
 		if req.Proof != "" {
 			if !s.logins.redeemProof(req.Proof, u.ID, time.Now()) {
 				return fail(http.StatusForbidden, "proof is wrong, used or too old: sign in again to prove the current password")
@@ -412,7 +537,9 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	s.log.Info("user changed", "user", u.Name, "remote", s.clientIP(r))
-	writeJSON(w, http.StatusOK, s.viewUserOf(r, st, u))
+	v := s.viewUserOf(r, st, u)
+	v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || a.self}
+	writeJSON(w, http.StatusOK, v)
 	return nil
 }
 
