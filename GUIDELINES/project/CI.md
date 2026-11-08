@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.12.0)
+# Massimo — CI Conventions (v1.12.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -168,14 +168,19 @@ and the job gives it one on pull requests only:
 `base..head` of the pull request, not `..HEAD`,
 because on a pull request HEAD is the merge commit GitHub makes for the run,
 whose message is not the project's to write.
-On a push to `main` the check runs without a range and reads nothing:
+On a push to `main` the check is given an empty range, `HEAD..HEAD`,
+and reads nothing:
 the merge commits `main` receives from GitHub do not follow COMMIT.md,
 and the pull request's own commits were checked when it was open.
 The history before the guidelines were adopted (2026-11-06) does not
 follow COMMIT.md either and is not rewritten.
-A pull request of Dependabot's runs the check without a range too,
+A pull request of Dependabot's is given the empty range too,
 since its messages cannot take the project's form (section 8);
 every other check runs on it.
+The range is named rather than left out:
+without one the check reads every commit not on the remote's default branch
+wherever the checkout has an `origin/HEAD`,
+and on 2026-11-08 it read a Dependabot pull request's that way.
 
 ## 5. Secrets and Variables
 
