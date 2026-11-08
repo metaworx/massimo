@@ -763,6 +763,7 @@
   "cap.settings": "les réglages du serveur",
   "cap.update": "lancer une mise à jour du logiciel",
   "cap.restart": "redémarrer le serveur",
+  "cap.reboot": "redémarrer l'ordinateur du serveur",
   "cap.audit": "lire l'audit",
   "help.users": "Chaque personne connectée a un rôle, qui dit ce qu'elle peut faire. Un invité a une date de fin ; un utilisateur sans mot de passe se connecte avec des clés seulement. Un mot de passe défini ici met fin aux sessions de l'utilisateur.",
   "help.roles": "Un rôle est un ensemble de capacités, chacune gardant une partie de ce que font la page et l'API. Les six rôles par défaut peuvent être renommés et remaniés, sauf le propriétaire ; d'autres peuvent être créés. Un rôle désactivé tient ses utilisateurs dehors.",

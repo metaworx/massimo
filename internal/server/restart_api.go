@@ -153,6 +153,8 @@ func (s *Server) restartState(r *http.Request) (v restartView, open bool) {
 		v.Blocked = "a restart is under way"
 	case s.updateRunning():
 		v.Blocked = "an update is running, and it restarts the server itself"
+	case s.rebootWaits():
+		v.Blocked = "a reboot of the computer is waiting"
 	case !s.authenticated(r.Context()) && !fromTheBox(r):
 		v.Blocked, open = openRestartRefused, true
 	}

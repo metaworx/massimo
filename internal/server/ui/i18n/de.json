@@ -761,6 +761,7 @@
   "cap.settings": "die Einstellungen des Servers",
   "cap.update": "ein Software-Update starten",
   "cap.restart": "den Server neu starten",
+  "cap.reboot": "den Computer des Servers neu starten",
   "cap.audit": "das Protokoll lesen",
   "help.users": "Wer sich anmeldet, hat eine Rolle, die sagt, was er darf. Ein Gast hat ein Ende; ein Benutzer ohne Passwort meldet sich nur mit Schlüsseln an. Ein hier gesetztes Passwort beendet die Sitzungen des Benutzers.",
   "help.roles": "Eine Rolle ist eine Menge von Fähigkeiten, von denen jede einen Teil dessen bewacht, was Seite und API tun. Die sechs Standardrollen lassen sich umbenennen und umbauen, außer dem Eigentümer; weitere lassen sich anlegen. Eine gesperrte Rolle hält ihre Benutzer draußen.",

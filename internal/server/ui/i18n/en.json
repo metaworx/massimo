@@ -761,6 +761,7 @@
   "cap.settings": "the server's settings",
   "cap.update": "start a software update",
   "cap.restart": "restart the server",
+  "cap.reboot": "reboot the computer the server runs on",
   "cap.audit": "read the audit",
   "help.users": "Everyone who signs in has one role, which says what they may do. A guest has an end date; a user without a password signs in with keys only. A password set here ends the user's sessions.",
   "help.roles": "A role is a set of capabilities, each guarding part of what the page and the API do. The six default roles can be renamed and reshaped, except the owner; more can be created. A disabled role keeps its users out.",

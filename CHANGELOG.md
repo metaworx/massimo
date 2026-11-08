@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `GET`/`POST`/`DELETE /api/v1/reboot` reboot the computer after a
+  delay, for the capability `reboot`, which only the owner holds
+  (`docs/api-v1.md`, "GET /api/v1/reboot, …").
+
 - A user with keys only sets its first password in My profile, without
   a current one (`docs/ui.md`, "My profile").
 

@@ -790,6 +790,7 @@
   "cap.settings": "ustawienia serwera",
   "cap.update": "uruchamiać aktualizację oprogramowania",
   "cap.restart": "ponownie uruchamiać serwer",
+  "cap.reboot": "ponownie uruchamiać komputer serwera",
   "cap.audit": "czytać audyt",
   "help.users": "Każdy, kto się loguje, ma jedną rolę, która mówi, co może. Gość ma datę końca; użytkownik bez hasła loguje się tylko kluczami. Hasło ustawione tutaj kończy sesje użytkownika.",
   "help.roles": "Rola to zbiór uprawnień, z których każde strzeże części tego, co robią strona i API. Sześć ról domyślnych można przemianować i przebudować, poza właścicielem; można tworzyć kolejne. Wyłączona rola nie wpuszcza swoich użytkowników.",
