@@ -112,3 +112,41 @@ docs/handover-session.md is the context a session needs to work here.
 14. **Later**:
     the server mode with encryption at rest and sync (docs/server.md),
     Loxone (design.md section 4), a radio-stick driver without a Cube.
+15. **System settings and the user menu**,
+    from the v0.11 screenshots on jaguar;
+    a mock of the page at 1100 and 390 px first (9), then the code:
+    1. Users and roles rows:
+       a space between the display name and the login or role key,
+       the badges right-aligned, the `you` badge first.
+    2. The order: Software update at the top, Backup and restore at the bottom.
+    3. A table of contents at the top, visible section headers,
+       a back-to-top button, foldable sections.
+    4. A Maintenance section: restart the server, reload its settings
+       (the file is reread on a change already; this is a button).
+    5. A name for a Cube, with a proposal and mock images of where the
+       serial shows once a label is given.
+    6. The Cube dropdown showing each Cube's address, the open list wider
+       than the control.
+    7. `store info` and the configuration shown in System settings.
+    8. Responsive: full width, Cubes and Backup full width, two columns in
+       the Cube settings, the capabilities per role beside Users and roles.
+    9. A static mock of the page with the real CSS, decided before any code.
+    10. A password set by whoever holds `users`, a manager never an owner's:
+        a rank rule, which holds today only through the default capabilities.
+    11. My profile offering "Set a password" to a keys-only user, such as the
+        owner made from `MASSIMO_API_TOKEN`.
+    12. Icons in the 👤 menu.
+    13. Every "only on this device" a switch at the right end of its row,
+        in a column labelled at the top and in the tooltip.
+    14. The 👤 button's tooltip with the user's name.
+    15. Expert mode showing a device's serial beside its RF address, which
+        the API already carries, in the four places the address appears.
+16. **An Android app**:
+    run as a stand-alone service, or connected to an existing Massimo;
+    published on F-Droid and on Google Play.
+17. **An iOS app**:
+    the same as the Android app; published on the App Store.
+18. **Discovery and the proxy**:
+    check whether Massimo can announce its own MAC address,
+    and whether `discover` can show which of the Cubes it lists is a proxy,
+    the one without an eQ-3 MAC prefix.
