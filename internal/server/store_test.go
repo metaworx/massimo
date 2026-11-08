@@ -42,7 +42,8 @@ func TestStaleAfterPerServer(t *testing.T) {
 }
 
 // A Cube discovery found is a row of the store: after a restart of the
-// server it is listed again, and not announced a second time.
+// server it is listed again once a run has heard it, not before, and
+// not announced a second time.
 func TestFoundCubeSurvivesRestart(t *testing.T) {
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
@@ -62,15 +63,18 @@ func TestFoundCubeSurvivesRestart(t *testing.T) {
 	ts.Close()
 	st.Close()
 
-	// The restarted server lists it before any discovery, and a run that
-	// finds it again sends no cube_found.
+	// The restarted server lists it once a run has heard it, and that
+	// run sends no cube_found.
 	st = testStore(t, dir)
 	ts, _ = startDiscovering(t, Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}})
 	var cubes []map[string]any
-	if getJSON(t, ts, "", "/api/v1/cubes", &cubes) != 200 || len(cubes) != 2 || cubes[1]["serial"] != "KEQ0000000" || cubes[1]["configured"] != false || cubes[1]["found_at"] == nil {
-		t.Fatalf("cubes after the restart %v", cubes)
+	if getJSON(t, ts, "", "/api/v1/cubes", &cubes) != 200 || len(cubes) != 1 {
+		t.Fatalf("cubes after the restart, before a run %v", cubes)
 	}
 	postDiscovery(t, ts)
+	if getJSON(t, ts, "", "/api/v1/cubes", &cubes) != 200 || len(cubes) != 2 || cubes[1]["serial"] != "KEQ0000000" || cubes[1]["configured"] != false || cubes[1]["found_at"] == nil {
+		t.Fatalf("cubes after the restart and a run %v", cubes)
+	}
 	var evs []event
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 	for _, e := range evs {

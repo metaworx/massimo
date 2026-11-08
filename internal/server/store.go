@@ -25,8 +25,9 @@ type fileDifference struct {
 	Store    any    `json:"store"`
 }
 
-// loadFound reads what discovery found before the restart, so that the
-// found Cubes are listed again and announced only once.
+// loadFound reads what discovery found before the restart, so that a
+// found Cube is announced only once; it is listed again once a run of
+// this process has heard it (foundLoaded).
 func (s *Server) loadFound() {
 	s.fileCubes = map[string]store.FileCube{}
 	s.diffs = map[string][]fileDifference{}
@@ -47,7 +48,7 @@ func (s *Server) loadFound() {
 			continue // never answered discovery
 		}
 		s.found[c.Serial] = &foundCube{Serial: c.Serial, Address: c.DiscoveredAddress, MAC: c.MAC, RFAddress: c.RFAddress, Firmware: c.Firmware,
-			Configured: c.Configured, FoundAt: c.FirstSeen, LastSeen: c.LastSeen}
+			FoundAt: c.FirstSeen, LastSeen: c.LastSeen, state: foundLoaded}
 	}
 }
 

@@ -62,7 +62,9 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
   Cubes it finds but does not serve are listed in the choice under "Found,
-  not configured" and cannot be chosen;
+  not configured" and cannot be chosen,
+  as long as they answer: one that a search or the server's own look no
+  longer hears leaves the list at the page's next poll;
   a line under the header counts them and opens to their address,
   whether they take it by DHCP or have a static one ("DHCP" or "static address"),
   their firmware and the lines to put into the server's env file
@@ -454,7 +456,7 @@ to the top of the page.
   a notice names the line and **Take the file's value** takes it.
   **Remove** stops serving the Cube;
   it keeps its settings and history in the store and is listed under **Found on
-  the LAN** once discovery sees it, with its address,
+  the LAN** while discovery hears it, with its address,
   DHCP flag and firmware and **Add**,
   which serves a found Cube at once (also in the list of found Cubes under the header).
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.

@@ -761,7 +761,7 @@ paths:
     get:
       summary: List the Cubes
       x-capability: read
-      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false).
+      description: The configured Cubes (configured true), then the Cubes discovery found that are not configured (configured false), while they answer - from the first answer to the end of the first complete run without one; after a restart, once a run has heard them.
       responses:
         "200":
           description: The Cubes
@@ -827,8 +827,10 @@ paths:
         UDP discovery, about three seconds. A call while a run is going
         waits for it and gets its result. serve also runs it at the start
         and every -discover-interval (30 minutes). A Cube that is not
-        configured is announced once as a cube_found event on every
-        Cube's stream.
+        configured is announced as a cube_found event on every Cube's
+        stream when it first answers, and again when it answers after a
+        complete run without it; not after a restart. A found Cube that
+        does not answer a complete run leaves GET /api/v1/cubes.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -908,8 +910,9 @@ paths:
       description: |
         The server stops the Cube's connection and proxy. Its row stays
         in the store with configured = 0, with its history; discovery
-        lists it as found again, and POST /api/v1/cubes adds it back. A
-        line for it in the settings file does not bring it back.
+        lists it as found while it answers, and POST /api/v1/cubes adds
+        it back. A line for it in the settings file does not bring it
+        back.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":

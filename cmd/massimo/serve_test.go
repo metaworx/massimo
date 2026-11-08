@@ -270,6 +270,34 @@ func TestServeStoreWins(t *testing.T) {
 	}
 }
 
+// A Cube removed through the API stays removed at the next start,
+// though the settings file still names it: by its own variable, or as
+// the plain MASSIMO_CUBE_ADDRESS whose serial the store learned.
+func TestServeRemovedCubeStaysRemoved(t *testing.T) {
+	clearCubeEnv(t)
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "192.0.2.1")
+	t.Setenv(env.Address, "192.0.2.2")
+	ctx := context.Background()
+	st := testStore(t, "")
+	for _, sn := range []string{"KEQ0000001", "KEQ0000002"} {
+		if _, err := st.AddCube(ctx, store.Cube{Serial: sn, Configured: false, Source: store.SourceUI}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.SetSetting(ctx, store.PlainSerialKey, "KEQ0000002"); err != nil {
+		t.Fatal(err)
+	}
+	su, err := serveSetup(ctx, st, "", nil, "", quietLog())
+	if err != nil || len(su.cubes) != 0 {
+		t.Fatalf("served %+v %v", su.cubes, err)
+	}
+	for _, sn := range []string{"KEQ0000001", "KEQ0000002"} {
+		if row, _, _ := st.Cube(ctx, sn); row.Configured || row.Source != store.SourceUI {
+			t.Fatalf("%s configured again: %+v", sn, row)
+		}
+	}
+}
+
 // Without any Cube configured serve starts anyway, with a warning: the
 // web UI can add one.
 func TestServeStartsWithoutCubes(t *testing.T) {

@@ -38,6 +38,14 @@ the next minor, a fix counts the suffix up.
   could stop a few pixels short as the header grew back (`docs/ui.md`,
   "System settings").
 
+- A Cube removed under System settings → Cubes is listed as found and
+  not configured, no longer as a configured Cube that is disconnected,
+  once discovery had heard it or serve had restarted since its add.
+
+- A search, and the periodic discovery, list only the Cubes that
+  answered it: one that no longer answers leaves the Cube choice and
+  System settings → Cubes (`docs/api-v1.md`, "GET /api/v1/cubes").
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added
