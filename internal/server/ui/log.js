@@ -406,8 +406,17 @@ function renderLogClear() {
   $("log-clear").disabled = !(logState.filter || logState.kind || logState.device);
 }
 
+// logChoicesChanged follows a new range, kind or device: the address in
+// place of the current entry while the log is shown (logHash), Clear,
+// and the log loaded again; a page on its way is dropped (loadLog).
+function logChoicesChanged() {
+  if (logState.open) setAddress(logHash(), "replace");
+  renderLogClear();
+  loadLog();
+}
+
 // clearLogFilter sets the text filter, the kind and the device back to
-// all and loads the log again; a page on its way is dropped (loadLog).
+// all and loads the log again.
 function clearLogFilter() {
   logState.filter = "";
   logState.kind = "";
@@ -415,13 +424,14 @@ function clearLogFilter() {
   $("log-filter").value = "";
   $("log-kind").value = "";
   $("log-device").value = "";
-  renderLogClear();
-  loadLog();
+  logChoicesChanged();
 }
 
 // fillLogSelects fills the choice of kind, every kind the server sends,
 // and of device, the Cube's devices by name; a device chosen that is gone
-// falls back to all, and the answer is true then.
+// falls back to all, and the answer is true then. Until the Cube's
+// devices are loaded (state.roomsOf), a device chosen from the address
+// stays, shown by its address.
 function fillLogSelects() {
   const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(LOG_KINDS.map((k) => [k, logKind(k)])));
   kinds.value = logState.kind;
@@ -430,8 +440,12 @@ function fillLogSelects() {
   for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
   devs.sort((a, b) => (a.name || a.rf_address).localeCompare(b.name || b.rf_address));
   fillOptions($("log-range"), LOG_RANGES.map((r) => [r, t("log.range." + r)])).value = logState.range;
-  const sel = fillOptions($("log-device"), [["", t("log.allDevices")]].concat(devs.map((d) => [d.rf_address, d.name ? d.name + " · " + d.rf_address : d.rf_address])));
-  const gone = logState.device !== "" && !devs.some((d) => d.rf_address === logState.device);
+  const options = [["", t("log.allDevices")]].concat(devs.map((d) => [d.rf_address, d.name ? d.name + " · " + d.rf_address : d.rf_address]));
+  const unknown = logState.device !== "" && !devs.some((d) => d.rf_address === logState.device);
+  const known = !!state.serial && state.roomsOf === state.serial;
+  if (unknown && !known) options.push([logState.device, logState.device]);
+  const sel = fillOptions($("log-device"), options);
+  const gone = unknown && known;
   if (gone) logState.device = "";
   sel.value = logState.device;
   renderLogClear();
@@ -440,7 +454,8 @@ function fillLogSelects() {
 
 // logCubeChanged starts the log over for another Cube: the device chosen
 // back to all, the lines and the paging reset, an answer still on its way
-// dropped, and the Cube's log loaded when the view is open.
+// dropped, and, when the view is open, the address without the device and
+// the Cube's log loaded.
 function logCubeChanged() {
   logState.gen++;
   logState.device = "";
@@ -452,6 +467,7 @@ function logCubeChanged() {
   renderLogClear();
   if (!logState.open) return;
   $("log-device").value = "";
+  setAddress(logHash(), "replace");
   renderLog();
   loadLog();
 }
@@ -463,26 +479,65 @@ function logCubeChanged() {
 // highlighted while one of them is shown, as ☰ is for Log and System
 // settings, which it holds on a narrow screen. The tiles keep their state
 // while hidden. The page shown is in the address (VIEW_HASH), Rooms
-// without one, so that a reload opens it again and the browser's back
-// and forward move between the pages.
+// without one, and the log's range, kind and device after its page
+// (logHash), so that a reload or a link opens it again as chosen and the
+// browser's back and forward move between the pages.
 const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", system: "system" };
 const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", system: "view-settings" };
 const VIEW_HASH = { tiles: "", log: "#log", profile: "#profile", prefs: "#prefs", system: "#system" };
 let currentView = "tiles";
 
-// viewOfHash is the page an address names, Rooms for none or another.
+// viewOfHash is the page an address names, the part before its "?",
+// Rooms for none or another.
 function viewOfHash(hash) {
-  return Object.keys(VIEW_HASH).find((v) => VIEW_HASH[v] && VIEW_HASH[v] === hash) || "tiles";
+  const page = hash.split("?")[0];
+  return Object.keys(VIEW_HASH).find((v) => VIEW_HASH[v] && VIEW_HASH[v] === page) || "tiles";
+}
+
+// logHash is the log's address: its page, then the range, the kind and
+// the device chosen, in that order, each left out at its default, so
+// that a plain #log is the last 20 events of every kind and device.
+function logHash() {
+  const q = new URLSearchParams();
+  if (logState.range !== LOG_COUNT_RANGE) q.set("range", logState.range);
+  if (logState.kind) q.set("kind", logState.kind);
+  if (logState.device) q.set("device", logState.device);
+  const s = q.toString();
+  return VIEW_HASH.log + (s ? "?" + s : "");
+}
+
+// readLogHash takes the log's range, kind and device from an address of
+// the log, each at its default where it is missing or not one of its
+// values; a device the Cube does not have goes once its devices are
+// loaded (fillLogSelects). The text filter is not in the address.
+function readLogHash(hash) {
+  const i = hash.indexOf("?");
+  const q = new URLSearchParams(i < 0 ? "" : hash.slice(i + 1));
+  const range = q.get("range");
+  const kind = q.get("kind");
+  const device = (q.get("device") || "").toLowerCase();
+  logState.range = LOG_RANGES.includes(range) ? range : LOG_COUNT_RANGE;
+  logState.kind = LOG_KINDS.includes(kind) ? kind : "";
+  logState.device = /^[0-9a-f]{6}$/.test(device) ? device : "";
 }
 
 // setAddress puts a page's hash into the address: as a new entry of the
-// browser's history ("push"), in place of the current one ("replace"),
-// or not at all ("none", for a page shown from the address).
+// browser's history ("push") or in place of the current one ("replace");
+// nothing where the address already says it.
 function setAddress(hash, how) {
-  if (how === "none" || location.hash === hash) return;
+  if (location.hash === hash) return;
   const url = location.pathname + location.search + hash;
   if (how === "replace") history.replaceState(null, "", url);
   else history.pushState(null, "", url);
+}
+
+// showAddress shows the page the address names, the log with the choices
+// it holds, at the start and on back and forward; the address is written
+// again in place, a value dropped and the log's choices in their order.
+function showAddress() {
+  const view = viewOfHash(location.hash);
+  if (view === "log") readLogHash(location.hash);
+  showView(view, "replace");
 }
 
 // mayShow reports whether the signed-in user may open a page: System
@@ -500,14 +555,15 @@ function isShown(view) {
 
 // showView shows a page, Rooms in place of one the user may not open,
 // puts it into the address as address says (setAddress, a new entry by
-// default; Rooms in place of a page refused), and tells the scripts that
-// load what it shows (onView).
+// default; Rooms in place of a page refused), the log with its choices
+// (logHash), and tells the scripts that load what it shows (onView).
 function showView(view, address = "push") {
   if (!mayShow(view)) {
     view = "tiles";
     address = "replace";
   }
-  setAddress(VIEW_HASH[view], address);
+  if (view === "log") fillLogSelects(); // a device the Cube does not have goes before the address takes it
+  setAddress(view === "log" ? logHash() : VIEW_HASH[view], address);
   currentView = view;
   logState.open = view === "log";
   for (const id of ["home-notice", "house", "rooms", "unlisted"]) {
@@ -523,10 +579,7 @@ function showView(view, address = "push") {
   }
   $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs");
   $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
-  if (view === "log") {
-    fillLogSelects();
-    loadLog();
-  }
+  if (view === "log") loadLog();
   document.dispatchEvent(new CustomEvent("viewshown", { detail: view }));
 }
 
@@ -548,7 +601,7 @@ function initLog() {
   $("menu-system").addEventListener("click", () => showView("system"));
   dropdown($("nav-menu"));
   // back and forward, and a page named in the address bar
-  window.addEventListener("popstate", () => showView(viewOfHash(location.hash), "none"));
+  window.addEventListener("popstate", () => showAddress());
   dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
@@ -558,17 +611,15 @@ function initLog() {
   $("log-clear").addEventListener("click", clearLogFilter);
   $("log-kind").addEventListener("change", (ev) => {
     logState.kind = ev.target.value;
-    renderLogClear();
-    loadLog();
+    logChoicesChanged();
   });
   $("log-device").addEventListener("change", (ev) => {
     logState.device = ev.target.value;
-    renderLogClear();
-    loadLog();
+    logChoicesChanged();
   });
   $("log-range").addEventListener("change", (ev) => {
     logState.range = LOG_RANGES.includes(ev.target.value) ? ev.target.value : LOG_COUNT_RANGE;
-    loadLog();
+    logChoicesChanged();
   });
   renderLogClear();
   $("log-older").addEventListener("click", loadOlder);
