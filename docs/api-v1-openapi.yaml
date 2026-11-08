@@ -2684,6 +2684,7 @@ components:
         by: {type: string, enum: [systemd, launchd, windows], description: Who reboots; absent when nobody can}
         blocked: {type: string, description: Why the reboot is not available}
         at: {type: string, format: date-time, description: When a reboot that waits, or has begun, is asked for}
+        begun: {type: boolean, description: The delay is over and the helper or the system was asked}
         error: {type: string, description: Why the last reboot failed}
     ReloadResult:
       type: object

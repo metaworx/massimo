@@ -5,7 +5,9 @@
 // whether a newer one is out on the update channel, the request to the
 // server's update helper to install it (POST /api/v1/update), and the
 // server's restart (POST /api/v1/restart), after which the page follows
-// /healthz until the server is back. Once the server restarts with a new
+// /healthz until the server is back, and the computer's reboot (POST
+// /api/v1/reboot), which waits its delay, can be taken back meanwhile,
+// and is followed the same way. Once the server restarts with a new
 // version, the version check in app.js offers the reload.
 
 "use strict";
@@ -197,6 +199,179 @@ async function loadRestart() {
   }
 }
 
+// --- the reboot of the computer (with reboot) -------------------------
+
+// REBOOT_WAIT_MS is how long the page waits for the computer to come
+// back, from the reboot's time; REBOOT_DELAY_MAX the longest delay.
+const REBOOT_WAIT_MS = 5 * 60 * 1000;
+const REBOOT_DELAY_MAX = 3600;
+
+const rebootState = { following: false, timer: null, before: "" };
+
+// showRebootText says how the reboot stands, under its title.
+function showRebootText(text) {
+  const p = $("reboot-text");
+  p.textContent = text;
+  p.classList.toggle("hidden", !text);
+}
+
+// renderReboot draws the reboot's row from GET /api/v1/reboot: the delay
+// and the button while this page may reboot the computer, and otherwise
+// why not; while a reboot waits, when, and the button that takes it
+// back; once it has begun, the page follows the computer back.
+function renderReboot(v) {
+  clearTimeout(rebootState.timer);
+  const waits = !!(v && v.at && !v.begun);
+  $("reboot-btn").classList.toggle("hidden", !(v && v.available));
+  $("reboot-delay-row").classList.toggle("hidden", !(v && v.available));
+  $("reboot-cancel").classList.toggle("hidden", !waits);
+  if (!v) return;
+  if (v.begun) {
+    followReboot(Date.parse(v.at));
+    return;
+  }
+  if (waits) {
+    const at = Date.parse(v.at);
+    showRebootText(t("reboot.waiting", { time: fmtInstant(new Date(at)) }));
+    // The start the page waits to see change; a page opened while the
+    // reboot waits takes the server's start now.
+    if (!rebootState.before) startedAt().then((s) => { rebootState.before = rebootState.before || s; });
+    // setTimeout fires at once beyond 2^31 ms; the delay is an hour at most.
+    rebootState.timer = setTimeout(() => followReboot(at), Math.min(Math.max(0, at - Date.now()), 2147483647));
+    return;
+  }
+  const text = [v.available ? t("maint.rebootText") : t("reboot.unavailable", { reason: v.blocked || "" })];
+  if (v.error) text.push(t("reboot.lastFailed", { error: v.error }));
+  showRebootText(text.join(" "));
+}
+
+// loadReboot asks whether the computer can be rebooted from here, for a
+// holder of reboot; the others see nothing of it.
+async function loadReboot() {
+  if (!hasCap("reboot") || rebootState.following) return; // login.js
+  try {
+    renderReboot(await api("GET", "api/v1/reboot"));
+  } catch (e) {
+    renderReboot(null);
+    showRebootText(t("reboot.cannotAsk", { error: e.message }));
+  }
+}
+
+// rebootDelay is the delay the field holds, in whole seconds, or null
+// when it is not one the server takes.
+function rebootDelay() {
+  const raw = $("reboot-delay").value.trim();
+  const n = Number(raw);
+  return raw !== "" && Number.isInteger(n) && n >= 0 && n <= REBOOT_DELAY_MAX ? n : null;
+}
+
+// startReboot asks in place of the reboot's button whether to reboot the
+// computer after the delay; Cancel puts the button back.
+function startReboot() {
+  const msg = $("reboot-msg");
+  const delay = rebootDelay();
+  if (delay === null) {
+    showResult(msg, t("reboot.badDelay", { max: REBOOT_DELAY_MAX }), false);
+    $("reboot-delay").focus();
+    return;
+  }
+  showResult(msg, "", true);
+  const actions = $("reboot-btn").parentElement;
+  const back = () => {
+    box.remove();
+    actions.classList.remove("hidden");
+  };
+  const question = delay === 0 ? t("reboot.confirmNow") : tn("reboot.confirm", delay);
+  const box = confirmBox(question, { yes: t("reboot.button"), no: t("action.cancel") }, () => {
+    back();
+    return runReboot(delay);
+  }, () => {
+    back();
+    $("reboot-btn").focus();
+  });
+  actions.classList.add("hidden");
+  actions.after(box);
+  box.focusFirst();
+}
+
+// runReboot asks the server for the reboot after delay seconds, then
+// draws the wait, or follows the computer at once.
+async function runReboot(delay) {
+  const btn = $("reboot-btn");
+  btn.disabled = true;
+  rebootState.before = await startedAt();
+  try {
+    await api("POST", "api/v1/reboot", { delay });
+  } catch (e) {
+    btn.disabled = false;
+    showResult($("reboot-msg"), t("reboot.failed", { error: e.message }), false);
+    return;
+  }
+  btn.disabled = false;
+  await loadReboot();
+}
+
+// cancelReboot takes a reboot that waits back (DELETE /api/v1/reboot).
+async function cancelReboot(ev) {
+  const msg = $("reboot-msg");
+  await whileBusy(ev.currentTarget, async () => {
+    try {
+      await api("DELETE", "api/v1/reboot");
+      showResult(msg, t("reboot.cancelled"), true);
+    } catch (e) {
+      showResult(msg, t("reboot.cancelFailed", { error: e.message }), false);
+    }
+    await loadReboot();
+  });
+}
+
+// followReboot follows the computer from the reboot's time: it asks
+// /healthz every RESTART_POLL_MS until the server answers with another
+// start than before, then reads the data and opens the stream again;
+// while the old server still answers it asks whether the reboot failed,
+// and after REBOOT_WAIT_MS it gives up and says so.
+function followReboot(at) {
+  clearTimeout(rebootState.timer);
+  if (rebootState.following) return;
+  rebootState.following = true;
+  $("reboot-btn").classList.add("hidden");
+  $("reboot-delay-row").classList.add("hidden");
+  $("reboot-cancel").classList.add("hidden");
+  showRebootText(t("reboot.rebooting"));
+  const until = Math.max(at || 0, Date.now()) + REBOOT_WAIT_MS;
+  const step = async () => {
+    const now = await startedAt();
+    if (!rebootState.before && now) rebootState.before = now; // a page that saw no request of its own
+    if (now && now !== rebootState.before) {
+      rebootState.following = false;
+      showRebootText(t("reboot.back", { time: fmtInstant(new Date(Date.parse(now))) }));
+      checkVersion(); // app.js
+      refresh().then(connectEvents);
+      return;
+    }
+    if (now) {
+      // The old server still answers: the reboot may have failed.
+      try {
+        const v = await api("GET", "api/v1/reboot");
+        if (!v.at) {
+          rebootState.following = false;
+          renderReboot(v);
+          return;
+        }
+      } catch (e) {
+        // going down
+      }
+    }
+    if (Date.now() > until) {
+      rebootState.following = false;
+      showRebootText(t("reboot.notBack"));
+      return;
+    }
+    rebootState.timer = setTimeout(step, RESTART_POLL_MS);
+  };
+  rebootState.timer = setTimeout(step, RESTART_POLL_MS);
+}
+
 // --- the store and the settings in effect (with settings) -------------
 
 const infoState = { store: null, config: null, error: "" };
@@ -330,9 +505,12 @@ function initUpdate() {
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
   $("restart-btn").addEventListener("click", startRestart);
   $("settings-reload").addEventListener("click", reloadSettings);
+  $("reboot-btn").addEventListener("click", startReboot);
+  $("reboot-cancel").addEventListener("click", cancelReboot);
   onView("system", () => {
     loadUpdate(false);
     loadRestart();
+    loadReboot();
     loadServerInfo();
   });
 }

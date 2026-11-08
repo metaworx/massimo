@@ -29,6 +29,11 @@ const (
 	MaxRebootDelay     = time.Hour
 )
 
+// rebootStuck is how long a server still runs after its reboot was taken
+// before it counts the reboot as failed: the system stops the server
+// within seconds of a reboot that started. A variable for the tests.
+var rebootStuck = 2 * time.Minute
+
 // RebootOptions say whether and how the server reboots the computer it
 // runs on; cmd/massimo finds them.
 type RebootOptions struct {
@@ -74,6 +79,7 @@ type rebootView struct {
 	By        string     `json:"by,omitempty"`
 	Blocked   string     `json:"blocked,omitempty"`
 	At        *time.Time `json:"at,omitempty"`
+	Begun     bool       `json:"begun,omitempty"`
 	Error     string     `json:"error,omitempty"`
 }
 
@@ -117,7 +123,7 @@ func (s *Server) rebootState(r *http.Request) (v rebootView, open bool) {
 	p := &s.reboot
 	p.mu.Lock()
 	allowed, at, begun := p.allowed, p.at, p.begun
-	v.Error = p.err
+	v.Error, v.Begun = p.err, p.begun
 	p.mu.Unlock()
 	if !at.IsZero() {
 		v.At = &at
@@ -220,14 +226,31 @@ func (s *Server) rebootNow(gen uint64) {
 	p.begun = true
 	p.mu.Unlock()
 	s.log.Info("rebooting the computer", "by", s.opts.Reboot.By)
-	if err := s.opts.Reboot.Reboot(); err != nil {
+	err := s.opts.Reboot.Reboot()
+	if err != nil {
 		s.log.Error("reboot not started", "error", err)
-		p.mu.Lock()
-		if p.gen == gen {
-			p.begun, p.at, p.timer, p.err = false, time.Time{}, nil, err.Error()
-		}
-		p.mu.Unlock()
+		p.failed(gen, err.Error())
+		return
 	}
+	// The helper took it; a server still here later did not go down
+	// with the computer, and the next reboot may be asked for.
+	time.AfterFunc(rebootStuck, func() {
+		if p.failed(gen, "the computer has not rebooted within "+rebootStuck.String()+"; the reboot helper's log says why") {
+			s.log.Error("the computer has not rebooted", "after", rebootStuck.String())
+		}
+	})
+}
+
+// failed ends the reboot gen with its reason, unless another has
+// followed it; it reports whether it did.
+func (p *rebootPlan) failed(gen uint64, why string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.gen != gen || !p.begun {
+		return false
+	}
+	p.begun, p.at, p.timer, p.err = false, time.Time{}, nil, why
+	return true
 }
 
 // cancelReboot takes back a reboot that waits. An open server takes it

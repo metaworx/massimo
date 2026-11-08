@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- System settings → Maintenance reboots the computer, after a delay
+  of 60 s or the one given, and takes the reboot back meanwhile
+  (`docs/ui.md`, "System settings").
+
 - `massimo install -reboot-helper` installs the root helper that
   reboots the computer; the Debian package ships it disabled
   (`packaging/README.md`, "Rebooting from the web UI").

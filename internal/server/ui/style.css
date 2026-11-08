@@ -370,6 +370,8 @@ body.scrolled #cube-found, body.scrolled #budget, body.scrolled #pending { displ
 .action-title { font-weight: 600; }
 .settings .action-row .actions { margin: 0; }
 .action-row + .notice { margin: 0 0 10px; }
+.action-row .reboot-delay { margin-top: 6px; }
+.reboot-delay input[type="number"] { width: 5.5em; }
 /* a part of a card that opens (System settings → Maintenance: the store,
    the settings in effect), its head with the chevron of a panel's */
 .sys-sub { border-top: 1px solid var(--line); padding: 8px 0; }
@@ -435,7 +437,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   .section-grid > * { grid-column: 1 / -1; }
   .section-grid > .half { grid-column: auto; }
   /* Software update alone where Maintenance is not shown */
-  .no-restart.no-settings .section-grid > #sys-software { grid-column: 1 / -1; }
+  .no-restart.no-settings.no-reboot .section-grid > #sys-software { grid-column: 1 / -1; }
   .section-flow { display: block; columns: 2; column-gap: 16px; }
   .section-flow > .section-card { break-inside: avoid; margin-bottom: 16px; }
   .section-flow .cap-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
@@ -1235,14 +1237,15 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
    no-<capability> on the body per capability the user lacks, and the
    markup marks what each one hides with needs-<capability>, with
    needs-cubes-or-pair what either of the two shows (System settings →
-   Cubes), and with needs-system what one of System settings' does (⚙) */
+   Cubes), with needs-maintenance what restart, settings or reboot shows
+   (Maintenance), and with needs-system what one of System settings' does (⚙) */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
-.no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-sync .needs-sync,
+.no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system,
-.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings .needs-restart-or-settings { display: none !important; }
+.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */

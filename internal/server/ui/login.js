@@ -41,9 +41,9 @@ function canManageUsers() {
 
 // hasSystem reports whether the signed-in user sees System settings: one
 // of the capabilities of its panels, Cubes, backups, users, roles, and
-// the software's update and the server's restart.
+// the software's update, the server's restart and the computer's reboot.
 function hasSystem() {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "update", "restart"].some(hasCap) || canManageUsers();
+  return ["cubes", "pair", "backup", "roles", "capabilities", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
 }
 
 // hasProfile reports whether the page is signed in as a user, who has My

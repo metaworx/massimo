@@ -1941,7 +1941,8 @@ and who does:
 `{"available": true, "by": "systemd"}`,
 or `{"available": false, "by": "systemd", "blocked": "<why>"}`;
 `at`, while a reboot waits or has begun, is when it is asked for,
-and `error` why the last one failed.
+`begun` is `true` once the delay is over and the helper was asked,
+and `error` says why the last one failed.
 `by` is `systemd` or `launchd`, their root helper,
 or `windows`, the service itself.
 The reasons come in this order:
@@ -1962,7 +1963,10 @@ which starts the root helper (`massimo-reboot.path`, `ch.metaworx.massimo-reboot
 the helper removes it and reboots,
 and reads nothing the server's user can write.
 A request the helper has not taken within 30 s is removed,
-and `GET` reports it as the `error`.
+and `GET` reports it as the `error`;
+so it does when the server still runs two minutes after the helper took it,
+since the system stops the server within seconds of a reboot;
+the next reboot may then be asked for.
 The Windows service runs `shutdown.exe /r` instead.
 The system stops the server as at every shutdown;
 `GET /healthz` reports a new `started_at` once the computer is back.

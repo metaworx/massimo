@@ -84,6 +84,9 @@ CONFIG = {"version": "v0.0.0-screenshots", "file": "/etc/massimo/env", "file_fou
               {"name": "MASSIMO_CUBE_KEQ0000100_ADDRESS", "value": CUBE_ADDRESS, "source": "file"},
               {"name": "MASSIMO_CUBE_KEQ0000100_NAME", "value": "Fake Cube", "source": "file"},
               {"name": "MASSIMO_LISTEN", "value": ":8099", "source": "file"}]}
+# Its reboot as on a box with the helper and the owner's switch: the
+# server of the run is in a terminal, which reboots nothing.
+REBOOT = {"available": True, "by": "systemd"}
 
 # The pages, in the order of the set and of the slideshow, each with its
 # frame: None for the viewport, else the element the shot is about.
@@ -163,6 +166,8 @@ class Answers:
         if path in ("/api/v1/store", "/api/v1/config"):
             body = STORE if path == "/api/v1/store" else CONFIG
             return route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+        if path == "/api/v1/reboot" and req.method == "GET":
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps(REBOOT))
         if path.endswith("/events/ticket"):
             return route.continue_()
         if path.endswith("/backups") and req.method == "GET":

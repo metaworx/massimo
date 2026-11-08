@@ -1,5 +1,5 @@
-<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again (with restart), the store and the settings in effect (with settings), update.js. -->
-<section id="sys-maint" class="tile section-card half maint-settings needs-restart-or-settings" aria-labelledby="sys-maint-h">
+<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again (with restart), the computer's reboot (with reboot), the store and the settings in effect (with settings), update.js. -->
+<section id="sys-maint" class="tile section-card half maint-settings needs-maintenance" aria-labelledby="sys-maint-h">
   <header class="tile-head section-head">
     <h3 id="sys-maint-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-maint-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="maint.title">Maintenance</span></button></h3>
     <span class="section-badges"></span>
@@ -13,6 +13,21 @@
       <div class="actions"><button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button></div>
     </div>
     <p id="restart-pending" class="notice small hidden needs-restart"></p>
+    <div class="action-row reboot needs-reboot">
+      <div>
+        <p class="action-title" data-i18n="maint.reboot">Reboot the computer</p>
+        <p id="reboot-text" class="muted small hidden"></p>
+        <div id="reboot-delay-row" class="field reboot-delay hidden">
+          <label for="reboot-delay" data-i18n="maint.rebootDelay">Delay</label>
+          <span class="inline field-control"><input type="number" id="reboot-delay" min="0" max="3600" step="1" value="60" inputmode="numeric"><span class="muted" data-i18n="unit.seconds">s</span></span>
+        </div>
+        <p id="reboot-msg" class="small cubes-msg hidden" role="status"></p>
+      </div>
+      <div class="actions">
+        <button type="button" id="reboot-btn" class="hidden" data-i18n="reboot.button">Reboot</button>
+        <button type="button" id="reboot-cancel" class="hidden" data-i18n="reboot.cancel">Take the reboot back</button>
+      </div>
+    </div>
     <div class="action-row needs-restart">
       <div>
         <p class="action-title" data-i18n="maint.file">Settings file</p>

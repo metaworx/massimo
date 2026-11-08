@@ -115,7 +115,7 @@ func TestRebootRoutes(t *testing.T) {
 	}
 	f.none(t)
 	code, text = callAPI(t, ts, "GET", path, "secret", "")
-	if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != rebootBegun || v.At == nil {
+	if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != rebootBegun || v.At == nil || !v.Begun {
 		t.Fatalf("GET after the reboot began: %d %s", code, text)
 	}
 	if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 409 || errorOf(text) != rebootBegun {
@@ -152,7 +152,7 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 			t.Fatalf("POST %q: %d %s", c.body, code, text)
 		}
 		code, text = callAPI(t, ts, "GET", path, "secret", "")
-		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != rebootWaiting || v.At == nil || !v.At.Equal(answer.At) {
+		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != rebootWaiting || v.At == nil || !v.At.Equal(answer.At) || v.Begun {
 			t.Fatalf("GET while it waits: %d %s", code, text)
 		}
 		if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 409 || errorOf(text) != rebootWaiting {
@@ -245,6 +245,26 @@ func TestRebootBlocked(t *testing.T) {
 			t.Fatalf("GET after the failure: %s", text)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+
+	// A reboot the helper took but the computer did not carry out.
+	stuck := rebootStuck
+	t.Cleanup(func() { rebootStuck = stuck })
+	rebootStuck = 50 * time.Millisecond
+	failing.err = nil
+	if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 202 {
+		t.Fatalf("POST: %d %s", code, text)
+	}
+	failing.called(t)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		_, text := callAPI(t, ts, "GET", path, "secret", "")
+		v := decodeReboot(t, text)
+		if v.Error == "the computer has not rebooted within 50ms; the reboot helper's log says why" && v.Available && !v.Begun {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("GET after a reboot that did not happen: %s", text)
+		}
 	}
 
 	if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 3600}`); code != 202 {
