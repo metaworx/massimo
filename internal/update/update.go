@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -194,25 +195,85 @@ type ghRelease struct {
 	} `json:"assets"`
 }
 
+// retryWaits are the pauses before a request is sent again, when GitHub
+// answered 502, 503 or 504 or the connection failed before an answer
+// (retryable): its hosts have outages of seconds, which the server's
+// check would otherwise keep for checkEvery. A variable for the tests.
+var retryWaits = []time.Duration{2 * time.Second, 5 * time.Second}
+
+// retryable says whether a request that got resp or err is worth sending
+// again: a gateway's or server's passing state, or a connection that
+// failed before an answer. Not a timeout, which the client gave its
+// time, nor the end of ctx; and not GitHub's rate limits (403, 429),
+// where seconds do not help and a token does (TokenVar).
+func retryable(ctx context.Context, resp *http.Response, err error) bool {
+	if err != nil {
+		var ne net.Error
+		return ctx.Err() == nil && !(errors.As(err, &ne) && ne.Timeout())
+	}
+	switch resp.StatusCode {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// do sends the request newReq makes, and again after each of retryWaits
+// while retryable says so. It returns the last response or error as it
+// came, and the number of attempts; a wait ends with ctx.
+func do(ctx context.Context, hc *http.Client, newReq func() (*http.Request, error)) (*http.Response, int, error) {
+	for attempt := 1; ; attempt++ {
+		req, err := newReq()
+		if err != nil {
+			return nil, attempt, err
+		}
+		resp, err := hc.Do(req)
+		if attempt > len(retryWaits) || !retryable(ctx, resp, err) {
+			return resp, attempt, err
+		}
+		wait := time.NewTimer(retryWaits[attempt-1])
+		select {
+		case <-ctx.Done():
+			wait.Stop()
+			return resp, attempt, err
+		case <-wait.C:
+		}
+		if resp != nil {
+			io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10)) // so that the connection is reused
+			resp.Body.Close()
+		}
+	}
+}
+
+// attempts is what an error adds after more than one attempt.
+func attempts(n int) string {
+	if n < 2 {
+		return ""
+	}
+	return fmt.Sprintf(" (%d attempts)", n)
+}
+
 func (c *Client) get(ctx context.Context, url string, limit int64, accept string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, n, err := do(ctx, c.HTTP, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		// Only to the API: the release files come from other hosts.
+		if c.Token != "" && strings.HasPrefix(url, c.API+"/") {
+			req.Header.Set("Authorization", "Bearer "+c.Token)
+		}
+		return req, nil
+	})
 	if err != nil {
-		return nil, err
-	}
-	if accept != "" {
-		req.Header.Set("Accept", accept)
-	}
-	// Only to the API: the release files come from other hosts.
-	if c.Token != "" && strings.HasPrefix(url, c.API+"/") {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w%s", err, attempts(n))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
+		return nil, fmt.Errorf("GET %s: %s%s", url, resp.Status, attempts(n))
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
@@ -399,22 +460,24 @@ func (c *Client) Download(ctx context.Context, r *Release, name string, w io.Wri
 		}
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
 	var hc http.Client
 	if c.HTTP != nil {
 		hc = *c.HTTP
 	}
 	hc.Timeout = 0
-	resp, err := hc.Do(req)
+	// Sent again as do says until the body starts: from then on w holds
+	// its bytes, and a failure ends the download. The idle time counts
+	// from each attempt.
+	resp, tries, err := do(ctx, &hc, func() (*http.Request, error) {
+		stall.Reset(idle)
+		return http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	})
 	if err != nil {
-		return stalled(err)
+		return stalled(fmt.Errorf("%w%s", err, attempts(tries)))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: %s", url, resp.Status)
+		return fmt.Errorf("GET %s: %s%s", url, resp.Status, attempts(tries))
 	}
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(w, h), io.LimitReader(idleReader{resp.Body, stall, idle}, MaxBinarySize+1))
