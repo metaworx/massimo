@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
   state when the command returns, so that a read right after sees it;
   a race test found the other order now and then.
 
+- System settings' ↑ takes the page all the way to the top, where it
+  could stop a few pixels short as the header grew back (`docs/ui.md`,
+  "System settings").
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added
