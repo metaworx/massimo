@@ -10,6 +10,22 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
+  `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
+  `/etc/massimo/cloudflare.token` (`packaging/README.md`).
+
+- The Debian package installs the DNS-01 hooks for Infomaniak and
+  Cloudflare as `/usr/share/massimo/acme-dns-hooks/*.sh`
+  (`packaging/README.md`, "Debian package").
+
+- `massimo install -acme-directory <url>` sets the CA's directory for
+  `-tls acme`, such as Let's Encrypt's staging one for a first try
+  (`packaging/README.md`, "Install with `massimo install`").
+
+## [0.12.0-alpha.1] - 2026-11-08
+
+### Added
+
 - System settings → Maintenance reboots the computer, after a delay
   of 60 s or the one given, and takes the reboot back meanwhile
   (`docs/ui.md`, "System settings").
@@ -44,18 +60,6 @@ the next minor, a fix counts the suffix up.
 - The log's range, kind and device are in the address after `#log`, so
   that a reload, a bookmark or a link opens the log with them
   (`docs/ui.md`, "Log").
-
-- `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
-  `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
-  `/etc/massimo/cloudflare.token` (`packaging/README.md`).
-
-- The Debian package installs the DNS-01 hooks for Infomaniak and
-  Cloudflare as `/usr/share/massimo/acme-dns-hooks/*.sh`
-  (`packaging/README.md`, "Debian package").
-
-- `massimo install -acme-directory <url>` sets the CA's directory for
-  `-tls acme`, such as Let's Encrypt's staging one for a first try
-  (`packaging/README.md`, "Install with `massimo install`").
 
 ### Changed
 
