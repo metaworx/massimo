@@ -38,6 +38,46 @@ const (
 // without the helper it is left out.
 const updateFlag = " -update-request /var/lib/massimo/update-request"
 
+// The reboot helper: the request file the server writes and the helper
+// watches, on Linux and macOS alike, and on Linux the link that enabling
+// massimo-reboot.path makes, by which serve knows the helper is there.
+const (
+	RebootRequest  = "/var/lib/massimo/reboot-request"
+	RebootPathWant = "/etc/systemd/system/paths.target.wants/massimo-reboot.path"
+	rebootPath     = "massimo-reboot.path"
+)
+
+// rebootWanted says whether the reboot helper stays or comes: asked for,
+// taken out, or as present says it is.
+func (in *installer) rebootWanted(present bool) bool {
+	switch {
+	case in.NoRebootHelper:
+		return false
+	case in.RebootHelper:
+		return true
+	}
+	return present
+}
+
+// rebootHint says what else the reboot needs, once the helper was asked for.
+func (in *installer) rebootHint(settings string) {
+	if in.RebootHelper {
+		fmt.Fprintf(in.Out, "the web UI offers the reboot once MASSIMO_REBOOT=on is in %s\n", settings)
+	}
+}
+
+// enableReboot removes a request left from before, so that the helper
+// does not take it at once, and enables the path unit, whose link serve
+// looks for.
+func (in *installer) enableReboot() error {
+	in.remove(RebootRequest, false)
+	if err := in.run("systemctl", "enable", "--now", rebootPath); err != nil {
+		return err
+	}
+	in.rebootHint(EnvPath)
+	return nil
+}
+
 // Options configure an install.
 type Options struct {
 	// Root prefixes every path; "" is the running system. Set for tests,
@@ -49,6 +89,10 @@ type Options struct {
 	Settings string
 	// NoUpdateHelper leaves out massimo-update.path and .service.
 	NoUpdateHelper bool
+	// RebootHelper installs the reboot helper (massimo-reboot.path and
+	// .service; on macOS its LaunchDaemon), NoRebootHelper takes it out;
+	// neither keeps what is there, brought up to date.
+	RebootHelper, NoRebootHelper bool
 	// NoStart enables the service without (re)starting it.
 	NoStart bool
 	// Listen, when set, is the API and web UI address (host:port), kept
@@ -87,6 +131,7 @@ type Options struct {
 type installer struct {
 	Options
 	svcUser string // the account the service runs as: User, or DarwinUser
+	reboot  bool   // the reboot helper stays or comes (rebootWanted)
 }
 
 func newInstaller(o Options) *installer {
@@ -185,6 +230,8 @@ func Install(o Options) error {
 	if startable {
 		in.checkSettings()
 	}
+	_, err = os.Lstat(in.path(UnitDir + "/" + rebootPath))
+	in.reboot = in.rebootWanted(err == nil)
 	if err := in.units(); err != nil {
 		return err
 	}
@@ -194,6 +241,9 @@ func Install(o Options) error {
 	if in.NoUpdateHelper {
 		in.removeHelper()
 	}
+	if in.NoRebootHelper {
+		in.removeRebootHelper()
+	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
 		return err
 	}
@@ -202,6 +252,11 @@ func Install(o Options) error {
 	}
 	if !in.NoUpdateHelper {
 		if err := in.run("systemctl", "enable", "--now", "massimo-update.path"); err != nil {
+			return err
+		}
+	}
+	if in.reboot {
+		if err := in.enableReboot(); err != nil {
 			return err
 		}
 	}
@@ -222,8 +277,9 @@ func Install(o Options) error {
 
 // configure is Install on a packaged box: -settings over a settings file
 // the package left as the template, the TLS options into the settings as
-// on a hand install, the listen drop-in, a restart. The package has no
-// update helper, so there is no health drop-in to write.
+// on a hand install, the listen drop-in, the reboot helper's path unit
+// enabled or disabled, a restart. The package has no update helper, so
+// there is no health drop-in to write.
 func configure(o Options, m Manager) error {
 	if !m.Configurable() {
 		return fmt.Errorf("%s; massimo install is for a box without the package", m)
@@ -257,6 +313,15 @@ func configure(o Options, m Manager) error {
 	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
 		return err
+	}
+	// The package ships the reboot helper's units disabled.
+	switch {
+	case in.RebootHelper:
+		if err := in.enableReboot(); err != nil {
+			return err
+		}
+	case in.NoRebootHelper:
+		in.run("systemctl", "disable", "--now", rebootPath) // fails for a unit not enabled; that is fine
 	}
 	switch {
 	case in.NoStart:
@@ -512,6 +577,11 @@ func (in *installer) unitFiles() [][2]string {
 			[2]string{"systemd/massimo-update.path", UnitDir + "/massimo-update.path"},
 			[2]string{"systemd/massimo-update.service", UnitDir + "/massimo-update.service"})
 	}
+	if in.reboot {
+		files = append(files,
+			[2]string{"systemd/" + rebootPath, UnitDir + "/" + rebootPath},
+			[2]string{"systemd/massimo-reboot.service", UnitDir + "/massimo-reboot.service"})
+	}
 	if fi, err := os.Stat(in.path(LogrotateDir)); err == nil && fi.IsDir() {
 		files = append(files, [2]string{"logrotate/massimo", LogrotateDir + "/massimo"})
 	}
@@ -583,6 +653,20 @@ func (in *installer) removeHelper() {
 	}
 }
 
+// removeRebootHelper takes out the reboot helper of an earlier install:
+// the path unit disabled and stopped, so that serve no longer offers the
+// reboot, and its units removed.
+func (in *installer) removeRebootHelper() {
+	units := []string{UnitDir + "/" + rebootPath, UnitDir + "/massimo-reboot.service"}
+	if _, err := os.Lstat(in.path(units[0])); err != nil {
+		return
+	}
+	in.run("systemctl", "disable", "--now", rebootPath) // fails for a unit systemd does not know; that is fine
+	for _, p := range units {
+		in.remove(p, false)
+	}
+}
+
 // Remove stops and removes the service, the units and the binary. With
 // purge it removes the settings, the state, the logs and the user too.
 // A packaged box is left to its package manager.
@@ -595,8 +679,9 @@ func Remove(o Options, purge bool) error {
 	}
 	in := newInstaller(o)
 	// Stopping fails for units that are not there; that is fine.
-	in.run("systemctl", "disable", "--now", "massimo-update.path", "massimo.service")
+	in.run("systemctl", "disable", "--now", "massimo-update.path", rebootPath, "massimo.service")
 	for _, p := range []string{UnitDir + "/massimo.service", UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service",
+		UnitDir + "/" + rebootPath, UnitDir + "/massimo-reboot.service",
 		LogrotateDir + "/massimo", BinPath, BinPath + ".prev", BinPath + ".failed", ListenDropIn, HealthDropIn} {
 		in.remove(p, false)
 	}

@@ -165,7 +165,7 @@ func Serials(name string) (serials []string, values map[string]string) {
 func Known(k string) bool {
 	switch k {
 	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
-		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST",
+		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", "MASSIMO_REBOOT",
 		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies,
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.

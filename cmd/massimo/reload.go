@@ -6,9 +6,10 @@ package main
 // The settings file while serve runs: serve looks at it every few
 // seconds and, on Unix, on SIGHUP (sighup.go), and reads it again once it
 // has changed. MASSIMO_API_TOKEN applies at once (Server.SetToken, as a
-// start would apply it); every other setting that changed is listed as
-// applying at the next restart (GET /api/v1/restart), by name, never by
-// value.
+// start would apply it), and so does MASSIMO_REBOOT, the owner's switch
+// of the reboot (Server.SetRebootAllowed); every other setting that
+// changed is listed as applying at the next restart (GET
+// /api/v1/restart), by name, never by value.
 
 import (
 	"context"
@@ -37,7 +38,7 @@ var flagVars = map[string]string{
 	"listen": "MASSIMO_LISTEN", "token": tokenVar, "log": "MASSIMO_LOG", "log-level": env.LogLevel, "update-request": "MASSIMO_UPDATE_REQUEST",
 	"tls": env.TLS, "tls-cert": env.TLSCert, "tls-key": env.TLSKey, "tls-names": env.TLSNames, "acme-email": env.ACMEEmail,
 	"acme-directory": env.ACMEDirectory, "tls-http": env.TLSHTTP, "trusted-proxies": env.TrustedProxies,
-	"acme-dns-hook": env.ACMEDNSHook, "hsts": env.HSTS, "restart": restartVar, "sighup": sighupVar,
+	"acme-dns-hook": env.ACMEDNSHook, "hsts": env.HSTS, "restart": restartVar, "sighup": sighupVar, "allow-reboot": rebootVar,
 }
 
 // fileStamp is what watchSettings compares: a file's size and time of
@@ -141,6 +142,13 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 			r.log.Error("api token from the settings file not applied", "error", err)
 		}
 	}
+	if slices.Contains(changed, rebootVar) && !r.fixed[rebootVar] {
+		on, err := parseSwitch(rebootVar, os.Getenv(rebootVar))
+		if err != nil {
+			r.log.Warn("the reboot switched off: the settings file's value is not on or off", "error", err)
+		}
+		r.srv.SetRebootAllowed(on)
+	}
 	pending = r.pending()
 	r.srv.SetPendingRestart(pending)
 	if len(changed) > 0 || why != "the settings file changed" {
@@ -158,7 +166,8 @@ func nonNil(names []string) []string {
 }
 
 // pending are the variables whose value differs from the start and that
-// apply only at the next one: not the token, which applies at once, not
+// apply only at the next one: not the token and the reboot's switch,
+// which apply at once, not
 // those a flag fixed, and not those serve does not read.
 func (r *settingsReloader) pending() []string {
 	now := settings()
@@ -170,7 +179,7 @@ func (r *settingsReloader) pending() []string {
 				continue
 			}
 			seen[k] = true
-			if r.start[k] != now[k] && k != tokenVar && !r.fixed[k] && !unusedByServe(k) {
+			if r.start[k] != now[k] && k != tokenVar && k != rebootVar && !r.fixed[k] && !unusedByServe(k) {
 				out = append(out, k)
 			}
 		}

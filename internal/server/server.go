@@ -40,6 +40,9 @@
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
 //	POST /api/v1/restart                             restart it through its service manager
 //	POST /api/v1/reload                              read the settings file again at once, as SIGHUP does
+//	GET  /api/v1/reboot                              whether the server can reboot its computer from here (reboot_api.go)
+//	POST /api/v1/reboot                              reboot it after a delay, through its root helper
+//	DELETE /api/v1/reboot                            take back a reboot that waits
 //	GET  /api/v1/store                               the store's file, schema and rows, as store info shows (serverinfo_api.go)
 //	GET  /api/v1/config                              the settings in effect, as massimo config shows, secrets as set
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
@@ -175,6 +178,8 @@ type Options struct {
 	Update UpdateOptions
 	// Restart configures the restart from the API.
 	Restart RestartOptions
+	// Reboot configures the reboot of the computer (reboot_api.go).
+	Reboot RebootOptions
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address.
@@ -263,8 +268,10 @@ type Server struct {
 	// restartGate lets one restart through (restart_api.go), and
 	// pending lists what applies only at the next one.
 	restartGate restartGate
-	pendingMu   sync.Mutex
-	pending     []string
+	// reboot is the reboot that waits (reboot_api.go).
+	reboot    rebootPlan
+	pendingMu sync.Mutex
+	pending   []string
 	// the settings file, when it was last read, and what reads it again
 	// (restart_api.go, SetReloader)
 	settingsFile string
@@ -455,6 +462,7 @@ func New(opts Options) *Server {
 		s.authLockout = DefaultAuthLockout
 	}
 	s.streamKeepAlive.Store(int64(30 * time.Second))
+	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	if opts.Store != nil {
@@ -879,6 +887,9 @@ func (s *Server) routes() {
 	api("GET /api/v1/restart", "restart", s.getRestart)
 	api("POST /api/v1/restart", "restart", s.startRestart)
 	api("POST /api/v1/reload", "restart", s.reloadSettings)
+	api("GET /api/v1/reboot", "reboot", s.getReboot)
+	api("POST /api/v1/reboot", "reboot", s.startReboot)
+	api("DELETE /api/v1/reboot", "reboot", s.cancelReboot)
 	api("GET /api/v1/store", "settings", s.getStore)
 	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)

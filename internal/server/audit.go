@@ -77,6 +77,8 @@ var actions = map[string]string{
 	"POST /api/v1/update":                          "update.start",
 	"POST /api/v1/restart":                         "server.restart",
 	"POST /api/v1/reload":                          "server.reload",
+	"POST /api/v1/reboot":                          "server.reboot",
+	"DELETE /api/v1/reboot":                        "server.reboot.cancel",
 	"POST /api/v1/users":                           "user.add",
 	"PUT /api/v1/users/{name}":                     "user.update",
 	"DELETE /api/v1/users/{name}":                  "user.remove",

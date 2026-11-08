@@ -2,7 +2,8 @@
 # The massimo package's postinst: what `massimo install` does on a box
 # without the package, with Debian's tools (packaging/README.md, "Debian
 # package"): the system user, the settings directory and file, the unit
-# enabled, and the service started once the settings are filled in.
+# enabled (the reboot helper's only once the owner enabled it), and the
+# service started once the settings are filled in.
 set -e
 
 case "$1" in
@@ -27,6 +28,17 @@ configure)
 		else
 			deb-systemd-helper update-state massimo.service >/dev/null || true
 		fi
+		# The reboot helper stays off until the owner turns it on with
+		# `massimo install -reboot-helper`, and on once turned on: debhelper's
+		# snippet for a unit it does not enable (was-enabled is true on a
+		# first install, debian-installed is not).
+		if deb-systemd-helper debian-installed massimo-reboot.path; then
+			deb-systemd-helper unmask massimo-reboot.path >/dev/null || true
+			if deb-systemd-helper --quiet was-enabled massimo-reboot.path; then
+				deb-systemd-helper enable massimo-reboot.path >/dev/null || true
+			fi
+		fi
+		deb-systemd-helper update-state massimo-reboot.path >/dev/null || true
 	fi
 	if [ -d /run/systemd/system ]; then
 		systemctl --system daemon-reload >/dev/null || true

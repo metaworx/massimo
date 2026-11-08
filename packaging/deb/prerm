@@ -6,7 +6,7 @@ set -e
 case "$1" in
 remove)
 	if [ -d /run/systemd/system ] && command -v deb-systemd-invoke >/dev/null 2>&1; then
-		deb-systemd-invoke stop massimo.service >/dev/null || true
+		deb-systemd-invoke stop massimo-reboot.path massimo.service >/dev/null || true
 	fi
 	;;
 esac
