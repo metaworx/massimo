@@ -1178,11 +1178,12 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   newest backup's, or after a restore with the file restored;
   the backup follows `backups.auto_min` minutes (60) after the last change,
   at the latest `backups.auto_max` (120) after the first,
-  and at once for a Cube without one, also once its last is deleted.
+  and at once for a Cube without one, also once its last is deleted or pruned.
   The comparison runs once a minute after a connection or a configuration event,
   so changes made outside Massimo count once the Cube reports them;
   the reference lives in memory, read from the newest backup,
-  and again from the one then newest once the newest is deleted.
+  and again from the one then newest once the newest is deleted,
+  or pruned, which `backups.keep_newest` 0 allows.
   A restore takes `before_restore` first and is refused when it cannot,
   and keeps the file of its body as `upload`.
 - API: `GET`/`POST …/backups` (the list newest first,
@@ -1203,7 +1204,7 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   the first backup, none without a change,
   one after a quiet window and one at `auto_max`;
   the change against the one before after deleting the newest,
-  and one at once after deleting all;
+  and one at once after deleting all or pruning the only one;
   the routes and the settings' check;
   a restore keeping `before_restore` and `upload`, by id, and clean after;
   the diff of a backup against itself and an edited copy;

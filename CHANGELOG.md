@@ -17,6 +17,9 @@ the next minor, a fix counts the suffix up.
   reference of its automatic backup, and deleting its last one takes a
   new one at once, without a restart of `serve`.
 
+- A prune that removes a Cube's newest backup, as `backups.keep_newest`
+  0 allows, does the same.
+
 ## [0.11.0-alpha.1] - 2026-11-08
 
 ### Added

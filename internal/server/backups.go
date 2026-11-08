@@ -12,9 +12,10 @@ package server
 // its backup is taken once no change has come for backups.auto_min
 // minutes, and at the latest backups.auto_max minutes after it became
 // dirty. A Cube without a backup gets one at once, also once its last
-// is deleted. The comparison runs once a minute after a connection or a
-// configuration event; the reference lives in memory, read from the
-// newest backup at the first look and again once the newest is deleted.
+// is deleted or pruned. The comparison runs once a minute after a
+// connection or a configuration event; the reference lives in memory,
+// read from the newest backup at the first look and again once the
+// newest is deleted or pruned.
 
 import (
 	"context"
@@ -44,7 +45,8 @@ type backupWatch struct {
 	// list: takeBackup holds it to store the row and call stored(),
 	// listBackups shares it to read the rows and state(). deleteBackup
 	// holds it to find whether the row is the newest, delete it and
-	// forget(); the first look shares it to read the reference, so that
+	// forget(), pruneBackups to forget() after a prune that may have
+	// removed it; the first look shares it to read the reference, so that
 	// it never keeps the hash of a row deleted meanwhile. Taken before
 	// mu, never while mu is held.
 	rows sync.RWMutex
@@ -258,10 +260,35 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 		return store.Backup{}, nil, fail(http.StatusInternalServerError, "%v", err)
 	}
 	s.log.Info("backup taken", "cube", rt.serial, "id", b.ID, "reason", reason, "bytes", b.Size)
-	if _, err := st.PruneBackups(ctx, time.Now()); err != nil {
-		s.log.Warn("backups not pruned", "error", err)
-	}
+	s.pruneBackups(ctx, st, time.Now())
 	return b, f, nil
+}
+
+// pruneBackups prunes the store's backups as of now. With
+// backups.keep_newest 0 a prune may remove a Cube's newest backup, and
+// the store does not say whose: where rows went, every Cube's watch
+// forgets its reference, which its next look reads again.
+func (s *Server) pruneBackups(ctx context.Context, st *store.Store, now time.Time) {
+	n, err := st.PruneBackups(ctx, now)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.log.Warn("backups not pruned", "error", err)
+		}
+		return
+	}
+	if n == 0 {
+		return
+	}
+	if set, err := st.BackupSettings(ctx); err == nil && set.KeepNewest > 0 {
+		return
+	}
+	for _, rt := range s.runtimes() {
+		if rt.store == st {
+			rt.bk.rows.Lock()
+			rt.bk.forget()
+			rt.bk.rows.Unlock()
+		}
+	}
 }
 
 // pruneBackupsDaily prunes the backups at the start and once a day,
@@ -273,9 +300,7 @@ func (s *Server) pruneBackupsDaily(ctx context.Context, st *store.Store) {
 	t := time.NewTicker(backupPruneEvery)
 	defer t.Stop()
 	for {
-		if _, err := st.PruneBackups(ctx, time.Now()); err != nil && ctx.Err() == nil {
-			s.log.Warn("backups not pruned", "error", err)
-		}
+		s.pruneBackups(ctx, st, time.Now())
 		select {
 		case <-ctx.Done():
 			return

@@ -169,6 +169,34 @@ func TestBackupDeleteAll(t *testing.T) {
 	}
 }
 
+// With backups.keep_newest 0 a prune can remove a Cube's only backup,
+// and the Cube then gets one at once, as after a delete.
+func TestBackupPruneNewest(t *testing.T) {
+	_, ts, s, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	ctx := context.Background()
+	var l backupList
+	eventually(t, "the first backup", func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto"
+	})
+	first := l.Backups[0]
+	st.SetSetting(ctx, store.BackupsAutoMinKey, 1000)
+	st.SetSetting(ctx, store.BackupsAutoMaxKey, 1000)
+	st.SetSetting(ctx, store.BackupsKeepNewestKey, 0)
+	st.SetSetting(ctx, store.BackupsKeepDaysAutoKey, 1)
+	s.pruneBackups(ctx, st, time.Now().Add(48*time.Hour))
+	if _, ok, err := st.StoredBackup(ctx, s.cubes["keq0000100"].storeID.Load(), first.ID); ok || err != nil {
+		t.Fatalf("the first backup is not pruned (%v)", err)
+	}
+	// The prune removes the row, so the next may get its id: the time tells them apart.
+	if !within(time.Second, func() bool {
+		_, l = historyOf(t, ts.URL)
+		return reasons(l) == "auto" && l.Backups[0].TakenAt.After(first.TakenAt)
+	}) {
+		t.Fatalf("after pruning the only backup: %q, changed %v", reasons(l), l.Changed)
+	}
+}
+
 // A backup taken by hand with a note, downloaded as stored and in the
 // other format, deleted; a bad request, an unknown id and a Cube without
 // a row in the store are refused.

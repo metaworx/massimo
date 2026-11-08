@@ -1432,7 +1432,7 @@ compared with the newest backup's by a hash;
 the backup follows once `backups.auto_min` minutes passed without a further change,
 at the latest `backups.auto_max` minutes after the first,
 and a Cube that has none gets one at once:
-at its first connection, or once its last backup is deleted.
+at its first connection, or once its last backup is deleted or pruned.
 Changes made outside Massimo count as well, once the Cube reports them,
 at the latest at the six-hourly refresh.
 A restore keeps the Cube's configuration before its first step (`before_restore`)
