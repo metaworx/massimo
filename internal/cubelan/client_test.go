@@ -71,10 +71,10 @@ func TestClientGreetingAndSnapshot(t *testing.T) {
 	if len(s.Metadata().Rooms) != 6 || len(s.Devices()) != 6 {
 		t.Fatalf("metadata: %d rooms, %d devices", len(s.Metadata().Rooms), len(s.Devices()))
 	}
-	if cfg := s.Config(0x1514b6); cfg == nil || cfg.Thermostat == nil || cfg.Thermostat.ComfortTemp != 21.5 {
+	if cfg := s.Config(0x0a010d); cfg == nil || cfg.Thermostat == nil || cfg.Thermostat.ComfortTemp != 21.5 {
 		t.Fatalf("config: %+v", cfg)
 	}
-	if st, ok := s.State(0x1514b6); !ok || st.Valid {
+	if st, ok := s.State(0x0a010d); !ok || st.Valid {
 		t.Fatalf("state: %+v %v", st, ok)
 	}
 
@@ -100,7 +100,7 @@ func TestClientSendAndPoll(t *testing.T) {
 	<-c.Ready()
 
 	// A radio command gets an S reply.
-	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x1514b6, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
+	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
 	res, err := c.SendRadio(ctx, m)
 	if err != nil || res.Discarded || res.FreeMemorySlots != 0x31 {
 		t.Fatalf("send: %+v %v", res, err)
@@ -176,9 +176,9 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 	}
 	// A device the Cube no longer has (deleted by another client, say)
 	// lingers in the snapshot until the next greeting.
-	gone, ok := c.Snapshot().ConfigLine(0x1514b6)
+	gone, ok := c.Snapshot().ConfigLine(0x0a010d)
 	if !ok {
-		t.Fatal("no C line for 1514b6")
+		t.Fatal("no C line for 0a010d")
 	}
 	raw, err := base64.StdEncoding.DecodeString(gone.Data[7:])
 	if err != nil {
@@ -205,7 +205,7 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 			t.Fatal("device still listed")
 		}
 	}
-	if c.Snapshot().Config(0x1514b6) == nil {
+	if c.Snapshot().Config(0x0a010d) == nil {
 		t.Fatal("real device dropped")
 	}
 	// No disconnected event for a reconnect on purpose.
@@ -271,7 +271,7 @@ func TestForgetDevice(t *testing.T) {
 	c := New(Options{Addr: addr})
 	go c.Run(ctx)
 	waitEvent(t, c, EventConnected)
-	const rf cube.RFAddress = 0x1514b6
+	const rf cube.RFAddress = 0x0a010d
 	c.ForgetDevice(rf)
 	if e := waitEvent(t, c, EventForgotten); e.Device != rf || e.Kind.String() != "device_forgotten" {
 		t.Fatalf("event %+v", e)
@@ -290,7 +290,7 @@ func TestForgetDevice(t *testing.T) {
 			t.Fatal("still in the metadata")
 		}
 	}
-	if len(s.Devices()) != 5 || s.Config(0x14d08e) == nil {
+	if len(s.Devices()) != 5 || s.Config(0x0a010a) == nil {
 		t.Fatalf("the other devices: %v", s.Devices())
 	}
 	l, ok := s.DeviceListLine()
@@ -354,7 +354,7 @@ func TestSendWaitsForEveryAOfADelete(t *testing.T) {
 	c := New(Options{Addr: addr})
 	go c.Run(ctx)
 	<-c.Ready()
-	del := cube.CmdDeleteDevices(true, 0x14ce3d, 0x14ce58, 0x151486)
+	del := cube.CmdDeleteDevices(true, 0x0a0108, 0x0a0109, 0x0a010b)
 	start := time.Now()
 	if _, err := c.Send(ctx, del); err != nil {
 		t.Fatal(err)

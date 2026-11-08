@@ -61,14 +61,14 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	})
 	const base = "/api/v1/cubes/KEQ0000100"
 	eco := func() any {
-		_, d := do(t, ts, "GET", base+"/devices/14d08e", "")
+		_, d := do(t, ts, "GET", base+"/devices/0a010a", "")
 		th, _ := d["thermostat"].(map[string]any)
 		return th["eco_temp"]
 	}
 	if e := eco(); e != float64(15) {
 		t.Fatalf("eco before %v", e)
 	}
-	if code, out := do(t, ts, "PUT", base+"/devices/14d08e/config", `{"eco_temp":17}`); code != 200 {
+	if code, out := do(t, ts, "PUT", base+"/devices/0a010a/config", `{"eco_temp":17}`); code != 200 {
 		t.Fatalf("write %d %v", code, out)
 	}
 	// The immediate re-read still sees the old line; the Cube changes it
@@ -76,7 +76,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	if e := eco(); e != float64(15) {
 		t.Fatalf("eco right after the write %v", e)
 	}
-	fc.SetConfig(withEco(t, greeting, 0x14d08e, 17))
+	fc.SetConfig(withEco(t, greeting, 0x0a010a, 17))
 	eventually(t, "the new eco temperature", func() bool { return eco() == float64(17) })
 	// The fake's S reply left one radiogram pending (49 of 50 slots
 	// free), so the follow-up reconnects for a fresh H line.
@@ -85,16 +85,16 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	getJSON(t, ts, "", base+"/log", &evs)
 	config := false
 	for _, e := range evs {
-		config = config || (e.Kind == "config" && e.Device == "14d08e")
+		config = config || (e.Kind == "config" && e.Device == "0a010a")
 	}
 	if !config {
 		t.Fatal("no config event for the device")
 	}
-	// The re-reads stop once the line changed: no c: for 14d08e after it.
+	// The re-reads stop once the line changed: no c: for 0a010a after it.
 	time.Sleep(200 * time.Millisecond)
 	var cs int
 	for _, m := range fc.Received() {
-		if m.String() == "c:14d08e" {
+		if m.String() == "c:0a010a" {
 			cs++
 		}
 	}
@@ -124,13 +124,13 @@ func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
-	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/14d08e/config", `{"eco_temp":17}`); code != 200 {
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010a/config", `{"eco_temp":17}`); code != 200 {
 		t.Fatal(code)
 	}
 	time.Sleep(300 * time.Millisecond)
 	var cs int
 	for _, m := range fc.Received() {
-		if m.String() == "c:14d08e" {
+		if m.String() == "c:0a010a" {
 			cs++
 		}
 	}
@@ -238,7 +238,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	sent := func() (rereads, others int) {
 		for _, m := range fc.Received() {
 			switch {
-			case m.String() == "c:14d08e":
+			case m.String() == "c:0a010a":
 				rereads++
 			case m.Type == 'c':
 				others++
@@ -247,15 +247,15 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 		return rereads, others
 	}
 
-	// The original software's 0x11 (preset temperatures) to 14d08e.
+	// The original software's 0x11 (preset temperatures) to 0a010a.
 	conn, r := proxyClient(t, proxyAddr)
-	proxyWrite(t, conn, r, "AAARAAAAFNCOACwePQkDCgM=")
+	proxyWrite(t, conn, r, "AAARAAAACgEKACwePQkDCgM=")
 	eventually(t, "a re-read", func() bool { n, _ := sent(); return n >= 1 })
-	fc.SetConfig(withEco(t, greeting, 0x14d08e, 17))
+	fc.SetConfig(withEco(t, greeting, 0x0a010a, 17))
 	eventually(t, "the device's new configuration", func() bool {
 		return strings.Contains(logs.String(), "device configuration taken over by the device")
 	})
-	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/14d08e", "")
+	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/0a010a", "")
 	if th, _ := d["thermostat"].(map[string]any); th["eco_temp"] != float64(17) {
 		t.Fatalf("eco after the follow-up %v", th["eco_temp"])
 	}
@@ -270,7 +270,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 
 	// A room setpoint re-reads nothing, but wants the budget again.
 	conn, r = proxyClient(t, proxyAddr)
-	proxyWrite(t, conn, r, "AARAAAAAFRS2BgA=")
+	proxyWrite(t, conn, r, "AARAAAAACgENBgA=")
 	eventually(t, "the second budget reconnect", func() bool { return fc.Connections() == 3 })
 	if after, others := sent(); after != before || others != 0 {
 		t.Fatalf("a setpoint re-read: %d re-reads of the device (%d before), %d of others", after, before, others)

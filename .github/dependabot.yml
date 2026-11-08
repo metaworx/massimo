@@ -1,0 +1,33 @@
+# Dependabot (GUIDELINES/project/CI.md, "Dependabot"): the Go modules the
+# code imports directly, and the actions the workflows use, pinned by
+# commit SHA with their version as a comment; checked monthly, one pull
+# request for each. Its commit messages cannot take the project's form,
+# so the Guidelines job leaves them out of its check, and its updates go
+# into one CHANGELOG bullet when they are merged.
+# github.com/bytemare/ksf, replaced by third_party/bytemare-ksf until a
+# release builds for 32-bit targets, is indirect and so left alone.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    allow:
+      - dependency-type: direct
+    groups:
+      go-modules:
+        patterns: ["*"]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: build
+      include: scope

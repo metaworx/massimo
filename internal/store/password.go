@@ -137,12 +137,18 @@ type phc struct {
 	salt, key    []byte
 }
 
+// minSaltLen is the shortest salt a stored hash may have: the PHC
+// string format's minimum; HashPassword makes argonSaltLen.
+const minSaltLen = 8
+
 // parseHash reads a PHC string of argon2id; false for an empty or
-// malformed one, or one whose parameters exceed the ceiling.
+// malformed one, one of another argon2 version than the one computed
+// here, one with a salt shorter than minSaltLen, or one whose parameters
+// exceed the ceiling.
 func parseHash(hash string) (phc, bool) {
 	var h phc
 	parts := strings.Split(hash, "$")
-	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" || parts[2] != "v="+strconv.Itoa(argon2.Version) {
 		return h, false
 	}
 	for _, kv := range strings.Split(parts[3], ",") {
@@ -171,7 +177,7 @@ func parseHash(hash string) (phc, bool) {
 	}
 	enc := base64.RawStdEncoding
 	var err error
-	if h.salt, err = enc.DecodeString(parts[4]); err != nil {
+	if h.salt, err = enc.DecodeString(parts[4]); err != nil || len(h.salt) < minSaltLen {
 		return h, false
 	}
 	if h.key, err = enc.DecodeString(parts[5]); err != nil || len(h.key) == 0 {

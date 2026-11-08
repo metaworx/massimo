@@ -80,7 +80,7 @@ func TestDeleteDevices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const gone, kept cube.RFAddress = 0x14d08e, 0x1514b6
+	const gone, kept cube.RFAddress = 0x0a010a, 0x0a010d
 	s := &Server{Greeting: greeting, Keep: map[cube.RFAddress]bool{kept: true}}
 	addr, err := s.Start("127.0.0.1:0")
 	if err != nil {
@@ -101,7 +101,7 @@ func TestDeleteDevices(t *testing.T) {
 		t.Fatalf("c: for the kept device answered %s", got)
 	}
 	l := c.send(cube.CmdList)
-	if listed(t, l, gone) || !listed(t, l, kept) || !listed(t, l, 0x14ce3d) {
+	if listed(t, l, gone) || !listed(t, l, kept) || !listed(t, l, 0x0a0108) {
 		t.Fatalf("L after t: %s", l)
 	}
 	fresh := dial(t, addr)
@@ -122,7 +122,7 @@ func TestDeletedPairDeviceJoinsAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	const rf cube.RFAddress = 0x0a0b0c
-	pair, err := PairingFrom(greeting, 0x1514b6, rf, "TEQ0000001", time.Millisecond)
+	pair, err := PairingFrom(greeting, 0x0a010d, rf, "TEQ0000001", time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestPairDeviceJoinsOnlyWhileIncluding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pair, err := PairingFrom(greeting, 0x1514b6, 0x0a0b0c, "TEQ0000001", 200*time.Millisecond)
+	pair, err := PairingFrom(greeting, 0x0a010d, 0x0a0b0c, "TEQ0000001", 200*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

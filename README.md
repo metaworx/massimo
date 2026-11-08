@@ -115,7 +115,9 @@ To build instead, with Go 1.26 or later installed:
 one at a time with `make linux`, `make linux-arm64`, `make linux-armv7`,
 `make linux-armv6`, `make darwin` (both Mac architectures) and `make windows`;
 `make release` adds `SHA256SUMS` and the release manifest; `make vet`,
-`make test` and `make clean` do what they say.
+`make test` and `make clean` do what they say;
+`make race` runs the race detector on the packages whose goroutines meet,
+and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
 A build from `main` follows the channel `main`, which has no releases,
 unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
 see [packaging/README.md](packaging/README.md#updating).
@@ -653,8 +655,8 @@ so the room is marked not ready (`-json` for machines).
 and with `-discovery 127.0.0.1:23273` it also answers UDP discovery as a further
 Cube (`-discovery-serial`),
 which `serve -discover-target 127.0.0.1:23273` finds.
-`-pair 1514b6,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
-after `n:`, a copy of the greeting's 1514b6 as 0abcde in no room,
+`-pair 0a010d,0abcde,TEQ0000001` adds a device that joins pairing mode two seconds
+after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
 and joins again after it was removed (a fourth field sets the delay).
 
 ```bash
@@ -663,7 +665,7 @@ massimo portal-crypto iv -addr <cube-ip>
 ```
 
 ```bash
-massimo portal -listen :80 -probe default -probe-target 1514b6:6 -probe-cube 192.168.1.46
+massimo portal -listen :80 -probe default -probe-target 0a010d:6 -probe-cube 192.168.1.46
 ```
 
 Probe mode answers each poll with the next reply variant (an `s:` radio

@@ -1,0 +1,22 @@
+# Identifiers that are not placeholders and may stay, each with its reason
+# (identifiers_test.go): a value, then why. A value no tracked file holds
+# any more fails the check, so the list stays as short as the tree needs.
+# Bouni/max-cube-protocol (MIT) is the public description of the Cube's
+# LAN protocol; its examples are no one's devices.
+KEQ0523864  Bouni/max-cube-protocol, H-Message.md and Cube_Discovery.md
+KEQ0378040  Bouni/max-cube-protocol, M-Message.md
+LEQ0015340  Bouni/max-cube-protocol, N-Message.md
+097f2c      Bouni/max-cube-protocol, H-Message.md: the Cube of KEQ0523864
+0e15cc      Bouni/max-cube-protocol, N-Message.md: LEQ0015340
+0fdaed      Bouni/max-cube-protocol, L-Message.md and S-Message.md
+0fc373      Bouni/max-cube-protocol, S-Message.md
+0fc380      Bouni/max-cube-protocol, S-Message.md
+# Made up by a test, plainly not a device's.
+000001      made up, a test's first address
+000002      made up, a test's second address
+123456      made up
+abcdef      made up
+0b0c0d      made up, one of three in sequence
+0c0d0e      made up, one of three in sequence
+0d0e0f      made up, one of three in sequence
+010203      made up, in sequence

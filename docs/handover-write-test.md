@@ -18,7 +18,7 @@ and record what happened.
 - Work on the live house Cube,
   with `SN` set to its serial (in the Pi's `/etc/massimo/env`),
   in a room with one radiator thermostat and no wall thermostat,
-  for example Halle 1 (room 1, thermostat 07631e) or Küche (room 2,
+  for example Halle 1 (room 1, thermostat 0a0105) or Küche (room 2,
   thermostat 05cdc6).
 - Everything below also works through the proxy: `status` and `backup`
   use the proxy automatically with `MASSIMO_CUBE_<SN>_PROXY` set.
@@ -65,7 +65,7 @@ the Cube's answer (not discarded) and the `c:` re-read.
    Or:
 
    ```bash
-   curl -s -X PUT localhost:8099/api/v1/cubes/$SN/devices/07631e/config -d '{"temp_offset": 0.5}'
+   curl -s -X PUT localhost:8099/api/v1/cubes/$SN/devices/0a0105/config -d '{"temp_offset": 0.5}'
    ```
 
    Expected: one 0x11 radiogram, diff shows `temp_offset: 0.5`.
@@ -89,7 +89,7 @@ the Cube's answer (not discarded) and the `c:` re-read.
    Then back.
 5. **Rename a device and back.**
    UI: Devices tab, name.
-   Or `{"name": "Thermostat Halle 1x"}` on `…/devices/07631e`.
+   Or `{"name": "Thermostat Halle 1x"}` on `…/devices/0a0105`.
    Expected: an `m:` line, no radiogram, the diff shows the name,
    the legacy software (through the proxy) shows the new name after reconnecting.
 6. **Rename a room and back**, the same way on `…/rooms/1`.

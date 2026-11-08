@@ -8,6 +8,26 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Added
+
+- Fuzz targets for the parsers of untrusted bytes, their seeds run by
+  `go test`; `make fuzz` and a Fuzz job on pushes to `main` run them
+  (`GUIDELINES/project/CI.md`, section 2).
+
+### Changed
+
+- The tests' fixtures and the recorded greeting carry placeholder radio
+  addresses too, and `tools/identifiers` fails `go test` on a real
+  serial, MAC or radio address in the tree (`AGENTS.md`).
+
+- CI runs the race detector on `internal/server`, `store`, `cubelan` and
+  `proxy` in a Race job beside Vet and test; `make race` runs it
+  locally (`GUIDELINES/project/CI.md`, section 2).
+
+- The workflows pin their actions by commit SHA; Dependabot proposes
+  their updates and the Go modules' monthly
+  (`GUIDELINES/project/CI.md`, "Dependabot").
+
 ### Fixed
 
 - The backup list no longer shows a pending change next to the backup
@@ -19,6 +39,14 @@ the next minor, a fix counts the suffix up.
 
 - A prune that removes a Cube's newest backup, as `backups.keep_newest`
   0 allows, does the same.
+
+- A metadata block without bytes after its device list, as a LAN client
+  may send it, gets none added when the server or the proxy writes it
+  back (`internal/protocol/cube`).
+
+- A stored password hash of another argon2 version, or with a salt under
+  8 bytes, is refused as malformed, as one over the ceiling is
+  (`docs/store.md` section 6).
 
 ## [0.11.0-alpha.1] - 2026-11-08
 

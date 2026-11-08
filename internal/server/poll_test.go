@@ -36,10 +36,10 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
-	// 1514b6 reports: manual, 21 °C, valve 30 %.
+	// 0a010d reports: manual, 21 °C, valve 30 %.
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
-	copy(raw, []byte{0x0b, 0x15, 0x14, 0xb6, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	var changed event
 	eventually(t, "a state event after connected", func() bool {
@@ -50,7 +50,7 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 			if e.Kind == "connected" {
 				connected = true
 			}
-			if connected && e.Kind == "state" && e.Device == "1514b6" {
+			if connected && e.Kind == "state" && e.Device == "0a010d" {
 				changed = e
 				return true
 			}

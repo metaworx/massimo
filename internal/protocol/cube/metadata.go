@@ -119,13 +119,15 @@ func DecodeMetadata(b []byte) (*Metadata, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
-	m.Trailing = append([]byte(nil), r.rest()...)
+	// Empty, not nil, when there are none, so that Encode writes none.
+	m.Trailing = append([]byte{}, r.rest()...)
 	return m, nil
 }
 
 // Encode returns the binary metadata block. Header and trailing bytes are
 // written back as they were read; for newly built metadata the observed
-// defaults ('V', 0x02 and 0x01) are used.
+// defaults ('V', 0x02 and 0x01) are used. A header of two zero bytes, never
+// observed, reads as none and so encodes as the default.
 func (m *Metadata) Encode() ([]byte, error) {
 	var buf bytes.Buffer
 	hdr := m.Header

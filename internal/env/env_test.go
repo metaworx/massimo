@@ -54,14 +54,14 @@ func TestSerials(t *testing.T) {
 }
 
 func TestHiddenList(t *testing.T) {
-	t.Setenv("MASSIMO_CUBE_IGNORE", "001867, 001F32")
-	t.Setenv("MASSIMO_CUBE_KEQ0000002_IGNORE", "005c32")
+	t.Setenv("MASSIMO_CUBE_IGNORE", "0a0101, 0A0201")
+	t.Setenv("MASSIMO_CUBE_KEQ0000002_IGNORE", "0a0202")
 	got, err := HiddenList("")
-	if err != nil || len(got) != 2 || got[0] != 0x001867 || got[1] != 0x001f32 {
+	if err != nil || len(got) != 2 || got[0] != 0x0a0101 || got[1] != 0x0a0201 {
 		t.Fatalf("plain list %v err %v", got, err)
 	}
 	got, err = HiddenList("keq0000002")
-	if err != nil || len(got) != 1 || got[0] != 0x005c32 {
+	if err != nil || len(got) != 1 || got[0] != 0x0a0202 {
 		t.Fatalf("per-cube list %v err %v", got, err)
 	}
 	if _, err := ParseList("MASSIMO_CUBE_IGNORE", "zz"); err == nil || !strings.Contains(err.Error(), "MASSIMO_CUBE_IGNORE") {
@@ -69,7 +69,7 @@ func TestHiddenList(t *testing.T) {
 	}
 	md := &cube.Metadata{Devices: []cube.DeviceMeta{{RFAddress: 0x000002, RoomID: cube.HiddenRoom}}}
 	h, err := HiddenSet("keq0000002", md, false)
-	if err != nil || !h[0x005c32] || !h[0x000002] || len(h) != 2 {
+	if err != nil || !h[0x0a0202] || !h[0x000002] || len(h) != 2 {
 		t.Fatalf("hidden set %v %v", h, err)
 	}
 	if h, _ := HiddenSet("keq0000002", md, true); len(h) != 0 {

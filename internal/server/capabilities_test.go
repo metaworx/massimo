@@ -97,7 +97,7 @@ func errorOf(body string) string {
 
 // fillRoute puts test values into a route pattern.
 func fillRoute(path string) string {
-	r := strings.NewReplacer("{sn}", "KEQ0000100", "{rf}", "1514b6", "{id}", "6", "{name}", "someone", "{key}", "night", "{tid}", "1")
+	r := strings.NewReplacer("{sn}", "KEQ0000100", "{rf}", "0a010d", "{id}", "6", "{name}", "someone", "{key}", "night", "{tid}", "1")
 	return r.Replace(path)
 }
 
@@ -224,7 +224,7 @@ func TestMoveNeedsStructure(t *testing.T) {
 	mover := userToken(t, st, "mover", "mover")
 	namer := userToken(t, st, "namer", "namer")
 	op := userToken(t, st, "op", store.RoleOperator)
-	path := "/api/v1/cubes/KEQ0000100/devices/1514b6"
+	path := "/api/v1/cubes/KEQ0000100/devices/0a010d"
 	for _, c := range []struct {
 		who, token, body, want string
 	}{
@@ -251,7 +251,7 @@ func TestCopyNeedsConfigure(t *testing.T) {
 	st := s.opts.Store
 	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)
 	mover := userToken(t, st, "mover", "mover")
-	path := "/api/v1/cubes/KEQ0000100/devices/1514b6"
+	path := "/api/v1/cubes/KEQ0000100/devices/0a010d"
 	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); code != 403 || errorOf(text) != `capability "configure" required` {
 		t.Fatalf("a move with the copy and without configure: %d %s", code, text)
 	}
@@ -273,7 +273,7 @@ func TestRoleRules(t *testing.T) {
 	st := s.opts.Store
 	ctx := t.Context()
 	setpoint := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint"
-	lock := "/api/v1/cubes/KEQ0000100/devices/1514b6/lock"
+	lock := "/api/v1/cubes/KEQ0000100/devices/0a010d/lock"
 	if _, err := st.AddRole(ctx, store.Role{Key: "night", Capabilities: []string{"read", "setpoint"}}, 0); err != nil {
 		t.Fatal(err)
 	}

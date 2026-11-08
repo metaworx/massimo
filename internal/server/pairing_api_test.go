@@ -17,14 +17,14 @@ import (
 const newDevice cube.RFAddress = 0x0a0b0c
 
 // startPairingCube starts a server over a fake Cube in which a radiator
-// thermostat, a copy of 1514b6 at newDevice, joins delay after n:.
+// thermostat, a copy of 0a010d at newDevice, joins delay after n:.
 func startPairingCube(t *testing.T, delay time.Duration) (*fakecube.Server, *httptest.Server, *Server) {
 	t.Helper()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pair, err := fakecube.PairingFrom(greeting, 0x1514b6, newDevice, "TEQ0000001", delay)
+	pair, err := fakecube.PairingFrom(greeting, 0x0a010d, newDevice, "TEQ0000001", delay)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,13 +117,13 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"Neu","room_id":1,"copy":false}`); code != 200 {
 		t.Fatalf("add to room 1: %d %v", code, out)
 	}
-	// Room 1 has one radiator thermostat, 14d08e. As the original
+	// Room 1 has one radiator thermostat, 0a010a. As the original
 	// software: wakeup, a link in each direction, the group, then the
 	// metadata and a re-read of the C line; the copy of the room's
 	// settings, which follows by default, has tests of its own
 	// (TestAddCopiesTheRoomsSettings and those after it).
-	partner := cube.CmdLinkPartner(cube.Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}, true, newDevice, cube.DeviceRadiatorThermostat)
-	own := cube.CmdLinkPartner(cube.Target{RFAddress: newDevice}, true, 0x14d08e, cube.DeviceRadiatorThermostat)
+	partner := cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, newDevice, cube.DeviceRadiatorThermostat)
+	own := cube.CmdLinkPartner(cube.Target{RFAddress: newDevice}, true, 0x0a010a, cube.DeviceRadiatorThermostat)
 	group := cube.CmdSetGroup(newDevice, 1, false)
 	got := fc.Received()[before:]
 	want := []string{"z:1e,G,01", partner.String(), own.String(), group.String()}

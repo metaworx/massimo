@@ -132,8 +132,8 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	}
 
 	// c: for a known device is answered locally.
-	conn.Write([]byte("c:1514b6\r\n"))
-	if cl := readLine(t, r); cl.Type != 'C' || !strings.HasPrefix(cl.Data, "1514b6,") {
+	conn.Write([]byte("c:0a010d\r\n"))
+	if cl := readLine(t, r); cl.Type != 'C' || !strings.HasPrefix(cl.Data, "0a010d,") {
 		t.Fatalf("c: answered %s", cl)
 	}
 	if countType(fc, 'c') != 0 {
@@ -141,7 +141,7 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	}
 
 	// s: goes through and the S reply comes back.
-	conn.Write([]byte("s:AARAAAAAFRS2BgA=\r\n"))
+	conn.Write([]byte("s:AARAAAAACgENBgA=\r\n"))
 	if s := readLine(t, r); s.Type != 'S' || s.Data != "19,0,31" {
 		t.Fatalf("s: answered %s", s)
 	}
@@ -179,7 +179,7 @@ func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 	fc, p, _, ctx := setup(t)
 	fc.Duty = 0x61 // 97 %
 	// A command through the queue teaches the client the budget.
-	p.opts.Queue.Enqueue(engine.Command{Passthrough: true, Lines: []cube.Message{{Type: 's', Data: "AARAAAAAFRS2BgA="}}}).Wait(ctx)
+	p.opts.Queue.Enqueue(engine.Command{Passthrough: true, Lines: []cube.Message{{Type: 's', Data: "AARAAAAACgENBgA="}}}).Wait(ctx)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 	for m := readLine(t, r); m.Type != 'L'; m = readLine(t, r) {
 	}
 	sent := countType(fc, 's')
-	conn.Write([]byte("s:AARAAAAAFRS2BgA=\r\n"))
+	conn.Write([]byte("s:AARAAAAACgENBgA=\r\n"))
 	if s := readLine(t, r); s.Type != 'S' || !strings.HasPrefix(s.Data, "61,1,") {
 		t.Fatalf("answered %s", s)
 	}
@@ -250,7 +250,7 @@ func TestProxyDiscovery(t *testing.T) {
 
 func TestProxyHidesHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
-	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
+	hidden := cube.RFAddress(0x0a010d) // in room 6 of the fixture
 	p.opts.Hidden = []cube.RFAddress{hidden}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -394,8 +394,8 @@ func TestProxyHidesHiddenDevices(t *testing.T) {
 
 func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
-	hidden := cube.RFAddress(0x1514b6) // in room 6 of the fixture
-	other := cube.RFAddress(0x14d08e)
+	hidden := cube.RFAddress(0x0a010d) // in room 6 of the fixture
+	other := cube.RFAddress(0x0a010a)
 	p.opts.Hidden = []cube.RFAddress{hidden}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -463,7 +463,7 @@ func TestProxyPairing(t *testing.T) {
 		t.Fatal(err)
 	}
 	const newDevice cube.RFAddress = 0x0a0b0c
-	pair, err := fakecube.PairingFrom(greeting, 0x1514b6, newDevice, "TEQ0000001", 100*time.Millisecond)
+	pair, err := fakecube.PairingFrom(greeting, 0x0a010d, newDevice, "TEQ0000001", 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +572,7 @@ func TestProxyReportsWrites(t *testing.T) {
 			t.Fatalf("a read reported as a write: %v", reported())
 		}
 		// The preset temperatures of one device, then a room setpoint.
-		for _, l := range []string{"s:AAARAAAAFNCOACwePQkDCgM=\r\n", "s:AARAAAAAFRS2BgA=\r\n"} {
+		for _, l := range []string{"s:AAARAAAACgEKACwePQkDCgM=\r\n", "s:AARAAAAACgENBgA=\r\n"} {
 			conn.Write([]byte(l))
 			if m := readLine(t, r); m.Type != 'S' {
 				t.Fatalf("s: answered %s", m)
@@ -582,8 +582,8 @@ func TestProxyReportsWrites(t *testing.T) {
 			t.Fatalf("cube received %d s commands", countType(fc, 's'))
 		}
 		want := []cube.RadioCommand{
-			{Command: cube.RFSetTemperatures, Target: cube.Target{RFAddress: 0x14d08e}},
-			{Command: cube.RFSetTemperature, Target: cube.Target{RFAddress: 0x1514b6, RoomID: 6, Room: true}},
+			{Command: cube.RFSetTemperatures, Target: cube.Target{RFAddress: 0x0a010a}},
+			{Command: cube.RFSetTemperature, Target: cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}},
 		}
 		if discard {
 			want = nil
@@ -612,7 +612,7 @@ func TestProxyDeleteOfSeveralDevices(t *testing.T) {
 	for readLine(t, r).Type != 'L' {
 	}
 	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	conn.Write([]byte(cube.CmdDeleteDevices(true, 0x14ce3d, 0x14ce58, 0x151486).Wire()))
+	conn.Write([]byte(cube.CmdDeleteDevices(true, 0x0a0108, 0x0a0109, 0x0a010b).Wire()))
 	for i := 0; i < 3; i++ {
 		if a := readLine(t, r); a.Type != 'A' {
 			t.Fatalf("A %d of the t: is %s", i+1, a)

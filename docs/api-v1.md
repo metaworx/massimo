@@ -272,7 +272,7 @@ and it will be removed in a later release.
 
 - `{sn}` is a Cube's serial number, as printed on it (`KEQ0000100`);
   case does not matter.
-- `{rf}` is a device's radio address, six hex digits (`012ca9`).
+- `{rf}` is a device's radio address, six hex digits (`0a0102`).
 - `{id}` is a room number as the Cube assigns it (1..255).
 
 ## Errors
@@ -725,17 +725,17 @@ its command is `acknowledged` with the answer.
 {
   "id": "01a1b0c2-5a3e-7b1c-9d4e-0f1a2b3c4d5e",
   "action": "device.update",
-  "target": "device:1514b6",
+  "target": "device:0a010d",
   "cube": "KEQ0000000",
   "user": "anna",
   "state": "acknowledged",
   "status": 200,
-  "request": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/devices/1514b6", "query": "", "hash": "…"},
+  "request": {"method": "PUT", "path": "/api/v1/cubes/KEQ0000000/devices/0a010d", "query": "", "hash": "…"},
   "result": {"ok": true, "budget": {…}},
   "created_at": "…", "updated_at": "…", "finished_at": "…",
   "steps": [
-    {"id": "…", "target": "device:1514b6", "state": "acknowledged", "request": {"key": "", "priority": 1, "lines": 2, "radio": 2, "wakeup": true, "room": 6, "reconnect": false}, "result": {"discarded": false, "budget": {…}}, "created_at": "…", "finished_at": "…"},
-    {"id": "…", "target": "device:1514b6", "state": "acknowledged", "request": {…}, "result": {…}, "created_at": "…", "finished_at": "…"},
+    {"id": "…", "target": "device:0a010d", "state": "acknowledged", "request": {"key": "", "priority": 1, "lines": 2, "radio": 2, "wakeup": true, "room": 6, "reconnect": false}, "result": {"discarded": false, "budget": {…}}, "created_at": "…", "finished_at": "…"},
+    {"id": "…", "target": "device:0a010d", "state": "acknowledged", "request": {…}, "result": {…}, "created_at": "…", "finished_at": "…"},
     {"id": "…", "state": "acknowledged", "request": {"key": "metadata", "priority": 2, "lines": 1, "radio": 0, …}, "result": {…}, "created_at": "…", "finished_at": "…"}
   ]
 }
@@ -785,7 +785,7 @@ then every Cube discovery found on the LAN that is not configured:
     "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
     "firmware": "1.1.3",
-    "rf_address": "022839",
+    "rf_address": "0a0104",
     "budget": {"duty_cycle_pct": 4, "free_memory_slots": 50, "updated_at": "2026-11-04T15:28:11+01:00"},
     "pending_radiograms": 0,
     "updated": "2026-11-04T15:28:11+01:00",
@@ -983,7 +983,7 @@ objects of the found Cubes above:
   "ran_at": "2026-11-04T15:00:00+01:00",
   "found": [
     {"serial": "KEQ0000200", "configured": true, "address": "192.168.1.9", "mac": "00:1a:22:0a:0b:0c",
-     "rf_address": "022839", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"},
+     "rf_address": "0a0104", "firmware": "1.1.3", "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"},
     {"serial": "KEQ0000000", "configured": false, "address": "192.168.1.23", "mac": "00:1a:22:01:02:03",
      "rf_address": "0a0b0c", "firmware": "1.1.3", "dhcp": true, "found_at": "2026-11-04T14:30:01+01:00", "last_seen": "2026-11-04T15:00:02+01:00"}
   ]
@@ -1026,11 +1026,11 @@ Rooms with their devices and live states:
     "ready": true,
     "devices": [
       {
-        "rf_address": "012ca9",
+        "rf_address": "0a0102",
         "type": "radiator_thermostat",
         "name": "Thermostat Bad",
         "room_id": 5,
-        "serial": "JEQ0328398",
+        "serial": "JEQ0000502",
         "reported": true,
         "state": {"mode": "auto", "setpoint": 22, "valve_pct": 0, "battery_low": false, "error": false, "link_error": false}
       }
@@ -1222,7 +1222,7 @@ the queue waits for the budget as for every write.
 The answer is
 
 ```json
-{"ok": true, "copied": {"temperatures": ["14d08e", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
+{"ok": true, "copied": {"temperatures": ["0a010a", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
 ```
 
 with `copied` absent when nothing was copied,
@@ -1320,7 +1320,7 @@ descaling and valve limits to radiator thermostats only.
 The answer lists every device:
 
 ```json
-{"ok": true, "devices": [{"rf_address": "012ca9", "name": "…", "ok": true, "discarded": false}], "budget": {…}}
+{"ok": true, "devices": [{"rf_address": "0a0102", "name": "…", "ok": true, "discarded": false}], "budget": {…}}
 ```
 
 `ok` is true when every device took the write; `502` only when none did.
@@ -1541,8 +1541,8 @@ Nothing is written.
   "plan": "558237da9e11cf498b34896fa99b7a4ebe3d05ff163a197e37a76f19b79fd804",
   "steps": [
     {"what": "write room and device names (room 6: \"Bedroom\"→\"Guest room\")", "radio": false},
-    {"what": "1514b6 \"Radiator Bedroom\": temperatures comfort 21.5 eco 17.0 max 30.5 min 4.5 offset +0.0 window 12.0/15min",
-     "radio": true, "device": "1514b6", "room": 6}
+    {"what": "0a010d \"Radiator Bedroom\": temperatures comfort 21.5 eco 17.0 max 30.5 min 4.5 offset +0.0 window 12.0/15min",
+     "radio": true, "device": "0a010d", "room": 6}
   ],
   "notes": ["device 123456 \"New\" (radiator_thermostat, MEQ0000000) is not paired with this cube; pair it and restore again"],
   "radio_commands": 1,
@@ -1635,7 +1635,7 @@ The last restore of the Cube since the server started:
   "steps": [
     {"what": "write room and device names (…)", "radio": false,
      "result": {"ok": true, "budget": {…}, "time": "2026-11-05T21:19:32+01:00"}},
-    {"what": "1514b6 \"Radiator Bedroom\": temperatures …", "radio": true, "device": "1514b6", "room": 6}
+    {"what": "0a010d \"Radiator Bedroom\": temperatures …", "radio": true, "device": "0a010d", "room": 6}
   ],
   "sent": 1,
   "radio_commands": 1
@@ -1654,7 +1654,7 @@ The event stream reports each step and the end:
 
 ```
 event: restore_step
-data: {"kind":"restore_step","device":"1514b6","restore":{"id":"f0eb2372c18a88c5","step":2,"steps":2,"what":"1514b6 \"Radiator Bedroom\": temperatures …","ok":true},"time":"…"}
+data: {"kind":"restore_step","device":"0a010d","restore":{"id":"f0eb2372c18a88c5","step":2,"steps":2,"what":"0a010d \"Radiator Bedroom\": temperatures …","ok":true},"time":"…"}
 
 event: restore_done
 data: {"kind":"restore_done","restore":{"id":"f0eb2372c18a88c5","steps":2,"ok":true,"state":"done","sent":2},"time":"…"}
@@ -1724,7 +1724,7 @@ afterwards an event whenever the Cube reports a change:
 
 ```
 event: state
-data: {"kind":"state","device":"012ca9","state":{…},"time":"2026-11-04T15:30:12+01:00"}
+data: {"kind":"state","device":"0a0102","state":{…},"time":"2026-11-04T15:30:12+01:00"}
 
 event: disconnected
 data: {"kind":"disconnected","error":"read tcp …: i/o timeout","time":"…"}

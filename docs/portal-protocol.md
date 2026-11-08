@@ -5,6 +5,9 @@ Reconstructed from the ERNW/Insinuator analysis (2016),
 from the behaviour of the original local software (version 1.4.6),
 and from experiments with real Cubes (firmware 1.1.3) in 2026.
 Facts marked *unverified* still need confirmation on hardware.
+Serials and radio addresses in the examples are placeholders since 2026-11-08,
+`KEQ0000…` and `0a…`, in the lines quoted as captured too,
+which are otherwise as the hardware sent them.
 
 Despite the title, this is the single record of what is known about the Cube's behaviour,
 on the LAN as well as towards the portal.
@@ -273,17 +276,17 @@ Captured on 2026-11-04 while operating the original UI:
 |---|---|---|
 | Set time zone | `v:<base64 of winter rule + summer rule>` (24 bytes, **no time field**) | `A:` |
 | Any command to a device in error state | `r:<count>,<base64 addresses>` first | `S:` |
-| Room 1 manual 15 °C | `s:AARAAAAAFNCOAV4=` | `S:` |
-| Room 3 auto | `s:AARAAAAAFM49AwA=` | `S:` |
-| All rooms 6.5 °C until 04.11.2026 02:00 | `s:AARAAAAAFNCOAY2kmgQ=` … | `S:` |
+| Room 1 manual 15 °C | `s:AARAAAAACgEKAV4=` | `S:` |
+| Room 3 auto | `s:AARAAAAACgEIAwA=` | `S:` |
+| All rooms 6.5 °C until 04.11.2026 02:00 | `s:AARAAAAACgEKAY2kmgQ=` … | `S:` |
 
 A second capture (week program, presets, valve settings, renames):
 
 | UI action | Lines sent | Reply |
 |---|---|---|
-| Edit week program of room 1 | `z:1e,G,01` (wake the room for 30 s), then one `s:` (0x10) per changed day, e.g. `s:AAQQAAAAFNCOAQRO3VTzRQoxIDEgMSAxIA==` (Wednesday, 4 points padded with the last) | `A:`, then `S:` per day |
-| Temperature offset -2 °C | `r:` if in error state, then `s:AAARAAAAFNCOACwePQkDCgM=` (0x11; flags 00, room 00) | `S:` |
-| Boost 5 min / 80 % | `s:AAQSAAAAFNCOATAM/wA=` (0x12) | `S:` |
+| Edit week program of room 1 | `z:1e,G,01` (wake the room for 30 s), then one `s:` (0x10) per changed day, e.g. `s:AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==` (Wednesday, 4 points padded with the last) | `A:`, then `S:` per day |
+| Temperature offset -2 °C | `r:` if in error state, then `s:AAARAAAACgEKACwePQkDCgM=` (0x11; flags 00, room 00) | `S:` |
+| Boost 5 min / 80 % | `s:AAQSAAAACgEKATAM/wA=` (0x12) | `S:` |
 | Rename room or device, reorder rooms | `m:00,<base64 metadata>` (index only, no count) | `A:` |
 
 All of these match the builders in `internal/protocol/cube` byte for byte.
@@ -305,8 +308,8 @@ duty cycle +3 % for 0x11/0x12, +8 % for one day of 0x10.
 
 ### Pairing a device, as the original software does it
 
-Log of pairing a wall thermostat (NEQ…, rf 15667d, fw 16) into room 4,
-which held a radiator thermostat (0147b7) and two shutter contacts (005447,
+Log of pairing a wall thermostat (NEQ…, rf 0a010e, fw 16) into room 4,
+which held a radiator thermostat (0a0103) and two shutter contacts (005447,
 1570d3):
 
 1. `n:` inclusion mode; the Cube answers `N:<type><rf><serial>ff` when a device joins.
@@ -314,13 +317,13 @@ which held a radiator thermostat (0147b7) and two shutter contacts (005447,
    too (they have a C line but no M entry).
 2. `z:1e,G,04` wakeup, then one 0x20 (add link partner) radiogram per pair in
    both directions:
-   to the radiator thermostat with the room flag (`00 04 20 … 0147b7 04 15667d 03`),
-   to each shutter contact (`00 00 20 … 005447 00 15667d 03`),
-   and to the new device for each partner (`00 00 20 … 15667d 00 0147b7 01`,
+   to the radiator thermostat with the room flag (`00 04 20 … 0a0103 04 0a010e 03`),
+   to each shutter contact (`00 00 20 … 005447 00 0a010e 03`),
+   and to the new device for each partner (`00 00 20 … 0a010e 00 0a0103 01`,
    `… 005447 04`, `… 1570d3 04`);
-   then 0x22 set group (`00 00 22 … 15667d 00 04`).
-3. `c:15667d` to fetch the new device's configuration.
-4. 0x40 set temperature, auto, temp 0 (`… 40 … 15667d 00 00`).
+   then 0x22 set group (`00 00 22 … 0a010e 00 04`).
+3. `c:0a010e` to fetch the new device's configuration.
+4. 0x40 set temperature, auto, temp 0 (`… 40 … 0a010e 00 00`).
 5. `z:` wakeup, then 0x11 preset temperatures to **every** thermostat of the room,
    radiator and wall alike,
    with the room's values (`27 22 3d 09 07 0a 03` = 19.5/17/30.5/4.5, offset 0,
@@ -360,7 +363,7 @@ and its discard ends nothing but says so in the answer.
 
 Moving a device to another room (same software,
 wall thermostat from room 4 to room 5): wakeup of the old room,
-0x23 remove group (`… 23 … 15667d 00 04`),
+0x23 remove group (`… 23 … 0a010e 00 04`),
 0x21 remove link partner for every device of the old room in both directions
 (same addressing as 0x20), `m:` with the device taken out of the room,
 then wakeup of the new room,
@@ -378,7 +381,7 @@ temperature at 12 (with bit 7 of byte 8 as the ninth bit);
 byte 7 is not a valve but the display mode: 0x01 shows the setpoint,
 0x04 the measured temperature,
 set with radiogram 0x82 and one byte (4 or 0) after a room wakeup
-(`00 00 82 … 15667d 00 04`).
+(`00 00 82 … 0a010e 00 04`).
 
 The original software's `FrameType` enum (MaxEssentialsBackend 1.4.6) lists
 every radiogram the system knows, with the codes:
@@ -457,7 +460,7 @@ That a device which answers is dropped from the C lines and the next `L:` is
 *unverified* on hardware.
 
 Which room such a device blocks is decided by the room byte of its own C line,
-not by the metadata (experiment 2026-11-04, one never-reporting device 001867):
+not by the metadata (experiment 2026-11-04, one never-reporting device 0a0101):
 moving it into room 1 in the original software (`m:`, `z:`, 0x20 links,
 0x22 group 1) set its C-line room to 1 and room 1 commands were discarded at once;
 deleting it from room 1 (`z:`, 0x21, `t:01,1,…`,
@@ -553,8 +556,8 @@ Replies: `"eQ3MaxAp"` (application) or `"eQ3MaxBl"` (bootloader), serial, `>`,
 opcode, data.
 For `I` the data is the RF address (4 bytes,
 leading zero) and the firmware version (2 bytes), as seen on the wire,
-the serial replaced by a placeholder:
-`eQ3MaxApKEQ0000100>I 00 0b 95 73 01 13`.
+the serial and the address replaced by placeholders:
+`eQ3MaxApKEQ0000100>I 00 0a 01 07 01 13`.
 
 Network configuration, **confirmed on hardware** (2026-11-06,
 a Cube with firmware 1.1.3,

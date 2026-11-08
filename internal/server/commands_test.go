@@ -149,7 +149,7 @@ func TestCommandsOfWrites(t *testing.T) {
 	}
 
 	// A move is several steps; a user without audit sees own commands only.
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/1514b6", "secret", `{"room_id":5}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010d", "secret", `{"room_id":5}`)
 	rows = auditRows(t, ts, "secret", "?limit=1")
 	c, code, _ := commandByID(t, ts, "secret", rows[0])
 	if code != 200 || c.Action != "device.update" || len(c.Steps) < 2 {
@@ -306,7 +306,7 @@ func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := s.newObserver()
-	cmd := engine.Command{ID: parent.UUID, Seq: 1, Lines: []cube.Message{{Type: 's', Data: "AARAAAAAFRS2Bms="}}}
+	cmd := engine.Command{ID: parent.UUID, Seq: 1, Lines: []cube.Message{{Type: 's', Data: "AARAAAAACgENBms="}}}
 	start := time.Now()
 	o.Enqueued(cmd)
 	o.Started(cmd)

@@ -56,7 +56,7 @@ def test_cube_found_live(page, case):
     before = page.evaluate("state.found.length")
     page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
                   "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", FOUND2)
-    assert sel.locator("option[value='found:LEQ0654321']").count() == 1, "cube_found adds a Cube live"
+    assert sel.locator("option[value='found:LEQ0000506']").count() == 1, "cube_found adds a Cube live"
     assert page.locator("#cube-found summary").inner_text() == found_text(case.lang, before + 1), "found Cubes counted"
 
 

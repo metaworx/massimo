@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.11.0)
+# Massimo — CI Conventions (v1.12.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -10,7 +10,7 @@ this document is the source of truth for *why*.
 
 ## Contents
 
-<!-- BEGIN GENERATED CONTENTS - do not edit; run "tools/sync-dev.sh" -->
+<!-- BEGIN GENERATED CONTENTS - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 1. Where CI Is Defined
 2. What Runs, and When
 3. The Commands Are the Project's Commands
@@ -18,7 +18,8 @@ this document is the source of truth for *why*.
 5. Secrets and Variables
 6. Releases
 7. Runner Constraints
-8. Document Governance
+8. Dependabot and the Repository's Settings
+9. Document Governance
 <!-- END GENERATED CONTENTS -->
 
 ## 1. Where CI Is Defined
@@ -33,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers, and on two of the suite's four cases); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan` and `internal/proxy`); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers, and on two of the suite's four cases); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
@@ -91,7 +92,22 @@ the Windows and macOS jobs run against the fake Cube.
 CI runs the commands of the contract's facts table (`GUIDELINES/project/_CONTRACT.md`):
 `gofmt -l .`, `go vet ./...` for linux, windows and darwin,
 `go test ./...` and `make cross`.
+`go test` includes `tools/identifiers`,
+which fails on a serial, a MAC or a radio address in the tree that is not a
+placeholder (the contract, "Secrets and identities").
 Where CI differs, and why:
+
+- `make race` is the contract's recommended `-race`, in a Race job of its own
+  beside Vet and test, so that neither waits for the other:
+  about 80 s on four cores,
+  the server's and the store's packages taking the longest.
+- `make fuzz` runs on a push to `main` only.
+  A pull request runs the fuzz targets' seeds in `go test`, the crashes found
+  before among them;
+  fuzzing finds what it finds by chance, so a pull request's result would
+  depend on its luck, and `main` is where a new fault is worth the minutes.
+  A crash fails the job and keeps its input as the artifact `fuzz-crash`,
+  which goes into the package's `testdata/fuzz/` with its fix.
 
 - `govulncheck ./...` runs in CI only, per platform with code of its own,
   because a known vulnerability is a reason to fail a build but not a tool
@@ -157,6 +173,9 @@ the merge commits `main` receives from GitHub do not follow COMMIT.md,
 and the pull request's own commits were checked when it was open.
 The history before the guidelines were adopted (2026-11-06) does not
 follow COMMIT.md either and is not rewritten.
+A pull request of Dependabot's runs the check without a range too,
+since its messages cannot take the project's form (section 8);
+every other check runs on it.
 
 ## 5. Secrets and Variables
 
@@ -252,6 +271,41 @@ a box following a suite takes the release through `apt upgrade`.
   the unit is enabled through deb-systemd-helper's symlinks and nothing starts,
   so the start on a real box is the owner's check.
 
-## 8. Document Governance
+## 8. Dependabot and the Repository's Settings
+
+`.github/dependabot.yml` has Dependabot propose,
+once a month and in one pull request each,
+the updates of the Go modules the code imports directly and of the actions
+the workflows use.
+Its pull requests differ from the project's in two ways, both on purpose:
+
+- Their commit messages, `build(deps): bump …`, carry no `Key changes:` list
+  and no `Assisted-by` trailer,
+  so the Guidelines job does not read them (section 4).
+- They carry no `CHANGELOG.md` bullet,
+  though `go.mod` and `.github/**` are shipped paths.
+  Whoever merges one adds its updates to a bullet
+  `- Dependencies updated: …` under `[Unreleased]`, Changed,
+  in a commit of the project's form before the next release is cut,
+  so that every release names them.
+
+Every action is pinned to the commit of its release,
+with the version as a comment (`actions/checkout@<sha> # v5.1.0`),
+so that a moved tag cannot change what runs;
+Dependabot updates the pin and the comment together.
+A new action is pinned the same way,
+its tag's commit from `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`
+(an annotated tag points at a tag object; its `object.sha` is the commit).
+`github.com/bytemare/ksf` is indirect and replaced by `third_party/bytemare-ksf`,
+so Dependabot leaves it alone until a release has the fix.
+
+The repository's own security settings are the owner's,
+in Settings → Code security, and need no file here:
+code scanning by CodeQL's default setup (Go, JavaScript and TypeScript,
+Python, the workflows), secret scanning with push protection,
+and Dependabot alerts and security updates.
+They were off on 2026-11-08, when this section was written.
+
+## 9. Document Governance
 
 - This document follows the shared governance rules in `GUIDELINES/shared/GOVERNANCE.md`.

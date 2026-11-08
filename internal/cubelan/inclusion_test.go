@@ -17,7 +17,7 @@ func TestInclusionDeliversNewDevices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pair, err := fakecube.PairingFrom(greeting, 0x1514b6, 0x0a0b0c, "TEQ0000001", 50*time.Millisecond)
+	pair, err := fakecube.PairingFrom(greeting, 0x0a010d, 0x0a0b0c, "TEQ0000001", 50*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

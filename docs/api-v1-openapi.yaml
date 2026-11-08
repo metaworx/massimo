@@ -1980,7 +1980,7 @@ components:
       in: path
       required: true
       description: Device radio address, six hex digits
-      schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: "012ca9"}
+      schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: "0a0102"}
     id:
       name: id
       in: path
@@ -2242,7 +2242,7 @@ components:
       type: object
       properties:
         id: {type: string, format: uuid}
-        target: {type: string, description: "device:1514b6 or room:6"}
+        target: {type: string, description: "device:0a010d or room:6"}
         state: {$ref: "#/components/schemas/CommandState"}
         request: {type: object, description: The queue key, the priority, the number of lines and of radio lines, the wakeup, the room}
         result: {type: object, description: discarded, the budget the Cube reported, and the error}
@@ -2258,7 +2258,7 @@ components:
         remote: {type: string, description: The client's address, or cli}
         action: {type: string, description: "setpoint, room.config, device.update, cube.add, user.add, login, login.failed, …", example: setpoint}
         cube: {type: string, description: The Cube's serial, for a Cube's route}
-        target: {type: string, description: "device:1514b6, room:6, user:anna, role:night, token:4, cube:KEQ0000000", example: "room:6"}
+        target: {type: string, description: "device:0a010d, room:6, user:anna, role:night, token:4, cube:KEQ0000000", example: "room:6"}
         detail:
           type: object
           description: >-

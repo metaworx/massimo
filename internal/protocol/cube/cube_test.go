@@ -39,7 +39,7 @@ func TestSplitLinesHandlesLFAndPadding(t *testing.T) {
 	if len(ms) != 2 || ms[0].Type != 'i' || ms[1].String() != "b:OK" {
 		t.Fatalf("got %v", ms)
 	}
-	ms, err = SplitLines("H:KMD1016788,099c3e,0113\nB:FOOBAR1,x,1,y")
+	ms, err = SplitLines("H:KMD0000505,0a0106,0113\nB:FOOBAR1,x,1,y")
 	if err != nil || len(ms) != 2 || ms[1].Type != 'B' {
 		t.Fatalf("got %v, %v", ms, err)
 	}
@@ -69,8 +69,8 @@ func TestParseHello(t *testing.T) {
 		t.Errorf("status: %+v", h)
 	}
 	// Shortened form sent over the portal connection.
-	h, err = ParseHello("KMD1016788,099c3e,0113")
-	if err != nil || h.RFAddress != 0x099c3e {
+	h, err = ParseHello("KMD0000505,0a0106,0113")
+	if err != nil || h.RFAddress != 0x0a0106 {
 		t.Fatalf("short form: %+v %v", h, err)
 	}
 }
@@ -175,7 +175,7 @@ func TestWriteMetadataCommands(t *testing.T) {
 }
 
 // cubeConfigExample is the Cube C payload from the hexdump in the protocol docs.
-const cubeConfigExample = "7QPyXQATAQBKRVEwNTQ0OTIzAAsABEAAAAAAAAAAAP///////////////////////////wsABEAAAAAAAAAAQf//////////////" +
+const cubeConfigExample = "7QPyXQATAQBKRVEwMDAwNTAzAAsABEAAAAAAAAAAAP///////////////////////////wsABEAAAAAAAAAAQf//////////////" +
 	"/////////////2h0dHA6Ly9tYXguZXEtMy5kZTo4MC9jdWJlADAvbG9va3VwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
 	"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAENFVAAACgADAAAO" +
 	"EENFU1QAAwACAAAcIA=="
@@ -185,7 +185,7 @@ func TestParseCubeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Type != DeviceCube || c.Serial != "JEQ0544923" || c.Cube == nil {
+	if c.Type != DeviceCube || c.Serial != "JEQ0000503" || c.Cube == nil {
 		t.Fatalf("header: %+v", c)
 	}
 	cc := c.Cube
@@ -212,7 +212,7 @@ func thermostatConfig() []byte {
 	b[0] = byte(len(b) - 1)
 	copy(b[1:4], []byte{0x0f, 0xc3, 0x80})
 	b[4], b[5], b[6], b[7] = byte(DeviceRadiatorThermostat), 1, 0x19, 0x01
-	copy(b[8:18], "KEQ0565026")
+	copy(b[8:18], "KEQ0000504")
 	copy(b[0x12:], []byte{0x24, 0x20, 0x3d, 0x09, 0x07, 0x18, 0x03, 0xf4, 0x0c, 0xff, 0x00})
 	// Every day: 16 °C until 06:00, 21 °C until 22:00, 16 °C until 24:00; rest filled with the last point.
 	for d := 0; d < 7; d++ {
@@ -328,12 +328,15 @@ func TestCommandExamples(t *testing.T) {
 	room := func(rf RFAddress, id uint8) Target { return Target{RFAddress: rf, RoomID: id, Room: true} }
 	dev := func(rf RFAddress) Target { return Target{RFAddress: rf} }
 
+	// The cases marked captured are lines of the original software, their
+	// radio addresses replaced by placeholders and re-encoded; the rest of
+	// each line is as captured.
 	cases := []struct {
 		name string
 		got  Message
 		want string
 	}{
-		{"set temperature", mustMsg(CmdSetTemperature(room(0x079100, 1), 19, ModeManual, Until{})), "s:AARAAAAAB5EAAWY="},
+		{"set temperature", mustMsg(CmdSetTemperature(room(0x0a0203, 1), 19, ModeManual, Until{})), "s:AARAAAAACgIDAWY="},
 		{"set temperatures", mustMsg(CmdSetTemperatures(dev(0x0fc380), TemperatureSettings{
 			Comfort: 21.5, Eco: 16.5, Max: 30.5, Min: 4.5, Offset: 0, WindowOpen: 12, WindowOpenMinutes: 15,
 		})), "s:AAARAAAAD8OAACshPQkHGAM="},
@@ -346,22 +349,22 @@ func TestCommandExamples(t *testing.T) {
 		{"remove group", CmdSetGroup(0x0fc380, 1, true), "s:AAAjAAAAD8OAAAE="},
 		{"inclusion", CmdInclusion(60 * time.Second), "n:003c"},
 		{"wakeup", CmdWakeup(0x1e, WakeupRoom, "01"), "z:1e,G,01"},
-		{"delete", CmdDeleteDevices(true, 0x0f1d54), "t:01,1,Dx1U"},
+		{"delete", CmdDeleteDevices(true, 0x0a0204), "t:01,1,CgIE"},
 		{"portal on", CmdSetPortalInterval(0), "i:00000000,00000000"},
 		{"portal off", CmdSetPortalInterval(-1), "i:ffffffff,00000000"},
 		{"ntp", CmdSetNTP("nl.pool.ntp.org", "ntp.homematic.com"), "f:nl.pool.ntp.org,ntp.homematic.com"},
 		{"time zone (captured)", mustMsg(CmdSetTimeZone(
 			TimeZoneRule{"EET", 10, 0, 3, 7200}, TimeZoneRule{"EEST", 3, 0, 2, 10800})), "v:RUVUAAAKAAMAABwgRUVTVAADAAIAACow"},
-		{"reset error (captured)", CmdResetError(0x14d08e), "r:01,FNCO"},
-		{"manual 15 (captured)", mustMsg(CmdSetTemperature(room(0x14d08e, 1), 15, ModeManual, Until{})), "s:AARAAAAAFNCOAV4="},
-		{"auto (captured)", mustMsg(CmdSetTemperature(room(0x14ce3d, 3), 0, ModeAuto, Until{})), "s:AARAAAAAFM49AwA="},
-		{"temporary 6.5 until 2026-11-04 02:00 (captured)", mustMsg(CmdSetTemperature(room(0x14d08e, 1), 6.5, ModeVacation, Until{2026, 11, 4, 120})), "s:AARAAAAAFNCOAY2kmgQ="},
-		{"temperatures with -2 offset (captured)", mustMsg(CmdSetTemperatures(dev(0x14d08e), TemperatureSettings{
+		{"reset error (captured)", CmdResetError(0x0a010a), "r:01,CgEK"},
+		{"manual 15 (captured)", mustMsg(CmdSetTemperature(room(0x0a010a, 1), 15, ModeManual, Until{})), "s:AARAAAAACgEKAV4="},
+		{"auto (captured)", mustMsg(CmdSetTemperature(room(0x0a0108, 3), 0, ModeAuto, Until{})), "s:AARAAAAACgEIAwA="},
+		{"temporary 6.5 until 2026-11-04 02:00 (captured)", mustMsg(CmdSetTemperature(room(0x0a010a, 1), 6.5, ModeVacation, Until{2026, 11, 4, 120})), "s:AARAAAAACgEKAY2kmgQ="},
+		{"temperatures with -2 offset (captured)", mustMsg(CmdSetTemperatures(dev(0x0a010a), TemperatureSettings{
 			Comfort: 22, Eco: 15, Max: 30.5, Min: 4.5, Offset: -2, WindowOpen: 5, WindowOpenMinutes: 15,
-		})), "s:AAARAAAAFNCOACwePQkDCgM="},
-		{"valve config (captured)", mustMsg(CmdSetValveConfig(room(0x14d08e, 1), ValveSettings{
+		})), "s:AAARAAAACgEKACwePQkDCgM="},
+		{"valve config (captured)", mustMsg(CmdSetValveConfig(room(0x0a010a, 1), ValveSettings{
 			BoostMinutes: 5, BoostValvePct: 80, DecalcDay: Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0,
-		})), "s:AAQSAAAAFNCOATAM/wA="},
+		})), "s:AAQSAAAACgEKATAM/wA="},
 		{"set time", mustMsg(CmdSetTime(
 			TimeZoneRule{"CET", 10, 0, 3, 3600}, TimeZoneRule{"CEST", 3, 0, 2, 7200},
 			cubeEpoch.Add(0x1fdda096*time.Second))), "v:Q0VUAAAKAAMAAA4QQ0VTVAADAAIAABwg,1fdda096"},
@@ -376,14 +379,14 @@ func TestCommandExamples(t *testing.T) {
 func TestSetDayProgramCaptured(t *testing.T) {
 	// Two day programs written by the original software; programs with
 	// fewer than 7 points are padded with the last point.
-	room := Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}
+	room := Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}
 	cases := []struct {
 		day  Weekday
 		prog DayProgram
 		want string
 	}{
-		{Wednesday, DayProgram{{19.5, 1105}, {21, 1215}, {17, 1330}, {12, 1440}}, "s:AAQQAAAAFNCOAQRO3VTzRQoxIDEgMSAxIA=="},
-		{Sunday, DayProgram{{17, 390}, {21, 480}, {19.5, 965}, {23, 1440}}, "s:AAQQAAAAFNCOAQFETlRgTsFdIF0gXSBdIA=="},
+		{Wednesday, DayProgram{{19.5, 1105}, {21, 1215}, {17, 1330}, {12, 1440}}, "s:AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA=="},
+		{Sunday, DayProgram{{17, 390}, {21, 480}, {19.5, 965}, {23, 1440}}, "s:AAQQAAAACgEKAQFETlRgTsFdIF0gXSBdIA=="},
 	}
 	for _, c := range cases {
 		msgs, err := CmdSetDayProgram(room, c.day, c.prog)
@@ -449,8 +452,9 @@ func TestDayProgramValidate(t *testing.T) {
 }
 
 func TestDeviceListInvalidEntryHasNoValues(t *testing.T) {
-	// Captured from a real Cube right after power-up: flags are all zero.
-	st, err := ParseDeviceList("CxUUtgkAAAAAAAAA", map[RFAddress]DeviceType{0x1514b6: DeviceRadiatorThermostat})
+	// Captured from a real Cube right after power-up, its address a
+	// placeholder: flags are all zero.
+	st, err := ParseDeviceList("CwoBDQkAAAAAAAAA", map[RFAddress]DeviceType{0x0a010d: DeviceRadiatorThermostat})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,8 +464,8 @@ func TestDeviceListInvalidEntryHasNoValues(t *testing.T) {
 }
 
 // TestRealCubeGreeting decodes a session captured from a Cube with firmware
-// 1.1.3 (room and device names anonymised, the serials replaced by
-// placeholders, everything else verbatim).
+// 1.1.3 (room and device names anonymised, the serials and radio addresses
+// replaced by placeholders, everything else verbatim).
 func TestRealCubeGreeting(t *testing.T) {
 	raw, err := os.ReadFile("testdata/cube-fw0113-greeting.txt")
 	if err != nil {
@@ -636,12 +640,12 @@ func TestWeekProgramJSON(t *testing.T) {
 // after the week program are offset 0, window-open 12.0 °C, boost 5 min
 // at 80 %. Its L entry reports auto, 18.0 °C set, 24.4 °C measured.
 func TestWallThermostatConfigAndState(t *testing.T) {
-	c, err := ParseConfig("15667d,zhVmfQMAEP9ORVEwOTA4MzU5KiI9CURIVQhFIEUgRSBFIEUgRSBFIEUgRSBFIEUgREhVCEUgRSBFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgREhUbETMVRRFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgBxgw")
+	c, err := ParseConfig("0a010e,zgoBDgMAEP9ORVEwMDAwNTA3KiI9CURIVQhFIEUgRSBFIEUgRSBFIEUgRSBFIEUgREhVCEUgRSBFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgREhUbETMVRRFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgBxgw")
 	if err != nil {
 		t.Fatal(err)
 	}
 	w := c.Wall
-	if c.Type != DeviceWallThermostat || c.Firmware != 16 || c.Serial != "NEQ0908359" || w == nil {
+	if c.Type != DeviceWallThermostat || c.Firmware != 16 || c.Serial != "NEQ0000507" || w == nil {
 		t.Fatalf("config %+v", c)
 	}
 	if w.ComfortTemp != 21 || w.EcoTemp != 17 || w.MaxSetpoint != 30.5 || w.MinSetpoint != 4.5 ||
@@ -651,7 +655,7 @@ func TestWallThermostatConfigAndState(t *testing.T) {
 	if got := w.WeekProgram[Monday]; len(got) != 5 || got[1] != (SwitchPoint{Temp: 21, Until: 540}) {
 		t.Fatalf("monday %+v", got)
 	}
-	states, err := ParseDeviceList("DBVmffYSGAEkAAAA9A==", map[RFAddress]DeviceType{0x15667d: DeviceWallThermostat})
+	states, err := ParseDeviceList("DAoBDvYSGAEkAAAA9A==", map[RFAddress]DeviceType{0x0a010e: DeviceWallThermostat})
 	if err != nil || len(states) != 1 {
 		t.Fatal(err)
 	}
@@ -659,28 +663,28 @@ func TestWallThermostatConfigAndState(t *testing.T) {
 	if !s.Valid || s.Mode != ModeAuto || s.Setpoint == nil || *s.Setpoint != 18 || s.ActualTemp == nil || *s.ActualTemp != 24.4 || s.ValvePct != nil {
 		t.Fatalf("state %+v", s)
 	}
-	nd, err := ParseNewDevice("AxVmfU5FUTA5MDgzNTn/")
-	if err != nil || nd.Type != DeviceWallThermostat || nd.RFAddress != 0x15667d || nd.Serial != "NEQ0908359" {
+	nd, err := ParseNewDevice("AwoBDk5FUTAwMDA1MDf/")
+	if err != nil || nd.Type != DeviceWallThermostat || nd.RFAddress != 0x0a010e || nd.Serial != "NEQ0000507" {
 		t.Fatalf("new device %+v %v", nd, err)
 	}
 }
 
 func TestWallDisplayMode(t *testing.T) {
-	types := map[RFAddress]DeviceType{0x15667d: DeviceWallThermostat}
+	types := map[RFAddress]DeviceType{0x0a010e: DeviceWallThermostat}
 	for _, c := range []struct {
 		data string
 		want bool
-	}{{"DBVmffYSGAEkAAAA7Q==", false}, {"DBVmffYSGAQkAAAA7Q==", true}} {
+	}{{"DAoBDvYSGAEkAAAA7Q==", false}, {"DAoBDvYSGAQkAAAA7Q==", true}} {
 		states, err := ParseDeviceList(c.data, types)
 		if err != nil || len(states) != 1 || states[0].DisplayActual == nil || *states[0].DisplayActual != c.want {
 			t.Fatalf("%s: %+v %v", c.data, states, err)
 		}
 	}
 	// The original software's radiogram for "show measured temperature".
-	if got := CmdLockControls(Target{RFAddress: 0x0147b7}, false).String(); got != "s:AACAAAAAAUe3AAA=" {
+	if got := CmdLockControls(Target{RFAddress: 0x0a0103}, false).String(); got != "s:AACAAAAACgEDAAA=" {
 		t.Fatalf("lock controls: %s", got)
 	}
-	if got := CmdSetDisplayActual(Target{RFAddress: 0x15667d}, true).String(); got != "s:AACCAAAAFWZ9AAQ=" {
+	if got := CmdSetDisplayActual(Target{RFAddress: 0x0a010e}, true).String(); got != "s:AACCAAAACgEOAAQ=" {
 		t.Fatalf("display command %s", got)
 	}
 }
@@ -691,9 +695,9 @@ func TestParseRadioCommand(t *testing.T) {
 		data string
 		want RadioCommand
 	}{
-		{"AAQQAAAAFNCOAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x14d08e, RoomID: 1, Room: true}}},
-		{"AAARAAAAFNCOACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x14d08e}}},
-		{"AARAAAAAFRS2BgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x1514b6, RoomID: 6, Room: true}}},
+		{"AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}}},
+		{"AAARAAAACgEKACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x0a010a}}},
+		{"AARAAAAACgENBgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}}},
 	} {
 		got, err := ParseRadioCommand(tc.data)
 		if err != nil || got != tc.want {
@@ -708,11 +712,11 @@ func TestParseRadioCommand(t *testing.T) {
 }
 
 func TestParseDeleteDevices(t *testing.T) {
-	force, addrs, err := ParseDeleteDevices(CmdDeleteDevices(true, 0x0f1d54, 0x1514b6).Data)
-	if err != nil || !force || len(addrs) != 2 || addrs[0] != 0x0f1d54 || addrs[1] != 0x1514b6 {
+	force, addrs, err := ParseDeleteDevices(CmdDeleteDevices(true, 0x0a0204, 0x0a010d).Data)
+	if err != nil || !force || len(addrs) != 2 || addrs[0] != 0x0a0204 || addrs[1] != 0x0a010d {
 		t.Fatalf("%v %v %v", force, addrs, err)
 	}
-	for _, bad := range []string{"", "01,1", "zz,1,Dx1U", "02,1,Dx1U", "01,0,!!"} {
+	for _, bad := range []string{"", "01,1", "zz,1,CgIE", "02,1,CgIE", "01,0,!!"} {
 		if _, _, err := ParseDeleteDevices(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
@@ -726,5 +730,21 @@ func TestIsThermostat(t *testing.T) {
 		if got := typ.IsThermostat(); got != want {
 			t.Errorf("%v: %v, want %v", typ, got, want)
 		}
+	}
+}
+
+// A metadata block without bytes after its device list encodes without
+// them: Encode adds the default 0x01 only to metadata built, not read.
+func TestMetadataWithoutTrailingBytes(t *testing.T) {
+	b := []byte{'V', 2, 0, 0}
+	m, err := DecodeMetadata(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back, err := m.Encode(); err != nil || !bytes.Equal(back, b) {
+		t.Fatalf("encoded as %x, want %x (%v)", back, b, err)
+	}
+	if back, _ := (&Metadata{}).Encode(); !bytes.Equal(back, []byte{'V', 2, 0, 0, 1}) {
+		t.Fatalf("built metadata encoded as %x", back)
 	}
 }
