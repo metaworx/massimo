@@ -67,6 +67,9 @@ type Client struct {
 	// wake cuts Run's wait between two dials short: a new address, or
 	// a Reconnect while disconnected.
 	wake chan struct{}
+	// beforeApply, set by a test before Run, is called with each line
+	// right before it goes into the snapshot; nil otherwise.
+	beforeApply func(cube.Message)
 }
 
 type pendingReply struct {
@@ -331,19 +334,23 @@ func (c *Client) handle(m cube.Message) {
 		c.mu.Unlock()
 		return
 	}
+	var reply *pendingReply
 	if p != nil && m.Type == p.want {
 		c.pending = nil
-		c.mu.Unlock()
-		p.ch <- m
-		// L and C replies also carry state; fall through to apply them.
-		// A C line of the greeting may answer a re-read sent while the
-		// greeting still comes, and the device it describes must not
-		// drop out of the snapshot at the greeting's end.
-		if m.Type != 'L' && m.Type != 'C' {
-			return
-		}
-	} else {
-		c.mu.Unlock()
+		reply = p
+	}
+	c.mu.Unlock()
+	if reply != nil && m.Type != 'L' && m.Type != 'C' {
+		reply.ch <- m
+		return
+	}
+	// L and C replies also carry state, which goes into the snapshot
+	// before the reply goes to Send, so that Send returns with it there.
+	// A C line of the greeting may answer a re-read sent while the
+	// greeting still comes, and the device it describes must not drop
+	// out of the snapshot at the greeting's end.
+	if c.beforeApply != nil {
+		c.beforeApply(m)
 	}
 	evs, err := c.snap.apply(m, time.Now())
 	if err != nil {
@@ -353,7 +360,10 @@ func (c *Client) handle(m cube.Message) {
 		c.noteBudget(c.snap.Hello())
 	}
 	for _, e := range evs {
-		c.emit(e)
+		c.emit(e) // never blocks: it drops the oldest event
+	}
+	if reply != nil {
+		reply.ch <- m // buffered for the one reply: never blocks
 	}
 }
 
@@ -422,7 +432,8 @@ func replies(m cube.Message) int {
 
 // Send writes a command and waits for its reply, the last of them for a
 // t: that deletes several devices. Only one command can be in flight at
-// a time, which matches how the Cube behaves.
+// a time, which matches how the Cube behaves. An L or C reply is in the
+// snapshot, its events emitted, when Send returns it.
 func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error) {
 	want := replyType(m.Type)
 	if want == 0 {

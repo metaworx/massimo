@@ -22,6 +22,12 @@ the next minor, a fix counts the suffix up.
   `-tls acme`, such as Let's Encrypt's staging one for a first try
   (`packaging/README.md`, "Install with `massimo install`").
 
+### Fixed
+
+- A device list or a configuration the Cube client asked for is in its
+  state when the command returns, so that a read right after sees it;
+  a race test found the other order now and then.
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added
