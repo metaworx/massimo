@@ -129,9 +129,13 @@ the next minor, a fix counts the suffix up.
   under the project's site: the install routes, building from source,
   the first settings and the privacy policy (`packaging/README.md`).
 
-- `make mdns-test` checks the mDNS announcement and `discover` against
-  avahi in Docker, and CI against mDNSResponder and Windows' mDNS as well
-  (`tools/mdns-test/README.md`).
+- `make lan-test` checks discovery, the mDNS announcement and
+  `discover` in Docker, against avahi, with a Cube's cable pulled and a
+  second server's proxy (`tools/lan-test/README.md`).
+
+- CI checks the announcement beside mDNSResponder and Windows' mDNS,
+  and runs discovery's tests on Windows as well
+  (`GUIDELINES/project/CI.md`).
 
 - serve takes a silent Cube for lost and reconnects: after about 30 s
   without traffic, or two polls in a row unanswered; it waited three
