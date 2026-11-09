@@ -790,57 +790,85 @@ jobs:
           rm -rf "$tap"
 
       # The announcement beside Apple's mDNSResponder, which holds UDP 5353
-      # on every Mac: a second serve on every address, with a store of its
-      # own, announces itself without a warning; massimo discover finds it
-      # by multicast, which shows the runner's multicast works, and dns-sd
-      # finds and resolves it through mDNSResponder (-Z lists the PTR, SRV
-      # and TXT records); tools/mdns-test/README.md for avahi. -announce is
-      # a switch: written alone, as "-announce on" would end the flags at
-      # "on". dns-sd runs under script, a terminal of its own, so that what
-      # it printed is in the file when it is stopped.
-      # The first runs found nothing by discover, not even the server on
-      # the same Mac, so the step also prints what tells the runner's
-      # multicast from our responder: serve's log at debug (a group not
-      # joined, an announcement not sent), the interfaces, the sockets on
-      # UDP 5353, the route to 224.0.0.251, discover by unicast to the
-      # runner's own addresses, and every service type mDNSResponder sees.
+      # on every Mac: a second serve, on every address and with a store of
+      # its own, runs as a launchd daemon in the system domain, as massimo
+      # install runs the service, and dns-sd must find and resolve it
+      # through mDNSResponder (-Z lists the PTR, SRV and TXT records);
+      # tools/mdns-test/README.md for avahi. A daemon, because macOS's local
+      # network privacy refuses the runner's own processes every multicast
+      # send ("no route to host"), and spares launchd daemons; for the same
+      # reason massimo discover, a runner's process, is not asked here.
+      # dns-sd only talks to mDNSResponder, and is read through a
+      # pseudo-terminal of Python's, so that what it printed is kept when it
+      # is stopped. -announce is a switch: written alone, as "-announce on"
+      # would end the flags at "on".
       - name: mDNS beside mDNSResponder
         run: |
           set -uo pipefail
           go build -o massimo-mdns ./cmd/massimo || exit 1
           d="$(mktemp -d)"
           ./massimo-mdns fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
-          MASSIMO_ENV_FILE=/dev/null MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./massimo-mdns -data "$d" serve -listen 0.0.0.0:18097 -announce -proxy off -discover-interval 0 -log-level debug > mdns-serve.log 2>&1 &
-          serve=$!
-          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
-          if ! grep -q 'msg="announced on the LAN"' mdns-serve.log || grep -q 'not announced' mdns-serve.log; then cat mdns-serve.log; echo "::error::serve did not announce itself beside mDNSResponder"; exit 1; fi
-          if grep -q 'cube proxy listening' mdns-serve.log; then echo "::error::serve's flags after -announce were not read"; exit 1; fi
-          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
-          echo "--- interfaces"; ifconfig -a
-          echo "--- UDP 5353"; netstat -an -p udp | grep -E '[.:]5353 ' || true
-          echo "--- route to 224.0.0.251"; route -n get 224.0.0.251 || true
-          addrs=127.0.0.1
-          for a in $(ifconfig | awk '/inet / && $2 != "127.0.0.1" {print $2}'); do addrs="$addrs,$a"; done
-          echo "--- discover by multicast"
-          ./massimo-mdns discover -json -wait 4s > mdns-discover.json 2>&1; cat mdns-discover.json
-          echo "--- discover by unicast to $addrs"
-          ./massimo-mdns discover -json -wait 4s -addr "$addrs" > mdns-discover-unicast.json 2>&1; cat mdns-discover-unicast.json
-          echo "--- dns-sd: the service types mDNSResponder sees"
-          script -q mdns-types.txt dns-sd -B _services._dns-sd._udp local. > /dev/null 2>&1 &
-          types=$!
-          echo "--- dns-sd: _massimo._tcp"
-          script -q mdns-zone.txt dns-sd -Z _massimo._tcp local. > /dev/null 2>&1 &
-          browse=$!
-          sleep 6
-          kill "$types" "$browse" || true
-          sleep 1
-          cat mdns-types.txt; echo "---"; cat mdns-zone.txt
-          echo "--- serve's log after the searches"; grep -vE 'device state|schema migrated' mdns-serve.log
-          kill "$serve" || true
+          label=ch.metaworx.massimo.mdns-ci
+          plist="/Library/LaunchDaemons/$label.plist"
+          log="$PWD/mdns-serve.log"
+          cat > "$RUNNER_TEMP/$label.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Label</key><string>$label</string>
+            <key>ProgramArguments</key><array>
+              <string>$PWD/massimo-mdns</string><string>-data</string><string>$d</string><string>serve</string>
+              <string>-listen</string><string>0.0.0.0:18097</string><string>-announce</string>
+              <string>-proxy</string><string>off</string><string>-discover-interval</string><string>0</string>
+              <string>-log-level</string><string>debug</string>
+            </array>
+            <key>EnvironmentVariables</key><dict>
+              <key>MASSIMO_ENV_FILE</key><string>/dev/null</string>
+              <key>MASSIMO_CUBE_KEQ0000100_ADDRESS</key><string>127.0.0.1:62998</string>
+            </dict>
+            <key>StandardOutPath</key><string>$log</string>
+            <key>StandardErrorPath</key><string>$log</string>
+            <key>RunAtLoad</key><true/>
+          </dict></plist>
+          EOF
+          sudo install -o root -g wheel -m 644 "$RUNNER_TEMP/$label.plist" "$plist"
+          sudo launchctl bootstrap system "$plist"
+          stop() { sudo launchctl bootout "system/$label" 2>/dev/null || true; sudo rm -f "$plist"; }
+          trap stop EXIT
+          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' "$log" 2>/dev/null && break; sleep 1; done
+          sleep 3
           ok=0
-          grep -q "\"node\": *\"$node\"" mdns-discover.json || { echo "::error::massimo discover does not find the server by multicast"; ok=1; }
-          grep -q "\"node\": *\"$node\"" mdns-discover-unicast.json || echo "::warning::massimo discover does not find the server by unicast either"
-          { grep -q 'SRV.* 18097 ' mdns-zone.txt && grep -q "node=$node" mdns-zone.txt; } || { echo "::error::dns-sd does not resolve the server through mDNSResponder"; ok=1; }
+          if ! grep -q 'msg="announced on the LAN"' "$log" || grep -q 'not announced' "$log"; then echo "::error::the daemon did not announce itself beside mDNSResponder"; ok=1; fi
+          if grep -q 'mdns: not sent' "$log"; then echo "::error::the daemon's announcements were not sent: local network privacy refuses a launchd daemon too"; ok=1; fi
+          if grep -q 'cube proxy listening' "$log"; then echo "::error::serve's flags after -announce were not read"; ok=1; fi
+          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' "$log" | head -n1)"
+          # dns-sd for six seconds in a pseudo-terminal, what it printed on stdout
+          pty_run() {
+            python3 -I - "$@" <<'PY'
+          import os, pty, select, signal, sys, time
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execvp(sys.argv[1], sys.argv[1:])
+          out, end = b"", time.time() + 6
+          while time.time() < end:
+              if select.select([fd], [], [], 0.2)[0]:
+                  try:
+                      data = os.read(fd, 4096)
+                  except OSError:
+                      break
+                  if not data:
+                      break
+                  out += data
+          os.kill(pid, signal.SIGTERM)
+          sys.stdout.write(out.decode(errors="replace"))
+          PY
+          }
+          echo "--- dns-sd: the service types mDNSResponder sees"
+          pty_run dns-sd -B _services._dns-sd._udp local. | tee mdns-types.txt
+          echo "--- dns-sd: _massimo._tcp"
+          pty_run dns-sd -Z _massimo._tcp local. | tee mdns-zone.txt
+          echo "--- the daemon's log"; grep -vE 'device state|schema migrated|greeting: ' "$log"
+          if ! grep -q 'SRV.* 18097 ' mdns-zone.txt || ! grep -q "node=$node" mdns-zone.txt; then echo "::error::dns-sd does not resolve the server through mDNSResponder"; ok=1; fi
           exit "$ok"
 
       - name: Logs
