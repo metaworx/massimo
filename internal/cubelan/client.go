@@ -90,6 +90,24 @@ var (
 	ErrBusy         = errors.New("cubelan: another command is waiting for its reply")
 )
 
+// replyTimeout is Send's error for a command the Cube did not answer
+// within the reply timeout.
+type replyTimeout struct {
+	want, cmd byte
+	after     time.Duration
+}
+
+func (e *replyTimeout) Error() string {
+	return fmt.Sprintf("cubelan: no %c reply to %c command within %s", e.want, e.cmd, e.after)
+}
+
+// pollMisses is how many polls in a row, with no line from the Cube
+// between them, the Cube may leave unanswered before its connection is
+// taken for lost: one may be late, two are a Cube that is gone, as one
+// whose network cable is out, which TCP would notice only after many
+// minutes. The read deadline is the backstop.
+const pollMisses = 2
+
 // New creates a client; Run starts it.
 func New(opts Options) *Client {
 	if opts.ReplyTimeout == 0 {
@@ -269,6 +287,7 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 	c.snap.beginGreeting()
 	r := cube.NewReader(conn)
 	var greeted atomic.Bool
+	var lines atomic.Int64 // read on this connection, for the missed polls
 	readErr := make(chan error, 1)
 	go func() {
 		for {
@@ -278,6 +297,7 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 				readErr <- err
 				return
 			}
+			lines.Add(1)
 			c.handle(m)
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
@@ -315,6 +335,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		defer t.Stop()
 		poll = t.C
 	}
+	// missed counts the polls in a row that went unanswered with no line
+	// read between them (pollMisses); linesAtMiss is lines at the last.
+	missed, linesAtMiss := 0, int64(0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -323,7 +346,31 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		case err := <-readErr:
 			return greeted.Load(), err
 		case <-poll:
-			if _, err := c.Send(ctx, cube.CmdList); err != nil && !errors.Is(err, ErrBusy) {
+			_, err := c.Send(ctx, cube.CmdList)
+			var timeout *replyTimeout
+			switch {
+			case err == nil:
+				missed = 0
+			case errors.Is(err, ErrBusy):
+				// Another command waits for its reply, which tells the
+				// same; nothing is counted.
+			case errors.As(err, &timeout) && c.Inclusion().Active:
+				// While pairing runs, a poll the Cube leaves unanswered
+				// counts nothing: whether the Cube answers l: then is
+				// not confirmed.
+				missed = 0
+				c.log.Warn("poll failed", "error", err)
+			case errors.As(err, &timeout):
+				if n := lines.Load(); missed > 0 && n == linesAtMiss {
+					missed++
+				} else {
+					missed, linesAtMiss = 1, n
+				}
+				if missed >= pollMisses {
+					return greeted.Load(), fmt.Errorf("cubelan: %d polls in a row unanswered: %w", missed, err)
+				}
+				c.log.Warn("poll failed", "error", err)
+			default:
 				c.log.Warn("poll failed", "error", err)
 			}
 		}
@@ -331,7 +378,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 }
 
 // readDeadline is generous: the Cube is silent between polls, and with
-// polling disabled it may be silent for a long time.
+// polling disabled it may be silent for a long time. With polling, two
+// unanswered polls end the connection sooner (pollMisses); the deadline
+// is the backstop.
 func (c *Client) readDeadline() time.Duration {
 	if c.opts.PollInterval > 0 {
 		return 3*c.opts.PollInterval + 30*time.Second
@@ -489,7 +538,7 @@ func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error)
 		return reply, nil
 	case <-time.After(c.opts.ReplyTimeout):
 		c.clearPending(p)
-		return cube.Message{}, fmt.Errorf("cubelan: no %c reply to %c command within %s", want, m.Type, c.opts.ReplyTimeout)
+		return cube.Message{}, &replyTimeout{want: want, cmd: m.Type, after: c.opts.ReplyTimeout}
 	case <-ctx.Done():
 		c.clearPending(p)
 		return cube.Message{}, ctx.Err()

@@ -114,6 +114,10 @@ the next minor, a fix counts the suffix up.
   under the project's site: the install routes, building from source,
   the first settings and the privacy policy (`packaging/README.md`).
 
+- serve takes a Cube that leaves two polls in a row unanswered for
+  lost, within two polls and 10 s, and reconnects; it waited three
+  polls and 30 s (`README.md`, "Server").
+
 ### Fixed
 
 - The Debian package restarts a running service on an upgrade, also on
