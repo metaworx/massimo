@@ -680,6 +680,12 @@ is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
+The week programme editor is an element of its own, `<massimo-week-program>`
+(`week-program.js`), so that a Home Assistant card can use the same editor:
+it holds the editor's behaviour, works on a model the page keeps,
+builds its controls with a kit the page gives it (`components.js`, `t()`),
+and tells the page of every edit with a `change` event;
+the programme tab puts it in a form with Cancel, Send and the two resets.
 A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.

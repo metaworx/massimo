@@ -102,6 +102,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The web UI's week programme editor is an element of its own,
+  `<massimo-week-program>`, for a Home Assistant card to use too; it
+  works as before (`docs/ui.md`).
+
 - The role `integration` may configure: week programmes, temperatures,
   device settings; migration 0012 adds it where the role is still the
   seeded one (`docs/store.md` section 6).

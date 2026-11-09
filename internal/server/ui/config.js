@@ -7,8 +7,7 @@
 // Cancel. Uses the state, api and helpers of app.js and tiles.js.
 "use strict";
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const MAX_POINTS = 13;
+const DAYS = MassimoWeekProgram.DAYS; // week-program.js
 const NAME_BYTES = 32;
 // The common fields of a room's configuration, as GET /rooms/{id}/config
 // returns them and PUT /rooms/{id}/config takes them.
@@ -50,7 +49,7 @@ async function openConfig(room, el, tab) {
     ]);
     if (!ui.config) return;
     ui.config.cfg = cfg;
-    ui.config.prog = programModel(prog);
+    ui.config.prog = MassimoWeekProgram.model(prog);
     ui.config.edit = freshEdit(room, cfg);
     ui.config.loading = false;
   } catch (e) {
@@ -83,61 +82,6 @@ function freshEdit(room, cfg) {
     };
   }
   return edit;
-}
-
-// programModel turns the API's week programme into the editor's model:
-// an editable copy per day and the loaded one (orig) for reset and for
-// telling the changed days, the day being edited, the selected days
-// (those with the edited day's programme, edited together unless
-// "only" is on), and the days ticked in the copy section.
-function programModel(prog) {
-  const days = {};
-  for (const day of DAYS) {
-    const pts = prog && Array.isArray(prog[day]) ? prog[day] : [];
-    days[day] = pts.map((p) => ({ temp: p.temp, until: p.until }));
-    if (days[day].length === 0) days[day] = [{ temp: 17, until: "24:00" }];
-  }
-  const p = { days, orig: copyDays(days), source: prog ? prog.source : "", day: "monday", selected: new Set(), only: false, copyTo: new Set() };
-  selectDay(p, "monday");
-  return p;
-}
-
-function copyPoints(pts) {
-  return pts.map((pt) => ({ temp: pt.temp, until: pt.until }));
-}
-
-function copyDays(days) {
-  const out = {};
-  for (const day of DAYS) out[day] = copyPoints(days[day]);
-  return out;
-}
-
-function samePoints(a, b) {
-  return a.length === b.length && a.every((pt, i) => pt.temp === b[i].temp && pt.until === b[i].until);
-}
-
-// dirtyDays lists the days whose programme differs from the loaded one.
-function dirtyDays(p) {
-  return DAYS.filter((d) => !samePoints(p.days[d], p.orig[d]));
-}
-
-// selectDay makes day the edited day and selects every day that has
-// the same programme.
-function selectDay(p, day) {
-  p.day = day;
-  p.selected = new Set(DAYS.filter((d) => samePoints(p.days[d], p.days[day])));
-  for (const d of p.selected) p.copyTo.delete(d);
-}
-
-// programEdited is called after every change to the edited day: with
-// "only" on, the change sets the day apart and the other days leave the
-// selection; with it off, the change goes to every selected day.
-function programEdited(p) {
-  if (p.only) {
-    p.selected = new Set([p.day]);
-    return;
-  }
-  for (const d of p.selected) if (d !== p.day) p.days[d] = copyPoints(p.days[p.day]);
 }
 
 // --- rendering --------------------------------------------------------
@@ -545,257 +489,51 @@ async function sendDevice(room, c, d, moveConfirmed) {
 
 // --- week programme tab -----------------------------------------------
 
-function minutesOf(until) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(until || "");
-  return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
-}
-
-function clockOf(minutes) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return pad(Math.floor(minutes / 60)) + ":" + pad(minutes % 60);
-}
-
-// renderProgramTab is the week programme editor: the day buttons (a
-// click edits that day and selects every day with the same programme),
-// the "Only {day}" switch, the day as a bar and as rows of switch
-// points, the copy section, and the resets left of Cancel and Send.
-// The rows are drawn in the order of their times; a time typed into one
-// is marked in place (markProgram), not drawn again.
+// renderProgramTab is the week programme editor, <massimo-week-program>
+// (week-program.js) on the room's model, in a form with the resets left
+// of Cancel and Send.
 function renderProgramTab(room, c) {
-  const p = c.prog;
-  sortPoints(p.days[p.day]);
   const form = configForm(room, c, "program", () => sendProgram(room, c));
-  const days = elem("div", "day-bar week prog-days");
-  days.setAttribute("role", "group");
-  days.setAttribute("aria-label", t("prog.dayToEdit"));
-  for (const day of DAYS) {
-    const b = button(dayShort(day), { title: t("prog.dayTitle", { day: dayLong(day) }) }, () => {
-      selectDay(p, day);
-      rerenderRoom(room);
-    });
-    b.dataset.day = day;
-    days.appendChild(b);
-  }
-  form.appendChild(days);
-  const onlyLabel = t("prog.only", { day: dayLong(p.day) });
-  const only = switchEl(onlyLabel, p.only, (on) => {
-    p.only = on;
-    rerenderRoom(room);
-  });
-  form.appendChild(fieldRow(null, only, { help: "onlyDay" }));
-  const together = DAYS.filter((d) => p.selected.has(d));
-  const scope = p.only || together.length < 2
-    ? t("prog.appliesOnly", { day: dayLong(p.day) })
-    : t("prog.appliesTogether", { days: dayList(together) });
-  form.appendChild(textEl("p", scope, "muted small"));
-  form.appendChild(renderDayBar(p.days[p.day]));
-  form.appendChild(renderPoints(room, c, p.day, () => markProgram(form, p)));
-  form.appendChild(renderDayCopy(room, p));
-  const src = p.source;
+  const editor = document.createElement("massimo-week-program");
+  editor.kit = weekKit();
+  editor.model = c.prog;
+  const src = c.prog.source;
   const dev = src && c.cfg && c.cfg.devices.find((d) => d.rf_address === src);
-  const note = textEl("p", "", "muted small prog-note");
-  note.dataset.stored = src ? t("prog.storedOn", { device: dev && dev.name ? dev.name : src }) + " " : "";
-  form.appendChild(note);
-  const resetDay = button(t("prog.resetDay"), { cls: "prog-reset-day", title: t("prog.resetDayTitle", { day: dayLong(p.day) }) }, () => {
-    p.days[p.day] = copyPoints(p.orig[p.day]);
-    selectDay(p, p.day);
-    rerenderRoom(room);
-  });
-  const resetAll = button(t("prog.resetAll"), { cls: "prog-reset-all", title: t("prog.resetAllTitle") }, () => {
-    p.days = copyDays(p.orig);
-    p.copyTo = new Set();
-    selectDay(p, p.day);
-    rerenderRoom(room);
-  });
-  form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send"), extra: [resetDay, resetAll] }));
-  form.whenChanged(() => dirtyDays(p).length > 0, true);
-  markProgram(form, p);
+  editor.storedOn = src ? (dev && dev.name ? dev.name : src) : "";
+  form.appendChild(editor);
+  form.appendChild(formFooter({ cancel: () => closeConfig(room), submit: t("action.send"), extra: editor.resetControls() }));
+  form.whenChanged(() => editor.dirtyDays().length > 0, true);
   return form;
 }
 
-// markProgram shows in the programme editor which days differ from the
-// Cube's programme (on the day buttons, in the note, on the resets) and
-// which are edited together, and draws the edited day's bar.
-function markProgram(form, p) {
-  const dirty = new Set(dirtyDays(p));
-  for (const b of form.querySelectorAll(".prog-days button")) {
-    const day = b.dataset.day;
-    const editing = p.day === day;
-    const sel = p.selected.has(day);
-    let name = dayLong(day);
-    if (sel && !editing) name = t("prog.editedTogether", { day: name });
-    if (dirty.has(day)) name = t("prog.changed", { day: name });
-    b.className = "day" + (sel ? " selected" : "") + (editing ? " editing" : "") + (dirty.has(day) ? " dirty" : "");
-    b.setAttribute("aria-label", name);
-    b.setAttribute("aria-pressed", editing ? "true" : "false");
-  }
-  const sorted = copyPoints(p.days[p.day]);
-  sortPoints(sorted);
-  form.querySelector(".prog-bar").replaceWith(renderDayBar(sorted));
-  const note = form.querySelector(".prog-note");
-  note.textContent = note.dataset.stored + (dirty.size ? t("prog.sendNoteDays", { days: dayList([...dirty]) }) : t("prog.sendNote"));
-  form.querySelector(".prog-reset-day").disabled = !dirty.has(p.day);
-  form.querySelector(".prog-reset-all").disabled = dirty.size === 0;
-}
-
-// renderDayCopy is the copy section: every day as a toggle, the days
-// already sharing the edited day's programme greyed out, "All days",
-// and Copy, which gives the ticked days the edited day's programme.
-// With "only" off they then join the selection and are edited together.
-function renderDayCopy(room, p) {
-  const title = t("prog.copyTo", { day: dayLong(p.day) });
-  const row = elem("div", "day-bar week");
-  const free = DAYS.filter((d) => !p.selected.has(d));
-  for (const day of DAYS) {
-    const on = p.copyTo.has(day);
-    const has = p.selected.has(day);
-    const b = button(dayShort(day), { cls: "day" + (on ? " chosen" : ""), aria: has ? t("prog.hasProgramme", { day: dayLong(day) }) : dayLong(day) }, () => {
-      if (p.copyTo.has(day)) p.copyTo.delete(day);
-      else p.copyTo.add(day);
-      rerenderRoom(room);
-    });
-    b.disabled = has;
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-    row.appendChild(b);
-  }
-  const all = button(t("prog.allDays"), "day all", () => {
-    for (const d of free) p.copyTo.add(d);
-    rerenderRoom(room);
-  });
-  all.disabled = free.length === 0 || free.every((d) => p.copyTo.has(d));
-  const copy = button(t("prog.copy"), "day copy", () => {
-    for (const d of p.copyTo) {
-      p.days[d] = copyPoints(p.days[p.day]);
-      if (!p.only) p.selected.add(d);
-    }
-    p.copyTo = new Set();
-    rerenderRoom(room);
-  });
-  copy.disabled = p.copyTo.size === 0;
-  const box = elem("div", "day-copy", textEl("h4", title), row, elem("div", "day-bar", all, copy));
-  box.setAttribute("role", "group");
-  box.setAttribute("aria-label", title);
-  return box;
-}
-
-// renderDayBar draws the day as segments proportional to their length.
-function renderDayBar(points) {
-  const bar = elem("div", "prog-bar");
-  let start = 0;
-  const temps = points.map((p) => p.temp);
-  const lo = Math.min(...temps), hi = Math.max(...temps);
-  for (const pt of points) {
-    const end = minutesOf(pt.until);
-    // A label only when the segment is wide enough to hold it.
-    const seg = textEl("span", end - start >= 120 ? fmtNum(pt.temp, 1) + "°" : "", "prog-seg");
-    seg.style.flexGrow = String(Math.max(1, end - start));
-    const warm = hi > lo ? (pt.temp - lo) / (hi - lo) : 0.5;
-    seg.style.setProperty("--warm", warm.toFixed(2));
-    seg.title = clockOf(start) + " – " + pt.until + ": " + fmtTemp(pt.temp);
-    bar.appendChild(seg);
-    start = end;
-  }
-  return bar;
-}
-
-// renderPoints lists the switch points of a day as editable rows; every
-// change goes through programEdited, and a time typed calls onTyped.
-function renderPoints(room, c, day, onTyped) {
-  const p = c.prog;
-  const pts = p.days[day];
-  const edited = () => {
-    programEdited(p);
-    rerenderRoom(room);
+// weekKit is what the week programme editor builds with: the page's
+// translation, its elements (components.js) and temperatures (tiles.js).
+function weekKit() {
+  return {
+    t, elem, textEl, button, switchEl, fieldRow, numberInput, fmtNum, fmtTemp,
+    clamp: clampTemp,
+    temps: { min: MIN_TEMP, max: MAX_TEMP, step: STEP },
   };
-  const list = elem("div", "prog-points");
-  pts.forEach((pt, i) => {
-    const last = i === pts.length - 1;
-    const row = elem("div", "prog-point", textEl("span", t("prog.until"), "muted"));
-    if (last) {
-      row.appendChild(textEl("span", "24:00", "prog-end"));
-    } else {
-      const time = document.createElement("input");
-      time.type = "time";
-      time.step = "300";
-      time.value = pt.until;
-      time.required = true;
-      time.setAttribute("aria-label", t("prog.pointUntil", { n: i + 1 }));
-      // Chrome fires change at each part of a time typed: the value is
-      // kept and marked in place (onTyped), without a redraw, which would
-      // replace the input in the middle of the time, or, once it is left,
-      // the button being clicked; the rows take the order of their times
-      // at the next draw, and Send sorts them (sendProgram).
-      time.addEventListener("change", () => {
-        if (!time.value) return;
-        pt.until = time.value;
-        programEdited(p);
-        onTyped();
-      });
-      row.appendChild(time);
-    }
-    row.appendChild(textEl("span", t("prog.at"), "muted"));
-    const temp = numberInput(pt.temp, MIN_TEMP, MAX_TEMP, STEP, (v) => {
-      if (v === undefined) return;
-      pt.temp = clampTemp(v);
-      edited();
-    });
-    temp.setAttribute("aria-label", t("prog.pointTemp", { n: i + 1 }));
-    row.appendChild(temp);
-    row.appendChild(textEl("span", "°C", "muted"));
-    if (!last) {
-      const rm = button("−", { cls: "step small", aria: t("prog.remove"), title: t("prog.removeTitle") }, () => {
-        pts.splice(i, 1);
-        edited();
-      });
-      row.appendChild(rm);
-    } else if (pts.length < MAX_POINTS) {
-      const add = button("+", { cls: "step small", aria: t("prog.add"), title: t("prog.addTitle") }, () => {
-        const prev = pts.length > 1 ? minutesOf(pts[pts.length - 2].until) : 0;
-        const mid = Math.round(((prev + 1440) / 2) / 5) * 5;
-        pts.splice(pts.length - 1, 0, { temp: pt.temp, until: clockOf(Math.min(1435, Math.max(prev + 5, mid))) });
-        edited();
-      });
-      row.appendChild(add);
-    }
-    list.appendChild(row);
-  });
-  return list;
-}
-
-// sortPoints puts a day's switch points in the order of their times.
-function sortPoints(pts) {
-  pts.sort((a, b) => minutesOf(a.until) - minutesOf(b.until));
-}
-
-function validateDay(pts) {
-  if (pts.length < 1 || pts.length > MAX_POINTS) return t("prog.errPoints", { n: MAX_POINTS });
-  let prev = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const m = minutesOf(pts[i].until);
-    if (i < pts.length - 1 && m <= prev) return t("prog.errTimes");
-    prev = m;
-  }
-  if (pts[pts.length - 1].until !== "24:00") return t("prog.errEnd");
-  return "";
 }
 
 // sendProgram writes the days that differ from the loaded programme;
 // once the Cube took them they count as loaded.
 async function sendProgram(room, c) {
+  const W = MassimoWeekProgram;
   const p = c.prog;
   const body = {};
-  for (const day of dirtyDays(p)) {
-    sortPoints(p.days[day]); // a time typed may not have been left yet
-    const err = validateDay(p.days[day]);
+  for (const day of W.dirtyDays(p)) {
+    W.sortPoints(p.days[day]); // a time typed may not have been left yet
+    const err = W.validateDay(p.days[day], t);
     if (err) return setConfigResult(room, c, t("prog.dayError", { day: dayShort(day), error: err }), false);
-    body[day] = copyPoints(p.days[day]);
+    body[day] = W.copyPoints(p.days[day]);
   }
   if (Object.keys(body).length === 0) return setConfigResult(room, c, t("prog.nothing"), true);
   const label = t("prog.label", { days: dayList(Object.keys(body)) });
   setConfigResult(room, c, t("result.waiting", { label }), true);
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/program", body);
-    if (!(res && res.discarded)) for (const d of Object.keys(body)) p.orig[d] = copyPoints(body[d]);
+    if (!(res && res.discarded)) for (const d of Object.keys(body)) p.orig[d] = W.copyPoints(body[d]);
     setConfigResult(room, c, resultText(label, res), !(res && res.discarded));
     state.details = {};
   } catch (e) {
@@ -872,7 +610,7 @@ async function sendCopy(room, c) {
   const fields = (k.temps ? TEMP_FIELDS : []).concat(k.radiator ? VALVE_FIELDS : []);
   const body = {};
   for (const f of fields) if (c.cfg[f] !== undefined && c.cfg[f] !== null) body[f] = c.cfg[f];
-  const days = program ? copyDays(c.prog.orig) : null;
+  const days = program ? MassimoWeekProgram.copyDays(c.prog.orig) : null;
   const lines = [];
   let allOk = true;
   for (const id of ids) {
