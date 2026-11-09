@@ -149,8 +149,9 @@ func TestSyncColumns(t *testing.T) {
 }
 
 // The six default roles and their sets, as docs/store.md section 6
-// lists them (preferences seeded by migration 0003); owner has every
-// capability by code and no rows.
+// lists them (preferences seeded by migration 0003, configure for
+// integration by 0012); owner has every capability by code and no
+// rows.
 func TestSeededRoles(t *testing.T) {
 	s := open(t, t.TempDir())
 	want := map[string][]string{
@@ -159,7 +160,7 @@ func TestSeededRoles(t *testing.T) {
 		"operator":    {"backup", "configure", "discover", "lock", "preferences", "read", "setpoint"},
 		"guest":       {"configure", "read", "setpoint"},
 		"viewer":      {"preferences", "read"},
-		"integration": {"lock", "read", "setpoint"},
+		"integration": {"configure", "lock", "read", "setpoint"},
 	}
 	rows, err := s.db.Query(`SELECT r.key, r.builtin, r.origin, coalesce(group_concat(c.capability), '') FROM roles r LEFT JOIN role_capabilities c ON c.role_id = r.id GROUP BY r.id`)
 	if err != nil {

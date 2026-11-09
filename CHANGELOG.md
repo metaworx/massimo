@@ -102,6 +102,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The role `integration` may configure: week programmes, temperatures,
+  device settings; migration 0012 adds it where the role is still the
+  seeded one (`docs/store.md` section 6).
+
 - The Homebrew caveats and the settings template ask for nothing to fill
   in and name the first owner; `brew services restart` follows
   `brew upgrade` (`packaging/README.md`, "Homebrew").

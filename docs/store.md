@@ -867,7 +867,7 @@ The default roles, as seeded.
 | `preferences` | ✓ | ✓ | | ✓ | |
 | `setpoint` | ✓ | ✓ | ✓ | | ✓ |
 | `lock` | ✓ | ✓ | | | ✓ |
-| `configure` | ✓ | ✓ | ✓ | | |
+| `configure` | ✓ | ✓ | ✓ | | ✓ |
 | `rename` | ✓ | | | | |
 | `structure` | ✓ | | | | |
 | `pair` | ✓ | | | | |
@@ -887,7 +887,11 @@ rebooting a computer that may run other services too;
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;
-`integration` is what a home automation needs and nothing it does not.
+`integration` is what a home automation needs and nothing it does not:
+it reads, sets, locks and configures, so that Home Assistant writes
+week programmes as the web UI does (migration 0012, 2026-11-09,
+where the role still held exactly read, setpoint and lock:
+an owner who had changed it keeps the set chosen).
 Moves and deletions (`structure`) go with the names to `manager`,
 because a move changes the house as a name does; if `operator` should keep them,
 that is one row of the seed.
