@@ -694,6 +694,18 @@ jobs:
       - name: Unit tests
         run: go test ./internal/update/... ./internal/install/... ./cmd/...
 
+      # install on the template's settings, as a new Mac gets it
+      # (packaging/launchd/template-test.sh): left for its owner with the
+      # message, whose owner line, run as printed from a directory the
+      # service user cannot enter, creates the owner; install again
+      # restarting a loaded job and leaving a booted-out one; the web UI's
+      # way; and a removal that leaves nothing, which the install below
+      # needs.
+      - name: Install on the template's settings
+        run: |
+          go build -o massimo ./cmd/massimo
+          bash packaging/launchd/template-test.sh ./massimo
+
       # The whole path as on a Mac: install against the fake Cube with a
       # self-signed certificate (so the health check and the API go over
       # https://, which the helper must accept on the loopback), the

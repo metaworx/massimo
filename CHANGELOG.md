@@ -100,6 +100,10 @@ the next minor, a fix counts the suffix up.
   upgrade from v0.12.0-alpha.1 with the service running among its cases,
   and CI runs it on trixie and bookworm (`GUIDELINES/project/CI.md`).
 
+- CI's macOS job installs on the template's settings first, the owner
+  line run as printed, a loaded job restarted and a booted-out one left
+  stopped (`packaging/launchd/template-test.sh`).
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill
