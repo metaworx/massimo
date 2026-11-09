@@ -214,6 +214,10 @@ the next minor, a fix counts the suffix up.
   are queued, as it assumed; under QEMU the armv6 job found the queue
   starting it first.
 
+- `make fuzz` no longer fails a target on Go 1.26's own `-fuzztime`
+  deadline, "context deadline exceeded" with no input written
+  (golang/go#75804; `GUIDELINES/project/CI.md`, section 3).
+
 ### Security
 
 - On Linux the service runs as `_massimo`, as on macOS: the package and
