@@ -1,4 +1,4 @@
-# AP ServiceUser v1.0: The service account _massimo
+# AP ServiceUser v1.1: The service account _massimo
 
 ## TL;DR
 
@@ -7,16 +7,21 @@ so it can never take over a person's account called massimo.
 An existing box is renamed in place.
 The "not started" message's owner line works as printed, from any directory,
 and on macOS too.
+Blocks 1 to 3 are merged (pull request #143);
+v1.1 adds Block 4, for a box that an older release had taken over.
 
 - account: any `massimo` reused → `_massimo`;
   our own `massimo` (home `/var/lib/massimo`) → renamed in place,
-  `usermod -l` and `groupmod -n`, the UID kept;
+  `usermod -l` and `groupmod -n`, the UID kept, a running service stopped for it;
   a person's `massimo` → left alone, never deleted by a purge
 - `install.User` `massimo` → `_massimo`, the same as `install.DarwinUser`
 - owner line `sudo -u massimo massimo -data …` →
   `sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add …`
   (`/usr/local/bin` for `massimo install`), through `install.ServiceCommand`
 - `/var/lib/massimo` after a start: 755 → 750 (`StateDirectoryMode=0750`)
+- a box an older release ran as a person's `massimo`:
+  the service failing on `/etc/massimo/env`, silently →
+  the package and `install` say so and name the `chown -R` to `_massimo`
 - AP EnvFile (another session) does the service user's defaults
   and merges main after this plan; whichever merges second shortens the owner line
 
@@ -29,6 +34,9 @@ and on macOS too.
    the absolute binary with `-env` and `-data`, in `postinst`, `install`,
    the READMEs and the site; the ServiceStart bullets amended
 3. The state directory: `StateDirectoryMode=0750` in the unit
+4. A box an older release took over: `postinst` and `install` name the
+   `chown` when `/etc/massimo/env` belongs to a person's `massimo`;
+   tests; `packaging/README.md`; the Security bullet amended
 
 ## Discussion
 
@@ -83,6 +91,15 @@ under systemd in a container on jaguar and on the owner's Mac):
   which touch the same files; the line is written once, with the new name.
   Not B, two plans, which change the message and the READMEs twice.
 
+- **D6-B** (`PLAN++ v1.1 for D6-B`, 2026-11-09, after the run of
+  Blocks 1 to 3, [NOTE v1.0](2026-11-09_17-17_NOTE_ServiceUser_v1.0_how_the_run_went.md)):
+  a box where an older release took over a person's `massimo` is named,
+  not repaired: `postinst` and `install` say that the files are that
+  person's, and give the `chown` that hands them to `_massimo`.
+  Not A, leaving it to Block 1's commit message.
+  Neither does the `chown` itself: what in `/etc/massimo` is the service's,
+  on a box where a person's account held it, is the owner's call.
+
 **With AP EnvFile** (the session "Ignore an unreadable default .env",
 agreed through the owner on 2026-11-09):
 
@@ -120,11 +137,14 @@ Debian itself has `_apt`.
 keep the UID and the GID.
 Files belong to the UID,
 so `/etc/massimo`, `/var/lib/massimo` and `/var/log/massimo` follow.
-In the trixie container, `usermod -l` renamed the account while a process
-ran as it, and the process ran on under the new name:
-no stop is needed.
-The restart with the new unit (`User=_massimo`) comes after,
-by ServiceStart's rule.
+`usermod -l` refuses an account a process runs as.
+In a container a process started outside systemd went unnoticed,
+which v1.0 took for "no stop is needed";
+under systemd the upgrade failed
+(`user massimo is currently used by process …`, [NOTE v1.0](2026-11-09_17-17_NOTE_ServiceUser_v1.0_how_the_run_went.md)).
+A running service is stopped first,
+and ServiceStart's rule starts it again with the new unit
+(`User=_massimo`), since it ran.
 
 **Ours, or a person's.**
 Both `postinst` and `install` make the account with the home
@@ -146,12 +166,20 @@ a hand install whose binary was updated by `massimo update` keeps the old
 account until `install` runs again.
 `postrm` purge does the same.
 
-**Not handled:** a box where an older package or install took over a
-person's `massimo`.
-Its files belong to that person, and the new `_massimo` cannot read them.
+**A box an older release took over** (v1.1, D6-B):
+an older package or install that found a person's `massimo` ran the
+service as that person, so its files are that person's.
+`_massimo` cannot read them:
+the service fails at its start with `open /etc/massimo/env: permission denied`.
 The package has been public since v0.12.0-alpha.1,
 with one known user, the owner.
-The `CHANGELOG.md` bullet names the case.
+`postinst` and `install` recognise the case by `/etc/massimo/env`
+belonging to `massimo` after the account step:
+ours is `_massimo` by then, renamed or made,
+so a `massimo` that still owns the file is a person's.
+They say so and name
+`sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo`;
+they change nothing, and the start rule runs as before.
 
 **Where the name lives:**
 
@@ -216,6 +244,10 @@ the update and reboot helpers run as root.
 
 ## Implementation Plan
 
+Blocks 1 to 3 are merged: pull request #143, on main as `fcba117`,
+with a fix to Block 1 for the rename of a running service;
+[NOTE v1.0](2026-11-09_17-17_NOTE_ServiceUser_v1.0_how_the_run_went.md) records how the run went.
+
 ### Block 1: The account
 
 1. `internal/install/install.go`:
@@ -278,6 +310,26 @@ a 700 home directory creates the owner;
 **Verification:** in the systemd container,
 `/var/lib/massimo` is 750 after a start and after a restart.
 
+### Block 4: A box an older release took over
+
+1. `packaging/deb/postinst`: after the account step,
+   when `stat -c %U /etc/massimo/env` says `massimo`, two lines:
+   the file is that account's, and the `chown -R`.
+2. `internal/install/install.go`: the same in `Install` after `settings()`,
+   `stat` asked through `Output`: a warning and the line.
+3. Tests: `internal/install`, the file `massimo`'s, `_massimo`'s, missing;
+   `packaging/deb/test.sh`, a person's `massimo` owning `/etc/massimo`
+   before the package: the lines; after the `chown`, none.
+4. `packaging/README.md`, "Debian package" and "Install with `massimo install`";
+   `CHANGELOG.md`, the Security bullet amended.
+
+**Verification:** the `internal/install` tests;
+`make deb-test` on trixie and bookworm;
+under systemd in the container, the v0.12.0-alpha.1 package on a box with
+a person's `massimo`, upgraded: the lines;
+the `chown` as printed, then `systemctl restart massimo`:
+the service runs as `_massimo`.
+
 ### The whole
 
 The test gate of AGENTS.md (`go test`, `gofmt`, `go vet` for linux, windows
@@ -291,28 +343,14 @@ readable; a box with a person's `massimo`; the purge.
 The owner's Mac and Pis are not touched;
 the Mac can repeat its test with the owner at the sudo prompt.
 
-## Proposed commit messages
+## Proposed commit message
 
-Block 1:
-
-```
-fix(security:packaging): The service runs as _massimo, and never as a person's account
-
-On Linux the service account is _massimo, as on macOS, so that the Debian package and massimo install no longer take over a person's account called massimo, and a purge no longer deletes it; a box set up before is renamed in place (AP ServiceUser v1.0, Block 1).
-…
-```
-
-Block 2:
+Block 4:
 
 ```
-fix(install): The owner line works from any directory, and on macOS
-…
-```
+fix(packaging): A box an older release took over is named, with its chown
 
-Block 3:
-
-```
-fix(security:packaging): /var/lib/massimo stays 750 at every start
+Where an older package or massimo install ran the service as a person's account massimo, its files stay that person's and the service, now _massimo, fails to read /etc/massimo/env; the package and massimo install now say so and name the chown that hands the files over (AP ServiceUser v1.1, Block 4).
 …
 ```
 
@@ -320,3 +358,7 @@ fix(security:packaging): /var/lib/massimo stays 750 at every start
 
 - v1.0 (2026-11-09): the first revision, by `PLAN++ as recommended`:
   D1-A, D3-A, D4-A, D5-A; D2 dropped for AP EnvFile.
+- v1.1 (2026-11-09): Block 4, by `PLAN++ v1.1 for D6-B`:
+  a box an older release took over is named, with its `chown`;
+  the rename's stop, which the run found ([NOTE v1.0](2026-11-09_17-17_NOTE_ServiceUser_v1.0_how_the_run_went.md)), in the Analysis;
+  Blocks 1 to 3 merged as pull request #143.
