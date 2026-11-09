@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.17.0)
+# Massimo — CI Conventions (v1.17.1)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -111,7 +111,8 @@ where `serve` must share UDP 5353 with avahi,
 and its goodbye take it out of the client's avahi.
 It is the announcement's only test against another implementation on Linux;
 the macOS and Windows jobs add Apple's mDNSResponder and Windows' mDNS,
-with a second `serve` on every address in a step of their own.
+with a second `serve` on every address in a step of their own,
+the macOS one as a launchd daemon (section 7).
 A pull request runs the job only when it changes `internal/announce/`,
 `internal/serve/`, `internal/proxy/`, `internal/cubelan/`,
 `cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `tools/mdns-test/`
@@ -317,6 +318,15 @@ a box following a suite takes the release through `apt upgrade`.
 - The macOS and Windows jobs' mDNS steps need the runner's own multicast
   to come back to it (the second `serve`'s announcements reach the system's
   responder on the same machine); a runner that filters it fails the step.
+- On the macOS runner, macOS's local network privacy refuses the runner's own
+  processes every multicast send ("no route to host"),
+  and spares launchd daemons:
+  the macOS step runs its second `serve` as a launchd daemon in the system
+  domain, as `massimo install` runs the service,
+  asks `dns-sd`, which talks to mDNSResponder alone,
+  and does not ask `massimo discover`, a process of the runner's.
+  `dns-sd` is read through a pseudo-terminal of Python's:
+  under `script`, what it printed was lost.
 - The Debian package job's container has no systemd:
   the unit is enabled through deb-systemd-helper's symlinks and nothing starts,
   so the start on a real box is the owner's check.
