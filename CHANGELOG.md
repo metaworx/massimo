@@ -30,6 +30,10 @@ the next minor, a fix counts the suffix up.
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
 
+- On a box the Debian package installed, the update helper upgrades
+  massimo through apt, from the massimo source only, and reports the
+  version apt installed; it never downgrades.
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what

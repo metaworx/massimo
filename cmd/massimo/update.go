@@ -52,12 +52,12 @@ func runUpdate(args []string) (err error) {
 	restart := fs.String("restart", "", "restart this service afterwards: a systemd unit such as massimo.service, on macOS the LaunchDaemon "+install.Label+", on Windows the service massimo")
 	health := fs.String("health", "", "after the restart, wait until this URL (the server's /healthz) reports the new version, else roll back")
 	healthWait := fs.Duration("health-timeout", 2*time.Minute, "how long to wait for -health")
-	request := fs.String("request", "", "helper mode: run only when this request file exists, take the channel from it and remove it")
+	request := fs.String("request", "", "helper mode: run only when this request file exists, take the channel from it and remove it; where apt owns massimo, run apt for the massimo source instead")
 	statusPath := fs.String("status", "", "write the progress to this file, for the server")
 	yes := fs.Bool("yes", false, "do not ask before installing")
 	force := fs.Bool("force", false, "also replace a development or modified build")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update. Where a package manager owns massimo, update leaves the\ninstall to it, and the helper of the Debian package runs apt.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -97,9 +97,13 @@ func runUpdate(args []string) (err error) {
 	}
 
 	// A package manager that owns the binary keeps owning it: -check still
-	// says what is out, nothing is installed or rolled back from here.
+	// says what is out, nothing is installed or rolled back from here. The
+	// helper asks apt where apt is the owner (update_apt.go).
 	if !*check {
 		if m, ok := packaged(); ok {
+			if *request != "" && m.Name == "apt" {
+				return aptUpdate(ctx, status, *health, *healthWait)
+			}
 			err := fmt.Errorf("this massimo is %s", m)
 			status(update.Status{State: "failed", From: version, Message: err.Error()})
 			return err
@@ -311,6 +315,9 @@ func loopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// healthEvery is how often waitHealthy asks; a variable for the tests.
+var healthEvery = 2 * time.Second
+
 // waitHealthy polls the server's /healthz until it reports tag.
 func waitHealthy(ctx context.Context, url, tag string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
@@ -327,7 +334,7 @@ func waitHealthy(ctx context.Context, url, tag string, timeout time.Duration) er
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-time.After(healthEvery):
 		}
 	}
 	return fmt.Errorf("the server did not come up with %s within %s (%s)", tag, timeout, last)

@@ -19,6 +19,11 @@ import (
 // (packaging/README.md, "Debian package").
 const PackagedPath = "/usr/share/massimo/packaged"
 
+// AptSource is the apt source of the massimo repository that
+// packaging/README.md, "The apt repository", sets up, and the only one
+// the update helper fetches from on a box apt owns massimo on.
+const AptSource = "/etc/apt/sources.list.d/massimo.sources"
+
 // Manager is the package manager a marker names.
 type Manager struct {
 	Name    string // apt, dnf, brew
