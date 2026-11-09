@@ -96,6 +96,10 @@ the next minor, a fix counts the suffix up.
   core, and `make test-armv6` does the same where `qemu-arm` is
   installed (`GUIDELINES/project/CI.md`).
 
+- `make deb-systemd-test` checks the package under a real systemd, the
+  upgrade from v0.12.0-alpha.1 with the service running among its cases
+  (`packaging/README.md`).
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill

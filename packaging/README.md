@@ -432,7 +432,15 @@ through `go run`) from `nfpm.yaml`,
 the scripts in `deb/` and the unit `deb/unit.sh` derives;
 `make deb-test` installs,
 checks and purges it in a Debian container (`deb/test.sh`),
-as CI does on trixie and on bookworm. lintian reports two errors by design,
+as CI does on trixie and on bookworm.
+That container has no systemd;
+`make deb-systemd-test` runs the cases that need one (`deb/systemd-test.sh`),
+each in a container of its own with systemd as its first process:
+the first start left to the owner and the owner line as printed,
+the restart of a running service, the upgrade from v0.12.0-alpha.1
+with the service running, a person called massimo, a box an older release
+took over, and `massimo install` over v0.12.0-alpha.1's hand install.
+lintian reports two errors by design,
 the statically linked binary and the missing Debian-format changelog (the
 changelog is `CHANGELOG.md` on GitHub).
 

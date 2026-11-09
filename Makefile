@@ -42,7 +42,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test release clean release-alpha
 
 # Development happens on main; a release promotes main to a release
 # branch, which is also the update channel boxes follow (internal/update).
@@ -216,6 +216,14 @@ packages: linux linux-arm64 linux-armv6 deb-unit
 # (packaging/deb/test.sh); DEB_IMAGE picks the release.
 deb-test:
 	docker run --rm -v "$(CURDIR)/$(OUT):/dist:ro" -v "$(CURDIR)/packaging/deb/test.sh:/test.sh:ro" $(DEB_IMAGE) bash /test.sh
+
+# The amd64 package under a real systemd, each case in a container of its
+# own with systemd as its first process (packaging/deb/systemd-test.sh):
+# the start, the restart, the upgrade from v0.12.0-alpha.1 with the
+# service running; DEB_IMAGE picks the release, OLD_DEB a local copy of
+# v0.12.0-alpha.1's package.
+deb-systemd-test:
+	packaging/deb/systemd-test.sh $(DEB_IMAGE)
 
 # The apt repository built from the packages with a throwaway key and
 # installed from in a Debian container (packaging/apt/test.sh).
