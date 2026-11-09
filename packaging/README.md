@@ -956,8 +956,15 @@ keeps the store in `$(brew --prefix)/var/massimo` and the log in
 and its service runs `massimo serve -listen :8099` as you while you are logged in;
 `sudo brew services start massimo-alpha` installs a LaunchDaemon that runs as
 root at boot instead.
-Fill in the settings file (the Cubes and `MASSIMO_API_TOKEN`),
-then start or restart the service.
+Nothing needs to go into the settings file for a start:
+brew never starts the service by itself,
+and until it has an owner every device on the local network may use it,
+so create the owner in the web UI at once,
+or before the start with
+`massimo -data $(brew --prefix)/var/massimo user add <name> -role owner`;
+the Cubes are added there too.
+`brew upgrade` does not restart a running service;
+`brew services restart massimo-alpha` does.
 
 One owner of the binary: brew owns it,
 and the marker under the formula's `share/massimo` tells massimo so.

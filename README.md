@@ -420,7 +420,8 @@ Details: [macOS](packaging/README.md#macos).
 (nothing needs notarization), `brew services start massimo-alpha` runs it as you
 (`sudo` for a daemon at boot),
 and the settings are in `$(brew --prefix)/etc/massimo/env`;
-brew then owns the binary and `brew upgrade` updates it,
+brew then owns the binary and `brew upgrade` updates it
+(`brew services restart massimo-alpha` then runs the new one),
 while the web UI and `massimo update` say when a release is out.
 Details: [Homebrew](packaging/README.md#homebrew).
 

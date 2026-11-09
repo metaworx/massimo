@@ -52,6 +52,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The Homebrew caveats and the settings template ask for nothing to fill
+  in and name the first owner; `brew services restart` follows
+  `brew upgrade` (`packaging/README.md`, "Homebrew").
+
 - `massimo install` restarts a running service also on the template's
   settings and leaves a box that never ran for its owner, on every
   platform, naming `massimo user add` and the web UI (`README.md`).

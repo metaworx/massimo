@@ -52,16 +52,21 @@ class @CLASS@ < Formula
 
   def caveats
     <<~EOS
-      Put the Cubes' addresses and MASSIMO_API_TOKEN into
-        #{etc}/massimo/env
-      (README.md, "Cube variables"), then run massimo serve as yourself while
-      you are logged in with
+      Nothing needs to go into #{etc}/massimo/env for a start. Run
+      massimo serve as yourself while you are logged in with
         brew services start @NAME@
       or as a daemon at boot with
         sudo brew services start @NAME@
-      The web UI is then at http://localhost:8099/. Updates come through
-      brew upgrade; massimo update leaves them to it. Do not mix this with
-      massimo install, which sets up a Mac without Homebrew.
+      The web UI is then at http://localhost:8099/. Until it has an owner,
+      every device on the local network may use it: create the owner there
+      at once, or before the start with
+        massimo -data #{var}/massimo user add <name> -role owner
+      The Cubes are added in the web UI too, under System settings, Cubes;
+      the settings file takes the rest (README.md, "Cube variables").
+      Updates come through brew upgrade @NAME@, and brew does not restart a
+      running service: brew services restart @NAME@ does. massimo update
+      leaves them to brew. Do not mix this with massimo install, which sets
+      up a Mac without Homebrew.
     EOS
   end
 
