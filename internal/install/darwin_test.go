@@ -109,9 +109,31 @@ func TestInstallDarwinNoHelperAndTemplate(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, DarwinLog)); err != nil || !rec.has("chown _massimo:_massimo "+filepath.Join(root, DarwinLog)) {
 		t.Errorf("log file: %v", err)
 	}
-	// Only the template: not started.
+	// Only the template: not started, and the way to the owner said.
 	if rec.has(launchctl+" bootstrap system "+PlistPath(Label)) || !strings.Contains(out.String(), "not started") {
 		t.Errorf("started without settings: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner\n") ||
+		!strings.Contains(out.String(), "then start it: sudo launchctl bootstrap system "+PlistPath(Label)+"\n") {
+		t.Errorf("the message: %s", out.String())
+	}
+
+	// Loaded since, on the template's settings: restarted.
+	answer := o.Output
+	o.Output = func(name string, args ...string) ([]byte, error) {
+		if name == launchctl && len(args) == 2 && args[0] == "print" && args[1] == "system/"+Label {
+			return []byte("system/" + Label + " = {\n\tstate = running\n}\n"), nil
+		}
+		return answer(name, args...)
+	}
+	rec2 := &recorder{}
+	o.Run, out = rec2.run, bytes.Buffer{}
+	o.Out = &out
+	if err := InstallDarwin(o); err != nil {
+		t.Fatal(err)
+	}
+	if !rec2.has(launchctl+" kickstart -k system/"+Label) || strings.Contains(out.String(), "not started") {
+		t.Errorf("a loaded job on the template was not restarted: %q\n%s", rec2.cmds, out.String())
 	}
 }
 

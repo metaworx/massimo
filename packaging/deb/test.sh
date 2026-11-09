@@ -28,6 +28,7 @@ getent group massimo >/dev/null || fail "no group massimo"
 [ "$(stat -c %a:%U:%G /etc/massimo)" = 750:massimo:massimo ] || fail "/etc/massimo is $(stat -c %a:%U:%G /etc/massimo)"
 [ "$(stat -c %a:%U:%G /etc/massimo/env)" = 600:massimo:massimo ] || fail "/etc/massimo/env is $(stat -c %a:%U:%G /etc/massimo/env)"
 cmp -s /etc/massimo/env /usr/share/massimo/env.template || fail "/etc/massimo/env is not the template"
+[ "$(stat -c %a:%U:%G /var/lib/massimo)" = 750:massimo:massimo ] || fail "/var/lib/massimo is $(stat -c %a:%U:%G /var/lib/massimo)"
 unit=/usr/lib/systemd/system/massimo.service
 grep -q '^ExecStart=/usr/bin/massimo ' "$unit" || fail "the unit does not run /usr/bin/massimo"
 grep '^ExecStart=' "$unit" | grep -q -- ' -update-request /var/lib/massimo/update-request' ||
@@ -67,6 +68,54 @@ grep -q 'apt remove massimo' /tmp/err || fail "install -remove: $(cat /tmp/err)"
 if massimo update 2>/tmp/err; then fail "update did not refuse"; fi
 grep -q 'managed by apt' /tmp/err || fail "update: $(cat /tmp/err)"
 
+# When the service starts: postinst asks systemd only where it runs, so
+# stand-ins for systemctl and deb-systemd-invoke log what it asks, and
+# systemctl answers is-active with the state in /tmp/state.
+mkdir -p /run/systemd/system
+for cmd in systemctl deb-systemd-invoke; do
+	printf '%s\n' '#!/bin/sh' \
+		"echo \"$cmd \$*\" >>/tmp/calls" \
+		'[ "$1" = is-active ] || exit 0' \
+		'state=$(cat /tmp/state 2>/dev/null || echo inactive)' \
+		'echo "$state"' \
+		'[ "$state" = active ]' >"/usr/local/sbin/$cmd"
+	chmod 755 "/usr/local/sbin/$cmd"
+done
+# reinstall <state>: the package again, with the service in that state;
+# apt gives dpkg a PATH of its own, here with the stand-ins first.
+reinstall() {
+	echo "$1" >/tmp/state
+	: >/tmp/calls
+	apt-get -qq -o DPkg::Path=/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin install -y --reinstall "$deb" >/tmp/out 2>&1 ||
+		fail "reinstall: $(cat /tmp/out)"
+}
+restarted() { grep -q '^deb-systemd-invoke restart massimo.service$' /tmp/calls; }
+# Never ran on the template: left for the owner, who is told how.
+reinstall inactive
+if restarted; then fail "started on the template: $(cat /tmp/calls)"; fi
+grep -q 'user add <name> -role owner' /tmp/out || fail "the message does not name user add: $(cat /tmp/out)"
+grep -q 'sudo systemctl start massimo' /tmp/out || fail "the message does not name the start: $(cat /tmp/out)"
+# Started by its owner on the template and set up through the web UI:
+# restarted with the new binary, and no message.
+reinstall active
+restarted || fail "a running service was not restarted: $(cat /tmp/calls)"
+if grep -q 'not started' /tmp/out; then fail "the message for a running service: $(cat /tmp/out)"; fi
+reinstall activating
+restarted || fail "a service in its restart pause was not restarted: $(cat /tmp/calls)"
+# An older template, its comments changed: still the template.
+cp /etc/massimo/env /tmp/env
+sed -i '1i # A comment of an older template.' /etc/massimo/env
+echo >>/etc/massimo/env
+reinstall inactive
+if restarted; then fail "started on an older template: $(cat /tmp/calls)"; fi
+# A setting of its own: started.
+cp /tmp/env /etc/massimo/env
+echo 'MASSIMO_ANNOUNCE=off' >>/etc/massimo/env
+reinstall inactive
+restarted || fail "filled-in settings were not started: $(cat /tmp/calls)"
+cp /tmp/env /etc/massimo/env
+rm -r /run/systemd/system /usr/local/sbin/systemctl /usr/local/sbin/deb-systemd-invoke
+
 # The settings survive a reinstall and an upgrade.
 echo 'MASSIMO_API_TOKEN=test' >>/etc/massimo/env
 apt-get -qq install -y --reinstall "$deb" >/dev/null
@@ -88,6 +137,7 @@ echo '{}' >/var/lib/massimo-update/status.json
 apt-get -qq purge -y massimo >/dev/null
 if getent passwd massimo >/dev/null; then fail "the user is left after purge"; fi
 [ ! -e /etc/massimo ] || fail "/etc/massimo is left after purge"
+[ ! -e /var/lib/massimo ] || fail "/var/lib/massimo is left after purge"
 [ ! -e /usr/share/massimo ] || fail "/usr/share/massimo is left after purge"
 [ ! -e /usr/bin/massimo ] || fail "/usr/bin/massimo is left after purge"
 [ ! -e /usr/lib/systemd/system/massimo-reboot.path ] || fail "the reboot helper is left after purge"

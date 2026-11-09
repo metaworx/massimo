@@ -241,8 +241,8 @@ func InstallDarwin(o Options) error {
 	switch {
 	case in.NoStart:
 		fmt.Fprintf(in.Out, "not (re)started; it starts at the next boot, or now with: sudo %s\n", bootstrap)
-	case !startable:
-		fmt.Fprintf(in.Out, "not started: put the Cubes into %s first (see packaging/README.md), then: sudo %s\n", EnvPath, bootstrap)
+	case !startable && !in.loaded(Label):
+		in.notStarted("sudo -u "+DarwinUser+" massimo -data "+StateDir+" user add <name> -role owner", "sudo "+bootstrap)
 	default:
 		// Restarted when loaded already, so that installing again takes
 		// the new binary.
@@ -414,9 +414,11 @@ func (in *installer) plist(label string, b []byte) (bool, error) {
 }
 
 // loaded asks launchd whether the job is loaded; read-only, also in a
-// dry run.
+// dry run. launchctl print fails for a job that is not; with Root set,
+// nothing is, unless Output answers for it.
 func (in *installer) loaded(label string) bool {
-	return in.Root == "" && in.Run(launchctl, "print", "system/"+label) == nil
+	out, err := in.Output(launchctl, "print", "system/"+label)
+	return err == nil && len(bytes.TrimSpace(out)) > 0
 }
 
 // load (re)loads a LaunchDaemon: a new or changed property list is

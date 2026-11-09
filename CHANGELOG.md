@@ -60,6 +60,14 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- The Homebrew caveats and the settings template ask for nothing to fill
+  in and name the first owner; `brew services restart` follows
+  `brew upgrade` (`packaging/README.md`, "Homebrew").
+
+- `massimo install` restarts a running service also on the template's
+  settings and leaves a box that never ran for its owner, on every
+  platform, naming `massimo user add` and the web UI (`README.md`).
+
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
   and their opposites, in any case, as `serve -help`, the settings
   file's template and the READMEs say (`README.md`, "Server").
@@ -81,6 +89,10 @@ the next minor, a fix counts the suffix up.
   (`packaging/README.md`, "The apt repository").
 
 ### Fixed
+
+- The Debian package restarts a running service on an upgrade, also on
+  the template's settings, and leaves a box that never ran stopped, even
+  when a release changed the template's comments (`packaging/README.md`).
 
 - A device list or a configuration the Cube client asked for is in its
   state when the command returns, so that a read right after sees it;

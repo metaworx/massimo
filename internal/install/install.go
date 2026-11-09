@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"go.metaworx.ch/massimo/packaging"
@@ -227,6 +228,9 @@ func Install(o Options) error {
 	if err := in.user(); err != nil {
 		return err
 	}
+	if err := in.stateDir(); err != nil {
+		return err
+	}
 	startable, err := in.settings()
 	if err != nil {
 		return err
@@ -270,8 +274,8 @@ func Install(o Options) error {
 	switch {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not started; start it with: systemctl start massimo")
-	case !startable:
-		fmt.Fprintf(in.Out, "not started: put the Cubes into %s first (see packaging/README.md), then: systemctl start massimo\n", EnvPath)
+	case !startable && !in.active():
+		in.notStarted(linuxUserAdd, linuxStart)
 	default:
 		// restart, so that running install again takes the new binary.
 		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
@@ -355,8 +359,8 @@ func configure(o Options, m Manager) error {
 	switch {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not restarted; restart it with: systemctl restart massimo")
-	case !startable:
-		fmt.Fprintf(in.Out, "not started: put the Cubes into %s first (see packaging/README.md), then: systemctl start massimo\n", EnvPath)
+	case !startable && !in.active():
+		in.notStarted(linuxUserAdd, linuxStart)
 	default:
 		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
 			return err
@@ -380,7 +384,7 @@ func (in *installer) packagedSettings() (bool, error) {
 	if terr != nil {
 		tmpl = []byte(envTemplate())
 	}
-	isTemplate := err != nil || bytes.Equal(cur, tmpl)
+	isTemplate := err != nil || onlyTemplate(cur, tmpl)
 	switch {
 	case in.Settings == "" && isTemplate:
 		fmt.Fprintf(in.Out, "%s is still the template\n", EnvPath)
@@ -462,8 +466,68 @@ func envTemplate() string {
 	return string(b)
 }
 
+// settingLines is what a settings file sets: its lines, trimmed, without
+// the comments and blank lines.
+func settingLines(b []byte) []string {
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// onlyTemplate reports whether a settings file sets what the template
+// sets and nothing more. Comments and blank lines do not count, so a
+// file left from a template whose comments a later release changed is
+// the template still, as packaging/deb/postinst sees it.
+func onlyTemplate(cur, tmpl []byte) bool {
+	return slices.Equal(settingLines(cur), settingLines(tmpl))
+}
+
+// The service's first start is the owner's while the settings are only
+// the template's: a server without users answers every device on the
+// local network (README.md, "Server"). Whatever runs is restarted, so
+// that it takes the new binary, also on the template's settings.
+const (
+	linuxUserAdd = "sudo -u " + User + " massimo -data " + StateDir + " user add <name> -role owner"
+	linuxStart   = "sudo systemctl start massimo"
+)
+
+// notStarted says why the service was left stopped and the two ways to
+// its first owner: userAdd before the start, or the web UI after it.
+func (in *installer) notStarted(userAdd, start string) {
+	fmt.Fprintln(in.Out, "not started: until it has an owner, every device on the local network may use it")
+	fmt.Fprintf(in.Out, "create the owner first: %s\n", userAdd)
+	fmt.Fprintf(in.Out, "then start it: %s\n", start)
+	fmt.Fprintln(in.Out, "or start it and create the owner in the web UI; the Cubes are added there (System settings → Cubes)")
+}
+
+// active asks systemd whether massimo.service runs, or waits to run
+// again after a failure; read-only, also in a dry run.
+func (in *installer) active() bool {
+	out, _ := in.Output("systemctl", "is-active", "massimo.service")
+	switch strings.TrimSpace(string(out)) {
+	case "active", "activating", "reloading":
+		return true
+	}
+	return false
+}
+
+// stateDir makes StateDir for the service user when it is missing:
+// systemd makes it only at the first start (StateDirectory=), and
+// massimo user add creates the owner there before that.
+func (in *installer) stateDir() error {
+	if _, err := os.Stat(in.path(StateDir)); !errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return in.dir(StateDir, in.svcUser+":"+in.svcUser, "0750")
+}
+
 // settings makes EnvDir and EnvPath; it reports whether the file holds
-// settings (an existing or copied one) rather than the fresh template.
+// settings (one copied, or one that sets more than the template)
+// rather than only the template's.
 func (in *installer) settings() (bool, error) {
 	dir, env := in.path(EnvDir), in.path(EnvPath)
 	if !in.DryRun {
@@ -477,18 +541,21 @@ func (in *installer) settings() (bool, error) {
 	if err := in.run("chmod", "0750", dir); err != nil {
 		return false, err
 	}
-	if _, err := os.Stat(env); err == nil {
+	tmpl := []byte(envTemplate())
+	if in.svcUser == DarwinUser {
+		tmpl = []byte(darwinEnvTemplate())
+	}
+	if cur, err := os.ReadFile(env); err == nil {
 		if in.Settings != "" {
 			fmt.Fprintf(in.Out, "%s exists; kept it and did not copy %s\n", EnvPath, in.Settings)
 		} else {
 			fmt.Fprintf(in.Out, "%s exists; kept it\n", EnvPath)
 		}
-		return true, nil
+		return !onlyTemplate(cur, tmpl), nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
 	}
-	content, startable := []byte(envTemplate()), false
-	if in.svcUser == DarwinUser {
-		content = []byte(darwinEnvTemplate())
-	}
+	content, startable := tmpl, false
 	if in.Settings != "" {
 		b, err := os.ReadFile(in.Settings)
 		if err != nil {
@@ -497,7 +564,7 @@ func (in *installer) settings() (bool, error) {
 		content, startable = b, true
 		in.say("copy %s to %s", in.Settings, EnvPath)
 	} else {
-		in.say("write a commented %s to fill in", EnvPath)
+		in.say("write the commented template as %s", EnvPath)
 	}
 	if !in.DryRun {
 		if err := writeAtomic(env, content, 0o600); err != nil {
@@ -525,7 +592,7 @@ func (in *installer) checkSettings() {
 		return
 	}
 	if vars["MASSIMO_API_TOKEN"] == "" {
-		fmt.Fprintln(in.Out, "warning: no MASSIMO_API_TOKEN: the API is open to the LAN and the web UI cannot start updates")
+		fmt.Fprintln(in.Out, "warning: no MASSIMO_API_TOKEN: until it has a user (massimo user add, or the web UI), every device on the local network may use it")
 	}
 	in.checkTLSSettings(vars)
 	lookup := in.LocalAddrs

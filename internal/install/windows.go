@@ -73,12 +73,13 @@ func InstallWindows(o Options) error {
 	}
 
 	listen := in.Listen
+	running := false // as found, before the install stops it
 	if s != nil {
 		if cfg, err := s.Config(); err == nil && listen == "" {
 			listen = ListenFromCommandLine(cfg.BinaryPathName)
 		}
 		// The running binary cannot be overwritten.
-		if err := stopService(in, s); err != nil {
+		if running, err = stopService(in, s); err != nil {
 			return err
 		}
 	}
@@ -148,8 +149,8 @@ func InstallWindows(o Options) error {
 	switch {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not started; start it with: sc start massimo")
-	case !startable:
-		fmt.Fprintf(in.Out, "not started: put the Cubes into %s first (see packaging/README.md), then: sc start massimo\n", p.Env)
+	case !startable && !running:
+		in.notStarted(fmt.Sprintf("& \"%s\" -data \"%s\" user add <name> -role owner", p.Bin, p.DataDir), "sc.exe start massimo")
 	default:
 		in.say("start the service %s", ServiceName)
 		if !in.DryRun {
@@ -198,7 +199,8 @@ func (in *installer) winBinary(p WinPaths) error {
 
 // winSettings makes the data directory, readable only by SYSTEM and the
 // Administrators, and the settings file in it; like settings() it
-// reports whether the file holds settings rather than the template.
+// reports whether the file holds settings rather than only the
+// template's.
 func (in *installer) winSettings(p WinPaths) (bool, error) {
 	if !in.DryRun {
 		if err := os.MkdirAll(p.DataDir, 0o700); err != nil {
@@ -210,11 +212,14 @@ func (in *installer) winSettings(p WinPaths) (bool, error) {
 	if err := in.run("icacls", p.DataDir, "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"); err != nil {
 		return false, err
 	}
-	if _, err := os.Stat(p.Env); err == nil {
+	tmpl := []byte(windowsEnvTemplate(p))
+	if cur, err := os.ReadFile(p.Env); err == nil {
 		fmt.Fprintf(in.Out, "%s exists; kept it\n", p.Env)
-		return true, nil
+		return !onlyTemplate(cur, tmpl), nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
 	}
-	content, startable := []byte(windowsEnvTemplate(p)), false
+	content, startable := tmpl, false
 	if in.Settings != "" {
 		b, err := os.ReadFile(in.Settings)
 		if err != nil {
@@ -223,7 +228,7 @@ func (in *installer) winSettings(p WinPaths) (bool, error) {
 		content, startable = b, true
 		in.say("copy %s to %s", in.Settings, p.Env)
 	} else {
-		in.say("write a commented %s to fill in", p.Env)
+		in.say("write the commented template as %s", p.Env)
 	}
 	if in.DryRun {
 		return startable, nil
@@ -243,7 +248,7 @@ func RemoveWindows(o Options, purge bool) error {
 	if m != nil {
 		defer m.Disconnect()
 		if s, err := m.OpenService(ServiceName); err == nil {
-			if err := stopService(in, s); err != nil {
+			if _, err := stopService(in, s); err != nil {
 				s.Close()
 				return err
 			}
@@ -267,19 +272,21 @@ func RemoveWindows(o Options, purge bool) error {
 	return nil
 }
 
-func stopService(in *installer, s *mgr.Service) error {
+// stopService stops a service that is not stopped, and reports whether
+// it was running (or starting, or pausing) when asked.
+func stopService(in *installer, s *mgr.Service) (bool, error) {
 	st, err := s.Query()
 	if err != nil || st.State == svc.Stopped {
-		return nil
+		return false, nil
 	}
 	in.say("stop the service %s", ServiceName)
 	if in.DryRun {
-		return nil
+		return true, nil
 	}
 	if _, err := s.Control(svc.Stop); err != nil {
-		return fmt.Errorf("stop the service: %w", err)
+		return true, fmt.Errorf("stop the service: %w", err)
 	}
-	return waitState(s, svc.Stopped, time.Minute)
+	return true, waitState(s, svc.Stopped, time.Minute)
 }
 
 func waitState(s *mgr.Service, want svc.State, timeout time.Duration) error {
@@ -322,7 +329,7 @@ func RestartService(name string) error {
 		return fmt.Errorf("service %s: %w", name, err)
 	}
 	defer s.Close()
-	if err := stopService(newInstaller(Options{Out: os.Stderr}), s); err != nil {
+	if _, err := stopService(newInstaller(Options{Out: os.Stderr}), s); err != nil {
 		return err
 	}
 	if err := s.Start(); err != nil {
