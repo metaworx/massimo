@@ -299,13 +299,19 @@ func TestLogWithoutStore(t *testing.T) {
 		t.Fatalf("before=%v on the ring: nothing", last)
 	}
 	_, newer := logOf(t, ts, "?limit=1000&since="+url.QueryEscape(last.Format(time.RFC3339Nano)))
+	// The connect burst may have added events since the first read; of
+	// those since its last one, count the ones it had.
+	read := 0
 	for _, e := range newer {
 		if e.Time.Before(last) {
 			t.Fatalf("since=%v on the ring: %+v", last, e)
 		}
+		if !e.Time.After(last) {
+			read++
+		}
 	}
-	if len(newer) == 0 || len(newer)+len(older) != len(all) {
-		t.Fatalf("since=%v on the ring: %d, and %d before, of %d", last, len(newer), len(older), len(all))
+	if read == 0 || read+len(older) != len(all) {
+		t.Fatalf("since=%v on the ring: %d of the first read (%d now), and %d before, of %d", last, read, len(newer), len(older), len(all))
 	}
 	if code, _ := logOf(t, ts, "?limit=1001"); code != http.StatusBadRequest {
 		t.Fatalf("limit=1001: %d", code)
