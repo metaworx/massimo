@@ -42,6 +42,39 @@ def test_log_changes(page, case):
     show_view(page, "tiles")
 
 
+def test_log_names_devices_by_serial(page, case):
+    """A line names a device without a name by its S/N, the radio address
+    in expert mode only; the Cube's own configuration is the Cube's; a
+    removed device is named by its type, S/N and name as it was."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    cube_sn = page.evaluate("state.serial")
+    page.evaluate("""([d, cubeSN]) => {
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(ev) }));
+      send("config", { kind: "config", device: "0a0fee", serial: "MEQ0000999", source: "device", time: now() });
+      send("config", { kind: "config", device: "0a0fef", serial: cubeSN, source: "cube", time: now() });
+      send("device_forgotten", { kind: "device_forgotten", device: d.rf_address, serial: d.serial, source: "device",
+        state: { rf_address: d.rf_address, type: d.type, name: "Old name", room_id: d.room_id, serial: d.serial, reported: false },
+        time: now() });
+    }""", [d, cube_sn])
+    lines = page.locator("#log-lines .log-line")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-device_forgotten').length > 0", 5), "the removed line"
+    unnamed = lines.filter(has_text="MEQ0000999").first
+    assert unnamed.locator(".log-device").inner_text() == "MEQ0000999", "a device without a name by its S/N"
+    rf = unnamed.locator(".log-rf")
+    assert rf.inner_text() == "0a0fee" and not rf.is_visible(), "its radio address for expert mode only"
+    own = page.locator("#log-lines .log-line.kind-config").filter(has_text=cube_sn).first
+    assert own.locator(".log-device").inner_text() == "Cube " + cube_sn, "the Cube's own configuration"
+    gone = page.locator("#log-lines .log-line.kind-device_forgotten").first
+    text = gone.locator(".log-text").inner_text()
+    type_name = page.evaluate("(t) => typeName(t)", d["type"])
+    assert d["serial"] in text and "(Old name)" in text and type_name in text, f"the removed device as it was: {text}"
+    assert gone.locator(".log-device").count() == 0, "named by its text alone"
+    show_view(page, "tiles")
+
+
 def stamp(now, i):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
 
@@ -66,10 +99,13 @@ def test_log_filters(page, case):
     assert page.locator("#log-lines .log-line").count() >= 7, "the seven devices' states"
     page.locator("#log-kind").select_option("")
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
-    page.locator("#log-device").select_option(rf)
+    sn = page.evaluate("state.rooms[0].devices[0].serial")
+    with page.expect_request(lambda r: "/log?" in r.url) as asked:
+        page.locator("#log-device").select_option(sn)
+    assert parse_qs(urlparse(asked.value.url).query).get("device") == [sn], "the device asked for by its S/N"
     assert wait_until(page, "logState.device === %r && document.querySelectorAll('#log-lines .log-line').length > 0 && "
                             "[...document.querySelectorAll('#log-lines .log-line')].every((l) => l.querySelector('.log-rf') && "
-                            "l.querySelector('.log-rf').textContent === %r)" % (rf, rf), 5), "only the device's events"
+                            "l.querySelector('.log-rf').textContent === %r)" % (sn, rf), 5), "only the device's events"
     kinds = set(page.evaluate("[...document.querySelectorAll('#log-lines .log-line')].map((l) => [...l.classList].find((c) => c.startsWith('kind-')))"))
     assert kinds <= {"kind-config", "kind-state"}, f"the device's kinds: {kinds}"
     with page.expect_response(lambda r: "/log?" in r.url) as answer:
@@ -174,8 +210,9 @@ def test_log_answers(page, case):
     assert older.is_disabled(), "nothing to page after Clear"
 
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
-    page.locator("#log-device").select_option(rf)
-    assert "device=" + rf in held(), "the device chosen asked for"
+    sn = page.evaluate("state.rooms[0].devices[0].serial")
+    page.locator("#log-device").select_option(sn)
+    assert "device=" + sn in held(), "the device chosen asked for, by its S/N"
     answer([])
     page.evaluate("selectCube(state.serial)")
     assert "device=" not in held(), "a Cube switch asks for all devices"
@@ -417,20 +454,20 @@ def test_log_choices_in_the_address(page, case):
     and the log again, keep the range; the last 20 again is the plain
     page."""
     show_view(page, "log")
-    rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+    sn = page.evaluate("state.rooms[0].devices[0].serial")
     length = page.evaluate("history.length")
     page.locator("#log-range").select_option("1h")
     page.locator("#log-kind").select_option("state")
-    page.locator("#log-device").select_option(rf)
-    want = "#log?range=1h&kind=state&device=" + rf
+    page.locator("#log-device").select_option(sn)
+    want = "#log?range=1h&kind=state&device=" + sn
     assert wait_until(page, "location.hash === %r" % want, 5), f"the choices in the address: {page.evaluate('location.hash')}"
     assert page.evaluate("history.length") == length, "in place of the log's entry"
     with page.expect_request(lambda r: "/log?" in r.url) as asked:
         page.reload()
     q = parse_qs(urlparse(asked.value.url).query)
-    assert q.get("kind") == ["state"] and q.get("device") == [rf] and "since" in q, f"the reload asks for them: {q}"
+    assert q.get("kind") == ["state"] and q.get("device") == [sn] and "since" in q, f"the reload asks for them: {q}"
     assert log_shown(page) and devices_loaded(page), "the log again, the Cube's devices loaded"
-    assert choices(page) == ["1h", "state", rf] and page.evaluate("location.hash") == want, "the choices kept"
+    assert choices(page) == ["1h", "state", sn] and page.evaluate("location.hash") == want, "the choices kept"
     page.locator("#log-clear").click()
     assert wait_until(page, "location.hash === '#log?range=1h'", 5), "Clear takes the kind and the device out, the range stays"
     show_view(page, "system")
@@ -447,19 +484,27 @@ def test_log_choices_in_the_address(page, case):
 
 def test_log_from_a_link(page, case):
     """A link to the log with its choices, in any order, opens the log
-    with them, asked of the server, and the address in its own order;
-    another address typed in its place shows its choices, the others at
-    their defaults."""
+    with them, asked of the server, and the address in its own order, the
+    device by its S/N; an old link's radio address takes the S/N once the
+    devices are loaded; another address typed in its place shows its
+    choices, the others at their defaults."""
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
-    page.evaluate("(h) => history.replaceState(null, '', location.pathname + h)", f"#log?device={rf}&kind=state&range=today")
+    sn = page.evaluate("state.rooms[0].devices[0].serial")
+    page.evaluate("(h) => history.replaceState(null, '', location.pathname + h)", f"#log?device={sn.lower()}&kind=state&range=today")
     with page.expect_request(lambda r: "/log?" in r.url) as asked:
         page.reload()
     q = parse_qs(urlparse(asked.value.url).query)
-    assert q.get("kind") == ["state"] and q.get("device") == [rf] and "since" in q and q.get("limit") == ["200"], \
+    assert q.get("kind") == ["state"] and q.get("device") == [sn] and "since" in q and q.get("limit") == ["200"], \
         f"the link's choices asked of the server: {q}"
     assert log_shown(page) and devices_loaded(page), "the log, the Cube's devices loaded"
-    assert choices(page) == ["today", "state", rf], "the link's choices"
-    assert page.evaluate("location.hash") == f"#log?range=today&kind=state&device={rf}", "the address in its order"
+    assert choices(page) == ["today", "state", sn], "the link's choices"
+    assert page.evaluate("location.hash") == f"#log?range=today&kind=state&device={sn}", "the address in its order"
+    page.evaluate("(h) => history.replaceState(null, '', location.pathname + h)", f"#log?device={rf}")
+    page.reload()
+    assert log_shown(page) and devices_loaded(page), "the old link's log"
+    assert wait_until(page, "location.hash === %r" % f"#log?device={sn}", 5), \
+        f"the old link's radio address takes the S/N: {page.evaluate('location.hash')}"
+    assert choices(page) == ["20", "", sn], "the device chosen by its S/N"
     page.evaluate("location.hash = '#log?range=week'")
     assert wait_until(page, "logState.range === 'week' && !logState.kind && !logState.device", 5), "the address typed"
     assert choices(page) == ["week", "", ""], "its range, every kind and device"

@@ -212,6 +212,10 @@ func pathTarget(r *http.Request, pattern string) string {
 // handed on; a refused one's is not read.
 func (s *Server) beginAudit(w *statusWriter, r *http.Request, pattern, action string, authorized bool) (*auditInfo, *http.Request) {
 	a := &auditInfo{action: action, pattern: pattern, path: r.URL.Path, method: r.Method, started: time.Now(), target: pathTarget(r, pattern), w: w}
+	if rf := r.PathValue("rf"); rf != "" {
+		// A device by its serial number, whichever form the path held.
+		a.target = s.deviceTarget(r.PathValue("sn"), rf)
+	}
 	if r.Body != nil && authorized {
 		b, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
 		r.Body.Close()

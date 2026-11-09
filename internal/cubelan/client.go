@@ -531,11 +531,12 @@ func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
 
 // ForgetDevice drops a device the Cube deleted with t: from the
 // snapshot (Snapshot.Forget) and tells the observers with an
-// EventForgotten, when the snapshot knew it.
+// EventForgotten, when the snapshot knew it; the event carries what the
+// snapshot knew of the device.
 func (c *Client) ForgetDevice(rf cube.RFAddress) {
-	if c.snap.Forget(rf) {
-		c.emit(Event{Kind: EventForgotten, Device: rf})
-		c.log.Info("device forgotten", "addr", c.Address(), "device", rf)
+	if gone, ok := c.snap.Forget(rf); ok {
+		c.emit(Event{Kind: EventForgotten, Device: rf, Gone: &gone})
+		c.log.Info("device forgotten", "addr", c.Address(), "device", rf, "serial", gone.Serial)
 	}
 }
 

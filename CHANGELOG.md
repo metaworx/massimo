@@ -50,6 +50,10 @@ the next minor, a fix counts the suffix up.
   answered it: one that no longer answers leaves the Cube choice and
   System settings → Cubes (`docs/api-v1.md`, "GET /api/v1/cubes").
 
+- The log names a device by its S/N, with the radio address in expert
+  mode, and a removed one by its type, S/N and name as it was; device
+  routes take the S/N too (`docs/api-v1.md`, "Identifiers").
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added

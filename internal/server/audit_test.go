@@ -145,7 +145,7 @@ func TestAuditDetails(t *testing.T) {
 		{"role.add", store.BootstrapUser, "role:night", store.ResultOK},
 		{"user.add", store.BootstrapUser, "user:zed", store.ResultOK},
 		{"setpoint", "vi", "room:6", store.ResultRefused},
-		{"device.lock", store.BootstrapUser, "device:0a010d", store.ResultOK},
+		{"device.lock", store.BootstrapUser, "device:MEQ0000106", store.ResultOK}, // by serial, the path's radio address resolved
 		{"setpoint", store.BootstrapUser, "room:6", store.ResultOK},
 	} {
 		r := rows[i]

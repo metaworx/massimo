@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -71,13 +72,14 @@ type logQuery struct {
 	before   time.Time
 	since    time.Time
 	kind     string
-	device   string
+	device   string // a radio address
+	serial   string // a serial number, until resolveSerial makes it the device
 	limit    int
 }
 
 // parseLogQuery reads before (an event's id, or an RFC 3339 time), since
 // (an RFC 3339 time, not after a before time), limit (1 to 1000, 200 by
-// default), kind and device (a radio address).
+// default), kind and device (a serial number or a radio address).
 func parseLogQuery(r *http.Request) (logQuery, error) {
 	q := r.URL.Query()
 	lq := logQuery{limit: defaultLogPage, kind: q.Get("kind")}
@@ -111,18 +113,38 @@ func parseLogQuery(r *http.Request) (logQuery, error) {
 		lq.limit = n
 	}
 	if v := q.Get("device"); v != "" {
-		rf, err := cube.ParseRFAddress(v)
-		if err != nil {
-			return lq, fail(http.StatusBadRequest, "bad device %q: %v", v, err)
+		if deviceSerial.MatchString(v) {
+			lq.serial = strings.ToUpper(v)
+		} else {
+			rf, err := cube.ParseRFAddress(v)
+			if err != nil {
+				return lq, fail(http.StatusBadRequest, "bad device %q: a radio address of six hex digits, or a serial number", v)
+			}
+			lq.device = rf.String()
 		}
-		lq.device = rf.String()
 	}
 	return lq, nil
 }
 
+// resolveSerial turns a page's serial into the radio address the log
+// keeps, through the Cube's snapshot; false for a serial the Cube does
+// not hold, whose page is empty.
+func (lq *logQuery) resolveSerial(rt *runtime) bool {
+	if lq.serial == "" {
+		return true
+	}
+	rf, ok := rt.client.Snapshot().BySerial(lq.serial)
+	if !ok {
+		return false
+	}
+	lq.device = rf.String()
+	return true
+}
+
 // getLog handles GET /cubes/{sn}/log: the page of the Cube's events
-// before the cursor and since a time, of a kind and a device where asked,
-// at most limit,
+// before the cursor and since a time, of a kind and a device where asked
+// (by its serial number or its radio address; a serial the Cube does not
+// hold has none), at most limit,
 // oldest first, the same objects the event stream sends; from the store,
 // with each event's id, or from the ring.
 func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
@@ -133,6 +155,10 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	lq, err := parseLogQuery(r)
 	if err != nil {
 		return err
+	}
+	if !lq.resolveSerial(rt) {
+		writeJSON(w, http.StatusOK, []event{})
+		return nil
 	}
 	if id := rt.storeID.Load(); id != 0 && rt.store != nil {
 		evs, err := s.storedLog(r.Context(), rt.store, id, lq)
