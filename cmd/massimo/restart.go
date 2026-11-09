@@ -52,7 +52,8 @@ const (
 	byExit    = "exit" // whatever runs serve, told by exitRestart
 )
 
-// homebrewLabel is the label brew services gives the server's job.
+// homebrewLabel is the label brew services gives the server's job; a
+// channel's formula, massimo-alpha, has it with its suffix (homebrewJob).
 const homebrewLabel = "homebrew.mxcl.massimo"
 
 // processInfo is what restartBy looks at, gathered by currentProcess.
@@ -109,7 +110,7 @@ func restartBy(mode string, p processInfo) (by, blocked string, err error) {
 		return byWindows, "", nil
 	case p.goos == "linux" && systemdStarted(p):
 		return bySystemd, "", nil
-	case p.goos == "darwin" && (p.ppid == 1 || p.getenv("XPC_SERVICE_NAME") == install.Label || p.getenv("XPC_SERVICE_NAME") == homebrewLabel):
+	case p.goos == "darwin" && (p.ppid == 1 || p.getenv("XPC_SERVICE_NAME") == install.Label || homebrewJob(p.getenv("XPC_SERVICE_NAME"))):
 		return byLaunchd, "", nil
 	}
 	return "", "no service manager would start this server again (in a terminal, or under one massimo does not know: -restart exit if it restarts serve)", nil

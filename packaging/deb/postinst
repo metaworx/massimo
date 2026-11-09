@@ -2,8 +2,9 @@
 # The massimo package's postinst: what `massimo install` does on a box
 # without the package, with Debian's tools (packaging/README.md, "Debian
 # package"): the system user, the settings directory and file, the unit
-# enabled (the reboot helper's only once the owner enabled it), and the
-# service started once the settings are filled in.
+# and the update helper's path unit enabled (the reboot helper's only once
+# the owner enabled it), and the service started once the settings are
+# filled in.
 set -e
 
 case "$1" in
@@ -28,6 +29,15 @@ configure)
 		else
 			deb-systemd-helper update-state massimo.service >/dev/null || true
 		fi
+		# The update helper runs apt when the web UI asks; enabled as
+		# `massimo install` enables a hand install's, and kept off once the
+		# owner turned it off (`massimo install -no-update-helper`).
+		deb-systemd-helper unmask massimo-update.path >/dev/null || true
+		if deb-systemd-helper --quiet was-enabled massimo-update.path; then
+			deb-systemd-helper enable massimo-update.path >/dev/null || true
+		else
+			deb-systemd-helper update-state massimo-update.path >/dev/null || true
+		fi
 		# The reboot helper stays off until the owner turns it on with
 		# `massimo install -reboot-helper`, and on once turned on: debhelper's
 		# snippet for a unit it does not enable (was-enabled is true on a
@@ -50,6 +60,11 @@ configure)
 			echo "massimo: (see packaging/README.md), then: sudo systemctl start massimo" >&2
 		elif command -v deb-systemd-invoke >/dev/null 2>&1; then
 			deb-systemd-invoke restart massimo.service >/dev/null || true
+		fi
+		# The update helper's path unit watches from now on, not only after
+		# the next boot, unless the owner turned it off.
+		if systemctl --quiet is-enabled massimo-update.path 2>/dev/null; then
+			systemctl start massimo-update.path >/dev/null || true
 		fi
 	fi
 	;;

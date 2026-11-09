@@ -12,7 +12,7 @@ version: ${VERSION}
 version_schema: none
 section: net
 priority: optional
-maintainer: Martin Rüegg <martin.rueegg@metaworx.ch>
+maintainer: Martin Rüegg <massimo@metaworx.ch>
 vendor: metaworx
 homepage: https://go.metaworx.ch/massimo
 license: AGPL-3.0-or-later
@@ -34,6 +34,12 @@ contents:
       mode: 0755
   - src: dist/deb/massimo.service
     dst: /usr/lib/systemd/system/massimo.service
+  # The update helper, enabled: it runs apt for the massimo source when
+  # the web UI asks (packaging/deb/massimo-update.service).
+  - src: packaging/systemd/massimo-update.path
+    dst: /usr/lib/systemd/system/massimo-update.path
+  - src: packaging/deb/massimo-update.service
+    dst: /usr/lib/systemd/system/massimo-update.service
   # The reboot helper, disabled until `massimo install -reboot-helper`.
   - src: packaging/systemd/massimo-reboot.path
     dst: /usr/lib/systemd/system/massimo-reboot.path

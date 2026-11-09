@@ -38,6 +38,10 @@ const (
 // without the helper it is left out.
 const updateFlag = " -update-request /var/lib/massimo/update-request"
 
+// UpdatePathWant is the link that enabling massimo-update.path makes, by
+// which serve knows that the Debian package's update helper is on.
+const UpdatePathWant = "/etc/systemd/system/paths.target.wants/massimo-update.path"
+
 // The reboot helper: the request file the server writes and the helper
 // watches, on Linux and macOS alike, and on Linux the link that enabling
 // massimo-reboot.path makes, by which serve knows the helper is there.
@@ -281,8 +285,9 @@ func Install(o Options) error {
 // configure is Install on a packaged box: -settings over a settings file
 // the package left as the template, the TLS options into the settings as
 // on a hand install, the listen drop-in, the reboot helper's path unit
-// enabled or disabled, a restart. The package has no update helper, so
-// there is no health drop-in to write.
+// enabled or disabled, a restart. The Debian package's update helper,
+// which runs apt, is enabled as a hand install's is, with its health
+// drop-in, unless -no-update-helper turns it off.
 func configure(o Options, m Manager) error {
 	if !m.Configurable() {
 		return fmt.Errorf("%s; massimo install is for a box without the package", m)
@@ -298,7 +303,12 @@ func configure(o Options, m Manager) error {
 	if err := o.checkTLS(); err != nil {
 		return err
 	}
-	o.NoUpdateHelper = true
+	// Only the Debian package ships an update helper, and only apt is
+	// what it runs.
+	helper := m.Name == "apt"
+	if !helper {
+		o.NoUpdateHelper = true
+	}
 	in := newInstaller(o)
 	fmt.Fprintf(in.Out, "%s: the binary, the user and the unit are the package's; configuring only\n", m)
 	startable, err := in.packagedSettings()
@@ -314,8 +324,24 @@ func configure(o Options, m Manager) error {
 	if err := in.listen(in.tlsEffective(in.path(EnvPath)), in.tlsHTTPEffective(in.path(EnvPath))); err != nil {
 		return err
 	}
+	if helper && in.NoUpdateHelper {
+		in.remove(HealthDropIn, false)
+		if !in.DryRun {
+			os.Remove(in.path(filepath.Dir(HealthDropIn))) // only when empty
+		}
+	}
 	if err := in.run("systemctl", "daemon-reload"); err != nil {
 		return err
+	}
+	// The package ships the update helper's path unit enabled.
+	switch {
+	case !helper:
+	case in.NoUpdateHelper:
+		in.run("systemctl", "disable", "--now", "massimo-update.path") // fails for a unit not enabled; that is fine
+	default:
+		if err := in.run("systemctl", "enable", "--now", "massimo-update.path"); err != nil {
+			return err
+		}
 	}
 	// The package ships the reboot helper's units disabled.
 	switch {

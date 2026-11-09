@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Massimo</title>
+<meta name="description" content="Open-source successor software for eQ-3 MAX! heating systems: a server with a web UI, an API and a proxy, on your own hardware.">
+<!-- The project's site (packaging/README.md, "The apt repository"):
+     packaging/apt/publish.sh copies this page to the site's root and
+     puts the apt suites in place of the placeholder below. Links are
+     absolute, so that they hold wherever a part of the page is shown. -->
+<style>
+:root { color-scheme: light dark; --text: #1f2328; --muted: #59636e; --back: #ffffff; --code: #f0f2f4; --link: #0b62c4; }
+@media (prefers-color-scheme: dark) {
+  :root { --text: #e6edf3; --muted: #9198a1; --back: #0d1117; --code: #1c2128; --link: #58a6ff; }
+}
+body { max-width: 46rem; margin: 0 auto; padding: 0 1rem 1rem; font: 1rem/1.5 system-ui, sans-serif; color: var(--text); background: var(--back); }
+a { color: var(--link); }
+pre { overflow-x: auto; padding: .75rem; border-radius: 6px; background: var(--code); font-size: .875rem; line-height: 1.4; }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; }
+p code, li code { overflow-wrap: anywhere; }
+footer { margin-top: 2rem; color: var(--muted); font-size: .875rem; }
+</style>
+</head>
+<body>
+<header>
+<h1>Massimo</h1>
+<p>Open-source successor software for eQ-3 MAX! heating systems (the MAX! Cube LAN gateway, radiator and wall thermostats, window contacts, eco switches) after the vendor's end of life.</p>
+</header>
+<main>
+<p>One program, <code>massimo serve</code>, on a small box on the Cubes' network (a Raspberry Pi 1 is enough) gives them a web UI for phone and desktop, a JSON API, and a proxy through which the original MAX! software keeps working. It runs on your own hardware, with no account and no cloud. Massimo is in early development: every release is a pre-release on the update channel <code>alpha</code>.</p>
+
+<h2>Install</h2>
+
+<h3>Debian, Ubuntu, Raspberry Pi OS: the apt repository</h3>
+<p>One suite per update channel: {{SUITES}}. Install the keyring package first, then the sources:</p>
+<pre><code>curl -fsSLo /tmp/massimo-archive-keyring.deb https://massimo.metaworx.ch/apt/massimo-archive-keyring.deb
+sudo apt install /tmp/massimo-archive-keyring.deb
+sudo tee /etc/apt/sources.list.d/massimo.sources &lt;&lt;'EOF'
+Types: deb
+URIs: https://massimo.metaworx.ch/apt
+Suites: alpha
+Components: main
+Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
+EOF
+sudo apt update &amp;&amp; sudo apt install massimo</code></pre>
+<p>Put a line into <code>/etc/massimo/env</code>, such as the token (see <a href="https://massimo.metaworx.ch/#settings">The first settings</a>), then <code>sudo systemctl start massimo</code>; <code>sudo apt upgrade</code> installs each release from then on. A single release's package is also on the <a href="https://github.com/metaworx/massimo/releases">releases page</a>: <code>_arm64.deb</code> for a 64-bit Raspberry Pi OS, <code>_armhf</code> for a 32-bit one (the Pi 1 included), <code>_amd64</code> for a PC. The repository's key, for a check by hand, is <a href="https://massimo.metaworx.ch/apt/massimo.asc">massimo.asc</a>. A box that followed the old address <code>https://metaworx.github.io/massimo/apt</code> changes its sources once: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#moving-from-the-old-address">Moving from the old address</a>. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#the-apt-repository">The apt repository</a>.</p>
+
+<h3>macOS: Homebrew</h3>
+<pre><code>brew install metaworx/massimo/massimo-alpha
+brew services start massimo-alpha</code></pre>
+<p>Homebrew builds the release from source. The settings are in <code>$(brew --prefix)/etc/massimo/env</code>, and <code>brew upgrade massimo-alpha</code> updates it. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#homebrew">Homebrew</a>.</p>
+
+<h3>Windows: the service</h3>
+<p>Download <code>massimo-windows-amd64.exe</code> from the <a href="https://github.com/metaworx/massimo/releases">releases page</a>. Then, in PowerShell opened with "Run as administrator", in that folder, with a settings file <code>.env</code> next to it (an empty one will do, see <a href="https://massimo.metaworx.ch/#settings">The first settings</a>):</p>
+<pre><code>.\massimo-windows-amd64.exe install -dry-run -settings .env
+.\massimo-windows-amd64.exe install -settings .env</code></pre>
+<p>This installs the service <code>massimo</code> and its firewall rule; the web UI's button and <code>massimo update</code> install the next release. The binary is not code-signed: one downloaded with a browser meets SmartScreen's "Unknown publisher" when started from Explorer. Details: <a href="https://github.com/metaworx/massimo#windows">Windows</a>.</p>
+
+<h3>Linux and macOS: the binary as a service</h3>
+<p>Every release carries one binary per platform, with <code>SHA256SUMS</code> and a signed manifest, on the <a href="https://github.com/metaworx/massimo/releases">releases page</a>; <a href="https://github.com/metaworx/massimo#installing">Installing</a> says which binary fits which box. As root, in the folder with the binary (here the one for a 64-bit Raspberry Pi) and a settings file <code>.env</code> (an empty one will do, see <a href="https://massimo.metaworx.ch/#settings">The first settings</a>):</p>
+<pre><code>chmod +x massimo-linux-arm64
+sudo ./massimo-linux-arm64 install -dry-run -settings .env
+sudo ./massimo-linux-arm64 install -settings .env</code></pre>
+<p>This installs a systemd service on Linux, a LaunchDaemon on a Mac; the web UI's button and <code>massimo update</code> install the next release. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#install-with-massimo-install">Install with massimo install</a>.</p>
+
+<h2 id="settings">The first settings</h2>
+<p>On the Cubes' network the server needs no settings to begin with. Open <code>http://&lt;the box&gt;:8099/</code> from a device on the same network: while there are no users, the page offers the local network a form for the first owner. Then add the Cubes under System settings → Cubes, which lists those the server finds. A Cube takes one client at a time: close the original MAX! software first; from then on that software connects to the server's proxy.</p>
+<p>The settings file each route above names takes what discovery and the page cannot give: the address of a Cube that discovery does not reach, on another subnet or behind a VPN (<code>massimo discover</code> lists the Cubes it hears, with their serial and address), and a token that becomes the owner's key at the first start, which the page then asks for, so that no form for the first owner is open on the network:</p>
+<pre><code>MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
+MASSIMO_API_TOKEN=choose-a-long-random-string</code></pre>
+<p>The Debian package starts the service, and restarts it after an upgrade, only once <code>/etc/massimo/env</code> differs from the template, so that a fresh box does not serve the network unasked: put a line in, such as the token, then <code>sudo systemctl start massimo</code>. <code>massimo install -settings .env</code> starts it with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
+
+<h2>Documentation</h2>
+<ul>
+<li><a href="https://github.com/metaworx/massimo#readme">README</a>: the features, installing, the server, the command line</li>
+<li><a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md">packaging/README.md</a>: the service on Linux, Windows and macOS, the Debian package, the apt repository, Homebrew, updating</li>
+<li><a href="https://github.com/metaworx/massimo/blob/main/docs/ui.md">docs/ui.md</a>: the web UI</li>
+<li><a href="https://github.com/metaworx/massimo/blob/main/docs/api-v1.md">docs/api-v1.md</a>: the HTTP API</li>
+<li><a href="https://github.com/metaworx/massimo/issues">Issues</a>: questions and bugs</li>
+</ul>
+</main>
+<footer>
+<p><a href="https://massimo.metaworx.ch/privacy.html">Privacy policy</a> · <a href="https://github.com/metaworx/massimo">Source on GitHub</a> · Free software under the <a href="https://github.com/metaworx/massimo/blob/main/LICENSE">AGPL-3.0-or-later</a></p>
+<p>"MAX!" and "eQ-3" are trademarks of eQ-3 AG.
+This project is not affiliated with or endorsed by eQ-3.</p>
+</footer>
+</body>
+</html>

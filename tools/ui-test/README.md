@@ -375,8 +375,14 @@ the page's clock is fixed and the server's times are replaced by fixed ones
 on the way to the page, the time zone is Europe/Zurich,
 the event stream is a stub that sends nothing,
 the first room's thermostat is made 30 hours old and stale,
-and the version, the Software section,
-the fake Cube's address and a found Cube are fixed answers.
+the version (in the log's line of the server's start too),
+the Software section, the fake Cube's address and a found Cube
+are fixed answers,
+and Chromium rasters every tile whole (`--disable-partial-raster`):
+by default it rasters again only the part of a tile that changed,
+and an anti-aliased edge rastered in part comes out a level of 255 off
+the same edge rastered whole,
+so a few shots of every run changed on the header's rounded buttons.
 Another machine's fonts give other pixels.
 Nothing is compared: a shot that cannot be taken fails the run,
 a changed picture does not.
