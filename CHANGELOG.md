@@ -97,8 +97,8 @@ the next minor, a fix counts the suffix up.
   installed (`GUIDELINES/project/CI.md`).
 
 - `make deb-systemd-test` checks the package under a real systemd, the
-  upgrade from v0.12.0-alpha.1 with the service running among its cases
-  (`packaging/README.md`).
+  upgrade from v0.12.0-alpha.1 with the service running among its cases,
+  and CI runs it on trixie and bookworm (`GUIDELINES/project/CI.md`).
 
 ### Changed
 

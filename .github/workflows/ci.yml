@@ -297,8 +297,11 @@ jobs:
   # one installed, checked and purged in a Debian container
   # (packaging/deb/test.sh), on trixie and on bookworm, which the
   # Raspberry Pi OS Legacy images run, and installed again from an apt
-  # repository built with a throwaway key (packaging/apt/test.sh). A
-  # container has no systemd, so the start on a real box is not covered.
+  # repository built with a throwaway key (packaging/apt/test.sh). That
+  # container has no systemd; the cases that need one run each in a
+  # container of its own with systemd as its first process
+  # (packaging/deb/systemd-test.sh): the first start, the restart, and the
+  # upgrade from v0.12.0-alpha.1 with the service running.
   deb:
     name: Debian package (${{ matrix.image }})
     runs-on: ubuntu-latest
@@ -321,6 +324,13 @@ jobs:
 
       - name: Install, check and purge in a container
         run: make deb-test DEB_IMAGE=${{ matrix.image }}
+
+      # v0.12.0-alpha.1's package, the last whose account was massimo,
+      # comes from its release through gh, with the job's token.
+      - name: Under systemd, the upgrade from v0.12.0-alpha.1 included
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make deb-systemd-test DEB_IMAGE=${{ matrix.image }}
 
       # The apt repository (packaging/README.md, "The apt repository")
       # built from the packages with a throwaway key, verified, and
