@@ -177,6 +177,7 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusInternalServerError, "asking the update helper: %v", err)
 	}
 	s.log.Info("update requested", "from", v.Current, "to", v.Latest, "channel", v.Channel)
+	asked := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
 	if start := s.opts.Update.Start; start != nil {
 		switch err := start(); {
 		case errors.Is(err, update.ErrHelperRunning):
@@ -186,9 +187,14 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 		case err != nil:
 			os.Remove(s.opts.Update.Request)
 			s.log.Error("update helper not started", "error", err)
+			failed := systemEvent("update", userIDOf(r), asked)
+			failed.Level, failed.Error = "warn", err.Error()
+			s.logServer(failed)
 			return fail(http.StatusInternalServerError, "starting the update helper: %v", err)
 		}
 	}
+	s.noteStop("update")
+	s.logServer(systemEvent("update", userIDOf(r), asked))
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
 	return nil
 }

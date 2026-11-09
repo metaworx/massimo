@@ -92,6 +92,32 @@ func (s *Server) SetConfig(line cube.Message) {
 	s.configs[rf] = line
 }
 
+// SetGreeting replaces the lines a new connection is greeted with, as
+// the Cube's rooms, names and configurations change while no client is
+// connected (another app, a button at a device).
+func (s *Server) SetGreeting(lines []cube.Message) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Greeting = append([]cube.Message(nil), lines...)
+}
+
+// greeting returns the lines a new connection is greeted with.
+func (s *Server) greeting() []cube.Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]cube.Message(nil), s.Greeting...)
+}
+
+// Drop closes every client connection and keeps listening, as a Cube
+// that lost its network for a moment: the client connects again.
+func (s *Server) Drop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for c := range s.open {
+		c.Close()
+	}
+}
+
 // SetDeviceList makes l: answer with line from now on, as the real Cube
 // does once devices reported new states.
 func (s *Server) SetDeviceList(line cube.Message) {
@@ -253,7 +279,8 @@ func (s *Server) serve(conn net.Conn) {
 		_, err := conn.Write([]byte(line))
 		return err
 	}
-	for _, m := range s.Greeting {
+	greeting := s.greeting()
+	for _, m := range greeting {
 		m, ok := s.visible(m)
 		if !ok {
 			continue
@@ -273,7 +300,7 @@ func (s *Server) serve(conn net.Conn) {
 		}
 	}()
 	var last cube.Message
-	for _, m := range s.Greeting {
+	for _, m := range greeting {
 		if m.Type == 'L' {
 			last = m
 		}
@@ -310,7 +337,7 @@ func (s *Server) serve(conn net.Conn) {
 			if p := s.paired(); p != nil && strings.EqualFold(strings.TrimSpace(m.Data), p.Device.RFAddress.String()) {
 				reply = p.Config.Wire()
 			}
-			for _, g := range s.Greeting {
+			for _, g := range greeting {
 				if g.Type == 'C' && strings.HasPrefix(strings.ToLower(g.Data), strings.ToLower(strings.TrimSpace(m.Data))+",") {
 					reply = g.Wire()
 				}

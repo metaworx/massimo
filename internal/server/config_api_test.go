@@ -562,7 +562,9 @@ func TestRemoveListedDevice(t *testing.T) {
 	}
 	waitFor(t, "the events", func() bool {
 		kinds := logKinds(t, ts, events)
-		return hasKind(kinds, "metadata:") && hasKind(kinds, "device_forgotten:0a010a")
+		// The list written without the device is a metadata line of that
+		// one device (AP Logging v1.1, Block 4).
+		return hasKind(kinds, "metadata:0a010a") && hasKind(kinds, "device_forgotten:0a010a")
 	})
 }
 

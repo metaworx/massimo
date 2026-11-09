@@ -45,6 +45,9 @@ type Client struct {
 	evs   chan Event
 	ready chan struct{} // closed when the first greeting is complete
 	once  sync.Once
+	// greetedOnce is set by the first complete greeting: a later one is
+	// after a loss or a reconnect asked for (EventConnected's Cause).
+	greetedOnce atomic.Bool
 
 	mu       sync.Mutex
 	conn     net.Conn
@@ -277,7 +280,15 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 				c.greeted = make(chan struct{})
 				c.mu.Unlock()
 				c.once.Do(func() { close(c.ready) })
-				c.emit(Event{Kind: EventConnected})
+				ev := Event{Kind: EventConnected, Cause: CauseReconnect}
+				switch {
+				case !c.greetedOnce.Swap(true):
+					ev.Cause = CauseStart
+				case !lost.IsZero():
+					ev.Cause, ev.DownFor = CauseLoss, time.Since(lost)
+				}
+				c.log.Debug("greeting: list", "addr", c.Address(), "devices", len(c.snap.Devices()))
+				c.emit(ev)
 				if lost.IsZero() {
 					c.log.Info("cube connected", "addr", c.Address())
 				} else {
@@ -360,6 +371,9 @@ func (c *Client) handle(m cube.Message) {
 		c.noteBudget(c.snap.Hello())
 	}
 	for _, e := range evs {
+		if e.Greeting {
+			c.logGreeting(e)
+		}
 		c.emit(e) // never blocks: it drops the oldest event
 	}
 	if reply != nil {
@@ -521,6 +535,27 @@ func (c *Client) reconnect(ctx context.Context, onlyMoved bool) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// logGreeting writes a line of the greeting into the text log, at Debug:
+// the steps of a connection are worth seeing when one looks for them.
+func (c *Client) logGreeting(e Event) {
+	snap := c.snap
+	switch e.Kind {
+	case EventHello:
+		if h := snap.Hello(); h != nil {
+			c.log.Debug("greeting: hello", "addr", c.Address(), "serial", h.Serial, "firmware", h.FirmwareVersion,
+				"duty_cycle_pct", h.DutyCycle, "free_memory_slots", h.FreeMemorySlots)
+		}
+	case EventMetadata:
+		if md := snap.Metadata(); md != nil {
+			c.log.Debug("greeting: metadata", "addr", c.Address(), "rooms", len(md.Rooms), "devices", len(md.Devices))
+		}
+	case EventConfig:
+		if cfg := snap.Config(e.Device); cfg != nil {
+			c.log.Debug("greeting: config", "addr", c.Address(), "device", e.Device, "serial", cfg.Serial, "type", cfg.Type)
+		}
 	}
 }
 

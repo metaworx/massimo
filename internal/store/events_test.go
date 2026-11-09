@@ -535,7 +535,8 @@ func TestEventsPruneStops(t *testing.T) {
 		t.Fatal("the writer did not stop")
 	}
 	var left int
-	if err := s.db.QueryRow(`SELECT count(*) FROM events WHERE kind != 'hello'`).Scan(&left); err != nil || left != 480 {
+	// The prune's own line is the server's (logPruned), not one of the 500.
+	if err := s.db.QueryRow(`SELECT count(*) FROM events WHERE kind NOT IN ('hello', 'log_pruned')`).Scan(&left); err != nil || left != 480 {
 		t.Fatalf("%d left after two chunks (%d steps), %v", left, steps.Load(), err)
 	}
 	if page, _ := s.Events(context.Background(), EventQuery{CubeID: a.ID, Kind: "hello"}); len(page) != 1 {

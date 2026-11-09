@@ -1812,6 +1812,22 @@ paths:
                     serial: {type: string, description: "The device's serial number, also before it has a state and after it is gone; the Cube's for its own configuration"}
                     source: {type: string, enum: [device, cube, system, config], description: "Whose the event is: a device's, the Cube's own, the server's own jobs, a change of the configuration"}
                     level: {type: string, enum: [debug, info, warn, error]}
+                    summary: {type: object, description: "What a line holds in short: a connection's devices, rooms, firmware, duty_cycle_pct, free_memory_slots, cause and down_for_s; a hello's budget; a list's rooms and devices; a configuration's main values"}
+                    list_changes:
+                      type: array
+                      description: A metadata event's differences of the room and device list
+                      items:
+                        type: object
+                        properties:
+                          what: {type: string, enum: [room_added, room_renamed, room_deleted, device_added, device_renamed, device_moved, device_left]}
+                          room: {type: integer}
+                          name: {type: string}
+                          from: {type: string}
+                          to: {type: string}
+                          device: {type: string}
+                          serial: {type: string}
+                    changes: {type: object, description: "A state event's or a config event's differences, by name: {from, to}"}
+                    while_disconnected: {type: boolean, description: What a connection's greeting found changed while the Cube was disconnected or the server down}
                     by:
                       type: object
                       description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and a server without users
@@ -1837,7 +1853,13 @@ paths:
         device_forgotten (a device deleted from the Cube left the server's
         copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),
         restore_step and restore_done (with the progress of a restore in
-        "restore", see POST …/restore). A state
+        "restore", see POST …/restore); the server's own, source system:
+        server_started, server_stopping, settings_read, restart, reboot,
+        reboot_cancelled, update, update_result, backup, backup_deleted,
+        backups_pruned, log_pruned, restore_started; a Cube's own:
+        address_changed, cube_gone; a change made through the API, source
+        config: change, with the action, target, set, changes and subject in
+        "summary" and who in "by". A state
         event after a device's first one has "changes": per changed value
         of state, {"from": …, "to": …} (null for a value the device did not
         have), and "reported" when the Cube gained or lost its state. A

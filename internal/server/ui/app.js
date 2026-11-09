@@ -613,7 +613,6 @@ function applySettings() {
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   startPolling();
-  logSettingsChanged(); // log.js: the log's level follows the expert switch
 }
 
 // --- loading ----------------------------------------------------------
@@ -1024,6 +1023,12 @@ async function connectEvents() {
   // that sent it (backup.js).
   es.addEventListener("restore_step", logged(restoreEvent));
   es.addEventListener("restore_done", logged(restoreEvent));
+  // The log's other kinds (log.js LOG_KINDS): the server's own lines, a
+  // Cube's address and its leaving the LAN, the changes, for the log
+  // alone.
+  const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
+    "connected", "disconnected", "config", "cube_found", "restore_step", "restore_done"]);
+  for (const kind of LOG_KINDS) if (!handled.has(kind)) es.addEventListener(kind, logged(() => {}));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();

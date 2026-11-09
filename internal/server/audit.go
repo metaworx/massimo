@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // Limits of what an audit row keeps of a request and its answer.
@@ -96,6 +97,24 @@ var actions = map[string]string{
 	"DELETE /api/v1/me/push/{id}":                  "push.unsubscribe",
 }
 
+// changeLines says which line of the log each audited action writes once
+// it succeeded (AP Logging v1.1, Block 6): "change", a line under
+// Configuration with who made it, the setpoints included; "system", none
+// here, its handler writing its own line (systemlog.go); "" none: a
+// sign-in, a preference, a search, a restore's plan. TestEveryActionHasALine
+// holds it to actions.
+var changeLines = map[string]string{
+	"login": "", "login.start": "", "logout": "", "preference.set": "", "preference.delete": "", "discover": "", "restore.plan": "",
+	"update.start": "system", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
+	"server.reboot.cancel": "system", "backup.take": "system", "backup.delete": "system", "restore.start": "system",
+	"cube.add": "change", "cube.update": "change", "cube.remove": "change", "settings.update": "change",
+	"setpoint": "change", "room.delete": "change", "room.rename": "change", "device.update": "change", "device.remove": "change",
+	"device.lock": "change", "room.config": "change", "device.config": "change", "room.program": "change", "device.program": "change",
+	"pairing.start": "change", "pairing.stop": "change",
+	"user.add": "change", "user.update": "change", "user.remove": "change", "token.add": "change", "token.revoke": "change",
+	"role.add": "change", "role.update": "change", "role.remove": "change", "role.disable": "change", "capability.disable": "change",
+}
+
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
 var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true, "server.reload": true}
@@ -122,6 +141,30 @@ type auditInfo struct {
 	commandID   int64
 	commandUUID string
 	skip        bool
+	// sn is the Cube the path names; changes and subject what a handler
+	// tells the log's change line (auditChange, auditSubject).
+	sn      string
+	changes map[string]view.Change
+	subject map[string]any
+}
+
+// auditChange tells the request's change line a value that changed, from
+// and to: a Cube's name, a setting.
+func auditChange(r *http.Request, name string, from, to any) {
+	if a := auditOf(r); a != nil {
+		if a.changes == nil {
+			a.changes = map[string]view.Change{}
+		}
+		a.changes[name] = view.Change{From: from, To: to}
+	}
+}
+
+// auditSubject tells the request's change line the user, role or key it
+// concerns, as they are then: their ids and names, never a secret.
+func auditSubject(r *http.Request, subject map[string]any) {
+	if a := auditOf(r); a != nil {
+		a.subject = subject
+	}
 }
 
 const auditKey ctxKey = iota + 1
@@ -227,7 +270,7 @@ func (s *Server) beginAudit(w *statusWriter, r *http.Request, pattern, action st
 		a.body, a.bodyLen = b, len(b)
 		r.Body = io.NopCloser(bytes.NewReader(b))
 	}
-	a.cubeID = s.cubeIDOf(r.Context(), r.PathValue("sn"))
+	a.cubeID, a.sn = s.cubeIDOf(r.Context(), r.PathValue("sn")), r.PathValue("sn")
 	return a, r.WithContext(context.WithValue(r.Context(), auditKey, a))
 }
 
@@ -320,6 +363,55 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 	if a.commandID != 0 {
 		s.endCommand(ctx, a, status)
 	}
+	if result == store.ResultOK && changeLines[a.action] == "change" {
+		s.logChange(a)
+	}
+}
+
+// logChange writes the change line of a request that changed something:
+// its action, its target (a device by its serial), what it set (the
+// request's body, its secrets removed), what changed from and to and the
+// user, role or key it concerns, where the handler said; with who made
+// it. A Cube's change is the Cube's line, every other the server's.
+func (s *Server) logChange(a *auditInfo) {
+	summary := map[string]any{"action": a.action}
+	if a.target != "" {
+		summary["target"] = a.target
+	}
+	if body := redacted(a.body); body != nil {
+		var set map[string]any
+		if json.Unmarshal(body, &set) == nil && len(set) > 0 {
+			summary["set"] = set
+		}
+	}
+	if len(a.changes) > 0 {
+		summary["changes"] = a.changes
+	}
+	if a.subject != nil {
+		summary["subject"] = a.subject
+	}
+	ev := event{Kind: "change", Source: "config", Time: a.started, Summary: summary}
+	if a.p.named() {
+		ev.userID = a.p.user.ID
+	}
+	if dev, ok := strings.CutPrefix(a.target, "device:"); ok && deviceSerial.MatchString(dev) {
+		ev.Serial = strings.ToUpper(dev)
+	}
+	sn := a.sn
+	if c, ok := strings.CutPrefix(a.target, "cube:"); ok && sn == "" {
+		sn = c
+	}
+	s.mu.RLock()
+	rt := s.cubes[strings.ToLower(sn)]
+	s.mu.RUnlock()
+	if rt != nil && rt.storeID.Load() != 0 {
+		s.emitBy(rt, ev)
+		return
+	}
+	if sn != "" {
+		summary["cube"] = store.NormalSerial(sn)
+	}
+	s.logServer(ev)
 }
 
 // refusalWindow is the span one row of refused requests covers.

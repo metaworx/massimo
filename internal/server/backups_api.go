@@ -220,6 +220,7 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusNotFound, "no backup %d of cube %s", id, rt.serial)
 	}
 	s.log.Info("backup deleted", "cube", rt.serial, "id", id)
+	s.emitBy(rt, systemEvent("backup_deleted", userIDOf(r), map[string]any{"id": id}))
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

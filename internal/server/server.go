@@ -250,13 +250,14 @@ type ProxyListener struct {
 
 // Server is the HTTP API over a set of Cubes.
 type Server struct {
-	opts Options
-	log  *slog.Logger
+	opts    Options
+	log     *slog.Logger
+	stopWhy atomic.Value // string: why the server will stop (noteStop)
+	started time.Time    // when the server was created, for /healthz
 	// notify runs the notification rules (push_api.go), nil without a
 	// store; vapidMu makes the VAPID key once.
 	notify  *notify.Sink
 	vapidMu sync.Mutex
-	started time.Time // when the server was created, for /healthz
 	mu      sync.RWMutex
 	cubes   map[string]*runtime // by serial, lower case
 	order   []string
@@ -320,6 +321,10 @@ type Server struct {
 }
 
 type runtime struct {
+	// logRef is what the log compares the Cube's lines with; only the
+	// pump touches it (logdiff.go).
+	logRef logRef
+
 	cfgMu sync.RWMutex
 	cfg   CubeConfig // through config and setConfig: the API changes it
 	// storeID is the Cube's row in the store, from CubeConfig.StoreID or
@@ -411,7 +416,20 @@ type event struct {
 	State interface{} `json:"state,omitempty"`
 	// Changes says, for a "state" event, which values differ from the
 	// device's previous state event and how; absent on the first one.
+	// For a "config" event, which values of the configuration differ
+	// from the one held before (logdiff.go).
 	Changes map[string]view.Change `json:"changes,omitempty"`
+	// ListChanges says, for a "metadata" event, what differs in the room
+	// and device list.
+	ListChanges []listChange `json:"list_changes,omitempty"`
+	// Summary is what a line holds, in short, where it says no
+	// differences: a hello's budget, a list's rooms and devices, a
+	// configuration's main values, a connection's devices, rooms,
+	// firmware, budget, cause and down_for_s.
+	Summary map[string]any `json:"summary,omitempty"`
+	// Missed marks the differences a greeting found: what changed while
+	// the Cube was disconnected, or the server down.
+	Missed bool `json:"while_disconnected,omitempty"`
 	// Paired is the device that joined, for a "paired" event.
 	Paired *cube.NewDevice `json:"paired,omitempty"`
 	// Cube is the Cube discovery found, for a "cube_found" event.
@@ -601,6 +619,7 @@ func (s *Server) Run(ctx context.Context) error {
 	} else {
 		close(writerDone)
 	}
+	s.logStarted(ctx)
 	for _, rt := range s.runtimes() {
 		s.startRuntime(rt)
 	}
@@ -620,6 +639,7 @@ func (s *Server) Run(ctx context.Context) error {
 		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
 	}
 	<-ctx.Done()
+	s.logStopping() // before the writer stops, which writes it
 	// Once ctx is done nothing new is tracked (track); taking the lock
 	// waits for a track that saw ctx alive, so Wait cannot race an Add.
 	s.mu.Lock()
@@ -782,6 +802,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				ev.Paired = e.New
 				go rt.writer().Reread(ctx, e.Device)
 			}
+			after := s.detail(ctx, rt, e, &ev)
 			ev.settle()
 			rt.remember(ev)
 			s.notifyEvent(rt, ev)
@@ -801,8 +822,92 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				}
 			}
 			rt.subsMu.Unlock()
+			for _, a := range after {
+				rt.emit(a)
+			}
 		}
 	}
+}
+
+// detail says what a hello, metadata, config or connected event holds
+// (logdiff.go). A greeting's own lines go to the log at debug with their
+// summaries, and what they found changed against the reference is held
+// until the connected line, which returns it, to follow at info. Outside
+// a greeting, a line with differences says them at info, one without is
+// at debug, and a device's first configuration says its summary.
+func (s *Server) detail(ctx context.Context, rt *runtime, e cubelan.Event, ev *event) []event {
+	snap := rt.client.Snapshot()
+	hidden := rt.hidden()
+	switch e.Kind {
+	case cubelan.EventHello:
+		ev.Summary = helloSummary(snap.Hello())
+		if e.Greeting {
+			ev.Level = "debug"
+		}
+	case cubelan.EventMetadata:
+		ref := s.logReference(ctx, rt)
+		md := snap.Metadata()
+		changes := listChanges(ref.meta, md, hidden)
+		if md != nil {
+			ref.meta = md
+		}
+		var one listChange
+		if len(changes) > 0 && sameDevice(changes) {
+			one = changes[0]
+		}
+		switch {
+		case e.Greeting:
+			ev.Level, ev.Summary = "debug", listSummary(md, hidden)
+			if len(changes) > 0 {
+				ref.held = append(ref.held, event{Kind: "metadata", Source: "cube", Device: one.Device, Serial: one.Serial, ListChanges: changes, Missed: true, Time: ev.Time})
+			}
+		case len(changes) > 0:
+			ev.ListChanges, ev.Device, ev.Serial = changes, one.Device, one.Serial
+		default:
+			ev.Level, ev.Summary = "debug", listSummary(md, hidden)
+		}
+	case cubelan.EventConfig:
+		ref := s.logReference(ctx, rt)
+		cfg := snap.Config(e.Device)
+		prev := ref.configs[e.Device]
+		if cfg != nil {
+			ref.configs[e.Device] = cfg
+		}
+		changes := configChanges(prev, cfg)
+		switch {
+		case e.Greeting:
+			ev.Level, ev.Summary = "debug", configSummary(cfg)
+			if len(changes) > 0 {
+				ref.held = append(ref.held, event{Kind: "config", Source: ev.Source, Device: ev.Device, Serial: ev.Serial, Changes: changes, Missed: true, Time: ev.Time})
+			}
+		case prev == nil:
+			ev.Summary = configSummary(cfg)
+		case len(changes) > 0:
+			ev.Changes = changes
+		default:
+			ev.Level, ev.Summary = "debug", configSummary(cfg)
+		}
+	case cubelan.EventConnected:
+		ref := s.logReference(ctx, rt)
+		ev.Summary = connectedSummary(snap, hidden, e)
+		if e.Cause == cubelan.CauseReconnect {
+			ev.Level = "debug"
+		}
+		held := ref.held
+		ref.held = nil
+		return held
+	}
+	return nil
+}
+
+// sameDevice reports whether every change of a list concerns one device.
+func sameDevice(changes []listChange) bool {
+	for _, c := range changes {
+		if c.Device == "" || c.Device != changes[0].Device {
+			return false
+		}
+	}
+	return true
 }
 
 // changedNames lists the names of the changed values, sorted.
