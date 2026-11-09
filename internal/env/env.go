@@ -55,8 +55,8 @@ const (
 )
 
 // The TLS of massimo serve (internal/certs) and its HSTS days, the
-// trusted proxies: the settings massimo install writes and serve reads,
-// named here once for both and for Known.
+// trusted proxies, which massimo install writes, and the announcement:
+// the settings serve reads, named here once for both and for Known.
 const (
 	TLS           = "MASSIMO_TLS"
 	TLSCert       = "MASSIMO_TLS_CERT"
@@ -70,6 +70,8 @@ const (
 	// TrustedProxies are the reverse proxies whose headers name the
 	// client.
 	TrustedProxies = "MASSIMO_TRUSTED_PROXIES"
+	// Announce switches serve's announcement on the LAN by mDNS.
+	Announce = "MASSIMO_ANNOUNCE"
 )
 
 // Moved lists the per-Cube variables whose values serve keeps in its
@@ -166,7 +168,7 @@ func Known(k string) bool {
 	switch k {
 	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", "MASSIMO_REBOOT",
-		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies,
+		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies, Announce,
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.
 		"MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN":

@@ -4,9 +4,13 @@
 package cubelan
 
 import (
+	"context"
 	"encoding/binary"
 	"net"
+	"slices"
+	"strconv"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 )
@@ -87,5 +91,46 @@ func TestQueryConfigReadsTheDHCPFlag(t *testing.T) {
 	queryConfig(pc, to, d)
 	if d.DHCP != nil {
 		t.Fatalf("other cube: dhcp %v", *d.DHCP)
+	}
+}
+
+// A serial that answers from two addresses, a Cube and the massimo
+// proxy that serves it, is listed twice, once per address.
+func TestDiscoverKeepsEveryAnswerOfASerial(t *testing.T) {
+	first, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0107)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	_, port, _ := net.SplitHostPort(first.Addr())
+	second, err := fakecube.StartDiscovery("127.0.0.2:"+port, "KEQ0000000", 0x0a0107)
+	if err != nil {
+		t.Skipf("no second loopback address here: %v", err)
+	}
+	defer second.Close()
+	p, _ := strconv.Atoi(port)
+	found, err := discover(context.Background(), 500*time.Millisecond, p, net.IPv4(127, 0, 0, 1), net.IPv4(127, 0, 0, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ips []string
+	for _, d := range found {
+		if d.Serial != "KEQ0000000" {
+			t.Fatalf("serial %q", d.Serial)
+		}
+		ips = append(ips, d.IP.String())
+	}
+	slices.Sort(ips)
+	if !slices.Equal(ips, []string{"127.0.0.1", "127.0.0.2"}) {
+		t.Fatalf("answers from %v", ips)
+	}
+}
+
+// eQ-3's prefix in either spelling and case; another card's is not.
+func TestIsEQ3MAC(t *testing.T) {
+	for mac, want := range map[string]bool{"00:1a:22:01:02:03": true, "00-1A-22-01-02-03": true, "02:00:00:01:02:03": false, "": false} {
+		if got := IsEQ3MAC(mac); got != want {
+			t.Errorf("%q: %v", mac, got)
+		}
 	}
 }

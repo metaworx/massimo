@@ -19,6 +19,12 @@ import (
 var version = ""
 
 func versionString() string {
+	return fmt.Sprintf("massimo %s (%s, %s/%s)", buildVersion(), runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
+
+// buildVersion is the version alone, such as v0.12.0, as versionString
+// begins with it.
+func buildVersion() string {
 	v := version
 	if v == "" {
 		v = "v0.0.0-dev"
@@ -39,5 +45,5 @@ func versionString() string {
 			}
 		}
 	}
-	return fmt.Sprintf("massimo %s (%s, %s/%s)", strings.TrimSpace(v), runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	return strings.TrimSpace(v)
 }

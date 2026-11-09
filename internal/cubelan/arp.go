@@ -12,6 +12,17 @@ import (
 	"strings"
 )
 
+// EQ3Prefix begins the MAC address of every Cube, eQ-3's
+// organizationally unique identifier.
+const EQ3Prefix = "00:1a:22"
+
+// IsEQ3MAC says whether a MAC address is eQ-3's, in either spelling
+// (colons or the dashes of Windows' arp), in any case: a massimo proxy
+// answers discovery from its host's network card, whose is not.
+func IsEQ3MAC(mac string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.ReplaceAll(mac, "-", ":")), EQ3Prefix)
+}
+
 // lookupMAC returns the MAC address the operating system's ARP cache has
 // for ip, or "". The Cube has just answered a packet, so the entry is
 // usually present. Best effort; "" on any problem.

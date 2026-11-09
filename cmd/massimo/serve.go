@@ -14,9 +14,11 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/serve"
@@ -69,12 +71,14 @@ func runServe(args []string) error {
 	acmeDNSHook := fs.String("acme-dns-hook", os.Getenv(acmeDNSHookVar), "with -tls acme, get the certificate by the DNS-01 challenge through this executable, run as '<hook> set <record> <txt>' and '<hook> clear <record> <txt>' (packaging/acme-dns-hooks/); no port needed, wildcards allowed (default "+acmeDNSHookVar+")")
 	sighupMode := fs.String("sighup", os.Getenv(sighupVar), "what SIGHUP does on Unix: reload reads the settings file again, applying MASSIMO_API_TOKEN at once, and checkpoints the store; stop stops as SIGTERM does; auto reloads under a service manager and where SIGHUP was ignored at the start (nohup), and stops in a terminal, where SIGHUP means it closed (default "+sighupVar+", else auto)")
 	restartMode := fs.String("restart", os.Getenv(restartVar), "what a restart from the API and the web UI does: auto offers it under a service manager that starts the server again (systemd, launchd, Homebrew, the Windows service); exit stops and exits with status 75 for whatever runs serve, such as Docker's --restart; off never offers it (default "+restartVar+", else auto)")
-	rebootDefault, rebootErr := parseSwitch(rebootVar, os.Getenv(rebootVar))
-	allowReboot := fs.Bool("allow-reboot", rebootDefault, "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", on or off: also true or false, yes or no, 1 or 0, in any case; else off)")
+	allowReboot, rebootErr := newSwitchFlag("allow-reboot", rebootVar, os.Getenv(rebootVar))
+	fs.Var(allowReboot, "allow-reboot", "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", "+switchHelp+"; else off)")
+	announceOn, announceErr := newSwitchFlag("announce", env.Announce, os.Getenv(env.Announce))
+	fs.Var(announceOn, "announce", "announce the server on the LAN by mDNS as "+announce.ServiceType+", with its node, version and certificate, for massimo discover and the apps (default "+env.Announce+", "+switchHelp+"; else on when -listen is reachable from the LAN, off on a loopback address)")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-log-level debug] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-log-level debug] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nOn an address the LAN reaches, the server announces itself by mDNS as\n_massimo._tcp (-announce), so that massimo discover and the apps find it.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -122,6 +126,12 @@ func runServe(args []string) error {
 	if rebootErr != nil && !given["allow-reboot"] {
 		return fmt.Errorf("serve: %w", rebootErr)
 	}
+	if announceErr != nil && !given["announce"] {
+		return fmt.Errorf("serve: %w", announceErr)
+	}
+	if !announceOn.set {
+		announceOn.on = !loopbackListen(*listen)
+	}
 	tlsCfg := serve.TLS{Mode: *tlsFlag, Cert: *tlsCert, Key: *tlsKey, Names: *tlsNames, ACMEEmail: *acmeEmail, ACMEDirectory: *acmeDirectory, HTTP: *tlsHTTP, DNSHook: *acmeDNSHook}
 	tlsInEffect := serve.TLSMode(*tlsFlag, *tlsCert, *tlsKey)
 
@@ -152,7 +162,7 @@ func runServe(args []string) error {
 			logger.Warn("the restart cannot be started from the API", "reason", restartBlocked)
 		}
 	}
-	reboot := serveReboot(logger, *allowReboot)
+	reboot := serveReboot(logger, allowReboot.on)
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
 		upd.Managed = m.String()
@@ -166,7 +176,8 @@ func runServe(args []string) error {
 	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), Serial: selectedSN, SerialGiven: snExplicit,
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot,
-		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: logger}
+		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: logger,
+		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}}
 	// The flags given win for this run; otherwise the store's settings.
 	for _, d := range []struct {
 		flag string
@@ -223,6 +234,17 @@ func runServe(args []string) error {
 		logger.Info("stopped for a restart", "by", restartFor, "exit", exitRestart)
 	}
 	return rs.result(err)
+}
+
+// loopbackListen says whether the listen address is reachable from this
+// box alone: a loopback address or localhost, not every interface.
+func loopbackListen(listen string) bool {
+	host := serve.ListenHost(listen)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // serveReboot finds who reboots this server's computer (reboot.go) and
