@@ -29,12 +29,10 @@ func tlsCommand(args []string, w io.Writer) error {
   show         the certificate serve presents: its source (MASSIMO_TLS), names, expiry and fingerprint;
                for acme, the certificate cached for each name of MASSIMO_TLS_NAMES
   self-signed  make a new self-signed certificate for the box's names in <data>/tls/; a running
-               serve -tls self-signed takes it up at the next connection, browsers ask once more
+               serve -tls self-signed takes it up at the next connection, browsers ask once more;
+               a host name the service listens on (MASSIMO_LISTEN, set by its unit) goes in -names
 
-The data directory is -data, else MASSIMO_DATA, else the current directory;
-for the service run it as its user, for example
-  sudo -u _massimo massimo -data /var/lib/massimo tls show
-`)
+`+dataDirUsage("tls", "show"))
 	}
 	if len(args) == 0 {
 		usage()

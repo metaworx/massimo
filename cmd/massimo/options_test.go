@@ -5,6 +5,7 @@ package main
 
 import (
 	"net"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
 	t.Setenv("MASSIMO_CUBE_SN", "ignored-here")
 	t.Setenv("MASSIMO_ENV_FILE", "")
-	t.Cleanup(func() { selectedSN, snExplicit, showHidden = "", false, false })
+	t.Cleanup(func() { selectedSN, snExplicit, showHidden, envGiven = "", false, false, false })
 	selectedSN = ""
 	rest, err := globalOptions([]string{"-env", "x.env", "--sn=keq0000001", "-show-hidden", "cube", "-addr", "y"})
 	if err != nil || len(rest) != 3 || rest[0] != "cube" {
@@ -47,6 +48,30 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	useDeviceSerial("KEQ0000001")
 	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
 		t.Fatalf("key after device serial %q", v)
+	}
+}
+
+// -no-env reads no settings file, os.DevNull, which config says; with
+// -env, in either order, it is an error.
+func TestNoEnv(t *testing.T) {
+	t.Setenv(env.FileVar, "from-the-environment.env")
+	t.Cleanup(func() { envGiven, noEnv = false, false })
+	envGiven, noEnv = false, false
+	rest, err := globalOptions([]string{"-no-env", "config"})
+	if err != nil || len(rest) != 1 || rest[0] != "config" {
+		t.Fatalf("rest %v err %v", rest, err)
+	}
+	if f := env.File(); f != os.DevNull || !noEnv {
+		t.Fatalf("file %q, noEnv %v", f, noEnv)
+	}
+	if l := envFileLine(); l != "env file:      none (-no-env)" {
+		t.Fatalf("config: %q", l)
+	}
+	for _, args := range [][]string{{"-env", "x.env", "-no-env", "config"}, {"-no-env", "-env=x.env", "config"}} {
+		envGiven, noEnv = false, false
+		if _, err := globalOptions(args); err == nil || err.Error() != "-env and -no-env exclude each other" {
+			t.Fatalf("%v: %v", args, err)
+		}
 	}
 }
 

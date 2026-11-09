@@ -103,7 +103,7 @@ func TestInstallFresh(t *testing.T) {
 	if rec.has("systemctl restart") || !strings.Contains(out.String(), "not started") {
 		t.Fatalf("started with the template: %q\n%s", rec.cmds, out.String())
 	}
-	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner\n") || !strings.Contains(out.String(), "then start it: sudo systemctl start massimo\n") {
+	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner\n") || !strings.Contains(out.String(), "then start it: sudo systemctl start massimo\n") {
 		t.Errorf("the message:\n%s", out.String())
 	}
 	if !rec.has("chown _massimo:_massimo " + filepath.Join(root, StateDir)) {
