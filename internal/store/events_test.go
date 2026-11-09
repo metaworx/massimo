@@ -343,6 +343,9 @@ func fill(t *testing.T, s *Store, cube int64, n int, start time.Time, step time.
 // terms, instead of sorting every one of the Cube's rows (the review of
 // 2026-11-06: 1.3 s a page at 90,000 events); each page holds what its
 // terms ask, newest first, and a page by time is the events before it.
+// A page of warnings or errors with no other term reads the index of
+// those rows, migration 0011's, rather than every row of the Cube (11 s
+// at 90,000 events on a Raspberry Pi 1, docs/store.md section 5).
 // 90,000 events of one Cube beside 10,000 of another, 3000 under -short;
 // the time of each page is logged.
 func TestEventsPageQuery(t *testing.T) {
@@ -365,7 +368,10 @@ func TestEventsPageQuery(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE events SET user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	info, warn := LevelInfo, LevelWarn
+	if _, err := s.db.Exec(`UPDATE events SET level = 8 WHERE level = 0 AND id % 997 = 0`); err != nil {
+		t.Fatal(err)
+	}
+	info, warn, errs := LevelInfo, LevelWarn, LevelError
 	shapes := []struct {
 		name string
 		q    EventQuery
@@ -382,6 +388,12 @@ func TestEventsPageQuery(t *testing.T) {
 		{"source and id", EventQuery{CubeID: a.ID, Source: "cube", BeforeID: int64(n / 2)}},
 		{"info and above", EventQuery{CubeID: a.ID, MinLevel: &info}},
 		{"warnings", EventQuery{CubeID: a.ID, MinLevel: &warn}},
+		{"errors", EventQuery{CubeID: a.ID, MinLevel: &errs}},
+		{"warnings and id", EventQuery{CubeID: a.ID, MinLevel: &warn, BeforeID: int64(n / 2)}},
+		{"warnings by time", EventQuery{CubeID: a.ID, MinLevel: &warn, Before: mid}},
+		{"warnings, with the server's", EventQuery{CubeID: a.ID, Server: true, MinLevel: &warn}},
+		{"the server's warnings", EventQuery{CubeID: 0, MinLevel: &warn}},
+		{"warnings of a kind", EventQuery{CubeID: a.ID, Kind: "connected", MinLevel: &warn}},
 		{"a user", EventQuery{CubeID: a.ID, UserID: anna.ID}},
 		{"with the server's", EventQuery{CubeID: a.ID, Server: true}},
 		{"with the server's, by time", EventQuery{CubeID: a.ID, Server: true, Before: mid, MinLevel: &info}},
@@ -392,6 +404,9 @@ func TestEventsPageQuery(t *testing.T) {
 		{"since and before", EventQuery{CubeID: a.ID, Since: start.Add(24 * time.Hour), Before: mid}},
 		{"the other Cube", EventQuery{CubeID: b.ID}},
 	}
+	// The shapes each walk of which reads migration 0011's index.
+	warnIndex := map[string]bool{"warnings": true, "errors": true, "warnings and id": true,
+		"warnings by time": true, "warnings, with the server's": true, "the server's warnings": true}
 	for _, sh := range shapes {
 		walks := []int64{sh.q.CubeID}
 		if sh.q.Server && sh.q.CubeID != 0 {
@@ -417,6 +432,9 @@ func TestEventsPageQuery(t *testing.T) {
 		joined := strings.Join(plan, "; ")
 		if strings.Contains(joined, "TEMP B-TREE") || strings.Contains(joined, "SCAN events") {
 			t.Errorf("%s: %s", sh.name, joined)
+		}
+		if warnIndex[sh.name] && strings.Count(joined, "USING INDEX events_cube_warn (") != len(walks) {
+			t.Errorf("%s: not every walk reads events_cube_warn: %s", sh.name, joined)
 		}
 		q := sh.q
 		q.Limit = 200

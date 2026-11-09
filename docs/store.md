@@ -95,7 +95,8 @@ linux/arm64, darwin/arm64 and windows/amd64 without any C toolchain.
   on the Pi 1 that is nothing.
   Measured on 2026-11-09 (section 5, `events`):
   the writer's batch of 100 events takes 0.15 s on the Pi 1,
-  but a page that reads all of 90,000 events 11 s.
+  but a page of warnings that read all of 90,000 events took 11 s,
+  a walk that migration 0011's index of the warnings ends.
 - Queries: real SQL, so the log can be paged and filtered by time,
   kind and device, the audit by user, the backups listed and pruned by age,
   all in the engine with indexes; retention is one `DELETE`.
@@ -462,6 +463,8 @@ CREATE INDEX events_cube_kind ON events (cube_id, kind);
 CREATE INDEX events_cube_source ON events (cube_id, source);
 CREATE INDEX events_cube_serial ON events (cube_id, serial);
 CREATE INDEX events_user ON events (user_id) WHERE user_id IS NOT NULL;
+-- migration 0011: the warnings and errors alone, each Cube's in id order
+CREATE INDEX events_cube_warn ON events (cube_id) WHERE level >= 4;
 
 CREATE TABLE audit (
     id        INTEGER PRIMARY KEY,
@@ -525,12 +528,25 @@ Notes on the tables:
   with the server's events it is two such walks, the Cube's and the server's,
   each limited to the page and merged by id, since one query for both would sort.
   A page before a time looks up the newest id before it first.
-  The level has no index, its "and above" being a range that would give up the
-  id order: a page reads past the rows below it,
-  so a page of warnings among 90,000 rows,
-  with fewer than a page of them, reads them all:
+  The level is no column of an index, its "and above" being a range that would
+  give up the id order: a page reads past the rows below it.
+  Before migration 0011, a page of warnings among 90,000 rows,
+  with fewer than a page of them, read them all:
   140 ms on a PC, 154 ms on a Raspberry Pi 5,
   and 11 s on a Raspberry Pi 1, the store's one connection held all the while.
+  0011's partial index `events_cube_warn` holds the warnings and errors alone,
+  each Cube's in id order, the server's under `cube_id IS NULL`.
+  A page at `warn` or above carries the literal term `level >= 4` beside the bound level,
+  since SQLite takes a partial index only for terms that imply its `WHERE`,
+  and cannot tell that of a bound value.
+  Such a page reads those rows only, under 2 ms on a PC at 90,000 events
+  where it took 90 to 120 ms (`TestEventsPageQuery`);
+  a page of errors reads at most the warnings.
+  With a kind, a source, a device or a user as well,
+  the page reads that term's index and checks the level on its rows.
+  A batch of 100 events with a third warnings took 2 to 3 ms on the PC
+  with the index as without it,
+  the spread between runs larger than any difference.
   Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days`,
   per Cube and then for the server's rows,
   30 days by default as decision 5 took it, 0 keeping everything.
@@ -559,6 +575,7 @@ Notes on the tables:
     The same walk takes 11 s on the Pi 1
     (a page of errors, of which it has none),
     5 to 16 s from one page to the next.
+    Migration 0011's index ends that walk; the Pis have not timed it yet.
 - `audit` makes durable what today only the log has:
   which client sent which write.
   The `api()` wrapper in `server.go` is the one place every handler passes through,
@@ -679,6 +696,10 @@ It keeps `min_reader` 1: a binary of version 8 reads its Cube's rows by
 columns, which take their defaults;
 the writer of a binary of version 9 fills those (`source` empty) at its start
 (`TestOlderReaderOnNine`).
+`0011_events_warnings.sql` (AP Logging v1.2, Block 8) adds `events_cube_warn`,
+an index of the log's warnings and errors alone (section 5, `events`),
+additively: a binary of before writes and reads as it did,
+and SQLite keeps the index for its rows too.
 Rules:
 
 - A migration is additive when it only adds tables,

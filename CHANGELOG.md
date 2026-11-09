@@ -30,6 +30,10 @@ the next minor, a fix counts the suffix up.
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
 
+- The store's migration 0011 indexes the log's warnings and errors,
+  so that a page of them reads those rows only, not the whole log:
+  11 s at 90,000 events on a Raspberry Pi 1 before (`docs/store.md`).
+
 - The log shows the server's start, stop, restart, reload, reboot,
   update, backups and prunes, and a Cube's new address or its leaving
   the LAN (`docs/ui.md`, "Log").
