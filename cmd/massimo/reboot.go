@@ -43,18 +43,6 @@ var (
 	rebootPoll = 200 * time.Millisecond
 )
 
-// parseSwitch reads an on/off variable: on, true, yes, 1, or off, false,
-// no, 0 and empty.
-func parseSwitch(name, v string) (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "on", "true", "yes", "1":
-		return true, nil
-	case "", "off", "false", "no", "0":
-		return false, nil
-	}
-	return false, fmt.Errorf("%s %q: want on or off", name, v)
-}
-
 // rebootBy says who reboots this server's computer, or, with by empty,
 // why nobody does; helper, where the system needs one, says at every
 // request whether it is installed: on Linux the link that enabling its

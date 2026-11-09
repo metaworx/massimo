@@ -202,6 +202,9 @@ func (s *Server) backupCheck(ctx context.Context, rt *runtime, now time.Time) {
 		w.mu.Unlock()
 		if ctx.Err() == nil {
 			s.log.Warn("automatic backup failed", "cube", rt.serial, "error", err, "retry_in", backupRetry*minute)
+			failed := systemEvent("backup", 0, map[string]any{"reason": store.ReasonAuto})
+			failed.Level, failed.Error = "warn", err.Error()
+			rt.emit(failed)
 		}
 	}
 }
@@ -260,6 +263,7 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 		return store.Backup{}, nil, fail(http.StatusInternalServerError, "%v", err)
 	}
 	s.log.Info("backup taken", "cube", rt.serial, "id", b.ID, "reason", reason, "bytes", b.Size)
+	s.emitBy(rt, systemEvent("backup", userID, map[string]any{"reason": reason, "id": b.ID, "bytes": b.Size}))
 	s.pruneBackups(ctx, st, time.Now())
 	return b, f, nil
 }
@@ -279,6 +283,7 @@ func (s *Server) pruneBackups(ctx context.Context, st *store.Store, now time.Tim
 	if n == 0 {
 		return
 	}
+	s.logServer(systemEvent("backups_pruned", 0, map[string]any{"removed": n}))
 	if set, err := st.BackupSettings(ctx); err == nil && set.KeepNewest > 0 {
 		return
 	}

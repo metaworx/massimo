@@ -181,6 +181,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running")
 	}
 	s.log.Info("restore started", "cube", rt.cubeSerial(), "id", run.ID, "steps", len(p.Steps), "radio_commands", v.RadioCommands, "duty_pct", v.Budget.DutyCyclePct)
+	s.emitBy(rt, systemEvent("restore_started", userIDOf(r), map[string]any{"id": run.ID, "steps": len(p.Steps), "radio_commands": v.RadioCommands}))
 	// Counted in s.wg while Run runs, so that Run waits for the restore's
 	// restore_done; before Run (the tests), on the background context.
 	ctx := s.track()

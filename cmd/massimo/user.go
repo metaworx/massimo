@@ -136,6 +136,27 @@ func (u userCmd) audit(action, target string, detail map[string]any, err error) 
 	if _, aerr := u.st.Audit(u.ctx, store.AuditEntry{Remote: store.RemoteCLI, Action: action, Target: target, Detail: raw, Result: result}); aerr != nil {
 		fmt.Fprintln(os.Stderr, "warning: audit row not written:", aerr)
 	}
+	if err == nil {
+		u.logChange(action, target, detail)
+	}
+}
+
+// logChange writes the change's line of the log (AP Logging v1.1,
+// Block 6), as the server writes one beside an audit row: a line of the
+// server's under Configuration, made by the command line, naming the
+// user it concerns as they are then; never a secret.
+func (u userCmd) logChange(action, target string, detail map[string]any) {
+	summary := map[string]any{"action": action, "target": target, "via": "cli", "set": detail}
+	if name, ok := strings.CutPrefix(target, "user:"); ok {
+		if us, found, err := u.st.User(u.ctx, name); err == nil && found {
+			summary["subject"] = map[string]any{"id": us.ID, "uuid": us.UUID, "name": us.Name, "display_name": us.DisplayName, "role": us.Role}
+		}
+	}
+	now := time.Now()
+	data, _ := json.Marshal(map[string]any{"kind": "change", "source": "config", "level": "info", "summary": summary, "time": now})
+	if err := u.st.InsertEvent(u.ctx, store.Event{Kind: "change", Source: "config", Level: store.LevelInfo, Time: now, Data: data}); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: log line not written:", err)
+	}
 }
 
 // readPassword asks for a password twice on the terminal, or reads it

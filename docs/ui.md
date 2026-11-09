@@ -236,8 +236,28 @@ configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
 until the Cube is back.
-Expert mode also shows the debug lines, such as the Cube's hello,
-which the log leaves out otherwise.
+A connection to the Cube is one line, "connected: 12 devices in 5 rooms,
+firmware 1.1.3, duty cycle 3 %, 180 slots free", after a loss with how long the
+Cube was lost; what changed meanwhile, while disconnected or while the server
+was down, follows it, a line each ("Room “Bath” renamed “Bathroom” (while
+disconnected)").
+A list or configuration line says what changed: "MEQ0000101 “Window” moved
+from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
+The server's own lines are there too: its start with its version, its stop
+and why, the settings file read again with the names of what changed, a
+restart, a reboot or an update asked for and its outcome, the backups, their
+prune and the log's, a restore started; and a Cube's new address or its
+leaving the LAN.
+A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
+Every change made through the web UI, the API or `massimo user` is a line
+of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, by
+Anna", "setpoint Window: mode manual, temperature 21.5, by Anna",
+"user added Zed, by the command line"; a change of a device shows under the
+device too, and the Cube's answer follows as its own line.
+The level choice "debug and above" also shows the debug lines, such as the
+greeting's hello, room and device list and configurations, each with its
+summary, which the log leaves out at "info and above", the default;
+"warnings" keeps the lost connections and the failures.
 A line names its device by name, else by serial number,
 with the radio address after it in expert mode only;
 the Cube's own configuration reads "Cube KEQ0000000".
@@ -268,18 +288,24 @@ and another Cube starts the log over with every device.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
-The two choices in the head show one kind of event (all kinds by default)
-and one device (all devices), listed by name and serial number;
+The choices in the head show one kind of event (all kinds by default,
+grouped by their source), one source or one device (all by default:
+System, Configuration, the Cube, Devices, then each device by name and
+serial number), the level and above (info by default) and, for those who
+may see the users, who made a change (everyone by default);
 the server answers what matches,
 and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
-**Clear** sets the filter, the kind and the device back to all
-and loads the log again, the range staying; it is off while none of them is set.
-The range, the kind and the device are in the address after `#log`,
+**Clear** sets the filter, the kind, the source or device, the level and who
+back to their defaults and loads the log again, the range staying;
+it is off while none of them is set.
+The choices are in the address after `#log`,
 each left out at its default:
 `range=` one of `10m`, `1h`, `today`, `week`, `month` and `all`,
-`kind=` an event's kind and `device=` a device's serial number
+`kind=` an event's kind, `source=` one of `system`, `config`, `cube` and `device`,
+`device=` a device's serial number
 (a link's radio address takes the serial once the devices are loaded),
+`level=` `debug` or `warn`, and `user=` a login name,
 so that a reload, a bookmark or a link opens the log with them,
 and the log's button opens it with the choices it had.
 A choice changes the address in place, so back still leaves the log.

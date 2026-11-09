@@ -70,7 +70,22 @@ type Event struct {
 	Err    error           // for EventDisconnected
 	New    *cube.NewDevice // for EventPaired
 	Gone   *Gone           // for EventForgotten: the device as the snapshot knew it
+	// Greeting marks the H, M and C lines of a connection's greeting,
+	// which a client receives at every connection, changed or not.
+	Greeting bool
+	// Cause says, for EventConnected, why the connection began
+	// (CauseStart, CauseLoss, CauseReconnect); DownFor how long the Cube
+	// was lost before it, for CauseLoss.
+	Cause   string
+	DownFor time.Duration
 }
+
+// The causes of a connection, for EventConnected.
+const (
+	CauseStart     = "start"     // the client's first connection
+	CauseLoss      = "loss"      // after a loss (EventDisconnected)
+	CauseReconnect = "reconnect" // a reconnect the client was asked for
+)
 
 // Gone is what the snapshot knew of a device it dropped (Forget): its
 // entry in the room and device list, or, for a device the list did not
@@ -180,7 +195,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 			return nil, err
 		}
 		s.hello = h
-		return []Event{{Kind: EventHello}}, nil
+		return []Event{{Kind: EventHello, Greeting: s.greeting}}, nil
 	case 'M':
 		p, err := cube.ParseMetadataPart(m.Data)
 		if err != nil {
@@ -200,7 +215,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		}
 		s.noteDelistedLocked(md)
 		s.metadata = md
-		return []Event{{Kind: EventMetadata}}, nil
+		return []Event{{Kind: EventMetadata, Greeting: s.greeting}}, nil
 	case 'C':
 		c, err := cube.ParseConfig(m.Data)
 		if err != nil {
@@ -214,7 +229,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		if c.Type != cube.DeviceCube {
 			s.noteLocked(c.RFAddress)
 		}
-		return []Event{{Kind: EventConfig, Device: c.RFAddress}}, nil
+		return []Event{{Kind: EventConfig, Device: c.RFAddress, Greeting: s.greeting}}, nil
 	case 'L':
 		states, err := cube.ParseDeviceList(m.Data, s.typesLocked())
 		if err != nil {

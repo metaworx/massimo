@@ -39,6 +39,7 @@ var flagVars = map[string]string{
 	"tls": env.TLS, "tls-cert": env.TLSCert, "tls-key": env.TLSKey, "tls-names": env.TLSNames, "acme-email": env.ACMEEmail,
 	"acme-directory": env.ACMEDirectory, "tls-http": env.TLSHTTP, "trusted-proxies": env.TrustedProxies,
 	"acme-dns-hook": env.ACMEDNSHook, "hsts": env.HSTS, "restart": restartVar, "sighup": sighupVar, "allow-reboot": rebootVar,
+	"announce": env.Announce,
 }
 
 // fileStamp is what watchSettings compares: a file's size and time of
@@ -153,6 +154,7 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	r.srv.SetPendingRestart(pending)
 	if len(changed) > 0 || why != "the settings file changed" {
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
+		r.srv.LogSettingsRead(ctx, why, changed, pending) // the names, never the values
 	}
 	return changed, pending, nil
 }

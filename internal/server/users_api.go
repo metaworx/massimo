@@ -373,6 +373,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
+	auditSubject(r, userSubject(created))
 	if p.mode == modeOpen {
 		s.log.Info("first owner created", "user", created.Name, "remote", s.clientIP(r))
 	} else {
@@ -537,10 +538,23 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	s.log.Info("user changed", "user", u.Name, "remote", s.clientIP(r))
+	auditSubject(r, userSubject(u))
 	v := s.viewUserOf(r, st, u)
 	v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || a.self}
 	writeJSON(w, http.StatusOK, v)
 	return nil
+}
+
+// userSubject is a user as a change line names them: ids, login name,
+// display name and role as they are then, never a secret.
+func userSubject(u store.User) map[string]any {
+	return map[string]any{"id": u.ID, "uuid": u.UUID, "name": u.Name, "display_name": u.DisplayName, "role": u.Role}
+}
+
+// tokenSubject is a key as a change line names it: its ids, its label and
+// its user's name; never the key.
+func tokenSubject(tok store.Token, u store.User) map[string]any {
+	return map[string]any{"id": tok.ID, "uuid": tok.UUID, "name": tok.Label, "user": u.Name}
 }
 
 // deleteUser handles DELETE /api/v1/users/{name}: the user is removed
@@ -562,6 +576,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	s.log.Info("user removed", "user", u.Name, "remote", s.clientIP(r))
+	auditSubject(r, userSubject(u)) // as the user was
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": u.Name})
 	return nil
 }
@@ -615,6 +630,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
+	auditSubject(r, tokenSubject(tok, u))
 	s.log.Info("api key created", "user", u.Name, "label", req.Label, "remote", s.clientIP(r))
 	v := viewToken(tok)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
@@ -647,6 +663,7 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	s.log.Info("token revoked", "user", u.Name, "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
+	auditSubject(r, tokenSubject(tok, u))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 	return nil
 }
