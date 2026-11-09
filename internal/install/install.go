@@ -281,7 +281,7 @@ func Install(o Options) error {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not started; start it with: systemctl start massimo")
 	case !startable && !in.active():
-		in.notStarted(linuxUserAdd, linuxStart)
+		in.notStarted(ownerLine(BinPath), linuxStart)
 	default:
 		// restart, so that running install again takes the new binary.
 		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
@@ -366,7 +366,7 @@ func configure(o Options, m Manager) error {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not restarted; restart it with: systemctl restart massimo")
 	case !startable && !in.active():
-		in.notStarted(linuxUserAdd, linuxStart)
+		in.notStarted(ownerLine(debBin), linuxStart)
 	default:
 		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
 			return err
@@ -534,13 +534,11 @@ func onlyTemplate(cur, tmpl []byte) bool {
 // the template's: a server without users answers every device on the
 // local network (README.md, "Server"). Whatever runs is restarted, so
 // that it takes the new binary, also on the template's settings.
-const (
-	linuxUserAdd = "sudo -u " + User + " massimo -data " + StateDir + " user add <name> -role owner"
-	linuxStart   = "sudo systemctl start massimo"
-)
+const linuxStart = "sudo systemctl start massimo"
 
 // notStarted says why the service was left stopped and the two ways to
-// its first owner: userAdd before the start, or the web UI after it.
+// its first owner: userAdd before the start (ownerLine), or the web UI
+// after it.
 func (in *installer) notStarted(userAdd, start string) {
 	fmt.Fprintln(in.Out, "not started: until it has an owner, every device on the local network may use it")
 	fmt.Fprintf(in.Out, "create the owner first: %s\n", userAdd)

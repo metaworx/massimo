@@ -210,7 +210,7 @@ which listens on `:8099` on every interface.
 On the template's settings it only restarts a service that runs:
 a server without users answers every device on the local network (see "Server"),
 so the first start is the owner's,
-after `sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner`
+after `sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`
 or followed by the first-owner form of the web UI.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),

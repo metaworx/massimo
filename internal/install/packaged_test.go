@@ -172,7 +172,7 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 	if err := Install(Options{Root: root2, Out: &out, Run: rec2.run}); err != nil {
 		t.Fatal(err)
 	}
-	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") || !strings.Contains(out.String(), "user add <name> -role owner") {
+	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") || !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner\n") {
 		t.Fatalf("started with the template: %v %s", rec2.cmds, out.String())
 	}
 

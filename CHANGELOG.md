@@ -88,8 +88,8 @@ the next minor, a fix counts the suffix up.
   `brew upgrade` (`packaging/README.md`, "Homebrew").
 
 - `massimo install` restarts a running service also on the template's
-  settings and leaves a box that never ran for its owner, on every
-  platform, naming `massimo user add` and the web UI (`README.md`).
+  settings and leaves a box that never ran for its owner, naming the web
+  UI and a `massimo user add` line that runs anywhere (`README.md`).
 
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
   and their opposites, in any case, as `serve -help`, the settings

@@ -140,7 +140,7 @@ MASSIMO_API_TOKEN=choose-a-long-random-string
 </code></pre>
 <!-- END GENERATED PARTIAL docs/fragments/_first-settings.md -->
 <p>A Cube takes one client at a time: close the original MAX! software first; from then on that software connects to the server's proxy.</p>
-<p>The Debian package leaves a new box stopped, since until it has an owner every device on the local network may use it. Create the owner on the box with <code>sudo -u _massimo massimo -data /var/lib/massimo user add &lt;name&gt; -role owner</code>, or put the token into <code>/etc/massimo/env</code>, or create the owner in the web UI once the service runs; <code>sudo systemctl start massimo</code> starts it, and from then on every upgrade restarts it. <code>massimo install -settings .env</code> starts the service with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
+<p>The Debian package leaves a new box stopped, since until it has an owner every device on the local network may use it. Create the owner on the box with <code>sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add &lt;name&gt; -role owner</code>, or put the token into <code>/etc/massimo/env</code>, or create the owner in the web UI once the service runs; <code>sudo systemctl start massimo</code> starts it, and from then on every upgrade restarts it. <code>massimo install -settings .env</code> starts the service with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
 
 <h2>Documentation</h2>
 <ul>

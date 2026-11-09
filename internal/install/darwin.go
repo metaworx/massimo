@@ -242,7 +242,7 @@ func InstallDarwin(o Options) error {
 	case in.NoStart:
 		fmt.Fprintf(in.Out, "not (re)started; it starts at the next boot, or now with: sudo %s\n", bootstrap)
 	case !startable && !in.loaded(Label):
-		in.notStarted("sudo -u "+DarwinUser+" massimo -data "+StateDir+" user add <name> -role owner", "sudo "+bootstrap)
+		in.notStarted(ownerLine(BinPath), "sudo "+bootstrap)
 	default:
 		// Restarted when loaded already, so that installing again takes
 		// the new binary.

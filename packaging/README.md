@@ -145,13 +145,16 @@ Nothing needs to go into `/etc/massimo/env` for the first start.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
 or start it and create the owner in the web UI from the local network,
 which until then may use it unasked;
 the Cubes are added there too (System settings → Cubes, "Found on the LAN").
+The binary's full path and `-env` let the first line run from any
+directory, a home directory the service user may not enter included,
+and through a sudo whose PATH lacks `/usr/local/bin`, as on macOS.
 
 Running `install` again, from a newer binary,
 replaces the binary and the units and restarts the service by the same rule;
@@ -331,7 +334,7 @@ Nothing needs to go into `/etc/massimo/env` for that.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
@@ -986,7 +989,7 @@ and in the update helper are the same everywhere:
   mode 0600, owned by `_massimo`;
   the service starts by the rule of "Install with `massimo install`",
   the owner made first with
-  `sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner`;
+  `sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`;
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
 - the log `/var/log/massimo/serve.log`:
