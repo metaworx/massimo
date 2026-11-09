@@ -649,7 +649,9 @@ by the rules the user chose in the preference `notify`.
 A notification is data, no text: its kind and values,
 which the page or the app renders in the user's language.
 Each one is written to the server's log as `notification`,
-with the user, the kind, the Cube, the device, its S/N and its room.
+with the user, the kind, the Cube, the device, its S/N and its room,
+pushed to the user's subscriptions by Web Push (see Delivery below),
+and sent on the user's own event streams as a `notification` event.
 
 **The preference `notify`**, through the preference routes above,
 a rule per kind; a kind left out, and a delay or threshold left out,
@@ -697,6 +699,34 @@ for `cube_offline`, `cube_online` and `window_open`; `values` are the kind's:
 `error` and `link_error` (`device_error`), `actual_c` and `below_c` (`frost`),
 `type` (`paired`), `address` (`cube_found`, whose `cube` is the one found),
 `version` (`update`).
+
+**Delivery.**
+A notification goes to every subscription of its user that may be sent to,
+by Web Push (RFC 8030), which UnifiedPush takes as well:
+the notification above as JSON, encrypted for the subscription (RFC 8291,
+`aes128gcm`, one record), so that the push service reads none of it,
+with a VAPID token (RFC 8292) signed by the server's key for the push service's origin,
+valid for 12 hours, its subject the box's node, `urn:uuid:<node_id>`.
+The request asks the push service to keep it a day (`TTL: 86400`),
+says `Urgency: high` for `frost` and `cube_offline`, `normal` for the rest,
+and `Topic: <kind>-<device or Cube>`,
+so that a newer one replaces one not delivered yet.
+A `2xx` is delivered and sets the subscription's `last_ok_at`;
+`404` and `410` remove the subscription;
+a `429` or a `5xx` is tried again after 5, 15 and 40 seconds;
+any other answer, or none, counts a failure,
+and a subscription failing for seven days,
+since its last delivery or its creation, is removed.
+A removal is a line in the server's log, which names the push service's host,
+never the endpoint's path.
+The server follows no redirect:
+an endpoint is not a way to send its requests elsewhere.
+The user's own event streams get the same notification at once,
+as a `notification` event (see GET /api/v1/cubes/{sn}/events),
+so that an open page shows it without a push;
+another user's streams never do.
+An app that embeds the server can take every notification itself as well
+(`internal/serve`, `Config.Deliverers`).
 
 **The subscription.**
 `GET /api/v1/push/vapid` is the server's VAPID public key (RFC 8292),
@@ -1890,7 +1920,9 @@ its `state` is the device as the server knew it,
 with its type, serial, name and room), `cube_found` (with `cube`,
 a Cube that is not configured, see POST /cubes/discover),
 `restore_step` and `restore_done` (with `restore`, the progress of a restore,
-see POST /restore).
+see POST /restore),
+`notification` (with `notification`, what the stream's user is told, on that
+user's streams alone; see Notifications).
 The server's own lines, source `system`, each with its `summary` and, where a
 request asked for it, `by`:
 `server_started` (`version`, and `before` when it changed),

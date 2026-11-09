@@ -1853,7 +1853,9 @@ paths:
         device_forgotten (a device deleted from the Cube left the server's
         copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),
         restore_step and restore_done (with the progress of a restore in
-        "restore", see POST …/restore); the server's own, source system:
+        "restore", see POST …/restore), notification (with what the
+        stream's user is told in "notification", on that user's streams
+        alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
         reboot_cancelled, update, update_result, backup, backup_deleted,
         backups_pruned, log_pruned, restore_started; a Cube's own:

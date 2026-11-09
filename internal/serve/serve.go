@@ -31,6 +31,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/certs"
+	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -105,6 +106,9 @@ type Config struct {
 	// LogAttrs are added to the first log line, "api listening", after
 	// the restart and the reboot: the command's sighup.
 	LogAttrs []any
+	// Deliverers take the users' notifications beside Web Push: an app
+	// embedding the server shows them itself, with push.Local.
+	Deliverers []push.Deliverer
 	// Announce announces the server on the LAN by mDNS once it listens,
 	// until it stops; off in the zero value.
 	Announce Announce
@@ -201,7 +205,7 @@ func open(ctx context.Context, cfg Config, log *slog.Logger, src certs.Source, s
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: log, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
-		Restart: cfg.Restart, Reboot: cfg.Reboot})
+		Restart: cfg.Restart, Reboot: cfg.Reboot, Deliverers: cfg.Deliverers})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return nil, err

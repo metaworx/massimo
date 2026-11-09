@@ -7,8 +7,10 @@ package server
 // internal/notify run over the Cubes' events for every user who has a
 // push subscription, with the user's notify preference; a browser or an
 // app subscribes under /api/v1/me/push with the server's VAPID key from
-// GET /api/v1/push/vapid. What a rule decides is logged; its delivery
-// by Web Push is internal/push's.
+// GET /api/v1/push/vapid. What a rule decides is logged, sent on the
+// user's own event streams, and delivered by internal/push: by Web Push
+// to the user's subscriptions, and to the deliverers an embedding app
+// gives.
 
 import (
 	"context"
@@ -28,6 +30,7 @@ import (
 	"unicode/utf8"
 
 	"go.metaworx.ch/massimo/internal/notify"
+	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -48,10 +51,10 @@ type vapidSetting struct {
 
 // vapidKey returns the server's VAPID key pair, made and kept at its
 // first use.
-func (s *Server) vapidKey(st *store.Store, r *http.Request) (*ecdsa.PrivateKey, []byte, error) {
+func (s *Server) vapidKey(ctx context.Context, st *store.Store) (*ecdsa.PrivateKey, []byte, error) {
 	s.vapidMu.Lock()
 	defer s.vapidMu.Unlock()
-	raw, ok, err := st.Setting(r.Context(), store.VAPIDKey)
+	raw, ok, err := st.Setting(ctx, store.VAPIDKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,7 +87,7 @@ func (s *Server) vapidKey(st *store.Store, r *http.Request) (*ecdsa.PrivateKey, 
 		return nil, nil, err
 	}
 	v := vapidSetting{Private: base64.RawURLEncoding.EncodeToString(d), Public: base64.RawURLEncoding.EncodeToString(pub), CreatedAt: time.Now().UTC()}
-	if err := st.SetSetting(r.Context(), store.VAPIDKey, v); err != nil {
+	if err := st.SetSetting(ctx, store.VAPIDKey, v); err != nil {
 		return nil, nil, err
 	}
 	s.log.Info("VAPID key created", "setting", store.VAPIDKey)
@@ -98,7 +101,7 @@ func (s *Server) getVAPID(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	_, pub, err := s.vapidKey(st, r)
+	_, pub, err := s.vapidKey(r.Context(), st)
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -345,9 +348,78 @@ func (s *Server) notifyDevices() []notify.Device {
 	return out
 }
 
-// deliverNotification takes what a rule decided: logged, for now the
-// only delivery.
+// newWebPush makes the Web Push deliverer of a server with a store.
+func (s *Server) newWebPush() *push.WebPush {
+	return &push.WebPush{Store: s.opts.Store, VAPID: s.vapid, Client: s.opts.pushClient, Retry: s.opts.pushRetry, Removed: s.refreshNotify, Logger: s.log}
+}
+
+// vapid is how the server identifies itself to a push service: its
+// VAPID key, and the box's node as the subject, there being no address
+// of whoever runs it to give (RFC 8292 section 2.1).
+func (s *Server) vapid(ctx context.Context) (push.VAPID, error) {
+	key, _, err := s.vapidKey(ctx, s.opts.Store)
+	if err != nil {
+		return push.VAPID{}, err
+	}
+	return push.VAPID{Key: key, Subject: "urn:uuid:" + s.opts.Store.NodeID()}, nil
+}
+
+// maxDeliveries bounds the deliveries under way, each of which may wait
+// a minute for a push service that asks to be tried again.
+const maxDeliveries = 8
+
+// deliverNotification takes what a rule decided, on the rules'
+// goroutine: it logs it, sends it on the user's own event streams, and
+// hands it to Web Push and to the other deliverers on goroutines of
+// their own, which the server's stop ends.
 func (s *Server) deliverNotification(userID int64, n notify.Notification) {
+	s.logNotification(userID, n)
+	s.streamNotification(userID, n)
+	var ds []push.Deliverer
+	if s.webPush != nil {
+		ds = append(ds, s.webPush)
+	}
+	ds = append(ds, s.opts.Deliverers...)
+	for _, d := range ds {
+		ctx := s.track()
+		if ctx == nil {
+			return
+		}
+		go func() {
+			defer s.wg.Done()
+			select {
+			case s.pushSlots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-s.pushSlots }()
+			d.Deliver(ctx, userID, n)
+		}()
+	}
+}
+
+// streamNotification sends a notification on the user's own event
+// streams: the Cube's it concerns, or every Cube's for one of no Cube
+// the server serves (cube_found, update). Nothing else gets it, and the
+// log keeps its line, not the event.
+func (s *Server) streamNotification(userID int64, n notify.Notification) {
+	ev := event{Kind: "notification", Source: "system", Level: "info", Notification: &n, Time: n.Time}
+	if n.Cube != "" {
+		s.mu.RLock()
+		rt := s.cubes[strings.ToLower(n.Cube)]
+		s.mu.RUnlock()
+		if rt != nil {
+			rt.sendUser(userID, ev)
+			return
+		}
+	}
+	for _, rt := range s.runtimes() {
+		rt.sendUser(userID, ev)
+	}
+}
+
+// logNotification writes a notification's line.
+func (s *Server) logNotification(userID int64, n notify.Notification) {
 	attrs := []any{"user", userID, "kind", n.Kind}
 	if s.opts.Store != nil {
 		if u, ok, err := s.opts.Store.UserByID(context.Background(), userID); err == nil && ok {
