@@ -190,6 +190,21 @@ If port 23272 is in use on the server's host, for example by `massimo discover`,
 the server runs without discovery and logs a warning;
 clients are then given the address by hand.
 
+The answer follows the Cube:
+from the loss the server logs (`cube connection lost`) to the next greeting
+it answers nothing,
+so that other servers and the original software see the Cube go,
+as they would without the proxy.
+A reconnect of the server's own (the refresh, a follow-up after a write,
+a new address) is no loss, and the answers go on.
+A client already connected keeps its connection,
+and one given the address still connects and reads the last state.
+The server itself is found whatever its Cube does:
+it announces itself by mDNS as `_massimo._tcp`,
+which the apps and `massimo discover` browse (README.md, "Server");
+the Cube's discovery has no answer for a server,
+since the original software would take one for another Cube.
+
 The same socket serves the server's own discovery of Cubes (the API's
 `POST /api/v1/cubes/discover`, at the start and every 30 minutes):
 the Cubes answer to port 23272 only,
