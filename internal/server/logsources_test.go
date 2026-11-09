@@ -91,9 +91,9 @@ func TestLogLevelFilter(t *testing.T) {
 	}
 }
 
-// user= keeps the events a user started, a removed user's too; the page
-// names them as the users table does now; a name the store does not
-// know has none.
+// user= keeps the events a user started, a removed user's too
+// (TestRemovedUserKeepsItsHistory); the page names them as the users
+// table does now; a name the store does not know has none.
 func TestLogUserFilter(t *testing.T) {
 	_, ts, s, st := startStored(t, Options{})
 	ctx := context.Background()
