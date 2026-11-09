@@ -70,6 +70,10 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- The Debian package restarts a running service on an upgrade, also on
+  the template's settings, and leaves a box that never ran stopped, even
+  when a release changed the template's comments (`packaging/README.md`).
+
 - A device list or a configuration the Cube client asked for is in its
   state when the command returns, so that a read right after sees it;
   a race test found the other order now and then.

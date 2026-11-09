@@ -42,9 +42,10 @@ such as every failed attempt to reach a lost Cube
 and every command the proxy passes on to it;
 the log then grows faster, so remove the line again after the diagnosis.
 `env.template` does not carry it:
-the package and `install` start the service only once the settings file
-differs from the template,
-and a new line there would make an untouched file differ after an upgrade.
+the package and `install` start a stopped service only when the settings
+set more than the template does, comments and blank lines aside,
+so a new setting there would make an untouched file look filled in after an
+upgrade.
 
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
@@ -288,18 +289,36 @@ the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudfla
 (see `-acme-dns-hook` above),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
-its scripts create the user `massimo` and `/etc/massimo/env` from the template
-when they are missing, enable the service,
-and start it once the file differs from the template,
-so that a fresh box does not serve the LAN without a token.
-Fill in `/etc/massimo/env` as "Install by hand" describes,
-then `sudo systemctl start massimo`.
+its scripts create the user `massimo`, `/etc/massimo/env` from the template
+and the state directory `/var/lib/massimo` when they are missing,
+and enable the service.
+They start it only when the settings set more than the template does
+(its comments and blank lines aside),
+because a server without users answers every device on the local network
+(README.md, "Server"):
+on a fresh box the first start is the owner's.
+Nothing needs to go into `/etc/massimo/env` for that.
+Either create the owner first and then start the service:
+
+```bash
+sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo systemctl start massimo
+```
+
+or start it and create the owner in the web UI from the local network,
+which until then may use it unasked.
+The Cubes are added there too, under System settings → Cubes,
+"Found on the LAN";
+`/etc/massimo/env` takes what the web UI does not,
+as "Install by hand" describes.
 The service listens on the LAN, so it announces itself by mDNS (README.md,
 "Server"; `MASSIMO_ANNOUNCE=off` stops it);
 a firewall on the box lets in 5353/udp for that,
 beside 62910/tcp and 23272/udp for the proxy and 8099/tcp for the page (with ufw:
 `sudo ufw allow 5353/udp`).
-The next package upgrades the binary and restarts the service;
+The next package upgrades the binary and restarts a running service,
+whatever the settings, and leaves a stopped one stopped,
+unless its settings are filled in;
 the settings and the store are left alone.
 
 **One owner of the binary.**
