@@ -124,6 +124,10 @@ the next minor, a fix counts the suffix up.
   mode, and a removed one by its type, S/N and name as it was; device
   routes take the S/N too (`docs/api-v1.md`, "Identifiers").
 
+- A self-signed certificate is valid 825 days in all, as Apple requires
+  of one it trusts; the hour it is dated back made it 825 days and an
+  hour (`README.md`, "Server").
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added

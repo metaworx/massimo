@@ -33,7 +33,7 @@ func TestGenerate(t *testing.T) {
 	if st.Source != "self-signed" || !st.SelfSigned || strings.Join(st.Names, ",") != "pi,pi.local,localhost,massimo.example.net,127.0.0.1,::1,192.0.2.10" {
 		t.Fatalf("status %+v", st)
 	}
-	if !st.NotAfter.Equal(now.Add(SelfSignedValidity)) || SelfSignedValidity != 825*24*time.Hour {
+	if !st.NotAfter.Equal(now.Add(-time.Hour).Add(SelfSignedValidity)) || SelfSignedValidity != 825*24*time.Hour {
 		t.Fatalf("validity %v", st.NotAfter)
 	}
 	cert, _, err := Load("self-signed", certPath, keyPath)
@@ -41,6 +41,10 @@ func TestGenerate(t *testing.T) {
 		t.Fatal(err)
 	}
 	leaf, _ := x509.ParseCertificate(cert.Certificate[0])
+	// Apple's 825 days count from NotBefore, the hour back included
+	if !leaf.NotBefore.Equal(now.Add(-time.Hour)) || leaf.NotAfter.Sub(leaf.NotBefore) != SelfSignedValidity {
+		t.Fatalf("valid from %v to %v: %v, want %v", leaf.NotBefore, leaf.NotAfter, leaf.NotAfter.Sub(leaf.NotBefore), SelfSignedValidity)
+	}
 	if k, ok := leaf.PublicKey.(*ecdsa.PublicKey); !ok || k.Curve != elliptic.P256() {
 		t.Fatalf("key %T", leaf.PublicKey)
 	}
