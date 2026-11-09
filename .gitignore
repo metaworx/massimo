@@ -30,11 +30,16 @@ massimo-backup-*
 /tools/ui-test/results/
 /tools/ui-test/.pytest_cache/
 
-# serve's store (internal/store): the Cubes, settings and node key
+# serve's store (internal/store): the Cubes, settings, the node key and
+# the OPAQUE key
 massimo.db
 massimo.db-*
 massimo.db.before-*
 node.key
+opaque.key
+# and serve's TLS certificates with their keys (internal/certs): the
+# self-signed pair and the ACME ones, in the data directory's tls/
+/tls/
 
 # Python leaves it behind wherever the UI smoke test runs.
 __pycache__/

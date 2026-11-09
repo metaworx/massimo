@@ -148,6 +148,9 @@ the next minor, a fix counts the suffix up.
   of one it trusts; the hour it is dated back made it 825 days and an
   hour (`README.md`, "Server").
 
+- `massimo user` and `massimo store` print their help, or refuse wrong
+  arguments, without creating a store in the data directory first.
+
 ### Security
 
 - The web UI shows no self-signed certificate's fingerprint, which a man

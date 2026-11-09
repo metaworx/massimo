@@ -7,6 +7,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"flag"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -261,5 +264,53 @@ func TestUserCommandsLog(t *testing.T) {
 	}
 	if strings.Join(actions, ",") != "user.add,user.update,token.add" {
 		t.Fatalf("the actions: %v", actions)
+	}
+}
+
+// Help, and a command with wrong arguments, print the usage without
+// opening the store, which would create it with its keys: here in the
+// current directory, the data directory when no -data is given.
+func TestHelpCreatesNoStore(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv(env.DataVar, "")
+	run := map[string]func([]string) error{
+		"user":  func(args []string) error { _, err := runUserWith(t, "", args...); return err },
+		"store": runStore,
+	}
+	for _, c := range []struct {
+		help bool
+		args string
+	}{
+		{true, "user -h"}, {true, "user help"}, {true, "user --help"},
+		{true, "user add -h"}, {true, "user add anna -h"}, {true, "user list -h"},
+		{true, "user passwd -h"}, {true, "user disable -h"}, {true, "user enable -h"},
+		{true, "user token -h"}, {true, "user tokens -h"}, {true, "user revoke -h"},
+		{true, "store -h"}, {true, "store help"}, {true, "store backup -h"},
+		{true, "store migrate -h"}, {true, "store info -h"},
+		{false, "user"}, {false, "user bogus"}, {false, "user add"},
+		{false, "user add -x anna"}, {false, "user add anna -no-password -expires tomorrow"},
+		{false, "user list extra"}, {false, "user passwd"}, {false, "user disable"},
+		{false, "user enable anna bob"}, {false, "user token anna"}, {false, "user tokens"},
+		{false, "user revoke"}, {false, "user revoke anna x"},
+		{false, "store"}, {false, "store bogus"}, {false, "store backup"},
+		{false, "store migrate extra"}, {false, "store info extra"},
+	} {
+		f := strings.Fields(c.args)
+		err := run[f[0]](f[1:])
+		switch {
+		case c.help && err != nil && !errors.Is(err, flag.ErrHelp):
+			t.Errorf("%s: %v", c.args, err)
+		case !c.help && err == nil:
+			t.Errorf("%s: no error", c.args)
+		}
+		left, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(left) > 0 {
+			t.Fatalf("%s left %s in the directory", c.args, left[0].Name())
+		}
 	}
 }
