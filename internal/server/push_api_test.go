@@ -70,7 +70,7 @@ func TestVAPIDKey(t *testing.T) {
 
 // A subscription is the caller's, made with the caller's session or
 // key: listed without its keys, the same endpoint again updating it,
-// removed by its owner only; the audit has both.
+// removed by its owner only; the audit has both, and no command.
 func TestPushSubscriptionRoutes(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
@@ -129,11 +129,18 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 	if _, text := callAPI(t, ts, "GET", "/api/v1/me/push", owner, ""); strings.TrimSpace(text) != "[]" {
 		t.Fatalf("after the removal: %s", text)
 	}
-	_, text = callAPI(t, ts, "GET", "/api/v1/audit?limit=100", owner, "")
-	for _, action := range []string{"push.subscribe", "push.unsubscribe"} {
-		if !strings.Contains(text, `"action": "`+action+`"`) {
-			t.Errorf("no %s in the audit", action)
+	seen := map[string]int{}
+	for _, r := range auditRows(t, ts, owner, "?limit=100") {
+		if !strings.HasPrefix(r.Action, "push.") {
+			continue
 		}
+		seen[r.Action]++
+		if r.CommandID != 0 {
+			t.Errorf("a command of %s: %d", r.Action, r.CommandID)
+		}
+	}
+	if seen["push.subscribe"] < 2 || seen["push.unsubscribe"] == 0 {
+		t.Errorf("audit rows: %v", seen)
 	}
 }
 

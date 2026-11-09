@@ -101,10 +101,11 @@ var actions = map[string]string{
 // it succeeded (AP Logging v1.1, Block 6): "change", a line under
 // Configuration with who made it, the setpoints included; "system", none
 // here, its handler writing its own line (systemlog.go); "" none: a
-// sign-in, a preference, a search, a restore's plan. TestEveryActionHasALine
-// holds it to actions.
+// sign-in, a preference or a push subscription, a search, a restore's
+// plan. TestEveryActionHasALine holds it to actions.
 var changeLines = map[string]string{
 	"login": "", "login.start": "", "logout": "", "preference.set": "", "preference.delete": "", "discover": "", "restore.plan": "",
+	"push.subscribe": "", "push.unsubscribe": "",
 	"update.start": "system", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
 	"server.reboot.cancel": "system", "backup.take": "system", "backup.delete": "system", "restore.start": "system",
 	"cube.add": "change", "cube.update": "change", "cube.remove": "change", "settings.update": "change",
@@ -117,7 +118,8 @@ var changeLines = map[string]string{
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
-var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true, "server.reload": true}
+var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true,
+	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true}
 
 // secretFields are the body fields an audit row never keeps.
 var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3"}
