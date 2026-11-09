@@ -128,9 +128,11 @@ see [packaging/README.md](packaging/README.md#updating).
 
 `serve` reads its settings from the environment or from a `.env` in the
 directory it is started from (see [Cube variables](#cube-variables)).
-On the Cubes' LAN it needs none to begin with:
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_first-settings.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+On the Cubes' LAN the server needs no settings to begin with:
 while there are no users,
-the web UI offers the local network a form for the first owner,
+the web UI, `http://<the box>:8099/`,
+offers the local network a form for the first owner,
 and System settings → Cubes lists the Cubes the server finds,
 each added with **Add**.
 The settings take what discovery and the web UI cannot give:
@@ -145,6 +147,7 @@ so that no form for the first owner is open on the LAN:
 MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
 MASSIMO_API_TOKEN=choose-a-long-random-string
 ```
+<!-- END GENERATED PARTIAL docs/fragments/_first-settings.md -->
 
 Each Cube accepts a single TCP client,
 so close the original MAX! software and stop any other server before `serve` connects;
@@ -977,5 +980,7 @@ Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
 The privacy policy of the software, the apps and the project's site is
 <https://massimo.metaworx.ch/privacy.html>.
 
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_trademark.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 "MAX!" and "eQ-3" are trademarks of eQ-3 AG.
 This project is not affiliated with or endorsed by eQ-3.
+<!-- END GENERATED PARTIAL docs/fragments/_trademark.md -->

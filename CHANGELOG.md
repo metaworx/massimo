@@ -95,8 +95,8 @@ the next minor, a fix counts the suffix up.
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
 
 - The apt repository's address is `https://massimo.metaworx.ch/apt`,
-  under the project's site with its install routes and privacy policy
-  (`packaging/README.md`, "The apt repository").
+  under the project's site: the install routes, the first settings and
+  the privacy policy (`packaging/README.md`, "The apt repository").
 
 ### Fixed
 

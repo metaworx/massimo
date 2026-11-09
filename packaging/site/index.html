@@ -34,7 +34,8 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .875rem; }
 
 <h3>Debian, Ubuntu, Raspberry Pi OS: the apt repository</h3>
 <p>One suite per update channel: {{SUITES}}. Install the keyring package first, then the sources:</p>
-<pre><code>curl -fsSLo /tmp/massimo-archive-keyring.deb https://massimo.metaworx.ch/apt/massimo-archive-keyring.deb
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_apt-sources.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+<pre><code class="language-bash">curl -fsSLo /tmp/massimo-archive-keyring.deb https://massimo.metaworx.ch/apt/massimo-archive-keyring.deb
 sudo apt install /tmp/massimo-archive-keyring.deb
 sudo tee /etc/apt/sources.list.d/massimo.sources &lt;&lt;'EOF'
 Types: deb
@@ -43,8 +44,10 @@ Suites: alpha
 Components: main
 Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
 EOF
-sudo apt update &amp;&amp; sudo apt install massimo</code></pre>
-<p>Put a line into <code>/etc/massimo/env</code>, such as the token (see <a href="https://massimo.metaworx.ch/#settings">The first settings</a>), then <code>sudo systemctl start massimo</code>; <code>sudo apt upgrade</code> installs each release from then on. A single release's package is also on the <a href="https://github.com/metaworx/massimo/releases">releases page</a>: <code>_arm64.deb</code> for a 64-bit Raspberry Pi OS, <code>_armhf</code> for a 32-bit one (the Pi 1 included), <code>_amd64</code> for a PC. The repository's key, for a check by hand, is <a href="https://massimo.metaworx.ch/apt/massimo.asc">massimo.asc</a>. A box that followed the old address <code>https://metaworx.github.io/massimo/apt</code> changes its sources once: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#moving-from-the-old-address">Moving from the old address</a>. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#the-apt-repository">The apt repository</a>.</p>
+sudo apt update &amp;&amp; sudo apt install massimo
+</code></pre>
+<!-- END GENERATED PARTIAL docs/fragments/_apt-sources.md -->
+<p>Then create the first owner and start the service, see <a href="https://massimo.metaworx.ch/#settings">The first settings</a>; <code>sudo apt upgrade</code> installs each release from then on and restarts the service. A single release's package is also on the <a href="https://github.com/metaworx/massimo/releases">releases page</a>: <code>_arm64.deb</code> for a 64-bit Raspberry Pi OS, <code>_armhf</code> for a 32-bit one (the Pi 1 included), <code>_amd64</code> for a PC. The repository's key, for a check by hand, is <a href="https://massimo.metaworx.ch/apt/massimo.asc">massimo.asc</a>. A box that followed the old address <code>https://metaworx.github.io/massimo/apt</code> changes its sources once: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#moving-from-the-old-address">Moving from the old address</a>. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#the-apt-repository">The apt repository</a>.</p>
 
 <h3>macOS: Homebrew</h3>
 <pre><code>brew install metaworx/massimo/massimo-alpha
@@ -65,11 +68,26 @@ sudo ./massimo-linux-arm64 install -settings .env</code></pre>
 <p>This installs a systemd service on Linux, a LaunchDaemon on a Mac; the web UI's button and <code>massimo update</code> install the next release. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#install-with-massimo-install">Install with massimo install</a>.</p>
 
 <h2 id="settings">The first settings</h2>
-<p>On the Cubes' network the server needs no settings to begin with. Open <code>http://&lt;the box&gt;:8099/</code> from a device on the same network: while there are no users, the page offers the local network a form for the first owner. Then add the Cubes under System settings → Cubes, which lists those the server finds. A Cube takes one client at a time: close the original MAX! software first; from then on that software connects to the server's proxy.</p>
-<p>The settings file each route above names takes what discovery and the page cannot give: the address of a Cube that discovery does not reach, on another subnet or behind a VPN (<code>massimo discover</code> lists the Cubes it hears, with their serial and address), and a token that becomes the owner's key at the first start, which the page then asks for, so that no form for the first owner is open on the network:</p>
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_first-settings.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+<p>On the Cubes' LAN the server needs no settings to begin with:
+while there are no users,
+the web UI, <code>http://&lt;the box&gt;:8099/</code>,
+offers the local network a form for the first owner,
+and System settings → Cubes lists the Cubes the server finds,
+each added with <strong>Add</strong>.
+The settings take what discovery and the web UI cannot give:
+the address of a Cube that discovery does not reach,
+on another subnet or behind a VPN (<code>massimo discover</code> lists the Cubes it hears,
+with serial and address),
+and a token that becomes the owner's key at the first start,
+which the API and the web UI then ask for,
+so that no form for the first owner is open on the LAN:</p>
 <pre><code>MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
-MASSIMO_API_TOKEN=choose-a-long-random-string</code></pre>
-<p>The Debian package starts the service, and restarts it after an upgrade, only once <code>/etc/massimo/env</code> differs from the template, so that a fresh box does not serve the network unasked: put a line in, such as the token, then <code>sudo systemctl start massimo</code>. <code>massimo install -settings .env</code> starts it with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
+MASSIMO_API_TOKEN=choose-a-long-random-string
+</code></pre>
+<!-- END GENERATED PARTIAL docs/fragments/_first-settings.md -->
+<p>A Cube takes one client at a time: close the original MAX! software first; from then on that software connects to the server's proxy.</p>
+<p>The Debian package leaves a new box stopped, since until it has an owner every device on the local network may use it. Create the owner on the box with <code>sudo -u massimo massimo -data /var/lib/massimo user add &lt;name&gt; -role owner</code>, or put the token into <code>/etc/massimo/env</code>, or create the owner in the web UI once the service runs; <code>sudo systemctl start massimo</code> starts it, and from then on every upgrade restarts it. <code>massimo install -settings .env</code> starts the service with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
 
 <h2>Documentation</h2>
 <ul>
@@ -82,8 +100,10 @@ MASSIMO_API_TOKEN=choose-a-long-random-string</code></pre>
 </main>
 <footer>
 <p><a href="https://massimo.metaworx.ch/privacy.html">Privacy policy</a> · <a href="https://github.com/metaworx/massimo">Source on GitHub</a> · Free software under the <a href="https://github.com/metaworx/massimo/blob/main/LICENSE">AGPL-3.0-or-later</a></p>
-<p>"MAX!" and "eQ-3" are trademarks of eQ-3 AG.
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_trademark.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+<p>&quot;MAX!&quot; and &quot;eQ-3&quot; are trademarks of eQ-3 AG.
 This project is not affiliated with or endorsed by eQ-3.</p>
+<!-- END GENERATED PARTIAL docs/fragments/_trademark.md -->
 </footer>
 </body>
 </html>
