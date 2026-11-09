@@ -732,6 +732,150 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	}
 }
 
+// Lost holds from the loss Run reports to the next complete greeting;
+// a deliberate Reconnect is none.
+func TestLostFromALossToTheNextGreeting(t *testing.T) {
+	srv, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond})
+	if c.Lost() {
+		t.Fatal("lost before Run")
+	}
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	if c.Lost() {
+		t.Fatal("lost after the greeting")
+	}
+
+	var sawLost atomic.Bool
+	done := make(chan struct{})
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if c.Lost() {
+				sawLost.Store(true)
+			}
+			time.Sleep(100 * time.Microsecond)
+		}
+	}()
+	if err := c.Reconnect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	close(done)
+	<-sampled
+	if sawLost.Load() {
+		t.Error("lost during a deliberate reconnect")
+	}
+
+	srv.Close()
+	eventually(t, "the loss", c.Lost)
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+	srv2 := &fakecube.Server{Greeting: srv.Greeting}
+	if _, err := srv2.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv2.Close() })
+	eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 3 })
+	if c.Lost() || !c.Connected() {
+		t.Errorf("after the greeting: lost %v, connected %v", c.Lost(), c.Connected())
+	}
+}
+
+// pollsReceived counts the l: lines a fake Cube has read.
+func pollsReceived(srv *fakecube.Server) int {
+	n := 0
+	for _, m := range srv.Received() {
+		if m.Type == 'l' {
+			n++
+		}
+	}
+	return n
+}
+
+// A Cube that answers nothing, as one whose cable is out, is lost after
+// two unanswered polls, long before the read deadline of three polls and
+// 30 s, and connected again once it answers.
+func TestSilentCubeIsLostAfterTwoPolls(t *testing.T) {
+	srv, addr := startFake(t)
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, PollInterval: 200 * time.Millisecond, ReplyTimeout: 100 * time.Millisecond, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+
+	srv.SetSilent(true)
+	eventually(t, "the loss", c.Lost)
+	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], "2 polls in a row") {
+		t.Errorf("cube connection lost lines: %q", lost)
+	}
+	srv.SetSilent(false)
+	eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+}
+
+// One poll the Cube answers late, or not at all, followed by one it
+// answers, keeps the connection.
+func TestOneMissedPollKeepsTheConnection(t *testing.T) {
+	srv, addr := startFake(t)
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, PollInterval: 200 * time.Millisecond, ReplyTimeout: 50 * time.Millisecond, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+
+	n := pollsReceived(srv)
+	srv.SetSilent(true)
+	eventually(t, "a poll held", func() bool { return pollsReceived(srv) > n })
+	eventually(t, "the poll missed", func() bool { return logs.count("WARN", "poll failed") >= 1 })
+	srv.SetSilent(false)
+	m := pollsReceived(srv)
+	eventually(t, "two polls more", func() bool { return pollsReceived(srv) >= m+2 })
+	if c.Lost() || evs.get(EventDisconnected) != 0 || srv.Connections() != 1 {
+		t.Errorf("lost %v, %d disconnected events, %d connections", c.Lost(), evs.get(EventDisconnected), srv.Connections())
+	}
+}
+
+// Polls the Cube leaves unanswered while pairing runs count nothing,
+// since whether the Cube answers l: then is unconfirmed; once pairing
+// ends they do.
+func TestSilentCubeWhilePairingIsKept(t *testing.T) {
+	srv, addr := startFake(t)
+	var logs logLines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, PollInterval: 100 * time.Millisecond, ReplyTimeout: 30 * time.Millisecond, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+
+	if err := c.StartInclusion(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	srv.SetSilent(true)
+	eventually(t, "three missed polls", func() bool { return logs.count("WARN", "poll failed") >= 3 })
+	if c.Lost() || evs.get(EventDisconnected) != 0 {
+		t.Fatal("lost while pairing runs")
+	}
+	c.EndInclusion()
+	eventually(t, "the loss once pairing ended", c.Lost)
+}
+
 // A Cube never reached since the start is reported once, at the first
 // failed attempt, and the first greeting says it is back.
 func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {

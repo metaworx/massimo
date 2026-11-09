@@ -60,3 +60,30 @@ func TestSwitchFlag(t *testing.T) {
 		t.Errorf("MASSIMO_ANNOUNCE=maybe: %v", err)
 	}
 }
+
+// A switch's value given after a space ends the flags at the value:
+// serve refuses the argument it is left with, before it opens anything,
+// and says how to write the switch; another stray argument is refused
+// too, without the hint.
+func TestServeRefusesAStrayArgument(t *testing.T) {
+	clearCubeEnv(t)
+	resetLogLevel(t)
+	base := []string{"-addr", "127.0.0.1:1", "-listen", "127.0.0.1:0"}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-announce", "off", "-proxy", "off"}, `serve: unexpected argument "off": write -announce=off, a switch takes its value after =`},
+		{[]string{"-allow-reboot", "off", "-proxy", "off"}, `serve: unexpected argument "off": write -allow-reboot=off, a switch takes its value after =`},
+		{[]string{"--announce", "Yes"}, `serve: unexpected argument "Yes": write -announce=Yes`},
+		{[]string{"-proxy", "off", "extra"}, `serve: unexpected argument "extra"`},
+	} {
+		err := runServe(append(append([]string{}, base...), c.args...))
+		if err == nil || !strings.HasPrefix(err.Error(), c.want) {
+			t.Errorf("%v: %v, want %s", c.args, err, c.want)
+		}
+		if err != nil && c.args[len(c.args)-1] == "extra" && strings.Contains(err.Error(), "write -") {
+			t.Errorf("%v: a hint for no switch: %v", c.args, err)
+		}
+	}
+}

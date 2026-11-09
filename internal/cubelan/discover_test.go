@@ -109,7 +109,7 @@ func TestDiscoverKeepsEveryAnswerOfASerial(t *testing.T) {
 	}
 	defer second.Close()
 	p, _ := strconv.Atoi(port)
-	found, err := discover(context.Background(), 500*time.Millisecond, p, net.IPv4(127, 0, 0, 1), net.IPv4(127, 0, 0, 2))
+	found, err := discover(context.Background(), 500*time.Millisecond, 0, p, net.IPv4(127, 0, 0, 1), net.IPv4(127, 0, 0, 2))
 	if err != nil {
 		t.Fatal(err)
 	}

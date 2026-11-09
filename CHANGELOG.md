@@ -41,6 +41,10 @@ the next minor, a fix counts the suffix up.
   so that a page of them reads those rows only, not the whole log:
   11 s at 90,000 events on a Raspberry Pi 1 before (`docs/store.md`).
 
+- Benchmarks of the log's writer and pages in `internal/store`, also on
+  a copy of a box's store, and `make store-bench` builds them for the
+  Raspberry Pis (`docs/store.md`, "Measuring on a box").
+
 - The log shows the server's start, stop, restart, reload, reboot,
   update, backups and prunes, and a Cube's new address or its leaving
   the LAN (`docs/ui.md`, "Log").
@@ -125,9 +129,17 @@ the next minor, a fix counts the suffix up.
   under the project's site: the install routes, building from source,
   the first settings and the privacy policy (`packaging/README.md`).
 
-- `make mdns-test` checks the mDNS announcement and `discover` against
-  avahi in Docker, and CI against mDNSResponder and Windows' mDNS as well
-  (`tools/mdns-test/README.md`).
+- `make lan-test` checks discovery, the mDNS announcement and
+  `discover` in Docker, against avahi, with a Cube's cable pulled and a
+  second server's proxy (`tools/lan-test/README.md`).
+
+- CI checks the announcement beside mDNSResponder and Windows' mDNS,
+  and runs discovery's tests on Windows as well
+  (`GUIDELINES/project/CI.md`).
+
+- serve takes a silent Cube for lost and reconnects: after about 30 s
+  without traffic, or two polls in a row unanswered; it waited three
+  polls and 30 s (`README.md`, "Server").
 
 ### Fixed
 
@@ -170,6 +182,18 @@ the next minor, a fix counts the suffix up.
   `/etc/massimo/env` and the store in `/var/lib/massimo` from any
   directory, not a home's `.env` (`README.md`, "Cube variables").
 
+- serve's proxy no longer answers discovery for a Cube it has lost,
+  so other servers and the original software see the Cube go; serve
+  stays findable by mDNS (`docs/proxy.md`, "Discovery").
+
+- A device that joins during pairing is in the server's pairing state
+  before a proxy client receives its N line; a race test found the
+  other order now and then.
+
+- The queue's observer test holds its first command until the next two
+  are queued, as it assumed; under QEMU the armv6 job found the queue
+  starting it first.
+
 ### Security
 
 - On Linux the service runs as `_massimo`, as on macOS: the package and
@@ -183,6 +207,10 @@ the next minor, a fix counts the suffix up.
 - The web UI shows no self-signed certificate's fingerprint, which a man
   in the middle passes along; its notice, also in the sign-in dialog,
   asks to compare the browser's with `massimo tls show` (`docs/ui.md`).
+
+- `serve -allow-reboot off` no longer allows the reboot: `serve` refuses
+  an argument it does not take, and a switch takes its value after `=`,
+  as `-allow-reboot=off` (`README.md`, "Server").
 
 ## [0.12.0-alpha.1] - 2026-11-08
 
