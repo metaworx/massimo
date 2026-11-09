@@ -210,7 +210,7 @@ which listens on `:8099` on every interface.
 On the template's settings it only restarts a service that runs:
 a server without users answers every device on the local network (see "Server"),
 so the first start is the owner's,
-after `sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`
+after `sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner`
 or followed by the first-owner form of the web UI.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
@@ -841,13 +841,17 @@ The Cubes are configured in the environment or in `.env` in the current
 directory (`KEY=VALUE` lines,
 `-env <file>` or `MASSIMO_ENV_FILE` for another file;
 the environment wins over the file).
+On Linux and macOS the service user, the owner of `/etc/massimo/env`,
+reads that file alone and keeps its data in `/var/lib/massimo`,
+from any directory, as `sudo sshd` reads sshd's own configuration;
+`-env` or `MASSIMO_ENV_FILE` turns both off.
 Keep the file out of git; `massimo config` shows what is in effect,
 secrets redacted.
 
 `serve` keeps the Cubes in its own store instead,
 `massimo.db` in the data directory (`-data <dir>` before the command name,
 or `MASSIMO_DATA`; else the current directory,
-so a terminal run puts it next to `.env`;
+so a terminal run puts it next to `.env`, or the service user's;
 the installed services pass the state directory,
 see [packaging/README.md](packaging/README.md#the-store)).
 At every start `serve` adds to the store each Cube of the file it does not know yet,
@@ -884,8 +888,8 @@ The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,
 "The store").
-For the service run them as its user,
-for example `sudo -u _massimo massimo -data /var/lib/massimo store info`.
+Run as the service user they act on the service's store from any directory,
+for example `sudo -u _massimo massimo store info`.
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):
@@ -903,8 +907,8 @@ with the browser's key stretching, so the web UI signs in with it and the
 server keeps no hash (docs/store.md section 6).
 A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
-for the service run it as its user,
-for example `sudo -u _massimo massimo -data /var/lib/massimo user add anna -role operator`.
+run as the service user it acts on the service's,
+for example `sudo -u _massimo massimo user add anna -role operator`.
 The audit records what it did with the remote `cli`,
 and the log a change line of each, by the command line (docs/ui.md, "Log").
 With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
@@ -926,7 +930,7 @@ the plain form applies to any Cube unless the table says otherwise.
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
 | `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. The plain form only with a single Cube. |
 | `MASSIMO_CUBE_SN` | The Cube to use when no `-sn` is given. |
-| `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory. |
+| `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory, `/var/lib/massimo` for the service user. |
 
 `-sn <serial>` selects a Cube:
 every command then reads that Cube's variables and, without an address,

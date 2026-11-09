@@ -96,15 +96,20 @@ func globalOptions(args []string) ([]string, error) {
 }
 
 // dataDir is the data directory, where serve keeps massimo.db: -data,
-// else MASSIMO_DATA, else the current directory; a Windows service
-// started without either (a binary updated by hand before install wrote
-// -data) uses %ProgramData%\Massimo, since a service runs in System32.
+// else MASSIMO_DATA (also from the settings file), else the current
+// directory; a Windows service started without either (a binary updated
+// by hand before install wrote -data) uses %ProgramData%\Massimo, since a
+// service runs in System32, and the service user without -env the
+// service's (useServiceDefaults).
 func dataDir() string {
 	if d := os.Getenv(env.DataVar); d != "" {
 		return d
 	}
 	if d := serviceDataDir(); d != "" {
 		return d
+	}
+	if serviceDefaults {
+		return serviceStateDir
 	}
 	return "."
 }

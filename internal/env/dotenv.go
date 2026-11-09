@@ -33,13 +33,25 @@ func Source(name string) string {
 	return "environment"
 }
 
-// File returns the env file to read: MASSIMO_ENV_FILE, else ".env" in
-// the current directory.
+// defaultFile is the env file File returns without MASSIMO_ENV_FILE.
+var defaultFile = ".env"
+
+// SetDefaultFile makes path the env file File returns without
+// MASSIMO_ENV_FILE, in place of ".env" in the current directory: the
+// service's settings file for the service user (cmd/massimo). It is
+// not MASSIMO_ENV_FILE itself, which config would show as set by the
+// environment and child processes would inherit. Call it at the start,
+// before the file is read.
+func SetDefaultFile(path string) { defaultFile = path }
+
+// File returns the env file to read: MASSIMO_ENV_FILE, else the default
+// file, ".env" in the current directory unless SetDefaultFile named
+// another.
 func File() string {
 	if f := os.Getenv(FileVar); f != "" {
 		return f
 	}
-	return ".env"
+	return defaultFile
 }
 
 // pair is one KEY=VALUE line of the file.

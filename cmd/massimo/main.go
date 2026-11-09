@@ -22,6 +22,7 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+	useServiceDefaults()
 	if err := env.LoadFile(env.File()); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -106,6 +107,9 @@ func usage() {
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
 override the path with -env or MASSIMO_ENV_FILE). Keep that file out of git.
+On Linux and macOS the service user, which owns /etc/massimo/env, reads
+that file alone and keeps its data in /var/lib/massimo, from any directory,
+unless -env or MASSIMO_ENV_FILE name another file.
 Several Cubes: put the serial into the variable names
 (MASSIMO_CUBE_KEQ0123456_KEY, _IV, _ADDRESS) and pick one with -sn or
 MASSIMO_CUBE_SN; with -sn and no address the Cube is discovered on the
@@ -123,7 +127,8 @@ Cube itself even when the proxy answers. -addr wins over both.
 info) is the level the commands log at, also after serve's name.
 
 serve keeps the Cubes and its settings in massimo.db in the data directory
-(-data, MASSIMO_DATA, else the current directory); after its first start
+(-data, MASSIMO_DATA, the service user's /var/lib/massimo, else the current
+directory); after its first start
 the file's _ADDRESS, _NAME, _PROXY, _PROXY_SERIAL and _IGNORE lines only
 add Cubes the store does not know. The other commands keep reading them.
 

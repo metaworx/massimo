@@ -187,6 +187,7 @@ with until its first clean stop.
 | Linux service (`massimo install`) | `/var/lib/massimo` | user `_massimo` | directory 0750 (`StateDirectory=massimo`, `StateDirectoryMode=0750`), file 0600 |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` | directory 0750 (`install.StateDir`), file 0600 |
 | Windows service | `C:\ProgramData\Massimo` | LocalSystem | the directory's ACL: SYSTEM and Administrators only (`winSettings`) |
+| A command as `_massimo` (Linux, macOS) | `/var/lib/massimo`, unless `-env`, `-data` or `MASSIMO_DATA` | user `_massimo` | as the services' |
 | Terminal run | the current directory, or `-data <dir>` | the user | file 0600 |
 
 These are the directories the installers create today (`internal/install`:
@@ -197,7 +198,9 @@ the update request already lives there on Linux and macOS.
 so no unit change is needed for the file to be created.
 
 The data directory is a global option like `-env`: `massimo -data
-<dir> serve …`, default `MASSIMO_DATA`, else the current directory. The
+<dir> serve …`, default `MASSIMO_DATA`, else the current directory;
+for the service user, the owner of `/etc/massimo/env`, without `-env`,
+`/var/lib/massimo` and that settings file alone (`useServiceDefaults`). The
 installers pass it explicitly in the unit,
 the plist and the Windows service arguments (`ServiceArgs`),
 so nothing depends on the working directory;
@@ -1018,8 +1021,9 @@ who cannot sign in once it is off until a password is set for them.
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
-they take `-data` like `serve` and run as the service user
-(`sudo -u _massimo massimo -data /var/lib/massimo user add anna`),
+they take `-data` like `serve` and run as the service user,
+which reads the service's settings and store from any directory
+(`sudo -u _massimo massimo user add anna`),
 beside a running server thanks to WAL.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,

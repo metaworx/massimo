@@ -96,7 +96,7 @@ restarted() { grep -q '^deb-systemd-invoke restart massimo.service$' /tmp/calls;
 # Never ran on the template: left for the owner, who is told how.
 reinstall inactive
 if restarted; then fail "started on the template: $(cat /tmp/calls)"; fi
-grep -q -F 'sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner' /tmp/out ||
+grep -q -F 'sudo -u _massimo /usr/bin/massimo user add <name> -role owner' /tmp/out ||
 	fail "the message does not name the owner line: $(cat /tmp/out)"
 grep -q 'sudo systemctl start massimo' /tmp/out || fail "the message does not name the start: $(cat /tmp/out)"
 # Started by its owner on the template and set up through the web UI:

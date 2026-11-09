@@ -151,6 +151,10 @@ the next minor, a fix counts the suffix up.
 - `massimo user` and `massimo store` print their help, or refuse wrong
   arguments, without creating a store in the data directory first.
 
+- As the service user, without `-env`, the commands read
+  `/etc/massimo/env` and the store in `/var/lib/massimo` from any
+  directory, not a home's `.env` (`README.md`, "Cube variables").
+
 ### Security
 
 - The service runs as `_massimo` on Linux too, as on macOS: the package
