@@ -158,6 +158,30 @@ def test_log_change_line(page, case):
     show_view(page, "tiles")
 
 
+def test_log_source_and_level(page, case):
+    """The source and the level chosen are asked of the server and kept in
+    the address after the log's page; a reload keeps them, Clear sets
+    them back to all and info."""
+    show_view(page, "log")
+    with page.expect_request(lambda r: "/log?" in r.url and "source=" in r.url) as asked:
+        page.locator("#log-device").select_option("src:system")
+    q = parse_qs(urlparse(asked.value.url).query)
+    assert q.get("source") == ["system"] and "device" not in q, f"the source asked for: {q}"
+    with page.expect_request(lambda r: "/log?" in r.url and "level=" in r.url) as asked:
+        page.locator("#log-level").select_option("warn")
+    q = parse_qs(urlparse(asked.value.url).query)
+    assert q.get("level") == ["warn"] and q.get("source") == ["system"], f"the level asked for: {q}"
+    assert wait_until(page, "location.hash === '#log?source=system&level=warn'", 5), f"the address: {page.evaluate('location.hash')}"
+    page.reload()
+    assert log_shown(page) and devices_loaded(page), "the log again"
+    assert page.locator("#log-device").input_value() == "src:system" and page.locator("#log-level").input_value() == "warn", "the choices kept"
+    page.locator("#log-clear").click()
+    assert wait_until(page, "location.hash === '#log'", 5), "Clear takes them out"
+    assert page.locator("#log-device").input_value() == "" and page.locator("#log-level").input_value() == "info", "all and info again"
+    named_buttons(page, "the log with its source and level")
+    show_view(page, "tiles")
+
+
 def stamp(now, i):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
 

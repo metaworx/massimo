@@ -613,7 +613,6 @@ function applySettings() {
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   startPolling();
-  logSettingsChanged(); // log.js: the log's level follows the expert switch
 }
 
 // --- loading ----------------------------------------------------------

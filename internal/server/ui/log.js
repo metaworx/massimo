@@ -45,36 +45,53 @@ const logState = {
   room: 0, // the lines live events may grow the log to before the oldest go (LOG_MAX_LINES at least)
   stick: true, // keep the newest line in view at the top unless the user scrolled down
   liveSeq: 0, // counts the live lines, so that loadLog finds the ones that came while it waited
-  level: "info", // the lowest level shown: debug in expert mode (logLevel)
+  level: "info", // the lowest level shown, one of LOG_LEVELS
+  source: "", // the source chosen, one of LOG_SOURCES, "" for all
+  user: "", // the user chosen by login name, "" for everyone
+  users: null, // the users of the who choice, loaded once the log opens (logLoadUsers)
+};
+
+// LOG_SOURCES are the sources of an event, as the server names them, in
+// the order of the source choice.
+const LOG_SOURCES = ["system", "config", "cube", "device"];
+
+// LOG_KIND_SOURCE groups the kinds by the source they come from, for the
+// kind choice; a kind of more than one (config) goes with the devices.
+const LOG_KIND_SOURCE = {
+  state: "device", config: "device", paired: "device", device_forgotten: "device",
+  connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
+  cube_found: "cube", cube_gone: "cube", address_changed: "cube",
+  change: "config",
 };
 
 // LOG_LEVELS are the levels of an event, lowest first, as the server
 // names them.
 const LOG_LEVELS = ["debug", "info", "warn", "error"];
 
-// logLevel is the lowest level the log shows: debug in expert mode, info
-// otherwise.
-function logLevel() {
-  return state.settings.expert ? "debug" : "info";
-}
-
-// logAtLevel reports whether a line is at the level shown or above; a
+// logAtLevel reports whether a line is at the level chosen or above; a
 // line of before the levels counts as info.
 function logAtLevel(line) {
   return LOG_LEVELS.indexOf(line.level || "info") >= LOG_LEVELS.indexOf(logState.level);
 }
 
-// logSettingsChanged follows the expert switch (applySettings): the log
-// asks for its debug lines in expert mode only, so an open log loads
-// again when the level changes.
-function logSettingsChanged() {
-  const level = logLevel();
-  if (level === logState.level) return;
-  logState.level = level;
-  if (logState.open) {
-    renderLog();
-    loadLog();
+// logOfChoices reports whether a line is of the source and the user
+// chosen.
+function logOfChoices(line) {
+  return (!logState.source || line.source === logState.source) && (!logState.user || (line.by && line.by.name === logState.user));
+}
+
+// logLoadUsers fills the who choice once, for a caller who may list the
+// users; for others, and on a server without users, it stays hidden.
+async function logLoadUsers() {
+  if (logState.users !== null) return;
+  logState.users = [];
+  if (!state.me || state.me.mode !== "users" || !hasCap("users")) return;
+  try {
+    logState.users = (await api("GET", "api/v1/users")) || [];
+  } catch (e) {
+    logState.users = [];
   }
+  fillLogSelects();
 }
 
 // logDevice finds a device of the rooms or of the unlisted list already
@@ -436,13 +453,13 @@ function logRangeStart(range, now = new Date()) {
 // logInQuery reports whether a line is of the kind and the device chosen,
 // as the server answers them.
 function logInQuery(line) {
-  return (!logState.kind || line.kind === logState.kind) && logOfDevice(line, logState.device) && logAtLevel(line);
+  return (!logState.kind || line.kind === logState.kind) && logOfDevice(line, logState.device) && logAtLevel(line) && logOfChoices(line);
 }
 
 function logLineMatches(line) {
   if (line.kind === "error") return true; // the page's own line: the log could not load
   if (logState.kind && line.kind !== logState.kind) return false;
-  if (!logOfDevice(line, logState.device) || !logAtLevel(line)) return false;
+  if (!logOfDevice(line, logState.device) || !logAtLevel(line) || !logOfChoices(line)) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
   const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, line.serial, logDeviceName(line), logText(line)].join(" ").toLowerCase();
@@ -512,8 +529,10 @@ function logQuery(before) {
   const start = logRangeStart(logState.range);
   if (start) q += "&since=" + encodeURIComponent(start.toISOString());
   if (logState.kind) q += "&kind=" + encodeURIComponent(logState.kind);
+  if (logState.source) q += "&source=" + logState.source;
   if (logState.device) q += "&device=" + encodeURIComponent(logState.device);
   if (logState.level !== "info") q += "&level=" + logState.level;
+  if (logState.user) q += "&user=" + encodeURIComponent(logState.user);
   if (before) q += "&before=" + encodeURIComponent(before);
   return q;
 }
@@ -652,7 +671,7 @@ function pruneLogRange(now = new Date()) {
 // renderLogClear turns Clear off while nothing narrows the log: no text
 // filter, every kind and every device.
 function renderLogClear() {
-  $("log-clear").disabled = !(logState.filter || logState.kind || logState.device);
+  $("log-clear").disabled = !(logState.filter || logState.kind || logState.device || logState.source || logState.user || logState.level !== "info");
 }
 
 // logChoicesChanged follows a new range, kind or device: the address in
@@ -664,15 +683,20 @@ function logChoicesChanged() {
   loadLog();
 }
 
-// clearLogFilter sets the text filter, the kind and the device back to
-// all and loads the log again.
+// clearLogFilter sets the text filter, the kind, the source or device,
+// the level and who back to all and loads the log again.
 function clearLogFilter() {
   logState.filter = "";
   logState.kind = "";
   logState.device = "";
+  logState.source = "";
+  logState.user = "";
+  logState.level = "info";
   $("log-filter").value = "";
   $("log-kind").value = "";
   $("log-device").value = "";
+  $("log-level").value = "info";
+  $("log-user").value = "";
   logChoicesChanged();
 }
 
@@ -683,14 +707,23 @@ function clearLogFilter() {
 // Cube's devices are loaded (state.roomsOf), a device chosen from the
 // address stays, shown as the address names it.
 function fillLogSelects() {
-  const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(LOG_KINDS.map((k) => [k, logKind(k)])));
+  const groups = LOG_SOURCES.map((src) => ({ group: t("log.src." + src), options: LOG_KINDS.filter((k) => (LOG_KIND_SOURCE[k] || "system") === src).map((k) => [k, logKind(k)]) }));
+  const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(groups));
   kinds.value = logState.kind;
+  fillOptions($("log-level"), LOG_LEVELS.filter((l) => l !== "error").map((l) => [l, t("log.level." + l)])).value = logState.level;
+  const users = logState.users || [];
+  const who = fillOptions($("log-user"), [["", t("log.allUsers")]].concat(users.map((u) => [u.name, u.display_name || u.name])));
+  if (logState.user && !users.some((u) => u.name === logState.user)) who.appendChild(new Option(logState.user, logState.user));
+  who.value = logState.user;
+  who.classList.toggle("hidden", users.length === 0 && !logState.user);
   const devs = [];
   for (const r of state.rooms) for (const d of r.devices) devs.push(d);
   for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
   devs.sort((a, b) => (a.name || logDeviceKey(a)).localeCompare(b.name || logDeviceKey(b)));
   fillOptions($("log-range"), LOG_RANGES.map((r) => [r, t("log.range." + r)])).value = logState.range;
-  const options = [["", t("log.allDevices")]].concat(devs.map((d) => [logDeviceKey(d), d.name ? d.name + " · " + logDeviceKey(d) : logDeviceKey(d)]));
+  const options = [["", t("log.allDevices")]]
+    .concat(LOG_SOURCES.map((src) => ["src:" + src, t("log.src." + src)]))
+    .concat(devs.length ? [{ group: t("log.devicesGroup"), options: devs.map((d) => [logDeviceKey(d), d.name ? d.name + " · " + logDeviceKey(d) : logDeviceKey(d)]) }] : []);
   const byRF = devs.find((d) => d.rf_address === logState.device && d.serial);
   let changed = false;
   if (byRF) {
@@ -705,7 +738,7 @@ function fillLogSelects() {
     logState.device = "";
     changed = true;
   }
-  sel.value = logState.device;
+  sel.value = logState.device || (logState.source ? "src:" + logState.source : "");
   renderLogClear();
   return changed;
 }
@@ -760,7 +793,10 @@ function logHash() {
   const q = new URLSearchParams();
   if (logState.range !== LOG_COUNT_RANGE) q.set("range", logState.range);
   if (logState.kind) q.set("kind", logState.kind);
+  if (logState.source) q.set("source", logState.source);
   if (logState.device) q.set("device", logState.device);
+  if (logState.level !== "info") q.set("level", logState.level);
+  if (logState.user) q.set("user", logState.user);
   const s = q.toString();
   return VIEW_HASH.log + (s ? "?" + s : "");
 }
@@ -781,6 +817,12 @@ function readLogHash(hash) {
   logState.kind = LOG_KINDS.includes(kind) ? kind : "";
   if (/^[a-z]{3}[0-9]{7}$/i.test(device)) logState.device = device.toUpperCase();
   else logState.device = /^[0-9a-f]{6}$/i.test(device) ? device.toLowerCase() : "";
+  const source = q.get("source");
+  logState.source = LOG_SOURCES.includes(source) && !logState.device ? source : "";
+  const level = q.get("level");
+  logState.level = ["debug", "info", "warn"].includes(level) ? level : "info";
+  const user = (q.get("user") || "").trim().toLowerCase();
+  logState.user = /^[a-z0-9._-]{1,64}$/.test(user) ? user : "";
 }
 
 // setAddress puts a page's hash into the address: as a new entry of the
@@ -841,7 +883,10 @@ function showView(view, address = "push") {
   }
   $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs");
   $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
-  if (view === "log") loadLog();
+  if (view === "log") {
+    loadLog();
+    logLoadUsers();
+  }
   document.dispatchEvent(new CustomEvent("viewshown", { detail: view }));
 }
 
@@ -876,7 +921,17 @@ function initLog() {
     logChoicesChanged();
   });
   $("log-device").addEventListener("change", (ev) => {
-    logState.device = ev.target.value;
+    const v = ev.target.value;
+    logState.source = v.startsWith("src:") ? v.slice(4) : "";
+    logState.device = v.startsWith("src:") ? "" : v;
+    logChoicesChanged();
+  });
+  $("log-level").addEventListener("change", (ev) => {
+    logState.level = ["debug", "info", "warn"].includes(ev.target.value) ? ev.target.value : "info";
+    logChoicesChanged();
+  });
+  $("log-user").addEventListener("change", (ev) => {
+    logState.user = ev.target.value;
     logChoicesChanged();
   });
   $("log-range").addEventListener("change", (ev) => {

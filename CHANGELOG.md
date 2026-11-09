@@ -38,6 +38,10 @@ the next minor, a fix counts the suffix up.
   with who made it: a Cube named, a setting, a user, a role, a key
   (`docs/ui.md`, "Log").
 
+- The log chooses a source, System, Configuration, the Cube or one
+  device, a level and who made a change, kept in the address after
+  `#log` (`docs/ui.md`, "Log").
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what
