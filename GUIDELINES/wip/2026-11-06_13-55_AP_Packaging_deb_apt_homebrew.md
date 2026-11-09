@@ -1,46 +1,54 @@
-# AP Packaging v1.0: deb, apt repository, Homebrew tap
+# AP Packaging v1.1: deb, apt, Homebrew, site
 
 ## TL;DR
 
-Massimo gets packages beside its raw binaries, with one rule:
+Massimo has packages beside its raw binaries, with one rule:
 one owner of the binary per box, recorded by a marker the package ships,
 so that `massimo update` defers to apt or brew where they own `/usr/bin/massimo`.
-The Makefile, release.yml and the key split stay;
-nfpm and a few scripts are added.
+Blocks 1 to 3 are merged; Blocks 4 to 10 wait for their conditions;
+Block 11, new in v1.1, gives the project a site of its own.
 
-- `.deb` by nfpm: amd64, arm64,
-  armhf from the GOARM=6 build (the Pi 1 included); `/usr/bin/massimo`,
-  the unit derived from `packaging/systemd/`, no update helper;
-  maintainer scripts do what `massimo install` does,
-  with adduser and deb-systemd-helper
-- marker `share/massimo/packaged` → `massimo update`,
-  the web UI and `massimo install` say "managed by apt: …" and install nothing;
-  `install` keeps `-settings` and `-listen`
-- apt repository on the project's GitHub Pages,
-  rebuilt from the last ten releases per channel at each release;
-  suites = channels; RSA 4096 key in `signing`; the keyring package;
-  CI proves it with a throwaway key
-- Homebrew tap: a formula built from source, `brew services`,
-  the marker for brew; rendered and pushed by a workflow on `release: published`
-- no Windows signing for now (D5); rpm, MSI, pkg, container, LoxBerry wait (D8)
+- `.deb` by nfpm (amd64, arm64, armhf), the marker, `massimo update` and the
+  web UI deferring to apt; the Homebrew tap with `brew services` → done
+- apt repository → `metaworx.github.io/massimo/apt/` → `massimo.metaworx.ch/apt/`:
+  the CNAME, the domain in the Pages settings and HTTPS are set (2026-11-09),
+  one base URL changes in `publish.sh`; the tree is under `/apt/` already;
+  three Pis follow the old address, which GitHub redirects to `http://` first,
+  so apt refuses it: their sources line changes by hand, once
+- the site's one index page → `packaging/site/`:
+  the home with the install routes, the privacy policy both app stores ask for,
+  in English and German
+- Windows signing, rpm, MSI, the container, LoxBerry, `.pkg` → each a
+  revision when its condition holds (D8); the button's helper → AP AptUpdate
 
 Rests on
 [2026-11-06_13-05_ANALYSIS_Packaging_packages_signing_channels.md](2026-11-06_13-05_ANALYSIS_Packaging_packages_signing_channels.md)
 and its addendum
 [2026-11-06_13-41_ANALYSIS_Packaging_certum_windows_signing.md](2026-11-06_13-41_ANALYSIS_Packaging_certum_windows_signing.md);
-the owner's decisions D1 to D8 are in the Discussion.
+the owner's decisions D1 to D11 are in the Discussion.
 
 ### Blocks
 
 1. Deb: nfpm, the maintainer scripts, the derived unit,
    the marker and its readers, `make packages`,
    the packages in the release and the manifest, the container test,
-   the documents
+   the documents (done)
 2. Apt: the publishing script, the keyring package,
    the Pages deploy behind the secret, the CI test with a throwaway key,
-   the documents and the owner's steps
+   the documents and the owner's steps (done)
 3. Homebrew: the formula template with its service block and test,
-   the render script, the publish workflow, the macOS CI test, the documents
+   the render script, the publish workflow, the macOS CI test,
+   the documents (done)
+4. Windows signing: SignPath first, Certum as fallback (waits, D5)
+5. Rpm: the package for dnf boxes (waits for a request)
+6. MSI and winget: the WiX installer and the manifest (waits for a beta or stable channel)
+7. Helper: the web UI's update button running apt or brew (carried over to AP AptUpdate)
+8. Container: the image on ghcr.io (waits for a NAS user)
+9. LoxBerry: the plugin around the deb (waits for a LoxBerry user)
+10. Pkg: the notarized `.pkg` with a cask (waits for Mac users off Homebrew)
+11. Site: `massimo.metaworx.ch` on the project's GitHub Pages, the apt
+    repository under `/apt/`, the home and privacy pages, the documents;
+    the owner's DNS and Pages steps
 
 ## Discussion
 
@@ -108,7 +116,7 @@ nothing is pushed or opened without a signal.
 each from the analysis's section 9 when its condition holds:
 Windows code signing (the owner's D5), the rpm (a request),
 the WiX installer and winget (a beta or stable channel),
-the helper running apt or brew from the button (Block 2 and a wish),
+the helper running apt or brew from the button (carried over to AP AptUpdate in v1.1),
 the container image on ghcr.io (a NAS user),
 the LoxBerry plugin around the deb (Block 1 and a LoxBerry user),
 and the notarized `.pkg` (Mac users off Homebrew).
@@ -118,6 +126,54 @@ this session, under `PLAN++` for Blocks 1 to 3 with the owner's accounts left ou
 no key is made, no secret set, no Pages enabled, no tap repository created;
 every step that needs one is written, tested with a throwaway,
 and skipped in CI until the secret exists.
+
+**Revision v1.1 (2026-11-09): the site.**
+The owner asked for `massimo.metaworx.ch` as the project's address,
+with the apt repository under it, while planning the apps (AP MobileApp):
+both stores want a privacy policy and a site to link, and an apt source line
+should name the project, not GitHub.
+Investigated at the TL;DR gate of 2026-11-09 and decided there, as recommended:
+
+- **D9.**
+  The site's pages live in `packaging/site/`,
+  plain HTML that `publish.sh` copies into the artifact,
+  so that `packaging/apt/test.sh` sees the whole site and the deploy stays as it is;
+  not rendered from `docs/` by a generator in the workflow.
+- **D10.**
+  The privacy policy in English and German first,
+  the other four languages when the apps' listings need them.
+- **D11.**
+  This session writes the revision; a session of its own runs Block 11.
+
+What was found, and what it changed: `publish.sh` writes the apt tree to
+`<site>/apt/` with an `index.html` beside it already, so the repository is one
+level down today and only its base URL changes.
+The owner set the domain while this revision was written (2026-11-09):
+the CNAME `massimo.metaworx.ch → metaworx.github.io` (GitHub requires the
+account's `github.io`, never the repository's address), the custom domain in
+the Pages settings, "Enforce HTTPS"; the site answers and serves the suites.
+Three Raspberry Pis follow the old address.
+GitHub redirects it with the path kept,
+but to `http://` first and only then to `https://`,
+and apt refuses the first hop ("Redirection from https to 'http://…' is forbidden";
+tested with `apt-helper` on 2026-11-09),
+so no box on the old address can fetch anything,
+a migration in the package's `postinst` would reach nobody,
+and the sources line is changed by hand, once per box,
+documented for anyone who set a box up before the change.
+Block 7, the update button running apt or brew,
+is carried over to AP AptUpdate (route 1,
+the owner's choice of 2026-11-09 after that session's answer):
+one plan and one session own the subject, both halves, apt and brew,
+and D2's "installs nothing" ends when that plan's work lands;
+the roadmap's item 3 follows.
+Blocks 4 to 10 get their headings in the Implementation Plan,
+each a line saying what it waits for, so that the blocks keep the numbers the
+roadmap and this Discussion use.
+
+**Names chosen in v1.1:**
+`packaging/site/` with `index.html` and `privacy.html`;
+the branch `claude/packaging-site`.
 
 ## Analysis
 
@@ -146,6 +202,10 @@ What changes, by file:
 | `docs/api-v1.md`, `docs/api-v1-openapi.yaml` | 1 | `blocked`'s reasons gain the package manager |
 | `GUIDELINES/project/CI.md` | 1, 2, 3 | the jobs, the secrets, the release steps; v1.2.0 |
 | `CHANGELOG.md` | 1, 2, 3 | a bullet per block under Unreleased |
+| `packaging/site/index.html`, `privacy.html` | 11 | new: the home with the install routes, the privacy policy (D9, D10) |
+| `packaging/apt/publish.sh`, `test.sh` | 11 | the base URL `https://massimo.metaworx.ch/apt`; the pages copied and the placeholder filled; the test's file list |
+| `packaging/README.md`, `README.md` | 11 | the apt snippet's address; "The apt repository" with the domain and the owner's DNS and Pages steps |
+| `GUIDELINES/project/CI.md` | 11 | section 6: the site's address and the custom domain |
 
 **What stays:**
 the raw binaries and their names (the updater asks for them by name),
@@ -192,6 +252,77 @@ the two-job release with the key in `sign` only,
   it runs after `gh release create` in the same job.
 - `apt-ftparchive` and `gpg` are on ubuntu-latest;
   nfpm comes through `go run` at a pinned version.
+
+### The site (Block 11)
+
+**GitHub Pages and the domain** (docs.github.com, read 2026-11-09):
+a custom subdomain of a project site is a CNAME record at the registrar pointing
+at `metaworx.github.io`, "excluding the repository name";
+the domain is entered under the repository's Settings → Pages → Custom domain;
+GitHub recommends verifying the domain for the account first (a TXT record it names),
+so that no other account can claim it; DNS changes take up to 24 hours,
+and "Enforce HTTPS" becomes available within 24 hours of that,
+with GitHub's certificate.
+A site published by a GitHub Actions workflow needs no `CNAME` file,
+and one in the artifact is ignored.
+A custom domain on this repository alone leaves the account's other project
+sites at their `github.io` addresses.
+
+**The apt repository under it.**
+`publish.sh` builds `<out>/apt/` and `<out>/index.html`,
+the artifact is `site/`, and Pages serves it at the site's root:
+`https://metaworx.github.io/massimo/apt/` today,
+`https://massimo.metaworx.ch/apt/` with the domain.
+The only value that changes is the default of `--base-url`,
+which the `massimo.sources` sample and the index page name;
+the suites, the pool, the keyring package and `InRelease` are untouched.
+The `.sources` snippet in `packaging/README.md` and the README's Linux section follow.
+The old address is not dead for browsers but is for apt: GitHub answers
+`https://metaworx.github.io/massimo/apt/…` with a 301 to the same path on
+`http://massimo.metaworx.ch`, which answers a 301 to `https://`; apt stops at
+the first hop and refuses the downgrade.
+So every box set up before the change edits its URIs line once:
+
+```bash
+sudo sed -i 's#https://metaworx.github.io/massimo/apt#https://massimo.metaworx.ch/apt#' /etc/apt/sources.list.d/massimo.sources && sudo apt update
+```
+
+`packaging/README.md` carries that line with the error text a box sees,
+so that it is found by searching for it.
+No migration in `postinst`: a package can reach only a box that can fetch it,
+and the file keeps its name, so AP AptUpdate's helper names the same file.
+
+**The pages.**
+`packaging/site/index.html`: what Massimo is, in a paragraph,
+and the install routes, each a line with its command or link:
+the Debian package and the apt snippet, Homebrew, the Windows installer,
+the raw binaries of the release, the apps once they exist;
+`packaging/site/privacy.html`: the privacy policy, English then German,
+in short sections:
+the software runs on the user's own hardware and sends nothing to metaworx;
+the apps talk only to the server the user chose;
+the site is served by GitHub Pages under GitHub's privacy statement; no cookies,
+no analytics; the contact.
+Plain HTML, no script, a few CSS rules in the file, readable at 390 px.
+`publish.sh` copies `packaging/site/*` into `<out>/` and fills the suites into
+the index page's placeholder `{{SUITES}}` in place of writing the page itself;
+`packaging/apt/test.sh` checks `index.html`,
+`privacy.html` and the placeholder's replacement.
+The texts are the owner's to approve at the block's commit gate.
+
+**What the apps take from it**
+(AP MobileApp, Blocks 5, 6 and 9):
+`https://massimo.metaworx.ch/privacy.html` as the privacy policy of both listings,
+`https://massimo.metaworx.ch/` as the site;
+`.well-known/` for App Links and universal links is added when those blocks need it,
+served as-is by an Actions deployment.
+
+**Risks:**
+the domain, the redirect and HTTPS are in place, so nothing waits on DNS;
+a box whose owner misses the README's note stays on the old address and sees
+apt's error naming the forbidden redirect, which the note quotes;
+GitHub's redirect of the old address is observed, not documented,
+and may change, which costs nothing once every box names the new address.
 
 ## Implementation Plan
 
@@ -404,18 +535,117 @@ variable); the site's `InRelease` verifies with `gpgv` against `massimo.asc`.
 (where brew is available); the macOS CI job installs, tests and uninstalls it;
 `shellcheck` clean.
 
+### Block 4: Windows signing
+
+Waits for the owner's D5 to change: SignPath Foundation first, Certum as the
+fallback (the addendum); written as a revision when it does.
+
+### Block 5: Rpm
+
+Waits for a request from a dnf box; the deb's nfpm configuration gives the
+rpm with little more than a second target.
+
+### Block 6: MSI and winget
+
+Waits for a beta or stable channel (D6):
+the WiX installer and the winget manifest.
+
+### Block 7: Helper
+
+Carried over to AP AptUpdate (route 1, the owner's choice of 2026-11-09):
+the web UI's update button running `apt` or `brew` through a root helper
+where the marker names a manager, both halves; D2's "installs nothing" ends
+when that plan's work lands.
+Nothing of it runs under this plan.
+
+### Block 8: Container
+
+Waits for a NAS user: the image on ghcr.io from the release binary.
+
+### Block 9: LoxBerry
+
+Waits for a LoxBerry user: the plugin around the deb.
+
+### Block 10: Pkg
+
+Waits for Mac users off Homebrew: the notarized `.pkg` with a cask.
+
+### Block 11: Site
+
+1. The owner's steps, done on 2026-11-09 before this revision was registered:
+   the CNAME `massimo.metaworx.ch → metaworx.github.io`,
+   Settings → Pages → Custom domain, "Enforce HTTPS".
+   Left: verify `metaworx.ch` for the account under its Pages settings (the
+   TXT record GitHub names), if not done yet;
+   and on each of the three Raspberry Pis, once, the sources line:
+
+   ```bash
+   sudo sed -i 's#https://metaworx.github.io/massimo/apt#https://massimo.metaworx.ch/apt#' /etc/apt/sources.list.d/massimo.sources && sudo apt update
+   ```
+
+2. `packaging/site/index.html` and `privacy.html` as the Analysis describes,
+   with the placeholder `{{SUITES}}` in the index.
+3. `packaging/apt/publish.sh`:
+   the default `--base-url https://massimo.metaworx.ch/apt`;
+   the pages copied from `packaging/site/` and the placeholder filled;
+   the inline page removed.
+   `packaging/apt/test.sh`: `privacy.html` in the file list,
+   the placeholder gone from the built `index.html`,
+   the `.sources` sample naming the new address.
+4. `packaging/README.md`:
+   the snippet and "The apt repository" with the address,
+   the domain's setup beside the key and Pages steps,
+   and a note for a box set up before 2026-11-09,
+   with apt's error text and the command of step 1; `README.md`:
+   the Linux section's address; `GUIDELINES/project/CI.md` section 6.
+5. `CHANGELOG.md`, Unreleased, Changed:
+
+   ```
+   - The apt repository's address is `https://massimo.metaworx.ch/apt`,
+     under the project's site with its install routes and privacy policy
+     (`packaging/README.md`, "The apt repository").
+   ```
+
+**Verification:**
+the test gate; `packaging/apt/test.sh` passes with the two pages checked;
+`shellcheck` clean; the pages validate (`tidy -q -e`,
+where available) and read at 390 px;
+`/usr/lib/apt/apt-helper download-file https://massimo.metaworx.ch/apt/dists/alpha/InRelease <file>` succeeds, as it does today; after the next release the index page served is the one from `packaging/site/` and `privacy.html` answers 200; on one Pi, on the owner's word, `sudo apt update` after the hand edit lists the suite without an error.
+
 ## Proposed commit messages
 
+The revision's registration, a commit of its own on `main`:
+
+```
+chore(aps): +Packaging v1.1
+
+The plan gains Block 11, the project's site at massimo.metaworx.ch with the apt repository under it and the pages both app stores ask for; Blocks 4 to 10 get their headings so that their numbers hold, and Block 7 is carried over to AP AptUpdate.
+
+Key changes:
+- GUIDELINES/wip/2026-11-06_13-55_AP_Packaging_deb_apt_homebrew.md: v1.1, the TL;DR for the plan as it stands, D9 to D11, the site's Analysis and Block 11; Block 7 carried over to AP AptUpdate.
+
+File-revision-v1: GUIDELINES/wip/2026-11-06_13-55_AP_Packaging_deb_apt_homebrew.md::v1.1::2026-11-09::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit messages, Change History::Block 11, the site; Block 7 carried over to AP AptUpdate; the headings of Blocks 4 to 10
+Assisted-by: claude-code:claude-fable-5-1
+```
+
+The blocks' commits, each citing `AP Packaging v<X.Y>, Block <n>` and ending
+with the attribution trailer:
 Block 1,
 `feat(packaging): a Debian package built with nfpm, and the updater deferring to apt`;
 Block 2,
 `feat(packaging): an apt repository on GitHub Pages, published from the releases`;
 Block 3,
-`feat(packaging): a Homebrew formula built from source, published to the tap`;
-each citing `AP Packaging v1.0, Block <n>` and ending with the attribution trailer.
+`feat(packaging): a Homebrew formula built from source, published to the tap`
+(all three merged on 2026-11-06);
+Block 11,
+`feat(packaging): The project site at massimo.metaworx.ch, the apt repository under it`.
 
 ## Change History
 
 - v1.0 (2026-11-06): first revision,
   from the analysis of 2026-11-06 and its Certum addendum; the owner's D1 to D8,
   D5 "no special Windows signing" for now.
+- v1.1 (2026-11-09): Block 11, the site at `massimo.metaworx.ch` with the
+  apt repository under `/apt/` and the pages the app stores ask for,
+  from the TL;DR gate of 2026-11-09 (D9 to D11);
+  Blocks 4 to 10 given their headings; Block 7 carried over to AP AptUpdate.
