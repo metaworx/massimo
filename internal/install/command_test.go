@@ -15,7 +15,7 @@ func TestServiceCommand(t *testing.T) {
 		{"sudo, a quote in the path", sudoCommand("/opt/it's/massimo"), `sudo -u _massimo '/opt/it'\''s/massimo'`},
 		{"windows", winCommand(`C:\Program Files\Massimo\massimo.exe`, "-data", `"C:\ProgramData\Massimo"`, "user", "list"),
 			`& "C:\Program Files\Massimo\massimo.exe" -data "C:\ProgramData\Massimo" user list`},
-		{"the owner line", ownerLine(BinPath), "sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner"},
+		{"the owner line", ownerLine(BinPath), "sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner"},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s: %q, want %q", c.name, c.got, c.want)

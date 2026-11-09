@@ -54,10 +54,7 @@ The roles are owner, manager, operator, guest, viewer, integration and the
 ones created through the API (viewer when -role is absent); -expires takes
 an RFC 3339 time, the end of a guest. -password-stdin reads the password
 from the first line of standard input, for scripts.
-The data directory is -data, else MASSIMO_DATA, else the current directory;
-for the service run it as its user, for example
-  sudo -u _massimo massimo -data /var/lib/massimo user add anna -role operator
-`)
+`+dataDirUsage("user", "add", "anna", "-role", "operator"))
 }
 
 // runUser handles massimo user. Each command checks its flags and

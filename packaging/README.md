@@ -132,6 +132,9 @@ An account `massimo` that an older release made, with the home
 `/var/lib/massimo`, is renamed `_massimo` in place:
 it keeps its ID, so its files and a running service follow.
 Any other `massimo` is a person's, and is left alone, also by `-remove -purge`.
+Where an older release ran the service as such a person's account,
+its files are still that person's, which `_massimo` cannot read:
+`install` says so and names the `chown -R` that hands them to the service.
 It starts the service when the settings set more than the template does
 (its comments and blank lines aside),
 and restarts it when it runs;
@@ -145,7 +148,7 @@ Nothing needs to go into `/etc/massimo/env` for the first start.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
@@ -201,9 +204,10 @@ the server makes a certificate for the box's names at its first start into
 `/var/lib/massimo/tls/`, renews it 30 days before it expires,
 and logs its fingerprint,
 which `massimo tls show` prints too (as the user `_massimo`,
-with `-data /var/lib/massimo`); browsers warn once per device.
+which reads the service's settings and data directory from any directory);
+browsers warn once per device.
 After a move to another address,
-`sudo -u _massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
+`sudo -u _massimo massimo tls self-signed` makes a new one,
 served at the next connection.
 `-tls acme -tls-names <name> [-acme-email <address>] [-acme-directory <url>] [-tls-http :80]` sets
 `MASSIMO_TLS=acme` with the name, the contact,
@@ -323,6 +327,10 @@ and enable the service.
 The account `massimo` of an older package is renamed `_massimo` in place,
 keeping its ID, so its files and a running service follow;
 a person's `massimo` is left alone, also by a purge.
+Where an older package ran the service as a person's `massimo`,
+the files are still that person's, and the service cannot read them;
+the package says so and names
+`sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo`.
 A script of your own that names `massimo`, such as a certbot deploy hook,
 needs the new name.
 They start it only when the settings set more than the template does
@@ -334,7 +342,7 @@ Nothing needs to go into `/etc/massimo/env` for that.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo /usr/bin/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
@@ -591,14 +599,15 @@ What to set there:
   serial other than the Cube's.
 - `MASSIMO_API_TOKEN` to require a Bearer token on the API.
 - `MASSIMO_LOG=/var/log/massimo/serve.log`, so that `massimo` commands run
-  with `-env /etc/massimo/env` agree with the unit (which passes `-log`).
+  as `_massimo`, which read `/etc/massimo/env`, agree with the unit
+  (which passes `-log`).
 
 Check the settings and that the Pi reaches a Cube before enabling the
 service (with no other server connected to that Cube):
 
 ```bash
-sudo -u _massimo massimo -env /etc/massimo/env config
-sudo -u _massimo massimo -env /etc/massimo/env status -sn <serial>
+sudo -u _massimo massimo config
+sudo -u _massimo massimo status -sn <serial>
 ```
 
 Start it and follow the log:
@@ -629,6 +638,7 @@ installer passes with `-data`:
 | Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, `StateDirectoryMode=0750`) | user `_massimo` |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` |
 | Windows service | `C:\ProgramData\Massimo` (SYSTEM and Administrators only) | LocalSystem |
+| A command as `_massimo` (Linux, macOS) | `/var/lib/massimo`, unless `-env`, `-data` or `MASSIMO_DATA` | user `_massimo` |
 | Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |
 
 Next to `massimo.db` (mode 0600) live `massimo.db-wal` and `massimo.db-shm`
@@ -638,7 +648,7 @@ without which no password of `auth_version` 2 signs in;
 a copy of the database belongs with all of them,
 or is made with `massimo store backup <file>`,
 which is consistent while the server runs.
-`sudo -u _massimo massimo -data /var/lib/massimo store info` shows the schema version,
+`sudo -u _massimo massimo store info` shows the schema version,
 the node and the row counts; `massimo config` shows, per Cube,
 which values the store has and which line of `/etc/massimo/env` differs.
 The Cubes' events, the log the web UI shows, are in `massimo.db` too,
@@ -989,7 +999,7 @@ and in the update helper are the same everywhere:
   mode 0600, owned by `_massimo`;
   the service starts by the rule of "Install with `massimo install`",
   the owner made first with
-  `sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`;
+  `sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner`;
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
 - the log `/var/log/massimo/serve.log`:

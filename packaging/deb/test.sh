@@ -96,7 +96,7 @@ restarted() { grep -q '^deb-systemd-invoke restart massimo.service$' /tmp/calls;
 # Never ran on the template: left for the owner, who is told how.
 reinstall inactive
 if restarted; then fail "started on the template: $(cat /tmp/calls)"; fi
-grep -q -F 'sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner' /tmp/out ||
+grep -q -F 'sudo -u _massimo /usr/bin/massimo user add <name> -role owner' /tmp/out ||
 	fail "the message does not name the owner line: $(cat /tmp/out)"
 grep -q 'sudo systemctl start massimo' /tmp/out || fail "the message does not name the start: $(cat /tmp/out)"
 # Started by its owner on the template and set up through the web UI:
@@ -193,5 +193,21 @@ getent passwd _massimo >/dev/null || fail "no _massimo beside the person"
 apt-get -qq purge -y massimo >/dev/null
 [ "$(getent passwd massimo)" = "$person" ] || fail "the purge took the person's account"
 if getent passwd _massimo >/dev/null; then fail "_massimo is left after purge"; fi
+userdel -r massimo 2>/dev/null || true
+
+# A box an older release ran as a person's massimo: the files are the
+# person's. The package names the chown and changes nothing; after the
+# chown it says nothing.
+useradd -m -c 'Massimo Rossi' -s /bin/bash massimo
+install -d -m 0750 -o massimo -g massimo /etc/massimo /var/lib/massimo
+printf 'MASSIMO_LOG=/var/log/massimo/serve.log\n' | install -m 0600 -o massimo -g massimo /dev/stdin /etc/massimo/env
+apt-get -qq install -y "$deb" >/tmp/out 2>&1 || fail "install: $(cat /tmp/out)"
+grep -q -F 'sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo' /tmp/out ||
+	fail "the chown is not named on a box taken over: $(cat /tmp/out)"
+[ "$(stat -c %U /etc/massimo/env)" = massimo ] || fail "the package changed the person's file"
+chown -R _massimo:_massimo /etc/massimo /var/lib/massimo
+apt-get -qq install -y --reinstall "$deb" >/tmp/out 2>&1 || fail "reinstall: $(cat /tmp/out)"
+if grep -q 'chown -R' /tmp/out; then fail "the chown is named again after it was done: $(cat /tmp/out)"; fi
+apt-get -qq purge -y massimo >/dev/null
 userdel -r massimo 2>/dev/null || true
 echo "deb test: ok"

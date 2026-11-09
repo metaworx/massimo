@@ -45,8 +45,9 @@ func shellQuote(s string) string {
 }
 
 // ownerLine creates the first owner as the service user with bin, from
-// any directory: -env names the service's settings file, so no ./.env is
-// opened where the line is run, and -data its store.
+// any directory: the service user reads the service's settings file and
+// keeps its data in StateDir without -env and -data (cmd/massimo,
+// useServiceDefaults), so no ./.env is opened where the line is run.
 func ownerLine(bin string) string {
-	return sudoCommand(bin, "-env", EnvPath, "-data", StateDir, "user", "add", "<name>", "-role", "owner")
+	return sudoCommand(bin, "user", "add", "<name>", "-role", "owner")
 }

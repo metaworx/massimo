@@ -28,10 +28,7 @@ func runStore(args []string) error {
   migrate        create massimo.db or apply its pending migrations, without starting serve
   info           the file's schema version, node and row counts
 
-The data directory is -data, else MASSIMO_DATA, else the current directory;
-for the service run it as its user, for example
-  sudo -u _massimo massimo -data /var/lib/massimo store info
-`)
+`+dataDirUsage("store", "info"))
 	}
 	if len(args) == 0 {
 		usage()

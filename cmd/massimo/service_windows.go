@@ -57,6 +57,10 @@ func init() {
 // runningAsService is set when the service manager started the process.
 var runningAsService bool
 
+// serviceUser is false: the Windows service runs as LocalSystem with its
+// -env and -data, and has no account of its own to run a command as.
+func serviceUser(string) bool { return false }
+
 // serviceDataDir is %ProgramData%\Massimo for a service started without
 // -data: its working directory is System32, so the current directory
 // will not do (docs/store.md section 3).

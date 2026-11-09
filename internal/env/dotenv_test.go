@@ -30,6 +30,24 @@ func TestLoadDotEnv(t *testing.T) {
 	}
 }
 
+// File is MASSIMO_ENV_FILE, else ./.env, or the default file
+// SetDefaultFile named, which MASSIMO_ENV_FILE still overrides.
+func TestFileDefault(t *testing.T) {
+	t.Cleanup(func() { SetDefaultFile(".env") })
+	t.Setenv(FileVar, "")
+	if f := File(); f != ".env" {
+		t.Fatalf("without MASSIMO_ENV_FILE: %q", f)
+	}
+	SetDefaultFile("/etc/massimo/env")
+	if f := File(); f != "/etc/massimo/env" {
+		t.Fatalf("with a default file: %q", f)
+	}
+	t.Setenv(FileVar, "given.env")
+	if f := File(); f != "given.env" {
+		t.Fatalf("MASSIMO_ENV_FILE over the default file: %q", f)
+	}
+}
+
 // clean gives the test a record of sources of its own, and registers
 // the names its files set, so that they are unset again after it.
 func clean(t *testing.T, names ...string) {

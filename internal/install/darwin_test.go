@@ -113,7 +113,7 @@ func TestInstallDarwinNoHelperAndTemplate(t *testing.T) {
 	if rec.has(launchctl+" bootstrap system "+PlistPath(Label)) || !strings.Contains(out.String(), "not started") {
 		t.Errorf("started without settings: %s", out.String())
 	}
-	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner\n") ||
+	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner\n") ||
 		!strings.Contains(out.String(), "then start it: sudo launchctl bootstrap system "+PlistPath(Label)+"\n") {
 		t.Errorf("the message: %s", out.String())
 	}

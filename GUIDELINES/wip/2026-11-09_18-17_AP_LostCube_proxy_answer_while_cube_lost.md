@@ -1,12 +1,12 @@
-# AP LostCube v1.0: proxy answer while the Cube is lost
+# AP LostCube v1.1: proxy answer while the Cube is lost
 
 ## TL;DR
 
 serve's LAN proxy answers UDP discovery for its Cube from a greeting it never
 forgets,
 so other servers and the original software still find an unplugged Cube;
-and serve takes a Cube that went silent for lost only after three polls and
-half a minute.
+and serve takes a Cube that went silent for lost only after three polls and half
+a minute.
 
 - discovery answer → while a greeting is known → while serve has the Cube:
   none from the loss it reports to the next greeting,
@@ -159,7 +159,7 @@ What the blocks would have done in that test:
   then a silent proxy until the reconnect after the cable is back;
   otherwise the poll's bytes stop the probes and Block 2 takes over.
 
-### Block 3's risk
+### The keepalive's risk
 
 A Cube that does not answer keepalive probes would be dropped after every 30 s
 without traffic,
@@ -192,7 +192,8 @@ Each block ends with the contract's test gate:
 and `GUIDELINES/shared/tools/check --commit-range origin/main..HEAD`
 from the main checkout.
 Nothing reaches a real Cube or a box but the reading before Block 3.
-One functional commit per block, citing `AP LostCube v1.0, Block <n>`,
+One functional commit per block,
+citing `AP LostCube v<X.Y>, Block <n>` with the revision it runs under,
 with its CHANGELOG bullet, written in the wrapped style of its neighbours.
 
 ### Block 1: SilentProxy
@@ -311,3 +312,7 @@ The blocks' commits:
 - v1.0 (2026-11-09): the first revision, from the owner's cable pull
   during the FoundCubes check;
   D1-A, D2-A, D3-E and D4-A by the owner's `PLAN++`.
+- v1.1 (2026-11-09): the Analysis heading "Block 3's risk" renamed "The
+  keepalive's risk", since `check-plans.sh` counted it as a second Block 3;
+  a block's commit cites the revision it runs under.
+  Blocks 1 and 2 ran under v1.0.
