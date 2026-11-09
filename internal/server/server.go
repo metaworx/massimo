@@ -66,7 +66,7 @@
 // A web UI for all of this is served at / (see ui.go).
 //
 // With Options.TLS set the server terminates TLS itself (the certificate
-// from internal/certs, the listener wrapped by cmd/massimo), /healthz
+// from internal/certs, the listener wrapped by internal/serve), /healthz
 // reports the certificate, and every response carries
 // Strict-Transport-Security.
 //
@@ -218,7 +218,7 @@ type Options struct {
 	// view.StaleAfter); SetStaleAfter changes it while the server runs.
 	StaleAfter time.Duration
 	// TLS, when set, is the certificate source of a server that
-	// terminates TLS itself (cmd/massimo wraps the listener with
+	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
 	// every response carries Strict-Transport-Security for HSTSDays
 	// days, max-age=0 with zero, which clears what a browser remembered.

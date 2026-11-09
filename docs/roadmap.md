@@ -7,14 +7,11 @@ What is done is in CHANGELOG.md, one section per release;
 docs/handover-session.md is the context a session needs to work here.
 
 1. **On the hardware**, by the owner, with a session watching the log:
-   2. TLS (the TLS plan's NOTE, item 10): a certificate from Let's Encrypt's
-      staging directory on the Pi with a name and the router's port-443 forward
-      (`serve -tls acme -tls-names <name> -acme-directory <staging URL>`,
-      or `install` with the same flags);
-      the same through the Infomaniak hook
-      (`-acme-dns-hook packaging/acme-dns-hooks/infomaniak.sh`,
-      the token in `/etc/massimo/infomaniak.token` readable by the service user,
-      `curl` and `jq` installed; the hook ran against a fake of the API only);
+   2. TLS (the TLS plan's NOTE, item 10):
+      a certificate from Let's Encrypt's staging directory by DNS-01
+      through the Cloudflare hook;
+      TLS-ALPN-01 and HTTP-01 against a local Pebble,
+      as the box has no public address;
       the self-signed notice on a phone.
       HSTS is on for a year once TLS serves:
       a box that goes back to `http://` runs once with `-hsts 0` first.
@@ -37,10 +34,6 @@ docs/handover-session.md is the context a session needs to work here.
       `discover` on a Cube with a static address.
    9. Discovery on the Pi with the spare Cube on the same network,
       with the DHCP flag in the found row.
-   10. The Debian package on the Pi once the apt repository is up
-       (`sudo massimo install -remove`, the apt snippet,
-       `sudo apt install massimo`, `sudo massimo install -listen :80`):
-       the service's start, which the container test cannot prove.
 2. **Packaging, the owner's steps** (the packaging plan's NOTE,
    "The owner's steps left"):
    the checks "Debian package (debian:trixie-slim)" and "(debian:bookworm-slim)"
@@ -112,35 +105,6 @@ docs/handover-session.md is the context a session needs to work here.
 14. **Later**:
     the server mode with encryption at rest and sync (docs/server.md),
     Loxone (design.md section 4), a radio-stick driver without a Cube.
-15. **System settings and the user menu**,
-    from the v0.11 screenshots on jaguar;
-    a mock of the page at 1100 and 390 px first (9), then the code:
-    1. Users and roles rows:
-       a space between the display name and the login or role key,
-       the badges right-aligned, the `you` badge first.
-    2. The order: Software update at the top, Backup and restore at the bottom.
-    3. A table of contents at the top, visible section headers,
-       a back-to-top button, foldable sections.
-    4. A Maintenance section: restart the server, reload its settings
-       (the file is reread on a change already; this is a button).
-    5. A name for a Cube, with a proposal and mock images of where the
-       serial shows once a label is given.
-    6. The Cube dropdown showing each Cube's address, the open list wider
-       than the control.
-    7. `store info` and the configuration shown in System settings.
-    8. Responsive: full width, Cubes and Backup full width, two columns in
-       the Cube settings, the capabilities per role beside Users and roles.
-    9. A static mock of the page with the real CSS, decided before any code.
-    10. A password set by whoever holds `users`, a manager never an owner's:
-        a rank rule, which holds today only through the default capabilities.
-    11. My profile offering "Set a password" to a keys-only user, such as the
-        owner made from `MASSIMO_API_TOKEN`.
-    12. Icons in the 👤 menu.
-    13. Every "only on this device" a switch at the right end of its row,
-        in a column labelled at the top and in the tooltip.
-    14. The 👤 button's tooltip with the user's name.
-    15. Expert mode showing a device's serial beside its RF address, which
-        the API already carries, in the four places the address appears.
 16. **An Android app**:
     run as a stand-alone service, or connected to an existing Massimo;
     published on F-Droid and on Google Play.

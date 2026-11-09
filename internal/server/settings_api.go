@@ -33,11 +33,12 @@ type durationSetting struct {
 	inEffect func(s *Server) time.Duration
 }
 
-// Defaults of the settings, as serve's flags have them.
+// The intervals of a server without a setting in the store; serve's
+// flags have them as their defaults.
 const (
-	defaultPoll     = time.Minute
-	defaultRefresh  = 6 * time.Hour
-	defaultDiscover = 30 * time.Minute
+	DefaultPollInterval     = time.Minute
+	DefaultRefreshInterval  = 6 * time.Hour
+	DefaultDiscoverInterval = 30 * time.Minute
 )
 
 // intSetting describes one whole-number setting, which applies at once.
@@ -79,11 +80,11 @@ var boolSettings = []boolSetting{
 var durationSettings = []durationSetting{
 	{key: store.StaleAfterKey, def: view.StaleAfter, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
 		inEffect: func(s *Server) time.Duration { return s.StaleAfter() }},
-	{key: store.PollIntervalKey, def: defaultPoll, min: 10 * time.Second, max: time.Hour,
+	{key: store.PollIntervalKey, def: DefaultPollInterval, min: 10 * time.Second, max: time.Hour,
 		inEffect: func(s *Server) time.Duration { return s.opts.PollInterval }},
-	{key: store.RefreshIntervalKey, def: defaultRefresh, min: 10 * time.Minute, max: 7 * 24 * time.Hour, zero: true,
+	{key: store.RefreshIntervalKey, def: DefaultRefreshInterval, min: 10 * time.Minute, max: 7 * 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.RefreshInterval }},
-	{key: store.DiscoverIntervalKey, def: defaultDiscover, min: time.Minute, max: 24 * time.Hour, zero: true,
+	{key: store.DiscoverIntervalKey, def: DefaultDiscoverInterval, min: time.Minute, max: 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.DiscoverInterval }},
 }
 
