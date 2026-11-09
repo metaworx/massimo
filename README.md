@@ -13,7 +13,7 @@ every release is a pre-release on the `alpha` channel (see [Versions](#versions)
 - [Features](#features)
 - [Documentation](#documentation)
 - [Installing](#installing): [Linux](#linux), [Windows](#windows),
-  [macOS](#macos)
+  [macOS](#macos), [From source](#from-source)
 - [Server](#server), with [Screenshots](#screenshots)
 - [Command line](#command-line), with the [Cube variables](#cube-variables)
 - [Original software](#original-software)
@@ -109,24 +109,32 @@ so take the newest release from the page and put its tag in place of `<tag>` bel
 | `massimo-darwin-amd64` | Mac with an Intel processor |
 | `massimo_<version>_<arch>.deb` | the Linux binary as a Debian package: `amd64`, `arm64`, `armhf` (every 32-bit Raspberry Pi OS), see [Linux](#linux) |
 
-To build instead, with Go 1.26 or later installed:
-`make` runs the tests and builds `./massimo` for this machine;
-`make cross` builds every release binary into `dist/`,
-one at a time with `make linux`, `make linux-arm64`, `make linux-armv7`,
-`make linux-armv6`, `make darwin` (both Mac architectures) and `make windows`;
-`make release` adds `SHA256SUMS` and the release manifest; `make vet`,
-`make test` and `make clean` do what they say;
-`make race` runs the race detector on the packages whose goroutines meet,
-and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
-A build from `main` follows the channel `main`, which has no releases,
-unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
-see [packaging/README.md](packaging/README.md#updating).
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_trust.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+**A binary is only as trustworthy as the place it came from.**
+Massimo runs as a service on your network and controls your heating,
+so take it from the project's [releases](https://github.com/metaworx/massimo/releases),
+its apt repository or its Homebrew tap, and never from a copy elsewhere:
+a mirror, a forum post or a prepared image may carry a changed binary,
+and no check of the project's can tell.
+`SHA256SUMS` proves that a download arrived as the release has it,
+not who built it:
+it sits on the same page as the binaries,
+and whoever could replace one could replace the other.
+Once a binary runs,
+`massimo update` checks every later release against the release key compiled into it,
+and apt against the repository's key,
+so what is left to trust is the first install.
+To trust no build but your own, build it from the signed source:
+[From source](https://github.com/metaworx/massimo#from-source).
+<!-- END GENERATED PARTIAL docs/fragments/_trust.md -->
 
 `serve` reads its settings from the environment or from a `.env` in the
 directory it is started from (see [Cube variables](#cube-variables)).
-On the Cubes' LAN it needs none to begin with:
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_first-settings.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+On the Cubes' LAN the server needs no settings to begin with:
 while there are no users,
-the web UI offers the local network a form for the first owner,
+the web UI, `http://<the box>:8099/`,
+offers the local network a form for the first owner,
 and System settings → Cubes lists the Cubes the server finds,
 each added with **Add**.
 The settings take what discovery and the web UI cannot give:
@@ -141,6 +149,7 @@ so that no form for the first owner is open on the LAN:
 MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
 MASSIMO_API_TOKEN=choose-a-long-random-string
 ```
+<!-- END GENERATED PARTIAL docs/fragments/_first-settings.md -->
 
 Each Cube accepts a single TCP client,
 so close the original MAX! software and stop any other server before `serve` connects;
@@ -436,6 +445,57 @@ which the web UI's Update runs as you under `brew services`
 (by hand, `brew services restart massimo-alpha` then runs the new one),
 while `massimo update` says when a release is out.
 Details: [Homebrew](packaging/README.md#homebrew).
+
+### From source
+
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_build.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+Every release can be built from its signed tag,
+with git, make and Go 1.26 or later (<https://go.dev/dl/>):
+
+```bash
+git clone https://github.com/metaworx/massimo.git
+cd massimo
+git -c gpg.ssh.allowedSignersFile=/dev/null verify-tag <tag>
+git checkout <tag>
+make
+```
+
+`verify-tag` checks the tag's signature.
+With no signer it trusts (`/dev/null`), git prints the key's fingerprint,
+then `No principal matched.`, and exits 1;
+the fingerprint must be `SHA256:R3Ihevc2jMppLJtKIhmpfRmulpf7DXuWBFbCjaU3qcs`,
+which the guidelines' README names as well, under "Verifying a release",
+<https://gitlab.com/metaworx/open-source/mwx-guidelines>,
+on a host this repository does not control.
+The key itself is deliberately not given here:
+whoever could change the tags could change the line naming it.
+
+`make` runs the tests and builds `./massimo` for this machine,
+`make build` without the tests;
+`make linux-armv6` builds for a Raspberry Pi 1, `make linux-arm64` for a 64-bit
+Raspberry Pi OS, `make windows` for Windows,
+and `make cross` every release binary, all into `dist/`.
+The binary goes in as a release's does,
+`sudo ./massimo install -dry-run -settings .env`, then without `-dry-run`.
+It follows the tag's update channel,
+so the web UI and `massimo update` say when a release is out,
+and they install the project's binary, checked against its signed manifest;
+to stay on your own builds, build the next tag and run `install` again,
+which replaces the binary and keeps the settings.
+A tag up to v0.12.0-alpha.1 follows `HEAD` instead, which has no releases,
+unless built with `make CHANNEL=alpha`.
+<!-- END GENERATED PARTIAL docs/fragments/_build.md -->
+
+The other targets:
+`make linux`, `make linux-armv7` and `make darwin` (both Mac architectures)
+build one more release binary each;
+`make release` adds `SHA256SUMS` and the release manifest;
+`make vet`, `make test` and `make clean` do what they say;
+`make race` runs the race detector on the packages whose goroutines meet,
+and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
+A build from `main` follows the channel `main`, which has no releases,
+unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
+see [packaging/README.md](packaging/README.md#updating).
 
 ## Server
 
@@ -973,5 +1033,7 @@ Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
 The privacy policy of the software, the apps and the project's site is
 <https://massimo.metaworx.ch/privacy.html>.
 
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_trademark.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 "MAX!" and "eQ-3" are trademarks of eQ-3 AG.
 This project is not affiliated with or endorsed by eQ-3.
+<!-- END GENERATED PARTIAL docs/fragments/_trademark.md -->
