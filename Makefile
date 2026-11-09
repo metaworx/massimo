@@ -42,7 +42,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race fuzz ui-test ui-screenshots windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
+.PHONY: all build test vet race fuzz ui-test ui-screenshots mdns-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
 
 # Development happens on main; a release promotes main to a release
 # branch, which is also the update channel boxes follow (internal/update).
@@ -147,6 +147,11 @@ ui-test:
 # start-up as ui-test; retaken at every change of the UI.
 ui-screenshots:
 	tools/ui-test/run.sh screenshots
+
+# serve's mDNS announcement and massimo discover against avahi, on three
+# hosts in Docker (tools/mdns-test/README.md); needs Docker with Compose v2.
+mdns-test:
+	tools/mdns-test/run.sh
 
 # Cross builds; each lands in $(OUT)/.
 windows:

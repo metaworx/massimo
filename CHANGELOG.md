@@ -114,6 +114,9 @@ the next minor, a fix counts the suffix up.
   under the project's site: the install routes, building from source,
   the first settings and the privacy policy (`packaging/README.md`).
 
+- `make mdns-test` checks the mDNS announcement and `discover` against
+  avahi in Docker (`tools/mdns-test/README.md`).
+
 ### Fixed
 
 - The Debian package restarts a running service on an upgrade, also on
