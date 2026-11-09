@@ -277,7 +277,7 @@ func TestPruneServerEvents(t *testing.T) {
 	if err != nil || removed != 2 {
 		t.Fatalf("removed %d, %v", removed, err)
 	}
-	page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Limit: 10})
+	page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Kind: "server_started", Limit: 10})
 	if len(page) != 2 || page[0].Time.Before(recent.Add(-time.Second)) || page[1].Time.Before(recent.Add(-time.Second)) {
 		t.Fatalf("left: %+v", page)
 	}

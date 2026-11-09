@@ -303,6 +303,7 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	}
 	if rt.client.SetAddress(net.JoinHostPort(cp.Address, strconv.Itoa(port))) {
 		s.log.Info("cube address from discovery", "serial", serial, "ip", cp.Address, "was", host)
+		rt.emit(event{Kind: "address_changed", Source: "cube", Serial: serial, Time: now, Summary: map[string]any{"from": host, "to": cp.Address}})
 		if had {
 			// Connected, or trying, to the old address: reconnect now.
 			go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true, Moved: true}).Wait(ctx)
@@ -358,6 +359,7 @@ func (s *Server) cubeGone(f foundCube) {
 		return
 	}
 	s.log.Info("cube gone from the LAN, not configured", "serial", f.Serial, "ip", f.Address, "mac", f.MAC)
+	s.logServer(event{Kind: "cube_gone", Source: "cube", Serial: f.Serial, Cube: &f, Time: time.Now()})
 }
 
 // unconfigured lists the Cubes found but not configured, by serial:

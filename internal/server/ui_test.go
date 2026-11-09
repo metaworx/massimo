@@ -40,7 +40,13 @@ func TestUIServed(t *testing.T) {
 	if code, ct, body := get("/"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="ui/app.js">`) {
 		t.Fatalf("GET /: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/roles.js", "/ui/theme.js"} {
+	// The apps' connect page is a page of its own, with the server's
+	// policy and its own for the app's copy (docs/app.md).
+	if code, ct, body := get("/ui/connect.html"); code != 200 || !strings.HasPrefix(ct, "text/html") || !strings.Contains(body, `<script src="ui/connect.js">`) ||
+		!strings.Contains(body, `<base href="../">`) || !strings.Contains(body, `http-equiv="Content-Security-Policy"`) {
+		t.Fatalf("GET /ui/connect.html: %d %s %q", code, ct, body[:min(80, len(body))])
+	}
+	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js"} {
 		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
@@ -147,11 +153,30 @@ func assembledPage(t *testing.T) []byte {
 	return page
 }
 
+// uiPageScripts are the pages of the UI other than the one at /, each
+// with the script that alone looks up its ids; every other script looks
+// up the ids of the page at /.
+var uiPageScripts = map[string]string{"ui/connect.html": "ui/connect.js"}
+
+// pageIDs are the ids of a page, each there once.
+func pageIDs(t *testing.T, name, page string) map[string]bool {
+	t.Helper()
+	ids := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\sid="([^"]+)"`).FindAllStringSubmatch(page, -1) {
+		if ids[m[1]] {
+			t.Errorf("%s has id %q twice", name, m[1])
+		}
+		ids[m[1]] = true
+	}
+	return ids
+}
+
 // The page is assembled from index.html and the partials: every file of
 // ui/partials/ is listed in uiPartials exactly once and every listed one
 // exists, no marker is left, the page is served at / as assembled, and
 // every id the scripts look up ($("…")) and every template they clone
-// (fromTemplate("…"), fragmentFromTemplate("…")) is in it.
+// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
+// script of another page (uiPageScripts), in that page.
 func TestUIPage(t *testing.T) {
 	files, err := fs.Glob(uiFiles, "ui/partials/*.html")
 	if err != nil {
@@ -180,12 +205,17 @@ func TestUIPage(t *testing.T) {
 	if n := strings.Count(page, "<html"); n != 1 || !strings.HasPrefix(page, "<!doctype html>") || !strings.HasSuffix(page, "</html>\n") {
 		t.Errorf("the assembled page is not one document (%d <html>)", n)
 	}
-	ids := map[string]bool{}
-	for _, m := range regexp.MustCompile(`\sid="([^"]+)"`).FindAllStringSubmatch(page, -1) {
-		if ids[m[1]] {
-			t.Errorf("the page has id %q twice", m[1])
+	ids := pageIDs(t, "the page", page)
+	idsOf := map[string]map[string]bool{} // by script, the page whose ids it looks up
+	for name, script := range uiPageScripts {
+		b, err := uiFiles.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
 		}
-		ids[m[1]] = true
+		idsOf[script] = pageIDs(t, name, string(b))
+		if !strings.Contains(string(b), `<script src="`+script+`">`) {
+			t.Errorf("%s does not load %s", name, script)
+		}
 	}
 	lookup := regexp.MustCompile(`(?:\$|fromTemplate|fragmentFromTemplate)\("([^"]+)"\)`)
 	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
@@ -195,10 +225,14 @@ func TestUIPage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		want, where := ids, "the page"
+		if other, ok := idsOf[f]; ok {
+			want, where = other, "its page"
+		}
 		for _, m := range lookup.FindAllStringSubmatch(string(b), -1) {
 			n++
-			if !ids[m[1]] {
-				t.Errorf("%s looks up %q, which is not an id of the page", f, m[1])
+			if !want[m[1]] {
+				t.Errorf("%s looks up %q, which is not an id of %s", f, m[1], where)
 			}
 		}
 	}
@@ -377,17 +411,26 @@ func TestUITranslations(t *testing.T) {
 	// The keys the markup asks for: data-i18n, data-i18n-attr pairs, and
 	// the help slots (data-help is the key of help.<key>).
 	used := map[string]string{} // key: where
-	html := assembledPage(t)
-	for _, m := range regexp.MustCompile(`data-(i18n|i18n-attr|help|help-label)="([^"]*)"`).FindAllStringSubmatch(string(html), -1) {
-		switch m[1] {
-		case "i18n", "help-label":
-			used[m[2]] = "the page"
-		case "help":
-			used["help."+m[2]] = "the page"
-		case "i18n-attr":
-			for _, pair := range strings.Fields(m[2]) {
-				if i := strings.Index(pair, ":"); i > 0 {
-					used[pair[i+1:]] = "the page"
+	pages := map[string][]byte{"the page": assembledPage(t)}
+	for name := range uiPageScripts {
+		b, err := uiFiles.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages[name] = b
+	}
+	for where, html := range pages {
+		for _, m := range regexp.MustCompile(`data-(i18n|i18n-attr|help|help-label)="([^"]*)"`).FindAllStringSubmatch(string(html), -1) {
+			switch m[1] {
+			case "i18n", "help-label":
+				used[m[2]] = where
+			case "help":
+				used["help."+m[2]] = where
+			case "i18n-attr":
+				for _, pair := range strings.Fields(m[2]) {
+					if i := strings.Index(pair, ":"); i > 0 {
+						used[pair[i+1:]] = where
+					}
 				}
 			}
 		}

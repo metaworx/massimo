@@ -52,6 +52,29 @@ function store(key, value) {
   }
 }
 
+// appBridge is the bridge of the Massimo app on the page it opened
+// (docs/app.md, "The calls of a server's page"): the app keeps the
+// page's token, behind the phone's fingerprint or PIN where the user
+// asked for it, in place of the browser's storage; null in a browser.
+function appBridge() {
+  const b = window.massimo;
+  return b && typeof b.token === "function" && typeof b.setToken === "function" ? b : null;
+}
+
+// readToken is the token the page starts with: the app's, which may ask
+// for the fingerprint first (none when that is dismissed), else the one
+// the browser kept. In the app the browser keeps none.
+async function readToken() {
+  const b = appBridge();
+  if (!b) return readStored("massimo.token");
+  store("massimo.token", null);
+  try {
+    return (await b.token()) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // --- the scopes of the settings ----------------------------------------
 
 // SETTING_KEYS are the page's settings. Each is the user's value, kept in
@@ -613,7 +636,6 @@ function applySettings() {
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   startPolling();
-  logSettingsChanged(); // log.js: the log's level follows the expert switch
 }
 
 // --- loading ----------------------------------------------------------
@@ -1024,6 +1046,12 @@ async function connectEvents() {
   // that sent it (backup.js).
   es.addEventListener("restore_step", logged(restoreEvent));
   es.addEventListener("restore_done", logged(restoreEvent));
+  // The log's other kinds (log.js LOG_KINDS): the server's own lines, a
+  // Cube's address and its leaving the LAN, the changes, for the log
+  // alone.
+  const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
+    "connected", "disconnected", "config", "cube_found", "restore_step", "restore_done"]);
+  for (const kind of LOG_KINDS) if (!handled.has(kind)) es.addEventListener(kind, logged(() => {}));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -1132,7 +1160,7 @@ function applyLanguage() {
 
 // init starts the page once English and the chosen language are loaded.
 async function init() {
-  state.token = readStored("massimo.token");
+  state.token = await readToken();
   state.serial = readStored("massimo.serial");
   loadSettings();
   await changeLanguage(state.settings.lang);
