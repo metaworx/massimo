@@ -333,6 +333,9 @@ func (s *Store) addUser(ctx context.Context, u User, c credential, by int64) (Us
 			// settings, also of a removal that left them live.
 			err = s.removePreferences(ctx, tx, id, now)
 		}
+		if err == nil {
+			err = removePushSubscriptions(ctx, tx, id, 0)
+		}
 	}
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
@@ -535,6 +538,9 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := s.removePreferences(ctx, tx, u.ID, now); err != nil {
+		return fmt.Errorf("store: user %s: %w", u.Name, err)
+	}
+	if err := removePushSubscriptions(ctx, tx, u.ID, 0); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := tx.Commit(); err != nil {

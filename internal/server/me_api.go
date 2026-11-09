@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -109,6 +110,14 @@ func (s *Server) putPreference(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fail(http.StatusBadRequest, "bad body: %v", err)
 	}
+	if key == notify.PrefKey && len(body) <= store.MaxPreferenceBytes {
+		// The notification rules read it: a document they cannot is
+		// refused here, not ignored there (docs/api-v1.md, "Notifications").
+		if _, err := notify.ParsePrefs(json.RawMessage(body)); err != nil {
+			return fail(http.StatusBadRequest, "%v", err)
+		}
+		defer s.refreshNotify()
+	}
 	pr, err := st.SetPreference(r.Context(), p.user.ID, key, json.RawMessage(body))
 	switch {
 	case errors.Is(err, store.ErrValueTooLarge):
@@ -134,6 +143,9 @@ func (s *Server) deletePreference(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	auditTarget(r, "preference:"+key)
+	if key == notify.PrefKey {
+		defer s.refreshNotify()
+	}
 	if err := st.DeletePreference(r.Context(), p.user.ID, key); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}

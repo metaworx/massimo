@@ -96,14 +96,14 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The Cube comes up only once the handlers read: its address is
-	// reserved, and the client's first dial fails.
-	free, err := net.Listen("tcp", "127.0.0.1:0")
+	// The Cube comes up only once the handlers read: its port is held,
+	// and the client's first dial waits for the greeting.
+	held, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := free.Addr().String()
-	free.Close()
+	defer held.Close()
+	addr := held.Addr().String()
 	fc := &fakecube.Server{Greeting: greeting}
 	defer fc.Close()
 	opts := storeOptions(t, t.TempDir(), "secret")
@@ -137,9 +137,7 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 	}
 	defer func() { close(stop); wg.Wait() }()
 	time.Sleep(200 * time.Millisecond)
-	if _, err := fc.Start(addr); err != nil {
-		t.Fatal(err)
-	}
+	fc.Serve(held)
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		var cubes []cubeView
 		getJSON(t, ts, "secret", "/api/v1/cubes", &cubes)
@@ -161,12 +159,14 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	free, err := net.Listen("tcp", "127.0.0.1:0")
+	// The Cube comes up only once the serial was added: its port is
+	// held, and the client's first dial waits for the greeting.
+	held, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := free.Addr().String()
-	free.Close()
+	defer held.Close()
+	addr := held.Addr().String()
 	fc := &fakecube.Server{Greeting: greeting}
 	defer fc.Close()
 	opts := storeOptions(t, t.TempDir(), "secret")
@@ -191,9 +191,7 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 	if byAddr == nil || bySerial == nil || bySerial == byAddr {
 		t.Fatalf("runtimes %p %p", byAddr, bySerial)
 	}
-	if _, err := fc.Start(addr); err != nil {
-		t.Fatal(err)
-	}
+	fc.Serve(held)
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if byAddr.cubeSerial() != "" && lookup(strings.ToLower(addr)) == nil {
 			break

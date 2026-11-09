@@ -423,10 +423,23 @@ CREATE TABLE cubes (
 
 CREATE TABLE preferences (
     user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    key        TEXT    NOT NULL,   -- 'scheme' (the massimo-scheme/1 document), 'ui' (poll, expert, clock, language)
+    key        TEXT    NOT NULL,   -- 'scheme' (the massimo-scheme/1 document), 'ui' (poll, expert, clock, language), 'notify'
     value      TEXT    NOT NULL,   -- JSON
     updated_at TEXT    NOT NULL,
     PRIMARY KEY (user_id, key)
+);
+
+CREATE TABLE push_subscriptions (            -- migration 0010
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_id   INTEGER NOT NULL REFERENCES tokens (id) ON DELETE CASCADE,  -- the session or key that subscribed
+    endpoint   TEXT    NOT NULL UNIQUE,      -- the push service's URL
+    p256dh     TEXT    NOT NULL,             -- the subscriber's keys, base64url (RFC 8291)
+    auth       TEXT    NOT NULL,
+    label      TEXT    NOT NULL DEFAULT '',
+    created_at TEXT    NOT NULL,
+    last_ok_at TEXT,                         -- the last message the push service took
+    failures   INTEGER NOT NULL DEFAULT 0    -- failed deliveries since then
 );
 
 CREATE TABLE events (                        -- made again by migration 0009
@@ -583,6 +596,18 @@ Notes on the tables:
   and the first migration seeds `settings` with `node.id` and `tenant.id`.
   The listing above leaves those columns out so that it stays readable;
   the migration file has them, and so does `internal/store/migrations/store.sql`.
+- `push_subscriptions` (migration 0010) are the browsers and apps a user's
+  notifications go to by Web Push (docs/api-v1.md, "Notifications"):
+  each tied to the session or API key that subscribed,
+  so that revoking it, or removing the user, deletes the row;
+  one whose session ended or whose user is disabled is kept and not sent to.
+  A row has a `uuid` but no `version`, `deleted_at` or `origin`:
+  a subscription is bound to this server's VAPID key, is not replicated,
+  and is deleted rather than marked.
+  The VAPID key pair (RFC 8292) is the setting `push.vapid`,
+  made at its first use: the private key is in the store itself,
+  not in a file beside it as the OPAQUE key is,
+  so a `store backup` carries it; `GET /api/v1/settings` does not show it.
 - `roles`, `role_capabilities` and `capabilities_disabled` are the capability
   model of section 6;
   the first migration seeds the six default roles with their sets.

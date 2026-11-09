@@ -61,6 +61,10 @@ the next minor, a fix counts the suffix up.
 - `serve -discover-listen <addr>` puts the discovery socket on another
   address than UDP 23272, for tests with a fake Cube (`README.md`).
 
+- Notification rules on the Cubes' events, per user in the `notify`
+  preference, and push subscriptions under `/api/v1/me/push` with the
+  server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill
