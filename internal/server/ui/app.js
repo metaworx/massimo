@@ -833,7 +833,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (isShown("profile") || isShown("prefs") || isShown("system")) return true;
+  if (isShown("profile") || isShown("prefs") || isShown("notify") || isShown("system")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -1048,6 +1048,9 @@ async function connectEvents() {
   // that sent it (backup.js).
   es.addEventListener("restore_step", logged(restoreEvent));
   es.addEventListener("restore_done", logged(restoreEvent));
+  // A notification for the signed-in user, which only that user's
+  // streams get: a toast, not a line of the log (notify.js).
+  es.addEventListener("notification", (ev) => notifyToast(JSON.parse(ev.data).notification));
   // The log's other kinds (log.js LOG_KINDS): the server's own lines, a
   // Cube's address and its leaving the LAN, the changes, for the log
   // alone.
@@ -1158,6 +1161,8 @@ function applyLanguage() {
   renderLog();
   if (updState.info) renderUpdate(updState.info);
   if (infoState.store || infoState.config) renderServerInfo();
+  if (isShown("notify")) renderNotify(); // notify.js
+  tellWorkerLanguage();
 }
 
 // init starts the page once English and the chosen language are loaded.
@@ -1183,6 +1188,7 @@ async function init() {
   await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
   initTiles();
   initLog();
+  initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;
   showAddress(); // log.js: the page the address names, the log with its choices
   refresh().then(() => {
