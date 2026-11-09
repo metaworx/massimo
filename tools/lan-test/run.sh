@@ -15,7 +15,7 @@
 #      logs it gone;
 #   3. that, the cable back, a search finds it again and logs it found;
 # then brings up the box, a serve beside avahi-daemon whose proxy answers
-# discovery for the Cube, and checks
+# discovery for the Cube and which polls it every 5 s, and checks
 #   4. that a search lists the Cube's serial from its address and from
 #      the box's;
 #   5. that serve announces itself beside avahi, UDP 5353 shared;
@@ -23,19 +23,22 @@
 #      and fingerprint, on the box and on the client, to the box;
 #   7. that massimo discover on the client lists the server, and the two
 #      answers of the Cube's serial: the box's marked proxy, the Cube's not;
-#   8. that the server's goodbye takes it out of the client's avahi.
+#   8. that, the Cube's cable pulled again, the box's serve loses it and
+#      its proxy stops answering for it: a search lists the serial from
+#      nowhere;
+#   9. that the server's goodbye takes it out of the client's avahi.
 # The hosts are taken down whatever happened, their logs printed first
 # when a check failed. Needs Docker with Compose v2; exit 1 on a failed
 # check, 2 without Docker.
 set -euo pipefail
-readonly VERSION=1.1.0
+readonly VERSION=1.2.0
 readonly SERIAL=KEQ0000100
 readonly CUBE_MAC=00:1a:22:00:00:01
 readonly BUILD=v0.0.0-lan-test
 
 case "${1:-}" in
 	-h | --help)
-		sed -n '4,29p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '4,32p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	--version)
@@ -185,7 +188,16 @@ if c.get("proxy") is not False or (c.get("mac") or "").lower() != mac:
 EOF
 ok "massimo discover on the client lists the server, the box's answer marked proxy and the Cube's ($CUBE_MAC) not"
 
-# 8. The goodbye takes the server out of the client's avahi.
+# 8. The cable pulled with the box up: the box's serve takes the Cube
+# for lost after two unanswered polls, 5 s apart, and 10 s, and its
+# proxy answers no search for it.
+compose exec -T cube ip link set eth0 down
+unlisted() { search && ! grep -q "^$SERIAL " <<<"$answers"; }
+within 45 unlisted || fail "the Cube's cable pulled, a search still lists $SERIAL: $answers"
+box_log | grep -q 'msg="cube connection lost"' || fail "the box's serve does not log the Cube lost"
+ok "the Cube's cable pulled again, the box's serve loses it, and a search no longer lists $SERIAL from its proxy"
+
+# 9. The goodbye takes the server out of the client's avahi.
 compose exec -T box pkill -TERM -f '/m/massimo -data' || fail "serve not stopped on the box"
 gone() { [ -z "$(resolved client)" ]; }
 within 30 gone || fail "the client's avahi still lists the server after its goodbye"

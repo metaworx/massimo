@@ -30,7 +30,7 @@ bridge has both.
   searching only when asked, through `POST /api/v1/cubes/discover` on its own address,
   as the web UI's search does;
 - **box**:
-  avahi-daemon, then `massimo serve -listen 0.0.0.0:8099 -tls self-signed`
+  avahi-daemon, then `massimo serve -listen 0.0.0.0:8099 -tls self-signed -poll 5s`
   against the Cube, its proxy answering discovery for it;
 - **client**:
   avahi-daemon of its own.
@@ -64,7 +64,17 @@ Then it brings up the box and checks:
 7. `massimo discover -json` on the client lists the server with that node,
    and two answers of `KEQ0000100`:
    the box's (the proxy) marked `proxy`, the Cube's not;
-8. `serve` stopped, its goodbye takes the server out of the client's avahi.
+8. the Cube's cable pulled again, the box's `serve` logs "cube connection lost"
+   after two polls left unanswered,
+   and a search no longer lists `KEQ0000100` from its proxy,
+   which answers nothing for a Cube it has lost;
+9. `serve` stopped, its goodbye takes the server out of the client's avahi.
+
+The box polls every 5 s so that check 8 tests the loss by polls,
+two left unanswered and 10 s each, about 25 s;
+at the default minute, the connection's keepalive would find it first.
+Before `serve` took a silent Cube for lost, its proxy kept answering,
+and check 8 failed.
 
 The cable is pulled by the Cube's link, not by `docker network disconnect`:
 a container connected again gets a new MAC, not of eQ-3's prefix,

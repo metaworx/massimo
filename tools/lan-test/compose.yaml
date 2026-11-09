@@ -8,7 +8,9 @@
 # a second serve with no Cube that searches through its API. run.sh
 # builds massimo into LAN_TEST_WORK, which every container mounts at /m,
 # names the project, builds the image first, and brings the box up only
-# after the searcher's checks of the Cube alone.
+# after the searcher's checks of the Cube alone. The box polls every 5 s,
+# so that it loses the Cube by its polls, within about 25 s of its cable
+# pulled.
 networks:
   lan: {}
 
@@ -36,7 +38,7 @@ services:
       MASSIMO_ENV_FILE: /dev/null
       MASSIMO_CUBE_KEQ0000100_ADDRESS: "cube:62910"
     command: [avahi.sh, /m/massimo, -data, /tmp, serve, -listen, "0.0.0.0:8099",
-              -tls, self-signed, -discover-interval, "0"]
+              -tls, self-signed, -discover-interval, "0", -poll, 5s]
     depends_on: [cube]
 
   client:
