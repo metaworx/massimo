@@ -186,6 +186,10 @@ the next minor, a fix counts the suffix up.
   before a proxy client receives its N line; a race test found the
   other order now and then.
 
+- The queue's observer test holds its first command until the next two
+  are queued, as it assumed; under QEMU the armv6 job found the queue
+  starting it first.
+
 ### Security
 
 - On Linux the service runs as `_massimo`, as on macOS: the package and
