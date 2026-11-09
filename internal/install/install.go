@@ -145,6 +145,7 @@ type installer struct {
 	Options
 	svcUser string // the account the service runs as: User, or DarwinUser
 	darwin  bool   // macOS, whose settings template has no MASSIMO_LOG
+	stopped bool   // stopped for the account's rename: it ran, so it is started again
 	reboot  bool   // the reboot helper stays or comes (rebootWanted)
 }
 
@@ -280,7 +281,7 @@ func Install(o Options) error {
 	switch {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not started; start it with: systemctl start massimo")
-	case !startable && !in.active():
+	case !startable && !in.active() && !in.stopped:
 		in.notStarted(ownerLine(BinPath), linuxStart)
 	default:
 		// restart, so that running install again takes the new binary.
@@ -452,17 +453,25 @@ func (in *installer) binary() error {
 
 // user makes the service account. The one an older install or package
 // made, formerUser with the home StateDir, is renamed in place: usermod
-// keeps its ID, so its files and a running service follow. Any other
-// formerUser is a person's, and is left alone.
+// keeps its ID, so its files follow. usermod refuses an account that a
+// process runs as, so a running service is stopped first and started
+// again by the start rule. Any other formerUser is a person's, and is
+// left alone.
 func (in *installer) user() error {
 	if in.passwd(User) != "" {
 		fmt.Fprintf(in.Out, "user %s exists\n", User)
 		return nil
 	}
 	if ownAccount(in.passwd(formerUser)) {
+		if in.active() {
+			if err := in.run("systemctl", "stop", "massimo.service"); err != nil {
+				return err
+			}
+			in.stopped = true
+		}
 		in.say("rename the user %s to %s, keeping its ID", formerUser, User)
 		if err := in.run("usermod", "-l", User, formerUser); err != nil {
-			return err
+			return fmt.Errorf("rename the user %s to %s: %w; stop what runs as %s and install again", formerUser, User, err, formerUser)
 		}
 		if in.group(formerUser) && !in.group(User) {
 			return in.run("groupmod", "-n", User, formerUser)

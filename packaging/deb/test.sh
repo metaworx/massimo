@@ -77,6 +77,7 @@ mkdir -p /run/systemd/system
 for cmd in systemctl deb-systemd-invoke; do
 	printf '%s\n' '#!/bin/sh' \
 		"echo \"$cmd \$*\" >>/tmp/calls" \
+		'[ "$1" = stop ] && echo inactive >/tmp/state' \
 		'[ "$1" = is-active ] || exit 0' \
 		'state=$(cat /tmp/state 2>/dev/null || echo inactive)' \
 		'echo "$state"' \
@@ -117,6 +118,16 @@ echo 'MASSIMO_ANNOUNCE=off' >>/etc/massimo/env
 reinstall inactive
 restarted || fail "filled-in settings were not started: $(cat /tmp/calls)"
 cp /tmp/env /etc/massimo/env
+# An older package's account massimo with the service running: stopped
+# before the rename, which usermod refuses while a process runs as it,
+# and restarted after.
+usermod -l massimo _massimo && groupmod -n massimo _massimo
+uid=$(id -u massimo)
+reinstall active
+[ "$(id -u _massimo 2>/dev/null)" = "$uid" ] || fail "massimo was not renamed: $(cat /tmp/out)"
+grep -n -e '^deb-systemd-invoke stop massimo.service$' -e '^deb-systemd-invoke restart massimo.service$' /tmp/calls |
+	cut -d: -f2 | tr '\n' ' ' | grep -q '^deb-systemd-invoke stop massimo.service deb-systemd-invoke restart massimo.service $' ||
+	fail "not stopped before the rename and restarted after: $(cat /tmp/calls)"
 rm -r /run/systemd/system /usr/local/sbin/systemctl /usr/local/sbin/deb-systemd-invoke
 
 # The settings survive a reinstall and an upgrade.

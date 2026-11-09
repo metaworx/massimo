@@ -20,11 +20,24 @@ configure)
 	# The service account is _massimo, a name no person has. The account
 	# massimo that an older package or `massimo install` made, with the
 	# home /var/lib/massimo, is renamed in place: usermod keeps its ID, so
-	# its files and a running service follow. Any other massimo is a
-	# person's, and is left alone.
+	# its files follow. usermod refuses an account a process runs as, so a
+	# running service is stopped first and started again below. Any other
+	# massimo is a person's, and is left alone.
+	stopped=no
 	if ! getent passwd _massimo >/dev/null; then
 		if [ "$(getent passwd massimo | cut -d: -f6)" = /var/lib/massimo ]; then
-			usermod -l _massimo massimo
+			if [ -d /run/systemd/system ] && command -v deb-systemd-invoke >/dev/null 2>&1; then
+				case "$(systemctl is-active massimo.service 2>/dev/null || true)" in
+				active | activating | reloading)
+					deb-systemd-invoke stop massimo.service >/dev/null || true
+					stopped=yes
+					;;
+				esac
+			fi
+			if ! usermod -l _massimo massimo; then
+				echo "massimo: the user massimo could not be renamed _massimo; stop what runs as massimo, then: sudo dpkg --configure -a" >&2
+				exit 1
+			fi
 			if getent group massimo >/dev/null && ! getent group _massimo >/dev/null; then
 				groupmod -n _massimo massimo
 			fi
@@ -84,7 +97,7 @@ configure)
 		state=$(systemctl is-active massimo.service 2>/dev/null || true)
 		case "$state" in
 		active | activating | reloading) start=yes ;;
-		*) start=no ;;
+		*) start=$stopped ;;
 		esac
 		if [ "$(settings /etc/massimo/env)" != "$(settings /usr/share/massimo/env.template)" ]; then
 			start=yes

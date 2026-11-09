@@ -320,6 +320,8 @@ func TestServiceAccount(t *testing.T) {
 			[]string{"usermod -l _massimo massimo", "groupmod -n _massimo massimo"}, []string{"useradd"}},
 		{"an older install's, the group taken", system{passwd: map[string]string{formerUser: ownEntry(formerUser)}, groups: []string{formerUser, User}},
 			[]string{"usermod -l _massimo massimo"}, []string{"useradd", "groupmod"}},
+		{"an older install's, running", system{active: "active", passwd: map[string]string{formerUser: ownEntry(formerUser)}, groups: []string{formerUser}},
+			[]string{"systemctl stop massimo.service", "usermod -l _massimo massimo", "systemctl restart massimo.service"}, []string{"useradd"}},
 		{"a person's", system{passwd: map[string]string{formerUser: personEntry}, groups: []string{formerUser}},
 			[]string{"useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell"}, []string{"usermod", "groupmod"}},
 	} {
@@ -327,7 +329,16 @@ func TestServiceAccount(t *testing.T) {
 			root, bin := setup(t)
 			rec := &recorder{}
 			var out bytes.Buffer
-			if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: rec.run, Output: c.sys.output}); err != nil {
+			// A stop stops: systemctl answers inactive after it.
+			sys := c.sys
+			run := func(name string, args ...string) error {
+				if name == "systemctl" && len(args) > 0 && args[0] == "stop" {
+					sys.active = "inactive"
+				}
+				return rec.run(name, args...)
+			}
+			output := func(name string, args ...string) ([]byte, error) { return sys.output(name, args...) }
+			if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: run, Output: output}); err != nil {
 				t.Fatal(err)
 			}
 			for _, w := range c.want {
@@ -342,6 +353,12 @@ func TestServiceAccount(t *testing.T) {
 			}
 			if rec.has("useradd") && !strings.HasSuffix(rec.cmds[0], " "+User) {
 				t.Errorf("useradd makes %q", rec.cmds[0])
+			}
+			// usermod refuses an account a process runs as: the stop
+			// comes first.
+			if i, j := slices.IndexFunc(rec.cmds, func(c string) bool { return strings.HasPrefix(c, "systemctl stop") }),
+				slices.IndexFunc(rec.cmds, func(c string) bool { return strings.HasPrefix(c, "usermod") }); i > j {
+				t.Errorf("stopped after the rename: %q", rec.cmds)
 			}
 		})
 	}
