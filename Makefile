@@ -134,19 +134,16 @@ test-armv6:
 
 # The fuzz targets (Fuzz* in the packages that parse untrusted bytes:
 # the Cube's and LAN clients' lines, uploaded backups, stored hashes),
-# each for FUZZTIME; go test -fuzz takes one target at a time. A crash
-# leaves its input under the package's testdata/fuzz/, which go test
-# then replays as a seed.
+# each for FUZZTIME, one after the other, by tools/fuzz/run.sh; go test
+# -fuzz takes one target at a time. A crash leaves its input under the
+# package's testdata/fuzz/, which go test then replays as a seed. Go
+# 1.26's own -fuzztime deadline, reported as a failure, passes
+# (golang/go#75804, GUIDELINES/project/CI.md, section 3).
 FUZZTIME ?= 10s
 FUZZPKGS = ./internal/protocol/cube ./internal/backup ./internal/store
 
 fuzz:
-	@set -e; for pkg in $(FUZZPKGS); do \
-		for t in $$(go test -list '^Fuzz' $$pkg | grep '^Fuzz'); do \
-			echo "fuzz $$pkg $$t ($(FUZZTIME))"; \
-			MASSIMO_ENV_FILE=/dev/null go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $$pkg; \
-		done; \
-	done
+	FUZZTIME=$(FUZZTIME) tools/fuzz/run.sh $(FUZZPKGS)
 
 # Web UI smoke test with Playwright against the fake Cube; skipped when
 # Playwright for Python is not installed (tools/ui-test/README.md).
