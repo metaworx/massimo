@@ -706,6 +706,9 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { srv2.Close() })
 	eventually(t, "greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
+	// The client logs the return right after the event, so the line may
+	// still be on its way.
+	eventually(t, "the re-established line", func() bool { return logs.count("INFO", "cube connection re-established") >= 1 })
 	if n := logs.count("WARN", "cube connection lost"); n != 1 {
 		t.Errorf("%d cube connection lost lines, want 1", n)
 	}
