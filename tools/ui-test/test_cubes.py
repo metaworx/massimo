@@ -33,12 +33,13 @@ def test_name_saved_and_taken_back(page, case):
     form.locator("button[type=submit]").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Renamed')", 5), "the new name is saved"
     assert "Renamed" in cube_item(page, "KEQ0000100").text_content(), "the Cube choice shows the new name"
+    # The panel is drawn again after the state changed: waited for.
     take = panel.locator(".take-file[data-field=name]")
-    assert take.count() == 1 and "MASSIMO_CUBE_KEQ0000100_NAME" in panel.locator(".cube-differs").inner_text(), \
-        "the settings file's name is offered"
+    assert wait_until(page, f"!!document.querySelector(\"{PANEL} .take-file[data-field=name]\")", 5) and \
+        "MASSIMO_CUBE_KEQ0000100_NAME" in panel.locator(".cube-differs").inner_text(), "the settings file's name is offered"
     take.click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Fake Cube')", 5), "the file's value taken"
-    assert panel.locator(".cube-differs").count() == 0, "no difference left"
+    assert wait_until(page, f"!document.querySelector(\"{PANEL} .cube-differs\")", 5), "no difference left"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the Cube's panel"
 
 

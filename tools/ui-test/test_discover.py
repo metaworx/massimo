@@ -39,7 +39,11 @@ def test_search_held_then_answered(page, case):
     facts = page.locator("#cube-found [data-serial='KEQ0000000'] .found-facts")
     assert facts.count() == 1 and " · DHCP · " in facts.inner_text(), "the found Cube's DHCP flag"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes"
+    # A Cube is announced once per server: where an earlier test on this
+    # server found it, its cube_found is older than the log's last 20
+    # events can be, so the log is asked for the kind.
     show_view(page, "log")
+    page.locator("#log-kind").select_option("cube_found")
     assert wait_until(page, "[...document.querySelectorAll('.log-line.kind-cube_found')].some((l) => l.textContent.includes('KEQ0000000'))", 5), \
         "cube_found in the log"
     show_view(page, "tiles")

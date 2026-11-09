@@ -66,9 +66,18 @@ whose working directory is `tools/ui-test/`, so files are named from there.
 A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
 then the browser.
 
-Of a failed test, pytest-playwright keeps the trace,
+Of a failed test, pytest-playwright keeps
 the screenshot and the video in `tools/ui-test/results/`,
-one directory per test (gitignored, emptied at the start of every run);
+one directory per test (gitignored, emptied at the start of every run).
+The first pass records no trace:
+its DOM snapshots make every step slower,
+840 ms instead of 14 for a step in System settings at 1100 px,
+and slow every wait with it.
+When tests fail, `run.sh` runs them once more with the trace
+(`--last-failed --tracing retain-on-failure`, the same arguments),
+and keeps the trace of each that fails again in `tools/ui-test/results/retry/`;
+it says whether they failed again, and the run fails either way:
+a test that passes only the second time is flaky, not fixed.
 `python -m playwright show-trace <trace.zip>` replays a trace step by step,
 with the page's DOM, console and network at every step.
 
@@ -386,7 +395,7 @@ on every push to `main` and every pull request,
 in Microsoft's Playwright image,
 and uploads the PNGs as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`);
 when a step fails it also uploads `tools/ui-test/results/`,
-the failed tests' traces, screenshots and videos,
+the failed tests' screenshots and videos and the retry's traces,
 as the artifact `ui-test-results`.
 It does not make the slideshow, which needs ImageMagick:
 `slideshow.sh` is run where the set is taken, and the GIF committed with it.

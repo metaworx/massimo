@@ -28,9 +28,10 @@ The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
 test and a stubbed 503 of the discovery are expected.
 
-pytest-playwright keeps the trace, the screenshot and the video of a
-failed test (pytest.ini) under the directory run.sh names with
---output, tools/ui-test/results/.
+pytest-playwright keeps the screenshot and the video of a failed test
+(pytest.ini) under the directory run.sh names with --output,
+tools/ui-test/results/, and the trace of a failed test that run.sh runs
+once more under results/retry/.
 """
 import json
 import os
@@ -181,7 +182,8 @@ def guard(request, case, watch):
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item):
     """The guard's checks run as part of the test, so that a console
-    error fails the test itself and pytest-playwright keeps its trace."""
+    error fails the test itself, and pytest-playwright keeps its
+    screenshot, its video and, on run.sh's retry, its trace."""
     result = yield
     guard = item.funcargs.get("guard")
     if guard is not None:

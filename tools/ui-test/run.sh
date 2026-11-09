@@ -9,8 +9,11 @@
 # in one worker (--dist loadfile); UI_TEST_WORKERS=1 runs it in one
 # process against one set. The arguments after "smoke" go to pytest, as
 # do those in PYTEST_ADDOPTS (PYTEST_ADDOPTS='-k cubes' make ui-test).
-# Of a failed test it keeps the trace, the screenshot and the video under
-# tools/ui-test/results/.
+# Of a failed test it keeps the screenshot and the video under
+# tools/ui-test/results/. The first pass records no trace, whose DOM
+# snapshots make every step slower; when tests fail, they run once more
+# with it, the trace of one that fails again under results/retry/, and
+# the run fails either way.
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -101,6 +104,8 @@ down_port=${UI_TEST_DOWN_PORT:-$((api_port + 1))}
 token=ui-test-token
 work=$(mktemp -d)
 pids=""
+# The trap below runs cleanup, which shellcheck takes for unreachable.
+# shellcheck disable=SC2317
 cleanup() {
 	for p in $pids; do kill "$p" 2>/dev/null || true; done
 	rm -rf "$work"
@@ -210,5 +215,16 @@ done
 if [ "$workers" -gt 1 ]; then
 	set -- -n "$workers" --dist loadfile "$@"
 fi
-UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
-	UI_TEST_SERVE_LOG="$work/set0/serve.log" "$py" -m pytest --output "$here/results" "$@"
+export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
+	UI_TEST_SERVE_LOG="$work/set0/serve.log"
+rc=0
+"$py" -m pytest --output "$here/results" "$@" || rc=$?
+# Only failed tests (exit 1) run again: not an interrupted or empty run.
+[ $rc -eq 1 ] || exit $rc
+echo "ui-test: tests failed; they run once more, with the trace (tools/ui-test/results/retry/)" >&2
+if "$py" -m pytest --last-failed --last-failed-no-failures none --tracing retain-on-failure --output "$here/results/retry" "$@"; then
+	echo "ui-test: the failed tests passed the second time, and the run fails all the same: they are flaky" >&2
+else
+	echo "ui-test: tests failed again; their traces are in tools/ui-test/results/retry/" >&2
+fi
+exit 1
