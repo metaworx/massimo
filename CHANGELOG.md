@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The event stream gives every event an id and resumes after the last
+  one a client read, or says `resync`; the web UI resumes with it
+  (`docs/api-v1.md`, "GET …/events").
+
 - `massimo -no-env` reads no settings file, as `-env /dev/null` did,
   also on Windows (`README.md`, "Cube variables").
 

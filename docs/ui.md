@@ -32,6 +32,10 @@ What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
 so the session never appears in a URL.
+After an interruption the page opens a new stream that resumes after the
+last event it read, so what happened meanwhile still arrives;
+where the server no longer holds it, the page reloads the rooms
+(docs/api-v1.md, "GET …/events").
 
 ## Header
 
