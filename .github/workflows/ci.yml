@@ -140,9 +140,9 @@ jobs:
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
 
-  # What a pull request changes, for the Screenshots and mDNS jobs: ui is
-  # true when it touches the web UI, its suite or this file, mdns when it
-  # touches the announcement, discovery, the proxy, the mDNS test or this
+  # What a pull request changes, for the Screenshots and LAN jobs: ui is
+  # true when it touches the web UI, its suite or this file, lan when it
+  # touches the announcement, discovery, the proxy, the LAN test or this
   # file (GUIDELINES/project/CI.md, section 2). The run checks out the pull request's merge commit, whose
   # first parent is the base branch. The list is taken before it is
   # matched, so that grep -q ending the pipe early cannot fail the step
@@ -154,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ui: ${{ steps.paths.outputs.ui }}
-      mdns: ${{ steps.paths.outputs.mdns }}
+      lan: ${{ steps.paths.outputs.lan }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -169,10 +169,10 @@ jobs:
           else
             echo "ui=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/mdns-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
-            echo "mdns=true" >> "$GITHUB_OUTPUT"
+          if grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+            echo "lan=true" >> "$GITHUB_OUTPUT"
           else
-            echo "mdns=false" >> "$GITHUB_OUTPUT"
+            echo "lan=false" >> "$GITHUB_OUTPUT"
           fi
 
   # The web UI in Chromium against the fake Cube: the pytest suite, then
@@ -243,18 +243,20 @@ jobs:
           path: tools/ui-test/results/
           if-no-files-found: ignore
 
-  # serve's mDNS announcement and massimo discover against avahi, on three
-  # hosts in Docker (tools/mdns-test/README.md): serve sharing UDP 5353
-  # with avahi-daemon, avahi-browse resolving it on the box and on a
+  # Discovery, serve's mDNS announcement and massimo discover on a LAN in
+  # Docker, against avahi (tools/lan-test/README.md): a second serve's
+  # searches finding a fake Cube, losing it with its cable pulled and
+  # finding it again, then from the box's proxy too; serve sharing UDP
+  # 5353 with avahi-daemon, avahi-browse resolving it on the box and on a
   # client, discover listing it and marking the proxy, and its goodbye.
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
   # a pull request whose changes job did not answer false, as Screenshots
   # does; skipped by this condition, the check counts as passed.
-  mdns:
-    name: mDNS against avahi
+  lan:
+    name: LAN against avahi
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.mdns != 'false') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.lan != 'false') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -264,8 +266,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
-      - name: mDNS test
-        run: make mdns-test
+      - name: LAN test
+        run: make lan-test
 
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.
@@ -620,7 +622,7 @@ jobs:
       # holds UDP 5353): a second serve on every address, with a store of
       # its own, announces itself without a warning, and massimo discover
       # finds it by multicast. Windows has no dns-sd of its own, so the
-      # browser is ours; tools/mdns-test/README.md for avahi.
+      # browser is ours; tools/lan-test/README.md for avahi.
       - name: mDNS beside Windows' mDNS
         shell: bash
         run: |
@@ -823,7 +825,7 @@ jobs:
       # its own, runs as a launchd daemon in the system domain, as massimo
       # install runs the service, and dns-sd must find and resolve it
       # through mDNSResponder (-Z lists the PTR, SRV and TXT records);
-      # tools/mdns-test/README.md for avahi. A daemon, because macOS's local
+      # tools/lan-test/README.md for avahi. A daemon, because macOS's local
       # network privacy refuses the runner's own processes every multicast
       # send ("no route to host"), and spares launchd daemons; for the same
       # reason massimo discover, a runner's process, is not asked here.
