@@ -341,6 +341,18 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 	return nil
 }
 
+// InsertEvent writes one event at once, without the writer: for a
+// process that runs none, the command line's massimo user.
+func (s *Store) InsertEvent(ctx context.Context, e Event) error {
+	if len(e.Data) == 0 || !json.Valid(e.Data) {
+		return errors.New("store: an event without JSON")
+	}
+	if err := s.writable(); err != nil {
+		return err
+	}
+	return s.writeEvents(ctx, []Event{e})
+}
+
 // FlushEvents asks the writer to write what is pending and waits until
 // it is readable; without a writer it returns at once, and it gives up
 // after eventsQuiet, the handover to the writer included.
@@ -444,7 +456,19 @@ cubes:
 	if removed > 0 || stopped {
 		s.log.Info("events pruned", "removed", removed, "keep_days", days, "stopped", stopped)
 	}
+	if removed > 0 {
+		s.logPruned(removed, days, now)
+	}
 	return removed, nil
+}
+
+// logPruned writes the prune's own line, an event of the server's
+// (source system) as the server's log.go writes them (AP Logging v1.1,
+// Block 5): the store prunes by itself, without a request.
+func (s *Store) logPruned(removed, days int, now time.Time) {
+	data, _ := json.Marshal(map[string]any{"kind": "log_pruned", "source": "system", "level": "info",
+		"summary": map[string]any{"removed": removed, "keep_days": days}, "time": now})
+	s.AddEvent(Event{Kind: "log_pruned", Source: "system", Level: LevelInfo, Time: now, Data: data})
 }
 
 // cubeIDs lists the store's Cubes by id.

@@ -279,6 +279,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 	}
 	pruneBackups := false
 	for _, wr := range writes {
+		var from any
+		if prev, ok, err := st.Setting(r.Context(), wr.key); err == nil && ok {
+			json.Unmarshal(prev, &from)
+		}
 		switch {
 		case wr.clear:
 			err = st.DeleteSetting(r.Context(), wr.key)
@@ -316,6 +320,16 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			value = strconv.FormatBool(*wr.on)
 		}
 		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", s.clientIP(r))
+		var to any
+		switch {
+		case wr.duration != nil:
+			to = fmtDuration(*wr.duration)
+		case wr.number != nil:
+			to = *wr.number
+		case wr.on != nil:
+			to = *wr.on
+		}
+		auditChange(r, wr.key, from, to) // nil: the default
 	}
 	if pruneBackups {
 		s.pruneBackups(r.Context(), st, time.Now())

@@ -822,7 +822,8 @@ A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
 for the service run it as its user,
 for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.
-The audit records what it did with the remote `cli`.
+The audit records what it did with the remote `cli`,
+and the log a change line of each, by the command line (docs/ui.md, "Log").
 With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
 `owner` with the token as its API key, so the token keeps working;
 without it, the first owner is created with `user add <name> -role owner`

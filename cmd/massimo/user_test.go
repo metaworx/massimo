@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -203,5 +204,62 @@ func TestUserTokens(t *testing.T) {
 	}
 	if _, err := runUserWith(t, "", "tokens", "nobody"); err == nil {
 		t.Fatal("tokens of nobody")
+	}
+}
+
+// Each user command that changed something writes a change line of the
+// server's, by the command line, naming the user as they are then; the
+// key a token command prints is in none (AP Logging v1.1, Block 6).
+func TestUserCommandsLog(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	if _, err := runUserWith(t, "", "add", "anna", "-no-password", "-display-name", "Anna"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runUserWith(t, "", "disable", "anna"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runUserWith(t, "", "token", "anna", "-label", "phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.OpenReadOnly(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	rows, err := st.Events(context.Background(), store.EventQuery{Kind: "change", Limit: 10})
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("%d change lines, %v", len(rows), err)
+	}
+	var actions []string
+	for i := len(rows) - 1; i >= 0; i-- {
+		r := rows[i]
+		var ev struct {
+			Source  string
+			Summary map[string]any
+		}
+		if err := json.Unmarshal(r.Data, &ev); err != nil {
+			t.Fatal(err)
+		}
+		if r.CubeID != 0 || r.Source != "config" || ev.Source != "config" || ev.Summary["via"] != "cli" || r.UserID != 0 {
+			t.Fatalf("line %d: %+v %s", i, r, r.Data)
+		}
+		actions = append(actions, ev.Summary["action"].(string))
+		if ev.Summary["action"] == "user.add" {
+			subject, _ := ev.Summary["subject"].(map[string]any)
+			if subject["name"] != "anna" || subject["display_name"] != "Anna" || subject["uuid"] == nil {
+				t.Fatalf("the user added: %v", ev.Summary)
+			}
+		}
+		for _, line := range strings.Fields(out) {
+			if len(line) > 20 && strings.Contains(string(r.Data), line) {
+				t.Fatalf("the printed key %q in the log: %s", line, r.Data)
+			}
+		}
+	}
+	if strings.Join(actions, ",") != "user.add,user.update,token.add" {
+		t.Fatalf("the actions: %v", actions)
 	}
 }

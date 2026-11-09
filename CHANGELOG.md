@@ -30,6 +30,18 @@ the next minor, a fix counts the suffix up.
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
 
+- The log shows the server's start, stop, restart, reload, reboot,
+  update, backups and prunes, and a Cube's new address or its leaving
+  the LAN (`docs/ui.md`, "Log").
+
+- Every change made through the API or `massimo user` is in the log,
+  with who made it: a Cube named, a setting, a user, a role, a key
+  (`docs/ui.md`, "Log").
+
+- The log chooses a source, System, Configuration, the Cube or one
+  device, a level and who made a change, kept in the address after
+  `#log` (`docs/ui.md`, "Log").
+
 - `serve` announces itself on the LAN by mDNS as `_massimo._tcp`
   (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
   and marks a proxy among the Cubes (`README.md`, "Server").
@@ -47,6 +59,10 @@ the next minor, a fix counts the suffix up.
 - `serve`'s wiring is the package `internal/serve`, which a program
   embedding the server calls as the command does; nothing changes for
   `massimo serve` itself.
+
+- The log's metadata and config lines say what changed, and a reconnect
+  is one line with the Cube's devices, rooms, firmware and duty cycle;
+  the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
 
 ### Fixed
 

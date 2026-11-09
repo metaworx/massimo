@@ -1794,6 +1794,36 @@ with its type, serial, name and room), `cube_found` (with `cube`,
 a Cube that is not configured, see POST /cubes/discover),
 `restore_step` and `restore_done` (with `restore`, the progress of a restore,
 see POST /restore).
+The server's own lines, source `system`, each with its `summary` and, where a
+request asked for it, `by`:
+`server_started` (`version`, and `before` when it changed),
+`server_stopping` (`why`: `restart`, `reboot`, `update` or `stop`),
+`settings_read` (the settings file read again: `why`, the names of the
+variables `changed` and of those waiting `at_next_start`, never their values),
+`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
+`update_result` (the helper's outcome after the restart, once:
+`state`, `from`, `to`; a failure at `warn` with its `error`),
+`backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
+`backup_deleted` (`id`), `backups_pruned` and `log_pruned` (`removed`),
+`restore_started` (`id`, `steps`, `radio_commands`).
+A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
+and `cube_gone` (with `cube`, a Cube found before that no longer answers).
+`change`, source `config`: every request that changed something, once it
+succeeded, with `by`: its `summary` holds the audit's `action` and `target`
+(a device by its serial number), what it `set` (the request's body, its
+secrets removed), what `changes` from and to where the server knows both
+(a Cube's `name`, `address`, proxy and hidden devices; a setting), and the
+`subject` it concerns as it was then (a user's `id`, `uuid`, `name`,
+`display_name` and `role`; a role's `id`, `key` and `name`; a key's `id`,
+`uuid`, `name` and its user).
+A change of a Cube is that Cube's line, one of a device carries its
+`serial`, every other is the server's.
+Setpoints are changes too; a sign-in, a preference, a search, a restore's
+plan and the requests whose own line is the server's (a backup, a restore,
+a restart, …) write none.
+`massimo user` writes the same lines, with `"via": "cli"`.
+A failure the server reports, such as a reboot the helper did not start,
+is its kind's line at `warn` with the `error`.
 A comment line is sent every 30 seconds to keep the connection alive.
 
 An event of a device carries its radio address as `device` and its serial number
@@ -1807,6 +1837,34 @@ the server's own events, such as `cube_found`, come on every Cube's stream:
 ```
 event: config
 data: {"kind":"config","device":"0a0101","serial":"MEQ0000101","source":"device","level":"info","time":"…"}
+```
+
+A connection's greeting brings the Cube's `hello`, `metadata` and a `config`
+for each device and the Cube itself every time, changed or not.
+These lines come at `debug`, each with
+its `summary` (a hello's `firmware`, `duty_cycle_pct` and `free_memory_slots`,
+a list's `rooms` and `devices`, a configuration's main values).
+`connected` comes at `info` with a `summary` of the connection:
+`devices`, `rooms`, `firmware`, `duty_cycle_pct`, `free_memory_slots`,
+`cause` (`start`, `loss`, or `reconnect` for one the server asked for,
+which is at `debug`) and, after a loss, `down_for_s`.
+What the greeting found changed, against what the server held before
+(or after a start the newest backup), follows `connected` at `info`,
+with `"while_disconnected": true`:
+a `metadata` event with `list_changes`, a `config` event with `changes`.
+Outside a greeting, `metadata` says its `list_changes`
+(`room_added`, `room_renamed`, `room_deleted`, `device_added`, `device_renamed`,
+`device_moved`, `device_left`, each with the room's or device's `name`,
+`from`, `to`, and a device's `device` and `serial`),
+a line of one device carrying that device's;
+`config` says its `changes` by the configuration's names, from and to
+(`comfort_temp`, `temp_offset`, `program_monday` without values, …),
+and a device's first `config` says its `summary`;
+one that changes nothing is at `debug`.
+
+```
+event: metadata
+data: {"kind":"metadata","source":"cube","level":"info","list_changes":[{"what":"room_renamed","room":6,"name":"Bathroom","from":"Bath"}],"while_disconnected":true,"time":"…"}
 ```
 
 A `state` event that follows an earlier one for the same device also says what changed,
