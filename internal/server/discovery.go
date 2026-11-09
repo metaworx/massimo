@@ -338,14 +338,15 @@ func (s *Server) settle(answered map[string]bool) {
 
 // cubeFound is the one place where a Cube becomes found: new to the
 // server, or back after a complete run it did not answer. One that is
-// not configured is logged and announced on every Cube's stream
-// (cube_found). It runs without foundMu held.
+// not configured is logged and announced, an event of the server's, kept
+// once and sent on every Cube's stream (cube_found). It runs without
+// foundMu held.
 func (s *Server) cubeFound(f foundCube) {
 	if f.Configured {
 		return
 	}
 	s.log.Info("cube found on the LAN, not configured", "serial", f.Serial, "ip", f.Address, "mac", f.MAC)
-	s.broadcast(event{Kind: "cube_found", Cube: &f, Time: f.LastSeen})
+	s.logServer(event{Kind: "cube_found", Source: "cube", Serial: f.Serial, Cube: &f, Time: f.LastSeen})
 }
 
 // cubeGone is the one place where a Cube becomes gone: it answered the
@@ -357,13 +358,6 @@ func (s *Server) cubeGone(f foundCube) {
 		return
 	}
 	s.log.Info("cube gone from the LAN, not configured", "serial", f.Serial, "ip", f.Address, "mac", f.MAC)
-}
-
-// broadcast sends an event to the stream of every Cube.
-func (s *Server) broadcast(ev event) {
-	for _, rt := range s.runtimes() {
-		rt.emit(ev)
-	}
 }
 
 // unconfigured lists the Cubes found but not configured, by serial:

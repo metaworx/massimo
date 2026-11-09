@@ -104,12 +104,17 @@ func TestEventsBatched(t *testing.T) {
 	if n := flushes - before; n < 1 || n > 3 {
 		t.Fatalf("250 events in %d transactions, want at most 3", n)
 	}
-	// Bad events are dropped and counted.
+	// Bad events are dropped and counted; one of no Cube is the server's.
 	_, dropped, _ = s.EventStats()
 	s.AddEvent(Event{CubeID: a.ID, Data: json.RawMessage(`nope`)})
-	s.AddEvent(Event{Data: json.RawMessage(`{}`)})
+	s.AddEvent(Event{Data: json.RawMessage(``)})
+	s.AddEvent(Event{Kind: "server_started", Data: json.RawMessage(`{}`)})
 	if _, d, _ := s.EventStats(); d != dropped+2 {
 		t.Fatalf("dropped %d, want %d", d, dropped+2)
+	}
+	flush(t, s)
+	if page, _ := s.Events(ctx, EventQuery{Kind: "server_started", Limit: 1}); len(page) != 1 || page[0].CubeID != 0 {
+		t.Fatalf("the server's event: %+v", page)
 	}
 	// An event without a time takes the store's clock.
 	s.AddEvent(Event{CubeID: a.ID, Kind: "hello", Data: json.RawMessage(`{"kind":"hello"}`)})
@@ -315,17 +320,20 @@ func TestEventsPruned(t *testing.T) {
 // bytes of JSON.
 const stateData = `{"kind":"state","device":"0abc01","time":"2026-11-06T10:00:00.000+01:00","state":{"rf_address":"0abc01","name":"Radiator 1","type":"radiator thermostat","room_id":1,"room":"Room 1","mode":"auto","setpoint":20.5,"temperature":21.3,"valve_pct":30,"battery_low":false,"window_open":false,"link_error":false,"panel_locked":false,"stale":false},"changes":{"valve_pct":{"from":20,"to":30}}}`
 
-// fill writes n events of a Cube straight into the table, step apart
-// from start: one in 500 connected, one in 97 config, the others state,
-// over thirty devices.
+// fill writes n events of a Cube, or with cube 0 of the server, straight
+// into the table, step apart from start: one in 500 connected (source
+// cube), one in 97 config, the others state, over thirty devices, each
+// with its serial; one in 13 at debug, one in 1000 at warn.
 func fill(t *testing.T, s *Store, cube int64, n int, start time.Time, step time.Duration) {
 	t.Helper()
 	_, err := s.db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ? - 1)
-		INSERT INTO events (uuid, cube_id, time, kind, device, data)
+		INSERT INTO events (uuid, cube_id, time, kind, source, level, device, serial, data)
 		SELECT printf('fill-%d-%d-%d', ?, ?, i), ?, strftime('%Y-%m-%dT%H:%M:%fZ', ? + i * ?, 'unixepoch'),
 			CASE WHEN i % 500 = 0 THEN 'connected' WHEN i % 97 = 0 THEN 'config' ELSE 'state' END,
-			printf('0abc%02d', i % 30), ? FROM n`,
-		n, cube, start.UnixMilli(), cube, float64(start.UnixMilli())/1000, step.Seconds(), stateData)
+			CASE WHEN i % 500 = 0 THEN 'cube' ELSE 'device' END,
+			CASE WHEN i % 1000 = 0 THEN 4 WHEN i % 13 = 0 THEN -4 ELSE 0 END,
+			printf('0abc%02d', i % 30), printf('MEQ00000%02d', i % 30), ? FROM n`,
+		n, cube, start.UnixMilli(), nullID(cube), float64(start.UnixMilli())/1000, step.Seconds(), stateData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +356,16 @@ func TestEventsPageQuery(t *testing.T) {
 	step := 30 * 24 * time.Hour / time.Duration(n)
 	fill(t, s, a.ID, n, start, step)
 	fill(t, s, b.ID, n/9, start, 9*step)
+	fill(t, s, 0, n/30, start, 30*step)
 	mid := start.Add(15 * 24 * time.Hour)
+	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE events SET user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	info, warn := LevelInfo, LevelWarn
 	shapes := []struct {
 		name string
 		q    EventQuery
@@ -358,30 +375,45 @@ func TestEventsPageQuery(t *testing.T) {
 		{"time", EventQuery{CubeID: a.ID, Before: mid}},
 		{"kind", EventQuery{CubeID: a.ID, Kind: "connected"}},
 		{"kind and id", EventQuery{CubeID: a.ID, Kind: "connected", BeforeID: int64(n / 2)}},
-		{"device", EventQuery{CubeID: a.ID, Device: "0abc07"}},
-		{"kind and device", EventQuery{CubeID: a.ID, Kind: "state", Device: "0abc07"}},
-		{"time and device", EventQuery{CubeID: a.ID, Device: "0abc07", Before: mid}},
+		{"serial", EventQuery{CubeID: a.ID, Serial: "MEQ0000007"}},
+		{"kind and serial", EventQuery{CubeID: a.ID, Kind: "state", Serial: "MEQ0000007"}},
+		{"time and serial", EventQuery{CubeID: a.ID, Serial: "MEQ0000007", Before: mid}},
+		{"source", EventQuery{CubeID: a.ID, Source: "cube"}},
+		{"source and id", EventQuery{CubeID: a.ID, Source: "cube", BeforeID: int64(n / 2)}},
+		{"info and above", EventQuery{CubeID: a.ID, MinLevel: &info}},
+		{"warnings", EventQuery{CubeID: a.ID, MinLevel: &warn}},
+		{"a user", EventQuery{CubeID: a.ID, UserID: anna.ID}},
+		{"with the server's", EventQuery{CubeID: a.ID, Server: true}},
+		{"with the server's, by time", EventQuery{CubeID: a.ID, Server: true, Before: mid, MinLevel: &info}},
+		{"with the server's, a source", EventQuery{CubeID: a.ID, Server: true, Source: "cube"}},
+		{"the server's", EventQuery{CubeID: 0}},
 		{"since", EventQuery{CubeID: a.ID, Since: mid}},
 		{"since and kind", EventQuery{CubeID: a.ID, Kind: "connected", Since: mid}},
 		{"since and before", EventQuery{CubeID: a.ID, Since: start.Add(24 * time.Hour), Before: mid}},
 		{"the other Cube", EventQuery{CubeID: b.ID}},
 	}
 	for _, sh := range shapes {
-		query, args := eventsQuery(sh.q, 200)
-		rows, err := s.db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+query, args...)
-		if err != nil {
-			t.Fatal(err)
+		walks := []int64{sh.q.CubeID}
+		if sh.q.Server && sh.q.CubeID != 0 {
+			walks = append(walks, 0)
 		}
 		var plan []string
-		for rows.Next() {
-			var id, parent, unused int
-			var detail string
-			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+		for _, cube := range walks {
+			query, args := eventsQuery(sh.q, cube, 200)
+			rows, err := s.db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+query, args...)
+			if err != nil {
 				t.Fatal(err)
 			}
-			plan = append(plan, detail)
+			for rows.Next() {
+				var id, parent, unused int
+				var detail string
+				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+					t.Fatal(err)
+				}
+				plan = append(plan, detail)
+			}
+			rows.Close()
 		}
-		rows.Close()
 		joined := strings.Join(plan, "; ")
 		if strings.Contains(joined, "TEMP B-TREE") || strings.Contains(joined, "SCAN events") {
 			t.Errorf("%s: %s", sh.name, joined)
@@ -395,7 +427,8 @@ func TestEventsPageQuery(t *testing.T) {
 			t.Fatalf("%s: %d events, %v", sh.name, len(page), err)
 		}
 		for i, e := range page {
-			if e.CubeID != q.CubeID || (q.Kind != "" && e.Kind != q.Kind) || (q.Device != "" && e.Device != q.Device) ||
+			if e.CubeID != q.CubeID && !(q.Server && e.CubeID == 0) || (q.Kind != "" && e.Kind != q.Kind) || (q.Serial != "" && e.Serial != q.Serial) ||
+				(q.Source != "" && e.Source != q.Source) || (q.UserID != 0 && e.UserID != q.UserID) || (q.MinLevel != nil && e.Level < *q.MinLevel) ||
 				(q.BeforeID > 0 && e.ID >= q.BeforeID) || (!q.Before.IsZero() && !e.Time.Before(q.Before)) ||
 				(!q.Since.IsZero() && e.Time.Before(q.Since)) ||
 				(i > 0 && e.ID >= page[i-1].ID) {
@@ -537,7 +570,8 @@ func TestEventSize(t *testing.T) {
 			`"state":{"mode":"auto","setpoint":21.5,"actual_temp":20.3,"valve_pct":%d,"battery_low":false,"error":false,"link_error":false},"last_seen":"2026-11-06T20:00:00.000Z"},`+
 			`"changes":{"valve_pct":{"from":20,"to":%d}},"time":"2026-11-06T20:00:%02d.123456789+01:00"}`, rf, rf, i%30, 1+i%8, i%30, i%100, i%100, i%60)
 		sample = len(data)
-		s.AddEvent(Event{CubeID: a.ID, Time: at.Add(time.Duration(i) * time.Second), Kind: "state", Device: rf, Data: json.RawMessage(data)})
+		s.AddEvent(Event{CubeID: a.ID, Time: at.Add(time.Duration(i) * time.Second), Kind: "state", Source: "device", Device: rf,
+			Serial: fmt.Sprintf("MEQ00000%02d", i%30), Data: json.RawMessage(data)})
 	}
 	flush(t, s)
 	grown := size() - start

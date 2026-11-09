@@ -26,15 +26,27 @@ the next minor, a fix counts the suffix up.
   made from the migrations beside it and checked by `go test`
   (`docs/store.md`, "Migrations").
 
+- The log keeps the server's own events beside the Cube's, each with
+  its source, its level and the user who started it; the store's
+  migration 0009 rebuilds its events table once (`docs/store.md`).
+
+- `serve` announces itself on the LAN by mDNS as `_massimo._tcp`
+  (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
+  and marks a proxy among the Cubes (`README.md`, "Server").
+
 - `ui/connect.html`, the apps' page: the servers, discovery, the
   fingerprint of a self-signed certificate, the biometric and
   notification switches; a browser sees it as the app's (`docs/app.md`).
 
 ### Changed
 
-- `serve -help`, the settings file's template and the READMEs list what
-  `MASSIMO_REBOOT` takes: on, true, yes or 1, and their opposites, in
-  any case (`README.md`, "Server").
+- `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
+  and their opposites, in any case, as `serve -help`, the settings
+  file's template and the READMEs say (`README.md`, "Server").
+
+- `massimo discover -json` prints an object with `cubes` and `servers`,
+  no longer a list of Cubes; a serial heard from a Cube and from its
+  proxy is listed twice (`docs/proxy.md`).
 
 - `serve`'s wiring is the package `internal/serve`, which a program
   embedding the server calls as the command does; nothing changes for

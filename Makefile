@@ -104,8 +104,9 @@ vet:
 	go vet ./...
 
 # The race detector on the packages whose goroutines meet: the server, the
-# store, the Cube client and the proxy (the contract's test gate).
-RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy
+# store, the Cube client, the proxy, the server's wiring and its
+# announcement (the contract's test gate).
+RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy ./internal/serve ./internal/announce
 
 race:
 	MASSIMO_ENV_FILE=/dev/null go test -race $(RACEPKGS)

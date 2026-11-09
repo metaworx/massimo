@@ -1699,7 +1699,7 @@ also as the event's `error`.
 `error`.
 Both are in `GET …/log`.
 
-### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&device=
+### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=
 
 A page of the Cube's events, oldest first,
 the same objects the event stream sends (`kind`, `device`, `state`, `error`,
@@ -1727,8 +1727,23 @@ or an RFC 3339 time for the events before that time;
 so that a view of the last hour or of today is one request,
 with `before` as the cursor within it;
 `kind` keeps one kind (`state`, `config`, `connected`,
-…) and `device` one device, by its serial number or its radio address;
-a serial the Cube does not have answers an empty page.
+…) and `device` one device, by its serial number or its radio address,
+also one the Cube no longer has.
+`source` keeps one source: `device` (a device's), `cube` (the Cube's own:
+its connection, configuration, rooms, pairing, a Cube found on the LAN),
+`system` (the server's own jobs) or `config` (a change of the configuration).
+`level` keeps that level and above, `debug`, `info`, `warn` or `error`;
+`info` by default, so that a client asks for `level=debug` to see the
+debug lines (the Cube's `hello`).
+`user` keeps the events a user started, by the login name, a removed user's too;
+a name the server does not know answers an empty page.
+The page holds the server's own events too, kept once with no Cube,
+in every Cube's log.
+Each event says its `source` and its `level`,
+and `by` names who started it, as the user is named now
+(`{"name": "anna", "display_name": "Anna"}`):
+absent for the Cube, the server's own jobs and a server without users;
+the bootstrap token is a key of the first owner, whom it names, as the audit does.
 A client pages back with `before` set to the `id` of the oldest event it has,
 until a page is empty: the events of a burst share a millisecond,
 so a time does not page them without gaps or repeats.
@@ -1747,7 +1762,7 @@ A device hidden later keeps its events in the log until `log.keep_days` removes 
 A page before a time first looks up the newest event before it,
 which reads the Cube's times up to there: an `id` is the quicker cursor.
 A page since a time looks up the oldest event at or after it the same way.
-`400` for a bad `before`, `limit` or `device`.
+`400` for a bad `before`, `limit`, `source`, `level` or `device`.
 
 ### GET /api/v1/cubes/{sn}/events
 
@@ -1782,13 +1797,16 @@ see POST /restore).
 A comment line is sent every 30 seconds to keep the connection alive.
 
 An event of a device carries its radio address as `device` and its serial number
-as `serial`, also before the device has a state and after it is gone,
-and `source`: `device`, or `cube` for the Cube's own configuration,
-whose `config` event carries the Cube's serial:
+as `serial`, also before the device has a state and after it is gone.
+Every event says its `source` (`device`, `cube` for the Cube's own, its
+configuration's `config` event under the Cube's serial; `system`, `config`)
+and its `level` (`debug` for `hello`, `warn` for `disconnected`, else `info`),
+as `GET …/log` does;
+the server's own events, such as `cube_found`, come on every Cube's stream:
 
 ```
 event: config
-data: {"kind":"config","device":"0a0101","serial":"MEQ0000101","source":"device","time":"…"}
+data: {"kind":"config","device":"0a0101","serial":"MEQ0000101","source":"device","level":"info","time":"…"}
 ```
 
 A `state` event that follows an earlier one for the same device also says what changed,

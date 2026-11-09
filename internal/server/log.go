@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,8 +48,12 @@ func storedEvent(cubeID int64, ev event) store.Event {
 		dv.Received = nil
 		ev.State = dv
 	}
+	ev.settle()
+	level, _ := store.ParseLevel(ev.Level)
+	userID := ev.userID
+	ev.By = nil // the row keeps the user's id, the page names them
 	data, _ := json.Marshal(ev)
-	return store.Event{CubeID: cubeID, Time: ev.Time, Kind: ev.Kind, Device: ev.Device, Data: data}
+	return store.Event{CubeID: cubeID, Time: ev.Time, Kind: ev.Kind, Source: ev.Source, Level: level, Device: ev.Device, Serial: ev.Serial, UserID: userID, Data: data}
 }
 
 // learnStoreID finds the row of a runtime that has none yet, at its
@@ -66,23 +71,32 @@ func (s *Server) learnStoreID(ctx context.Context, rt *runtime) {
 	rt.storeID.Store(row.ID)
 }
 
+// logSources are the sources an event comes from (event.settle).
+var logSources = []string{"device", "cube", "system", "config"}
+
 // logQuery is a request's page of the log.
 type logQuery struct {
 	beforeID int64
 	before   time.Time
 	since    time.Time
 	kind     string
-	device   string // a radio address
-	serial   string // a serial number, until resolveSerial makes it the device
+	source   string
+	device   string // a radio address, for a device whose serial the Cube does not say
+	serial   string // a serial number
+	user     string // a login name
+	userID   int64  // its row, once resolved
+	minLevel int
 	limit    int
 }
 
 // parseLogQuery reads before (an event's id, or an RFC 3339 time), since
 // (an RFC 3339 time, not after a before time), limit (1 to 1000, 200 by
-// default), kind and device (a serial number or a radio address).
+// default), kind, source (device, cube, system or config), level (debug,
+// info, warn or error: that level and above, info by default), device
+// (a serial number or a radio address) and user (a login name).
 func parseLogQuery(r *http.Request) (logQuery, error) {
 	q := r.URL.Query()
-	lq := logQuery{limit: defaultLogPage, kind: q.Get("kind")}
+	lq := logQuery{limit: defaultLogPage, kind: q.Get("kind"), minLevel: store.LevelInfo, user: q.Get("user")}
 	if v := q.Get("before"); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
 			if id < 1 {
@@ -112,6 +126,19 @@ func parseLogQuery(r *http.Request) (logQuery, error) {
 		}
 		lq.limit = n
 	}
+	if v := q.Get("source"); v != "" {
+		if !slices.Contains(logSources, v) {
+			return lq, fail(http.StatusBadRequest, "bad source %q: one of %s", v, strings.Join(logSources, ", "))
+		}
+		lq.source = v
+	}
+	if v := q.Get("level"); v != "" {
+		l, ok := store.ParseLevel(v)
+		if !ok {
+			return lq, fail(http.StatusBadRequest, "bad level %q: debug, info, warn or error", v)
+		}
+		lq.minLevel = l
+	}
 	if v := q.Get("device"); v != "" {
 		if deviceSerial.MatchString(v) {
 			lq.serial = strings.ToUpper(v)
@@ -126,27 +153,26 @@ func parseLogQuery(r *http.Request) (logQuery, error) {
 	return lq, nil
 }
 
-// resolveSerial turns a page's serial into the radio address the log
-// keeps, through the Cube's snapshot; false for a serial the Cube does
-// not hold, whose page is empty.
-func (lq *logQuery) resolveSerial(rt *runtime) bool {
-	if lq.serial == "" {
-		return true
+// resolveDevice names a page's device by its serial where the Cube's
+// snapshot gives the serial of a radio address asked for, since the log
+// finds a device by its serial.
+func (lq *logQuery) resolveDevice(rt *runtime) {
+	if lq.device == "" {
+		return
 	}
-	rf, ok := rt.client.Snapshot().BySerial(lq.serial)
-	if !ok {
-		return false
+	if rf, err := cube.ParseRFAddress(lq.device); err == nil {
+		if serial := rt.client.Snapshot().Serial(rf); serial != "" {
+			lq.serial, lq.device = serial, ""
+		}
 	}
-	lq.device = rf.String()
-	return true
 }
 
-// getLog handles GET /cubes/{sn}/log: the page of the Cube's events
-// before the cursor and since a time, of a kind and a device where asked
-// (by its serial number or its radio address; a serial the Cube does not
-// hold has none), at most limit,
-// oldest first, the same objects the event stream sends; from the store,
-// with each event's id, or from the ring.
+// getLog handles GET /cubes/{sn}/log: the page of the Cube's events and
+// the server's, before the cursor and since a time, of a kind, a source,
+// a device (by its serial number or its radio address) and a user, at a
+// level and above, at most limit, oldest first, the same objects the
+// event stream sends; from the store, with each event's id, or from the
+// ring. A user the store does not know has none.
 func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -156,9 +182,19 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if !lq.resolveSerial(rt) {
-		writeJSON(w, http.StatusOK, []event{})
-		return nil
+	lq.resolveDevice(rt)
+	if lq.user != "" {
+		id, ok := int64(0), false
+		if st := s.opts.Store; st != nil {
+			if id, ok, err = st.UserIDByName(r.Context(), lq.user); err != nil {
+				return fail(http.StatusInternalServerError, "%v", err)
+			}
+		}
+		if !ok {
+			writeJSON(w, http.StatusOK, []event{})
+			return nil
+		}
+		lq.userID = id
 	}
 	if id := rt.storeID.Load(); id != 0 && rt.store != nil {
 		evs, err := s.storedLog(r.Context(), rt.store, id, lq)
@@ -172,16 +208,21 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// storedLog reads a page from the store, after the writer wrote what is
-// pending, and turns it round, oldest first.
+// storedLog reads a page from the store, the Cube's rows and the
+// server's, after the writer wrote what is pending, and turns it round,
+// oldest first; who started an event is named as the users table names
+// them now.
 func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, lq logQuery) ([]event, error) {
 	if err := st.FlushEvents(ctx); err != nil {
 		s.log.Warn("api: the log's pending events not written", "error", err)
 	}
-	rows, err := st.Events(ctx, store.EventQuery{CubeID: cubeID, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since, Kind: lq.kind, Device: lq.device, Limit: lq.limit})
+	minLevel := lq.minLevel
+	rows, err := st.Events(ctx, store.EventQuery{CubeID: cubeID, Server: true, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since,
+		Kind: lq.kind, Source: lq.source, Device: lq.device, Serial: lq.serial, UserID: lq.userID, MinLevel: &minLevel, Limit: lq.limit})
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
+	users := map[int64]*eventUser{}
 	out := make([]event, 0, len(rows))
 	for i := len(rows) - 1; i >= 0; i-- {
 		var ev event
@@ -189,15 +230,27 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 			s.log.Warn("api: a stored event not read", "id", rows[i].ID, "error", err)
 			continue
 		}
-		ev.ID = rows[i].ID
+		ev.ID, ev.Source, ev.Level, ev.By = rows[i].ID, rows[i].Source, store.LevelName(rows[i].Level), nil
+		if ev.Serial == "" {
+			ev.Serial = rows[i].Serial
+		}
+		if id := rows[i].UserID; id != 0 {
+			by, seen := users[id]
+			if !seen {
+				named := event{userID: id}
+				s.nameUser(ctx, &named)
+				by, users[id] = named.By, named.By
+			}
+			ev.By = by
+		}
 		out = append(out, ev)
 	}
 	return out, nil
 }
 
 // filterEvents is a page of the ring, oldest first: the events before the
-// time and not before since, of the kind and the device, the last limit
-// of them. The ring's
+// time and not before since, of the kind, the source, the device and the
+// user, at the level and above, the last limit of them. The ring's
 // events have no id, so none lies before one.
 func filterEvents(all []event, lq logQuery) []event {
 	out := []event{}
@@ -205,8 +258,11 @@ func filterEvents(all []event, lq logQuery) []event {
 		return out
 	}
 	for _, ev := range all {
+		level, _ := store.ParseLevel(ev.Level)
 		if !lq.before.IsZero() && !ev.Time.Before(lq.before) || !lq.since.IsZero() && ev.Time.Before(lq.since) ||
-			lq.kind != "" && ev.Kind != lq.kind || lq.device != "" && ev.Device != lq.device {
+			lq.kind != "" && ev.Kind != lq.kind || lq.source != "" && ev.Source != lq.source ||
+			lq.serial != "" && ev.Serial != lq.serial || lq.device != "" && ev.Device != lq.device ||
+			lq.userID != 0 && ev.userID != lq.userID || level < lq.minLevel {
 			continue
 		}
 		out = append(out, ev)
