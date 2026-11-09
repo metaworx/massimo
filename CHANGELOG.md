@@ -46,6 +46,10 @@ the next minor, a fix counts the suffix up.
   (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
   and marks a proxy among the Cubes (`README.md`, "Server").
 
+- `ui/connect.html`, the apps' page: the servers, discovery, the
+  fingerprint of a self-signed certificate, the biometric and
+  notification switches; a browser sees it as the app's (`docs/app.md`).
+
 - The web UI's Update works on a box the Debian package installed: its
   helper, enabled, upgrades massimo through apt from the massimo source
   alone (`packaging/README.md`, "Debian package").
