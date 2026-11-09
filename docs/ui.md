@@ -236,6 +236,8 @@ configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
 until the Cube is back.
+Expert mode also shows the debug lines, such as the Cube's hello,
+which the log leaves out otherwise.
 A line names its device by name, else by serial number,
 with the radio address after it in expert mode only;
 the Cube's own configuration reads "Cube KEQ0000000".

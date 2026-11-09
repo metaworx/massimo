@@ -140,6 +140,20 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, bool, error) {
 	return u, true, nil
 }
 
+// UserIDByName returns the row identifier of a login name, a removed
+// user's too: the name stays the user's (UNIQUE (name)).
+func (s *Store) UserIDByName(ctx context.Context, name string) (int64, bool, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ?`, NormalName(name)).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("store: user %s: %w", name, err)
+	}
+	return id, true, nil
+}
+
 // CountUsers counts the users that are not removed, disabled ones
 // included: with one, every request needs a token.
 func (s *Store) CountUsers(ctx context.Context) (int, error) {
