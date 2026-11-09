@@ -347,7 +347,10 @@ func fill(t *testing.T, s *Store, cube int64, n int, start time.Time, step time.
 // those rows, migration 0011's, rather than every row of the Cube (11 s
 // at 90,000 events on a Raspberry Pi 1, docs/store.md section 5).
 // 90,000 events of one Cube beside 10,000 of another, 3000 under -short;
-// the time of each page is logged.
+// the time of each page is logged. The rows lie from 29 days ago to one
+// day ago, inside log.keep_days' default of 30: the writer's first prune
+// runs in its goroutine and may come after the fill, and would delete
+// rows filled at the edge (under QEMU, the server's one warning).
 func TestEventsPageQuery(t *testing.T) {
 	s, a, b := eventsStore(t, t.TempDir())
 	ctx := context.Background()
@@ -355,12 +358,12 @@ func TestEventsPageQuery(t *testing.T) {
 	if testing.Short() {
 		n = 3000
 	}
-	start := time.Now().UTC().Add(-30 * 24 * time.Hour).Truncate(time.Second)
-	step := 30 * 24 * time.Hour / time.Duration(n)
+	start := time.Now().UTC().Add(-29 * 24 * time.Hour).Truncate(time.Second)
+	step := 28 * 24 * time.Hour / time.Duration(n)
 	fill(t, s, a.ID, n, start, step)
 	fill(t, s, b.ID, n/9, start, 9*step)
 	fill(t, s, 0, n/30, start, 30*step)
-	mid := start.Add(15 * 24 * time.Hour)
+	mid := start.Add(14 * 24 * time.Hour)
 	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "", 0)
 	if err != nil {
 		t.Fatal(err)

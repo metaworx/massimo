@@ -81,6 +81,10 @@ the next minor, a fix counts the suffix up.
   TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
   to port 443, the one a router forwards (`README.md`, "Server").
 
+- CI runs the tests on 32-bit ARM under QEMU, as the Raspberry Pi 1's
+  core, and `make test-armv6` does the same where `qemu-arm` is
+  installed (`GUIDELINES/project/CI.md`).
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill
