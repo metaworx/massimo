@@ -731,9 +731,25 @@ Rules:
 - The store refuses a file it did not create (no `schema_version`
   table) rather than migrating a stranger's database.
 - Tests: migrating an empty file to the latest version,
-  migrating a file at every earlier version (the test keeps a fixture database
-  per released version),
+  migrating a file at every earlier version,
   and opening a newer additive version with an older reader.
+- The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
+  is the text dump of the store a release's `serve` wrote against the fake Cube,
+  one for each release since the store came (v0.7.0-alpha.1),
+  made by `tools/store-fixture/make.sh <tag>`.
+  The script builds the tag and sends every release the same requests:
+  the settings, setpoints, a room renamed, a user and a key,
+  a backup by hand, each where the release takes it.
+  Then it dumps the release's own `store backup` with `sqlite3 .dump`.
+  A dump is text, so a review reads it and `tools/identifiers` checks it;
+  only placeholders reach it.
+  `TestMigratesReleasedStores` loads each as its release left it and opens it,
+  which migrates it:
+  the file stays sound, no table loses a row, `events` keeps exactly its own,
+  every event has its source, and the log, the users and the backups read.
+  A pull request that adds a migration adds the dump of the newest release
+  when it is missing,
+  so that each release's file is migrated by every later binary.
 - `store.sql`, beside the migrations, is the schema they make of an empty file,
   generated, never edited by hand:
   every table as SQLite keeps its statement (an added column at its end),

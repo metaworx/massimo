@@ -26,6 +26,10 @@ the next minor, a fix counts the suffix up.
   made from the migrations beside it and checked by `go test`
   (`docs/store.md`, "Migrations").
 
+- The store's tests migrate a store written by each release since
+  v0.7.0-alpha.1, kept as text dumps that `tools/store-fixture` makes
+  (`docs/store.md`, "Migrations").
+
 - The log keeps the server's own events beside the Cube's, each with
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
