@@ -58,6 +58,9 @@ the next minor, a fix counts the suffix up.
   `brew upgrade` as the service's user and restarts the job
   (`packaging/README.md`, "Homebrew").
 
+- `serve -discover-listen <addr>` puts the discovery socket on another
+  address than UDP 23272, for tests with a fake Cube (`README.md`).
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill
@@ -79,6 +82,9 @@ the next minor, a fix counts the suffix up.
 - `serve`'s wiring is the package `internal/serve`, which a program
   embedding the server calls as the command does; nothing changes for
   `massimo serve` itself.
+
+- CI runs all four cases of the web UI suite on a pull request too, in
+  four workers (`GUIDELINES/project/CI.md`, section 2).
 
 - The log's metadata and config lines say what changed, and a reconnect
   is one line with the Cube's devices, rooms, firmware and duty cycle;

@@ -342,6 +342,8 @@ def test_server_page_token_from_bridge(new_context, case, watch, guard):
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")
     page.locator("#login-form button[type=submit]").click()
+    # The rooms are still drawn behind the dialog: the session is waited for.
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'setToken').length >= 2", 10), "the sign-in hands the app its session"
     page.wait_for_selector(".room", timeout=10000)
     sets = calls(page, "setToken")
     assert len(sets) == 2 and isinstance(sets[1][1], str) and sets[1][1] not in ("", TOKEN), f"the session goes to the app: {sets}"

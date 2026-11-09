@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.14.0)
+# Massimo — CI Conventions (v1.15.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve` and `internal/announce`); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' traces, screenshots and videos as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers, and on two of the suite's four cases); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve` and `internal/announce`); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers; all four of the suite's cases, in four workers); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
@@ -63,15 +63,22 @@ the runner's fonts give other pixels,
 so the artifact is for looking at,
 and nothing compares it with the committed set.
 
-The Screenshots job is the run's longest, about 7½ minutes,
-6½ of them for the suite's 204 cases (51 tests,
-each at 1100 and 390 px, in English and German);
+The Screenshots job is the run's longest.
+The suite's 484 runs (121 tests,
+each at 1100 and 390 px, in English and German)
+run in four pytest-xdist workers, one per CPU of the runner,
+each against a server set of its own (`tools/ui-test/README.md`):
+under 6 minutes on four CPUs here, against 9 for half the cases in one process,
+which a pull request ran before;
 the screenshot set takes half a minute.
-A pull request therefore runs it only when it changes `internal/server/ui/`,
+The first pass records no Playwright trace,
+whose DOM snapshots made every step slower;
+the failed tests run once more with it.
+A pull request runs the job only when it changes `internal/server/ui/`,
 `tools/ui-test/` or `.github/workflows/ci.yml`,
 the paths the contract asks `make ui-test` for and the job's own definition,
-and then on the cases 1100-en and 390-de (`PYTEST_ADDOPTS`),
-both widths and both languages, half the cases.
+and then on all four cases,
+so that a case it would have left out does not fail first on `main`.
 The job Changed paths answers that from the pull request's merge commit,
 whose first parent is the base branch.
 The condition sits on the job, not on the workflow's trigger:
@@ -81,7 +88,7 @@ while a workflow that a path filter never starts leaves the check waiting.
 Only an answer of `false` skips the job,
 so a Changed paths job that fails runs it rather than letting the pull request
 through untested.
-A push to `main` runs all four cases,
+A push to `main` runs the job whatever it changes,
 so a change elsewhere that breaks the page shows on the merge commit's run.
 
 Hardware is never touched by CI;
@@ -133,10 +140,12 @@ Where CI differs, and why:
   because the browsers in the image fit that Playwright version only:
   the image's tag and the pin move together.
   The suite's step sets `UI_TEST_REQUIRED=1`,
-  so that a missing Playwright, pytest or pytest-playwright fails the job
-  instead of skipping the tests, as `run.sh` does on a developer's machine.
+  so that a missing Playwright, pytest, pytest-playwright or pytest-xdist
+  fails the job instead of skipping the tests or running them in one process,
+  as `run.sh` does on a developer's machine.
   When a step fails, the job uploads `tools/ui-test/results/`,
-  where pytest-playwright keeps a failed test's trace, screenshot and video,
+  where pytest-playwright keeps a failed test's screenshot and video,
+  and under `retry/` the trace of its run once more,
   so that a failure on the runner can be replayed rather than retold.
   The smoke test runs in the same job, before the captures,
   because Playwright and Chromium are there anyway;

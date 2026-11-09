@@ -2,12 +2,10 @@
 # Copyright (C) 2026 The Massimo Authors
 """The Cube choice's search for new Cubes. The fake Cube answers
 discovery on a loopback port as a Cube that is not configured,
-KEQ0000000; the server's own discovery socket is UDP 23272, so where
-another program holds that port the search answers 503 and the test of
-the answer is skipped."""
+KEQ0000000; the server's own discovery socket is on a loopback port of
+its own (serve -discover-listen, run.sh), so the search needs no UDP
+23272."""
 import time
-
-import pytest
 
 from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, scroll_width, show_view, wait_until
 
@@ -32,8 +30,6 @@ def test_search_held_then_answered(page, case):
         held[0].continue_()  # on to the server, which asks the fake Cube
     page.unroute("**/api/v1/cubes/discover")
     assert wait_until(page, "!discovery.running", 10), "search done"
-    if "bad" in (page.locator("#cube-search").get_attribute("class") or ""):
-        pytest.skip("the server has no discovery socket (UDP 23272 in use?): " + page.locator("#cube-search").inner_text())
     assert page.locator("#cube-search").inner_text() == found_text(case.lang, 1), "search result shown"
     opt = cube_item(page, "found:KEQ0000000")
     assert opt.count() == 1 and opt.is_disabled(), "found Cube in the choice, not selectable"
@@ -43,7 +39,11 @@ def test_search_held_then_answered(page, case):
     facts = page.locator("#cube-found [data-serial='KEQ0000000'] .found-facts")
     assert facts.count() == 1 and " · DHCP · " in facts.inner_text(), "the found Cube's DHCP flag"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes"
+    # A Cube is announced once per server: where an earlier test on this
+    # server found it, its cube_found is older than the log's last 20
+    # events can be, so the log is asked for the kind.
     show_view(page, "log")
+    page.locator("#log-kind").select_option("cube_found")
     assert wait_until(page, "[...document.querySelectorAll('.log-line.kind-cube_found')].some((l) => l.textContent.includes('KEQ0000000'))", 5), \
         "cube_found in the log"
     show_view(page, "tiles")

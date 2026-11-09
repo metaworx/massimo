@@ -46,6 +46,7 @@ func runServe(args []string) error {
 		discoverTargets = append(discoverTargets, v)
 		return nil
 	})
+	discoverListen := fs.String("discover-listen", "", "the local address of the discovery socket, for the searches and the proxy's answers, instead of :23272, the only port the Cubes answer to and the original software asks; for tests, with -discover-target (a fake Cube's -discovery answers to any port)")
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
 	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr (default MASSIMO_LOG)")
 	logLevelFlag := fs.String("log-level", os.Getenv(env.LogLevel), "log at this level and above: "+logLevelNames+" (default "+env.LogLevel+", else info)")
@@ -177,7 +178,7 @@ func runServe(args []string) error {
 	}
 
 	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), Serial: selectedSN, SerialGiven: snExplicit,
-		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets,
+		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot,
 		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: logger,
 		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}}

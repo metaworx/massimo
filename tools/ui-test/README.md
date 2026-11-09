@@ -4,31 +4,50 @@
 The script:
 
 1. builds massimo;
-2. starts the fake Cube (`massimo fakecube`), which also answers discovery
+2. starts a server set for each of four pytest-xdist workers
+   (`UI_TEST_WORKERS`, default 4), each set:
+   the fake Cube (`massimo fakecube`), which also answers discovery
    and has a device that joins pairing mode (`-pair 0a010d,0abcde,TEQ0000001`:
    a copy of the radiator thermostat 0a010d, two seconds after `n:`,
    again after it was removed), with `greeting.txt`,
    which is the protocol fixture from internal/protocol/cube/testdata plus an
    `L:` line with device states (measured temperatures included) and a window contact,
    "Fenster Kind 1", that reports an open window;
-3. starts `massimo serve` against the fake Cube,
+   `massimo serve` against the fake Cube,
    with the API token `ui-test-token`;
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
    which the server seeds into its store,
-   `massimo.db` in the temporary directory;
+   `massimo.db` in the set's temporary directory;
+   and the second server, of a Cube that is not connected (`test_home.py`);
+3. waits until every program of every set says it listens on its own port
+   and every server is connected to its fake Cube,
+   and stops if one of them has stopped meanwhile:
+   a server of another run on one of the ports would answer the same token;
 4. runs the pytest suite in this directory with `pytest-playwright` (Chromium),
-   handing it the page's address in `UI_TEST_URL`, the token in `UI_TEST_TOKEN`
-   and the server's log in `UI_TEST_SERVE_LOG`.
+   in the workers, a file's tests together in one worker (`--dist loadfile`),
+   handing worker `gw<n>` set n's page address in `UI_TEST_URL`,
+   the token in `UI_TEST_TOKEN` and the server's log in `UI_TEST_SERVE_LOG`
+   (`conftest.py` takes them from `UI_TEST_URL_<n>` and the others).
 
-Both servers run on loopback ports of their own (62919 and 8119;
-set `UI_TEST_CUBE_PORT` and `UI_TEST_API_PORT` to change them).
-They run in an empty temporary directory without the caller's environment,
+Set 0 runs on loopback ports of its own:
+the fake Cube on 62919 (`UI_TEST_CUBE_PORT`) with its discovery on 23919
+(`UI_TEST_DISCOVERY_PORT`),
+the server on 8119 (`UI_TEST_API_PORT`)
+and the second server on 8120 (`UI_TEST_DOWN_PORT`, the server's + 1).
+Set n takes the fake Cube's two ports + n and the servers' two + 2n,
+so another session running the suite at the same time needs ports further apart
+than twice its workers.
+The programs run in empty temporary directories without the caller's environment,
 so a `.env` or `MASSIMO_*` variables can't point them at real hardware.
-Both are stopped at the end.
+All are stopped at the end.
+
+`UI_TEST_WORKERS=1` runs the suite in one process against one set, as before
+the workers; so does a machine without pytest-xdist, which `run.sh` says.
 
 When Playwright, pytest or pytest-playwright is missing,
 `make ui-test` says so and exits 0;
-with `UI_TEST_REQUIRED=1`, which CI sets, it exits 1 instead.
+with `UI_TEST_REQUIRED=1`, which CI sets, it exits 1 instead,
+as it does without pytest-xdist and more than one worker.
 
 ## Running all, one file, one test
 
@@ -38,6 +57,7 @@ PYTEST_ADDOPTS='-k cubes' make ui-test                # the tests whose names ma
 PYTEST_ADDOPTS='-k "hidden and 390-de"' make ui-test  # one test in one case
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
+UI_TEST_WORKERS=1 make ui-test                        # in one process
 ```
 
 `PYTEST_ADDOPTS` is pytest's own;
@@ -46,9 +66,18 @@ whose working directory is `tools/ui-test/`, so files are named from there.
 A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
 then the browser.
 
-Of a failed test, pytest-playwright keeps the trace,
+Of a failed test, pytest-playwright keeps
 the screenshot and the video in `tools/ui-test/results/`,
-one directory per test (gitignored, emptied at the start of every run);
+one directory per test (gitignored, emptied at the start of every run).
+The first pass records no trace:
+its DOM snapshots make every step slower,
+840 ms instead of 14 for a step in System settings at 1100 px,
+and slow every wait with it.
+When tests fail, `run.sh` runs them once more with the trace
+(`--last-failed --tracing retain-on-failure`, the same arguments),
+and keeps the trace of each that fails again in `tools/ui-test/results/retry/`;
+it says whether they failed again, and the run fails either way:
+a test that passes only the second time is flaky, not fixed.
 `python -m playwright show-trace <trace.zip>` replays a trace step by step,
 with the page's DOM, console and network at every step.
 
@@ -88,7 +117,7 @@ Rooms, the log and System settings with their header button,
 or the log and System settings from ☰ on a narrow screen,
 My profile and My settings from the 👤 menu.
 
-The four cases share the one server,
+The four cases share the one server of a worker,
 so a test that changes the server's store puts it back;
 what a test stores in the browser goes with its context.
 
@@ -146,18 +175,17 @@ what a test stores in the browser goes with its context.
   a refused search (a stubbed 503) shows the server's message.
   The fake Cube answers discovery on loopback (`-discovery`,
   `UI_TEST_DISCOVERY_PORT`, 23919),
-  and the server asks it there (`-discover-target`).
-  The server's own discovery socket is UDP 23272 as always,
-  so where another program holds that port the search answers 503
-  and the tests that need an answer are skipped.
+  and the server asks it there (`-discover-target`)
+  from a discovery socket on a free loopback port (`-discover-listen 127.0.0.1:0`),
+  so no set needs UDP 23272, which another program may hold.
 - `test_cubes.py`, System settings → Cubes:
   a new name is saved and shown in the Cube choice,
   the settings file's name is offered as a differing line and "Take the file's
   value" brings it back;
   hiding the devices of the last room takes its tile away and showing them again
   brings it back; the found Cube KEQ0000000, its DHCP flag shown,
-  is added and removed again (the test searches first where nothing was found yet,
-  and is skipped without a discovery answer), Remove asks in the panel,
+  is added and removed again (the test searches first where nothing was found yet),
+  Remove asks in the panel,
   and Keep takes the question back;
   a redraw of the open panel asks for nothing again,
   so the focus stays in the pairing form being typed in
@@ -373,7 +401,7 @@ on every push to `main` and every pull request,
 in Microsoft's Playwright image,
 and uploads the PNGs as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`);
 when a step fails it also uploads `tools/ui-test/results/`,
-the failed tests' traces, screenshots and videos,
+the failed tests' screenshots and videos and the retry's traces,
 as the artifact `ui-test-results`.
 It does not make the slideshow, which needs ImageMagick:
 `slideshow.sh` is run where the set is taken, and the GIF committed with it.

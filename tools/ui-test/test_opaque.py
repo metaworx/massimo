@@ -6,6 +6,7 @@ whose password the page registered with the vendored client
 carries the password. Each case has a user of its own, removed at the
 end; the console is not watched, since the page's first requests without
 a token are refused on purpose."""
+import json
 import time
 
 from conftest import TOKEN, URL, api_call
@@ -111,7 +112,10 @@ def test_passwords_registered_in_the_browser(page, case, new_context):
         panel.locator("summary").click()
         panel.locator("[name=password]").fill("second-pass")
         panel.locator(".user-form button[type=submit]").first.click()
-        assert wait_until(page, "!document.getElementById('users-msg').classList.contains('hidden') && document.getElementById('users-msg').classList.contains('ok')", 10), "the password is set"
+        # The add's "<name> created." is ok too: the save's own words.
+        saved = page.evaluate("(name) => t('users.saved', { name })", name)
+        assert wait_until(page, f"document.getElementById('users-msg').textContent === {json.dumps(saved)} && document.getElementById('users-msg').classList.contains('ok')", 10), \
+            "the password is set"
         assert sign_in_in(probe, name, "second-pass") and not sign_in_in(probe, name, "first-pass"), "the second password replaced the first"
 
         own = ctx.new_page()

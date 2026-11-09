@@ -848,7 +848,7 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
-          description: The discovery port (UDP 23272) is not available
+          description: The discovery port (UDP 23272, or the address of serve -discover-listen) is not available
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
