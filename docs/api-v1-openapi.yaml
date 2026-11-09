@@ -1743,7 +1743,11 @@ paths:
         device_forgotten (a device deleted from the Cube left the server's
         copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),
         restore_step and restore_done (with the progress of a restore in
-        "restore", see POST …/restore). A state
+        "restore", see POST …/restore); the server's own, source system:
+        server_started, server_stopping, settings_read, restart, reboot,
+        reboot_cancelled, update, update_result, backup, backup_deleted,
+        backups_pruned, log_pruned, restore_started; a Cube's own:
+        address_changed, cube_gone. A state
         event after a device's first one has "changes": per changed value
         of state, {"from": …, "to": …} (null for a value the device did not
         have), and "reported" when the Cube gained or lost its state. A

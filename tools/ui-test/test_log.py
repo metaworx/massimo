@@ -111,6 +111,32 @@ def test_log_says_what_changed(page, case):
     show_view(page, "tiles")
 
 
+SERVER_SAYS = {
+    "en": {"started": "started, version v9.9.9, before v9.9.8", "backup": "backup 12 taken (by hand), by Anna"},
+    "de": {"started": "gestartet, Version v9.9.9, vorher v9.9.8", "backup": "Backup 12 erstellt (von Hand), durch Anna"},
+}
+
+
+def test_log_server_lines(page, case):
+    """The server's own lines say what they are, and who asked for one."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(ev) }));
+      send("server_started", { kind: "server_started", source: "system", level: "info", time: now(), summary: { version: "v9.9.9", before: "v9.9.8" } });
+      send("backup", { kind: "backup", source: "system", level: "info", time: now(), summary: { reason: "manual", id: 12, bytes: 2048 },
+        by: { name: "anna", display_name: "Anna" } });
+    }""")
+    says = SERVER_SAYS[case.lang]
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-backup').length > 0", 5), "the backup's line"
+    started = page.locator("#log-lines .log-line.kind-server_started").first.locator(".log-text").inner_text()
+    backup = page.locator("#log-lines .log-line.kind-backup").first.locator(".log-text").inner_text()
+    assert started == says["started"], f"the start: {started}"
+    assert backup == says["backup"], f"the backup: {backup}"
+    show_view(page, "tiles")
+
+
 def stamp(now, i):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
 

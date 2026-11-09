@@ -280,8 +280,8 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 	for len(kinds) < 2 {
 		select {
 		case ev := <-ch:
-			if !strings.HasPrefix(ev.Kind, "restore_") {
-				continue
+			if ev.Kind != "restore_step" && ev.Kind != "restore_done" {
+				continue // restore_started is the system's line, without the run's progress
 			}
 			kinds = append(kinds, ev.Kind)
 			if ev.Restore == nil || ev.Restore.ID != id || ev.Restore.Steps != 1 || !ev.Restore.OK {

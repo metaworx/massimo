@@ -248,7 +248,8 @@ type ProxyListener struct {
 type Server struct {
 	opts    Options
 	log     *slog.Logger
-	started time.Time // when the server was created, for /healthz
+	stopWhy atomic.Value // string: why the server will stop (noteStop)
+	started time.Time    // when the server was created, for /healthz
 	mu      sync.RWMutex
 	cubes   map[string]*runtime // by serial, lower case
 	order   []string
@@ -608,6 +609,7 @@ func (s *Server) Run(ctx context.Context) error {
 	} else {
 		close(writerDone)
 	}
+	s.logStarted(ctx)
 	for _, rt := range s.runtimes() {
 		s.startRuntime(rt)
 	}
@@ -623,6 +625,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
 	<-ctx.Done()
+	s.logStopping() // before the writer stops, which writes it
 	// Once ctx is done nothing new is tracked (track); taking the lock
 	// waits for a track that saw ctx alive, so Wait cannot race an Add.
 	s.mu.Lock()

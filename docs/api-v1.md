@@ -1793,6 +1793,22 @@ with its type, serial, name and room), `cube_found` (with `cube`,
 a Cube that is not configured, see POST /cubes/discover),
 `restore_step` and `restore_done` (with `restore`, the progress of a restore,
 see POST /restore).
+The server's own lines, source `system`, each with its `summary` and, where a
+request asked for it, `by`:
+`server_started` (`version`, and `before` when it changed),
+`server_stopping` (`why`: `restart`, `reboot`, `update` or `stop`),
+`settings_read` (the settings file read again: `why`, the names of the
+variables `changed` and of those waiting `at_next_start`, never their values),
+`restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
+`update_result` (the helper's outcome after the restart, once:
+`state`, `from`, `to`; a failure at `warn` with its `error`),
+`backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
+`backup_deleted` (`id`), `backups_pruned` and `log_pruned` (`removed`),
+`restore_started` (`id`, `steps`, `radio_commands`).
+A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
+and `cube_gone` (with `cube`, a Cube found before that no longer answers).
+A failure the server reports, such as a reboot the helper did not start,
+is its kind's line at `warn` with the `error`.
 A comment line is sent every 30 seconds to keep the connection alive.
 
 An event of a device carries its radio address as `device` and its serial number

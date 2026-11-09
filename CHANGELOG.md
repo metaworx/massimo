@@ -30,6 +30,10 @@ the next minor, a fix counts the suffix up.
   its source, its level and who started it; the store's migration 0009
   rebuilds its events table once (`docs/store.md`, "Migrations").
 
+- The log shows the server's start, stop, restart, reload, reboot,
+  update, backups and prunes, and a Cube's new address or its leaving
+  the LAN (`docs/ui.md`, "Log").
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what

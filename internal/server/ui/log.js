@@ -19,7 +19,9 @@ const LOG_PAGE = 200;
 // LOG_KINDS are the kinds of event the server sends, in its order
 // (eventKinds in internal/server/log.go, which TestLogKinds compares).
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-  "device_forgotten", "cube_found", "restore_step", "restore_done"];
+  "device_forgotten", "cube_found", "restore_step", "restore_done",
+  "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
+  "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "restore_started"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
 // LOG_COUNT events, the last 10 minutes, the last hour, today, this week
@@ -240,8 +242,49 @@ function logSummaryText(kind, s) {
       if (s.portal_enabled !== undefined) return t("log.sum.cubeConfig", { portal: t(s.portal_enabled ? "log.on" : "log.off"), winter: s.tz_winter || "–", summer: s.tz_summer || "–" });
       if (s.comfort_temp !== undefined) return t("log.sum.config", { comfort: fmtNum(s.comfort_temp, 1), eco: fmtNum(s.eco_temp, 1), offset: fmtNum(s.temp_offset, 1) });
       return "";
+    case "server_started":
+      return s.before ? t("log.sum.startedFrom", { version: s.version || "–", before: s.before }) : t("log.sum.started", { version: s.version || "–" });
+    case "server_stopping":
+      return t("log.sum.stopping", { why: logWord("log.why.", s.why) });
+    case "settings_read": {
+      const why = logWord("log.readWhy.", { "the settings file changed": "file", SIGHUP: "sighup", "the API": "api" }[s.why] || s.why);
+      const changed = (s.changed || []).join(", ");
+      const pending = (s.at_next_start || []).join(", ");
+      if (!changed && !pending) return t("log.sum.readNothing", { why });
+      return t("log.sum.read", { why, changed: changed || "–", pending: pending || "–" });
+    }
+    case "restart":
+      return t("log.sum.restart");
+    case "reboot":
+      return t("log.sum.reboot");
+    case "reboot_cancelled":
+      return t(s.why ? "log.sum.rebootOff" : "log.sum.rebootCancelled");
+    case "update":
+      return t("log.sum.update", { from: s.from || "–", to: s.to || "–" });
+    case "update_result":
+      return t("log.sum.updateResult", { from: s.from || "–", to: s.to || "–", state: logWord("log.updateState.", s.state) });
+    case "backup":
+      return s.id ? t("log.sum.backup", { id: s.id, reason: logWord("log.reason.", s.reason) }) : t("log.sum.backupFailed", { reason: logWord("log.reason.", s.reason) });
+    case "backup_deleted":
+      return t("log.sum.backupDeleted", { id: s.id });
+    case "backups_pruned":
+      return t("log.sum.backupsPruned", { n: s.removed });
+    case "log_pruned":
+      return t("log.sum.logPruned", { n: s.removed, days: s.keep_days });
+    case "restore_started":
+      return t("log.sum.restoreStarted", { steps: num(s.steps) });
+    case "address_changed":
+      return t("log.sum.addressChanged", { from: s.from || "–", to: s.to || "–" });
   }
   return "";
+}
+
+// logWord is a value's word in the language shown, the value itself where
+// the page has none.
+function logWord(prefix, v) {
+  const key = prefix + v;
+  const s = t(key);
+  return s === key ? String(v) : s;
 }
 
 // logLine turns an event object into a line of the view; the text of a
@@ -266,14 +309,19 @@ function logLine(ev) {
     summary: ev.summary || null,
     missed: !!ev.while_disconnected,
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
-    cube: ev.kind === "cube_found" ? ev.cube : null,
+    cube: ev.kind === "cube_found" || ev.kind === "cube_gone" ? ev.cube : null,
+    by: ev.by || null,
+    error: ev.error || "",
     text: ev.error || "",
   };
 }
 
 function logText(line) {
-  const text = logOwnText(line);
-  return line.missed && text ? t("log.whileDisconnected", { text }) : text;
+  let text = logOwnText(line);
+  if (line.error && text !== line.error) text = text ? text + ": " + line.error : line.error;
+  if (line.missed && text) text = t("log.whileDisconnected", { text });
+  if (line.by) text = t("log.by", { text, name: line.by.display_name || line.by.name });
+  return text;
 }
 
 // logOwnText is a line's text without the note of when it changed.
@@ -291,7 +339,7 @@ function logOwnText(line) {
     if (s) return s;
   }
   if (line.state) return logStateText(line.state);
-  if (line.cube) return t("discover.log", { serial: line.cube.serial, address: line.cube.address || "–" });
+  if (line.cube) return t(line.kind === "cube_gone" ? "log.sum.cubeGone" : "discover.log", { serial: line.cube.serial, address: line.cube.address || "–" });
   return line.text;
 }
 

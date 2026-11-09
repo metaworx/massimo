@@ -243,6 +243,12 @@ was down, follows it, a line each ("Room “Bath” renamed “Bathroom” (whil
 disconnected)").
 A list or configuration line says what changed: "MEQ0000101 “Window” moved
 from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
+The server's own lines are there too: its start with its version, its stop
+and why, the settings file read again with the names of what changed, a
+restart, a reboot or an update asked for and its outcome, the backups, their
+prune and the log's, a restore started; and a Cube's new address or its
+leaving the LAN.
+A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
 Expert mode also shows the debug lines, such as the greeting's hello, room
 and device list and configurations, each with its summary, which the log
 leaves out otherwise.
