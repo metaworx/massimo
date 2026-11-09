@@ -7,15 +7,6 @@ What is done is in CHANGELOG.md, one section per release;
 docs/handover-session.md is the context a session needs to work here.
 
 1. **On the hardware**, by the owner, with a session watching the log:
-   2. TLS (the TLS plan's NOTE, item 10):
-      a certificate from Let's Encrypt's staging directory by DNS-01
-      through the Cloudflare hook;
-      TLS-ALPN-01 and HTTP-01 against a local Pebble,
-      as the box has no public address;
-      the self-signed notice on a phone.
-      HSTS is on for a year once TLS serves:
-      a box that goes back to `http://` runs once with `-hsts 0` first.
-      Then `EXEC retire` for AP Tls v1.1.
    3. Pairing (docs/api-v1.md, "Pairing"): the six steps of pull request #10,
       the assumptions marked unverified in docs/portal-protocol.md,
       the copy of the room's settings on a real thermostat,
@@ -59,7 +50,9 @@ docs/handover-session.md is the context a session needs to work here.
    (in the header's expert list for now) and `log.keep_days`,
    which the settings API already takes.
 7. **TLS, later**, each a plan of its own: UPnP, a local CA,
-   a Pebble job in CI so that a test reaches an ACME server.
+   a Pebble job in CI so that a test reaches an ACME server;
+   the DNS hooks checking for `curl` and `jq`,
+   which the Debian package does not name (HookDeps).
 8. **Translations**:
    a native speaker's review of FR, IT, NL and PL;
    the server's error texts in the UI's language.
@@ -91,7 +84,9 @@ docs/handover-session.md is the context a session needs to work here.
     the update's own command marked dropped at the next start;
     a note in README.md and docs/update-windows.md
     that a Windows service created before v0.7.0 needs `install` again
-    before the Update button works.
+    before the Update button works;
+    `install` warning that the API is open to the LAN
+    while the server signs users in (AuthWarning).
 13. **Housekeeping**:
     the `.env` copies and the release key in the Mint box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;

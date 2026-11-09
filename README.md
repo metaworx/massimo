@@ -573,9 +573,11 @@ the server makes one at its first start for the box's names (its hostname,
 `<hostname>.local`, `localhost`, its addresses,
 and `-tls-names` for a name you gave it) into the data directory's `tls/`,
 valid 825 days and renewed 30 days before the end with the names it has;
-every browser warns once per device,
-and the fingerprint to compare is in the log, in `massimo config`,
-in `massimo tls show`, in `/healthz` and under the page's header.
+every browser warns once per device:
+compare the fingerprint in its certificate details with the one in the log,
+in `massimo config` or in `massimo tls show` on the box,
+before signing in, as the page asks (`/healthz` carries it too,
+but over the connection in question).
 A box whose address changed gets a new one with `massimo tls self-signed`,
 which a running server takes up at once.
 `-tls acme -tls-names <name>` gets a certificate from Let's Encrypt for a
@@ -584,7 +586,8 @@ the validation reaches the box on port 443 (a router forwards its public
 443 to the server's port; the name's record is the public address,
 dynamic DNS where it changes), by TLS-ALPN-01 on the listener itself,
 or with `-tls-http :80` by HTTP-01 on a plain port 80 as well,
-which then redirects to `https://`.
+which then redirects to `https://<name>:443/`,
+the port the router forwards, whatever `-listen` says.
 `-acme-email` gives the account a contact address;
 the account key and the certificates live in the data directory's `tls/acme/`.
 A client that names no host, as one does for an address (`https://127.0.0.1`,

@@ -871,15 +871,18 @@ function renderStarted(iso) {
 }
 
 // renderTLS shows the certificate the server serves, from /healthz's
-// tls: in expert mode its source, names and expiry, and under the header
-// a notice with the fingerprint while it is self-signed, so the owner
-// can compare it with the server's log after the browser's warning, and
-// a warning while the certificate ends within two weeks (or has none
-// yet), computed here from not_after so that it speaks the page's
-// language.
+// tls: in expert mode its source, names and expiry, and, while it is
+// self-signed, a notice under the header and in the sign-in dialog
+// asking to compare the fingerprint the browser shows for it with
+// massimo tls show on the box before signing in; and a warning while
+// the certificate ends within two weeks (or has none yet), computed
+// here from not_after so that it speaks the page's language. The page
+// shows no fingerprint: it comes over the very connection in question,
+// and a man in the middle would pass the server's along, or rewrite it.
 function renderTLS(tls) {
   const dd = $("tls-cert");
   const notice = $("tls-notice");
+  $("login-tls").classList.toggle("hidden", !(tls && tls.self_signed));
   if (!tls) {
     dd.textContent = "–";
     notice.classList.add("hidden");
@@ -899,7 +902,6 @@ function renderTLS(tls) {
     else if (days < 14) texts.push(tn("header.certExpires", days));
   }
   $("tls-notice-text").textContent = texts.join(" ");
-  $("tls-fingerprint").textContent = tls.self_signed ? tls.fingerprint || "" : "";
   notice.classList.toggle("hidden", texts.length === 0);
 }
 

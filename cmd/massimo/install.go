@@ -27,7 +27,7 @@ func runInstall(args []string) error {
 	tlsNames := fs.String("tls-names", "", "with -tls self-signed, names and addresses the certificate holds besides the box's own; with -tls acme, the DNS name the certificate is for; comma-separated")
 	acmeEmail := fs.String("acme-email", "", "with -tls acme, the account's contact address")
 	acmeDirectory := fs.String("acme-directory", "", "with -tls acme, the CA's directory URL, such as Let's Encrypt's staging one, https://acme-staging-v02.api.letsencrypt.org/directory, for a first try (default: Let's Encrypt's)")
-	tlsHTTP := fs.String("tls-http", "", "with -tls acme, also listen on this plain address, such as :80, for the HTTP-01 challenge and the redirect to https://")
+	tlsHTTP := fs.String("tls-http", "", "with -tls acme, also listen on this plain address, such as :80, for the HTTP-01 challenge and the redirect to https://<name>:443/, the port a router forwards")
 	acmeDNSHook := fs.String("acme-dns-hook", "", "with -tls acme, get the certificate by the DNS-01 challenge through this executable (packaging/acme-dns-hooks/), readable and executable by the service user; no port, wildcards allowed")
 	dryRun := fs.Bool("dry-run", false, "only show what would be done")
 	remove := fs.Bool("remove", false, "stop and remove the service and the binary")

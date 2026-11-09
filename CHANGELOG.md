@@ -74,6 +74,10 @@ the next minor, a fix counts the suffix up.
   takes as well, and sent on the event stream as `notification`
   (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
 
+- The log says when Let's Encrypt issued or renewed a certificate by
+  TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
+  to port 443, the one a router forwards (`README.md`, "Server").
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill
@@ -136,6 +140,16 @@ the next minor, a fix counts the suffix up.
 - A build from a release tag's checkout follows the tag's update
   channel, such as `alpha`, no longer `HEAD`, which has no releases
   (`README.md`, "From source").
+
+- A self-signed certificate is valid 825 days in all, as Apple requires
+  of one it trusts; the hour it is dated back made it 825 days and an
+  hour (`README.md`, "Server").
+
+### Security
+
+- The web UI shows no self-signed certificate's fingerprint, which a man
+  in the middle passes along; its notice, also in the sign-in dialog,
+  asks to compare the browser's with `massimo tls show` (`docs/ui.md`).
 
 ## [0.12.0-alpha.1] - 2026-11-08
 

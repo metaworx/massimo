@@ -35,7 +35,8 @@ const (
 	selfSignedCert = "self-signed.pem"
 	selfSignedKey  = "self-signed.key"
 	// SelfSignedValidity is 825 days: Apple trusts no TLS server
-	// certificate issued for longer, even one installed by hand.
+	// certificate issued for longer, even one installed by hand. They
+	// count from NotBefore, the hour it is dated back included.
 	SelfSignedValidity = 825 * 24 * time.Hour
 	// RenewBefore is how long before it expires the pair is made anew.
 	RenewBefore = 30 * 24 * time.Hour
@@ -133,9 +134,10 @@ func (s *SelfSigned) Check(now time.Time) {
 }
 
 // Generate writes a self-signed ECDSA P-256 pair for the names (DNS
-// names and addresses; the first DNS name is the subject) valid for
-// SelfSignedValidity from now, the files mode 0600 in a directory mode
-// 0700, each written beside its place and renamed over.
+// names and addresses; the first DNS name is the subject) valid from an
+// hour before now, for a clock a little behind, for SelfSignedValidity
+// in all, the files mode 0600 in a directory mode 0700, each written
+// beside its place and renamed over.
 func Generate(certPath, keyPath string, names []string, now time.Time) (Status, error) {
 	if len(names) == 0 {
 		return Status{}, fmt.Errorf("tls: a certificate needs at least one name")
@@ -148,10 +150,11 @@ func Generate(certPath, keyPath string, names []string, now time.Time) (Status, 
 	if err != nil {
 		return Status{}, err
 	}
+	notBefore := now.Add(-time.Hour)
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
-		NotBefore:             now.Add(-time.Hour), // a clock a little behind
-		NotAfter:              now.Add(SelfSignedValidity),
+		NotBefore:             notBefore,
+		NotAfter:              notBefore.Add(SelfSignedValidity),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
