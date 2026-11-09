@@ -1,11 +1,11 @@
-# AP Logging v1.1: log sources and serials
+# AP Logging v1.2: log sources and serials
 
 ## TL;DR
 
 The log names devices by their S/N, says what changed,
 and gains sources (the devices, the Cube, System, Configuration),
 who made each change, and a level per line.
-Seven blocks, a pull request each.
+Blocks 1 to 7 are merged; Block 8 indexes the warnings (D15-A).
 
 - a device in the log → its radio address → its S/N, the address in expert mode
 - a removed device → `device_forgotten 0a0101` → "Removed thermostat TEQ0000001
@@ -19,6 +19,8 @@ Seven blocks, a pull request each.
   with `source`, `serial`, `level`, `user_id` (migration 0009, D1-A, D7-A)
 - the store's schema → eight migrations to read → one generated `schema.sql`
   (D10-A)
+- a page of warnings → every row read, 11 s on the Pi 1 → the warnings only
+  (migration 0011)
 
 ### Blocks
 
@@ -33,6 +35,8 @@ Seven blocks, a pull request each.
 6. ChangeEvents: a line beside each change's audit row, with who; the command
    line's too
 7. LogFilter: the source, level and who choices, the address, the documents
+8. LevelIndex: migration 0011, an index of the warnings and errors;
+   the page's term that uses it
 
 ## Discussion
 
@@ -61,6 +65,8 @@ and its Block 1 moves `serve`'s wiring from `cmd/massimo/serve.go` into
 `internal/serve`.
 Whichever migration merges second takes the next number, 0010;
 Block 5 here writes the server's start and stop wherever the wiring lives then.
+This plan's merged first, as 0009, and ServerAnnouncements' as
+`0010_push_subscriptions.sql`; Block 8's is 0011.
 
 **The owner's input on the store:** an `events.user_uuid`, filled when a user
 started the action, maybe indexed.
@@ -100,6 +106,25 @@ as they were then; the same for roles (id, key) and keys (id, uuid, name).
 - **The removed line** reads "Removed thermostat TEQ0000001 (Window)", the name
   as it was; without a name, "Removed thermostat TEQ0000001".
 
+**Decided at the gates of v1.1**, by the owner:
+
+- **D13-A.** The schema file is `internal/store/migrations/store.sql`,
+  its test `TestStoreSQL` in `migrate_test.go`,
+  the embed `migrations/[0-9]*.sql`.
+- **D14-A.** Blocks 4 to 7 in one pull request, a commit each (#124).
+
+**Decided after the Pi timing**
+([NOTE Logging v1.1: pi timing](2026-11-09_11-34_NOTE_Logging_v1.1_pi_timing.md)),
+by the owner:
+
+- **D15-A.** A page of a level that has fewer than a page of rows read every
+  row of the Cube: 11 s on the Pi 1 at 90,000 events, the store's one
+  connection held meanwhile.
+  A partial index of the warnings and errors ends that walk, in migration 0011,
+  as Block 8; rather than a cap on the rows a page reads (D15-B),
+  which would change what the API calls a page,
+  or the walk left as it is and documented (D15-C).
+
 **Names chosen here**, routine and not the owner's decisions:
 the blocks' names; the sources `device`, `cube`, `system` and `config`;
 the levels `debug`, `info`, `warn` and `error`, as the text log names them;
@@ -108,7 +133,9 @@ the kinds in the Analysis' table; the event fields `serial`, `source`,
 the migration `0009_events_sources.sql`; the tests in the Implementation Plan;
 the branches `claude/log-serial`, `claude/schema-file`, `claude/log-store`,
 `claude/log-detail`, `claude/server-events`, `claude/change-events` and
-`claude/log-filter`.
+`claude/log-filter`;
+Block 8's migration `0011_events_warnings.sql`, its index `events_cube_warn`
+and its branch `claude/level-index`.
 
 **Not in this plan:**
 
@@ -351,7 +378,9 @@ CREATE INDEX events_user ON events (user_id) WHERE user_id IS NOT NULL;
 - **The level has no index:** `level >= ?` is a range, and an index on it would
   give up the id order; it is checked on the rows the walk reads.
   An info page reads past the debug rows among them, about fourteen per
-  reconnect with twelve devices; a page of warnings may read further back.
+  reconnect with twelve devices; a page of warnings may read further back,
+  every row of the Cube where it has fewer than a page of them:
+  Block 8's index ends that walk.
 - **The backfill**, in the copy:
   `serial` from `data`'s `state.serial`, else from another row of the same Cube
   and radio address (one pass builds that map over the old index
@@ -385,6 +414,62 @@ A device's page (`serial = ?`) needs the Cube's walk only.
 The route gains `source=` (`device`, `cube`, `system`, `config`), `level=`
 and `user=` (a login name, as the audit's route takes it);
 `device=` takes a S/N or a radio address.
+
+### The warnings' index: migration 0011
+
+Read on `main` at 7e942b4, after Blocks 1 to 7 and the Pi timing merged.
+
+**The walk:** `eventsQuery` (`internal/store/events.go`) checks the level as
+`+level >= ?` on each row the Cube's index gives, newest first,
+until the page is full.
+A page of warnings where the Cube has fewer than a page of them reads every
+row of the Cube.
+Measured on 2026-11-09 on copies of the owner's two stores, grown to 90,000
+events ([NOTE Logging v1.1: pi timing](2026-11-09_11-34_NOTE_Logging_v1.1_pi_timing.md)):
+154 ms on the Raspberry Pi 5, 11 s on the Raspberry Pi 1 (5 to 16 s),
+the store's one connection held all the while,
+so every request that needs the store waits.
+
+**The index (D15-A):**
+
+```sql
+CREATE INDEX events_cube_warn ON events (cube_id) WHERE level >= 4;
+```
+
+- It holds the warnings and errors only, each Cube's in id order, since SQLite
+  keeps the rowid last in an index, and the server's under `cube_id IS NULL`:
+  a page of warnings reads the warnings, newest first, and stops at the page.
+- **The page's term:** SQLite takes a partial index only for a query whose
+  terms imply the index's `WHERE`, and cannot tell that of a bound value, its
+  plan being made before the value is known.
+  So a page at `warn` or above adds the literal term `level >= 4`,
+  written from `LevelWarn`, beside the bound `+level >= ?`, which stays the
+  filter.
+- **Errors:** a page of errors reads the warnings and the errors,
+  at most every warning of the Cube.
+  The server writes no line at `error` today, and the UI offers no such choice;
+  an index of their own would be a second partial index, left out.
+- **With another term**, a kind, a source, a device or a user,
+  SQLite keeps choosing that term's index, as now,
+  and checks the level on its rows: that walk is bounded by the term's rows.
+- **A trial** with Python's SQLite 3.45 on `store.sql` and 90,000 rows of one
+  Cube, 90 of them warnings:
+  the page of warnings went from 32 ms to 0.5 ms,
+  its plan `SEARCH events USING INDEX events_cube_warn (cube_id=?)`;
+  with an id bound `(cube_id=? AND rowid<?)`, with a time bound the same and
+  `events_cube_time` for the bound's own lookup;
+  with a kind, a source or a serial their own indexes, as before.
+- **The insert:** a warning or an error gains one index entry;
+  any other row pays SQLite's check of the `WHERE`, nothing more.
+  The Pi 1's copy held a third warnings; timed on the PC before and after,
+  a batch of 100 with a third warnings, not on the boxes.
+- **The migration** reads every row once, at the new binary's first open;
+  D12-A left the migration's time aside.
+- **`min_reader` stays 1:** an index is additive.
+  A binary of version 9 or 10 opens the file as before,
+  and SQLite keeps the index up to date for its inserts too.
+- **The Pi's figures after Block 8** need a new copy of each store,
+  with the owner's go: the NOTE's test binary, built again.
 
 ### Who
 
@@ -446,14 +531,15 @@ the complete one.
 | `internal/server/audit.go` and the handlers | 6 | the `change` line beside the audit row |
 | `cmd/massimo/user.go` | 6 | the command line's `change` lines |
 | `internal/store/schema.sql` (new), `store_test.go` | 2, 3 | the generated schema and its test |
+| `internal/store/migrations/0011_events_warnings.sql` (new), `store.sql`, `events.go`, `events_test.go` | 8 | the warnings' index, the page's term, the shapes' plans |
 | `internal/store/migrations/0009_events_sources.sql`, `events.go`, `migrate.go` | 3 | the rebuild, the backfill, the columns, the walks, the prune |
 | `internal/server/ui/log.js`, `app.js`, `config.js`, `cubes.js`, `tiles.js`, `partials/log.html`, `i18n/*.json` | 1, 4–7 | the S/N, the lines' texts, the choices |
 | `tools/ui-test/` | 1, 4, 7 | the log's S/N, lines and choices at 1100 and 390 px |
 | `docs/api-v1.md`, `docs/api-v1-openapi.yaml` | 1, 3–6 | the events' fields and kinds, the route's parameters, the device path |
 | `docs/ui.md` | 1, 4–7 | the log |
-| `docs/store.md` | 2, 3 | the schema file, the schema, migration 0009, the page |
+| `docs/store.md` | 2, 3, 8 | the schema file, the schema, migrations 0009 and 0011, the page |
 | `README.md` | 6 | `massimo user …` writes the log too |
-| `CHANGELOG.md` | 1–7 | a bullet each under Unreleased |
+| `CHANGELOG.md` | 1–8 | a bullet each under Unreleased |
 
 ### Risks
 
@@ -462,8 +548,9 @@ the complete one.
 - **`serve`'s wiring moves** under AP ServerAnnouncements' Block 1:
   Block 5 follows it there.
 - **The insert:** two indexes more per row; measured, not guessed.
-- **A page of warnings** walks back past every info and debug row: measured on
-  the Pi with the insert; an index per level is the fallback.
+- **A page of warnings** walks back past every info and debug row:
+  measured on the Pi with the insert, 11 s at 90,000 events on the Pi 1;
+  Block 8's partial index ends it (D15-A).
 - **The reference after a restart** is the newest backup, taken some minutes
   after a change (`backups.auto_min`): a change made just before a stop can be
   logged again after the start.
@@ -489,7 +576,8 @@ A route that takes a new form gets a test that checks the line sent to the
 fake Cube, and `TestOpenAPICoversRoutes` holds the OpenAPI file to the routes.
 Every UI text goes through `t()` or `data-i18n` in all six languages,
 FR, IT, NL and PL machine-translated and marked.
-One functional commit per block, citing `AP Logging v1.1, Block <n>`,
+One functional commit per block, citing `AP Logging v1.1, Block <n>`
+for Blocks 1 to 7 and `AP Logging v1.2, Block 8` for the last,
 with its CHANGELOG bullet in the wrapped style of its neighbours.
 
 ### Block 1: LogSerial
@@ -716,19 +804,56 @@ its line with the user's name.
 
 **Verification:** the test gate; `make ui-test` at 1100 and 390 px.
 
+### Block 8: LevelIndex
+
+On the branch `claude/level-index`, from `origin/main`.
+
+1. `internal/store/migrations/0011_events_warnings.sql`: the partial index
+   `events_cube_warn` of the Analysis, `min_reader` 1, its comment saying why;
+   `store.sql` written again
+   (`go test ./internal/store -run TestStoreSQL -update`).
+2. `internal/store/events.go`, `eventsQuery`: at `MinLevel` `warn` or above,
+   the literal term `level >= 4` from `LevelWarn` beside `+level >= ?`;
+   its comment and `Events`' say why the term is literal.
+3. `internal/store/events_test.go`, `TestEventsPageQuery`: the shapes of
+   errors, of warnings with an id bound, a time bound and the server's,
+   and the check that a page of warnings or errors with no other term walks
+   `events_cube_warn`, where the other Cube's and the server's warnings
+   are in the index too.
+   `TestMigratesAVersionOneFile` and `TestStoreSQL` take 0011 as they are.
+4. `docs/store.md`: section 2, "Speed";
+   section 5, the index in the listing and the level's walk;
+   "Migrations", 0011.
+5. `CHANGELOG.md`, Unreleased, Added, after the bullet of migration 0009:
+
+   ```
+   - The store's migration 0011 indexes the log's warnings and errors,
+     so that a page of them reads those rows only, not the whole log:
+     11 s at 90,000 events on a Raspberry Pi 1 before (`docs/store.md`).
+   ```
+
+**Verification:** the test gate, without `make ui-test`, since no UI file
+changes;
+`TestEventsPageQuery` at 90,000 events logs the page of warnings before and
+after the block;
+a batch of 100 events with a third warnings, timed on the PC before and after
+by a scratch test, not committed;
+on the owner's boxes, **only with the owner's go**:
+the NOTE's test binary again on a new copy of each store.
+
 ## Proposed commit message
 
 The revision's commit, on `main`, before the run's first project write:
 
 ```
-chore(aps): +Logging v1.1
+chore(aps): +Logging v1.2
 
-The owner's answers at the gates of v1.0: the greeting's lines kept at debug beside the one connected line at info, with a level stored and chosen; the UI sends the S/N; a generated schema file; the Pi checks the insert only; the other decisions as recommended.
+The owner's D15-A after the Pi timing: a page of warnings read every row of a Cube's log, 11 s at 90,000 events on the Raspberry Pi 1 with the store's one connection held, so Block 8 gives the warnings and errors an index of their own.
 
 Key changes:
-- GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md: seven blocks, the schema file as Block 2 and the store before the lines' detail; the levels; the decisions settled; beside AP ServerAnnouncements' migration 0009.
+- GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md: Block 8, LevelIndex: migration 0011 with the partial index events_cube_warn, and the page's literal term that lets SQLite use it; its Analysis with the trial's plans; D13-A, D14-A and D15-A recorded; Blocks 1 to 7 merged.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md::v1.1::2026-11-09::TL;DR, Discussion, Analysis, Implementation Plan::the owner's decisions D1 to D12, the levels and the schema file
+File-revision-v1: GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md::v1.2::2026-11-09::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Block 8, the warnings' index
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
@@ -741,6 +866,7 @@ The blocks' commits:
 5. `feat(log): The server's own jobs and a Cube's address in the log`
 6. `feat(log): Every change says who made it`
 7. `feat(ui): The log chooses a source, a level and who`
+8. `perf(store): A page of warnings reads the warnings only`
 
 ## Change History
 
@@ -754,3 +880,8 @@ The blocks' commits:
   detail; D12-A, the Pi times the insert only; the removed line with the name as
   it was; D1 to D3, D5, D7, D8 and D11 as recommended; beside AP
   ServerAnnouncements' migration 0009.
+- v1.2 (2026-11-09): the owner's D15-A after the Pi timing, Blocks 1 to 7
+  merged: Block 8, LevelIndex, a partial index of the warnings and errors in
+  migration 0011, since a page of warnings read every row, 11 s on the Pi 1;
+  the Analysis of the walk; D13-A and D14-A, taken at the gates of v1.1,
+  recorded in the Discussion.
