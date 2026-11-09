@@ -160,6 +160,10 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("%w: %d", ErrNoToken, id)
 	}
+	// What the token subscribed to push goes with it.
+	if err := removePushSubscriptions(ctx, s.db, 0, id); err != nil {
+		return fmt.Errorf("store: token %d: %w", id, err)
+	}
 	return nil
 }
 
@@ -170,6 +174,9 @@ func (s *Store) RevokeSessions(ctx context.Context, userID int64) error {
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, version = version + 1 WHERE user_id = ? AND kind = ? AND revoked_at IS NULL`, s.nowText(), userID, TokenSession); err != nil {
+		return fmt.Errorf("store: sessions of %d: %w", userID, err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE user_id = ? AND kind = ? AND revoked_at IS NOT NULL)`, userID, TokenSession); err != nil {
 		return fmt.Errorf("store: sessions of %d: %w", userID, err)
 	}
 	return nil

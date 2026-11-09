@@ -26,6 +26,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/proxy"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -347,6 +348,7 @@ func (s *Server) cubeFound(f foundCube) {
 	}
 	s.log.Info("cube found on the LAN, not configured", "serial", f.Serial, "ip", f.Address, "mac", f.MAC)
 	s.logServer(event{Kind: "cube_found", Source: "cube", Serial: f.Serial, Cube: &f, Time: f.LastSeen})
+	s.pushNotify(notify.Event{Kind: "cube_found", Cube: f.Serial, Values: map[string]any{"address": f.Address}, Time: f.LastSeen})
 }
 
 // cubeGone is the one place where a Cube becomes gone: it answered the

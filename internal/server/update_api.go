@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -131,6 +132,9 @@ func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 			v.Latest, v.ReleaseURL = rel.Tag, rel.URL
 			cur, ok := update.ParseVersion(u.Version)
 			v.Available = !ok || update.Compare(rel.Version, cur) > 0
+			if v.Available {
+				s.pushNotify(notify.Event{Kind: "update", Values: map[string]any{"version": rel.Tag}})
+			}
 		}
 	}
 	if u.Status != "" {

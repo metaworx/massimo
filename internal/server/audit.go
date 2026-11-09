@@ -92,6 +92,8 @@ var actions = map[string]string{
 	"PUT /api/v1/capabilities/{key}":               "capability.disable",
 	"PUT /api/v1/me/preferences/{key}":             "preference.set",
 	"DELETE /api/v1/me/preferences/{key}":          "preference.delete",
+	"POST /api/v1/me/push":                         "push.subscribe",
+	"DELETE /api/v1/me/push/{id}":                  "push.unsubscribe",
 }
 
 // noCommand are the actions that are audited but are no command: they

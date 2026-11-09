@@ -95,6 +95,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
 	"go.metaworx.ch/massimo/internal/store"
@@ -217,6 +218,9 @@ type Options struct {
 	// StaleAfter is the stale threshold of the device views (0:
 	// view.StaleAfter); SetStaleAfter changes it while the server runs.
 	StaleAfter time.Duration
+	// notifyClock is the notification rules' clock, for the tests; nil
+	// is the real one.
+	notifyClock notify.Clock
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
@@ -246,8 +250,12 @@ type ProxyListener struct {
 
 // Server is the HTTP API over a set of Cubes.
 type Server struct {
-	opts    Options
-	log     *slog.Logger
+	opts Options
+	log  *slog.Logger
+	// notify runs the notification rules (push_api.go), nil without a
+	// store; vapidMu makes the VAPID key once.
+	notify  *notify.Sink
+	vapidMu sync.Mutex
 	started time.Time // when the server was created, for /healthz
 	mu      sync.RWMutex
 	cubes   map[string]*runtime // by serial, lower case
@@ -553,6 +561,7 @@ func New(opts Options) *Server {
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	if opts.Store != nil {
+		s.notify = s.newNotify()
 		s.refusals = newRefusalAudit(s.writeRefusal)
 		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
 		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
@@ -606,6 +615,10 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
+	if s.notify != nil {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
+	}
 	<-ctx.Done()
 	// Once ctx is done nothing new is tracked (track); taking the lock
 	// waits for a track that saw ctx alive, so Wait cannot race an Add.
@@ -771,6 +784,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			ev.settle()
 			rt.remember(ev)
+			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()
 			for ch := range rt.subs {
 				select {
@@ -939,6 +953,10 @@ func (s *Server) routes() {
 	api("GET /api/v1/me/preferences/{key}", "any", s.getPreference)
 	api("PUT /api/v1/me/preferences/{key}", "preferences", s.putPreference)
 	api("DELETE /api/v1/me/preferences/{key}", "preferences", s.deletePreference)
+	api("GET /api/v1/push/vapid", "read", s.getVAPID)
+	api("GET /api/v1/me/push", "preferences", s.listPush)
+	api("POST /api/v1/me/push", "preferences", s.addPush)
+	api("DELETE /api/v1/me/push/{id}", "preferences", s.deletePush)
 	api("GET /api/v1/users", "users", s.listUsers)
 	api("POST /api/v1/users", "users", s.postUser)
 	api("GET /api/v1/users/{name}", "users", s.getUser)

@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
   (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
   and marks a proxy among the Cubes (`README.md`, "Server").
 
+- Notification rules on the Cubes' events, per user in the `notify`
+  preference, and push subscriptions under `/api/v1/me/push` with the
+  server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
+
 ### Changed
 
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
