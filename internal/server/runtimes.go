@@ -79,7 +79,7 @@ func (rt *runtime) setConfig(change func(*CubeConfig)) {
 // ("" waits for discovery).
 func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	opts := s.opts
-	rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]int64{}, push: map[chan struct{}]struct{}{},
+	rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(), push: map[chan struct{}]struct{}{},
 		structure: make(chan struct{}, 1),
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
 	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: opts.Logger})

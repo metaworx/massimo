@@ -32,6 +32,10 @@ What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
 so the session never appears in a URL.
+After an interruption the page opens a new stream that resumes after the
+last event it read, so what happened meanwhile still arrives;
+where the server no longer holds it, the page reloads the rooms
+(docs/api-v1.md, "GET …/events").
 
 ## Header
 
@@ -676,6 +680,12 @@ is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
+The week programme editor is an element of its own, `<massimo-week-program>`
+(`week-program.js`), so that a Home Assistant card can use the same editor:
+it holds the editor's behaviour, works on a model the page keeps,
+builds its controls with a kit the page gives it (`components.js`, `t()`),
+and tells the page of every edit with a `change` event;
+the programme tab puts it in a form with Cancel, Send and the two resets.
 A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.

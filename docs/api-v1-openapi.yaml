@@ -1870,6 +1870,13 @@ paths:
         configuration. A comment line
         every 30 seconds keeps the stream alive. Browsers open it
         without headers: pass a ticket from POST …/events/ticket.
+        Every event carries an id, "<epoch>-<number>"; the connection's
+        state events none but the last, which carries the newest. A client
+        that reconnects with the last id it read, in Last-Event-ID or
+        last_event_id, gets the events since and no state burst; an id the
+        server no longer holds gets a resync event, then the state burst.
+        A client that falls behind is sent what is queued, then the stream
+        ends.
       security:
         - bearer: []
         - ticket: []
@@ -1878,6 +1885,8 @@ paths:
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {name: ticket, in: query, description: Single-use ticket from POST …/events/ticket, schema: {type: string}}
+        - {name: last_event_id, in: query, description: "The last event id the client read, to resume after it; Last-Event-ID wins where both are given", schema: {type: string}}
+        - {name: Last-Event-ID, in: header, description: "The last event id the client read, as a browser's retry sends it", schema: {type: string}}
         - {name: token, in: query, deprecated: true, description: "The API token itself; deprecated, it ends up in URLs and logs. Answered with the header Deprecation: @1793836800 (RFC 9745)", schema: {type: string}}
       responses:
         "200":

@@ -141,6 +141,19 @@ Interfaces: UDP `key=value` lines or HTTP to the Miniserver,
 virtual output HTTP calls to the API with a scoped key,
 Loxone Config template export (XML), a LoxBerry plugin.
 
+Home Assistant is the other platform, and where a site makes it the hub,
+it takes the role Loxone has here
+([homeassistant.md](homeassistant.md); AP HomeAssistant, 2026-11-09):
+Massimo publishes its own rooms and devices,
+and the platform renders them as one more client, beside the web UI and the
+apps; its writes go through the API, the queue and the radio budget.
+Until Massimo's own integration exists, Home Assistant's `maxcube` reads
+the Cube through the LAN proxy.
+The integration signs in with a key of the role `integration`,
+follows the event stream with its ids and resume,
+and edits week programmes with the web UI's editor element.
+Its owner, with a lease as Loxone's, is still to be decided.
+
 ## 5. REST API, web UI, events and webhooks
 
 API versioned under `/api/v1`, OpenAPI description, resources for sites,

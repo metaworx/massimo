@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The event stream gives every event an id and resumes after the last
+  one a client read, or says `resync`; the web UI resumes with it
+  (`docs/api-v1.md`, "GET …/events").
+
 - `massimo -no-env` reads no settings file, as `-env /dev/null` did,
   also on Windows (`README.md`, "Cube variables").
 
@@ -97,6 +101,14 @@ the next minor, a fix counts the suffix up.
   installed (`GUIDELINES/project/CI.md`).
 
 ### Changed
+
+- The web UI's week programme editor is an element of its own,
+  `<massimo-week-program>`, for a Home Assistant card to use too; it
+  works as before (`docs/ui.md`).
+
+- The role `integration` may configure: week programmes, temperatures,
+  device settings; migration 0012 adds it where the role is still the
+  seeded one (`docs/store.md` section 6).
 
 - The Homebrew caveats and the settings template ask for nothing to fill
   in and name the first owner; `brew services restart` follows
