@@ -101,6 +101,15 @@ func (e *replyTimeout) Error() string {
 	return fmt.Sprintf("cubelan: no %c reply to %c command within %s", e.want, e.cmd, e.after)
 }
 
+// keepAlive finds a dead Cube between polls: after 15 s without traffic
+// a probe every 5 s, and the third unanswered one ends the connection,
+// about 30 s after the Cube went. The Cube acknowledges the probes
+// (checked on hardware on 2026-11-09). Go's default, 15 s apart and 9
+// probes, needs 150 s of silence, which a poll every minute never
+// leaves. A probe is not sent while a poll's bytes are unacknowledged;
+// that case is pollMisses'.
+var keepAlive = net.KeepAliveConfig{Enable: true, Idle: 15 * time.Second, Interval: 5 * time.Second, Count: 3}
+
 // pollMisses is how many polls in a row, with no line from the Cube
 // between them, the Cube may leave unanswered before its connection is
 // taken for lost: one may be late, two are a Cube that is gone, as one
@@ -123,7 +132,7 @@ func New(opts Options) *Client {
 		opts.RemindEvery = 24 * time.Hour
 	}
 	if opts.Dialer == nil {
-		d := &net.Dialer{Timeout: 10 * time.Second}
+		d := &net.Dialer{Timeout: 10 * time.Second, KeepAliveConfig: keepAlive}
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
 	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
@@ -378,9 +387,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 }
 
 // readDeadline is generous: the Cube is silent between polls, and with
-// polling disabled it may be silent for a long time. With polling, two
-// unanswered polls end the connection sooner (pollMisses); the deadline
-// is the backstop.
+// polling disabled it may be silent for a long time. The keepalive
+// (keepAlive) and, with polling, two unanswered polls (pollMisses) end
+// the connection to a dead Cube sooner; the deadline is the backstop.
 func (c *Client) readDeadline() time.Duration {
 	if c.opts.PollInterval > 0 {
 		return 3*c.opts.PollInterval + 30*time.Second

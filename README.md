@@ -684,9 +684,12 @@ Writes that a client of the proxy (below) sends,
 such as the original software's, are followed up the same way.
 The log lists every wakeup and every radio command the Cube accepted,
 with its duty cycle and free slots.
-`serve` asks each Cube for its device list every minute (`-poll`);
-a Cube that leaves two of these polls in a row unanswered is lost,
-within two polls and ten seconds, as one whose network cable is out:
+`serve` asks each Cube for its device list every minute (`-poll`),
+and between these polls the connection's TCP keepalive probes the Cube.
+A Cube that stops answering, as one whose network cable is out, is lost
+about 30 seconds after the last traffic,
+or once it leaves two polls in a row unanswered,
+within two polls and ten seconds:
 `serve` logs `cube connection lost`,
 its proxy stops answering discovery for it ([docs/proxy.md](docs/proxy.md)),
 and it tries again, at most a minute apart, until the Cube answers.

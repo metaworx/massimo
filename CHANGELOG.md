@@ -133,8 +133,8 @@ the next minor, a fix counts the suffix up.
   avahi in Docker, and CI against mDNSResponder and Windows' mDNS as well
   (`tools/mdns-test/README.md`).
 
-- serve takes a Cube that leaves two polls in a row unanswered for
-  lost, within two polls and 10 s, and reconnects; it waited three
+- serve takes a silent Cube for lost and reconnects: after about 30 s
+  without traffic, or two polls in a row unanswered; it waited three
   polls and 30 s (`README.md`, "Server").
 
 ### Fixed
