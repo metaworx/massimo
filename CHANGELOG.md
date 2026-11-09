@@ -133,6 +133,10 @@ the next minor, a fix counts the suffix up.
   `discover` in Docker, against avahi, with a Cube's cable pulled and a
   second server's proxy (`tools/lan-test/README.md`).
 
+- CI checks the announcement beside mDNSResponder and Windows' mDNS,
+  and runs discovery's tests on Windows as well
+  (`GUIDELINES/project/CI.md`).
+
 ### Fixed
 
 - The Debian package restarts a running service on an upgrade, also on

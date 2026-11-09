@@ -352,11 +352,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
+      # Discovery's tests as well: Windows binds UDP ports otherwise than
+      # Linux, a wildcard beside an address's own port (CI.md, section 3).
       - name: Unit tests
         shell: bash
         run: |
-          go test ./internal/update/... ./internal/install/... ./cmd/...
-          go test -run Update ./internal/server/
+          go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/...
+          go test -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
 
       # The service against the fake Cube, with the update from the web
       # UI's request (docs/update-windows.md, section 6): the server
