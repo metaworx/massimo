@@ -324,7 +324,7 @@ const stateData = `{"kind":"state","device":"0abc01","time":"2026-11-06T10:00:00
 // into the table, step apart from start: one in 500 connected (source
 // cube), one in 97 config, the others state, over thirty devices, each
 // with its serial; one in 13 at debug, one in 1000 at warn.
-func fill(t *testing.T, s *Store, cube int64, n int, start time.Time, step time.Duration) {
+func fill(t testing.TB, s *Store, cube int64, n int, start time.Time, step time.Duration) {
 	t.Helper()
 	_, err := s.db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ? - 1)
 		INSERT INTO events (uuid, cube_id, time, kind, source, level, device, serial, data)

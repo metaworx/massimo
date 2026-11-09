@@ -64,6 +64,12 @@ jobs:
       - name: go test
         run: go test ./...
 
+      # The store's benchmarks once each, with -short, to see that they
+      # still run (docs/store.md section 5, "Measuring on a box"); no
+      # time is compared.
+      - name: Benchmarks, once
+        run: go test -run '^$' -bench . -benchtime 1x -short ./internal/store
+
       - name: Cross build
         run: make cross
 
