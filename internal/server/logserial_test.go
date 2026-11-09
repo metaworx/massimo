@@ -48,10 +48,10 @@ func TestLogEventsCarrySerial(t *testing.T) {
 	}
 	var evs []event
 	eventually(t, "a config event per device and the Cube's own", func() bool {
-		_, evs = logOf(t, ts, "?kind=config&limit=1000")
+		_, evs = logOf(t, ts, "?kind=config&limit=1000&level=debug") // the greeting's own lines
 		return len(evs) >= len(serials)+1
 	})
-	_, states := logOf(t, ts, "?kind=state&limit=1000")
+	_, states := logOf(t, ts, "?kind=state&limit=1000&level=debug")
 	own := 0
 	for _, e := range append(evs, states...) {
 		switch {

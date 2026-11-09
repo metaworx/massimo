@@ -23,7 +23,7 @@ func TestLogSourceFilter(t *testing.T) {
 		_, evs := logOf(t, ts, "?kind=state")
 		return len(evs) > 0
 	})
-	s.logServer(event{Kind: "server_started", Source: "system", Time: time.Now()})
+	s.logServer(event{Kind: "settings_read", Source: "system", Time: time.Now()}) // beside the start's server_started
 	_, all := logOf(t, ts, "?limit=1000")
 	sources := map[string]int{}
 	for _, e := range all {
@@ -32,7 +32,7 @@ func TestLogSourceFilter(t *testing.T) {
 		}
 		sources[e.Source]++
 	}
-	if sources["system"] != 1 || sources["device"] == 0 || sources["cube"] == 0 {
+	if sources["system"] != 2 || sources["device"] == 0 || sources["cube"] == 0 {
 		t.Fatalf("the sources of the log: %v", sources)
 	}
 	for _, src := range []string{"system", "device", "cube"} {
@@ -46,7 +46,7 @@ func TestLogSourceFilter(t *testing.T) {
 			}
 		}
 	}
-	rows, err := st.Events(context.Background(), store.EventQuery{Kind: "server_started", Limit: 10})
+	rows, err := st.Events(context.Background(), store.EventQuery{Kind: "settings_read", Limit: 10})
 	if err != nil || len(rows) != 1 || rows[0].CubeID != 0 || rows[0].Source != "system" {
 		t.Fatalf("the server's event in the store: %+v %v", rows, err)
 	}

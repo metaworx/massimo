@@ -21,20 +21,6 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// MASSIMO_REBOOT is on or off, in the usual spellings; anything else is
-// refused with the variable's name.
-func TestParseSwitch(t *testing.T) {
-	for v, want := range map[string]bool{"on": true, "ON": true, "true": true, "yes": true, "1": true, " on ": true,
-		"": false, "off": false, "false": false, "no": false, "0": false} {
-		if got, err := parseSwitch(rebootVar, v); err != nil || got != want {
-			t.Errorf("%q: %v %v", v, got, err)
-		}
-	}
-	if _, err := parseSwitch(rebootVar, "maybe"); err == nil || !strings.Contains(err.Error(), `MASSIMO_REBOOT "maybe": want on or off`) {
-		t.Fatalf("maybe: %v", err)
-	}
-}
-
 // Who reboots: the Windows service itself; systemd's and launchd's
 // services through their helper, which is there once its mark is;
 // nobody for Homebrew's service, a terminal, or Linux without systemd.

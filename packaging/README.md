@@ -296,6 +296,11 @@ and start it once the file differs from the template,
 so that a fresh box does not serve the LAN without a token.
 Fill in `/etc/massimo/env` as "Install by hand" describes,
 then `sudo systemctl start massimo`.
+The service listens on the LAN, so it announces itself by mDNS (README.md,
+"Server"; `MASSIMO_ANNOUNCE=off` stops it);
+a firewall on the box lets in 5353/udp for that,
+beside 62910/tcp and 23272/udp for the proxy and 8099/tcp for the page (with ufw:
+`sudo ufw allow 5353/udp`).
 The next package upgrades the binary and restarts the service;
 the settings and the store are left alone.
 
@@ -724,7 +729,8 @@ The owner can reboot the computer from System settings → Maintenance
 and take the reboot back meanwhile.
 Two things make it so, and both are the owner's:
 `MASSIMO_REBOOT=on` in the settings file (or `serve -allow-reboot`),
-which `serve` applies at once (`true`, `yes` and `1` too, in any case),
+which `serve` applies at once (`true`, `yes`, `1` and `enabled` too,
+in any case),
 and on Linux and macOS a root helper that only root installs:
 
 ```bash
@@ -807,7 +813,7 @@ It creates the service `massimo` (Massimo in the Services console):
 automatic start, running as LocalSystem, restarted after 10 s on failure,
 running `massimo -env C:\ProgramData\Massimo\env serve -listen :8099 -log …`;
 and a firewall rule for the program on private and domain networks (not public ones),
-which covers the API, the Cube proxy and discovery.
+which covers the API, the Cube proxy, discovery and the mDNS announcement.
 `-listen <addr>` changes the address, and installing again keeps it.
 `-tls-cert <pem> -tls-key <pem>` copies the files into `C:\ProgramData\Massimo\`
 and sets `MASSIMO_TLS`,

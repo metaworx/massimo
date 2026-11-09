@@ -185,12 +185,18 @@ func (s *Server) startRestart(w http.ResponseWriter, r *http.Request) error {
 		attrs = append(attrs, "user", p.user.Name)
 	}
 	s.log.Info("restart requested", attrs...)
+	s.noteStop("restart")
+	s.logServer(systemEvent("restart", userIDOf(r), map[string]any{"by": v.By}))
 	// The stop waits for this request, its answer and its audit row
 	// (cmd/massimo, serveHTTP), so the restart may begin before the
 	// answer is written.
 	if err := s.opts.Restart.Restart(); err != nil {
 		s.restartGate.asked.Store(false)
+		s.noteStop("")
 		s.log.Error("restart not started", "error", err)
+		failed := systemEvent("restart", userIDOf(r), map[string]any{"by": v.By})
+		failed.Level, failed.Error = "warn", err.Error()
+		s.logServer(failed)
 		return fail(http.StatusInternalServerError, "starting the restart: %v", err)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "by": v.By})

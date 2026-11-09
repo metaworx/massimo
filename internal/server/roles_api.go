@@ -134,6 +134,7 @@ func (s *Server) postRole(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	s.log.Info("role added", "role", created.Key, "remote", s.clientIP(r))
+	auditSubject(r, map[string]any{"id": created.ID, "key": created.Key, "name": created.Name})
 	writeJSON(w, http.StatusCreated, viewRole(created))
 	return nil
 }
@@ -164,6 +165,7 @@ func (s *Server) putRole(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	s.log.Info("role changed", "role", changed.Key, "remote", s.clientIP(r))
+	auditSubject(r, map[string]any{"id": changed.ID, "key": changed.Key, "name": changed.Name})
 	writeJSON(w, http.StatusOK, viewRole(changed))
 	return nil
 }
