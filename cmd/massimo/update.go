@@ -98,11 +98,15 @@ func runUpdate(args []string) (err error) {
 
 	// A package manager that owns the binary keeps owning it: -check still
 	// says what is out, nothing is installed or rolled back from here. The
-	// helper asks apt where apt is the owner (update_apt.go).
+	// helper asks apt or brew where it is the owner (update_apt.go,
+	// update_brew.go).
 	if !*check {
 		if m, ok := packaged(); ok {
 			if *request != "" && m.Name == "apt" {
 				return aptUpdate(ctx, status, *health, *healthWait)
+			}
+			if *request != "" && m.Name == "brew" {
+				return brewUpdate(ctx, status, *restart, *health, *healthWait)
 			}
 			err := fmt.Errorf("this massimo is %s", m)
 			status(update.Status{State: "failed", From: version, Message: err.Error()})
@@ -241,8 +245,11 @@ func confirm(q string) bool {
 	return a == "y" || a == "yes"
 }
 
-// restartService restarts the systemd unit, or on Windows the service.
-func restartService(name string) error {
+// restartService restarts the systemd unit, on macOS the launchd job, or
+// on Windows the service; a variable for the tests.
+var restartService = restartUnit
+
+func restartUnit(name string) error {
 	if name == "" {
 		return nil
 	}

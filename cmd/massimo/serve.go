@@ -156,6 +156,9 @@ func runServe(args []string) error {
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
 		packagedUpdate(&upd, m, "", os.Getenv)
+		if m.Name == "brew" {
+			serveBrewUpdate(logger, &upd, m, *listen, tlsInEffect != "off")
+		}
 	}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
 		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, tlsInEffect != "off", *updateRequest, *updateStatus); err != nil {

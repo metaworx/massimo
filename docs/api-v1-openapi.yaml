@@ -2756,7 +2756,7 @@ components:
       properties:
         current: {type: string, description: The running version}
         channel: {type: string, description: The update channel, a branch name; the apt source's suite where apt owns the binary}
-        manager: {type: string, description: "The package manager that owns the binary (apt); absent on a box massimo install set up"}
+        manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
         latest: {type: string, description: Newest signed release on the channel}
         release_url: {type: string}
         available: {type: boolean, description: latest is newer than current}

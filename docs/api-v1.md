@@ -1883,7 +1883,7 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
 the server (see `internal/update`).
 `check_error` says why a check failed.
 `manager` is the package manager that owns the binary, `apt`,
-where the Debian package installed it;
+where the Debian package installed it, or `brew` under Homebrew's service;
 absent on a box `massimo install` set up.
 `can_update` is true when POST would start an update;
 otherwise `blocked` says why it cannot be started from here (a package
@@ -1909,6 +1909,8 @@ Where `manager` is `apt`, the Debian package's helper runs apt for the massimo
 source instead, the package restarts the server,
 and nothing is rolled back: the helper's last run names the way back
 (packaging/README.md, "Debian package").
+Where it is `brew`, the server starts a helper as its own user that runs
+`brew upgrade` and restarts the job (packaging/README.md, "Homebrew").
 The request names no version and no file,
 so the most the API can do is install the newest signed release.
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;

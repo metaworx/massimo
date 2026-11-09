@@ -409,6 +409,9 @@ to the top of the page.
   and **Update** has the package's helper run apt;
   nothing is put back there, and the last update says how to go back
   (packaging/README.md, "Debian package").
+  Under Homebrew's service it says "Installed by brew",
+  and **Update** runs `brew upgrade` as the service's user
+  (packaging/README.md, "Homebrew").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
 - **Maintenance** (with `restart`, `reboot` for its reboot,

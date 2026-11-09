@@ -963,10 +963,29 @@ then start or restart the service.
 
 One owner of the binary: brew owns it,
 and the marker under the formula's `share/massimo` tells massimo so.
-`massimo update` and the web UI say when a release is out and leave it to
+`massimo update` says when a release is out and leaves it to
 `brew upgrade massimo-alpha`; `massimo install` refuses,
 since that is the layout of a Mac without Homebrew (on an Intel Mac both would
 write to `/usr/local/bin`).
+
+**Updates from the web UI.**
+brew refuses to run as root, so there is no root helper:
+under `brew services` as you, the server starts the helper itself,
+this binary in its helper mode, as you and in a session of its own,
+with the request and its last result in `$(brew --prefix)/var/massimo`
+and its log in `$(brew --prefix)/var/log/massimo-update.log`.
+It runs `brew update` (left out where `HOMEBREW_NO_AUTO_UPDATE` is set,
+as `brew upgrade` leaves it out) and `brew upgrade massimo-alpha`,
+which builds the release from source, so it takes minutes;
+then it restarts the job with `launchctl kickstart -k`,
+whose service runs the formula's `opt` binary, now the new one,
+and waits until `/healthz` reports it.
+Nothing is downgraded.
+The channel is the formula's;
+`MASSIMO_UPDATE_CHANNEL` naming another one keeps the button off, with the reason.
+A server that `sudo brew services` runs as root,
+or one started by hand, keeps the button off as well:
+`brew upgrade massimo-alpha` and a restart of the service are then yours.
 `brew uninstall massimo-alpha` removes it;
 the settings under `etc/massimo` stay, as brew keeps them.
 
@@ -976,7 +995,8 @@ conflicting with the tap's other formulae (all install `bin/massimo`),
 and pushed to the tap with a deploy key by `.github/workflows/publish.yml`,
 which the release workflow calls once the release is published;
 CI's macOS job renders it for a tarball of the checkout,
-builds and tests it, and checks the marker.
+builds and tests it, checks the marker,
+and upgrades it to a second rendering through the update helper's command.
 Until the owner has made the tap and the key, the workflow skips the push.
 
 The owner's steps, once:

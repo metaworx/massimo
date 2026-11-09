@@ -414,7 +414,8 @@ Details: [macOS](packaging/README.md#macos).
 (`sudo` for a daemon at boot),
 and the settings are in `$(brew --prefix)/etc/massimo/env`;
 brew then owns the binary and `brew upgrade` updates it,
-while the web UI and `massimo update` say when a release is out.
+which the web UI's Update runs as you under `brew services`,
+while `massimo update` says when a release is out.
 Details: [Homebrew](packaging/README.md#homebrew).
 
 ## Server

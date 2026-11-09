@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
   helper, enabled, upgrades massimo through apt from the massimo source
   alone (`packaging/README.md`, "Debian package").
 
+- The web UI's Update works under Homebrew's service too: it runs
+  `brew upgrade` as the service's user and restarts the job
+  (`packaging/README.md`, "Homebrew").
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what

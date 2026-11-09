@@ -74,7 +74,7 @@ func rebootBy(p processInfo, root string) (by, blocked string, helper func() str
 		return byWindows, "", nil
 	case p.goos == "linux" && systemdStarted(p):
 		return bySystemd, "", marked(install.RebootPathWant)
-	case p.goos == "darwin" && p.getenv("XPC_SERVICE_NAME") == homebrewLabel:
+	case p.goos == "darwin" && homebrewJob(p.getenv("XPC_SERVICE_NAME")):
 		return "", "Homebrew's service runs as a user, who cannot reboot the computer", nil
 	case p.goos == "darwin" && (p.ppid == 1 || p.getenv("XPC_SERVICE_NAME") == install.Label):
 		return byLaunchd, "", marked(install.PlistPath(install.RebootLabel))
