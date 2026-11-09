@@ -105,7 +105,3 @@ docs/handover-session.md is the context a session needs to work here.
     published on F-Droid and on Google Play.
 17. **An iOS app**:
     the same as the Android app; published on the App Store.
-18. **Discovery and the proxy**:
-    check whether Massimo can announce its own MAC address,
-    and whether `discover` can show which of the Cubes it lists is a proxy,
-    the one without an eQ-3 MAC prefix.
