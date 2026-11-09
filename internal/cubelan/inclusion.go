@@ -129,10 +129,22 @@ func (c *Client) WatchInclusion() (<-chan cube.Message, func()) {
 }
 
 // handleNewDevice takes an N line: a device that joined, or, empty, the
-// end of inclusion mode.
+// end of inclusion mode. The device is in the state before a watcher
+// gets the line, in one critical section: the proxy relays the line to
+// its client, which may ask for the state at once.
 func (c *Client) handleNewDevice(m cube.Message) {
+	var nd *cube.NewDevice
+	if m.Data != "" {
+		var err error
+		if nd, err = cube.ParseNewDevice(m.Data); err != nil {
+			c.log.Warn("bad N line from cube", "error", err)
+		}
+	}
 	inc := &c.inclusion
 	inc.mu.Lock()
+	if nd != nil {
+		inc.state.Paired = append(inc.state.Paired, *nd)
+	}
 	for ch := range inc.watchers {
 		select {
 		case ch <- m:
@@ -144,14 +156,9 @@ func (c *Client) handleNewDevice(m cube.Message) {
 		c.EndInclusion()
 		return
 	}
-	nd, err := cube.ParseNewDevice(m.Data)
-	if err != nil {
-		c.log.Warn("bad N line from cube", "error", err)
+	if nd == nil {
 		return
 	}
-	inc.mu.Lock()
-	inc.state.Paired = append(inc.state.Paired, *nd)
-	inc.mu.Unlock()
 	c.log.Info("device paired", "addr", c.Address(), "device", nd.RFAddress, "type", nd.Type, "serial", nd.Serial)
 	c.emit(Event{Kind: EventPaired, Device: nd.RFAddress, New: nd})
 }

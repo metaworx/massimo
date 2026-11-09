@@ -137,6 +137,10 @@ the next minor, a fix counts the suffix up.
   and runs discovery's tests on Windows as well
   (`GUIDELINES/project/CI.md`).
 
+- serve takes a silent Cube for lost and reconnects: after about 30 s
+  without traffic, or two polls in a row unanswered; it waited three
+  polls and 30 s (`README.md`, "Server").
+
 ### Fixed
 
 - The Debian package restarts a running service on an upgrade, also on
@@ -177,6 +181,18 @@ the next minor, a fix counts the suffix up.
 - As the service user, without `-env`, the commands read
   `/etc/massimo/env` and the store in `/var/lib/massimo` from any
   directory, not a home's `.env` (`README.md`, "Cube variables").
+
+- serve's proxy no longer answers discovery for a Cube it has lost,
+  so other servers and the original software see the Cube go; serve
+  stays findable by mDNS (`docs/proxy.md`, "Discovery").
+
+- A device that joins during pairing is in the server's pairing state
+  before a proxy client receives its N line; a race test found the
+  other order now and then.
+
+- The queue's observer test holds its first command until the next two
+  are queued, as it assumed; under QEMU the armv6 job found the queue
+  starting it first.
 
 ### Security
 

@@ -271,18 +271,35 @@ func (r *recorder) list() []string {
 	return append([]string(nil), r.calls...)
 }
 
+// startGatedRecorder holds the Started call of one command until
+// released, so that what a test queues meanwhile is recorded first.
+type startGatedRecorder struct {
+	recorder
+	gate    string
+	release chan struct{}
+}
+
+func (r *startGatedRecorder) Started(c Command) {
+	if c.ID == r.gate {
+		<-r.release
+	}
+	r.recorder.Started(c)
+}
+
 // The observer sees every command with an ID join the queue, start and
 // finish, a superseded and a drained one included, and none without.
 func TestQueueObserver(t *testing.T) {
-	rec := &recorder{}
+	rec := &startGatedRecorder{gate: "a", release: make(chan struct{})}
 	_, q, cancel := setup(t, Options{Gap: 50 * time.Millisecond, Observer: rec})
 	line := cube.Message{Type: 's', Data: "AARAAAAACgENBms="}
-	// The first command holds the queue for a gap while the next two,
-	// with one key, are enqueued: the first of them is superseded.
+	// The first command's start is held while the next two, with one
+	// key, are queued: the first of them is superseded. The queue may
+	// take the first command at once, and on a slow machine it does.
 	first := q.Enqueue(Command{ID: "a", Lines: []cube.Message{line}})
 	q.Enqueue(Command{ID: "b", Key: "k", Lines: []cube.Message{line}})
 	third := q.Enqueue(Command{ID: "c", Key: "k", Lines: []cube.Message{line}})
 	q.Enqueue(Command{Lines: []cube.Message{line}}) // no ID: not observed
+	close(rec.release)
 	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	if res := first.Wait(ctx); res.Err != nil {
