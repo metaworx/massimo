@@ -427,20 +427,26 @@ CREATE TABLE preferences (
     PRIMARY KEY (user_id, key)
 );
 
-CREATE TABLE events (
+CREATE TABLE events (                        -- made again by migration 0009
     id        INTEGER PRIMARY KEY,
-    cube_id   INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
+    cube_id   INTEGER REFERENCES cubes (id) ON DELETE CASCADE,  -- NULL: the server's
     time      TEXT    NOT NULL,
     kind      TEXT    NOT NULL,                  -- connected, state, paired, cube_found, … as the stream names them
-    device    TEXT    NOT NULL DEFAULT '',       -- radio address, '' for Cube-level events
+    source    TEXT    NOT NULL DEFAULT '',       -- device, cube, system, config; '' a row of a binary before 0009
+    level     INTEGER NOT NULL DEFAULT 0,        -- slog's: -4 debug, 0 info, 4 warn, 8 error
+    device    TEXT    NOT NULL DEFAULT '',       -- radio address, '' when none
+    serial    TEXT    NOT NULL DEFAULT '',       -- the device's serial number, or the Cube's for its own lines
+    user_id   INTEGER REFERENCES users (id),     -- who started it; NULL: the Cube, the server's own jobs, a server without users
     data      TEXT    NOT NULL                   -- JSON: the event object as GET …/log returns it today
 );
 CREATE INDEX events_cube_time ON events (cube_id, time);
--- migration 0004 (stage (d)), in place of events_device_time (cube_id, device, time):
--- each in id order within its terms, since SQLite keeps the rowid last in an index
+-- migrations 0004 and 0009: each in id order within its terms,
+-- since SQLite keeps the rowid last in an index
 CREATE INDEX events_cube ON events (cube_id);
 CREATE INDEX events_cube_kind ON events (cube_id, kind);
-CREATE INDEX events_cube_device ON events (cube_id, device);
+CREATE INDEX events_cube_source ON events (cube_id, source);
+CREATE INDEX events_cube_serial ON events (cube_id, serial);
+CREATE INDEX events_user ON events (user_id) WHERE user_id IS NOT NULL;
 
 CREATE TABLE audit (
     id        INTEGER PRIMARY KEY,
@@ -494,16 +500,27 @@ Notes on the tables:
   the per-value times the tiles' ages read and the log does not;
   `kind`, `device` and `time` are copied out for the indexes,
   and the row's `id` is the log's cursor (stage (d)).
-  A page reads one index of migration 0004 from its end, in id order,
+  Migration 0009 (AP Logging v1.1, Block 3) adds the server's own events,
+  with `cube_id` NULL, and copies out `source`, `level`, `serial` and `user_id`:
+  a Cube's log shows the server's events beside its own,
+  and a page chooses a source, a level and above, a device by its serial
+  and a user.
+  A page reads one index from its end, in id order,
   under 2 ms at 90,000 events of one Cube (`TestEventsPageQuery`);
-  a page before a time looks up the newest id before it first.
+  with the server's events it is two such walks, the Cube's and the server's,
+  each limited to the page and merged by id, since one query for both would sort.
+  A page before a time looks up the newest id before it first.
+  The level has no index, its "and above" being a range that would give up the
+  id order: a page reads past the rows below it,
+  so a page of warnings among 90,000 rows reads them all (140 ms on a PC).
   Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days`,
+  per Cube and then for the server's rows,
   30 days by default as decision 5 took it, 0 keeping everything.
-  Measured in `TestEventSize` (stage (d)):
-  a state event of about 420 bytes of JSON takes about 640 bytes in the file,
-  its indexes included,
-  so a house with thirty devices that sends 3000 events a day adds about 2 MB a day
-  and 60 MB at the default retention,
+  Measured in `TestEventSize` (stage (d), and again with 0009's columns):
+  a state event of about 420 bytes of JSON takes about 730 bytes in the file,
+  its indexes included (640 before 0009),
+  so a house with thirty devices that sends 3000 events a day adds about 2.2 MB a day
+  and 66 MB at the default retention,
   in a file on an SD card; the owner's Pi gives the real figure.
 - `audit` makes durable what today only the log has:
   which client sent which write.
@@ -594,6 +611,22 @@ and `audit.command_id`, additively.
 the record of a password of `auth_version` 2 and its key stretching (section 6,
 "The sign-in by OPAQUE"), additively:
 a binary of before reads such a user as one with keys only.
+`0009_events_sources.sql` (AP Logging v1.1, Block 3) makes `events` again,
+since SQLite cannot drop the NOT NULL of `cube_id`:
+a new table, every row copied with its id and uuid,
+the old one dropped, the new one renamed, the indexes made.
+It fills the new columns from each row's JSON:
+the serial from the event or its device view,
+else from another row of the same Cube and radio address,
+else for the Cube's own C line the Cube's;
+the source from the event, else `system` for a restore's,
+`cube` for the Cube's own C line and for a row of no device, `device` for the rest;
+the level `warn` for `disconnected`, `debug` for `hello`, `info` for the rest.
+It keeps `min_reader` 1: a binary of version 8 reads its Cube's rows by
+`cube_id = ?`, never meeting a NULL one, and writes rows without the new
+columns, which take their defaults;
+the writer of a binary of version 9 fills those (`source` empty) at its start
+(`TestOlderReaderOnNine`).
 Rules:
 
 - A migration is additive when it only adds tables,

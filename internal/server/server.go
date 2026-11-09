@@ -391,11 +391,16 @@ type event struct {
 	// device has no state yet or is gone; for the Cube's own
 	// configuration, the Cube's.
 	Serial string `json:"serial,omitempty"`
-	// Source says whose a device's event is: "device", or "cube" for the
-	// Cube's own configuration.
-	Source string      `json:"source,omitempty"`
-	Error  string      `json:"error,omitempty"`
-	State  interface{} `json:"state,omitempty"`
+	// Source says whose the event is: "device" for a device's, "cube"
+	// for the Cube's own (its configuration, connection, rooms,
+	// pairing), "system" for the server's own jobs, "config" for a change
+	// of the configuration (settle gives each kind its own).
+	Source string `json:"source,omitempty"`
+	// Level is how much the event matters: debug, info, warn or error,
+	// as the server's text log names them.
+	Level string      `json:"level,omitempty"`
+	Error string      `json:"error,omitempty"`
+	State interface{} `json:"state,omitempty"`
 	// Changes says, for a "state" event, which values differ from the
 	// device's previous state event and how; absent on the first one.
 	Changes map[string]view.Change `json:"changes,omitempty"`
@@ -410,6 +415,45 @@ type event struct {
 	// ID is the event's row in the store, for GET …/log's paging; the
 	// stream's events and the ring's have none.
 	ID int64 `json:"id,omitempty"`
+	// By is who started what the event says, as the users table names
+	// them now; absent for the Cube, the server's own jobs and a server
+	// without users (the bootstrap token is a key of the first owner).
+	By *eventUser `json:"by,omitempty"`
+	// userID is By's row in the store, kept in events.user_id.
+	userID int64
+}
+
+// eventUser names the user an event says started it.
+type eventUser struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+}
+
+// settle gives an event the source and the level its kind has where it
+// says none: the Cube's for the driver's events of no device and for
+// cube_found, the system's for a restore's; warn for a lost connection,
+// debug for the H line, which only a greeting brings; info for the rest.
+func (ev *event) settle() {
+	if ev.Source == "" {
+		switch {
+		case strings.HasPrefix(ev.Kind, "restore_"):
+			ev.Source = "system"
+		case ev.Device != "":
+			ev.Source = "device"
+		default:
+			ev.Source = "cube"
+		}
+	}
+	if ev.Level == "" {
+		switch ev.Kind {
+		case "disconnected":
+			ev.Level = "warn"
+		case "hello":
+			ev.Level = "debug"
+		default:
+			ev.Level = "info"
+		}
+	}
 }
 
 // logSize is how many events the ring keeps for GET …/log, the log of a
@@ -432,9 +476,15 @@ func (rt *runtime) remember(ev event) {
 }
 
 // emit sends an event to the Cube's stream subscribers and remembers it
-// for the log.
+// for the log, settled.
 func (rt *runtime) emit(ev event) {
+	ev.settle()
 	rt.remember(ev)
+	rt.send(ev)
+}
+
+// send hands an event to the Cube's stream subscribers.
+func (rt *runtime) send(ev event) {
 	rt.subsMu.Lock()
 	for ch := range rt.subs {
 		select {
@@ -443,6 +493,35 @@ func (rt *runtime) emit(ev event) {
 		}
 	}
 	rt.subsMu.Unlock()
+}
+
+// logServer keeps an event of the server's, no Cube's: once in the
+// store, with no Cube (cube_id NULL), which every Cube's log shows, and
+// on every Cube's stream; a Cube without a row in the store keeps it in
+// its ring, its log being the ring's.
+func (s *Server) logServer(ev event) {
+	ev.settle()
+	s.nameUser(context.Background(), &ev)
+	if st := s.opts.Store; st != nil {
+		st.AddEvent(storedEvent(0, ev))
+	}
+	for _, rt := range s.runtimes() {
+		if rt.storeID.Load() == 0 || rt.store == nil {
+			rt.remember(ev)
+		}
+		rt.send(ev)
+	}
+}
+
+// nameUser sets an event's By from its user, as the store names them
+// now; a removed user keeps the names it had.
+func (s *Server) nameUser(ctx context.Context, ev *event) {
+	if ev.userID == 0 || s.opts.Store == nil {
+		return
+	}
+	if u, ok, err := s.opts.Store.UserByID(ctx, ev.userID); err == nil && ok {
+		ev.By = &eventUser{Name: u.Name, DisplayName: u.DisplayName}
+	}
 }
 
 // recent returns the last n events, oldest first.
@@ -690,6 +769,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				ev.Paired = e.New
 				go rt.writer().Reread(ctx, e.Device)
 			}
+			ev.settle()
 			rt.remember(ev)
 			rt.subsMu.Lock()
 			for ch := range rt.subs {
