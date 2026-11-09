@@ -1,27 +1,38 @@
-# AP MdnsInterop v1.0: mDNS against real responders
+# AP MdnsInterop v1.1: mDNS and discovery on real hosts
 
 ## TL;DR
 
-`serve`'s mDNS announcement and `massimo discover` are tested against our own
-code alone, by unicast on the loopback.
-This plan tests them against the responders a box and a client really run:
-avahi in Docker, Apple's mDNSResponder and Windows' own mDNS in CI.
+`serve`'s mDNS announcement,
+its discovery and `massimo discover` are tested against our own code alone,
+on the loopback, with 127.0.0.2 standing in for a LAN address.
+This plan tests them on hosts of their own: avahi and the real ports,
+a cable pulled and a second server on the LAN in Docker,
+Apple's mDNSResponder and Windows in CI.
 
-- the announcement → our browser,
-  on the loopback → avahi beside `serve` on one box,
-  and `avahi-browse` and `discover` on another, in Docker
-- `discover`'s proxy mark → a fake Cube with eQ-3's placeholder MAC beside
-  `serve`'s proxy, the proxy marked and the Cube not
-- macOS → the existing job also finds a second `serve` with `dns-sd`
-- Windows → the existing job checks the announcement beside Windows' mDNS
-- `make mdns-test`, which needs Docker; locally in WSL too, where the LAN has
-  no multicast and a Docker bridge has
+- the announcement → avahi beside `serve` and on a client, in Docker (#144,
+  Blocks 1 and 2)
+- macOS and Windows → a second `serve` beside the system's responder (Block 2,
+  fixed after its first CI run: `-announce on` ended the flags)
+- discovery → a search through the API on its own host,
+  the real 23272 and 62910, `docker network disconnect` as the cable,
+  a second server's proxy answering too (Block 3)
+- Windows → `internal/cubelan` and the server's discovery tests in CI's
+  Windows job (Block 4)
+- the proxy and a lost Cube → once the owner has decided it (Block 5, later)
+- `make lan-test`, which needs Docker (D4)
 
 ### Blocks
 
 1. Docker: `tools/mdns-test/`, the box, the Cube and the client,
-   `make mdns-test`, its README
-2. CI: the mDNS job on Linux, the macOS and Windows steps, `CI.md`, the bullet
+   `make mdns-test`, its README (done, #144)
+2. CI: the mDNS job on Linux, the macOS and Windows steps, `CI.md`,
+   the bullet (#144), and the steps' fix after the first run
+3. LAN: a searching server in Docker, the cable pulled and put back,
+   a second server's proxy; the test named `lan-test` (D4)
+4. Windows: `internal/cubelan` and the server's discovery tests in CI's Windows
+   job, checked first from WSL
+5. The proxy and a lost Cube, once decided: the second server's Cube pulled,
+   its proxy checked (D5)
 
 ## Discussion
 
@@ -35,7 +46,40 @@ The two owner checks that plan left, the announcement on a real LAN and
 notifications on a phone, stay with the "Run Hardware/Owner tests" session;
 this plan makes what Docker and CI can reach automatic.
 
-**Open at the plan gate:**
+**The second request.**
+On 2026-11-09 the owner asked, through the FoundCubes session, for a Docker LAN
+test in this plan and for the discovery tests in CI's Windows job,
+and gave `PLAN+` for both here.
+FoundCubes' fix had been checked on hardware from the Windows side with the
+test Cube's cable out for a minute:
+a search of the Cube's address alone found it, lost it at the first search,
+found it again;
+a broadcast search still listed it, from the Raspberry Pi only,
+whose proxy answers discovery from the greeting it never clears
+(`internal/proxy/proxy.go`, `discoveryReply`).
+Whether a proxy should answer for a lost Cube is being decided apart
+(the session "Decide whether a proxy answers for a lost Cube");
+Block 5 checks what is decided.
+
+**Decided at v1.0's gate**
+(NOTE gate_decisions): D1-A, D2-A, D3-B.
+
+**Open at v1.1's gate:**
+
+- **D4.
+  The test's name, once it tests the LAN as well.**
+  A (recommended): `tools/lan-test/`,
+  `make lan-test` and the CI job "LAN against avahi",
+  renamed in Block 3 with the contract's test gate (v1.6.0),
+  `CI.md` and the README.
+  B: `mdns-test` stays, its README saying it tests discovery too.
+- **D5.
+  Where Block 5 runs.**
+  A (recommended): here, on the Docker hosts Block 3 brings up,
+  once the decision is on `main`.
+  B: in the plan that carries out the decision, which then extends this test.
+
+**Open at v1.0's gate, decided:**
 
 - **D1.
   The Docker test's form.**
@@ -61,7 +105,8 @@ this plan makes what Docker and CI can reach automatic.
 the directory `tools/mdns-test/`, the target `make mdns-test`,
 the CI job `mdns` named "mDNS against avahi",
 the containers `box`, `cube` and `client`,
-the branch `claude/mdns-interop`.
+the branch `claude/mdns-interop`;
+for Blocks 3 to 5 the container `searcher` and the branch `claude/lan-test`.
 
 **Not in this plan:**
 a Web Push check against a real push service or browser (the EVAL's third line,
@@ -69,7 +114,9 @@ not taken); an IPv6-only network (the probes ran IPv4 and IPv6 sockets,
 the checks IPv4); a real Cube.
 
 **Who runs it:**
-a session of its own, or this one, after the plan's registration on `main`.
+this session: Blocks 1 and 2 are #144, the fix of Block 2's steps goes into it;
+Blocks 3 and 4 are a pull request of their own once #144 is merged;
+Block 5 waits for the decision.
 
 ## Analysis
 
@@ -168,6 +215,84 @@ So multicast crosses a Docker bridge, `SO_REUSEADDR` and `SO_REUSEPORT` share
   the CI change and the target are shipped paths (`.github/**`, `Makefile`):
   a bullet under Changed.
 
+### The first CI run (Block 2)
+
+The run of #144 on 2026-11-09 (run 42662761265):
+the Linux job and the Windows step passed; the macOS step failed.
+Its second `serve` announced itself,
+but listened as a proxy on `:62910` though the step said `-proxy off`:
+`-announce` is a boolean switch (`IsBoolFlag`),
+so `-announce on` ended the flags at "on",
+and `-proxy off` and `-discover-interval 0` were never read.
+`dns-sd -Z`, killed after six seconds, left an empty file:
+its output, written to a file, was lost with the process,
+or mDNSResponder never saw the server; the run cannot tell which.
+The fix:
+
+- both steps pass `-announce` alone;
+- on macOS `dns-sd` runs under `script -q`, a terminal of its own, so that
+  every line it prints is in the file when it is stopped;
+- the macOS step runs `massimo discover -json` as well, our own browser,
+  so that a failure says whether the runner's multicast or mDNSResponder is at
+  fault; where mDNSResponder alone fails,
+  the `dns-sd` check is dropped with a NOTE, as the Risks below say.
+
+The same parsing makes `serve -announce off` announce, and `-allow-reboot off`
+allow a reboot: a defect of `serve`, not of this plan, which the gate of v1.1
+puts to the owner apart.
+
+### The LAN test (Block 3)
+
+The Go tests ask a fake Cube on the loopback, on another port,
+with 127.0.0.2 as the LAN.
+In containers each host has its own address and the real ports:
+discovery's broadcast (`udpBroadcast`, `interfaceBroadcasts`),
+the answer to the request's own address, `ownAnswer` with real addresses,
+and two servers on one LAN.
+
+- A fourth host, `searcher`, in the box's image with `curl`:
+  `massimo serve -discover-interval 0 -proxy off`, no Cube configured,
+  its searches through `POST /api/v1/cubes/discover` on its own address.
+- `run.sh` brings up `cube`, `searcher` and `client` first,
+  so that no proxy answers for the Cube while it is pulled, then:
+  1. a search lists `KEQ0000100` at the Cube's address, its MAC,
+     `configured: false`, and the searcher logs "cube found on the LAN";
+  2. `docker network disconnect` takes the Cube off the network:
+     the next search lists nothing, and the log says "cube gone from the LAN";
+  3. `docker network connect` puts it back: found again,
+     with a new "cube found on the LAN" line;
+  4. the box comes up, its `serve` configured with the Cube and its proxy on:
+     a search lists `KEQ0000100` from the Cube's address and from the box's.
+  Then the mDNS checks of Block 1, the goodbye last.
+- Whether the found list keeps two answers of one serial is measured first;
+  where it keeps one, check 4 reads the searcher's log for both addresses.
+- With D4-A, `tools/mdns-test/` becomes `tools/lan-test/` (`git mv`),
+  `make mdns-test` `make lan-test`, the CI job `lan` "LAN against avahi",
+  and the contract's test gate, `CI.md` and the README follow;
+  the Changed paths add nothing (they hold discovery's paths already).
+
+### The Windows discovery tests (Block 4)
+
+CI's Windows job runs `go test ./internal/update/... ./internal/install/...
+./cmd/...` and `go test -run Update ./internal/server/`; nothing on Windows
+tests discovery.
+Block 4 adds `go test ./internal/cubelan/...` and the server's
+`TestSearchListsOnlyCubesThatAnswered`, `TestFailedRunChangesNothing`,
+`TestRemovedCubeIsListedAsFound`, `TestFoundCubeSurvivesRestart` and
+`TestFoundCubeStoredOnce`, none of which has run on Windows.
+They are checked first from WSL: `GOOS=windows go test -c` for both packages,
+the binaries run through interop with `ProgramData` in a temporary directory,
+away from the live service's; a test that fails there is fixed,
+or left out of the job with the reason in a NOTE.
+
+### The proxy and a lost Cube (Block 5, later)
+
+Once the decision is on `main`: the box's `serve` runs with `-poll 5s`,
+since a connected `serve` notices a lost Cube only when its read deadline fires,
+three polls and 30 s, 45 s at 5 s; the Cube is taken off the network,
+and after that time the searcher's search must show what the proxy was decided
+to do.
+
 ### Risks
 
 - **A runner's multicast:**
@@ -191,6 +316,11 @@ So multicast crosses a Docker bridge, `SO_REUSEADDR` and `SO_REUSEPORT` share
 | `.github/workflows/ci.yml` | 2 | the `mdns` job, the macOS and Windows steps |
 | `GUIDELINES/project/CI.md` | 2 | the job and the steps |
 | `CHANGELOG.md` | 1, 2 | the target; the CI checks |
+| `.github/workflows/ci.yml` | 2 | the steps' fix |
+| `tools/lan-test/*` (D4-A, `git mv`), `Makefile`, the contract, `CI.md`, `ci.yml` | 3 | the LAN checks, the name |
+| `.github/workflows/ci.yml`, `GUIDELINES/project/CI.md` | 4 | the Windows job's tests |
+| `tools/lan-test/*` | 5 | the proxy and a lost Cube |
+| `CHANGELOG.md` | 3, 4 | the bullet amended |
 
 ## Implementation Plan
 
@@ -202,8 +332,10 @@ and `GUIDELINES/shared/tools/check --commit-range origin/main..HEAD` from the
 main checkout; Block 1 adds `make mdns-test`, Block 2 the pull request's CI.
 Nothing reaches a real Cube or the network but Docker's base image and avahi's
 packages.
-One commit per block, citing `AP MdnsInterop v1.0, Block <n>`,
-with its CHANGELOG bullet; one pull request for both.
+One commit per block, citing `AP MdnsInterop v<X.Y>, Block <n>`,
+with its CHANGELOG bullet; Blocks 1 and 2 with their fix are #144,
+Blocks 3 and 4 a pull request of their own,
+Block 5 another once the decision is on `main`.
 
 ### Block 1: Docker
 
@@ -245,6 +377,67 @@ change, not committed).
 the test gate; the pull request's CI with the three checks green,
 or a step that cannot work on its runner dropped with a NOTE.
 
+**The fix after the first run** (v1.1), a commit on #144:
+
+1. `.github/workflows/ci.yml`:
+   both steps pass `-announce` alone;
+   the macOS step runs `dns-sd -Z` under `script -q`
+   and `massimo discover -json` beside it.
+2. No CHANGELOG change: the bullet says what the steps check.
+
+**Verification:**
+#144's CI green; where mDNSResponder alone fails, the `dns-sd` check
+dropped with a NOTE and the `discover` check kept.
+
+### Block 3: LAN
+
+1. With D4-A, `git mv tools/mdns-test tools/lan-test`; `make lan-test`,
+   the CI job, the contract (v1.6.0), `CI.md` and the README renamed.
+2. The image gains `curl`; `compose.yaml` the host `searcher`;
+   `run.sh` the four LAN checks before the mDNS ones,
+   the hosts brought up in two steps.
+3. The README: what the LAN checks show,
+   and why no proxy runs while the Cube is pulled.
+4. `CHANGELOG.md`:
+   the bullet amended:
+
+   ```
+   - `make lan-test` checks discovery, the mDNS announcement and
+     `discover` in Docker, against avahi, with a Cube's cable pulled and a
+     second server's proxy (`tools/lan-test/README.md`).
+   ```
+
+**Verification:**
+the test gate; `make lan-test` passes twice in a row;
+check 2 fails when the Cube is not disconnected (a scratch change).
+
+### Block 4: Windows
+
+1. From WSL: the test binaries of `internal/cubelan` and `internal/server` built
+   for Windows and run through interop, `ProgramData` in a temporary directory;
+   what fails, fixed or left out with a NOTE.
+2. `.github/workflows/ci.yml`:
+   the Windows job's unit tests run them.
+3. `GUIDELINES/project/CI.md`:
+   the Windows job's tests.
+4. `CHANGELOG.md`:
+   the bullet amended for the Windows job.
+
+**Verification:**
+the test gate; the tests pass through interop and in the pull request's Windows
+job.
+
+### Block 5: The proxy and a lost Cube (later)
+
+1. Once the decision is on `main`: the box's `serve` with `-poll 5s`;
+   `run.sh` takes the Cube off the network after the LAN checks,
+   waits the read deadline,
+   and checks what the searcher's search shows of the proxy.
+2. The README and the bullet.
+
+**Verification:**
+the test gate; `make lan-test` passes twice.
+
 ## Proposed commit message
 
 The plan's registration,
@@ -262,13 +455,35 @@ File-revision-v1: GUIDELINES/wip/2026-11-09_17-15_AP_MdnsInterop_mdns_against_re
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+This revision, before Block 2's fix:
+
+```
+chore(aps): +MdnsInterop v1.1
+
+The LAN test in Docker, the Windows discovery tests and the proxy's check added to the plan, and the fix of Block 2's macOS step after #144's first run.
+
+Key changes:
+- GUIDELINES/wip/2026-11-09_17-15_AP_MdnsInterop_mdns_against_real_responders.md: v1.1, Blocks 3 to 5, the first CI run.
+
+File-revision-v1: GUIDELINES/wip/2026-11-09_17-15_AP_MdnsInterop_mdns_against_real_responders.md::v1.1::2026-11-09::All::Blocks 3 to 5, the first CI run
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 The blocks' commits:
 
 1. `test(announce): make mdns-test checks the announcement against avahi in Docker`
-2. `ci(mdns): The announcement against avahi, mDNSResponder and Windows' mDNS`
+2. `ci(mdns): The announcement against avahi, mDNSResponder and Windows' mDNS`,
+   and `fix(ci): The mDNS steps read every flag, and dns-sd's output is kept`
+3. `test(discovery): make lan-test pulls a Cube's cable and adds a second server`
+4. `ci(windows): The discovery tests on Windows`
+5. `test(discovery): A proxy and a lost Cube`
 
 ## Change History
 
 - v1.0 (2026-11-09): the first revision,
   from the owner's `EXEC D21-A D22-A` on the EVAL of AP ServerAnnouncements'
   manual tests; D1 to D3 open at its gate.
+- v1.1 (2026-11-09): Blocks 3 to 5, the owner's `PLAN+` on the FoundCubes
+  session's request (a Docker LAN test, the Windows discovery tests);
+  the first CI run of #144 and the fix of Block 2's steps;
+  D4 and D5 open at its gate.

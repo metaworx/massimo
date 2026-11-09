@@ -200,7 +200,7 @@ sudo ./massimo-linux-arm64 install -settings .env
 ```
 
 installs the binary as `/usr/local/bin/massimo`,
-creates the system user `massimo`,
+creates the system user `_massimo`,
 copies the `.env` to `/etc/massimo/env` (without `-settings` the commented template,
 which is all a first start needs),
 writes `massimo.service`,
@@ -210,7 +210,7 @@ which listens on `:8099` on every interface.
 On the template's settings it only restarts a service that runs:
 a server without users answers every device on the local network (see "Server"),
 so the first start is the owner's,
-after `sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner`
+after `sudo -u _massimo /usr/local/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`
 or followed by the first-owner form of the web UI.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
@@ -885,7 +885,7 @@ The copy holds the database alone:
 since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,
 "The store").
 For the service run them as its user,
-for example `sudo -u massimo massimo -data /var/lib/massimo store info`.
+for example `sudo -u _massimo massimo -data /var/lib/massimo store info`.
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):
@@ -904,7 +904,7 @@ server keeps no hash (docs/store.md section 6).
 A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
 for the service run it as its user,
-for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.
+for example `sudo -u _massimo massimo -data /var/lib/massimo user add anna -role operator`.
 The audit records what it did with the remote `cli`,
 and the log a change line of each, by the command line (docs/ui.md, "Log").
 With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user

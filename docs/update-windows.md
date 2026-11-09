@@ -91,7 +91,7 @@ updates are not installed automatically on Windows yet."
 (the `update.blocked` text in i18n.js), and `POST /api/v1/update` answers 403.
 `TestUpdateEndpoints` skips on Windows for the same reason.
 
-The reason behind the refusal: on Linux the server runs as the user `massimo`,
+The reason behind the refusal: on Linux the server runs as the user `_massimo`,
 cannot write `/usr/local/bin`,
 and asks a root helper by writing `/var/lib/massimo/update-request`;
 `massimo-update.path` (`PathExists=`) starts `massimo-update.service`,

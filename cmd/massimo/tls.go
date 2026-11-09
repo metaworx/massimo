@@ -33,7 +33,7 @@ func tlsCommand(args []string, w io.Writer) error {
 
 The data directory is -data, else MASSIMO_DATA, else the current directory;
 for the service run it as its user, for example
-  sudo -u massimo massimo -data /var/lib/massimo tls show
+  sudo -u _massimo massimo -data /var/lib/massimo tls show
 `)
 	}
 	if len(args) == 0 {

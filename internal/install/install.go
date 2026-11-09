@@ -32,7 +32,12 @@ const (
 	EnvPath      = EnvDir + "/env"
 	UnitDir      = "/etc/systemd/system"
 	LogrotateDir = "/etc/logrotate.d"
-	User         = "massimo"
+	// User is the service account, as on macOS: a name no person has,
+	// since adduser refuses a user's name that starts with "_".
+	User = "_massimo"
+	// formerUser is the account's name before it took macOS's: a name a
+	// person may have, Massimo being a common one.
+	formerUser = "massimo"
 )
 
 // updateFlag is how massimo.service enables the web UI's update button;
@@ -139,6 +144,8 @@ type Options struct {
 type installer struct {
 	Options
 	svcUser string // the account the service runs as: User, or DarwinUser
+	darwin  bool   // macOS, whose settings template has no MASSIMO_LOG
+	stopped bool   // stopped for the account's rename: it ran, so it is started again
 	reboot  bool   // the reboot helper stays or comes (rebootWanted)
 }
 
@@ -274,8 +281,8 @@ func Install(o Options) error {
 	switch {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not started; start it with: systemctl start massimo")
-	case !startable && !in.active():
-		in.notStarted(linuxUserAdd, linuxStart)
+	case !startable && !in.active() && !in.stopped:
+		in.notStarted(ownerLine(BinPath), linuxStart)
 	default:
 		// restart, so that running install again takes the new binary.
 		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
@@ -360,7 +367,7 @@ func configure(o Options, m Manager) error {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not restarted; restart it with: systemctl restart massimo")
 	case !startable && !in.active():
-		in.notStarted(linuxUserAdd, linuxStart)
+		in.notStarted(ownerLine(debBin), linuxStart)
 	default:
 		if err := in.run("systemctl", "restart", "massimo.service"); err != nil {
 			return err
@@ -444,16 +451,62 @@ func (in *installer) binary() error {
 	return writeAtomic(dst, b, 0o755)
 }
 
+// user makes the service account. The one an older install or package
+// made, formerUser with the home StateDir, is renamed in place: usermod
+// keeps its ID, so its files follow. usermod refuses an account that a
+// process runs as, so a running service is stopped first and started
+// again by the start rule. Any other formerUser is a person's, and is
+// left alone.
 func (in *installer) user() error {
-	if in.Root == "" && in.Run("id", "-u", User) == nil { // read-only, also in a dry run
+	if in.passwd(User) != "" {
 		fmt.Fprintf(in.Out, "user %s exists\n", User)
+		return nil
+	}
+	if ownAccount(in.passwd(formerUser)) {
+		if in.active() {
+			if err := in.run("systemctl", "stop", "massimo.service"); err != nil {
+				return err
+			}
+			in.stopped = true
+		}
+		in.say("rename the user %s to %s, keeping its ID", formerUser, User)
+		if err := in.run("usermod", "-l", User, formerUser); err != nil {
+			return fmt.Errorf("rename the user %s to %s: %w; stop what runs as %s and install again", formerUser, User, err, formerUser)
+		}
+		if in.group(formerUser) && !in.group(User) {
+			return in.run("groupmod", "-n", User, formerUser)
+		}
 		return nil
 	}
 	nologin := "/usr/sbin/nologin"
 	if _, err := os.Stat(nologin); err != nil {
 		nologin = "/sbin/nologin"
 	}
-	return in.run("useradd", "--system", "--user-group", "--home-dir", "/var/lib/massimo", "--no-create-home", "--shell", nologin, User)
+	return in.run("useradd", "--system", "--user-group", "--home-dir", StateDir, "--no-create-home", "--shell", nologin, User)
+}
+
+// passwd is the passwd entry of the account name, "" when there is none;
+// read-only, also in a dry run.
+func (in *installer) passwd(name string) string {
+	out, err := in.Output("getent", "passwd", name)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// group reports whether the group name exists; read-only.
+func (in *installer) group(name string) bool {
+	out, err := in.Output("getent", "group", name)
+	return err == nil && len(bytes.TrimSpace(out)) > 0
+}
+
+// ownAccount reports whether a passwd entry is an account that an install
+// or the package made for the service: its home is StateDir. A person's
+// home is elsewhere.
+func ownAccount(entry string) bool {
+	f := strings.Split(entry, ":")
+	return len(f) >= 7 && f[5] == StateDir
 }
 
 // envTemplate is the commented settings file a fresh install gets,
@@ -490,13 +543,11 @@ func onlyTemplate(cur, tmpl []byte) bool {
 // the template's: a server without users answers every device on the
 // local network (README.md, "Server"). Whatever runs is restarted, so
 // that it takes the new binary, also on the template's settings.
-const (
-	linuxUserAdd = "sudo -u " + User + " massimo -data " + StateDir + " user add <name> -role owner"
-	linuxStart   = "sudo systemctl start massimo"
-)
+const linuxStart = "sudo systemctl start massimo"
 
 // notStarted says why the service was left stopped and the two ways to
-// its first owner: userAdd before the start, or the web UI after it.
+// its first owner: userAdd before the start (ownerLine), or the web UI
+// after it.
 func (in *installer) notStarted(userAdd, start string) {
 	fmt.Fprintln(in.Out, "not started: until it has an owner, every device on the local network may use it")
 	fmt.Fprintf(in.Out, "create the owner first: %s\n", userAdd)
@@ -542,7 +593,7 @@ func (in *installer) settings() (bool, error) {
 		return false, err
 	}
 	tmpl := []byte(envTemplate())
-	if in.svcUser == DarwinUser {
+	if in.darwin {
 		tmpl = []byte(darwinEnvTemplate())
 	}
 	if cur, err := os.ReadFile(env); err == nil {
@@ -796,8 +847,28 @@ func Remove(o Options, purge bool) error {
 	for _, p := range []string{EnvDir, "/var/lib/massimo", "/var/lib/massimo-update", "/var/log/massimo"} {
 		in.remove(p, true)
 	}
-	in.say("remove the user %s", User)
-	return in.run("userdel", User)
+	return in.removeUsers()
+}
+
+// removeUsers removes the service account, and formerUser where an older
+// install made it and no install since renamed it; a person's formerUser
+// stays.
+func (in *installer) removeUsers() error {
+	for _, name := range []string{User, formerUser} {
+		e := in.passwd(name)
+		switch {
+		case e == "":
+			continue
+		case name == formerUser && !ownAccount(e):
+			fmt.Fprintf(in.Out, "kept the user %s, which is not the service's\n", name)
+			continue
+		}
+		in.say("remove the user %s", name)
+		if err := in.run("userdel", name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (in *installer) remove(p string, all bool) {

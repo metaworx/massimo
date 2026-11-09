@@ -150,7 +150,7 @@ func InstallWindows(o Options) error {
 	case in.NoStart:
 		fmt.Fprintln(in.Out, "not started; start it with: sc start massimo")
 	case !startable && !running:
-		in.notStarted(fmt.Sprintf("& \"%s\" -data \"%s\" user add <name> -role owner", p.Bin, p.DataDir), "sc.exe start massimo")
+		in.notStarted(winCommand(p.Bin, "-data", `"`+p.DataDir+`"`, "user", "add", "<name>", "-role", "owner"), "sc.exe start massimo")
 	default:
 		in.say("start the service %s", ServiceName)
 		if !in.DryRun {
