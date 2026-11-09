@@ -30,11 +30,17 @@ getent group massimo >/dev/null || fail "no group massimo"
 cmp -s /etc/massimo/env /usr/share/massimo/env.template || fail "/etc/massimo/env is not the template"
 unit=/usr/lib/systemd/system/massimo.service
 grep -q '^ExecStart=/usr/bin/massimo ' "$unit" || fail "the unit does not run /usr/bin/massimo"
-if grep '^ExecStart=' "$unit" | grep -q -- '-update-request'; then fail "the unit still has -update-request"; fi
+grep '^ExecStart=' "$unit" | grep -q -- ' -update-request /var/lib/massimo/update-request' ||
+	fail "the unit lacks -update-request for the update helper"
 [ -L /etc/systemd/system/multi-user.target.wants/massimo.service ] || fail "the unit is not enabled"
-for u in massimo-reboot.path massimo-reboot.service; do
+for u in massimo-update.path massimo-update.service massimo-reboot.path massimo-reboot.service; do
 	[ -f "/usr/lib/systemd/system/$u" ] || fail "no $u"
 done
+# The update helper runs apt, and is enabled; the reboot helper is not.
+grep -q '^ExecStart=/usr/bin/massimo update -request /var/lib/massimo/update-request ' /usr/lib/systemd/system/massimo-update.service ||
+	fail "the update helper does not run /usr/bin/massimo update"
+if grep -q '^ProtectSystem' /usr/lib/systemd/system/massimo-update.service; then fail "the update helper cannot run dpkg"; fi
+[ -L /etc/systemd/system/paths.target.wants/massimo-update.path ] || fail "the update helper is not enabled"
 [ ! -e /etc/systemd/system/paths.target.wants/massimo-reboot.path ] || fail "the reboot helper is enabled"
 [ "$(head -n 1 /usr/share/massimo/packaged)" = apt ] || fail "the marker does not say apt"
 [ -f /usr/share/doc/massimo/copyright ] || fail "no copyright file"
@@ -52,9 +58,12 @@ grep -q 'managed by apt' <<<"$out" || fail "install -dry-run does not say manage
 if grep -q '/usr/local/bin' <<<"$out"; then fail "install -dry-run would touch /usr/local/bin: $out"; fi
 out=$(massimo install -reboot-helper -dry-run 2>&1) || fail "install -reboot-helper -dry-run failed: $out"
 grep -q 'would run systemctl enable --now massimo-reboot.path' <<<"$out" || fail "install -reboot-helper -dry-run: $out"
+out=$(massimo install -no-update-helper -dry-run 2>&1) || fail "install -no-update-helper -dry-run failed: $out"
+grep -q 'would run systemctl disable --now massimo-update.path' <<<"$out" || fail "install -no-update-helper -dry-run: $out"
 if massimo install -remove 2>/tmp/err; then fail "install -remove did not refuse"; fi
 grep -q 'apt remove massimo' /tmp/err || fail "install -remove: $(cat /tmp/err)"
-# And the updater leaves the binary to apt, before any network.
+# And the updater run by hand leaves the binary to apt, before any
+# network; the helper's run through apt is packaging/apt/test.sh's.
 if massimo update 2>/tmp/err; then fail "update did not refuse"; fi
 grep -q 'managed by apt' /tmp/err || fail "update: $(cat /tmp/err)"
 
@@ -68,6 +77,13 @@ mkdir -p /etc/systemd/system/paths.target.wants
 ln -s /usr/lib/systemd/system/massimo-reboot.path /etc/systemd/system/paths.target.wants/massimo-reboot.path
 apt-get -qq install -y --reinstall "$deb" >/dev/null
 [ -L /etc/systemd/system/paths.target.wants/massimo-reboot.path ] || fail "a reinstall disabled the reboot helper"
+# The update helper, once the owner turned it off (the link that
+# systemctl disable removes), stays off.
+rm /etc/systemd/system/paths.target.wants/massimo-update.path
+apt-get -qq install -y --reinstall "$deb" >/dev/null
+[ ! -e /etc/systemd/system/paths.target.wants/massimo-update.path ] || fail "a reinstall enabled the update helper again"
+mkdir -p /var/lib/massimo-update
+echo '{}' >/var/lib/massimo-update/status.json
 
 apt-get -qq purge -y massimo >/dev/null
 if getent passwd massimo >/dev/null; then fail "the user is left after purge"; fi
@@ -75,6 +91,8 @@ if getent passwd massimo >/dev/null; then fail "the user is left after purge"; f
 [ ! -e /usr/share/massimo ] || fail "/usr/share/massimo is left after purge"
 [ ! -e /usr/bin/massimo ] || fail "/usr/bin/massimo is left after purge"
 [ ! -e /usr/lib/systemd/system/massimo-reboot.path ] || fail "the reboot helper is left after purge"
+[ ! -e /usr/lib/systemd/system/massimo-update.path ] || fail "the update helper is left after purge"
+[ ! -e /var/lib/massimo-update ] || fail "/var/lib/massimo-update is left after purge"
 [ ! -L /etc/systemd/system/paths.target.wants/massimo-reboot.path ] || fail "the reboot helper's link is left after purge"
 
 # A hand install blocks the package.

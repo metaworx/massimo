@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: massimo
-Upstream-Contact: Martin Rüegg <martin.rueegg@metaworx.ch>
+Upstream-Contact: Martin Rüegg <massimo@metaworx.ch>
 Source: https://github.com/metaworx/massimo
 
 Files: *

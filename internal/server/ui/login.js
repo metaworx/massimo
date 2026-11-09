@@ -67,9 +67,18 @@ function roleLabel(key, name) {
   return s === k ? key : s;
 }
 
+// setToken keeps the page's token, or forgets it with null: in the
+// browser's storage, or in the app's where the page runs in the app
+// (appBridge, app.js). A token the app could not keep still serves this
+// page, and the app asks for a sign-in at its next start.
 function setToken(token) {
   state.token = token;
-  store("massimo.token", token);
+  const b = appBridge();
+  if (!b) {
+    store("massimo.token", token);
+    return;
+  }
+  b.setToken(token).catch(() => {});
 }
 
 // sawOpen is set once the page has seen the server ask for no key: the

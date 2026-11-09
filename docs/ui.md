@@ -430,6 +430,14 @@ to the top of the page.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
+  On a box the Debian package installed it says "Installed by apt",
+  the channel is the suite of the apt source,
+  and **Update** has the package's helper run apt;
+  nothing is put back there, and the last update says how to go back
+  (packaging/README.md, "Debian package").
+  Under Homebrew's service it says "Installed by brew",
+  and **Update** runs `brew upgrade` as the service's user
+  (packaging/README.md, "Homebrew").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
@@ -574,6 +582,20 @@ to the top of the page.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
 
+## In the apps
+
+The apps for Android and iOS (docs/app.md) open on a page of their own,
+`ui/connect.html`: the servers the app keeps, each with what it found
+when it last looked (on the LAN, remote, not reachable, a changed certificate),
+a tap opening the server, ⚙ or a long press its settings;
+the servers on the network and an address typed, to add one;
+and the fingerprint of a self-signed certificate, compared with the
+server's log or `massimo tls show` before it is trusted.
+A browser that opens that page sees a line saying it is the app's.
+A server's page in the app is this page,
+except that the app keeps its session in place of the browser,
+behind the phone's fingerprint or PIN where the server's settings in the app ask for it.
+
 ## How the page is built
 
 This section is for changing the UI;
@@ -632,6 +654,14 @@ Every URL the page and the scripts use is relative to the page (`ui/style.css`,
 `api/v1/cubes`, `healthz`),
 so that a reverse proxy may serve the UI under a path prefix it strips
 (docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.
+
+`ui/connect.html` is a second page, the apps' (docs/app.md),
+served at `/ui/connect.html` as it is, not assembled:
+its markup, its templates and `<base href="../">`,
+so that its URLs resolve as those of the page at `/`;
+it loads `i18n.js`, `components.js` and its own `connect.js`, not `app.js`.
+`go test ./internal/server` checks the ids `connect.js` looks up against
+it (`uiPageScripts` in `ui_test.go`) and its texts as the page's.
 
 One file is not the project's: `ui/vendor/opaque.js`,
 `@serenity-kit/opaque` as published, the OPAQUE client in WebAssembly,

@@ -8,7 +8,8 @@ package server
 // helper to install it (internal/update): through a request file that a
 // systemd path unit (packaging/systemd) or launchd (packaging/launchd)
 // watches, and on Windows by starting the helper itself (Start). The
-// server only checks and asks; the helper replaces the binary.
+// server only checks and asks; the helper replaces the binary, or, where
+// the Debian package owns it, has apt upgrade it (packaging/deb).
 
 import (
 	"context"
@@ -41,9 +42,17 @@ type UpdateOptions struct {
 	// found by whoever provides Start; it is reported like the others.
 	Blocked string
 	// Managed is set where a package manager owns the binary
-	// (install.Packaged): the reason updates are not installed from here,
-	// given ahead of every other and shown beside the newer version.
+	// (install.Packaged) and updates are not installed from here: the
+	// reason, given ahead of every other and shown beside the newer
+	// version.
 	Managed string
+	// Manager is the package manager that owns the binary, "apt", shown
+	// as such; where Managed is empty, the helper installs through it.
+	Manager string
+	// Helper says why the helper is not there, asked at each request
+	// (the Debian package's, which the owner can turn off); nil where
+	// Request alone says it.
+	Helper func() string
 }
 
 // ReleaseFinder finds the newest signed release on a channel; nil, nil
@@ -95,6 +104,8 @@ func (s *Server) updateBlocked(ctx context.Context) string {
 		return "start updates from the installed service (massimo install)"
 	case s.opts.Update.Request == "":
 		return "no update helper installed (see packaging/README.md)"
+	case s.opts.Update.Helper != nil && s.opts.Update.Helper() != "":
+		return s.opts.Update.Helper()
 	case s.opts.Update.Blocked != "":
 		return s.opts.Update.Blocked
 	case !update.ValidChannel(s.opts.Update.Channel):
@@ -109,6 +120,7 @@ func (s *Server) updateBlocked(ctx context.Context) string {
 type updateView struct {
 	Current    string         `json:"current"`
 	Channel    string         `json:"channel"`
+	Manager    string         `json:"manager,omitempty"`
 	Latest     string         `json:"latest,omitempty"`
 	ReleaseURL string         `json:"release_url,omitempty"`
 	Available  bool           `json:"available"`
@@ -121,7 +133,7 @@ type updateView struct {
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 	u := s.opts.Update
-	v := updateView{Current: u.Version, Channel: u.Channel, Blocked: s.updateBlocked(ctx)}
+	v := updateView{Current: u.Version, Channel: u.Channel, Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
 	if update.ValidChannel(u.Channel) {
 		rel, at, err := s.latest(ctx, refresh)
 		v.CheckedAt = at

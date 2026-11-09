@@ -46,6 +46,18 @@ the next minor, a fix counts the suffix up.
   (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
   and marks a proxy among the Cubes (`README.md`, "Server").
 
+- `ui/connect.html`, the apps' page: the servers, discovery, the
+  fingerprint of a self-signed certificate, the biometric and
+  notification switches; a browser sees it as the app's (`docs/app.md`).
+
+- The web UI's Update works on a box the Debian package installed: its
+  helper, enabled, upgrades massimo through apt from the massimo source
+  alone (`packaging/README.md`, "Debian package").
+
+- The web UI's Update works under Homebrew's service too: it runs
+  `brew upgrade` as the service's user and restarts the job
+  (`packaging/README.md`, "Homebrew").
+
 - Notification rules on the Cubes' events, per user in the `notify`
   preference, and push subscriptions under `/api/v1/me/push` with the
   server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
@@ -67,6 +79,10 @@ the next minor, a fix counts the suffix up.
 - The log's metadata and config lines say what changed, and a reconnect
   is one line with the Cube's devices, rooms, firmware and duty cycle;
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
+
+- The apt repository's address is `https://massimo.metaworx.ch/apt`,
+  under the project's site with its install routes and privacy policy
+  (`packaging/README.md`, "The apt repository").
 
 ### Fixed
 

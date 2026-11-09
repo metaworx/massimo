@@ -22,12 +22,17 @@ byte for byte on one machine, on every run:
   live update lands in the middle of a run (the log's one state event
   with changes is dispatched on it, with a fixed time); the poll still
   runs and gets the same answers;
-- the version, the Software section's answer, the fake Cube's address
-  (which has run.sh's port) and a Cube found on the LAN are fixed
-  answers of the routes below; the found Cube is listed from the Cube
-  choice's shot on;
+- the version (the log's line of the server's start too), the Software
+  section's answer, the fake Cube's address (which has run.sh's port)
+  and a Cube found on the LAN are fixed answers of the routes below;
+  the found Cube is listed from the Cube choice's shot on;
 - reduced motion, one device pixel per CSS pixel, and the screenshots
-  taken with animations stopped and the caret hidden.
+  taken with animations stopped and the caret hidden;
+- every tile rastered whole (CHROMIUM_ARGS): by default Chromium
+  rasters again only the part of a tile that changed, and an
+  anti-aliased edge rastered in part comes out a level of 255 off the
+  same edge rastered whole, so the header's rounded buttons, painted
+  before the API's answers or after, changed from run to run.
 
 A shot is framed by what it is about (PAGES): the viewport where the
 page is the subject, else the one element that is, with PADDING around
@@ -58,6 +63,10 @@ HEIGHT = {1100: 800, 390: 844}
 PHONE = 390                                  # the width whose shots are all the viewport
 PADDING = 12                                 # CSS px around an element shot
 LOCALE = {"en": "en-US", "de": "de-DE"}
+# Every tile rastered whole, so that a pixel depends on the page and not
+# on what was painted before (the docstring): with partial raster, a few
+# shots of every run were off by one level on the header's buttons.
+CHROMIUM_ARGS = ["--disable-partial-raster"]
 VERSION = "massimo v0.0.0-screenshots (go, linux/amd64)"
 UPDATE = {"current": "v0.0.0-screenshots", "channel": "alpha", "latest": "v0.0.0-screenshots",
           "available": False, "can_update": False}
@@ -183,6 +192,14 @@ class Answers:
         body = TIME_RE.sub('"' + SERVER_TIME + '"', resp.text())
         if path.startswith("/api/v1/cubes") and "/rooms" not in path:
             body = ADDRESS_RE.sub(CUBE_ADDRESS, body)
+        if path.endswith("/log") and resp.ok:
+            # The server's start says the build's version, another at
+            # every commit: the fixed one, as /healthz.
+            events = json.loads(body)
+            for e in events if isinstance(events, list) else []:
+                if e.get("kind") == "server_started":
+                    e["summary"] = {"version": VERSION}
+            body = json.dumps(events)
         if path == "/api/v1/cubes" and req.method == "GET" and self.found and resp.ok:
             cubes = json.loads(body)
             if not any(c.get("serial") == FOUND["serial"] for c in cubes):
@@ -355,8 +372,7 @@ def shoot(browser, url, token, width, theme, lang, pages, problems):
     for which in pages:
         file = name(which, width, theme, lang)
         # From the Cube choice's shot on, the server lists a found Cube
-        # from the page's load: added later, the header's new layout
-        # rasterised its buttons differently from run to run.
+        # from the page's load.
         answers.found = answers.found or which == "cube-found"
         try:
             load(page, url)
@@ -386,7 +402,7 @@ def main():
         old.unlink()
     problems = []
     with sync_playwright() as pw:
-        browser = pw.chromium.launch()
+        browser = pw.chromium.launch(args=CHROMIUM_ARGS)
         for width, theme, lang, pages in SETS:
             shoot(browser, url, token, width, theme, lang, pages, problems)
         browser.close()

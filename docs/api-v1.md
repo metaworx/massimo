@@ -2016,7 +2016,8 @@ but the route answers all the same.
 ### GET /api/v1/update?refresh=1
 
 Whether a newer signed release is out on the server's update channel (the branch
-it was built from, or `MASSIMO_UPDATE_CHANNEL`).
+it was built from, or `MASSIMO_UPDATE_CHANNEL`;
+on a box the Debian package installed, the suite of its apt source).
 The server asks GitHub at most every ten minutes; `refresh` asks now.
 
 ```json
@@ -2035,10 +2036,15 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
 `latest` is only a release whose manifest verifies against the key compiled into
 the server (see `internal/update`).
 `check_error` says why a check failed.
+`manager` is the package manager that owns the binary, `apt`,
+where the Debian package installed it, or `brew` under Homebrew's service;
+absent on a box `massimo install` set up.
 `can_update` is true when POST would start an update;
 otherwise `blocked` says why it cannot be started from here (a package
-manager owning the binary, which then also upgrades it; no API token;
-no update helper; a development build).
+manager owning the binary without a helper of its own, which then upgrades it;
+for apt, its source missing, `MASSIMO_UPDATE_CHANNEL` naming another channel
+than its suite, or the package's helper turned off;
+no API token; no update helper; a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
@@ -2053,6 +2059,12 @@ by the server itself as a detached process on Windows;
 see [packaging/README.md](../packaging/README.md)) downloads and verifies the release,
 test-runs it, replaces the binary,
 restarts the server and rolls back if the new version does not answer `/healthz`.
+Where `manager` is `apt`, the Debian package's helper runs apt for the massimo
+source instead, the package restarts the server,
+and nothing is rolled back: the helper's last run names the way back
+(packaging/README.md, "Debian package").
+Where it is `brew`, the server starts a helper as its own user that runs
+`brew upgrade` and restarts the job (packaging/README.md, "Homebrew").
 The request names no version and no file,
 so the most the API can do is install the newest signed release.
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;

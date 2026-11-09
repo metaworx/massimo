@@ -2897,14 +2897,15 @@ components:
       type: object
       properties:
         current: {type: string, description: The running version}
-        channel: {type: string, description: The update channel, a branch name}
+        channel: {type: string, description: The update channel, a branch name; the apt source's suite where apt owns the binary}
+        manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
         latest: {type: string, description: Newest signed release on the channel}
         release_url: {type: string}
         available: {type: boolean, description: latest is newer than current}
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
-        blocked: {type: string, description: Why an update cannot be started from the API (a package manager owning the binary, no token, no helper, a development build)}
+        blocked: {type: string, description: Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
     UpdateStatus:
       type: object

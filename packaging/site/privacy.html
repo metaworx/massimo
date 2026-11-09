@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Massimo: privacy policy</title>
+<meta name="description" content="The privacy policy of Massimo: the server software, its web UI, the apps and this website.">
+<!-- The privacy policy of the project and its apps (packaging/README.md,
+     "The apt repository"), English then German; packaging/apt/publish.sh
+     copies it to the site's root. A change states its date in both
+     languages. -->
+<style>
+:root { color-scheme: light dark; --text: #1f2328; --muted: #59636e; --back: #ffffff; --code: #f0f2f4; --link: #0b62c4; }
+@media (prefers-color-scheme: dark) {
+  :root { --text: #e6edf3; --muted: #9198a1; --back: #0d1117; --code: #1c2128; --link: #58a6ff; }
+}
+body { max-width: 46rem; margin: 0 auto; padding: 0 1rem 1rem; font: 1rem/1.5 system-ui, sans-serif; color: var(--text); background: var(--back); }
+a { color: var(--link); }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+section + section { margin-top: 3rem; }
+footer { margin-top: 2rem; color: var(--muted); font-size: .875rem; }
+</style>
+</head>
+<body>
+<header>
+<h1>Massimo: privacy policy · Datenschutzerklärung</h1>
+<p><a href="https://massimo.metaworx.ch/privacy.html#en">English</a> · <a href="https://massimo.metaworx.ch/privacy.html#de">Deutsch</a></p>
+</header>
+<main>
+<section id="en">
+<h2>Privacy policy</h2>
+<p>For Massimo: the server software, its web UI, the apps for Android and iOS, and this website. As of 9 November 2026.</p>
+
+<h3>In short</h3>
+<p>Massimo runs on your own hardware and sends nothing to us. There are no accounts with us, no analytics and no advertising, and this website sets no cookies.</p>
+
+<h3>Who is responsible</h3>
+<p>Martin Rüegg, metaworx: <a href="mailto:massimo@metaworx.ch">massimo@metaworx.ch</a>.</p>
+
+<h3>The server</h3>
+<p>The server, <code>massimo serve</code>, runs on a computer you choose and talks to your MAX! Cubes on your network. What it keeps, such as the Cubes' configuration, the users and their sign-in data, the settings and the log, stays on that computer. It sends nothing to us: no telemetry, no usage statistics, no crash reports. It reaches the internet only in these cases:</p>
+<ul>
+<li>When you open the system settings in the web UI, or run <code>massimo update</code>, it asks GitHub whether a newer release is out, and it downloads a release from GitHub when you install one. GitHub sees the IP address of your connection.</li>
+<li>When you turn on certificates with <code>-tls acme</code>, it talks to the certificate authority (Let's Encrypt, unless you name another) and to your DNS provider if you give it one.</li>
+<li>When you turn on notifications, it sends them through the push service that your phone or browser registered with it, as described below.</li>
+</ul>
+
+<h3>The apps</h3>
+<p>The Massimo apps connect only to the servers you add to them. They keep those servers' addresses and your sign-in on your device, in the system's protected storage, and send them nowhere else. They contain no analytics, no advertising and no tracking.</p>
+<p>If you turn on notifications, your server sends them through a push service: in the Android app from Google Play, Google's Firebase Cloud Messaging; in the other Android builds, the UnifiedPush distributor you choose. Each message is encrypted for your device; the push service learns that a message is delivered to it, not what it says.</p>
+
+<h3>This website</h3>
+<p>massimo.metaworx.ch, with the apt repository under it, is hosted on GitHub Pages. GitHub records the IP address of every visit for security and operation; the <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub General Privacy Statement</a> applies. The site sets no cookies, runs no scripts and uses no analytics, and we see no data about its visitors. The releases are downloaded from GitHub as well.</p>
+
+<h3>Writing to us</h3>
+<p>If you write to us, by e-mail or in a GitHub issue, we keep your message and your address to answer it. We delete an e-mail once it is no longer needed; a GitHub issue is public.</p>
+
+<h3>Your rights</h3>
+<p>You may ask us what we hold about you and have it corrected or deleted, at the address above. You may also complain to the data protection authority where you live.</p>
+
+<h3>Changes</h3>
+<p>A change to this policy is published on this page, with its date at the top; its history is in the <a href="https://github.com/metaworx/massimo/commits/main/packaging/site/privacy.html">repository</a>.</p>
+</section>
+
+<section id="de" lang="de">
+<h2>Datenschutzerklärung</h2>
+<p>Für Massimo: die Server-Software, ihre Weboberfläche, die Apps für Android und iOS und diese Website. Stand: 9. November 2026.</p>
+
+<h3>Kurz gesagt</h3>
+<p>Massimo läuft auf Ihrer eigenen Hardware und sendet uns nichts. Es gibt keine Konten bei uns, keine Analyse und keine Werbung, und diese Website setzt keine Cookies.</p>
+
+<h3>Verantwortlich</h3>
+<p>Martin Rüegg, metaworx: <a href="mailto:massimo@metaworx.ch">massimo@metaworx.ch</a>.</p>
+
+<h3>Der Server</h3>
+<p>Der Server, <code>massimo serve</code>, läuft auf einem Rechner Ihrer Wahl und spricht mit Ihren MAX! Cubes in Ihrem Netzwerk. Was er speichert, etwa die Konfiguration der Cubes, die Benutzer und ihre Anmeldedaten, die Einstellungen und das Protokoll, bleibt auf diesem Rechner. Er sendet uns nichts: keine Telemetrie, keine Nutzungsstatistik, keine Absturzberichte. Ins Internet geht er nur in diesen Fällen:</p>
+<ul>
+<li>Wenn Sie in der Weboberfläche die Systemeinstellungen öffnen oder <code>massimo update</code> ausführen, fragt er bei GitHub nach einer neueren Version, und er lädt eine Version von GitHub herunter, wenn Sie sie installieren. GitHub sieht dabei die IP-Adresse Ihrer Verbindung.</li>
+<li>Wenn Sie Zertifikate mit <code>-tls acme</code> einschalten, spricht er mit der Zertifizierungsstelle (Let's Encrypt, sofern Sie keine andere angeben) und mit Ihrem DNS-Anbieter, falls Sie einen angeben.</li>
+<li>Wenn Sie Benachrichtigungen einschalten, sendet er sie über den Push-Dienst, den Ihr Telefon oder Browser bei ihm angemeldet hat, wie unten beschrieben.</li>
+</ul>
+
+<h3>Die Apps</h3>
+<p>Die Massimo-Apps verbinden sich nur mit den Servern, die Sie in ihnen eintragen. Sie speichern deren Adressen und Ihre Anmeldung auf Ihrem Gerät, im geschützten Speicher des Systems, und senden sie nirgendwohin sonst. Sie enthalten keine Analyse, keine Werbung und kein Tracking.</p>
+<p>Wenn Sie Benachrichtigungen einschalten, sendet Ihr Server sie über einen Push-Dienst: in der Android-App aus Google Play über Firebase Cloud Messaging von Google, in den anderen Android-Ausgaben über den UnifiedPush-Verteiler Ihrer Wahl. Jede Nachricht ist für Ihr Gerät verschlüsselt; der Push-Dienst erfährt, dass eine Nachricht an das Gerät geht, nicht, was sie enthält.</p>
+
+<h3>Diese Website</h3>
+<p>massimo.metaworx.ch, samt dem apt-Repository darunter, wird von GitHub Pages bereitgestellt. GitHub erfasst bei jedem Aufruf die IP-Adresse, für Sicherheit und Betrieb; es gilt das <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub General Privacy Statement</a>. Die Website setzt keine Cookies, führt keine Skripte aus und verwendet keine Analyse, und wir sehen keine Daten über ihre Besucher. Auch die Versionen werden von GitHub heruntergeladen.</p>
+
+<h3>Wenn Sie uns schreiben</h3>
+<p>Wenn Sie uns schreiben, per E-Mail oder in einem GitHub-Issue, bewahren wir Ihre Nachricht und Ihre Adresse auf, um zu antworten. Eine E-Mail löschen wir, sobald sie nicht mehr gebraucht wird; ein GitHub-Issue ist öffentlich.</p>
+
+<h3>Ihre Rechte</h3>
+<p>Sie können unter der obigen Adresse erfragen, was wir über Sie gespeichert haben, und es berichtigen oder löschen lassen. Sie können sich auch bei der Datenschutzbehörde Ihres Wohnorts beschweren.</p>
+
+<h3>Änderungen</h3>
+<p>Eine Änderung dieser Erklärung wird auf dieser Seite veröffentlicht, mit ihrem Datum oben; ihre Geschichte steht im <a href="https://github.com/metaworx/massimo/commits/main/packaging/site/privacy.html">Repository</a>.</p>
+</section>
+</main>
+<footer>
+<p><a href="https://massimo.metaworx.ch/">Massimo</a> · <a href="https://github.com/metaworx/massimo">Source on GitHub</a></p>
+<p>"MAX!" and "eQ-3" are trademarks of eQ-3 AG.
+This project is not affiliated with or endorsed by eQ-3.</p>
+</footer>
+</body>
+</html>
