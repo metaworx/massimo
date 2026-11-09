@@ -132,7 +132,7 @@ CREATE TABLE "events" (
     level     INTEGER NOT NULL DEFAULT 0,        -- slog's: -4 debug, 0 info, 4 warn, 8 error
     device    TEXT    NOT NULL DEFAULT '',       -- radio address, '' when none
     serial    TEXT    NOT NULL DEFAULT '',       -- the device's serial number, or the Cube's for its own lines
-    user_id   INTEGER REFERENCES users (id),     -- who started it; NULL: the Cube, the server, the bootstrap token
+    user_id   INTEGER REFERENCES users (id),     -- who started it; NULL: the Cube, the server's own jobs, a server without users
     data      TEXT    NOT NULL                   -- JSON: the event object as GET …/log returns it
 );
 

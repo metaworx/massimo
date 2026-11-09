@@ -27,8 +27,8 @@ the next minor, a fix counts the suffix up.
   (`docs/store.md`, "Migrations").
 
 - The log keeps the server's own events beside the Cube's, each with
-  its source, its level and who started it; the store's migration 0009
-  rebuilds its events table once (`docs/store.md`, "Migrations").
+  its source, its level and the user who started it; the store's
+  migration 0009 rebuilds its events table once (`docs/store.md`).
 
 - The log shows the server's start, stop, restart, reload, reboot,
   update, backups and prunes, and a Cube's new address or its leaving

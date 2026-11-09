@@ -1720,7 +1720,7 @@ paths:
                     while_disconnected: {type: boolean, description: What a connection's greeting found changed while the Cube was disconnected or the server down}
                     by:
                       type: object
-                      description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and the bootstrap token
+                      description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and a server without users
                       properties:
                         name: {type: string}
                         display_name: {type: string}
