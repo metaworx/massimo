@@ -215,12 +215,20 @@ func (s *Server) Start(addr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return s.Serve(ln), nil
+}
+
+// Serve serves on a listener the caller opened, and closes it with the
+// server. A test that brings the Cube up late holds its port this way:
+// a client's dial waits for the greeting meanwhile, and nothing else
+// takes the port, as it may between a listener closed and one opened.
+func (s *Server) Serve(ln net.Listener) string {
 	s.ln = ln
 	if s.NTP == nil {
 		s.NTP = []string{"ntp.homematic.com", "ntp.homematic.com"}
 	}
 	go s.accept()
-	return ln.Addr().String(), nil
+	return ln.Addr().String()
 }
 
 // Close stops the server and drops every client connection.
