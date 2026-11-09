@@ -67,6 +67,9 @@ the next minor, a fix counts the suffix up.
   embedding the server calls as the command does; nothing changes for
   `massimo serve` itself.
 
+- CI runs all four cases of the web UI suite on a pull request too, in
+  four workers (`GUIDELINES/project/CI.md`, section 2).
+
 - The log's metadata and config lines say what changed, and a reconnect
   is one line with the Cube's devices, rooms, firmware and duty cycle;
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
