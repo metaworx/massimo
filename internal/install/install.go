@@ -242,6 +242,7 @@ func Install(o Options) error {
 	if err != nil {
 		return err
 	}
+	in.takenOver()
 	if err := in.tlsFiles(EnvDir+"/"+certName, EnvDir+"/"+keyName, EnvPath, true); err != nil {
 		return err
 	}
@@ -483,6 +484,20 @@ func (in *installer) user() error {
 		nologin = "/sbin/nologin"
 	}
 	return in.run("useradd", "--system", "--user-group", "--home-dir", StateDir, "--no-create-home", "--shell", nologin, User)
+}
+
+// takenOver names the chown for a box where an older release ran the
+// service as a person's formerUser: its files are still that person's,
+// which User cannot read. Ours is User by now, renamed or made, so a
+// formerUser that owns the settings is a person's. Said, not done: what
+// in EnvDir is the service's is the owner's call.
+func (in *installer) takenOver() {
+	out, err := in.Output("stat", "-c", "%U", in.path(EnvPath))
+	if err != nil || strings.TrimSpace(string(out)) != formerUser {
+		return
+	}
+	fmt.Fprintf(in.Out, "warning: %s belongs to the user %s, which an older release ran the service as; the service runs as %s now and cannot read it\n", EnvPath, formerUser, User)
+	fmt.Fprintf(in.Out, "hand the service its files: sudo chown -R %s:%s %s %s /var/log/massimo\n", User, User, EnvDir, StateDir)
 }
 
 // passwd is the passwd entry of the account name, "" when there is none;

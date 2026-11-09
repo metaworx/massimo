@@ -10,6 +10,9 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `massimo -no-env` reads no settings file, as `-env /dev/null` did,
+  also on Windows (`README.md`, "Cube variables").
+
 - `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
   `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
   `/etc/massimo/cloudflare.token` (`packaging/README.md`).
@@ -24,6 +27,10 @@ the next minor, a fix counts the suffix up.
 
 - `internal/store/migrations/store.sql` is the store's complete schema,
   made from the migrations beside it and checked by `go test`
+  (`docs/store.md`, "Migrations").
+
+- The store's tests migrate a store written by each release since
+  v0.7.0-alpha.1, kept as text dumps that `tools/store-fixture` makes
   (`docs/store.md`, "Migrations").
 
 - The log keeps the server's own events beside the Cube's, each with
@@ -80,6 +87,10 @@ the next minor, a fix counts the suffix up.
 - The log says when Let's Encrypt issued or renewed a certificate by
   TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
   to port 443, the one a router forwards (`README.md`, "Server").
+
+- CI runs the tests on 32-bit ARM under QEMU, as the Raspberry Pi 1's
+  core, and `make test-armv6` does the same where `qemu-arm` is
+  installed (`GUIDELINES/project/CI.md`).
 
 ### Changed
 
@@ -155,11 +166,15 @@ the next minor, a fix counts the suffix up.
 - `massimo user` and `massimo store` print their help, or refuse wrong
   arguments, without creating a store in the data directory first.
 
+- As the service user, without `-env`, the commands read
+  `/etc/massimo/env` and the store in `/var/lib/massimo` from any
+  directory, not a home's `.env` (`README.md`, "Cube variables").
+
 ### Security
 
-- The service runs as `_massimo` on Linux too, as on macOS: the package
-  and `massimo install` rename their own `massimo` in place, and never
-  take over or purge a person's `massimo` (`packaging/README.md`).
+- On Linux the service runs as `_massimo`, as on macOS: the package and
+  `massimo install` rename their own `massimo`, spare a person's, and
+  name the `chown` after an older takeover (`packaging/README.md`).
 
 - `/var/lib/massimo`, the store, stays 0750 when the service starts;
   systemd made it 0755 at every start, so that every user of the box saw
