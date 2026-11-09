@@ -60,23 +60,16 @@ for the service run it as its user, for example
 `)
 }
 
-// runUser handles massimo user.
+// runUser handles massimo user. Each command checks its flags and
+// arguments before it opens the store, which creates the store with its
+// keys, so that its help and a mistake leave nothing behind.
 func runUser(args []string) error {
 	if len(args) == 0 {
 		userUsage()
 		return errors.New("user: which command?")
 	}
-	ctx := context.Background()
-	logger, err := newLogger(os.Stderr)
-	if err != nil {
-		return err
-	}
-	st, err := store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
-	if err != nil {
-		return err
-	}
-	defer st.Close()
-	u := userCmd{st: st, ctx: ctx}
+	u := &userCmd{ctx: context.Background()}
+	defer u.close()
 	switch args[0] {
 	case "add":
 		return u.add(args[1:])
@@ -101,13 +94,31 @@ func runUser(args []string) error {
 }
 
 type userCmd struct {
-	st  *store.Store
 	ctx context.Context
+	st  *store.Store // nil until open
+}
+
+// open opens the store in the data directory, once the command's
+// arguments are good.
+func (u *userCmd) open() error {
+	logger, err := newLogger(os.Stderr)
+	if err != nil {
+		return err
+	}
+	u.st, err = store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
+	return err
+}
+
+// close closes the store if the command opened it.
+func (u *userCmd) close() {
+	if u.st != nil {
+		u.st.Close()
+	}
 }
 
 // flags parses a subcommand's flags, which may come before or after the
 // name: "user add anna -role operator" and "user add -role operator anna".
-func (u userCmd) flags(cmd string, args []string, fs *flag.FlagSet) ([]string, error) {
+func (u *userCmd) flags(cmd string, args []string, fs *flag.FlagSet) ([]string, error) {
 	fs.Usage = userUsage
 	var names []string
 	for len(args) > 0 {
@@ -124,7 +135,7 @@ func (u userCmd) flags(cmd string, args []string, fs *flag.FlagSet) ([]string, e
 }
 
 // audit records what the command did.
-func (u userCmd) audit(action, target string, detail map[string]any, err error) {
+func (u *userCmd) audit(action, target string, detail map[string]any, err error) {
 	if detail == nil {
 		detail = map[string]any{}
 	}
@@ -145,7 +156,7 @@ func (u userCmd) audit(action, target string, detail map[string]any, err error) 
 // Block 6), as the server writes one beside an audit row: a line of the
 // server's under Configuration, made by the command line, naming the
 // user it concerns as they are then; never a secret.
-func (u userCmd) logChange(action, target string, detail map[string]any) {
+func (u *userCmd) logChange(action, target string, detail map[string]any) {
 	summary := map[string]any{"action": action, "target": target, "via": "cli", "set": detail}
 	if name, ok := strings.CutPrefix(target, "user:"); ok {
 		if us, found, err := u.st.User(u.ctx, name); err == nil && found {
@@ -200,7 +211,7 @@ func readPassword(fromStdin bool) (string, error) {
 	return pw, nil
 }
 
-func (u userCmd) add(args []string) error {
+func (u *userCmd) add(args []string) error {
 	fs := flag.NewFlagSet("user add", flag.ContinueOnError)
 	role := fs.String("role", store.RoleViewer, "the user's role")
 	display := fs.String("display-name", "", "the name shown")
@@ -220,6 +231,9 @@ func (u userCmd) add(args []string) error {
 		if nu.ExpiresAt, err = time.Parse(time.RFC3339, *expires); err != nil {
 			return fmt.Errorf("user add: -expires: %w", err)
 		}
+	}
+	if err := u.open(); err != nil {
+		return err
 	}
 	password := ""
 	if !*noPassword {
@@ -243,10 +257,17 @@ func (u userCmd) add(args []string) error {
 	return nil
 }
 
-func (u userCmd) list(args []string) error {
-	if len(args) > 0 {
+func (u *userCmd) list(args []string) error {
+	names, err := u.flags("list", args, flag.NewFlagSet("user list", flag.ContinueOnError))
+	if err != nil {
+		return err
+	}
+	if len(names) > 0 {
 		userUsage()
 		return errors.New("user list takes no argument")
+	}
+	if err := u.open(); err != nil {
+		return err
 	}
 	users, err := u.st.Users(u.ctx)
 	if err != nil {
@@ -282,7 +303,7 @@ func (u userCmd) list(args []string) error {
 	return w.Flush()
 }
 
-func (u userCmd) passwd(args []string) error {
+func (u *userCmd) passwd(args []string) error {
 	fs := flag.NewFlagSet("user passwd", flag.ContinueOnError)
 	fromStdin := fs.Bool("password-stdin", false, "read the password from standard input")
 	names, err := u.flags("passwd", args, fs)
@@ -292,6 +313,9 @@ func (u userCmd) passwd(args []string) error {
 	if len(names) != 1 {
 		userUsage()
 		return errors.New("user passwd: give the name")
+	}
+	if err := u.open(); err != nil {
+		return err
 	}
 	us, ok, err := u.st.User(u.ctx, names[0])
 	if err != nil {
@@ -316,17 +340,24 @@ func (u userCmd) passwd(args []string) error {
 	return nil
 }
 
-func (u userCmd) setDisabled(args []string, disabled bool) error {
+func (u *userCmd) setDisabled(args []string, disabled bool) error {
 	verb := "enable"
 	if disabled {
 		verb = "disable"
 	}
-	if len(args) != 1 {
+	names, err := u.flags(verb, args, flag.NewFlagSet("user "+verb, flag.ContinueOnError))
+	if err != nil {
+		return err
+	}
+	if len(names) != 1 {
 		userUsage()
 		return fmt.Errorf("user %s: give the name", verb)
 	}
-	us, err := u.st.UpdateUser(u.ctx, args[0], func(c *store.User) error { c.Disabled = disabled; return nil }, 0)
-	u.audit("user.update", "user:"+store.NormalName(args[0]), map[string]any{"disabled": disabled}, err)
+	if err := u.open(); err != nil {
+		return err
+	}
+	us, err := u.st.UpdateUser(u.ctx, names[0], func(c *store.User) error { c.Disabled = disabled; return nil }, 0)
+	u.audit("user.update", "user:"+store.NormalName(names[0]), map[string]any{"disabled": disabled}, err)
 	if err != nil {
 		return fmt.Errorf("user %s: %w", verb, err)
 	}
@@ -334,7 +365,7 @@ func (u userCmd) setDisabled(args []string, disabled bool) error {
 	return nil
 }
 
-func (u userCmd) token(args []string) error {
+func (u *userCmd) token(args []string) error {
 	fs := flag.NewFlagSet("user token", flag.ContinueOnError)
 	label := fs.String("label", "", "what the key is for (required)")
 	names, err := u.flags("token", args, fs)
@@ -344,6 +375,9 @@ func (u userCmd) token(args []string) error {
 	if len(names) != 1 || strings.TrimSpace(*label) == "" {
 		userUsage()
 		return errors.New("user token: give the name and -label")
+	}
+	if err := u.open(); err != nil {
+		return err
 	}
 	us, ok, err := u.st.User(u.ctx, names[0])
 	if err != nil {
@@ -368,17 +402,24 @@ func (u userCmd) token(args []string) error {
 
 // tokens lists a user's live sessions and keys, oldest first, with the
 // ids revoke takes; never their secrets, which the store does not have.
-func (u userCmd) tokens(args []string) error {
-	if len(args) != 1 {
+func (u *userCmd) tokens(args []string) error {
+	names, err := u.flags("tokens", args, flag.NewFlagSet("user tokens", flag.ContinueOnError))
+	if err != nil {
+		return err
+	}
+	if len(names) != 1 {
 		userUsage()
 		return errors.New("user tokens: give the name")
 	}
-	us, ok, err := u.st.User(u.ctx, args[0])
+	if err := u.open(); err != nil {
+		return err
+	}
+	us, ok, err := u.st.User(u.ctx, names[0])
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("user tokens: no user %q", args[0])
+		return fmt.Errorf("user tokens: no user %q", names[0])
 	}
 	tokens, err := u.st.Tokens(u.ctx, us.ID)
 	if err != nil {
@@ -402,27 +443,36 @@ func (u userCmd) tokens(args []string) error {
 	return w.Flush()
 }
 
-func (u userCmd) revoke(args []string) error {
-	if len(args) < 1 || len(args) > 2 {
+func (u *userCmd) revoke(args []string) error {
+	names, err := u.flags("revoke", args, flag.NewFlagSet("user revoke", flag.ContinueOnError))
+	if err != nil {
+		return err
+	}
+	if len(names) < 1 || len(names) > 2 {
 		userUsage()
 		return errors.New("user revoke: give the name, and a token id to revoke one")
 	}
-	us, ok, err := u.st.User(u.ctx, args[0])
+	var id int64
+	if len(names) == 2 {
+		if id, err = strconv.ParseInt(names[1], 10, 64); err != nil {
+			return fmt.Errorf("user revoke: bad token id %q", names[1])
+		}
+	}
+	if err := u.open(); err != nil {
+		return err
+	}
+	us, ok, err := u.st.User(u.ctx, names[0])
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("user revoke: no user %q", args[0])
+		return fmt.Errorf("user revoke: no user %q", names[0])
 	}
 	tokens, err := u.st.Tokens(u.ctx, us.ID)
 	if err != nil {
 		return err
 	}
-	if len(args) == 2 {
-		id, err := strconv.ParseInt(args[1], 10, 64)
-		if err != nil {
-			return fmt.Errorf("user revoke: bad token id %q", args[1])
-		}
+	if len(names) == 2 {
 		found := false
 		for _, t := range tokens {
 			found = found || t.ID == id
