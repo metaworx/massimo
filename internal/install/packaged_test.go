@@ -169,8 +169,30 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 	if err := Install(Options{Root: root2, Out: &out, Run: rec2.run}); err != nil {
 		t.Fatal(err)
 	}
-	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") {
+	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") || !strings.Contains(out.String(), "user add <name> -role owner") {
 		t.Fatalf("started with the template: %v %s", rec2.cmds, out.String())
+	}
+
+	// An older template, its comments changed, is the template still.
+	root3 := packagedRoot(t)
+	os.WriteFile(filepath.Join(root3, EnvPath), []byte("# an older comment\nMASSIMO_LOG=/var/log/massimo/serve.log\n"), 0o600)
+	rec3 := &recorder{}
+	out.Reset()
+	if err := Install(Options{Root: root3, Out: &out, Run: rec3.run}); err != nil {
+		t.Fatal(err)
+	}
+	if rec3.has("systemctl restart") || !strings.Contains(out.String(), "is still the template") {
+		t.Fatalf("an older template: %v %s", rec3.cmds, out.String())
+	}
+
+	// Running on the template, set up through the web UI: restarted.
+	rec4 := &recorder{}
+	out.Reset()
+	if err := Install(Options{Root: packagedRoot(t), Out: &out, Run: rec4.run, Output: isActive("active")}); err != nil {
+		t.Fatal(err)
+	}
+	if !rec4.has("systemctl restart massimo.service") || strings.Contains(out.String(), "not started") {
+		t.Fatalf("not restarted on the template: %v %s", rec4.cmds, out.String())
 	}
 }
 

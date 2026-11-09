@@ -52,6 +52,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- `massimo install` restarts a running service also on the template's
+  settings and leaves a box that never ran for its owner, on every
+  platform, naming `massimo user add` and the web UI (`README.md`).
+
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
   and their opposites, in any case, as `serve -help`, the settings
   file's template and the READMEs say (`README.md`, "Server").

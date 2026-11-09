@@ -183,12 +183,17 @@ sudo ./massimo-linux-arm64 install -settings .env
 
 installs the binary as `/usr/local/bin/massimo`,
 creates the system user `massimo`,
-copies the `.env` to `/etc/massimo/env` (without `-settings` a commented
-template to fill in, and the service is then not started),
+copies the `.env` to `/etc/massimo/env` (without `-settings` the commented template,
+which is all a first start needs),
 writes `massimo.service`,
 the update helper `massimo-update.path` and `.service` and the log rotation,
 enables them and starts the service,
 which listens on `:8099` on every interface.
+On the template's settings it only restarts a service that runs:
+a server without users answers every device on the local network (see "Server"),
+so the first start is the owner's,
+after `sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner`
+or followed by the first-owner form of the web UI.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
 `-no-update-helper` leaves the helper out,
@@ -273,8 +278,9 @@ In PowerShell opened with "Run as administrator", in that folder:
 ```
 
 installs the binary as `C:\Program Files\Massimo\massimo.exe`,
-the settings as `C:\ProgramData\Massimo\env` (without `-settings` a template to
-fill in) with the logs `serve.log` and `service.log` next to them,
+the settings as `C:\ProgramData\Massimo\env` (without `-settings` the template,
+and the first start is then the owner's, as on Linux)
+with the logs `serve.log` and `service.log` next to them,
 in a folder only SYSTEM and the Administrators can read,
 the service `massimo` ("Massimo" in the Services console: automatic start,
 LocalSystem, restarted after 10 s on failure, listening on `:8099`;
@@ -384,7 +390,8 @@ sudo ./massimo-darwin-arm64 install -settings .env
 
 installs the Linux layout: the binary `/usr/local/bin/massimo`,
 the hidden user `_massimo`,
-the settings `/etc/massimo/env` (without `-settings` a template to fill in),
+the settings `/etc/massimo/env` (without `-settings` the template,
+and the first start is then the owner's, as on Linux),
 the state `/var/lib/massimo`,
 the log `/var/log/massimo/serve.log` (launchd appends to it; it is not rotated),
 and in `/Library/LaunchDaemons` the daemon `ch.metaworx.massimo` (started at
