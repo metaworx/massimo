@@ -26,6 +26,10 @@ the next minor, a fix counts the suffix up.
   made from the migrations beside it and checked by `go test`
   (`docs/store.md`, "Migrations").
 
+- `ui/connect.html`, the apps' page: the servers, discovery, the
+  fingerprint of a self-signed certificate, the biometric and
+  notification switches; a browser sees it as the app's (`docs/app.md`).
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what
