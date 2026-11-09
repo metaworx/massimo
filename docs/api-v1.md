@@ -239,7 +239,7 @@ The default roles and their sets are those of docs/store.md section 6:
 restore and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
-`viewer` reads, `integration` reads, sets and locks.
+`viewer` reads, `integration` reads, sets, locks and configures.
 A role's set can be changed, a role renamed, created and disabled,
 and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
@@ -1954,6 +1954,36 @@ a restart, …) write none.
 A failure the server reports, such as a reboot the helper did not start,
 is its kind's line at `warn` with the `error`.
 A comment line is sent every 30 seconds to keep the connection alive.
+
+**Ids and resume.**
+Every event the stream sends carries an `id:` line,
+`<epoch>-<number>`: the number counts the Cube's events up,
+the epoch changes when the server or the Cube's connection to it starts anew.
+The connection's state events carry none,
+but the last of them carries the newest id, where a reconnection resumes:
+```
+id: mh8k2q3x-41
+event: state
+data: {"kind":"state","device":"0a0102",…}
+```
+A client that reconnects names the last id it read,
+in the header `Last-Event-ID` (the browser's own retry sends it)
+or the parameter `last_event_id` (a client that opens a new stream, such as
+one with a fresh ticket); the header wins where both are given.
+The stream then sends the events since that id that the caller may see,
+oldest first, and no state burst.
+The server keeps a Cube's last 1024 events for that;
+an id it no longer holds, one from before a restart, or one it never issued
+gets a `resync` event first, then the state burst of a first connection:
+what happened in between is lost, and the client reads what it needs again.
+```
+event: resync
+data: {"kind":"resync","source":"system","level":"info","time":"…"}
+```
+A client that falls behind, its events piling up at the server,
+gets what is queued for it and then the end of the stream,
+rather than a stream with a gap it cannot see:
+its reconnection resumes.
 
 An event of a device carries its radio address as `device` and its serial number
 as `serial`, also before the device has a state and after it is gone.

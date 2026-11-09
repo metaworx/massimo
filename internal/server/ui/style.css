@@ -1077,6 +1077,9 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .config-tabs .tab.close { margin-left: auto; font-weight: 400; }
 .config-body h4 { margin: 12px 0 6px; font-size: 0.95rem; }
 .cfg-form { display: flex; flex-direction: column; gap: 8px; }
+/* The week editor (week-program.js) lays its parts out in the form, as if
+   they were the form's own. */
+massimo-week-program { display: contents; }
 /* a row of a label and its control (components.js fieldRow, and the
    rows of the settings): the label at the left, the control at the
    right on the same line, wrapping under the label where there is no

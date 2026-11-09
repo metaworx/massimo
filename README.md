@@ -55,6 +55,8 @@ the web UI in any current browser, on a phone or a desktop.
   [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml): the HTTP API
 - [docs/ui.md](docs/ui.md): using the web UI
 - [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
+- [docs/homeassistant.md](docs/homeassistant.md): Home Assistant,
+  through the proxy today and with an integration of its own later
 - [docs/portal-protocol.md](docs/portal-protocol.md):
   everything learned about the Cube, the portal and the radio commands
 - [docs/firmware-extraction.md](docs/firmware-extraction.md):
