@@ -18,6 +18,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/serve"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -168,7 +169,7 @@ func storeState() string {
 // or the file (a Cube the store does not know yet, added at serve's next
 // start), with the file's line where it differs.
 func printStore(w io.Writer) {
-	file, plain, err := fileCubes()
+	file, plain, err := serve.FileCubes(selectedSN)
 	if err != nil {
 		fmt.Fprintf(w, "\nsettings file: %v\n", err)
 		return
@@ -260,7 +261,7 @@ func printStore(w io.Writer) {
 // can be read here (they belong to the service user).
 func printTLS(w io.Writer) {
 	certPath, keyPath := os.Getenv(tlsCertVar), os.Getenv(tlsKeyVar)
-	mode := tlsMode(os.Getenv(tlsVar), certPath, keyPath)
+	mode := serve.TLSMode(os.Getenv(tlsVar), certPath, keyPath)
 	if mode == "off" {
 		fmt.Fprintf(w, "tls:           off (serve has no TLS)\n")
 		return
