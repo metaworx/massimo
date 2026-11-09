@@ -86,12 +86,15 @@ func parseUDPReply(b []byte) (serial string, boot bool, op byte, data []byte, ok
 // those instead of being broadcast (for other subnets, or NAT setups
 // such as WSL 2).
 func Discover(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Discovered, error) {
-	return discover(ctx, wait, DiscoveryPort, unicast...)
+	return discover(ctx, wait, DiscoveryPort, DiscoveryPort, unicast...)
 }
 
-// discover is Discover on another port than the Cube's, for the tests.
-func discover(ctx context.Context, wait time.Duration, port int, unicast ...net.IP) ([]Discovered, error) {
-	pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
+// discover is Discover binding one port and asking on another, for the
+// tests: a fake Cube on the loopback holds the port asked on, and
+// Windows, unlike Linux, lets the wildcard bind it too and hands the
+// fake its own answers.
+func discover(ctx context.Context, wait time.Duration, bind, port int, unicast ...net.IP) ([]Discovered, error) {
+	pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", bind))
 	if err != nil {
 		// Fall back to any port: a Cube that answers to the source port
 		// is still found; one that answers to 23272 is not.

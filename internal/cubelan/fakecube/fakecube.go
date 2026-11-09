@@ -49,6 +49,34 @@ type Server struct {
 	configs  map[string]cube.Message // C lines set with SetConfig, by address
 	list     *cube.Message           // the L line set with SetDeviceList
 	deleted  map[cube.RFAddress]bool // deleted with t:
+	quiet    chan struct{}           // open while silent, see SetSilent
+}
+
+// SetSilent makes the fake a Cube whose network cable is out, or puts
+// the cable back: while silent it keeps its connections, sends no
+// greeting and holds every line it reads unanswered; once it speaks
+// again it carries on with what it held, as TCP delivers it when the
+// cable is back. Close ends a silence too.
+func (s *Server) SetSilent(on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case on && s.quiet == nil:
+		s.quiet = make(chan struct{})
+	case !on && s.quiet != nil:
+		close(s.quiet)
+		s.quiet = nil
+	}
+}
+
+// audible waits while the fake is silent.
+func (s *Server) audible() {
+	s.mu.Lock()
+	q := s.quiet
+	s.mu.Unlock()
+	if q != nil {
+		<-q
+	}
 }
 
 // paired returns the Pair device once it has joined.
@@ -239,6 +267,7 @@ func (s *Server) Close() error {
 		c.Close()
 	}
 	s.mu.Unlock()
+	s.SetSilent(false)
 	return err
 }
 
@@ -287,6 +316,7 @@ func (s *Server) serve(conn net.Conn) {
 		_, err := conn.Write([]byte(line))
 		return err
 	}
+	s.audible()
 	greeting := s.greeting()
 	for _, m := range greeting {
 		m, ok := s.visible(m)
@@ -326,6 +356,7 @@ func (s *Server) serve(conn net.Conn) {
 		s.mu.Lock()
 		s.received = append(s.received, m)
 		s.mu.Unlock()
+		s.audible()
 		var reply string
 		switch m.Type {
 		case 'q':
