@@ -241,3 +241,25 @@ func TestInstallPackagedUpdateHelper(t *testing.T) {
 		t.Fatalf("without -no-update-helper: %q", rec.cmds)
 	}
 }
+
+func TestAptSuite(t *testing.T) {
+	dir := t.TempDir()
+	for content, want := range map[string]string{
+		"# The Massimo apt repository\n# Suites: comment\nTypes: deb\nURIs: https://massimo.example.invalid/apt\nSuites: alpha\nComponents: main\n": "alpha",
+		"types: deb\nsuites:   beta stable\n": "beta",
+	} {
+		p := filepath.Join(dir, "massimo.sources")
+		os.WriteFile(p, []byte(content), 0o644)
+		if got, err := AptSuite(p); err != nil || got != want {
+			t.Errorf("%q: %q, %v; want %q", content, got, err, want)
+		}
+	}
+	p := filepath.Join(dir, "none.sources")
+	os.WriteFile(p, []byte("Types: deb\nSuites:\n"), 0o644)
+	if _, err := AptSuite(p); err == nil {
+		t.Error("an empty Suites field read")
+	}
+	if _, err := AptSuite(filepath.Join(dir, "missing.sources")); err == nil {
+		t.Error("a missing file read")
+	}
+}

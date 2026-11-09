@@ -38,6 +38,10 @@ const (
 // without the helper it is left out.
 const updateFlag = " -update-request /var/lib/massimo/update-request"
 
+// UpdatePathWant is the link that enabling massimo-update.path makes, by
+// which serve knows that the Debian package's update helper is on.
+const UpdatePathWant = "/etc/systemd/system/paths.target.wants/massimo-update.path"
+
 // The reboot helper: the request file the server writes and the helper
 // watches, on Linux and macOS alike, and on Linux the link that enabling
 // massimo-reboot.path makes, by which serve knows the helper is there.

@@ -155,7 +155,7 @@ func runServe(args []string) error {
 	reboot := serveReboot(logger, *allowReboot)
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
-		upd.Managed = m.String()
+		packagedUpdate(&upd, m, "", os.Getenv)
 	}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
 		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, tlsInEffect != "off", *updateRequest, *updateStatus); err != nil {

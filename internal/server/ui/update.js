@@ -43,6 +43,9 @@ function helperText(h) {
 function renderUpdate(u) {
   const version = u.current || t("update.unknownVersion");
   const parts = [u.channel ? t("update.runningChannel", { version, channel: u.channel }) : t("update.running", { version })];
+  // a package manager owns the binary: the Debian package's helper
+  // installs through apt
+  if (u.manager) parts.push(t("update.manager", { manager: u.manager }));
   if (u.check_error) parts.push(t("update.checkFailed", { error: u.check_error }));
   else if (!u.channel) parts.push(t("update.noChannel"));
   else if (!u.latest) parts.push(t("update.noRelease"));
@@ -111,7 +114,9 @@ function startUpdate() {
     box.remove();
     actions.classList.remove("hidden");
   };
-  const box = confirmBox(t("update.confirm", { version: u.latest }), { yes: t("update.to", { version: u.latest }), no: t("action.cancel") }, () => {
+  // apt puts nothing back: the helper says how to go back instead
+  const question = u.manager ? t("update.confirmManaged", { version: u.latest, manager: u.manager }) : t("update.confirm", { version: u.latest });
+  const box = confirmBox(question, { yes: t("update.to", { version: u.latest }), no: t("action.cancel") }, () => {
     back();
     runUpdate(u);
   }, () => {

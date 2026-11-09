@@ -4,6 +4,7 @@
 package install
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,26 @@ const PackagedPath = "/usr/share/massimo/packaged"
 // packaging/README.md, "The apt repository", sets up, and the only one
 // the update helper fetches from on a box apt owns massimo on.
 const AptSource = "/etc/apt/sources.list.d/massimo.sources"
+
+// AptSuite reads the first suite the apt source at path names (its
+// Suites field, deb822 as packaging/apt/publish.sh writes it): the update
+// channel apt follows there.
+func AptSuite(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if !ok || strings.HasPrefix(strings.TrimSpace(k), "#") || !strings.EqualFold(strings.TrimSpace(k), "Suites") {
+			continue
+		}
+		if f := strings.Fields(v); len(f) > 0 {
+			return f[0], nil
+		}
+	}
+	return "", fmt.Errorf("%s names no suite", path)
+}
 
 // Manager is the package manager a marker names.
 type Manager struct {

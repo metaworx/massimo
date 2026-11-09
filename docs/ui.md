@@ -404,6 +404,11 @@ to the top of the page.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.
+  On a box the Debian package installed it says "Installed by apt",
+  the channel is the suite of the apt source,
+  and **Update** has the package's helper run apt;
+  nothing is put back there, and the last update says how to go back
+  (packaging/README.md, "Debian package").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
 - **Maintenance** (with `restart`, `reboot` for its reboot,

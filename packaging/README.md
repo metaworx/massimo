@@ -303,7 +303,9 @@ the settings and the store are left alone.
 On such a box apt owns `/usr/bin/massimo`, and the marker tells massimo so:
 `massimo update` run by hand still says when a newer release is out,
 but leaves the install to `sudo apt update && sudo apt install massimo`
-(the apt repository below) or to the next release's package by hand.
+(the apt repository below) or to the next release's package by hand,
+and the web UI's button has the package's update helper run apt
+(see "Updates through apt" below).
 `massimo install` keeps only what configures:
 `-settings` over a settings file that is still the template,
 `-tls` and its options into the settings as "Install with `massimo install`" puts them,
@@ -340,6 +342,12 @@ While another apt run holds apt's lock (`unattended-upgrades` among them)
 it waits up to two minutes for each command,
 since `apt-get update` does not wait itself,
 then reports apt as busy.
+The server follows the source's suite for its check as well,
+`Suites:` of `/etc/apt/sources.list.d/massimo.sources`:
+the web UI says "Installed by apt" with that channel,
+and refuses an update while `MASSIMO_UPDATE_CHANNEL` names another one,
+while the source is missing (a package installed from its file alone),
+or while the helper is off.
 The package's `postinst` restarts the service,
 and the helper waits until `/healthz` reports the version apt installed.
 When it does not, the helper reports that, with the way back,
@@ -699,7 +707,8 @@ The helper's log is in `journalctl -u massimo-update`,
 its last result in `/var/lib/massimo-update/status.json` and in the UI.
 On macOS the same request starts the LaunchDaemon `ch.metaworx.massimo-update`
 instead (see "macOS");
-on Windows the server starts the helper itself (see "Windows").
+on Windows the server starts the helper itself (see "Windows");
+the Debian package's own helper runs apt (see "Debian package").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`,
 a secret of the repository's `signing` environment that only `v*` tags can use;

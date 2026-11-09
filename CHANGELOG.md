@@ -30,9 +30,9 @@ the next minor, a fix counts the suffix up.
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
 
-- The Debian package ships the update helper, enabled: it upgrades
-  massimo through apt from the massimo source only, never downgrades
-  (`packaging/README.md`, "Debian package").
+- The web UI's Update works on a box the Debian package installed: its
+  helper, enabled, upgrades massimo through apt from the massimo source
+  alone (`packaging/README.md`, "Debian package").
 
 ### Changed
 
