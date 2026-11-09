@@ -640,7 +640,8 @@ which stops and starts the service through the service manager.
 such as Docker's `--restart`;
 `off` never.
 `sudo massimo restart` restarts the installed server from a prompt as well.
-`-allow-reboot` (or `MASSIMO_REBOOT=on`) lets the owner reboot the computer
+`-allow-reboot` (or `MASSIMO_REBOOT=on`; `-allow-reboot=off` to say no)
+lets the owner reboot the computer
 `serve` runs on from the API and the web UI (`POST /api/v1/reboot`,
 for the capability `reboot`, which only `owner` has),
 60 seconds after the request or after the delay it names, 0 to 3600:
@@ -721,6 +722,9 @@ It is on by default where `-listen` is reachable from the LAN,
 and off on a loopback address;
 `-announce` (or `MASSIMO_ANNOUNCE`) switches it,
 taking the same values as `MASSIMO_REBOOT`, and `-addr` announces nothing.
+A switch alone is on, and its value goes after `=`, as `-announce=off`:
+`serve` refuses `-announce off`, which would set it on and leave `off` and the
+flags after it unread.
 It shares port 5353 with the system's own responder (avahi, mDNSResponder,
 Windows' mDNS);
 where multicast is missing, as in a container without it,

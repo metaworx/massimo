@@ -204,6 +204,10 @@ the next minor, a fix counts the suffix up.
   in the middle passes along; its notice, also in the sign-in dialog,
   asks to compare the browser's with `massimo tls show` (`docs/ui.md`).
 
+- `serve -allow-reboot off` no longer allows the reboot: `serve` refuses
+  an argument it does not take, and a switch takes its value after `=`,
+  as `-allow-reboot=off` (`README.md`, "Server").
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added
