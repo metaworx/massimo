@@ -42,7 +42,8 @@ func storeOptions(t *testing.T, dir, token string) Options {
 			t.Fatal(err)
 		}
 	}
-	return Options{Store: st, Token: token, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{"127.0.0.1:9"}, DiscoveryWait: 20 * time.Millisecond}
+	return Options{Store: st, Token: token, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{"127.0.0.1:9"}, DiscoveryWait: 20 * time.Millisecond,
+		pushClient: loopbackOnly, pushRetry: []time.Duration{10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond}}
 }
 
 // userToken adds a user with a role and returns an API key of it.

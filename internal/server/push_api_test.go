@@ -4,21 +4,49 @@
 package server
 
 import (
+	"bufio"
+	"context"
 	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/push"
+	"go.metaworx.ch/massimo/internal/push/pushtest"
 	"go.metaworx.ch/massimo/internal/store"
 )
+
+// loopbackOnly is the tests' Web Push client: it reaches the loopback
+// alone, so that a subscription's endpoint in a test, such as
+// push.example.net, never reaches the network.
+var loopbackOnly = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if ip, perr := netip.ParseAddr(host); err != nil || perr != nil || !ip.IsLoopback() {
+			return nil, fmt.Errorf("the tests reach no network: %s", addr)
+		}
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}},
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
 
 // subscription is a browser's PushSubscription.toJSON() for endpoint,
 // with keys of its own.
@@ -221,5 +249,152 @@ func TestNotificationFromTheCube(t *testing.T) {
 	})
 	if n := strings.Count(log.String(), "msg=notification"); n != 1 {
 		t.Fatalf("%d notifications, want the subscriber's one:\n%s", n, log.String())
+	}
+}
+
+// notificationEvents opens a Cube's event stream with the token and
+// returns a channel of the notifications it sends.
+func notificationEvents(t *testing.T, ts *httptest.Server, token string) <-chan notify.Notification {
+	t.Helper()
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("stream: %v %v", resp, err)
+	}
+	out := make(chan notify.Notification, 8)
+	go func() {
+		defer resp.Body.Close()
+		rd := bufio.NewReader(resp.Body)
+		kind := ""
+		for {
+			l, err := rd.ReadString('\n')
+			if err != nil {
+				return
+			}
+			switch {
+			case strings.HasPrefix(l, "event: "):
+				kind = strings.TrimSpace(strings.TrimPrefix(l, "event: "))
+			case strings.HasPrefix(l, "data: ") && kind == "notification":
+				var ev struct {
+					Notification notify.Notification `json:"notification"`
+				}
+				json.Unmarshal([]byte(strings.TrimPrefix(l, "data: ")), &ev)
+				out <- ev.Notification
+			}
+		}
+	}()
+	t.Cleanup(func() { resp.Body.Close() })
+	return out
+}
+
+// A notification reaches its user by Web Push, encrypted for the
+// subscription and signed with the server's VAPID key, on the user's
+// own event stream and no one else's, and through the deliverers an app
+// embedding the server gives.
+func TestNotificationDelivered(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	var log syncBuffer
+	opts.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	opts.PollInterval = 100 * time.Millisecond
+	var mu sync.Mutex
+	var local []string
+	opts.Deliverers = []push.Deliverer{push.Local(func(user int64, n notify.Notification) {
+		mu.Lock()
+		defer mu.Unlock()
+		local = append(local, fmt.Sprintf("%d %s %s", user, n.Kind, n.Device))
+	})}
+	fc, ts, s := startWith(t, opts)
+	st := s.opts.Store
+	op := userToken(t, st, "op", store.RoleOperator)
+	_, text := callAPI(t, ts, "GET", "/api/v1/push/vapid", "secret", "")
+	var vapid struct{ Key string }
+	json.Unmarshal([]byte(text), &vapid)
+	kb, _ := base64.RawURLEncoding.DecodeString(vapid.Key)
+	pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), kb)
+	if err != nil {
+		t.Fatalf("the VAPID key %q: %v", vapid.Key, err)
+	}
+	svc := pushtest.New(t, pub)
+	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", svc.Subscription("/send/owner", "phone")); code != 201 {
+		t.Fatalf("subscribe: %d %s", code, text)
+	}
+	eventually(t, "the cube", func() bool {
+		var c cubeView
+		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
+	})
+	mine, theirs := notificationEvents(t, ts, "secret"), notificationEvents(t, ts, op)
+	// 0a010d reports manual, 21 °C, valve 30 %; then its battery low.
+	greeting, _ := fakecube.LoadGreeting(fixture)
+	l := greeting[len(greeting)-1]
+	raw, _ := base64.StdEncoding.DecodeString(l.Data)
+	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
+	eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
+	raw[6] |= 0x80
+	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
+
+	select {
+	case n := <-mine:
+		if n.Kind != notify.KindBatteryLow || n.Cube != "KEQ0000100" || n.Device != "0a010d" {
+			t.Fatalf("the stream's notification: %+v", n)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no notification on the user's stream")
+	}
+	eventually(t, "the push", func() bool { return len(svc.Received()) == 1 })
+	got := svc.Received()[0]
+	var n notify.Notification
+	if got.Err != nil || json.Unmarshal(got.Message, &n) != nil || n.Kind != notify.KindBatteryLow || n.Device != "0a010d" || got.Path != "/send/owner" {
+		t.Fatalf("the push: %+v %s", got, got.Message)
+	}
+	if h := got.Header; h.Get("TTL") != "86400" || h.Get("Urgency") != "normal" || h.Get("Topic") != "battery_low-0a010d" {
+		t.Fatalf("the push's headers: %v", h)
+	}
+	eventually(t, "the local deliverer", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(local) == 1
+	})
+	if !strings.HasSuffix(local[0], " battery_low 0a010d") || strings.HasPrefix(local[0], "0 ") {
+		t.Fatalf("the local deliverer: %v", local)
+	}
+	eventually(t, "the delivery noted", func() bool {
+		_, text := callAPI(t, ts, "GET", "/api/v1/me/push", "secret", "")
+		var list []pushView
+		json.Unmarshal([]byte(text), &list)
+		return len(list) == 1 && list[0].LastOKAt != nil && list[0].Failures == 0
+	})
+	select {
+	case n := <-theirs:
+		t.Fatalf("another user's stream got %+v", n)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// A subscription its push service knows no more is removed at the
+// first notification.
+func TestNotificationRemovesGoneSubscription(t *testing.T) {
+	opts := storeOptions(t, t.TempDir(), "secret")
+	var log syncBuffer
+	opts.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	_, ts, s := startWith(t, opts)
+	svc := pushtest.New(t, nil, http.StatusGone)
+	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", svc.Subscription("/send/gone", "phone")); code != 201 {
+		t.Fatalf("subscribe: %d %s", code, text)
+	}
+	subs, err := s.opts.Store.PushSubscriptions(t.Context(), 0)
+	if err != nil || len(subs) != 1 {
+		t.Fatalf("subscriptions: %v %v", subs, err)
+	}
+	s.webPush.Deliver(t.Context(), subs[0].UserID, notify.Notification{Kind: notify.KindUpdate, Values: map[string]any{"version": "v9.9.9"}, Time: time.Now(), URL: "/"})
+	if got := svc.Received(); len(got) != 1 || got[0].Err != nil {
+		t.Fatalf("the push: %+v", got)
+	}
+	if _, text := callAPI(t, ts, "GET", "/api/v1/me/push", "secret", ""); strings.TrimSpace(text) != "[]" {
+		t.Fatalf("the subscription stayed: %s", text)
+	}
+	if !strings.Contains(log.String(), "push subscription removed: its push service knows it no more") {
+		t.Fatalf("no line:\n%s", log.String())
 	}
 }

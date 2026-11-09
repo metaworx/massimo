@@ -249,7 +249,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 
 	ch := make(chan event, 64)
 	rt.subsMu.Lock()
-	rt.subs[ch] = struct{}{}
+	rt.subs[ch] = 0
 	rt.subsMu.Unlock()
 	before := len(fc.Received())
 	code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f))

@@ -601,6 +601,9 @@ Notes on the tables:
   each tied to the session or API key that subscribed,
   so that revoking it, or removing the user, deletes the row;
   one whose session ended or whose user is disabled is kept and not sent to.
+  `last_ok_at` is the last message its push service took, `failures` the
+  failed ones since; one its push service knows no more (`404`, `410`),
+  or failing for seven days, is deleted.
   A row has a `uuid` but no `version`, `deleted_at` or `origin`:
   a subscription is bound to this server's VAPID key, is not replicated,
   and is deleted rather than marked.
