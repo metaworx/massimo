@@ -124,6 +124,10 @@ the next minor, a fix counts the suffix up.
   mode, and a removed one by its type, S/N and name as it was; device
   routes take the S/N too (`docs/api-v1.md`, "Identifiers").
 
+- A build from a release tag's checkout follows the tag's update
+  channel, such as `alpha`, no longer `HEAD`, which has no releases
+  (`README.md`, "Installing").
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added

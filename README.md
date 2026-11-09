@@ -118,6 +118,10 @@ one at a time with `make linux`, `make linux-arm64`, `make linux-armv7`,
 `make test` and `make clean` do what they say;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
+A build from a release tag's checkout follows the tag's channel,
+`alpha` for every release so far.
+A tag up to v0.12.0-alpha.1 still follows `HEAD`, which has no releases,
+unless built with `make CHANNEL=alpha`.
 A build from `main` follows the channel `main`, which has no releases,
 unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
 see [packaging/README.md](packaging/README.md#updating).
