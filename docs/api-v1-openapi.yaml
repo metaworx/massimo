@@ -1669,8 +1669,9 @@ paths:
       x-capability: read
       description: |
         The events the stream sends, kept in the store for log.keep_days
-        (30 by default, 0 for ever), each with its id; without
-        parameters the newest 200. A client pages back with before set
+        (30 by default, 0 for ever), each with its id, the server's own
+        among every Cube's; without parameters the newest 200 at info
+        and above. A client pages back with before set
         to the id of the oldest event it has, until a page is empty. A
         state event's stored copy leaves out state.received. A Cube
         without a row in the store keeps its last 500 events in memory,
@@ -1681,7 +1682,10 @@ paths:
         - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
         - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
         - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
-        - {name: device, in: query, description: "Only events of this device, by its serial number or its radio address; a serial the Cube does not have answers an empty page", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
+        - {name: source, in: query, description: "Only events of this source: a device's, the Cube's own, the server's own jobs, a change of the configuration", schema: {type: string, enum: [device, cube, system, config]}}
+        - {name: level, in: query, description: "Only events of this level and above; info by default", schema: {type: string, enum: [debug, info, warn, error], default: info}}
+        - {name: device, in: query, description: "Only events of this device, by its serial number or its radio address, also one the Cube no longer has", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
+        - {name: user, in: query, description: "Only events this user started, by the login name, a removed user's too; a name the server does not know answers an empty page", schema: {type: string, example: anna}}
       responses:
         "200":
           description: Events as the stream sends them, each with its id in the log
@@ -1696,7 +1700,14 @@ paths:
                     kind: {type: string}
                     device: {type: string, description: The device's radio address}
                     serial: {type: string, description: "The device's serial number, also before it has a state and after it is gone; the Cube's for its own configuration"}
-                    source: {type: string, enum: [device, cube], description: "Whose a device's event is: the device's, or the Cube's own configuration"}
+                    source: {type: string, enum: [device, cube, system, config], description: "Whose the event is: a device's, the Cube's own, the server's own jobs, a change of the configuration"}
+                    level: {type: string, enum: [debug, info, warn, error]}
+                    by:
+                      type: object
+                      description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and the bootstrap token
+                      properties:
+                        name: {type: string}
+                        display_name: {type: string}
                     time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}

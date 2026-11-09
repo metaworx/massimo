@@ -42,7 +42,37 @@ const logState = {
   room: 0, // the lines live events may grow the log to before the oldest go (LOG_MAX_LINES at least)
   stick: true, // keep the newest line in view at the top unless the user scrolled down
   liveSeq: 0, // counts the live lines, so that loadLog finds the ones that came while it waited
+  level: "info", // the lowest level shown: debug in expert mode (logLevel)
 };
+
+// LOG_LEVELS are the levels of an event, lowest first, as the server
+// names them.
+const LOG_LEVELS = ["debug", "info", "warn", "error"];
+
+// logLevel is the lowest level the log shows: debug in expert mode, info
+// otherwise.
+function logLevel() {
+  return state.settings.expert ? "debug" : "info";
+}
+
+// logAtLevel reports whether a line is at the level shown or above; a
+// line of before the levels counts as info.
+function logAtLevel(line) {
+  return LOG_LEVELS.indexOf(line.level || "info") >= LOG_LEVELS.indexOf(logState.level);
+}
+
+// logSettingsChanged follows the expert switch (applySettings): the log
+// asks for its debug lines in expert mode only, so an open log loads
+// again when the level changes.
+function logSettingsChanged() {
+  const level = logLevel();
+  if (level === logState.level) return;
+  logState.level = level;
+  if (logState.open) {
+    renderLog();
+    loadLog();
+  }
+}
 
 // logDevice finds a device of the rooms or of the unlisted list already
 // loaded by its radio address; null when the Cube has none.
@@ -165,6 +195,7 @@ function logLine(ev) {
     source: ev.source || "",
     state: ev.kind === "state" ? ev.state : null,
     gone: ev.kind === "device_forgotten" && ev.state ? ev.state : null,
+    level: ev.level || "info",
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" ? ev.cube : null,
     text: ev.error || "",
@@ -222,13 +253,13 @@ function logRangeStart(range, now = new Date()) {
 // logInQuery reports whether a line is of the kind and the device chosen,
 // as the server answers them.
 function logInQuery(line) {
-  return (!logState.kind || line.kind === logState.kind) && logOfDevice(line, logState.device);
+  return (!logState.kind || line.kind === logState.kind) && logOfDevice(line, logState.device) && logAtLevel(line);
 }
 
 function logLineMatches(line) {
   if (line.kind === "error") return true; // the page's own line: the log could not load
   if (logState.kind && line.kind !== logState.kind) return false;
-  if (!logOfDevice(line, logState.device)) return false;
+  if (!logOfDevice(line, logState.device) || !logAtLevel(line)) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
   const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, line.serial, logDeviceName(line), logText(line)].join(" ").toLowerCase();
@@ -299,6 +330,7 @@ function logQuery(before) {
   if (start) q += "&since=" + encodeURIComponent(start.toISOString());
   if (logState.kind) q += "&kind=" + encodeURIComponent(logState.kind);
   if (logState.device) q += "&device=" + encodeURIComponent(logState.device);
+  if (logState.level !== "info") q += "&level=" + logState.level;
   if (before) q += "&before=" + encodeURIComponent(before);
   return q;
 }
