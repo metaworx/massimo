@@ -5,8 +5,9 @@ name: CI
 # release binary (so that a tag finds nothing new to fail on),
 # govulncheck, the Debian package in a container, and the Windows service
 # on a Windows runner. A pull request runs the web UI's suite only when
-# it changes the UI, the suite or this file, and on two of its four cases;
-# a push to main runs all of it. A push to a release branch (alpha) runs
+# it changes the UI, the suite or this file, and on two of its four cases,
+# and the mDNS test against avahi only when it changes the announcement,
+# discovery, the test or this file; a push to main runs all of it. A push to a release branch (alpha) runs
 # nothing: it is a fast-forward of a commit main has tested; the tag runs
 # release.yml.
 on:
@@ -110,9 +111,10 @@ jobs:
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
 
-  # What a pull request changes, for the Screenshots job: ui is true when
-  # it touches the web UI, its suite or this file (GUIDELINES/project/CI.md,
-  # section 2). The run checks out the pull request's merge commit, whose
+  # What a pull request changes, for the Screenshots and mDNS jobs: ui is
+  # true when it touches the web UI, its suite or this file, mdns when it
+  # touches the announcement, discovery, the proxy, the mDNS test or this
+  # file (GUIDELINES/project/CI.md, section 2). The run checks out the pull request's merge commit, whose
   # first parent is the base branch. The list is taken before it is
   # matched, so that grep -q ending the pipe early cannot fail the step
   # under pipefail; a step that fails anyway leaves ui empty, and the
@@ -123,6 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ui: ${{ steps.paths.outputs.ui }}
+      mdns: ${{ steps.paths.outputs.mdns }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -136,6 +139,11 @@ jobs:
             echo "ui=true" >> "$GITHUB_OUTPUT"
           else
             echo "ui=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/mdns-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+            echo "mdns=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mdns=false" >> "$GITHUB_OUTPUT"
           fi
 
   # The web UI in Chromium against the fake Cube: the pytest suite, then
@@ -205,6 +213,30 @@ jobs:
           name: ui-test-results
           path: tools/ui-test/results/
           if-no-files-found: ignore
+
+  # serve's mDNS announcement and massimo discover against avahi, on three
+  # hosts in Docker (tools/mdns-test/README.md): serve sharing UDP 5353
+  # with avahi-daemon, avahi-browse resolving it on the box and on a
+  # client, discover listing it and marking the proxy, and its goodbye.
+  # The runner has Docker and Compose v2; the hosts' image is built from
+  # debian:trixie-slim at each run. It runs for every push to main and for
+  # a pull request whose changes job did not answer false, as Screenshots
+  # does; skipped by this condition, the check counts as passed.
+  mdns:
+    name: mDNS against avahi
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.mdns != 'false') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: mDNS test
+        run: make mdns-test
 
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.
@@ -555,6 +587,31 @@ jobs:
           test ! -e "C:/Program Files/Massimo"
           test ! -e "C:/ProgramData/Massimo" # the settings, the logs, update.log, update-status.json and update-request
 
+      # The announcement beside Windows' own mDNS (the DNS client service
+      # holds UDP 5353): a second serve on every address, with a store of
+      # its own, announces itself without a warning, and massimo discover
+      # finds it by multicast. Windows has no dns-sd of its own, so the
+      # browser is ours; tools/mdns-test/README.md for avahi.
+      - name: mDNS beside Windows' mDNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -o mdns.exe ./cmd/massimo
+          : > mdns.env
+          mkdir -p mdns-data
+          ./mdns.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
+          MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./mdns.exe -env mdns.env -data mdns-data serve -listen 0.0.0.0:18097 -announce on -proxy off -discover-interval 0 > mdns-serve.log 2>&1 &
+          serve=$!
+          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
+          cat mdns-serve.log
+          grep -q 'msg="announced on the LAN"' mdns-serve.log
+          if grep -q 'not announced' mdns-serve.log; then echo "::error::serve did not announce itself beside Windows' mDNS"; exit 1; fi
+          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
+          ./mdns.exe -env mdns.env discover -json -wait 4s > mdns-discover.json
+          cat mdns-discover.json
+          grep -q "\"node\": *\"$node\"" mdns-discover.json
+          kill "$serve"
+
       - name: Logs
         if: always()
         shell: bash
@@ -730,6 +787,33 @@ jobs:
           "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep -q 'v0.0.0-ci.2'
           brew uninstall --force massimo-ci
           rm -rf "$tap"
+
+      # The announcement beside Apple's mDNSResponder, which holds UDP 5353
+      # on every Mac: a second serve on every address, with a store of its
+      # own, announces itself without a warning, and dns-sd finds and
+      # resolves it through mDNSResponder (-Z lists the PTR, SRV and TXT
+      # records); tools/mdns-test/README.md for avahi.
+      - name: mDNS beside mDNSResponder
+        run: |
+          set -euo pipefail
+          go build -o massimo-mdns ./cmd/massimo
+          d="$(mktemp -d)"
+          ./massimo-mdns fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
+          MASSIMO_ENV_FILE=/dev/null MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./massimo-mdns -data "$d" serve -listen 0.0.0.0:18097 -announce on -proxy off -discover-interval 0 > mdns-serve.log 2>&1 &
+          serve=$!
+          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
+          cat mdns-serve.log
+          grep -q 'msg="announced on the LAN"' mdns-serve.log
+          if grep -q 'not announced' mdns-serve.log; then echo "::error::serve did not announce itself beside mDNSResponder"; exit 1; fi
+          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
+          dns-sd -Z _massimo._tcp local. > mdns-zone.txt 2>&1 &
+          browse=$!
+          sleep 6
+          kill "$browse" || true
+          cat mdns-zone.txt
+          grep -q 'SRV.* 18097 ' mdns-zone.txt
+          grep -q "node=$node" mdns-zone.txt
+          kill "$serve"
 
       - name: Logs
         if: always()

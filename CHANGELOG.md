@@ -115,7 +115,8 @@ the next minor, a fix counts the suffix up.
   the first settings and the privacy policy (`packaging/README.md`).
 
 - `make mdns-test` checks the mDNS announcement and `discover` against
-  avahi in Docker (`tools/mdns-test/README.md`).
+  avahi in Docker, and CI against mDNSResponder and Windows' mDNS as well
+  (`tools/mdns-test/README.md`).
 
 ### Fixed
 
