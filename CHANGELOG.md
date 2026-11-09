@@ -103,8 +103,8 @@ the next minor, a fix counts the suffix up.
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
 
 - The apt repository's address is `https://massimo.metaworx.ch/apt`,
-  under the project's site with its install routes and privacy policy
-  (`packaging/README.md`, "The apt repository").
+  under the project's site: the install routes, building from source,
+  the first settings and the privacy policy (`packaging/README.md`).
 
 ### Fixed
 
@@ -131,6 +131,10 @@ the next minor, a fix counts the suffix up.
 - The log names a device by its S/N, with the radio address in expert
   mode, and a removed one by its type, S/N and name as it was; device
   routes take the S/N too (`docs/api-v1.md`, "Identifiers").
+
+- A build from a release tag's checkout follows the tag's update
+  channel, such as `alpha`, no longer `HEAD`, which has no releases
+  (`README.md`, "From source").
 
 ## [0.12.0-alpha.1] - 2026-11-08
 
