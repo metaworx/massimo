@@ -1,0 +1,44 @@
+# The update helper of the Debian package, enabled by its postinst:
+# started by massimo-update.path when the server (running unprivileged as
+# massimo) asks for an update by creating /var/lib/massimo/update-request,
+# as POST /api/v1/update does. apt owns /usr/bin/massimo here, so the
+# helper takes the request (whose channel it ignores: apt follows the
+# suite of the massimo source) and runs apt for that source only: apt-get
+# update of /etc/apt/sources.list.d/massimo.sources, then apt-get install
+# --only-upgrade massimo. The package's postinst restarts massimo.service,
+# and the helper waits until /healthz reports the version apt installed;
+# it downgrades nothing. It runs as root because apt does, and without
+# the tarball helper's ProtectSystem: apt and the package's scripts write
+# /usr, /etc and /var, add the user and restart the service
+# (packaging/README.md, "Debian package"). `massimo install
+# -no-update-helper` turns it off.
+
+[Unit]
+Description=Massimo update helper (apt)
+Documentation=https://go.metaworx.ch/massimo
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# The server's /healthz, matching MASSIMO_LISTEN of massimo.service and its
+# scheme (https:// once the settings give the server TLS); `massimo install`
+# sets both in massimo-update.service.d/listen.conf.
+Environment=MASSIMO_HEALTH=http://127.0.0.1:8099/healthz
+ExecStart=/usr/bin/massimo update -request /var/lib/massimo/update-request -status /var/lib/massimo-update/status.json -health ${MASSIMO_HEALTH}
+# No .env file is read: the working directory is / and this one does not exist.
+Environment=MASSIMO_ENV_FILE=/nonexistent/.env
+WorkingDirectory=/
+# The status file, readable by the server.
+StateDirectory=massimo-update
+StateDirectoryMode=0755
+# apt waits up to two minutes for each of its locks, the download and the
+# Pi 1 are slow, and the health check waits two minutes.
+TimeoutStartSec=15min
+
+NoNewPrivileges=yes
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes

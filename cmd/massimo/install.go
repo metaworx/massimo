@@ -16,7 +16,7 @@ import (
 func runInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	settings := fs.String("settings", "", "copy this settings file (a .env) as the service's settings when there are none yet")
-	noHelper := fs.Bool("no-update-helper", false, "leave out the update helper (Linux and macOS: its units or LaunchDaemon; Windows: the service's -update-request); the web UI then cannot start updates")
+	noHelper := fs.Bool("no-update-helper", false, "leave out the update helper (Linux and macOS: its units or LaunchDaemon; Windows: the service's -update-request; the Debian package: its path unit disabled); the web UI then cannot start updates")
 	rebootHelper := fs.Bool("reboot-helper", false, "Linux and macOS: install the root helper that reboots the computer when the web UI asks (massimo-reboot.path and .service, the LaunchDaemon "+install.RebootLabel+"); the server offers the reboot once MASSIMO_REBOOT=on is in its settings; kept by later installs")
 	noRebootHelper := fs.Bool("no-reboot-helper", false, "take the reboot helper out again")
 	noStart := fs.Bool("no-start", false, "enable the service without starting it")
@@ -58,7 +58,8 @@ refuse http:// for a year.
   massimo-update.path/.service, with -reboot-helper the reboot helper
   massimo-reboot.path/.service, and the log rotation; a unit edited by
   hand is kept as .bak. On a box with the Debian package only the
-  settings, the listen address and the reboot helper. Needs root.
+  settings, the listen address and the package's update and reboot
+  helpers, enabled or disabled. Needs root.
 - Windows: the binary as %s, settings and log in %s
   (SYSTEM and Administrators only), the service "massimo" (automatic
   start, restarted on failure) and a firewall rule for private and

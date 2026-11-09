@@ -282,7 +282,9 @@ sudo apt install ./massimo_<version>_arm64.deb
 
 It installs the release binary as `/usr/bin/massimo`,
 the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
-that path and without the update helper),
+that path),
+the update helper's `massimo-update.path` and the package's own `massimo-update.service`,
+enabled (see "Updates through apt" below),
 the log rotation and the marker `/usr/share/massimo/packaged`,
 the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
 (see `-acme-dns-hook` above),
@@ -299,15 +301,16 @@ the settings and the store are left alone.
 
 **One owner of the binary.**
 On such a box apt owns `/usr/bin/massimo`, and the marker tells massimo so:
-`massimo update` and the web UI's button still say when a newer release is out,
-but leave the install to `sudo apt update && sudo apt install massimo`
+`massimo update` run by hand still says when a newer release is out,
+but leaves the install to `sudo apt update && sudo apt install massimo`
 (the apt repository below) or to the next release's package by hand.
 `massimo install` keeps only what configures:
 `-settings` over a settings file that is still the template,
 `-tls` and its options into the settings as "Install with `massimo install`" puts them,
-`-listen` as the listen drop-in there (the package has no update helper,
-so no health drop-in),
-`-reboot-helper` and `-no-reboot-helper` as the package's path unit enabled or disabled,
+`-listen` as the listen drop-in there and the update helper's health drop-in,
+the update helper's path unit enabled, or disabled with `-no-update-helper`,
+`-reboot-helper` and `-no-reboot-helper` as the reboot helper's path unit
+enabled or disabled,
 then a restart.
 `massimo install -remove` points at `apt remove massimo`;
 `apt purge massimo` takes the settings, the store, the logs and the user too,
@@ -316,6 +319,42 @@ A box set up with `massimo install` keeps its own updater:
 the package refuses to install over it until `sudo massimo install -remove` has run,
 which keeps the settings and the store;
 a `-listen` address is set again afterwards with `sudo massimo install -listen <addr>`.
+
+**Updates through apt.**
+The package's update helper is the one of "From the web UI" below,
+started by the same request file,
+but with apt as the owner it installs no release itself:
+it takes the request, whose channel it ignores,
+and runs apt for the massimo source of "The apt repository" alone,
+
+```bash
+apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/massimo.sources \
+  -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confdef \
+  -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 massimo
+```
+
+so it follows that source's suite and does what `apt upgrade` does for massimo,
+the other sources' lists left as they are.
+While another apt run holds apt's lock (`unattended-upgrades` among them)
+it waits up to two minutes for each command,
+since `apt-get update` does not wait itself,
+then reports apt as busy.
+The package's `postinst` restarts the service,
+and the helper waits until `/healthz` reports the version apt installed.
+When it does not, the helper reports that, with the way back,
+`sudo apt install massimo=<previous version>`,
+and downgrades nothing:
+an older binary would run on a store the newer one may have migrated.
+"Nothing newer" is reported when the GitHub release is out before the apt
+repository has it.
+Its sandbox is lighter than the hand install's,
+since apt and the package's scripts write `/usr`, `/etc` and `/var`;
+its log is `journalctl -u massimo-update`,
+its last result `/var/lib/massimo-update/status.json`.
+`sudo massimo install -no-update-helper` turns it off,
+and a later package keeps it off;
+`sudo massimo install` turns it on again.
 
 The package is built by `make packages` (nfpm, at the version the Makefile pins,
 through `go run`) from `nfpm.yaml`,
@@ -375,6 +414,8 @@ so a release that is deleted on GitHub leaves the pool at the next release.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
 verifies `InRelease`,
 and installs from it in a container as the snippet above does,
+then upgrades to a newer package through the update helper while another
+process holds apt's lock,
 as CI does on trixie and on bookworm (`make apt-test`).
 Until the owner has made the key and set the secrets,
 the workflow skips the steps.
