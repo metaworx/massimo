@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Massimo Authors
+#
+# The mDNS test's three hosts on one bridge network (README.md): a fake
+# Cube with a MAC of eQ-3's prefix, the box that runs serve beside avahi,
+# its proxy answering discovery for the Cube, and a client with avahi of
+# its own. run.sh builds massimo into MDNS_TEST_WORK, which every
+# container mounts at /m, and names the project.
+networks:
+  lan: {}
+
+services:
+  cube:
+    image: debian:trixie-slim
+    networks:
+      lan:
+        mac_address: "00:1a:22:00:00:01"
+    volumes:
+      - "${MDNS_TEST_WORK:?run tools/mdns-test/run.sh}:/m:ro"
+    command: [/m/massimo, fakecube, -greeting, /m/greeting.txt, -listen, "0.0.0.0:62910",
+              -discovery, "0.0.0.0:23272", -discovery-serial, KEQ0000100]
+
+  box:
+    build: .
+    image: massimo-mdns-test:avahi
+    pull_policy: build
+    networks: [lan]
+    volumes:
+      - "${MDNS_TEST_WORK:?run tools/mdns-test/run.sh}:/m:ro"
+    environment:
+      MASSIMO_ENV_FILE: /dev/null
+      MASSIMO_CUBE_KEQ0000100_ADDRESS: "cube:62910"
+    command: [avahi.sh, /m/massimo, -data, /tmp, serve, -listen, "0.0.0.0:8099",
+              -tls, self-signed, -discover-interval, "0"]
+    depends_on: [cube]
+
+  client:
+    image: massimo-mdns-test:avahi
+    pull_policy: never
+    networks: [lan]
+    volumes:
+      - "${MDNS_TEST_WORK:?run tools/mdns-test/run.sh}:/m:ro"
+    environment:
+      MASSIMO_ENV_FILE: /dev/null
+    command: [avahi.sh, sleep, infinity]
+    depends_on: [box]
