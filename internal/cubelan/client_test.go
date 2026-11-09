@@ -757,6 +757,9 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { srv.Close() })
 	eventually(t, "greeting", func() bool { return evs.get(EventConnected) == 1 })
+	// The client logs the return right after the event, so the line may
+	// still be on its way.
+	eventually(t, "the re-established line", func() bool { return logs.count("INFO", "cube connection re-established") >= 1 })
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
