@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
 )
@@ -497,5 +498,65 @@ func TestFirstOwnPassword(t *testing.T) {
 	}
 	if code, text := callAPI(t, ts, "PUT", path, key, `{"password":"second-pass-1","current_password":"first-pass-1"}`); code != 200 {
 		t.Fatalf("the second with the current one: %d %s", code, text)
+	}
+}
+
+// A removed user keeps its history: its row stays, marked, so that the
+// log and the audit still name it as it was named, while its keys and
+// its push subscriptions go with it (docs/store.md, "users").
+func TestRemovedUserKeepsItsHistory(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	anna := userToken(t, st, "anna", store.RoleViewer)
+	if _, err := st.UpdateUser(ctx, "anna", func(u *store.User) error { u.DisplayName = "Anna"; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+	row, _, err := st.User(ctx, "anna")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", anna, subscription(t, "https://push.example.net/send/anna", "phone")); code != 201 {
+		t.Fatalf("subscribe: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/me/preferences/ui", anna, `{"poll": 20}`); code != 200 {
+		t.Fatalf("a preference: %d %s", code, text)
+	}
+	s.logServer(event{Kind: "change", Source: "config", Time: time.Now(), userID: row.ID})
+
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/users/anna", "secret", ""); code != 200 {
+		t.Fatalf("remove: %d %s", code, text)
+	}
+
+	// Gone as a user: its key, its name, its subscriptions.
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", anna, ""); code != 401 {
+		t.Fatalf("the removed user's key: %d", code)
+	}
+	if _, ok, _ := st.User(ctx, "anna"); ok {
+		t.Fatal("found by name")
+	}
+	if subs, err := st.PushSubscriptions(ctx, row.ID); err != nil || len(subs) != 0 {
+		t.Fatalf("its push subscriptions: %v %v", subs, err)
+	}
+	// Its row kept, by which the log and the audit name it.
+	if u, ok, err := st.UserByID(ctx, row.ID); err != nil || !ok || u.Name != "anna" || u.DisplayName != "Anna" {
+		t.Fatalf("its row: %+v %v %v", u, ok, err)
+	}
+	var evs []event
+	if code := getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?user=anna", &evs); code != 200 || len(evs) != 1 || evs[0].By == nil || evs[0].By.Name != "anna" || evs[0].By.DisplayName != "Anna" {
+		t.Fatalf("the log of the removed user: %d %+v", code, evs)
+	}
+	seen := map[string]bool{}
+	for _, r := range auditRows(t, ts, "secret", "?user=anna&limit=50") {
+		if r.User != "anna" {
+			t.Errorf("an audit row of %q under user=anna", r.User)
+		}
+		seen[r.Action] = true
+	}
+	if !seen["push.subscribe"] || !seen["preference.set"] {
+		t.Fatalf("the audit of the removed user: %v", seen)
+	}
+	if rows := auditRows(t, ts, "secret", "?limit=50"); !strings.Contains(fmt.Sprint(rows), "user.remove") {
+		t.Fatalf("no user.remove in the audit")
 	}
 }
