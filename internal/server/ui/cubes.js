@@ -170,7 +170,7 @@ function fillHiddenList(serial, box, input) {
 // yet in the hide field.
 function fillDatalist(dl, serial, hidden) {
   const devs = (cubesUI.devices[serial] || []).filter((d) => !hidden.includes(d.rf_address));
-  fillOptions(dl, devs.map((d) => [d.rf_address, d.name || d.rf_address]));
+  fillOptions(dl, devs.map((d) => [d.rf_address, deviceName(d)]));
 }
 
 // devicesLoaded fills an open panel's device choice in place, so that
@@ -503,7 +503,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
     ev.preventDefault();
     if (e.busy || !rooms.length) return;
     const nm = (e.name || "").trim();
-    const label = nm || dev.name || dev.rf_address;
+    const label = nm || deviceName(dev);
     const body = { room_id: e.room };
     if (isThermostat(dev)) body.copy = hasCap("configure") && e.copy !== false;
     if (nm && hasCap("rename")) {
@@ -522,7 +522,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
     showResult(result, e.result.text, true);
     let res;
     try {
-      res = await api("PUT", cubePath(serial) + "/devices/" + dev.rf_address, body);
+      res = await api("PUT", cubePath(serial) + "/devices/" + encodeURIComponent(dev.serial || dev.rf_address), body);
     } catch (err) {
       // A copy that stopped leaves the device in its room: the reload
       // shows where it is, and onFail says the error where it is seen.

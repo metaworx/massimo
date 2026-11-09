@@ -31,10 +31,10 @@ const LOG_COUNT = 20;
 const logState = {
   open: false,
   range: LOG_COUNT_RANGE, // one of LOG_RANGES
-  lines: [], // {id, time, at, kind, device, text}, oldest first; drawn newest first
+  lines: [], // {id, time, at, kind, device, serial, source, text}, oldest first; drawn newest first
   filter: "",
   kind: "", // the kind chosen, "" for all
-  device: "", // the radio address chosen, "" for all
+  device: "", // the device chosen by its S/N (its radio address for one without), "" for all
   cursor: null, // the oldest line's id, else its time as received: where Older pages from
   more: false, // the server may have older events
   loading: false, // a page is on its way
@@ -44,16 +44,39 @@ const logState = {
   liveSeq: 0, // counts the live lines, so that loadLog finds the ones that came while it waited
 };
 
-// logDeviceName resolves a device's name from the rooms and the unlisted
-// list already loaded; the address when unknown.
-function logDeviceName(rf) {
-  if (!rf) return "";
+// logDevice finds a device of the rooms or of the unlisted list already
+// loaded by its radio address; null when the Cube has none.
+function logDevice(rf) {
   for (const r of state.rooms) {
     const d = r.devices.find((x) => x.rf_address === rf);
-    if (d) return d.name || rf;
+    if (d) return d;
   }
-  const u = state.unlisted.find((x) => x.rf_address === rf);
-  return u && u.name ? u.name : rf;
+  return state.unlisted.find((x) => x.rf_address === rf) || null;
+}
+
+// logDeviceKey is how the log names a device in its choice and its
+// address: by its S/N, by its radio address only when it has none.
+function logDeviceKey(d) {
+  return d.serial || d.rf_address;
+}
+
+// logDeviceName is how a line names its device: by its name from the
+// rooms and the unlisted list already loaded, else by its S/N, the radio
+// address only for a device without either.
+function logDeviceName(line) {
+  if (!line.device) return "";
+  const d = logDevice(line.device);
+  if (d && d.name) return d.name;
+  return line.serial || (d && d.serial) || line.device;
+}
+
+// logOfDevice reports whether a line is of the device chosen, named by
+// its S/N or its radio address; a line stored before events carried the
+// S/N is the chosen device's by its radio address.
+function logOfDevice(line, key) {
+  if (!key || line.serial === key || line.device === key) return true;
+  for (const r of state.rooms) if (r.devices.some((d) => d.serial === key && d.rf_address === line.device)) return true;
+  return state.unlisted.some((d) => d.serial === key && d.rf_address === line.device);
 }
 
 // logStateText is the short state text of a state event.
@@ -138,7 +161,10 @@ function logLine(ev) {
     time,
     kind: ev.kind || "",
     device: ev.device || "",
+    serial: ev.serial || (ev.state && ev.state.serial) || "",
+    source: ev.source || "",
     state: ev.kind === "state" ? ev.state : null,
+    gone: ev.kind === "device_forgotten" && ev.state ? ev.state : null,
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" ? ev.cube : null,
     text: ev.error || "",
@@ -146,6 +172,11 @@ function logLine(ev) {
 }
 
 function logText(line) {
+  if (line.gone) {
+    // The device as it was: the Cube has it no longer.
+    const vars = { type: typeName(line.gone.type), serial: line.serial || line.device, name: line.gone.name };
+    return t(line.gone.name ? "log.removedNamed" : "log.removed", vars);
+  }
   if (line.changes) return logChangesText(line.changes);
   if (line.state) return logStateText(line.state);
   if (line.cube) return t("discover.log", { serial: line.cube.serial, address: line.cube.address || "–" });
@@ -191,22 +222,24 @@ function logRangeStart(range, now = new Date()) {
 // logInQuery reports whether a line is of the kind and the device chosen,
 // as the server answers them.
 function logInQuery(line) {
-  return (!logState.kind || line.kind === logState.kind) && (!logState.device || line.device === logState.device);
+  return (!logState.kind || line.kind === logState.kind) && logOfDevice(line, logState.device);
 }
 
 function logLineMatches(line) {
   if (line.kind === "error") return true; // the page's own line: the log could not load
   if (logState.kind && line.kind !== logState.kind) return false;
-  if (logState.device && line.device !== logState.device) return false;
+  if (!logOfDevice(line, logState.device)) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
-  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, logDeviceName(line.device), logText(line)].join(" ").toLowerCase();
+  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, line.serial, logDeviceName(line), logText(line)].join(" ").toLowerCase();
   return hay.includes(f);
 }
 
 // renderLogLine is one line of the log, from its template
-// (tpl-log-line): the time, the kind, the device by name and radio
-// address when the line has one, and the text.
+// (tpl-log-line): the time, the kind, the device when the line has one,
+// by its name, else its S/N, with its radio address in expert mode, and
+// the text. The Cube's own configuration is the Cube's, by its S/N; a
+// removed device is named by the text alone.
 function renderLogLine(line) {
   const row = fromTemplate("tpl-log-line");
   row.className += " kind-" + line.kind;
@@ -215,8 +248,9 @@ function renderLogLine(line) {
   const dev = row.querySelector(".log-device");
   const rf = row.querySelector(".log-rf");
   if (line.device) {
-    dev.textContent = logDeviceName(line.device);
     rf.textContent = line.device;
+    if (line.gone) dev.remove();
+    else dev.textContent = line.source === "cube" ? t("log.cubeDevice", { serial: line.serial || line.device }) : logDeviceName(line);
   } else {
     dev.remove();
     rf.remove();
@@ -428,28 +462,37 @@ function clearLogFilter() {
 }
 
 // fillLogSelects fills the choice of kind, every kind the server sends,
-// and of device, the Cube's devices by name; a device chosen that is gone
-// falls back to all, and the answer is true then. Until the Cube's
-// devices are loaded (state.roomsOf), a device chosen from the address
-// stays, shown by its address.
+// and of device, the Cube's devices by name and S/N; a device chosen that
+// is gone falls back to all, one chosen by its radio address takes its
+// S/N, and the answer is true when the choice changed so. Until the
+// Cube's devices are loaded (state.roomsOf), a device chosen from the
+// address stays, shown as the address names it.
 function fillLogSelects() {
   const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(LOG_KINDS.map((k) => [k, logKind(k)])));
   kinds.value = logState.kind;
   const devs = [];
   for (const r of state.rooms) for (const d of r.devices) devs.push(d);
   for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
-  devs.sort((a, b) => (a.name || a.rf_address).localeCompare(b.name || b.rf_address));
+  devs.sort((a, b) => (a.name || logDeviceKey(a)).localeCompare(b.name || logDeviceKey(b)));
   fillOptions($("log-range"), LOG_RANGES.map((r) => [r, t("log.range." + r)])).value = logState.range;
-  const options = [["", t("log.allDevices")]].concat(devs.map((d) => [d.rf_address, d.name ? d.name + " · " + d.rf_address : d.rf_address]));
-  const unknown = logState.device !== "" && !devs.some((d) => d.rf_address === logState.device);
+  const options = [["", t("log.allDevices")]].concat(devs.map((d) => [logDeviceKey(d), d.name ? d.name + " · " + logDeviceKey(d) : logDeviceKey(d)]));
+  const byRF = devs.find((d) => d.rf_address === logState.device && d.serial);
+  let changed = false;
+  if (byRF) {
+    logState.device = byRF.serial; // an old link's radio address
+    changed = true;
+  }
+  const unknown = logState.device !== "" && !devs.some((d) => logDeviceKey(d) === logState.device);
   const known = !!state.serial && state.roomsOf === state.serial;
   if (unknown && !known) options.push([logState.device, logState.device]);
   const sel = fillOptions($("log-device"), options);
-  const gone = unknown && known;
-  if (gone) logState.device = "";
+  if (unknown && known) {
+    logState.device = "";
+    changed = true;
+  }
   sel.value = logState.device;
   renderLogClear();
-  return gone;
+  return changed;
 }
 
 // logCubeChanged starts the log over for another Cube: the device chosen
@@ -495,8 +538,9 @@ function viewOfHash(hash) {
 }
 
 // logHash is the log's address: its page, then the range, the kind and
-// the device chosen, in that order, each left out at its default, so
-// that a plain #log is the last 20 events of every kind and device.
+// the device chosen (by its S/N), in that order, each left out at its
+// default, so that a plain #log is the last 20 events of every kind and
+// device.
 function logHash() {
   const q = new URLSearchParams();
   if (logState.range !== LOG_COUNT_RANGE) q.set("range", logState.range);
@@ -508,17 +552,20 @@ function logHash() {
 
 // readLogHash takes the log's range, kind and device from an address of
 // the log, each at its default where it is missing or not one of its
-// values; a device the Cube does not have goes once its devices are
-// loaded (fillLogSelects). The text filter is not in the address.
+// values; the device by its S/N, or an old link's radio address, which
+// takes the S/N, and a device the Cube does not have goes, once its
+// devices are loaded (fillLogSelects). The text filter is not in the
+// address.
 function readLogHash(hash) {
   const i = hash.indexOf("?");
   const q = new URLSearchParams(i < 0 ? "" : hash.slice(i + 1));
   const range = q.get("range");
   const kind = q.get("kind");
-  const device = (q.get("device") || "").toLowerCase();
+  const device = (q.get("device") || "").trim();
   logState.range = LOG_RANGES.includes(range) ? range : LOG_COUNT_RANGE;
   logState.kind = LOG_KINDS.includes(kind) ? kind : "";
-  logState.device = /^[0-9a-f]{6}$/.test(device) ? device : "";
+  if (/^[a-z]{3}[0-9]{7}$/i.test(device)) logState.device = device.toUpperCase();
+  else logState.device = /^[0-9a-f]{6}$/i.test(device) ? device.toLowerCase() : "";
 }
 
 // setAddress puts a page's hash into the address: as a new entry of the

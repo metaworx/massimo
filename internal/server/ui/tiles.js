@@ -192,13 +192,13 @@ function showUnlistedResult(text, ok) {
   }
 }
 
-// removeFromCube deletes a device from the Cube (DELETE …/devices/{rf})
+// removeFromCube deletes a device from the Cube (DELETE …/devices/{sn})
 // and reloads the rooms, which the metadata and device_forgotten events
 // do as well; it returns the outcome as a text.
 async function removeFromCube(d) {
   const label = deviceName(d);
   try {
-    await api("DELETE", base() + "/devices/" + d.rf_address);
+    await api("DELETE", devicePath(d));
     delete state.details[d.rf_address];
     await loadRooms();
     return { text: t("device.removed", { device: label }), ok: true };
@@ -260,7 +260,7 @@ function renderNotReady(el, room) {
     notReady.appendChild(document.createTextNode(": "));
     silent.forEach((d, i) => {
       if (i > 0) notReady.appendChild(document.createTextNode(", "));
-      notReady.appendChild(textEl("span", d.name || d.rf_address));
+      notReady.appendChild(textEl("span", deviceName(d)));
       if (d.name) notReady.appendChild(textEl("span", " " + d.rf_address, "mono expert-only"));
     });
   }
@@ -339,7 +339,7 @@ function renderSetpoint(el, room) {
   if (mixed) {
     const list = room.devices
       .filter((d) => isThermostat(d) && d.state && d.state.mode)
-      .map((d) => (d.name || d.rf_address) + ": " + modeName(d.state.mode))
+      .map((d) => deviceName(d) + ": " + modeName(d.state.mode))
       .join(", ");
     mixedNote.textContent = t("room.mixed");
     mixedNote.title = t("room.mixedTitle", { list });
@@ -666,8 +666,8 @@ function renderDevice(d) {
   const el = fromTemplate("device-template");
   el.dataset.rf = d.rf_address;
   // Type and radio address are for expert mode (.device-sub); a device
-  // without a name keeps its address, the only way to tell it apart.
-  el.querySelector(".device-name").textContent = d.name || t("device.unnamed") + " · " + d.rf_address;
+  // without a name keeps its S/N, the only way to tell it apart.
+  el.querySelector(".device-name").textContent = d.name || t("device.unnamed") + " · " + (d.serial || d.rf_address);
   el.querySelector(".device-type").textContent = typeName(d.type);
   const ids = el.querySelector(".device-rf");
   clear(ids);
@@ -689,7 +689,7 @@ function renderDevice(d) {
   const grid = el.querySelector(".device-vals");
   if (isThermostat(d) && d.reported) {
     deviceValues(grid, d, undefined);
-    deviceDetail(d.rf_address).then((detail) => {
+    deviceDetail(d).then((detail) => {
       const cfg = detail.thermostat || detail.wall_thermostat;
       if (cfg && cfg.temp_offset !== undefined) deviceValues(grid, d, cfg.temp_offset);
     }).catch(() => {});
@@ -885,7 +885,7 @@ async function setLock(d, locked) {
   const roomId = d.room_id;
   showTileResult(roomId, t("result.waiting", { label }), true);
   try {
-    const res = await api("PUT", base() + "/devices/" + d.rf_address + "/lock", { locked });
+    const res = await api("PUT", devicePath(d) + "/lock", { locked });
     showTileResult(roomId, resultText(label, res), !(res && res.discarded));
   } catch (e) {
     showTileResult(roomId, errorText(label, e), false);
@@ -1028,7 +1028,7 @@ async function houseRequests() {
     try {
       let temp = manualTemp;
       if (mode === "eco" || mode === "comfort") {
-        const detail = await deviceDetail(th.rf_address);
+        const detail = await deviceDetail(th);
         const cfg = detail.thermostat || detail.wall_thermostat || {};
         temp = mode === "eco" ? cfg.eco_temp : cfg.comfort_temp;
         if (temp === undefined) throw new Error(t(mode === "eco" ? "house.noEco" : "house.noComfort"));

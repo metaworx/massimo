@@ -82,6 +82,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -384,8 +385,15 @@ func (rt *runtime) subscribePush() (<-chan struct{}, func()) {
 }
 
 type event struct {
-	Kind   string      `json:"kind"`
-	Device string      `json:"device,omitempty"`
+	Kind   string `json:"kind"`
+	Device string `json:"device,omitempty"`
+	// Serial is the S/N of the device the event concerns, also when the
+	// device has no state yet or is gone; for the Cube's own
+	// configuration, the Cube's.
+	Serial string `json:"serial,omitempty"`
+	// Source says whose a device's event is: "device", or "cube" for the
+	// Cube's own configuration.
+	Source string      `json:"source,omitempty"`
 	Error  string      `json:"error,omitempty"`
 	State  interface{} `json:"state,omitempty"`
 	// Changes says, for a "state" event, which values differ from the
@@ -639,6 +647,20 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
+				snap := rt.client.Snapshot()
+				ev.Source, ev.Serial = "device", snap.Serial(e.Device)
+				if c := snap.Config(e.Device); c != nil && c.Type == cube.DeviceCube {
+					ev.Source = "cube"
+					if sn := rt.cubeSerial(); sn != "" {
+						ev.Serial = sn
+					}
+				}
+				if g := e.Gone; g != nil {
+					// The snapshot has dropped the device: its view is what
+					// the snapshot knew of it.
+					ev.Serial = g.Serial
+					ev.State = view.Device{RFAddress: ev.Device, Type: g.Type, Name: g.Name, RoomID: g.RoomID, Serial: g.Serial}
+				}
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
 					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
 					ev.State = dv
@@ -969,6 +991,50 @@ func (s *Server) cube(r *http.Request) (*runtime, error) {
 	return rt, nil
 }
 
+// deviceSerial is the form of a device's serial number: three letters
+// and seven digits, as printed on the device.
+var deviceSerial = regexp.MustCompile(`^[A-Za-z]{3}[0-9]{7}$`)
+
+// deviceOf resolves the device a path or a query names on a Cube: by
+// its radio address, six hex digits, or by its serial number, which the
+// Cube's snapshot holds while the Cube has the device. The two cannot be
+// confused. A serial the snapshot does not know is a 404, anything else
+// that is neither a 400.
+func deviceOf(rt *runtime, name string) (cube.RFAddress, error) {
+	if !deviceSerial.MatchString(name) {
+		rf, err := cube.ParseRFAddress(name)
+		if err != nil {
+			return 0, fail(http.StatusBadRequest, "bad device %q: a radio address of six hex digits, or a serial number", name)
+		}
+		return rf, nil
+	}
+	rf, ok := rt.client.Snapshot().BySerial(name)
+	if !ok {
+		return 0, fail(http.StatusNotFound, "no device %s", strings.ToUpper(name))
+	}
+	return rf, nil
+}
+
+// deviceTarget is a device's audit target: "device:" and its serial
+// number, whichever form the request named it by; its radio address
+// for a device whose serial the Cube's snapshot does not hold.
+func (s *Server) deviceTarget(sn, name string) string {
+	s.mu.RLock()
+	rt := s.cubes[strings.ToLower(sn)]
+	s.mu.RUnlock()
+	if rt == nil {
+		return "device:" + strings.ToLower(name)
+	}
+	rf, err := deviceOf(rt, name)
+	if err != nil {
+		return "device:" + strings.ToLower(name)
+	}
+	if serial := rt.client.Snapshot().Serial(rf); serial != "" {
+		return "device:" + serial
+	}
+	return "device:" + rf.String()
+}
+
 // Views.
 
 type cubeView struct {
@@ -1110,9 +1176,9 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
+	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return err
 	}
 	snap := rt.client.Snapshot()
 	st, ok := snap.State(rf)
@@ -1145,9 +1211,9 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
+	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return err
 	}
 	snap := rt.client.Snapshot()
 	c := snap.Config(rf)
@@ -1168,9 +1234,9 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
+	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return err
 	}
 	c := rt.client.Snapshot().Config(rf)
 	if c == nil || rt.hidden()[rf] {
