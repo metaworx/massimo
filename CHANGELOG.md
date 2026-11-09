@@ -76,6 +76,10 @@ the next minor, a fix counts the suffix up.
   is one line with the Cube's devices, rooms, firmware and duty cycle;
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
 
+- The apt repository's address is `https://massimo.metaworx.ch/apt`,
+  under the project's site with its install routes and privacy policy
+  (`packaging/README.md`, "The apt repository").
+
 ### Fixed
 
 - A device list or a configuration the Cube client asked for is in its
