@@ -112,6 +112,7 @@ PAGES = {
     "cube-choice": None,                            # the Cube choice open over the rooms
     "profile": "#profile",                          # My profile, the owner's with keys only
     "prefs": "#prefs",                              # My settings
+    "notify": "#notify",                            # Notifications, this browser not notified
     "appearance": "#prefs .appearance",
     "system": "#system",                            # System settings
     "maintenance": "#sys-maint",                    # its Maintenance, the store and settings open
@@ -330,6 +331,11 @@ def step(page, which):
         page.locator("#cube-menu .menu-items").wait_for(state="visible")
     elif which in ("prefs", "system", "profile"):
         show_view(page, which)
+    elif which == "notify":
+        # a headless browser denies notifications: the page as a browser
+        # shows it that has not been asked yet
+        page.evaluate("() => { Object.defineProperty(Notification, 'permission', { get: () => 'default' }); }")
+        show_view(page, "notify")
     elif which == "maintenance":
         show_view(page, "system")
         wait_until(page, "document.getElementById('store-info-sum').textContent !== ''", 5)

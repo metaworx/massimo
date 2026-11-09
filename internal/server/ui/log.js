@@ -764,18 +764,19 @@ function logCubeChanged() {
 }
 
 // The pages of the main area: Rooms ("tiles"), the log ("log"), My
-// profile ("profile"), My settings ("prefs") and System settings
-// ("system"), each with its section and, where it has one, its button in
-// the header; My profile and My settings open from the 👤 menu, which is
-// highlighted while one of them is shown, as ☰ is for Log and System
+// profile ("profile"), My settings ("prefs"), Notifications ("notify")
+// and System settings ("system"), each with its section and, where it
+// has one, its button in the header; My profile, My settings and
+// Notifications open from the 👤 menu, which is highlighted while one of
+// them is shown, as ☰ is for Log and System
 // settings, which it holds on a narrow screen. The tiles keep their state
 // while hidden. The page shown is in the address (VIEW_HASH), Rooms
 // without one, and the log's range, kind and device after its page
 // (logHash), so that a reload or a link opens it again as chosen and the
 // browser's back and forward move between the pages.
-const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", system: "system" };
+const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", notify: "notify", system: "system" };
 const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", system: "view-settings" };
-const VIEW_HASH = { tiles: "", log: "#log", profile: "#profile", prefs: "#prefs", system: "#system" };
+const VIEW_HASH = { tiles: "", log: "#log", profile: "#profile", prefs: "#prefs", notify: "#notify", system: "#system" };
 let currentView = "tiles";
 
 // viewOfHash is the page an address names, the part before its "?",
@@ -881,7 +882,7 @@ function showView(view, address = "push") {
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
-  $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs");
+  $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs" || view === "notify");
   $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
   if (view === "log") {
     loadLog();

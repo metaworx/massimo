@@ -65,10 +65,13 @@ the next minor, a fix counts the suffix up.
   preference, and push subscriptions under `/api/v1/me/push` with the
   server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
 
-- A notification is pushed to the user's subscribed browsers and
-  devices by Web Push (RFC 8030, 8291 and 8292), which UnifiedPush
-  takes as well, and sent on the event stream as `notification`
-  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+- A notification is pushed by Web Push (RFC 8291, 8292) to the user's
+  browsers and devices, UnifiedPush's too, and sent on the event stream
+  as `notification` (`docs/api-v1.md`, "Notifications").
+
+- 👤 → Notifications chooses which events notify and turns them on for
+  this browser, and the page installs as an app, with a manifest and a
+  service worker (`docs/ui.md`, "Notifications").
 
 ### Changed
 

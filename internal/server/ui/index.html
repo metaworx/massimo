@@ -6,6 +6,11 @@
 <meta name="color-scheme" content="light dark">
 <title>Massimo</title>
 <link rel="stylesheet" href="ui/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="ui/icons/icon-192.png">
+<meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151514" media="(prefers-color-scheme: dark)">
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true" focusable="false">
@@ -27,10 +32,11 @@
   <symbol id="icon-log" viewBox="0 0 24 24"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4.5"/></symbol>
   <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
   <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
-  <!-- the 👤 menu's items: My profile, My settings, Sign out, Forget key -->
+  <!-- the 👤 menu's items: My profile, My settings, Notifications, Sign out, Forget key -->
   <symbol id="icon-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.8 16.2a3.3 3.3 0 0 1 6.4 0"/><path d="M14.5 10h4M14.5 13.5h3"/></symbol>
   <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
   <symbol id="icon-signout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></symbol>
+  <symbol id="icon-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
   <symbol id="icon-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M16 7l2 2"/><path d="M14 9l2 2"/></symbol>
   <!-- a Cube's connection: a plug joined, and apart; the Cube choice's arrow -->
   <symbol id="icon-plug-on" viewBox="0 0 24 24"><path d="M1 12h3.5"/><path d="M4.5 8.5H11v7H5.5a1 1 0 0 1-1-1z"/><path d="M11 7.5h4.5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H11z"/><path d="M16.5 12H23"/></symbol>
@@ -74,6 +80,7 @@
           <p id="me-line" class="menu-line small"></p>
           <button type="button" id="menu-profile"><svg class="ni" aria-hidden="true"><use href="#icon-id"/></svg><span data-i18n="nav.profile">My profile</span></button>
           <button type="button" id="menu-prefs"><svg class="ni" aria-hidden="true"><use href="#icon-sliders"/></svg><span data-i18n="nav.prefs">My settings</span></button>
+          <button type="button" id="menu-notify"><svg class="ni" aria-hidden="true"><use href="#icon-bell"/></svg><span data-i18n="nav.notify">Notifications</span></button>
           <button type="button" id="logout-btn"><svg class="ni" aria-hidden="true"><use id="logout-icon" href="#icon-signout"/></svg><span id="logout-label" data-i18n="me.signOut">Sign out</span></button>
         </div>
       </details>
@@ -204,6 +211,14 @@
     </div>
   </section>
 
+  <!-- Notifications: which events notify the user, and where (notify.js) -->
+  <section id="notify" class="tile settings notify-page hidden" aria-labelledby="notify-title">
+    <header class="tile-head"><h2 id="notify-title" data-i18n="nav.notify">Notifications</h2></header>
+    <div class="settings-body">
+      <!-- partials: notify -->
+    </div>
+  </section>
+
   <!-- System settings: its row kept at the top under the header, with
        the sections menu (components.js pageBar), the row of section
        buttons, and section cards in a grid (sectionCards, pageContents,
@@ -312,6 +327,12 @@
   </form>
 </dialog>
 
+<!-- A notification while the page is open (notify.js notifyToast) -->
+<div id="notify-toast" class="toast hidden" role="status" aria-live="polite">
+  <p class="toast-text"><strong id="notify-toast-title" class="toast-title"></strong> <span id="notify-toast-body"></span></p>
+  <button type="button" id="notify-toast-close" class="icon-btn toast-close" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button>
+</div>
+
 <!-- partials: templates -->
 
 <script src="ui/i18n.js"></script>
@@ -327,5 +348,7 @@
 <script src="ui/backup.js"></script>
 <script src="ui/roles.js"></script>
 <script src="ui/theme.js"></script>
+<script src="ui/notifytext.js"></script>
+<script src="ui/notify.js"></script>
 </body>
 </html>

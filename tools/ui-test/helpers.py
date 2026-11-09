@@ -170,16 +170,16 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
 # The pages of the main area: how a user opens each, and the section it
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}
-VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs"}
+VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs", "notify": "#menu-notify"}
 VIEW_FOLDED = {"log": "#menu-log", "system": "#menu-system"}  # in ☰ below 600 px
-VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "system": "#system"}
+VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "notify": "#notify", "system": "#system"}
 
 
 def show_view(page, view):
     """A page of the main area, opened as a user opens it: Rooms, the log
     and System settings with their button in the header, or on a narrow
-    screen the log and System settings from ☰, My profile and My settings
-    from the 👤 menu."""
+    screen the log and System settings from ☰, My profile, My settings
+    and Notifications from the 👤 menu."""
     if view in VIEW_MENU:
         open_user_menu(page)
         page.locator(VIEW_MENU[view]).click()
