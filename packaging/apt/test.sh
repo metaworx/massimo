@@ -24,13 +24,34 @@ gpgv --keyring "$work/keyring.gpg" "$work/site/apt/dists/alpha/InRelease" 2>/dev
 	echo "FAIL: InRelease does not verify" >&2
 	exit 1
 }
-for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources index.html apt/dists/alpha/Release.gpg \
-	apt/dists/alpha/main/binary-amd64/Packages.gz apt/dists/alpha/main/binary-armhf/Packages; do
+for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources index.html privacy.html \
+	apt/dists/alpha/Release.gpg apt/dists/alpha/main/binary-amd64/Packages.gz apt/dists/alpha/main/binary-armhf/Packages; do
 	[ -s "$work/site/$f" ] || {
 		echo "FAIL: $f missing" >&2
 		exit 1
 	}
 done
+
+# The pages are packaging/site's: the index with the suites in place of
+# its placeholder, the privacy policy as it is; the sample names the
+# site's address by default.
+index=$(<"$work/site/index.html")
+if grep -qF '{{' <<<"$index"; then
+	echo "FAIL: index.html keeps a placeholder" >&2
+	exit 1
+fi
+grep -qF 'One suite per update channel: alpha.' <<<"$index" || {
+	echo "FAIL: index.html does not name the suite alpha" >&2
+	exit 1
+}
+cmp -s "$root/packaging/site/privacy.html" "$work/site/privacy.html" || {
+	echo "FAIL: privacy.html is not packaging/site's" >&2
+	exit 1
+}
+grep -qx 'URIs: https://massimo.metaworx.ch/apt' "$work/site/apt/massimo.sources" || {
+	echo "FAIL: massimo.sources does not name https://massimo.metaworx.ch/apt" >&2
+	exit 1
+}
 grep -q '^Package: massimo-archive-keyring$' "$work/site/apt/dists/alpha/main/binary-arm64/Packages" || {
 	echo "FAIL: the keyring package is not listed for arm64" >&2
 	exit 1

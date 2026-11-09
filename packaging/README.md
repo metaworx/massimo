@@ -33,6 +33,10 @@ on a Mac LaunchDaemons (see "macOS").
   the apt repository the release workflow publishes (see "The apt repository").
 - `homebrew/`:
   the Homebrew formula's template and renderer (see "Homebrew").
+- `site/`:
+  the pages of the project's site, <https://massimo.metaworx.ch>,
+  the home with the install routes and the privacy policy,
+  which the apt repository's publishing puts beside it (see "The apt repository").
 
 Every service starts `serve` with `-env <settings file>`,
 so a line there reaches it without a change to its command line.
@@ -334,8 +338,8 @@ changelog is `CHANGELOG.md` on GitHub).
 ## The apt repository
 
 The packages of the newest ten releases of every update channel are also in an
-apt repository on the project's GitHub Pages,
-<https://metaworx.github.io/massimo/apt/>, one suite per channel (`alpha`;
+apt repository on the project's site,
+<https://massimo.metaworx.ch/apt/>, one suite per channel (`alpha`;
 later `beta` and `stable`),
 the same for every Debian and Ubuntu release since the binary is static,
 signed with the repository's own OpenPGP key (RSA 4096;
@@ -343,11 +347,11 @@ not the Ed25519 release key of the manifest, which apt cannot use).
 To follow a channel, install the keyring package first, then the sources:
 
 ```bash
-curl -fsSLo /tmp/massimo-archive-keyring.deb https://metaworx.github.io/massimo/apt/massimo-archive-keyring.deb
+curl -fsSLo /tmp/massimo-archive-keyring.deb https://massimo.metaworx.ch/apt/massimo-archive-keyring.deb
 sudo apt install /tmp/massimo-archive-keyring.deb
 sudo tee /etc/apt/sources.list.d/massimo.sources <<'EOF'
 Types: deb
-URIs: https://metaworx.github.io/massimo/apt
+URIs: https://massimo.metaworx.ch/apt
 Suites: alpha
 Components: main
 Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
@@ -374,11 +378,17 @@ it signs with one key.
 
 The site is built by `packaging/apt/publish.sh` in the release workflow (the
 pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
-the keyring package by nfpm) and deployed with `actions/deploy-pages`;
+the keyring package by nfpm,
+and at the site's root the pages of `site/`:
+`index.html`, the home with the install routes, its suites filled in,
+and `privacy.html`, the privacy policy of the project and its apps,
+which the app stores' listings link)
+and deployed to the project's GitHub Pages with `actions/deploy-pages`;
 it has no state of its own,
-so a release that is deleted on GitHub leaves the pool at the next release.
+so a release that is deleted on GitHub leaves the pool at the next release,
+and a change to the pages is online with the next release.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease`,
+verifies `InRelease` and the pages,
 and installs from it in a container as the snippet above does,
 as CI does on trixie and on bookworm (`make apt-test`).
 Until the owner has made the key and set the secrets,
@@ -398,9 +408,40 @@ The owner's steps, once:
   The environment GitHub makes for Pages deploys from the default branch only,
   and the deploy runs for a release's tag,
   so without the rule every deploy is refused.
+- The domain (the CNAME, the custom domain and HTTPS set on 2026-11-09):
+  verify `metaworx.ch` for the account under its settings → Pages,
+  with the TXT record GitHub names, so that no other account can claim it;
+  at the DNS provider, a CNAME record
+  `massimo.metaworx.ch` → `metaworx.github.io` (the account's address,
+  without the repository's name);
+  in the repository's settings, Pages → Custom domain `massimo.metaworx.ch`,
+  then "Enforce HTTPS" once GitHub has the certificate.
+  A site deployed by a workflow needs no `CNAME` file.
 - Before the key expires,
   `gpg --quick-set-expire <fpr> 2y` and the secret again;
   the next release publishes the renewed key and a newer keyring package.
+
+### Moving from the old address
+
+Until 2026-11-09 the repository was at `https://metaworx.github.io/massimo/apt`,
+which a box set up before then still names in `/etc/apt/sources.list.d/massimo.sources`.
+GitHub redirects that address to the new one.
+When the domain was set up, the redirect went through `http://` first,
+and apt refused it:
+
+```text
+Redirection from https to 'http://massimo.metaworx.ch/…' is forbidden
+```
+
+Since later that day it goes straight to `https://` and apt follows it,
+but the redirect is GitHub's and not documented,
+so change the line once:
+
+```bash
+sudo sed -i 's#https://metaworx.github.io/massimo/apt#https://massimo.metaworx.ch/apt#' /etc/apt/sources.list.d/massimo.sources && sudo apt update
+```
+
+The file keeps its name, and the keyring package and the key stay as they are.
 
 ## Install by hand
 

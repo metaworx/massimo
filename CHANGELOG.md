@@ -48,6 +48,10 @@ the next minor, a fix counts the suffix up.
   embedding the server calls as the command does; nothing changes for
   `massimo serve` itself.
 
+- The apt repository's address is `https://massimo.metaworx.ch/apt`,
+  under the project's site with its install routes and privacy policy
+  (`packaging/README.md`, "The apt repository").
+
 ### Fixed
 
 - A device list or a configuration the Cube client asked for is in its
