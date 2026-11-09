@@ -1808,6 +1808,20 @@ variables `changed` and of those waiting `at_next_start`, never their values),
 `restore_started` (`id`, `steps`, `radio_commands`).
 A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
 and `cube_gone` (with `cube`, a Cube found before that no longer answers).
+`change`, source `config`: every request that changed something, once it
+succeeded, with `by`: its `summary` holds the audit's `action` and `target`
+(a device by its serial number), what it `set` (the request's body, its
+secrets removed), what `changes` from and to where the server knows both
+(a Cube's `name`, `address`, proxy and hidden devices; a setting), and the
+`subject` it concerns as it was then (a user's `id`, `uuid`, `name`,
+`display_name` and `role`; a role's `id`, `key` and `name`; a key's `id`,
+`uuid`, `name` and its user).
+A change of a Cube is that Cube's line, one of a device carries its
+`serial`, every other is the server's.
+Setpoints are changes too; a sign-in, a preference, a search, a restore's
+plan and the requests whose own line is the server's (a backup, a restore,
+a restart, …) write none.
+`massimo user` writes the same lines, with `"via": "cli"`.
 A failure the server reports, such as a reboot the helper did not start,
 is its kind's line at `warn` with the `error`.
 A comment line is sent every 30 seconds to keep the connection alive.

@@ -163,6 +163,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	if s.configured(serial) != nil {
 		return fail(http.StatusConflict, "cube %s is served already", serial)
 	}
+	auditTarget(r, "cube:"+serial)
 	row, known, err := st.Cube(r.Context(), serial)
 	if err != nil {
 		return storeFail(err)
@@ -235,10 +236,12 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 	if req.Serial != "" {
 		return fail(http.StatusBadRequest, "the serial is the path's")
 	}
+	before, _, _ := st.Cube(r.Context(), rt.cubeSerial())
 	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), req.apply)
 	if err != nil {
 		return storeFail(err)
 	}
+	auditCubeChanges(r, before, row)
 	s.noteRow(row)
 	if err := s.applyCube(rt, row); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
@@ -246,6 +249,27 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 	s.log.Info("cube changed", "serial", rt.cubeSerial(), "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, s.summary(rt))
 	return nil
+}
+
+// auditCubeChanges tells the change line what a Cube's change changed:
+// its name, its address, whether it follows discovery, its proxy and its
+// hidden devices, from and to.
+func auditCubeChanges(r *http.Request, before, after store.Cube) {
+	for _, c := range []struct {
+		name     string
+		from, to any
+	}{
+		{"name", before.Name, after.Name},
+		{"address", before.Address, after.Address},
+		{"follow_discovery", before.FollowDiscovery, after.FollowDiscovery},
+		{"proxy_address", before.ProxyAddress, after.ProxyAddress},
+		{"proxy_serial", before.ProxySerial, after.ProxySerial},
+		{"hidden", strings.Join(before.Hidden, ","), strings.Join(after.Hidden, ",")},
+	} {
+		if c.from != c.to {
+			auditChange(r, c.name, c.from, c.to)
+		}
+	}
 }
 
 // applyCube brings a running Cube in line with its changed row.

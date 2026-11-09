@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
   update, backups and prunes, and a Cube's new address or its leaving
   the LAN (`docs/ui.md`, "Log").
 
+- Every change made through the API or `massimo user` is in the log,
+  with who made it: a Cube named, a setting, a user, a role, a key
+  (`docs/ui.md`, "Log").
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what

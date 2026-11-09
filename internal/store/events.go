@@ -341,6 +341,18 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 	return nil
 }
 
+// InsertEvent writes one event at once, without the writer: for a
+// process that runs none, the command line's massimo user.
+func (s *Store) InsertEvent(ctx context.Context, e Event) error {
+	if len(e.Data) == 0 || !json.Valid(e.Data) {
+		return errors.New("store: an event without JSON")
+	}
+	if err := s.writable(); err != nil {
+		return err
+	}
+	return s.writeEvents(ctx, []Event{e})
+}
+
 // FlushEvents asks the writer to write what is pending and waits until
 // it is readable; without a writer it returns at once, and it gives up
 // after eventsQuiet, the handover to the writer included.

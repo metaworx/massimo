@@ -35,6 +35,7 @@ var eventKinds = []string{
 	"device_forgotten", "cube_found", "restore_step", "restore_done",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
 	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "restore_started",
+	"change",
 }
 
 // Limits of a page of the log.

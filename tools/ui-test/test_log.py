@@ -137,6 +137,27 @@ def test_log_server_lines(page, case):
     show_view(page, "tiles")
 
 
+CHANGE_SAYS = {
+    "en": "Cube changed KEQ0000000: name – → Upstairs, by Anna",
+    "de": "Cube geändert KEQ0000000: Name – → Upstairs, durch Anna",
+}
+
+
+def test_log_change_line(page, case):
+    """A change made through the API says what was changed, from and to,
+    and by whom."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => state.events.dispatchEvent(new MessageEvent("change", { data: JSON.stringify({
+      kind: "change", source: "config", level: "info", time: new Date().toISOString(),
+      summary: { action: "cube.update", target: "cube:KEQ0000000", changes: { name: { from: "", to: "Upstairs" } } },
+      by: { name: "anna", display_name: "Anna" } }) }))""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-change').length > 0", 5), "the change line"
+    text = page.locator("#log-lines .log-line.kind-change").first.locator(".log-text").inner_text()
+    assert text == CHANGE_SAYS[case.lang], f"the change: {text}"
+    show_view(page, "tiles")
+
+
 def stamp(now, i):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
 

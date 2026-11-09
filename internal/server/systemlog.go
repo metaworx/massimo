@@ -57,17 +57,21 @@ func (s *Server) noteStop(why string) { s.stopWhy.Store(why) }
 // when it changed; and an update's outcome the helper reported since the
 // last one the log said.
 func (s *Server) logStarted(ctx context.Context) {
-	summary := map[string]any{"version": s.opts.Version}
+	version := s.opts.Update.Version // the release's, without the Go details
+	if version == "" {
+		version = s.opts.Version
+	}
+	summary := map[string]any{"version": version}
 	st := s.opts.Store
 	if st != nil && !st.ReadOnly() {
 		var before string
 		if raw, ok, err := st.Setting(ctx, logVersionKey); err == nil && ok {
 			before = jsonString(raw)
 		}
-		if before != "" && before != s.opts.Version {
+		if before != "" && before != version {
 			summary["before"] = before
 		}
-		if err := st.SetSetting(ctx, logVersionKey, s.opts.Version); err != nil {
+		if err := st.SetSetting(ctx, logVersionKey, version); err != nil {
 			s.log.Debug("log: the version not kept", "error", err)
 		}
 	}

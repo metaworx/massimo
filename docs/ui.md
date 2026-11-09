@@ -249,6 +249,11 @@ restart, a reboot or an update asked for and its outcome, the backups, their
 prune and the log's, a restore started; and a Cube's new address or its
 leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
+Every change made through the web UI, the API or `massimo user` is a line
+of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, by
+Anna", "setpoint Window: mode manual, temperature 21.5, by Anna",
+"user added Zed, by the command line"; a change of a device shows under the
+device too, and the Cube's answer follows as its own line.
 Expert mode also shows the debug lines, such as the greeting's hello, room
 and device list and configurations, each with its summary, which the log
 leaves out otherwise.

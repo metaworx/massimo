@@ -21,7 +21,8 @@ const LOG_PAGE = 200;
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
-  "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "restore_started"];
+  "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "restore_started",
+  "change"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
 // LOG_COUNT events, the last 10 minutes, the last hour, today, this week
@@ -198,7 +199,7 @@ function logListText(changes) {
 // digit, a switch as on or off, a time zone by its name, a day by its
 // name.
 function logValue(key, v) {
-  if (v === null || v === undefined) return "–";
+  if (v === null || v === undefined || v === "") return "–";
   if (typeof v === "boolean") return t(v ? "log.on" : "log.off");
   if (typeof v === "number") return key.endsWith("_temp") || key.endsWith("_setpoint") || key === "temp_offset" ? fmtNum(v, 1) : String(v);
   if (typeof v === "object" && v.name !== undefined) return v.name || "–";
@@ -275,8 +276,61 @@ function logSummaryText(kind, s) {
       return t("log.sum.restoreStarted", { steps: num(s.steps) });
     case "address_changed":
       return t("log.sum.addressChanged", { from: s.from || "–", to: s.to || "–" });
+    case "change":
+      return logChangeText(s);
   }
   return "";
+}
+
+// logTargetText names what a change concerns: a device by its name, else
+// its S/N; a room by its name; a user, role or key as the line names it.
+function logTargetText(s) {
+  const target = s.target || "";
+  const i = target.indexOf(":");
+  if (i < 0) return target;
+  const kind = target.slice(0, i);
+  const id = target.slice(i + 1);
+  switch (kind) {
+    case "device": {
+      for (const r of state.rooms) {
+        const d = r.devices.find((x) => x.serial === id || x.rf_address === id);
+        if (d && d.name) return d.name;
+      }
+      return id;
+    }
+    case "room": {
+      const r = state.rooms.find((x) => String(x.id) === id);
+      return r && r.name ? r.name : t("log.room", { id });
+    }
+    case "token":
+      return s.subject && s.subject.name ? s.subject.name : id;
+    case "user":
+      return s.subject && s.subject.display_name ? s.subject.display_name : id;
+  }
+  return id;
+}
+
+// logChangeText is a change line (AP Logging v1.1, Block 6): what was
+// done, to what, and what changed from and to, else what it set.
+function logChangeText(s) {
+  const key = "log.action." + s.action;
+  const action = t(key) === key ? s.action : t(key);
+  const target = logTargetText(s);
+  let text = target ? t("log.sum.change", { action, target }) : action;
+  const changes = s.changes && Object.keys(s.changes).length ? s.changes : null;
+  if (changes) {
+    text += ": " + logConfigText(changes);
+  } else if (s.set && typeof s.set === "object") {
+    const parts = Object.keys(s.set)
+      .sort()
+      .filter((k) => s.set[k] !== "…" && typeof s.set[k] !== "object")
+      .map((k) => {
+        const label = t("log.cfg." + k) === "log.cfg." + k ? k : t("log.cfg." + k);
+        return label + " " + logValue(k, s.set[k]);
+      });
+    if (parts.length) text += ": " + parts.join(", ");
+  }
+  return s.via === "cli" ? t("log.viaCli", { text }) : text;
 }
 
 // logWord is a value's word in the language shown, the value itself where
