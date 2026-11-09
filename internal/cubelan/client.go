@@ -61,6 +61,9 @@ type Client struct {
 	reconnecting atomic.Bool
 	// online is set while a connection is up and its greeting complete.
 	online atomic.Bool
+	// lost is set from the loss Run reports to the next complete
+	// greeting, see Lost.
+	lost atomic.Bool
 	// inclusion is the pairing state, see inclusion.go.
 	inclusion inclusion
 
@@ -169,6 +172,12 @@ func (c *Client) Events() <-chan Event { return c.evs }
 // received the connection's complete greeting.
 func (c *Client) Connected() bool { return c.online.Load() }
 
+// Lost reports whether the Cube is lost: from the loss Run reports
+// (EventDisconnected and the warning "cube connection lost") to the next
+// complete greeting. Unlike Connected it stays false while the client
+// connects again on purpose (Reconnect), and while it has not tried yet.
+func (c *Client) Lost() bool { return c.lost.Load() }
+
 // Ready is closed after the first complete greeting.
 func (c *Client) Ready() <-chan struct{} { return c.ready }
 
@@ -207,6 +216,7 @@ func (c *Client) Run(ctx context.Context) error {
 		switch now := time.Now(); {
 		case lost.IsZero():
 			lost, warned = now, now
+			c.lost.Store(true)
 			c.emit(Event{Kind: EventDisconnected, Err: err})
 			c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 		case now.Sub(warned) >= c.opts.RemindEvery:
@@ -272,6 +282,7 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
 				c.online.Store(true)
+				c.lost.Store(false)
 				// Swap the greeted channel before anyone can see the
 				// client as ready, so that a Reconnect right after Ready
 				// waits for the next greeting, not this one.

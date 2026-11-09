@@ -151,6 +151,10 @@ the next minor, a fix counts the suffix up.
 - `massimo user` and `massimo store` print their help, or refuse wrong
   arguments, without creating a store in the data directory first.
 
+- serve's proxy no longer answers discovery for a Cube it has lost,
+  so other servers and the original software see the Cube go; serve
+  stays findable by mDNS (`docs/proxy.md`, "Discovery").
+
 ### Security
 
 - The service runs as `_massimo` on Linux too, as on macOS: the package

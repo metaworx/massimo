@@ -732,6 +732,65 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	}
 }
 
+// Lost holds from the loss Run reports to the next complete greeting;
+// a deliberate Reconnect is none.
+func TestLostFromALossToTheNextGreeting(t *testing.T) {
+	srv, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond})
+	if c.Lost() {
+		t.Fatal("lost before Run")
+	}
+	evs := countEvents(ctx, c)
+	go c.Run(ctx)
+	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	if c.Lost() {
+		t.Fatal("lost after the greeting")
+	}
+
+	var sawLost atomic.Bool
+	done := make(chan struct{})
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if c.Lost() {
+				sawLost.Store(true)
+			}
+			time.Sleep(100 * time.Microsecond)
+		}
+	}()
+	if err := c.Reconnect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	close(done)
+	<-sampled
+	if sawLost.Load() {
+		t.Error("lost during a deliberate reconnect")
+	}
+
+	srv.Close()
+	eventually(t, "the loss", c.Lost)
+	if n := evs.get(EventDisconnected); n != 1 {
+		t.Errorf("%d disconnected events, want 1", n)
+	}
+	srv2 := &fakecube.Server{Greeting: srv.Greeting}
+	if _, err := srv2.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv2.Close() })
+	eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 3 })
+	if c.Lost() || !c.Connected() {
+		t.Errorf("after the greeting: lost %v, connected %v", c.Lost(), c.Connected())
+	}
+}
+
 // A Cube never reached since the start is reported once, at the first
 // failed attempt, and the first greeting says it is back.
 func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {

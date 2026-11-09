@@ -7,7 +7,8 @@
 // the proxy instead: reads are answered from the server's snapshot of
 // the Cube, writes go through the command queue to the real Cube and the
 // Cube's own answers are relayed. The proxy also answers the UDP
-// discovery request, so clients find it like a Cube.
+// discovery request while the server has the Cube, so clients find it
+// like a Cube, and see it go with the Cube.
 package proxy
 
 import (
@@ -539,7 +540,10 @@ func (p *Proxy) hiddenRooms(md *cube.Metadata) map[uint8]bool {
 
 // discoveryReply builds the reply to a discovery request for the
 // serial it names ("" for any), or returns false when the request is
-// not for this proxy's Cube.
+// not for this proxy's Cube, or while the server has lost the Cube
+// (cubelan.Client.Lost): a discovery answer says that a Cube is there,
+// and other servers and the original software are to see it go. The
+// TCP side still serves the last snapshot meanwhile.
 func (p *Proxy) discoveryReply(serial string, op byte) ([]byte, bool) {
 	h := p.opts.Client.Snapshot().Hello()
 	if h == nil {
@@ -554,6 +558,10 @@ func (p *Proxy) discoveryReply(serial string, op byte) ([]byte, bool) {
 	}
 	if op != cubelan.UDPIdentify {
 		p.log.Debug("proxy: discovery request not answered", "op", string(op), "serial", mine)
+		return nil, false
+	}
+	if p.opts.Client.Lost() {
+		p.log.Debug("proxy: discovery request not answered, the cube is lost", "serial", mine)
 		return nil, false
 	}
 	fw, _ := strconv.ParseUint(h.Firmware, 16, 16)
