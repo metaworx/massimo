@@ -76,6 +76,10 @@ with the page's DOM, console and network at every step.
   which the server refuses with 401,
   and the page is handed over before the stream is open again.
 
+`fake_bridge.js` is the app's bridge for `test_connect.py`,
+`window.massimo` as docs/app.md describes it,
+recording every call in `window.__fakeBridge.calls`.
+
 `helpers.py` holds the texts the tests expect in both languages,
 the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
 `open_user_menu` and `sign_out` for the header's 👤 menu,
@@ -276,6 +280,27 @@ what a test stores in the browser goes with its context.
   `GET /api/v1/update`) and come back when it is done;
   Update asks in the page with the version,
   and Cancel takes the question back without a request.
+- `test_connect.py`, the apps' connect page (`ui/connect.html`, docs/app.md),
+  with `fake_bridge.js` as the app's bridge,
+  put into the page by `add_init_script` and answering from a configuration
+  the test gives it, which it may change while the page runs:
+  each server shows what its probe found (on the LAN, remote, not reachable),
+  a tap opens it at the address found, and one that does not answer says so;
+  an address typed is probed by HTTPS first and added,
+  a private one as the LAN address;
+  what is not an address says so and plain HTTP outside the home network is warned of;
+  a self-signed certificate opens the fingerprint sheet,
+  Cancel adds nothing and Trust pins it,
+  and a changed certificate shows the old and the new fingerprint before the server opens;
+  a server's settings open from ⚙ and a long press,
+  save the biometric switch and Remove asks in place;
+  discovery offers a server not in the list and moves a saved one's LAN address;
+  the card of the server on the phone starts and stops it;
+  a browser without the bridge sees the line saying the page is the app's;
+  and the server's page in the app takes its token from the bridge,
+  keeps none in the browser, and hands a sign-in and a sign-out to the bridge.
+  axe-core (`axe-playwright-python`) finds no violation on the connect page
+  in each state the tests open.
 - Every button on every page the tests open has an accessible name (its text,
   `aria-label`, `aria-labelledby` or `title`),
   and the pages have no horizontal scroll where the tests look for one.

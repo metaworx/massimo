@@ -1,0 +1,102 @@
+<!doctype html>
+<!-- The apps' connect page (docs/app.md): the servers the app keeps,
+     discovery, adding one by its address, the fingerprint of a
+     self-signed certificate, a server's settings and the server on the
+     phone, through the app's bridge window.massimo (connect.js). The
+     server serves it at ui/connect.html, the app its own copy of ui/;
+     <base> makes its URLs resolve as the page at / resolves them, and
+     the policy is in a meta element for the app's copy, which is served
+     without the server's header. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data:; base-uri 'self'; form-action 'self'">
+<base href="../">
+<title>Massimo</title>
+<link rel="stylesheet" href="ui/style.css">
+</head>
+<body class="connect">
+<svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true" focusable="false">
+  <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+</svg>
+
+<header class="top connect-top">
+  <div class="brand"><h1>Massimo</h1></div>
+</header>
+
+<main class="connect-main">
+  <p id="no-bridge" class="notice hidden" role="status"><span data-i18n="connect.noBridge">This page belongs to the Massimo app for Android and iOS. In a browser, Massimo is the web UI at the server's address.</span> <a href="./" data-i18n="connect.toWebUI">Open the web UI</a></p>
+
+  <section id="servers" class="tile section-card hidden" aria-labelledby="servers-h">
+    <header class="tile-head">
+      <h2 id="servers-h" data-i18n="connect.servers">Servers</h2>
+      <button type="button" id="probe-btn" class="icon-btn refresh-btn" aria-label="check again" title="Check every server again" data-i18n-attr="aria-label:connect.probeAgain title:connect.probeAgainTitle">↻</button>
+    </header>
+    <div class="section-body">
+      <ul id="server-list" class="server-list"></ul>
+      <p id="servers-empty" class="muted hidden" data-i18n="connect.none">No server yet: add one below.</p>
+      <p id="servers-msg" class="small cubes-msg hidden" role="status"></p>
+    </div>
+  </section>
+
+  <section id="add" class="tile section-card hidden" aria-labelledby="add-h">
+    <header class="tile-head"><h2 id="add-h" data-i18n="connect.add">Add a server</h2></header>
+    <div class="section-body">
+      <h3 class="connect-sub" data-i18n="connect.found">On this network</h3>
+      <ul id="found-list" class="found-servers"></ul>
+      <p class="found-line"><span id="found-state" class="muted small" role="status"></span> <button type="button" id="search-btn" class="small" data-i18n="connect.searchAgain">Search again</button></p>
+      <form id="add-form" class="add-form">
+        <div class="field wide">
+          <label for="add-address" data-i18n="connect.address">Address</label>
+          <input type="text" id="add-address" class="field-control" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="192.168.1.20:8099" required>
+          <p class="muted small field-hint" data-i18n="connect.addressHint">A name or an address, with its port where it is not the usual one, or the whole URL.</p>
+          <p id="add-warn" class="small field-hint warn-text hidden" data-i18n="connect.plainHttp">Not encrypted: outside the home network, anyone on the way can read the sign-in and change the page.</p>
+        </div>
+        <p id="add-msg" class="small cubes-msg hidden" role="status"></p>
+        <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="connect.addButton">Add</button></span></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="core-card" class="tile section-card hidden" aria-labelledby="core-h">
+    <header class="tile-head"><h2 id="core-h" data-i18n="connect.core">Run the server on this phone</h2></header>
+    <div class="section-body">
+      <p class="muted small" data-i18n="connect.coreText">The phone then talks to the Cube itself. A Cube takes one connection at a time: while the phone holds it, nothing else reaches that Cube directly.</p>
+      <p id="core-status" role="status"></p>
+      <div class="actions"><span class="actions-right"><button type="button" id="core-stop" data-i18n="connect.coreStop">Stop</button><button type="button" id="core-start" class="primary" data-i18n="connect.coreStart">Start</button></span></div>
+    </div>
+  </section>
+</main>
+
+<!-- The fingerprint sheet: a self-signed certificate seen for the first
+     time, or one that is not the one trusted before. -->
+<dialog id="fp-dialog" aria-labelledby="fp-title">
+  <h3 id="fp-title"></h3>
+  <p id="fp-text"></p>
+  <div id="fp-old-row" class="fp-row"><span class="muted small" data-i18n="connect.fpOld">Trusted until now</span><span id="fp-old" class="mono tls-fp"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.fpNew">The server's certificate</span><span id="fp-new" class="mono tls-fp"></span></div>
+  <p class="muted small" data-i18n="connect.fpCompare">Compare it with the fingerprint in the server's log, or with massimo tls show on the box, before you trust it.</p>
+  <div class="actions"><button type="button" id="fp-cancel" data-i18n="action.cancel">Cancel</button><button type="button" id="fp-trust" class="primary" data-i18n="connect.trust">Trust</button></div>
+</dialog>
+
+<!-- A saved server in the list: a tap opens it, a long press or the cog
+     its settings (connect.js serverRow). -->
+<template id="tpl-server">
+  <li class="server-row">
+    <button type="button" class="server-open"><span class="server-name"></span><span class="server-where mono muted small"></span><span class="server-badges"></span></button>
+    <button type="button" class="icon-btn server-cog" aria-expanded="false" aria-label="settings" data-i18n-attr="aria-label:connect.settings title:connect.settings"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+  </li>
+</template>
+
+<!-- A server discovery found that is not in the list (connect.js foundRow). -->
+<template id="tpl-found">
+  <li class="found-server"><span class="found-name"></span><span class="found-where mono muted small"></span><button type="button" class="found-add" data-i18n="connect.addButton">Add</button></li>
+</template>
+
+<script src="ui/i18n.js"></script>
+<script src="ui/components.js"></script>
+<script src="ui/connect.js"></script>
+</body>
+</html>
