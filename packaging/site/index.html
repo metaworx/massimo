@@ -31,6 +31,24 @@ footer { margin-top: 2rem; color: var(--muted); font-size: .875rem; }
 <p>One program, <code>massimo serve</code>, on a small box on the Cubes' network (a Raspberry Pi 1 is enough) gives them a web UI for phone and desktop, a JSON API, and a proxy through which the original MAX! software keeps working. It runs on your own hardware, with no account and no cloud. Massimo is in early development: every release is a pre-release on the update channel <code>alpha</code>.</p>
 
 <h2>Install</h2>
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_trust.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+<p><strong>A binary is only as trustworthy as the place it came from.</strong>
+Massimo runs as a service on your network and controls your heating,
+so take it from the project's <a href="https://github.com/metaworx/massimo/releases">releases</a>,
+its apt repository or its Homebrew tap, and never from a copy elsewhere:
+a mirror, a forum post or a prepared image may carry a changed binary,
+and no check of the project's can tell.
+<code>SHA256SUMS</code> proves that a download arrived as the release has it,
+not who built it:
+it sits on the same page as the binaries,
+and whoever could replace one could replace the other.
+Once a binary runs,
+<code>massimo update</code> checks every later release against the release key compiled into it,
+and apt against the repository's key,
+so what is left to trust is the first install.
+To trust no build but your own, build it from the signed source:
+<a href="https://github.com/metaworx/massimo#from-source">From source</a>.</p>
+<!-- END GENERATED PARTIAL docs/fragments/_trust.md -->
 
 <h3>Debian, Ubuntu, Raspberry Pi OS: the apt repository</h3>
 <p>One suite per update channel: {{SUITES}}. Install the keyring package first, then the sources:</p>
@@ -66,6 +84,41 @@ brew services start massimo-alpha</code></pre>
 sudo ./massimo-linux-arm64 install -dry-run -settings .env
 sudo ./massimo-linux-arm64 install -settings .env</code></pre>
 <p>This installs a systemd service on Linux, a LaunchDaemon on a Mac; the web UI's button and <code>massimo update</code> install the next release. Details: <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#install-with-massimo-install">Install with massimo install</a>.</p>
+
+<h3 id="from-source">From source</h3>
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_build.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+<p>Every release can be built from its signed tag,
+with git, make and Go 1.26 or later (<a href="https://go.dev/dl/">https://go.dev/dl/</a>):</p>
+<pre><code class="language-bash">git clone https://github.com/metaworx/massimo.git
+cd massimo
+git -c gpg.ssh.allowedSignersFile=/dev/null verify-tag &lt;tag&gt;
+git checkout &lt;tag&gt;
+make
+</code></pre>
+<p><code>verify-tag</code> checks the tag's signature.
+With no signer it trusts (<code>/dev/null</code>), git prints the key's fingerprint,
+then <code>No principal matched.</code>, and exits 1;
+the fingerprint must be <code>SHA256:R3Ihevc2jMppLJtKIhmpfRmulpf7DXuWBFbCjaU3qcs</code>,
+which the guidelines' README names as well, under &quot;Verifying a release&quot;,
+<a href="https://gitlab.com/metaworx/open-source/mwx-guidelines">https://gitlab.com/metaworx/open-source/mwx-guidelines</a>,
+on a host this repository does not control.
+The key itself is deliberately not given here:
+whoever could change the tags could change the line naming it.</p>
+<p><code>make</code> runs the tests and builds <code>./massimo</code> for this machine,
+<code>make build</code> without the tests;
+<code>make linux-armv6</code> builds for a Raspberry Pi 1, <code>make linux-arm64</code> for a 64-bit
+Raspberry Pi OS, <code>make windows</code> for Windows,
+and <code>make cross</code> every release binary, all into <code>dist/</code>.
+The binary goes in as a release's does,
+<code>sudo ./massimo install -dry-run -settings .env</code>, then without <code>-dry-run</code>.
+It follows the tag's update channel,
+so the web UI and <code>massimo update</code> say when a release is out,
+and they install the project's binary, checked against its signed manifest;
+to stay on your own builds, build the next tag and run <code>install</code> again,
+which replaces the binary and keeps the settings.
+A tag up to v0.12.0-alpha.1 follows <code>HEAD</code> instead, which has no releases,
+unless built with <code>make CHANNEL=alpha</code>.</p>
+<!-- END GENERATED PARTIAL docs/fragments/_build.md -->
 
 <h2 id="settings">The first settings</h2>
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_first-settings.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
