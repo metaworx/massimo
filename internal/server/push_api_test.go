@@ -107,6 +107,9 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 		if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", tok, subscription(t, "https://push.example.net/send/"+role, "")); code != 403 || errorOf(text) != `capability "preferences" required` {
 			t.Errorf("%s subscribed: %d %s", role, code, text)
 		}
+		if code, _ := callAPI(t, ts, "DELETE", "/api/v1/me/push/"+strconv.FormatInt(v.ID, 10), tok, ""); code != 403 {
+			t.Errorf("%s unsubscribed: %d", role, code)
+		}
 	}
 	for _, bad := range []string{
 		`{`,
@@ -129,17 +132,29 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 	if _, text := callAPI(t, ts, "GET", "/api/v1/me/push", owner, ""); strings.TrimSpace(text) != "[]" {
 		t.Fatalf("after the removal: %s", text)
 	}
+	// Every row names the subscription its path or its answer names, a
+	// refused or failed one too; a subscription that was not made, none.
 	seen := map[string]int{}
 	for _, r := range auditRows(t, ts, owner, "?limit=100") {
 		if !strings.HasPrefix(r.Action, "push.") {
 			continue
 		}
-		seen[r.Action]++
+		seen[r.Action+" "+r.Result]++
 		if r.CommandID != 0 {
 			t.Errorf("a command of %s: %d", r.Action, r.CommandID)
 		}
+		want := "push:" + strconv.FormatInt(v.ID, 10)
+		switch {
+		case r.Action == "push.unsubscribe" && strings.Contains(string(r.Detail), `/api/v1/me/push/x"`):
+			want = "push:x"
+		case r.Action == "push.subscribe" && r.Result != store.ResultOK:
+			want = ""
+		}
+		if r.Target != want {
+			t.Errorf("%s %s: target %q, want %q", r.Action, r.Result, r.Target, want)
+		}
 	}
-	if seen["push.subscribe"] < 2 || seen["push.unsubscribe"] == 0 {
+	if seen["push.subscribe ok"] != 2 || seen["push.unsubscribe ok"] != 1 || seen["push.unsubscribe refused"] != 2 || seen["push.unsubscribe failed"] != 2 {
 		t.Errorf("audit rows: %v", seen)
 	}
 }

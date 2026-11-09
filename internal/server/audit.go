@@ -231,13 +231,16 @@ func (w *statusWriter) Flush() {
 }
 
 // pathTarget derives the target from the path's values: the device,
-// the room, the token, the user, the role or capability, or the Cube.
+// the room, the token, the push subscription, the user, the role or
+// capability, or the Cube.
 func pathTarget(r *http.Request, pattern string) string {
 	switch {
 	case r.PathValue("rf") != "":
 		return "device:" + strings.ToLower(r.PathValue("rf"))
 	case r.PathValue("id") != "" && strings.Contains(pattern, "/tokens/"):
 		return "token:" + r.PathValue("id")
+	case r.PathValue("id") != "" && strings.Contains(pattern, "/me/push/"):
+		return "push:" + r.PathValue("id")
 	case r.PathValue("id") != "":
 		return "room:" + r.PathValue("id")
 	case r.PathValue("name") != "":
