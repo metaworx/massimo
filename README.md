@@ -524,7 +524,8 @@ the validation reaches the box on port 443 (a router forwards its public
 443 to the server's port; the name's record is the public address,
 dynamic DNS where it changes), by TLS-ALPN-01 on the listener itself,
 or with `-tls-http :80` by HTTP-01 on a plain port 80 as well,
-which then redirects to `https://`.
+which then redirects to `https://<name>:443/`,
+the port the router forwards, whatever `-listen` says.
 `-acme-email` gives the account a contact address;
 the account key and the certificates live in the data directory's `tls/acme/`.
 A client that names no host, as one does for an address (`https://127.0.0.1`,

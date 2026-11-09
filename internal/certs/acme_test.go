@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func TestOpenACME(t *testing.T) {
@@ -190,5 +191,52 @@ func TestACMECheckAsksAsABrowser(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "no certificate from the ACME directory") {
 		t.Fatalf("the check ordered another certificate:\n%s", logs.String())
+	}
+}
+
+// A certificate autocert stores is a new one, and goes into the log with
+// its name and fingerprint; the account key, a token and a challenge's
+// certificate do not, and a certificate an earlier run left in the cache
+// is served without the line.
+func TestACMELogsIssued(t *testing.T) {
+	var logs bytes.Buffer
+	c := logCache{Cache: autocert.DirCache(t.TempDir()), log: slog.New(slog.NewTextHandler(&logs, nil))}
+	certPath, keyPath, fp := writePair(t, t.TempDir(), []string{"massimo.example.net"}, time.Now().Add(80*24*time.Hour), time.Now())
+	keyPEM, _ := os.ReadFile(keyPath)
+	certPEM, _ := os.ReadFile(certPath)
+	data := append(append([]byte{}, keyPEM...), certPEM...) // as autocert stores it
+	ctx := context.Background()
+	for _, key := range []string{"acme_account+key", "tok3n+http-01", "massimo.example.net+token"} {
+		if err := c.Put(ctx, key, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("logged what is no certificate of the server's:\n%s", logs.String())
+	}
+	if err := c.Put(ctx, "massimo.example.net", data); err != nil {
+		t.Fatal(err)
+	}
+	line := logs.String()
+	if strings.Count(line, "tls: certificate issued by the ACME directory") != 1 || !strings.Contains(line, "name=massimo.example.net") || !strings.Contains(line, "fingerprint="+fp) {
+		t.Fatalf("log %q, want one line with the fingerprint %s", line, fp)
+	}
+	if got, err := c.Get(ctx, "massimo.example.net"); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("stored %d bytes, %v", len(got), err)
+	}
+
+	a, cachedFP, cached := cachedACME(t, "massimo.example.net")
+	if _, ok := a.m.Cache.(logCache); !ok {
+		t.Fatalf("the manager's cache is a %T", a.m.Cache)
+	}
+	cert, err := a.GetCertificate(browserHello("massimo.example.net"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Fingerprint(cert.Certificate[0]); got != cachedFP {
+		t.Fatalf("served %s, want the cached %s", got, cachedFP)
+	}
+	if strings.Contains(cached.String(), "certificate issued") {
+		t.Fatalf("a cached certificate logged as issued:\n%s", cached.String())
 	}
 }

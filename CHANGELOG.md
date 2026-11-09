@@ -61,6 +61,10 @@ the next minor, a fix counts the suffix up.
 - `serve -discover-listen <addr>` puts the discovery socket on another
   address than UDP 23272, for tests with a fake Cube (`README.md`).
 
+- The log says when Let's Encrypt issued or renewed a certificate by
+  TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
+  to port 443, the one a router forwards (`README.md`, "Server").
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill

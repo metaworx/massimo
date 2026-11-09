@@ -4,7 +4,9 @@
 package certs
 
 import (
+	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -30,7 +32,8 @@ import (
 // own, and the hourly watch (Check) gets the certificate of every name
 // at the start, so the log says at once whether the order worked, and
 // warns under ACMEWarnBefore. autocert logs nothing itself: its errors
-// reach only GetCertificate, which logs each name's once in a while.
+// reach only GetCertificate, which logs each name's once in a while, and
+// the cache logs each certificate autocert stores (logCache).
 const (
 	// ACMEDir is the cache directory under the data directory.
 	ACMEDir = "tls/acme"
@@ -85,7 +88,7 @@ func OpenACME(dataDir string, names []string, email, directory string, log *slog
 	dir, _ := ACMEPaths(dataDir, "")
 	m := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache(dir),
+		Cache:      logCache{Cache: autocert.DirCache(dir), log: log},
 		HostPolicy: autocert.HostWhitelist(names...),
 		Email:      email,
 		Client:     &acme.Client{DirectoryURL: directory, HTTPClient: &http.Client{Timeout: 30 * time.Second}},
@@ -162,6 +165,47 @@ func (a *ACME) Check(now time.Time) {
 	if st := a.Status(); st.Warning != "" && !st.NotAfter.IsZero() {
 		a.log.Warn("tls: "+st.Warning, "names", st.Names, "expires", st.NotAfter)
 	}
+}
+
+// logCache is autocert's cache with a line in the log for every
+// certificate autocert stores, which is a new one: the first order's or
+// a renewal's. A certificate an earlier run left in the cache is only
+// read (Get), so the line never repeats an old one.
+type logCache struct {
+	autocert.Cache
+	log *slog.Logger
+}
+
+// Put stores the data and, for a certificate, logs it as the DNS-01
+// source logs its own: the key is the name ("<name>+rsa" for an RSA
+// one); the account key (acme_account+key), an HTTP-01 token
+// (<token>+http-01) and a TLS-ALPN-01 challenge's certificate
+// (<name>+token) are no certificate of the server's. The data is the
+// key's PEM followed by the chain's, the leaf first.
+func (c logCache) Put(ctx context.Context, key string, data []byte) error {
+	if err := c.Cache.Put(ctx, key, data); err != nil {
+		return err
+	}
+	name := strings.TrimSuffix(key, "+rsa")
+	if strings.Contains(name, "+") {
+		return nil
+	}
+	for rest := data; ; {
+		var b *pem.Block
+		if b, rest = pem.Decode(rest); b == nil {
+			break
+		}
+		if b.Type != "CERTIFICATE" {
+			continue
+		}
+		if leaf, err := x509.ParseCertificate(b.Bytes); err == nil {
+			c.log.Info("tls: certificate issued by the ACME directory", "name", name, "expires", leaf.NotAfter, "fingerprint", Fingerprint(b.Bytes))
+			return nil
+		}
+		break
+	}
+	c.log.Info("tls: certificate issued by the ACME directory", "name", name)
+	return nil
 }
 
 // remember keeps the certificate served as the status.
