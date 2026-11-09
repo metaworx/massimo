@@ -124,9 +124,18 @@ see [packaging/README.md](packaging/README.md#updating).
 
 `serve` reads its settings from the environment or from a `.env` in the
 directory it is started from (see [Cube variables](#cube-variables)).
-For a first run two lines are enough, the Cube's address (`massimo
-discover` lists the Cubes on the LAN with serial and address) and the
-token the API and the web UI then ask for:
+On the Cubes' LAN it needs none to begin with:
+while there are no users,
+the web UI offers the local network a form for the first owner,
+and System settings → Cubes lists the Cubes the server finds,
+each added with **Add**.
+The settings take what discovery and the web UI cannot give:
+the address of a Cube that discovery does not reach,
+on another subnet or behind a VPN (`massimo discover` lists the Cubes it hears,
+with serial and address),
+and a token that becomes the owner's key at the first start,
+which the API and the web UI then ask for,
+so that no form for the first owner is open on the LAN:
 
 ```
 MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
@@ -165,8 +174,8 @@ chmod +x massimo-linux-arm64
 ./massimo-linux-arm64 serve -listen 127.0.0.1:8099
 ```
 
-with the `.env` from above in the same directory,
-then open http://127.0.0.1:8099/ and enter the token;
+with the `.env` from above in the same directory, if any,
+then open http://127.0.0.1:8099/ and enter the token or create the first owner;
 `-listen :8099` serves the page to the LAN as well,
 `-proxy off` leaves the proxy out for a first run.
 A firewall on the box must allow incoming 62910/tcp, 23272/udp and 5353/udp,
@@ -232,9 +241,11 @@ same install through apt (`sudo apt install ./massimo_<version>_arm64.deb`;
 `_armhf` for a 32-bit Raspberry Pi OS, the Pi 1 included, `_amd64` for a PC),
 creates the user and `/etc/massimo/env` to fill in,
 and owns the binary from then on:
-the web UI and `massimo update` say when a release is out and apt installs it,
+`massimo update` says when a release is out and leaves the install to apt,
+the web UI's Update has the package's helper run apt for the project's source,
 `apt purge massimo` removes everything.
-The project's apt repository makes that an `apt upgrade`:
+The project's apt repository, <https://massimo.metaworx.ch/apt/>,
+makes that an `apt upgrade`:
 one suite per update channel, the snippet in
 [The apt repository](packaging/README.md#the-apt-repository).
 Details: [Debian package](packaging/README.md#debian-package).
@@ -420,9 +431,10 @@ Details: [macOS](packaging/README.md#macos).
 (nothing needs notarization), `brew services start massimo-alpha` runs it as you
 (`sudo` for a daemon at boot),
 and the settings are in `$(brew --prefix)/etc/massimo/env`;
-brew then owns the binary and `brew upgrade` updates it
-(`brew services restart massimo-alpha` then runs the new one),
-while the web UI and `massimo update` say when a release is out.
+brew then owns the binary and `brew upgrade` updates it,
+which the web UI's Update runs as you under `brew services`
+(by hand, `brew services restart massimo-alpha` then runs the new one),
+while `massimo update` says when a release is out.
 Details: [Homebrew](packaging/README.md#homebrew).
 
 ## Server
@@ -956,6 +968,8 @@ report the commit only with `go run -buildvcs=true`.
 ## Legal
 
 Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+The privacy policy of the software, the apps and the project's site is
+<https://massimo.metaworx.ch/privacy.html>.
 
 "MAX!" and "eQ-3" are trademarks of eQ-3 AG.
 This project is not affiliated with or endorsed by eQ-3.

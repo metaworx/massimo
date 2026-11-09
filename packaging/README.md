@@ -33,6 +33,10 @@ on a Mac LaunchDaemons (see "macOS").
   the apt repository the release workflow publishes (see "The apt repository").
 - `homebrew/`:
   the Homebrew formula's template and renderer (see "Homebrew").
+- `site/`:
+  the pages of the project's site, <https://massimo.metaworx.ch>,
+  the home with the install routes and the privacy policy,
+  which the apt repository's publishing puts beside it (see "The apt repository").
 
 Every service starts `serve` with `-env <settings file>`,
 so a line there reaches it without a change to its command line.
@@ -298,7 +302,9 @@ sudo apt install ./massimo_<version>_arm64.deb
 
 It installs the release binary as `/usr/bin/massimo`,
 the unit as `/usr/lib/systemd/system/massimo.service` (the embedded one with
-that path and without the update helper),
+that path),
+the update helper's `massimo-update.path` and the package's own `massimo-update.service`,
+enabled (see "Updates through apt" below),
 the log rotation and the marker `/usr/share/massimo/packaged`,
 the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
 (see `-acme-dns-hook` above),
@@ -338,15 +344,18 @@ the settings and the store are left alone.
 
 **One owner of the binary.**
 On such a box apt owns `/usr/bin/massimo`, and the marker tells massimo so:
-`massimo update` and the web UI's button still say when a newer release is out,
-but leave the install to `sudo apt update && sudo apt install massimo`
-(the apt repository below) or to the next release's package by hand.
+`massimo update` run by hand still says when a newer release is out,
+but leaves the install to `sudo apt update && sudo apt install massimo`
+(the apt repository below) or to the next release's package by hand,
+and the web UI's button has the package's update helper run apt
+(see "Updates through apt" below).
 `massimo install` keeps only what configures:
 `-settings` over a settings file that is still the template,
 `-tls` and its options into the settings as "Install with `massimo install`" puts them,
-`-listen` as the listen drop-in there (the package has no update helper,
-so no health drop-in),
-`-reboot-helper` and `-no-reboot-helper` as the package's path unit enabled or disabled,
+`-listen` as the listen drop-in there and the update helper's health drop-in,
+the update helper's path unit enabled, or disabled with `-no-update-helper`,
+`-reboot-helper` and `-no-reboot-helper` as the reboot helper's path unit
+enabled or disabled,
 then a restart, by the rule of "Install with `massimo install`".
 `massimo install -remove` points at `apt remove massimo`;
 `apt purge massimo` takes the settings, the store, the logs and the user too,
@@ -355,6 +364,48 @@ A box set up with `massimo install` keeps its own updater:
 the package refuses to install over it until `sudo massimo install -remove` has run,
 which keeps the settings and the store;
 a `-listen` address is set again afterwards with `sudo massimo install -listen <addr>`.
+
+**Updates through apt.**
+The package's update helper is the one of "From the web UI" below,
+started by the same request file,
+but with apt as the owner it installs no release itself:
+it takes the request, whose channel it ignores,
+and runs apt for the massimo source of "The apt repository" alone,
+
+```bash
+apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/massimo.sources \
+  -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confdef \
+  -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 massimo
+```
+
+so it follows that source's suite and does what `apt upgrade` does for massimo,
+the other sources' lists left as they are.
+While another apt run holds apt's lock (`unattended-upgrades` among them)
+it waits up to two minutes for each command,
+since `apt-get update` does not wait itself,
+then reports apt as busy.
+The server follows the source's suite for its check as well,
+`Suites:` of `/etc/apt/sources.list.d/massimo.sources`:
+the web UI says "Installed by apt" with that channel,
+and refuses an update while `MASSIMO_UPDATE_CHANNEL` names another one,
+while the source is missing (a package installed from its file alone),
+or while the helper is off.
+The package's `postinst` restarts the service,
+and the helper waits until `/healthz` reports the version apt installed.
+When it does not, the helper reports that, with the way back,
+`sudo apt install massimo=<previous version>`,
+and downgrades nothing:
+an older binary would run on a store the newer one may have migrated.
+"Nothing newer" is reported when the GitHub release is out before the apt
+repository has it.
+Its sandbox is lighter than the hand install's,
+since apt and the package's scripts write `/usr`, `/etc` and `/var`;
+its log is `journalctl -u massimo-update`,
+its last result `/var/lib/massimo-update/status.json`.
+`sudo massimo install -no-update-helper` turns it off,
+and a later package keeps it off;
+`sudo massimo install` turns it on again.
 
 The package is built by `make packages` (nfpm, at the version the Makefile pins,
 through `go run`) from `nfpm.yaml`,
@@ -368,8 +419,8 @@ changelog is `CHANGELOG.md` on GitHub).
 ## The apt repository
 
 The packages of the newest ten releases of every update channel are also in an
-apt repository on the project's GitHub Pages,
-<https://metaworx.github.io/massimo/apt/>, one suite per channel (`alpha`;
+apt repository on the project's site,
+<https://massimo.metaworx.ch/apt/>, one suite per channel (`alpha`;
 later `beta` and `stable`),
 the same for every Debian and Ubuntu release since the binary is static,
 signed with the repository's own OpenPGP key (RSA 4096;
@@ -377,11 +428,11 @@ not the Ed25519 release key of the manifest, which apt cannot use).
 To follow a channel, install the keyring package first, then the sources:
 
 ```bash
-curl -fsSLo /tmp/massimo-archive-keyring.deb https://metaworx.github.io/massimo/apt/massimo-archive-keyring.deb
+curl -fsSLo /tmp/massimo-archive-keyring.deb https://massimo.metaworx.ch/apt/massimo-archive-keyring.deb
 sudo apt install /tmp/massimo-archive-keyring.deb
 sudo tee /etc/apt/sources.list.d/massimo.sources <<'EOF'
 Types: deb
-URIs: https://metaworx.github.io/massimo/apt
+URIs: https://massimo.metaworx.ch/apt
 Suites: alpha
 Components: main
 Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
@@ -408,12 +459,20 @@ it signs with one key.
 
 The site is built by `packaging/apt/publish.sh` in the release workflow (the
 pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
-the keyring package by nfpm) and deployed with `actions/deploy-pages`;
+the keyring package by nfpm,
+and at the site's root the pages of `site/`:
+`index.html`, the home with the install routes, its suites filled in,
+and `privacy.html`, the privacy policy of the project and its apps,
+which the app stores' listings link)
+and deployed to the project's GitHub Pages with `actions/deploy-pages`;
 it has no state of its own,
-so a release that is deleted on GitHub leaves the pool at the next release.
+so a release that is deleted on GitHub leaves the pool at the next release,
+and a change to the pages is online with the next release.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease`,
+verifies `InRelease` and the pages,
 and installs from it in a container as the snippet above does,
+then upgrades to a newer package through the update helper while another
+process holds apt's lock,
 as CI does on trixie and on bookworm (`make apt-test`).
 Until the owner has made the key and set the secrets,
 the workflow skips the steps.
@@ -432,9 +491,40 @@ The owner's steps, once:
   The environment GitHub makes for Pages deploys from the default branch only,
   and the deploy runs for a release's tag,
   so without the rule every deploy is refused.
+- The domain (the CNAME, the custom domain and HTTPS set on 2026-11-09):
+  verify `metaworx.ch` for the account under its settings → Pages,
+  with the TXT record GitHub names, so that no other account can claim it;
+  at the DNS provider, a CNAME record
+  `massimo.metaworx.ch` → `metaworx.github.io` (the account's address,
+  without the repository's name);
+  in the repository's settings, Pages → Custom domain `massimo.metaworx.ch`,
+  then "Enforce HTTPS" once GitHub has the certificate.
+  A site deployed by a workflow needs no `CNAME` file.
 - Before the key expires,
   `gpg --quick-set-expire <fpr> 2y` and the secret again;
   the next release publishes the renewed key and a newer keyring package.
+
+### Moving from the old address
+
+Until 2026-11-09 the repository was at `https://metaworx.github.io/massimo/apt`,
+which a box set up before then still names in `/etc/apt/sources.list.d/massimo.sources`.
+GitHub redirects that address to the new one.
+When the domain was set up, the redirect went through `http://` first,
+and apt refused it:
+
+```text
+Redirection from https to 'http://massimo.metaworx.ch/…' is forbidden
+```
+
+Since later that day it goes straight to `https://` and apt follows it,
+but the redirect is GitHub's and not documented,
+so change the line once:
+
+```bash
+sudo sed -i 's#https://metaworx.github.io/massimo/apt#https://massimo.metaworx.ch/apt#' /etc/apt/sources.list.d/massimo.sources && sudo apt update
+```
+
+The file keeps its name, and the keyring package and the key stay as they are.
 
 ## Install by hand
 
@@ -697,7 +787,8 @@ The helper's log is in `journalctl -u massimo-update`,
 its last result in `/var/lib/massimo-update/status.json` and in the UI.
 On macOS the same request starts the LaunchDaemon `ch.metaworx.massimo-update`
 instead (see "macOS");
-on Windows the server starts the helper itself (see "Windows").
+on Windows the server starts the helper itself (see "Windows");
+the Debian package's own helper runs apt (see "Debian package").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`,
 a secret of the repository's `signing` environment that only `v*` tags can use;
@@ -968,10 +1059,29 @@ the Cubes are added there too.
 
 One owner of the binary: brew owns it,
 and the marker under the formula's `share/massimo` tells massimo so.
-`massimo update` and the web UI say when a release is out and leave it to
+`massimo update` says when a release is out and leaves it to
 `brew upgrade massimo-alpha`; `massimo install` refuses,
 since that is the layout of a Mac without Homebrew (on an Intel Mac both would
 write to `/usr/local/bin`).
+
+**Updates from the web UI.**
+brew refuses to run as root, so there is no root helper:
+under `brew services` as you, the server starts the helper itself,
+this binary in its helper mode, as you and in a session of its own,
+with the request and its last result in `$(brew --prefix)/var/massimo`
+and its log in `$(brew --prefix)/var/log/massimo-update.log`.
+It runs `brew update` (left out where `HOMEBREW_NO_AUTO_UPDATE` is set,
+as `brew upgrade` leaves it out) and `brew upgrade massimo-alpha`,
+which builds the release from source, so it takes minutes;
+then it restarts the job with `launchctl kickstart -k`,
+whose service runs the formula's `opt` binary, now the new one,
+and waits until `/healthz` reports it.
+Nothing is downgraded.
+The channel is the formula's;
+`MASSIMO_UPDATE_CHANNEL` naming another one keeps the button off, with the reason.
+A server that `sudo brew services` runs as root,
+or one started by hand, keeps the button off as well:
+`brew upgrade massimo-alpha` and a restart of the service are then yours.
 `brew uninstall massimo-alpha` removes it;
 the settings under `etc/massimo` stay, as brew keeps them.
 
@@ -981,7 +1091,8 @@ conflicting with the tap's other formulae (all install `bin/massimo`),
 and pushed to the tap with a deploy key by `.github/workflows/publish.yml`,
 which the release workflow calls once the release is published;
 CI's macOS job renders it for a tarball of the checkout,
-builds and tests it, and checks the marker.
+builds and tests it, checks the marker,
+and upgrades it to a second rendering through the update helper's command.
 Until the owner has made the tap and the key, the workflow skips the push.
 
 The owner's steps, once:

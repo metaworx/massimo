@@ -686,8 +686,11 @@ jobs:
       # (Homebrew loads formulae from taps only, and trusts a tap on
       # request), built from source as a user installs it, tested, and
       # the marker checked: brew owns that binary, and update and install
-      # say so. The tarball is served from a local port, since a formula
-      # wants a URL.
+      # say so. Then a newer version of the formula in the tap, and the
+      # update helper's command as the server starts it, but without
+      # -restart and -health (brew services does not run here): brew
+      # builds and links the newer version. The tarball is served from a
+      # local port, since a formula wants a URL.
       # Developer mode, which brew test turns on anyway, from the start:
       # a deprecation in the formula, or a conflicts_with brew cannot
       # resolve, then fails the install rather than warning in the log.
@@ -717,7 +720,14 @@ jobs:
           grep -q 'managed by brew' err.txt
           if "$prefix/bin/massimo" install -dry-run 2>err.txt; then echo "::error::install did not refuse under brew"; exit 1; fi
           grep -q 'Homebrew' err.txt
-          brew uninstall massimo-ci
+          packaging/homebrew/render.sh --tag v0.0.0-ci.2 --url http://127.0.0.1:8321/massimo.tar.gz --sha256 "$sha" --out "$tap/Formula/massimo-ci.rb"
+          echo alpha > "$RUNNER_TEMP/update-request"
+          "$prefix/bin/massimo" update -request "$RUNNER_TEMP/update-request" -status "$RUNNER_TEMP/update-status.json"
+          cat "$RUNNER_TEMP/update-status.json"
+          test "$(basename "$(readlink "$(brew --prefix)/opt/massimo-ci")")" = 0.0.0-ci.2
+          grep -q '"state": "done"' "$RUNNER_TEMP/update-status.json"
+          "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep -q 'v0.0.0-ci.2'
+          brew uninstall --force massimo-ci
           rm -rf "$tap"
 
       - name: Logs

@@ -64,12 +64,13 @@ def found_text(lang, n):
     return FOUND_N[lang].format(n=n, s="" if n == 1 else "s")
 
 
-def update_json(state, to, available):
+def update_json(state, to, available, manager=None):
     """GET /api/v1/update's answer with the update helper in the given
-    state."""
-    return ('{"current": "v0.0.0-test", "channel": "alpha", "latest": "%s", "available": %s, "can_update": %s, '
+    state, and the package manager that owns the binary, if any."""
+    return ('{"current": "v0.0.0-test", "channel": "alpha", %s"latest": "%s", "available": %s, "can_update": %s, '
             '"helper": {"state": "%s", "to": "%s", "time": "2026-01-01T00:00:00Z"}}'
-            % (to, "true" if available else "false", "true" if available else "false", state, to))
+            % ('"manager": "%s", ' % manager if manager else "", to, "true" if available else "false",
+               "true" if available else "false", state, to))
 
 
 def used_ticket_first(refused):

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Builds the apt repository site (packaging/README.md, "The apt
-# repository"): the Debian packages of the newest releases of every
-# update channel, one suite per channel, indexed with apt-ftparchive and
-# signed with the repository's OpenPGP key. The site has no state of its
-# own: the release workflow rebuilds it from GitHub's releases at every
-# release and deploys it to the project's GitHub Pages; the test feeds it
-# a directory of packages and a throwaway key instead.
+# Builds the project's site (packaging/README.md, "The apt repository"):
+# the pages of packaging/site at its root, and under apt/ the Debian
+# packages of the newest releases of every update channel, one suite per
+# channel, indexed with apt-ftparchive and signed with the repository's
+# OpenPGP key. The site has no state of its own: the release workflow
+# rebuilds it from GitHub's releases at every release and deploys it to
+# the project's GitHub Pages, https://massimo.metaworx.ch; the test feeds
+# it a directory of packages and a throwaway key instead.
 set -euo pipefail
 
 usage() {
@@ -13,14 +14,14 @@ usage() {
 usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owner/name>]
        publish.sh --out <dir> --key <fingerprint> --from <dir> --channel <name>
 
-  --out <dir>        the site: <dir>/apt holds the repository, <dir>/index.html the page
+  --out <dir>        the site: <dir>/apt holds the repository, <dir> the pages of packaging/site
   --key <fpr>        the OpenPGP key in gpg's keyring that signs the suites; its
                      passphrase, if any, in APT_KEY_PASSPHRASE
   --releases <n>     the newest releases kept per channel (default 10)
   --repo <o/n>       the GitHub repository the releases come from (default metaworx/massimo)
   --from <dir>       take every .deb in <dir> instead of GitHub's releases …
   --channel <name>   … as the one suite <name>
-  --base-url <url>   what the sources snippet names (default https://metaworx.github.io/massimo/apt)
+  --base-url <url>   what the sources snippet names (default https://massimo.metaworx.ch/apt)
 
 NFPM names the nfpm command for the keyring package (default: go run at the Makefile's version).
 EOF
@@ -34,7 +35,7 @@ releases=10
 repo=metaworx/massimo
 from=""
 channel=""
-base_url=https://metaworx.github.io/massimo/apt
+base_url=https://massimo.metaworx.ch/apt
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--out) out=$2; shift 2 ;;
@@ -165,12 +166,14 @@ for pool in "$apt"/pool/*/; do
 	sign "$dist/Release" "$dist/Release.gpg" --detach-sign
 done
 
-# 4. The snippet and the page. Signed-By names the keyring package's
+# 4. The snippet and the pages. Signed-By names the keyring package's
 # file, so that the key apt verifies with is the one the newest keyring
-# package carries; the box installs that package first.
+# package carries; the box installs that package first. The pages are
+# packaging/site's, copied as they are, with the suites in place of the
+# index page's placeholder.
 suites=$(for pool in "$apt"/pool/*/; do basename "$pool"; done | tr '\n' ' ')
 cat >"$apt/massimo.sources" <<EOF
-# The Massimo apt repository (https://github.com/metaworx/massimo,
+# The Massimo apt repository (https://massimo.metaworx.ch,
 # packaging/README.md, "The apt repository"): one suite per update
 # channel (${suites% }); the key comes with the package
 # massimo-archive-keyring, installed first from
@@ -181,15 +184,7 @@ Suites: ${suites%% *}
 Components: main
 Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
 EOF
-cat >"$out/index.html" <<EOF
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Massimo apt repository</title></head>
-<body><h1>Massimo apt repository</h1>
-<p>The Debian packages of <a href="https://github.com/metaworx/massimo">Massimo</a>, one suite per update channel: ${suites% }.
-See <a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md#the-apt-repository">packaging/README.md</a>
-for the sources snippet and the keyring package to install first,
-<a href="apt/massimo-archive-keyring.deb">apt/massimo-archive-keyring.deb</a>;
-the key itself is <a href="apt/massimo.asc">apt/massimo.asc</a>.</p>
-</body></html>
-EOF
+cp -R "$root/packaging/site/." "$out/"
+suite_list=${suites% }
+sed "s/{{SUITES}}/${suite_list// /, }/g" "$root/packaging/site/index.html" >"$out/index.html"
 echo "publish.sh: $out holds the suites ${suites% }"

@@ -41,3 +41,24 @@ def test_update_asks_in_the_page(page):
     box.locator(".confirm-no").click()
     assert page.locator(".update .confirm-box").count() == 0 and btn.is_visible() and not posts, "Cancel takes it back, nothing sent"
     page.unroute("**/api/v1/update*")
+
+
+def test_update_through_apt(page):
+    """On a box the Debian package installed, Software names apt beside
+    the version, and Update asks without promising the old version back:
+    apt puts nothing back."""
+    show_view(page, "system")
+    page.route("**/api/v1/update*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True, "apt")))
+    page.locator("#update-check").click()
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes('apt')", 5), \
+        "Software names apt"
+    btn = page.locator("#update-btn")
+    btn.wait_for(state="visible")
+    plain = page.evaluate("t('update.confirm', {version: 'v0.0.1-test'})")
+    btn.click()
+    box = page.locator(".update .confirm-box")
+    assert box.is_visible() and "apt" in box.inner_text() and plain not in box.inner_text(), \
+        "Update asks about apt, not with the hand install's rollback"
+    box.locator(".confirm-no").click()
+    page.unroute("**/api/v1/update*")

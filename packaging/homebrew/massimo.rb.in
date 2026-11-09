@@ -20,7 +20,8 @@ class @CLASS@ < Formula
   def install
     system "go", "build", *std_go_args(output: bin/"massimo", ldflags: "-s -w -X main.version=v#{version} -X main.channel=@CHANNEL@"), "./cmd/massimo"
     # The marker internal/install.Packaged reads: brew owns this binary, so
-    # massimo update and the web UI leave the install to it.
+    # massimo update leaves the install to it, and the web UI's Update
+    # runs brew upgrade.
     (share/"massimo").mkpath
     (share/"massimo"/"packaged").write "brew\nbrew upgrade @NAME@\nbrew uninstall @NAME@\n"
     template = (buildpath/"packaging/env.template").read
@@ -63,10 +64,12 @@ class @CLASS@ < Formula
         massimo -data #{var}/massimo user add <name> -role owner
       The Cubes are added in the web UI too, under System settings, Cubes;
       the settings file takes the rest (README.md, "Cube variables").
-      Updates come through brew upgrade @NAME@, and brew does not restart a
-      running service: brew services restart @NAME@ does. massimo update
-      leaves them to brew. Do not mix this with massimo install, which sets
-      up a Mac without Homebrew.
+      Updates come through the web UI's Update, which runs brew upgrade and
+      brew services restart for you under brew services as yourself, or by
+      hand: brew upgrade @NAME@ does not restart a running service, brew
+      services restart @NAME@ does. massimo update leaves them to brew. Do
+      not mix this with massimo install, which sets up a Mac without
+      Homebrew.
     EOS
   end
 

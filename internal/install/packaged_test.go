@@ -115,8 +115,11 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, UnitDir, "massimo.service")); err == nil {
 		t.Fatal("a unit was written")
 	}
-	if rec.has("useradd") || rec.has("systemctl enable") {
+	if rec.has("useradd") || rec.has("systemctl enable massimo.service") {
 		t.Fatalf("the package's work was done again: %v", rec.cmds)
+	}
+	if !rec.has("systemctl enable --now massimo-update.path") {
+		t.Fatalf("the update helper not enabled: %v", rec.cmds)
 	}
 	if !strings.Contains(read(t, filepath.Join(root, EnvPath)), "MASSIMO_API_TOKEN=t") {
 		t.Fatal("the settings were not copied over the template")
@@ -128,8 +131,8 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 		t.Fatalf("not restarted: %v", rec.cmds)
 	}
 
-	// -tls goes into the settings as on a hand install; the package has
-	// no helper, so there is no health drop-in.
+	// -tls goes into the settings as on a hand install, and the package's
+	// update helper checks the server over https.
 	out.Reset()
 	if err := Install(Options{Root: root, TLS: "self-signed", TLSNames: "massimo.example.net", Out: &out, Run: rec.run}); err != nil {
 		t.Fatal(err)
@@ -138,8 +141,8 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 	if strings.Count(env, "MASSIMO_TLS=self-signed\n") != 1 || !strings.Contains(env, "MASSIMO_TLS_NAMES=massimo.example.net\n") {
 		t.Fatalf("settings after -tls self-signed:\n%s", env)
 	}
-	if _, err := os.Stat(filepath.Join(root, HealthDropIn)); err == nil {
-		t.Fatal("a health drop-in for the helper the package lacks")
+	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "MASSIMO_HEALTH=https://127.0.0.1:80/healthz") {
+		t.Fatalf("health drop-in: %s", read(t, filepath.Join(root, HealthDropIn)))
 	}
 	cert, key := filepath.Join(t.TempDir(), "cert.pem"), filepath.Join(t.TempDir(), "key.pem")
 	os.WriteFile(cert, []byte("CERT"), 0o644)
@@ -226,5 +229,59 @@ func TestRemovePackagedRefuses(t *testing.T) {
 func TestEnvTemplateEmbedded(t *testing.T) {
 	if !strings.Contains(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log") {
 		t.Fatal(envTemplate())
+	}
+}
+
+// TestInstallPackagedUpdateHelper: -no-update-helper turns the package's
+// helper off and takes its health drop-in; without it, install turns it
+// on again, as on a hand install.
+func TestInstallPackagedUpdateHelper(t *testing.T) {
+	root := packagedRoot(t)
+	rec := &recorder{}
+	if err := Install(Options{Root: root, Listen: ":80", Out: &bytes.Buffer{}, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(read(t, filepath.Join(root, HealthDropIn)), "MASSIMO_HEALTH=http://127.0.0.1:80/healthz") {
+		t.Fatal("no health drop-in for -listen :80")
+	}
+	rec = &recorder{}
+	var out bytes.Buffer
+	if err := Install(Options{Root: root, NoUpdateHelper: true, Out: &out, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if !rec.has("systemctl disable --now massimo-update.path") || rec.has("systemctl enable --now massimo-update.path") || !gone(t, filepath.Join(root, HealthDropIn)) {
+		t.Fatalf("-no-update-helper: %q\n%s", rec.cmds, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, ListenDropIn)); err != nil {
+		t.Fatal("the listen drop-in went with the helper's")
+	}
+	rec = &recorder{}
+	if err := Install(Options{Root: root, Out: &bytes.Buffer{}, Run: rec.run}); err != nil {
+		t.Fatal(err)
+	}
+	if !rec.has("systemctl enable --now massimo-update.path") {
+		t.Fatalf("without -no-update-helper: %q", rec.cmds)
+	}
+}
+
+func TestAptSuite(t *testing.T) {
+	dir := t.TempDir()
+	for content, want := range map[string]string{
+		"# The Massimo apt repository\n# Suites: comment\nTypes: deb\nURIs: https://massimo.example.invalid/apt\nSuites: alpha\nComponents: main\n": "alpha",
+		"types: deb\nsuites:   beta stable\n": "beta",
+	} {
+		p := filepath.Join(dir, "massimo.sources")
+		os.WriteFile(p, []byte(content), 0o644)
+		if got, err := AptSuite(p); err != nil || got != want {
+			t.Errorf("%q: %q, %v; want %q", content, got, err, want)
+		}
+	}
+	p := filepath.Join(dir, "none.sources")
+	os.WriteFile(p, []byte("Types: deb\nSuites:\n"), 0o644)
+	if _, err := AptSuite(p); err == nil {
+		t.Error("an empty Suites field read")
+	}
+	if _, err := AptSuite(filepath.Join(dir, "missing.sources")); err == nil {
+		t.Error("a missing file read")
 	}
 }
