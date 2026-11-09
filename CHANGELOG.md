@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   `-tls acme`, such as Let's Encrypt's staging one for a first try
   (`packaging/README.md`, "Install with `massimo install`").
 
+- `internal/store/migrations/store.sql` is the store's complete schema,
+  made from the migrations beside it and checked by `go test`
+  (`docs/store.md`, "Migrations").
+
 ### Changed
 
 - `serve -help`, the settings file's template and the READMEs list what
