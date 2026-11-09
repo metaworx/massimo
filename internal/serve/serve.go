@@ -292,12 +292,16 @@ func (i *Instance) announce(ctx context.Context) (wait func()) {
 		return func() {}
 	}
 	_, p, _ := net.SplitHostPort(i.Addr())
-	port, _ := strconv.Atoi(p)
+	port, err := strconv.ParseUint(p, 10, 16)
+	if err != nil {
+		i.log.Warn("not announced on the LAN", "error", fmt.Errorf("the listener's port %q: %w", p, err))
+		return func() {}
+	}
 	name := i.cfg.Announce.Name
 	if name == "" {
 		name, _ = os.Hostname()
 	}
-	svc := announce.Service{Instance: name, Port: port, Node: i.st.NodeID(), Version: i.cfg.Announce.Version}
+	svc := announce.Service{Instance: name, Port: uint16(port), Node: i.st.NodeID(), Version: i.cfg.Announce.Version}
 	if src := i.src; src != nil {
 		svc.Fingerprint = func() string { return src.Status().Fingerprint }
 	}

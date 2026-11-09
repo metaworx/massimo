@@ -60,7 +60,7 @@ type Service struct {
 	// name, "massimo" without one.
 	Instance string
 	// Port is the API's port.
-	Port int
+	Port uint16
 	// Node is the store's node_id; its last eight hex digits name the
 	// host of the SRV record, massimo-<digits>.local.
 	Node string
@@ -170,7 +170,7 @@ func (r recordSet) servicesPTR() dnsmessage.Resource {
 }
 
 func (r recordSet) srv() dnsmessage.Resource {
-	return dnsmessage.Resource{Header: r.header(r.n.instance, dnsmessage.TypeSRV, true, false), Body: &dnsmessage.SRVResource{Port: uint16(r.svc.Port), Target: r.n.host}}
+	return dnsmessage.Resource{Header: r.header(r.n.instance, dnsmessage.TypeSRV, true, false), Body: &dnsmessage.SRVResource{Port: r.svc.Port, Target: r.n.host}}
 }
 
 func (r recordSet) txt() dnsmessage.Resource {
