@@ -10,7 +10,7 @@ on a Mac LaunchDaemons (see "macOS").
 
 - `systemd/massimo.service`:
   the unit.
-  Runs as the user `massimo`, reads its settings from `/etc/massimo/env`,
+  Runs as the user `_massimo`, reads its settings from `/etc/massimo/env`,
   listens on port 8099 on every interface (API and web UI;
   `install -listen` changes it),
   logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure
@@ -123,11 +123,15 @@ sudo ./massimo-linux-armv6 install
 (`releases/latest` skips pre-releases; while there are only alphas,
 take the URL from the releases page.)
 It installs the binary as `/usr/local/bin/massimo`,
-creates the system user `massimo`, its state directory `/var/lib/massimo`
+creates the system user `_massimo`, its state directory `/var/lib/massimo`
 and `/etc/massimo/env` (the commented template,
 or a copy of `-settings <.env>`), writes `massimo.service`,
 the update helper `massimo-update.path` and `.service` and the log rotation,
 and enables them.
+An account `massimo` that an older release made, with the home
+`/var/lib/massimo`, is renamed `_massimo` in place:
+it keeps its ID, so its files and a running service follow.
+Any other `massimo` is a person's, and is left alone, also by `-remove -purge`.
 It starts the service when the settings set more than the template does
 (its comments and blank lines aside),
 and restarts it when it runs;
@@ -141,7 +145,7 @@ Nothing needs to go into `/etc/massimo/env` for the first start.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
@@ -169,7 +173,7 @@ or `192.168.1.200:80` for one address only).
 It writes two drop-ins that later installs keep:
 `massimo.service.d/listen.conf` sets `MASSIMO_LISTEN` and, below port 1024,
 grants the service `CAP_NET_BIND_SERVICE`,
-since the user `massimo` cannot bind such a port otherwise;
+since the user `_massimo` cannot bind such a port otherwise;
 `massimo-update.service.d/listen.conf` sets `MASSIMO_HEALTH`,
 where the update helper checks the restarted server.
 Deleting both files (and `systemctl daemon-reload`,
@@ -177,13 +181,13 @@ Deleting both files (and `systemctl daemon-reload`,
 
 `-tls-cert <pem> -tls-key <pem>` makes the service serve `https://`:
 the files are copied to `/etc/massimo/cert.pem` and `key.pem`,
-owned by `massimo` and mode 0600, and `MASSIMO_TLS=files`,
+owned by `_massimo` and mode 0600, and `MASSIMO_TLS=files`,
 `MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` are set in `/etc/massimo/env`,
 which later installs keep.
 The server re-reads the files when they change, so a renewal needs no restart:
 certbot keeps its files under `/etc/letsencrypt/live/<name>/`,
 readable by root only, so a deploy hook copies them over
-(`--deploy-hook 'cp "$RENEWED_LINEAGE"/fullchain.pem /etc/massimo/cert.pem; cp "$RENEWED_LINEAGE"/privkey.pem /etc/massimo/key.pem; chown massimo:massimo /etc/massimo/*.pem'`).
+(`--deploy-hook 'cp "$RENEWED_LINEAGE"/fullchain.pem /etc/massimo/cert.pem; cp "$RENEWED_LINEAGE"/privkey.pem /etc/massimo/key.pem; chown _massimo:_massimo /etc/massimo/*.pem'`).
 The update helper then checks `https://127.0.0.1:8099/healthz`
 (`massimo-update.service.d/listen.conf`),
 without verifying the certificate of a loopback address,
@@ -193,10 +197,10 @@ which a connection to never leaves the box.
 the server makes a certificate for the box's names at its first start into
 `/var/lib/massimo/tls/`, renews it 30 days before it expires,
 and logs its fingerprint,
-which `massimo tls show` prints too (as the user `massimo`,
+which `massimo tls show` prints too (as the user `_massimo`,
 with `-data /var/lib/massimo`); browsers warn once per device.
 After a move to another address,
-`sudo -u massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
+`sudo -u _massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
 served at the next connection.
 `-tls acme -tls-names <name> [-acme-email <address>] [-acme-directory <url>] [-tls-http :80]` sets
 `MASSIMO_TLS=acme` with the name, the contact,
@@ -211,7 +215,7 @@ The name must resolve to the box's public address and the router forward
 port 443 to the service's port (`-listen :443` with the capability,
 or the forward to `:8099`);
 with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
-`massimo tls show` (as `massimo`) prints what was issued.
+`massimo tls show` (as `_massimo`) prints what was issued.
 `-acme-dns-hook <script>` with `-tls acme -tls-names …` takes the DNS-01
 challenge instead of a port: the server runs
 `<script> set _acme-challenge.<name> <value>` before the validation and
@@ -219,14 +223,14 @@ challenge instead of a port: the server runs
 and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
 The name may point at the box's LAN address,
 and wildcards work (`-tls-names '*.example.net,example.net'`).
-The script runs as `massimo` with the server's environment less the `MASSIMO_` variables,
+The script runs as `_massimo` with the server's environment less the `MASSIMO_` variables,
 so its own secret comes from a file;
 a run ends after two minutes, with every process it started.
 `packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
 Infomaniak (its name servers, not merely registered there):
 it needs `curl` and `jq`,
 and a token with the DNS scope from the API section of the Infomaniak
-manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
+manager in `/etc/massimo/infomaniak.token` (owned by `_massimo`, mode 0600).
 It hands the token to `curl` on its standard input, never on its command line,
 which every local user can read,
 and gives each call 30 seconds.
@@ -234,8 +238,8 @@ It ran against the real API on 2026-11-08;
 the test runs it against a fake one.
 
 ```bash
-sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/infomaniak.sh /usr/local/lib/massimo/infomaniak.sh
-sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
+sudo install -D -o _massimo -g _massimo -m 0755 packaging/acme-dns-hooks/infomaniak.sh /usr/local/lib/massimo/infomaniak.sh
+sudo install -o _massimo -g _massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/infomaniak.sh
 ```
 
@@ -243,7 +247,7 @@ sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /us
 with the same needs and the same care for its token:
 an API token with the permission Zone → DNS → Edit on the zone,
 made from the template "Edit zone DNS" under My Profile → API Tokens,
-in `/etc/massimo/cloudflare.token` (owned by `massimo`, mode 0600).
+in `/etc/massimo/cloudflare.token` (owned by `_massimo`, mode 0600).
 It finds the zone by name;
 where the token may not list it,
 a line `CLOUDFLARE_ZONE_ID=<id>` in `/etc/massimo/env` names it
@@ -252,8 +256,8 @@ the script gets every variable of the settings file but the `MASSIMO_` ones.
 The test runs it against a fake of Cloudflare's API.
 
 ```bash
-sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/cloudflare.sh /usr/local/lib/massimo/cloudflare.sh
-sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.token <<< "$CLOUDFLARE_TOKEN"
+sudo install -D -o _massimo -g _massimo -m 0755 packaging/acme-dns-hooks/cloudflare.sh /usr/local/lib/massimo/cloudflare.sh
+sudo install -o _massimo -g _massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.token <<< "$CLOUDFLARE_TOKEN"
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/cloudflare.sh
 ```
 
@@ -310,9 +314,14 @@ the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudfla
 (see `-acme-dns-hook` above),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
-its scripts create the user `massimo`, `/etc/massimo/env` from the template
+its scripts create the user `_massimo`, `/etc/massimo/env` from the template
 and the state directory `/var/lib/massimo` when they are missing,
 and enable the service.
+The account `massimo` of an older package is renamed `_massimo` in place,
+keeping its ID, so its files and a running service follow;
+a person's `massimo` is left alone, also by a purge.
+A script of your own that names `massimo`, such as a certbot deploy hook,
+needs the new name.
 They start it only when the settings set more than the template does
 (its comments and blank lines aside),
 because a server without users answers every device on the local network,
@@ -322,7 +331,7 @@ Nothing needs to go into `/etc/massimo/env` for that.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
@@ -542,8 +551,8 @@ On the Pi:
 ```bash
 sudo install -m 0755 massimo-linux-armv6 /usr/local/bin/massimo
 massimo version
-sudo useradd --system --home-dir /var/lib/massimo --no-create-home --shell /usr/sbin/nologin massimo
-sudo install -d -m 0750 -o massimo -g massimo /etc/massimo
+sudo useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell /usr/sbin/nologin _massimo
+sudo install -d -m 0750 -o _massimo -g _massimo /etc/massimo
 sudo install -m 0644 massimo.service /etc/systemd/system/massimo.service
 sudo install -m 0644 massimo /etc/logrotate.d/massimo
 ```
@@ -552,7 +561,7 @@ Then write `/etc/massimo/env` (same format as the `.env` described in the
 main README) and make it readable only by the service:
 
 ```bash
-sudo install -m 0600 -o massimo -g massimo /dev/null /etc/massimo/env
+sudo install -m 0600 -o _massimo -g _massimo /dev/null /etc/massimo/env
 sudoedit /etc/massimo/env
 ```
 
@@ -585,8 +594,8 @@ Check the settings and that the Pi reaches a Cube before enabling the
 service (with no other server connected to that Cube):
 
 ```bash
-sudo -u massimo massimo -env /etc/massimo/env config
-sudo -u massimo massimo -env /etc/massimo/env status -sn <serial>
+sudo -u _massimo massimo -env /etc/massimo/env config
+sudo -u _massimo massimo -env /etc/massimo/env status -sn <serial>
 ```
 
 Start it and follow the log:
@@ -614,7 +623,7 @@ installer passes with `-data`:
 
 | Where | Data directory | Who |
 |---|---|---|
-| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, 0750) | user `massimo` |
+| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, 0750) | user `_massimo` |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` |
 | Windows service | `C:\ProgramData\Massimo` (SYSTEM and Administrators only) | LocalSystem |
 | Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |
@@ -626,7 +635,7 @@ without which no password of `auth_version` 2 signs in;
 a copy of the database belongs with all of them,
 or is made with `massimo store backup <file>`,
 which is consistent while the server runs.
-`sudo -u massimo massimo -data /var/lib/massimo store info` shows the schema version,
+`sudo -u _massimo massimo -data /var/lib/massimo store info` shows the schema version,
 the node and the row counts; `massimo config` shows, per Cube,
 which values the store has and which line of `/etc/massimo/env` differs.
 The Cubes' events, the log the web UI shows, are in `massimo.db` too,
@@ -765,13 +774,13 @@ that is still decided by the signature.
 
 ### From the web UI
 
-The service runs as `massimo` and cannot write `/usr/local/bin`,
+The service runs as `_massimo` and cannot write `/usr/local/bin`,
 so the web UI only asks:
 `POST /api/v1/update` writes `/var/lib/massimo/update-request`,
 and the path unit starts the helper as root,
 which does exactly the update above.
 The request carries nothing but the channel name,
-the helper reads nothing else the `massimo` user can write (in particular
+the helper reads nothing else the `_massimo` user can write (in particular
 not `/etc/massimo/env`),
 and the release must verify against the compiled-in key,
 so a compromised server can at most install the newest signed release.

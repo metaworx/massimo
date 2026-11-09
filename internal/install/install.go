@@ -32,7 +32,12 @@ const (
 	EnvPath      = EnvDir + "/env"
 	UnitDir      = "/etc/systemd/system"
 	LogrotateDir = "/etc/logrotate.d"
-	User         = "massimo"
+	// User is the service account, as on macOS: a name no person has,
+	// since adduser refuses a user's name that starts with "_".
+	User = "_massimo"
+	// formerUser is the account's name before it took macOS's: a name a
+	// person may have, Massimo being a common one.
+	formerUser = "massimo"
 )
 
 // updateFlag is how massimo.service enables the web UI's update button;
@@ -139,6 +144,7 @@ type Options struct {
 type installer struct {
 	Options
 	svcUser string // the account the service runs as: User, or DarwinUser
+	darwin  bool   // macOS, whose settings template has no MASSIMO_LOG
 	reboot  bool   // the reboot helper stays or comes (rebootWanted)
 }
 
@@ -444,16 +450,54 @@ func (in *installer) binary() error {
 	return writeAtomic(dst, b, 0o755)
 }
 
+// user makes the service account. The one an older install or package
+// made, formerUser with the home StateDir, is renamed in place: usermod
+// keeps its ID, so its files and a running service follow. Any other
+// formerUser is a person's, and is left alone.
 func (in *installer) user() error {
-	if in.Root == "" && in.Run("id", "-u", User) == nil { // read-only, also in a dry run
+	if in.passwd(User) != "" {
 		fmt.Fprintf(in.Out, "user %s exists\n", User)
+		return nil
+	}
+	if ownAccount(in.passwd(formerUser)) {
+		in.say("rename the user %s to %s, keeping its ID", formerUser, User)
+		if err := in.run("usermod", "-l", User, formerUser); err != nil {
+			return err
+		}
+		if in.group(formerUser) && !in.group(User) {
+			return in.run("groupmod", "-n", User, formerUser)
+		}
 		return nil
 	}
 	nologin := "/usr/sbin/nologin"
 	if _, err := os.Stat(nologin); err != nil {
 		nologin = "/sbin/nologin"
 	}
-	return in.run("useradd", "--system", "--user-group", "--home-dir", "/var/lib/massimo", "--no-create-home", "--shell", nologin, User)
+	return in.run("useradd", "--system", "--user-group", "--home-dir", StateDir, "--no-create-home", "--shell", nologin, User)
+}
+
+// passwd is the passwd entry of the account name, "" when there is none;
+// read-only, also in a dry run.
+func (in *installer) passwd(name string) string {
+	out, err := in.Output("getent", "passwd", name)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// group reports whether the group name exists; read-only.
+func (in *installer) group(name string) bool {
+	out, err := in.Output("getent", "group", name)
+	return err == nil && len(bytes.TrimSpace(out)) > 0
+}
+
+// ownAccount reports whether a passwd entry is an account that an install
+// or the package made for the service: its home is StateDir. A person's
+// home is elsewhere.
+func ownAccount(entry string) bool {
+	f := strings.Split(entry, ":")
+	return len(f) >= 7 && f[5] == StateDir
 }
 
 // envTemplate is the commented settings file a fresh install gets,
@@ -542,7 +586,7 @@ func (in *installer) settings() (bool, error) {
 		return false, err
 	}
 	tmpl := []byte(envTemplate())
-	if in.svcUser == DarwinUser {
+	if in.darwin {
 		tmpl = []byte(darwinEnvTemplate())
 	}
 	if cur, err := os.ReadFile(env); err == nil {
@@ -796,8 +840,28 @@ func Remove(o Options, purge bool) error {
 	for _, p := range []string{EnvDir, "/var/lib/massimo", "/var/lib/massimo-update", "/var/log/massimo"} {
 		in.remove(p, true)
 	}
-	in.say("remove the user %s", User)
-	return in.run("userdel", User)
+	return in.removeUsers()
+}
+
+// removeUsers removes the service account, and formerUser where an older
+// install made it and no install since renamed it; a person's formerUser
+// stays.
+func (in *installer) removeUsers() error {
+	for _, name := range []string{User, formerUser} {
+		e := in.passwd(name)
+		switch {
+		case e == "":
+			continue
+		case name == formerUser && !ownAccount(e):
+			fmt.Fprintf(in.Out, "kept the user %s, which is not the service's\n", name)
+			continue
+		}
+		in.say("remove the user %s", name)
+		if err := in.run("userdel", name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (in *installer) remove(p string, all bool) {

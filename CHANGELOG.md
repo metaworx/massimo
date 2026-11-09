@@ -153,6 +153,10 @@ the next minor, a fix counts the suffix up.
 
 ### Security
 
+- The service runs as `_massimo` on Linux too, as on macOS: the package
+  and `massimo install` rename their own `massimo` in place, and never
+  take over or purge a person's `massimo` (`packaging/README.md`).
+
 - The web UI shows no self-signed certificate's fingerprint, which a man
   in the middle passes along; its notice, also in the sign-in dialog,
   asks to compare the browser's with `massimo tls show` (`docs/ui.md`).

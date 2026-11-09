@@ -39,7 +39,7 @@ const (
 	HelperLabel    = "ch.metaworx.massimo-update"
 	RebootLabel    = "ch.metaworx.massimo-reboot"
 	DaemonDir      = "/Library/LaunchDaemons"
-	DarwinUser     = "_massimo"
+	DarwinUser     = User // the same account name as on Linux
 	StateDir       = "/var/lib/massimo"
 	HelperStateDir = "/var/lib/massimo-update"
 	LogDir         = "/var/log/massimo"
@@ -143,7 +143,7 @@ func InstallDarwin(o Options) error {
 		return err
 	}
 	in := newInstaller(o)
-	in.svcUser = DarwinUser
+	in.svcUser, in.darwin = DarwinUser, true
 
 	listen := in.Listen
 	if listen == "" {
@@ -272,9 +272,8 @@ func (in *installer) checkDarwinListen(listen string) {
 // darwinEnvTemplate is envTemplate without MASSIMO_LOG: launchd writes
 // serve's stderr to the log.
 func darwinEnvTemplate() string {
-	t := strings.Replace(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log\n",
+	return strings.Replace(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log\n",
 		"# The log is "+DarwinLog+", written by launchd; no MASSIMO_LOG here.\n", 1)
-	return strings.Replace(t, "by the user "+User+".", "by the user "+DarwinUser+".", 1)
 }
 
 // checkDarwinSettings warns about MASSIMO_LOG, which on macOS writes
@@ -484,7 +483,7 @@ func RemoveDarwin(o Options, purge bool) error {
 		return err
 	}
 	in := newInstaller(o)
-	in.svcUser = DarwinUser
+	in.svcUser, in.darwin = DarwinUser, true
 	for _, l := range []string{HelperLabel, RebootLabel, Label} {
 		in.unload(l)
 		in.remove(PlistPath(l), false)

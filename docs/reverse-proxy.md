@@ -117,7 +117,7 @@ and the box needs no port open to the internet.
    and `MASSIMO_TRUSTED_PROXIES=127.0.0.1` in `/etc/massimo/env`.
    Create the first owner before nginx forwards the LAN to it,
    since an empty store leaves the API open:
-   `cd / && sudo -u massimo massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`.
+   `cd / && sudo -u _massimo massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner`.
 3. The certificate, here with Infomaniak (`dns_infomaniak`, token in
    `INFOMANIAK_API_TOKEN`; for Cloudflare `dns_cf` with `CF_Token`).
    acme.sh defaults to ZeroSSL, so name Let's Encrypt;
