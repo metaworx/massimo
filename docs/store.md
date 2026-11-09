@@ -93,7 +93,9 @@ linux/arm64, darwin/arm64 and windows/amd64 without any C toolchain.
 - Speed: slower than C SQLite, a few times on small statements.
   The server writes a few thousand rows a day and reads a page of the log now and then;
   on the Pi 1 that is nothing.
-  Measured once on the Pi before stage (d) if there is any doubt.
+  Measured on 2026-11-09 (section 5, `events`):
+  the writer's batch of 100 events takes 0.15 s on the Pi 1,
+  but a page that reads all of 90,000 events 11 s.
 - Queries: real SQL, so the log can be paged and filtered by time,
   kind and device, the audit by user, the backups listed and pruned by age,
   all in the engine with indexes; retention is one `DELETE`.
@@ -512,7 +514,10 @@ Notes on the tables:
   A page before a time looks up the newest id before it first.
   The level has no index, its "and above" being a range that would give up the
   id order: a page reads past the rows below it,
-  so a page of warnings among 90,000 rows reads them all (140 ms on a PC).
+  so a page of warnings among 90,000 rows,
+  with fewer than a page of them, reads them all:
+  140 ms on a PC, 154 ms on a Raspberry Pi 5,
+  and 11 s on a Raspberry Pi 1, the store's one connection held all the while.
   Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days`,
   per Cube and then for the server's rows,
   30 days by default as decision 5 took it, 0 keeping everything.
@@ -521,7 +526,26 @@ Notes on the tables:
   its indexes included (640 before 0009),
   so a house with thirty devices that sends 3000 events a day adds about 2.2 MB a day
   and 66 MB at the default retention,
-  in a file on an SD card; the owner's Pi gives the real figure.
+  in a file on an SD card.
+  Measured on 2026-11-09 on a copy of each of the owner's two stores,
+  with a test binary of the store at schema 8 and one at 9,
+  on the copy and on the copy grown to 90,000 events with its own events,
+  the median of 30 batches and of 10 pages:
+  - The writer's batch of 100 events, in one transaction:
+    124 ms at schema 8 and 147 ms at 9 on a Raspberry Pi 1 (one core, 426 MB),
+    2.7 ms and 3.4 ms on a Raspberry Pi 5,
+    so 0009's two indexes cost about a fifth more.
+    Now and then a batch waits seconds on the Pi 1, at 8 as at 9,
+    for a checkpoint of the WAL on the SD card.
+  - A page of 200 events: 59 ms at 8 and 80 ms at 9 on the Pi 1,
+    1.0 ms and 1.5 ms on the Pi 5.
+  - A page of 200 warnings: 110 ms on the Pi 1,
+    a third of whose events are warnings;
+    154 ms on the Pi 5, whose busiest Cube has none,
+    so the page reads every row.
+    The same walk takes 11 s on the Pi 1
+    (a page of errors, of which it has none),
+    5 to 16 s from one page to the next.
 - `audit` makes durable what today only the log has:
   which client sent which write.
   The `api()` wrapper in `server.go` is the one place every handler passes through,
