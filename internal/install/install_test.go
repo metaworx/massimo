@@ -282,6 +282,7 @@ type system struct {
 	active string
 	passwd map[string]string // the name's passwd line
 	groups []string
+	owner  string // what stat -c %U says of any file; "" fails
 }
 
 func (s system) output(name string, args ...string) ([]byte, error) {
@@ -293,6 +294,11 @@ func (s system) output(name string, args ...string) ([]byte, error) {
 			return []byte(e + "\n"), nil
 		}
 		return nil, errors.New("exit status 2")
+	case name == "stat" && len(args) == 3 && args[0] == "-c" && args[1] == "%U":
+		if s.owner == "" {
+			return nil, errors.New("exit status 1")
+		}
+		return []byte(s.owner + "\n"), nil
 	case name == "getent" && len(args) == 2 && args[0] == "group":
 		if slices.Contains(s.groups, args[1]) {
 			return []byte(args[1] + ":x:101:\n"), nil
@@ -794,5 +800,32 @@ func TestTLSVariablesAreKnown(t *testing.T) {
 		if !env.Known(k) {
 			t.Errorf("%s is not a variable serve knows", k)
 		}
+	}
+}
+
+func TestTakenOver(t *testing.T) {
+	const chown = "hand the service its files: sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo\n"
+	for _, c := range []struct {
+		name, owner string
+		want        bool
+	}{
+		{"a person's massimo owns the settings", formerUser, true},
+		{"the service's", User, false},
+		{"no answer", "", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root, bin := setup(t)
+			sys := system{passwd: map[string]string{formerUser: personEntry}, owner: c.owner}
+			var out bytes.Buffer
+			if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: (&recorder{}).run, Output: sys.output}); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(out.String(), chown); got != c.want {
+				t.Errorf("chown named %v, want %v: %s", got, c.want, out.String())
+			}
+			if c.want && !strings.Contains(out.String(), "warning: /etc/massimo/env belongs to the user massimo, which an older release ran the service as") {
+				t.Errorf("no warning: %s", out.String())
+			}
+		})
 	}
 }
