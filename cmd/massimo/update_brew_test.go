@@ -159,9 +159,11 @@ func TestBrewUpdateFailures(t *testing.T) {
 	}
 }
 
+// TestBrewKegOf: the keg is read with filepath, so on Windows, where the
+// test runs too, the prefix comes back with its separators.
 func TestBrewKegOf(t *testing.T) {
 	k, err := brewKegOf("/opt/homebrew/Cellar/massimo-alpha/0.13.0-alpha.1/bin/massimo")
-	if err != nil || k.prefix != "/opt/homebrew" || k.formula != "massimo-alpha" || k.version != "0.13.0-alpha.1" {
+	if err != nil || k.prefix != filepath.FromSlash("/opt/homebrew") || k.formula != "massimo-alpha" || k.version != "0.13.0-alpha.1" {
 		t.Fatalf("%+v, %v", k, err)
 	}
 	if _, err := brewKegOf("/usr/local/bin/massimo"); err == nil {
