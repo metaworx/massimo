@@ -23,10 +23,13 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
@@ -97,8 +100,33 @@ type Config struct {
 	// LogAttrs are added to the first log line, "api listening", after
 	// the restart and the reboot: the command's sighup.
 	LogAttrs []any
+	// Announce announces the server on the LAN by mDNS once it listens,
+	// until it stops; off in the zero value.
+	Announce Announce
 	// Logger takes the log; nil is slog.Default().
 	Logger *slog.Logger
+}
+
+// Announce says whether and how the server announces itself on the LAN
+// (internal/announce). A server without a store has no node, and
+// announces nothing.
+type Announce struct {
+	On bool
+	// Name is the instance name; "" takes the box's host name.
+	Name string
+	// Version is the TXT record's v, the build's version alone, such as
+	// v0.12.0.
+	Version string
+}
+
+// startAnnounce starts the responder; a test replaces it, so that no
+// test reaches the network.
+var startAnnounce = func(ctx context.Context, svc announce.Service, log *slog.Logger) (stop func(), err error) {
+	r, err := announce.Start(ctx, svc, log)
+	if err != nil {
+		return nil, err
+	}
+	return r.Stop, nil
 }
 
 // Instance is a server opened and not yet stopped.
@@ -220,6 +248,9 @@ func (i *Instance) Run(ctx context.Context) error {
 		attrs = append(attrs, "store", "none (-addr)")
 	}
 	i.log.Info("api listening", attrs...)
+	if i.cfg.Announce.On {
+		defer i.announce(ctx)()
+	}
 	if a, ok := i.src.(*certs.ACME); ok && i.cfg.TLS.HTTP != "" {
 		// The plain helper: the HTTP-01 challenge and a redirect to
 		// https://; serving it is what lets the manager use HTTP-01.
@@ -249,6 +280,34 @@ func (i *Instance) Run(ctx context.Context) error {
 		i.log.Warn("the server did not stop within 10s: the store closes under it, and what it writes from now on is lost")
 	}
 	return err
+}
+
+// announce starts the announcement on the LAN, which ends with ctx, and
+// returns what waits for its goodbye. A responder that cannot start
+// (no multicast, the port refused) is a warning, and the server runs
+// unannounced.
+func (i *Instance) announce(ctx context.Context) (wait func()) {
+	if i.st == nil {
+		i.log.Info("not announced on the LAN", "reason", "no store (-addr), so no node")
+		return func() {}
+	}
+	_, p, _ := net.SplitHostPort(i.Addr())
+	port, _ := strconv.Atoi(p)
+	name := i.cfg.Announce.Name
+	if name == "" {
+		name, _ = os.Hostname()
+	}
+	svc := announce.Service{Instance: name, Port: port, Node: i.st.NodeID(), Version: i.cfg.Announce.Version}
+	if src := i.src; src != nil {
+		svc.Fingerprint = func() string { return src.Status().Fingerprint }
+	}
+	stop, err := startAnnounce(ctx, svc, i.log)
+	if err != nil {
+		i.log.Warn("not announced on the LAN", "error", err)
+		return func() {}
+	}
+	i.log.Info("announced on the LAN", "service", announce.ServiceType, "name", announce.InstanceName(name), "port", port)
+	return stop
 }
 
 // Close releases an instance that was not run: its listener and its

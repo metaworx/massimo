@@ -79,11 +79,19 @@ func parseUDPReply(b []byte) (serial string, boot bool, op byte, data []byte, ok
 }
 
 // Discover broadcasts an identify request and collects the Cubes that
-// answer within wait. Each one is then asked for its network settings.
-// With unicast addresses given, the request goes to those instead of
-// being broadcast (for other subnets, or NAT setups such as WSL 2).
+// answer within wait, one entry per serial and address: a massimo proxy
+// answers with the serial of the Cube it serves, so a serial can come
+// twice, from the Cube and from the proxy. Each one is then asked for its
+// network settings. With unicast addresses given, the request goes to
+// those instead of being broadcast (for other subnets, or NAT setups
+// such as WSL 2).
 func Discover(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Discovered, error) {
-	pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", DiscoveryPort))
+	return discover(ctx, wait, DiscoveryPort, unicast...)
+}
+
+// discover is Discover on another port than the Cube's, for the tests.
+func discover(ctx context.Context, wait time.Duration, port int, unicast ...net.IP) ([]Discovered, error) {
+	pc, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
 	if err != nil {
 		// Fall back to any port: a Cube that answers to the source port
 		// is still found; one that answers to 23272 is not.
@@ -103,7 +111,7 @@ func Discover(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Dis
 	}
 	for i := 0; i < 2; i++ {
 		for _, ip := range targets {
-			pc.WriteTo(req, &net.UDPAddr{IP: ip, Port: DiscoveryPort})
+			pc.WriteTo(req, &net.UDPAddr{IP: ip, Port: port})
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -124,25 +132,27 @@ func Discover(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Dis
 		if !ok || op != udpIdentify || len(data) < 6 {
 			continue
 		}
-		if _, seen := found[serial]; seen {
+		ip := from.(*net.UDPAddr).IP
+		key := serial + "|" + ip.String()
+		if _, seen := found[key]; seen {
 			continue
 		}
 		d := &Discovered{
 			Serial:     serial,
-			IP:         from.(*net.UDPAddr).IP,
+			IP:         ip,
 			RFAddress:  cube.RFAddress(binary.BigEndian.Uint32(data[0:4])),
 			Firmware:   firmwareString(binary.BigEndian.Uint16(data[4:6])),
 			Bootloader: boot,
 		}
-		found[serial] = d
-		order = append(order, serial)
+		found[key] = d
+		order = append(order, key)
 	}
 	var out []Discovered
 	for _, s := range order {
 		d := found[s]
 		// A massimo proxy answers neither N nor c; skip the second wait.
-		if queryNetwork(pc, d) {
-			queryConfig(pc, &net.UDPAddr{IP: d.IP, Port: DiscoveryPort}, d)
+		if queryNetwork(pc, d, port) {
+			queryConfig(pc, &net.UDPAddr{IP: d.IP, Port: port}, d)
 		}
 		d.MAC = lookupMAC(d.IP)
 		out = append(out, *d)
@@ -185,8 +195,8 @@ func queryConfig(pc net.PacketConn, to net.Addr, d *Discovered) {
 // queryNetwork sends N to one Cube and fills in what it answers: the
 // original software reads the IP only; other clients report ip, gateway,
 // netmask and two DNS servers. It reports whether the Cube answered.
-func queryNetwork(pc net.PacketConn, d *Discovered) bool {
-	data, ok := ask(pc, &net.UDPAddr{IP: d.IP, Port: DiscoveryPort}, d.Serial, udpNetConfig)
+func queryNetwork(pc net.PacketConn, d *Discovered, port int) bool {
+	data, ok := ask(pc, &net.UDPAddr{IP: d.IP, Port: port}, d.Serial, udpNetConfig)
 	if !ok {
 		return false
 	}

@@ -136,8 +136,9 @@ func InstallWindows(o Options) error {
 		}
 	}
 
-	// One rule for the program covers the API, the Cube proxy (TCP 62910)
-	// and discovery (UDP 23272); not on public networks.
+	// One rule for the program covers the API, the Cube proxy (TCP 62910),
+	// discovery (UDP 23272) and the mDNS announcement (UDP 5353); not on
+	// public networks.
 	in.run("netsh", "advfirewall", "firewall", "delete", "rule", "name="+firewallRule)
 	if err := in.run("netsh", "advfirewall", "firewall", "add", "rule", "name="+firewallRule, "dir=in", "action=allow",
 		"program="+p.Bin, "enable=yes", "profile=private,domain"); err != nil {
