@@ -103,7 +103,12 @@ with the page's DOM, console and network at every step.
   and what a test lists in `watch.expected` are expected;
 - the marker `used_ticket`: the page's first stream gets a used ticket,
   which the server refuses with 401,
-  and the page is handed over before the stream is open again.
+  and the page is handed over before the stream is open again;
+- `failed_checks_forgotten` (autouse): after a test that opened a context
+  without the token (`new_context`), one request with the token forgets the
+  failed token checks its pages counted against 127.0.0.1;
+  after every test, the set's store (`massimo.db` beside `UI_TEST_SERVE_LOG`)
+  has none counted against an address, or the test errors at teardown.
 
 `fake_bridge.js` is the app's bridge for `test_connect.py`,
 `window.massimo` as docs/app.md describes it,
@@ -120,6 +125,12 @@ My profile and My settings from the 👤 menu.
 The four cases share the one server of a worker,
 so a test that changes the server's store puts it back;
 what a test stores in the browser goes with its context.
+So do the files of a worker, in whatever order the scheduler gives them,
+and the API's lockout is the server's too:
+a page without the token counts a failed token check with every request,
+and ten within a minute, a wrong password among them,
+lock the address out for five minutes (429),
+hence `failed_checks_forgotten`.
 
 ## What the tests check
 
