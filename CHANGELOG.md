@@ -182,6 +182,10 @@ the next minor, a fix counts the suffix up.
   so other servers and the original software see the Cube go; serve
   stays findable by mDNS (`docs/proxy.md`, "Discovery").
 
+- A device that joins during pairing is in the server's pairing state
+  before a proxy client receives its N line; a race test found the
+  other order now and then.
+
 ### Security
 
 - On Linux the service runs as `_massimo`, as on macOS: the package and

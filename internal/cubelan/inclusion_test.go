@@ -5,12 +5,40 @@ package cubelan
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
+
+// A device that joins is in the pairing state once a watcher has its N
+// line: the proxy relays the line to its client, which may ask for the
+// state at once (TestProxyPairing). The window was narrow and showed
+// under the race detector only, so the test tries it many times.
+func TestPairedBeforeRelayed(t *testing.T) {
+	c := New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	line := fakecube.NewDeviceLine(cube.NewDevice{Type: cube.DeviceRadiatorThermostat, RFAddress: 0x0a0b0c, Serial: "TEQ0000001"})
+	for i := 0; i < 2000; i++ {
+		if err := c.StartInclusion(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		lines, stop := c.WatchInclusion()
+		paired := make(chan int, 1)
+		go func() {
+			<-lines
+			paired <- len(c.Inclusion().Paired)
+		}()
+		c.handleNewDevice(line)
+		if n := <-paired; n != 1 {
+			t.Fatalf("try %d: %d devices in the state when the watcher had the line, want 1", i, n)
+		}
+		stop()
+		c.EndInclusion()
+	}
+}
 
 func TestInclusionDeliversNewDevices(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
