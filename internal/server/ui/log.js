@@ -179,6 +179,71 @@ function logChangesText(changes) {
   return parts.join(", ");
 }
 
+// logListText says what changed in the room and device list, one phrase
+// per change (AP Logging v1.1, Block 4): "Room “Bath” renamed
+// “Bathroom”", "MEQ0000101 “Window” moved from Bath to Kitchen".
+function logListText(changes) {
+  return changes
+    .map((c) => {
+      const key = "log.list." + c.what;
+      const s = t(key, { name: c.name || "", from: c.from || "–", to: c.to || "–", device: c.serial || c.device || "" });
+      return s === key ? c.what : s;
+    })
+    .join("; ");
+}
+
+// logValue shows a value of a configuration: a temperature with one
+// digit, a switch as on or off, a time zone by its name, a day by its
+// name.
+function logValue(key, v) {
+  if (v === null || v === undefined) return "–";
+  if (typeof v === "boolean") return t(v ? "log.on" : "log.off");
+  if (typeof v === "number") return key.endsWith("_temp") || key.endsWith("_setpoint") || key === "temp_offset" ? fmtNum(v, 1) : String(v);
+  if (typeof v === "object" && v.name !== undefined) return v.name || "–";
+  if (typeof v === "string" && t("day." + v) !== "day." + v) return t("day." + v);
+  return typeof v === "string" ? v : JSON.stringify(v);
+}
+
+// logConfigText says what changed in a device's configuration, one
+// phrase per value: "comfort 21.0 → 21.5", "Monday's program changed".
+function logConfigText(changes) {
+  return Object.keys(changes)
+    .sort()
+    .map((k) => {
+      if (k.startsWith("program_")) return t("log.cfg.program", { day: t("day." + k.slice(8)) });
+      const key = "log.cfg." + k;
+      const label = t(key) === key ? k : t(key);
+      const c = changes[k] || {};
+      return t("log.cfg.change", { label, from: logValue(k, c.from), to: logValue(k, c.to) });
+    })
+    .join(", ");
+}
+
+// logSummaryText is what a line says of itself where it names no
+// differences: a connection's devices, rooms, firmware, budget and how
+// long the Cube was lost; a hello's budget; a list's rooms and devices; a
+// configuration's main values.
+function logSummaryText(kind, s) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  switch (kind) {
+    case "connected": {
+      let text = t("log.sum.connected", { devices: num(s.devices), rooms: num(s.rooms), firmware: s.firmware || "–", duty: num(s.duty_cycle_pct), slots: num(s.free_memory_slots) });
+      const down = s.down_for_s;
+      if (down) text += "; " + (down >= 60 ? t("log.sum.downForMin", { n: Math.round(down / 60) }) : t("log.sum.downForSec", { n: down }));
+      return text;
+    }
+    case "hello":
+      return t("log.sum.hello", { firmware: s.firmware || "–", duty: num(s.duty_cycle_pct), slots: num(s.free_memory_slots) });
+    case "metadata":
+      return t("log.sum.metadata", { rooms: num(s.rooms), devices: num(s.devices) });
+    case "config":
+      if (s.portal_enabled !== undefined) return t("log.sum.cubeConfig", { portal: t(s.portal_enabled ? "log.on" : "log.off"), winter: s.tz_winter || "–", summer: s.tz_summer || "–" });
+      if (s.comfort_temp !== undefined) return t("log.sum.config", { comfort: fmtNum(s.comfort_temp, 1), eco: fmtNum(s.eco_temp, 1), offset: fmtNum(s.temp_offset, 1) });
+      return "";
+  }
+  return "";
+}
+
 // logLine turns an event object into a line of the view; the text of a
 // state event is made when the line is drawn, in the current language:
 // what changed when the event says so, else the whole state (a device's
@@ -196,6 +261,10 @@ function logLine(ev) {
     state: ev.kind === "state" ? ev.state : null,
     gone: ev.kind === "device_forgotten" && ev.state ? ev.state : null,
     level: ev.level || "info",
+    listChanges: ev.kind === "metadata" && ev.list_changes && ev.list_changes.length ? ev.list_changes : null,
+    configChanges: ev.kind === "config" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
+    summary: ev.summary || null,
+    missed: !!ev.while_disconnected,
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" ? ev.cube : null,
     text: ev.error || "",
@@ -203,12 +272,24 @@ function logLine(ev) {
 }
 
 function logText(line) {
+  const text = logOwnText(line);
+  return line.missed && text ? t("log.whileDisconnected", { text }) : text;
+}
+
+// logOwnText is a line's text without the note of when it changed.
+function logOwnText(line) {
   if (line.gone) {
     // The device as it was: the Cube has it no longer.
     const vars = { type: typeName(line.gone.type), serial: line.serial || line.device, name: line.gone.name };
     return t(line.gone.name ? "log.removedNamed" : "log.removed", vars);
   }
   if (line.changes) return logChangesText(line.changes);
+  if (line.configChanges) return logConfigText(line.configChanges);
+  if (line.listChanges) return logListText(line.listChanges);
+  if (line.summary) {
+    const s = logSummaryText(line.kind, line.summary);
+    if (s) return s;
+  }
   if (line.state) return logStateText(line.state);
   if (line.cube) return t("discover.log", { serial: line.cube.serial, address: line.cube.address || "–" });
   return line.text;

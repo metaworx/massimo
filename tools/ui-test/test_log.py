@@ -75,6 +75,42 @@ def test_log_names_devices_by_serial(page, case):
     show_view(page, "tiles")
 
 
+SAYS = {
+    "en": {"down": "down for 5 min", "missed": "(while disconnected)", "renamed": "renamed", "comfort": "comfort 21.0 → 21.5"},
+    "de": {"down": "5 min getrennt", "missed": "(während getrennt)", "renamed": "umbenannt", "comfort": "Komfort 21,0 → 21,5"},
+}
+
+
+def test_log_says_what_changed(page, case):
+    """A reconnect is one line with its summary, what changed meanwhile
+    follows it with a note, a configuration's line says its differences,
+    and a debug line shows in expert mode only."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    page.evaluate("""(d) => {
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(ev) }));
+      send("hello", { kind: "hello", source: "cube", level: "debug", summary: { firmware: "1.1.3" }, time: now() });
+      send("connected", { kind: "connected", source: "cube", level: "info", time: now(),
+        summary: { devices: 7, rooms: 3, firmware: "1.1.3", duty_cycle_pct: 3, free_memory_slots: 180, cause: "loss", down_for_s: 300 } });
+      send("metadata", { kind: "metadata", source: "cube", level: "info", while_disconnected: true, time: now(),
+        list_changes: [{ what: "room_renamed", room: 1, name: "Bathroom", from: "Bath" }] });
+      send("config", { kind: "config", source: "device", level: "info", device: d.rf_address, serial: d.serial, time: now(),
+        changes: { comfort_temp: { from: 21, to: 21.5 } } });
+    }""", d)
+    says = SAYS[case.lang]
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-connected').length > 0", 5), "the connected line"
+    connected = page.locator("#log-lines .log-line.kind-connected").first.locator(".log-text").inner_text()
+    assert "1.1.3" in connected and says["down"] in connected, f"the reconnect's summary: {connected}"
+    meta = page.locator("#log-lines .log-line.kind-metadata").first.locator(".log-text").inner_text()
+    assert "Bathroom" in meta and says["renamed"] in meta and says["missed"] in meta, f"what changed meanwhile: {meta}"
+    cfg = page.locator("#log-lines .log-line.kind-config").first.locator(".log-text").inner_text()
+    assert says["comfort"] in cfg, f"the configuration's difference: {cfg}"
+    assert page.locator("#log-lines .log-line.kind-hello").count() == 0, "the debug line outside expert mode"
+    show_view(page, "tiles")
+
+
 def stamp(now, i):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - 7200 + i)) + "Z"
 

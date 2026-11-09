@@ -236,8 +236,16 @@ configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
 until the Cube is back.
-Expert mode also shows the debug lines, such as the Cube's hello,
-which the log leaves out otherwise.
+A connection to the Cube is one line, "connected: 12 devices in 5 rooms,
+firmware 1.1.3, duty cycle 3 %, 180 slots free", after a loss with how long the
+Cube was lost; what changed meanwhile, while disconnected or while the server
+was down, follows it, a line each ("Room “Bath” renamed “Bathroom” (while
+disconnected)").
+A list or configuration line says what changed: "MEQ0000101 “Window” moved
+from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
+Expert mode also shows the debug lines, such as the greeting's hello, room
+and device list and configurations, each with its summary, which the log
+leaves out otherwise.
 A line names its device by name, else by serial number,
 with the radio address after it in expert mode only;
 the Cube's own configuration reads "Cube KEQ0000000".

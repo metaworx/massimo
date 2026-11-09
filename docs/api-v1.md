@@ -1808,6 +1808,34 @@ event: config
 data: {"kind":"config","device":"0a0101","serial":"MEQ0000101","source":"device","level":"info","time":"…"}
 ```
 
+A connection's greeting brings the Cube's `hello`, `metadata` and a `config`
+for each device and the Cube itself every time, changed or not.
+These lines come at `debug`, each with
+its `summary` (a hello's `firmware`, `duty_cycle_pct` and `free_memory_slots`,
+a list's `rooms` and `devices`, a configuration's main values).
+`connected` comes at `info` with a `summary` of the connection:
+`devices`, `rooms`, `firmware`, `duty_cycle_pct`, `free_memory_slots`,
+`cause` (`start`, `loss`, or `reconnect` for one the server asked for,
+which is at `debug`) and, after a loss, `down_for_s`.
+What the greeting found changed, against what the server held before
+(or after a start the newest backup), follows `connected` at `info`,
+with `"while_disconnected": true`:
+a `metadata` event with `list_changes`, a `config` event with `changes`.
+Outside a greeting, `metadata` says its `list_changes`
+(`room_added`, `room_renamed`, `room_deleted`, `device_added`, `device_renamed`,
+`device_moved`, `device_left`, each with the room's or device's `name`,
+`from`, `to`, and a device's `device` and `serial`),
+a line of one device carrying that device's;
+`config` says its `changes` by the configuration's names, from and to
+(`comfort_temp`, `temp_offset`, `program_monday` without values, …),
+and a device's first `config` says its `summary`;
+one that changes nothing is at `debug`.
+
+```
+event: metadata
+data: {"kind":"metadata","source":"cube","level":"info","list_changes":[{"what":"room_renamed","room":6,"name":"Bathroom","from":"Bath"}],"while_disconnected":true,"time":"…"}
+```
+
 A `state` event that follows an earlier one for the same device also says what changed,
 whoever changed it, the server, another client or someone at the device:
 
