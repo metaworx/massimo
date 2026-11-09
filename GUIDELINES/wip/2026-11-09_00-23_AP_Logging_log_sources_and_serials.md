@@ -1,32 +1,38 @@
-# AP Logging v1.0: log sources and serials
+# AP Logging v1.1: log sources and serials
 
 ## TL;DR
 
 The log names devices by their S/N, says what changed,
-and gains four sources to filter on: the devices, the Cube, System and
-Configuration, each change with who made it.
-Six blocks, a pull request each; block 1 needs no migration.
+and gains sources (the devices, the Cube, System, Configuration),
+who made each change, and a level per line.
+Seven blocks, a pull request each.
 
 - a device in the log → its radio address → its S/N, the address in expert mode
-- a removed device → `device_forgotten 0a0101` → "Removed thermostat TEQ0000001"
-- `metadata`, `config` → the bare kind → what changed, nothing when nothing did
-- a reconnect → hello, metadata, a config per device → one `connected` line
+- a removed device → `device_forgotten 0a0101` → "Removed thermostat TEQ0000001
+  (Window)"
+- `metadata`, `config` → the bare kind → what changed
+- a reconnect → hello, metadata, a config per device → one `connected` line at
+  info, the greeting's lines at debug (D9-B)
 - a Cube named, settings, users, backups, reload, start, stop → audit or text
   log only → the log, with who (D2-A, D8-A)
 - `events` → one Cube's rows → also the server's, `cube_id` NULL,
-  with `source`, `serial`, `user_id` (migration 0009, D1-A, D7-A)
+  with `source`, `serial`, `level`, `user_id` (migration 0009, D1-A, D7-A)
+- the store's schema → eight migrations to read → one generated `schema.sql`
+  (D10-A)
 
 ### Blocks
 
 1. LogSerial: the S/N in the events, the routes and the UI; no migration
-2. LogDetail: metadata and config lines list their differences; the greeting
-   folded into `connected`
-3. LogStore: migration 0009, the server-wide rows, `source=` and `user=`
-4. ServerEvents: start, stop, restart, reload, reboot, update, backups, prunes,
+2. SchemaFile: `internal/store/schema.sql`, generated from the migrations and
+   checked by a test
+3. LogStore: migration 0009, the server-wide rows, `source=`, `level=`, `user=`
+4. LogDetail: lines with their differences; the greeting folded into
+   `connected`, its own lines at debug
+5. ServerEvents: start, stop, restart, reload, reboot, update, backups, prunes,
    restore; a Cube's new address and its leaving the LAN
-5. ChangeEvents: a line beside each change's audit row, with who; the command
+6. ChangeEvents: a line beside each change's audit row, with who; the command
    line's too
-6. LogFilter: the source and who choices, the address, the documents
+7. LogFilter: the source, level and who choices, the address, the documents
 
 ## Discussion
 
@@ -49,88 +55,84 @@ FoundCubes left the hand-off this plan builds on:
 each where a Cube becomes found or gone, both called without `foundMu` held;
 a Cube at a new address is `note`'s change of the address.
 
+**Beside AP ServerAnnouncements**, registered on `main` on 2026-11-09:
+its Block 3 plans a migration `0009_push_subscriptions.sql`,
+and its Block 1 moves `serve`'s wiring from `cmd/massimo/serve.go` into
+`internal/serve`.
+Whichever migration merges second takes the next number, 0010;
+Block 5 here writes the server's start and stop wherever the wiring lives then.
+
 **The owner's input on the store:** an `events.user_uuid`, filled when a user
 started the action, maybe indexed.
-This plan recommends `events.user_id INTEGER REFERENCES users (id)` instead
-(D7, with the reasons there).
+The plan takes `events.user_id INTEGER REFERENCES users (id)` instead (D7-A).
 For a user created or deleted, the event's data holds the target user's
 `users.id` and `uuid` (the owner's point), its login name and its display name
 as they were then; the same for roles (id, key) and keys (id, uuid, name).
 
-**Open at the plan gate**, each recommended option first:
+**Decided at the plan gates** of v1.0, by the owner:
 
-- **D1. Where System and Configuration events live.**
-  A: in `events`, `cube_id` NULL and a `source` column, shown in every Cube's
-  log: one timeline, one cursor; SQLite cannot drop a NOT NULL, so migration
-  0009 rebuilds the table once (measured on the Pi 1, Block 3).
-  B: a table and route of their own, `GET /api/v1/log`: no rebuild, but the UI
-  pages two logs, and a Cube's log doesn't show that it was named.
-  C: the UI merges the audit in: two tables cannot be paged by one id, and the
-  audit's capability shows more than a log reader should see.
-- **D2. Who appears in the log.**
-  A: the display name, for everyone who reads the log, and the lines of users,
-  roles and keys with it: in a household that is what the log is for.
-  B: the name and those lines only for holders of `audit` or `users`,
-  "a user" for the others; the stream then filters per subscriber.
-- **D3. The settings file read again.**
-  A: a System line naming the variables that changed and those waiting for a
-  restart, never their values, which may be secrets.
-  B: nothing beyond the server's text log.
-- **D4. The API path `…/devices/{rf}`.**
-  A: takes the S/N as well, the answers keep both fields: nothing breaks.
-  B: the S/N only: an incompatible change for every client.
-- **D5. A greeting's lines.**
-  A: folded into one `connected` line, plus a line for each thing that changed
-  while disconnected; the stream still sends them, marked, for the tiles.
-  B: kept as lines, each with its summary: a reconnect stays a dozen lines.
-- **D6. A greeting's lines that change nothing, in the store.**
-  A: not stored; the backups keep the raw lines.
-  B: stored and hidden in the UI: about 20 kB per reconnect with thirty devices.
-- **D7. The acting user in `events`.**
-  A: `user_id INTEGER REFERENCES users (id)`: the rowid is the internal key
-  (`docs/store.md`, "Identifiers"), as `audit.user_id`, `updated_by` and
-  `invited_by` have it; users are tombstoned, never deleted, so it never
-  dangles; an export maps it to the uuid.
-  B: `user_uuid TEXT`, the owner's first idea: readable without a join, but
-  36 bytes a row and an index on text, and the only uuid reference in the file.
-- **D8. Which changes get a line with who.**
-  A: every change made through the API or the command line, kind `change`,
-  under Configuration; one about a device carries its S/N, so the device's
-  choice shows it too; setpoints included; the Cube's answer follows as its
-  own line.
-  B: as A, without setpoints and modes, which are no configuration: who set
-  one stays in the audit.
-  C: only the server's own configuration (Cubes, settings, users, roles, keys);
-  a change sent to the Cube shows only as the Cube's answer.
+- **D1-A.** System and Configuration events live in `events`, `cube_id` NULL,
+  with a `source` column, shown in every Cube's log: one timeline, one cursor.
+  The rebuild 0009 needs costs nothing worth measuring: the owner's Pi 1 is the
+  only installed store, and a new one migrates an empty file.
+- **D2-A.** Who is the display name as it is now, for everyone who reads the
+  log: the store keeps `user_id` only, and the page and the stream add the name
+  at read; a deleted user keeps its last.
+- **D3-A.** The settings file read again: a System line naming the variables,
+  never their values.
+- **D4-A.** `…/devices/{rf}` takes the S/N as well, the answers keep both
+  fields; **the UI sends the S/N** in every device request.
+- **D5-A with D9-B.** A reconnect is one `connected` line at info, with a line
+  for each difference; the greeting's hello, metadata and config lines are
+  kept as well, each with its summary, at debug.
+  The level is a column of `events`, chosen in the API and the UI.
+  Each greeting message is also one Debug line of the server's text log.
+- **D6** falls with D9-B: the greeting's lines are stored, at debug.
+- **D7-A.** `events.user_id INTEGER REFERENCES users (id)`.
+- **D8-A.** Every change made through the API or the command line gets a line,
+  kind `change`, under Configuration, setpoints included;
+  one about a device carries its S/N.
+- **D10-A.** `internal/store/schema.sql`, generated from the migrations and
+  checked by a test, for reading only; a store is still created by the
+  migrations, the one path every upgrade takes.
+- **D11-A.** `massimo store backup` stays a full copy, the log included.
+- **D12-A.** The Pi 1 check times the insert only, with the owner's go.
+- **The removed line** reads "Removed thermostat TEQ0000001 (Window)", the name
+  as it was; without a name, "Removed thermostat TEQ0000001".
 
 **Names chosen here**, routine and not the owner's decisions:
 the blocks' names; the sources `device`, `cube`, `system` and `config`;
+the levels `debug`, `info`, `warn` and `error`, as the text log names them;
 the kinds in the Analysis' table; the event fields `serial`, `source`,
-`greeting`, `cause`, `summary` and `by`;
+`level`, `greeting`, `cause`, `summary` and `by`;
 the migration `0009_events_sources.sql`; the tests in the Implementation Plan;
-the branches `claude/log-serial`, `claude/log-detail`, `claude/log-store`,
-`claude/server-events`, `claude/change-events` and `claude/log-filter`.
+the branches `claude/log-serial`, `claude/schema-file`, `claude/log-store`,
+`claude/log-detail`, `claude/server-events`, `claude/change-events` and
+`claude/log-filter`.
 
 **Not in this plan:**
 
-- a log without a Cube: with D1-A the server-wide lines show in a Cube's log,
+- a log without a Cube: the server-wide lines show in a Cube's log,
   so a server with no Cube has none to show;
 - the audit in the UI: `GET /api/v1/audit` stays for holders of `audit`,
   the complete record behind the log;
-- the server's text log: its lines stay as they are;
+- the server's text log, but for the greeting's Debug lines;
 - who changed something at the Cube itself or in another app: the Cube does
   not say, so its answer's line has no who;
+- a store backup without the log (D11-A);
+- the backups' formats: the server's own are stored as JSON and converted on
+  download; an uploaded restore file is kept as it was sent;
 - a `VACUUM` after the rebuild: the store never runs one (`docs/store.md`).
 
-**Who runs it:** this session, after the owner's `EXEC`.
-The plan's own commit goes straight onto `main`;
-each block's branch starts after it, from `origin/main`,
+**Who runs it:** this session.
+The plan's own commits go straight onto `main`;
+each block's branch starts after them, from `origin/main`,
 or from the block before while that one is not merged yet (merged in, never
 rebased), and becomes a pull request with a commit per block.
 
 ## Analysis
 
-Read on `main` at 0dfda58, with FoundCubes merged.
+Read on `main` at 25ef827.
 Placeholders stand for real identifiers: `KEQ0000000` a Cube,
 `TEQ0000001` a device, `0a0101` a radio address.
 
@@ -158,23 +160,23 @@ writes its own audit rows (`store.RemoteCLI`, `cmd/massimo/user.go`);
 
 | Change | Audit | Log now | After the plan |
 |--------|-------|---------|----------------|
-| Cube added, named, renamed, unnamed, its address, proxy, hidden devices, removed (`cube.add`, `cube.update`, `cube.remove`) | yes | no | Configuration, `change`, with who (5) |
-| server settings (`settings.update`): `backups.*`, `log.keep_days`, `auth.password_login`, … | yes | no | Configuration (5) |
-| users, roles, keys, capabilities | yes | no | Configuration (5) |
-| the same by `massimo user …` | yes | no | Configuration, "by the command line" (5) |
-| room renamed or deleted; device renamed, moved, removed | yes | `metadata`, `device_forgotten`, bare | the Cube's lines with their differences (1, 2), and the request's line with who (5, D8) |
-| device or room configuration, week program, lock | yes | `config`, bare | the device's line with its differences (2); the request's (5) |
-| setpoint, mode | yes | `state` with its changes | unchanged; the request's line with who (5, D8-A) |
-| pairing started, ended, a device paired | yes | the pairing events | the Cube's lines; the request's (5) |
-| restore planned, started; its steps and end | yes | `restore_step`, `restore_done` | System, with who started it (4) |
-| backup by hand, deleted | yes | no | System, with who (4) |
-| automatic backup, prune of backups, prune of the log | no | no | System (4) |
-| restart, reload, reboot and its taking back, update started | yes | no | System, with who (4) |
-| the settings file read again (SIGHUP, its watch, `POST /api/v1/reload`) | the request only | no | System, the variables' names (4, D3-A) |
-| an update's outcome, after the restart | no | no | System, from the helper's status file (4) |
-| the server's start and stop | no | no | System (4) |
-| a Cube's address from discovery (`note`) | no | no | the Cube's, `address_changed` (4) |
-| a Cube found on the LAN, gone from it | no | `cube_found`, once per Cube | server-wide, `cube_found`, `cube_gone` (3, 4) |
+| Cube added, named, renamed, unnamed, its address, proxy, hidden devices, removed (`cube.add`, `cube.update`, `cube.remove`) | yes | no | Configuration, `change`, with who (6) |
+| server settings (`settings.update`): `backups.*`, `log.keep_days`, `auth.password_login`, … | yes | no | Configuration (6) |
+| users, roles, keys, capabilities | yes | no | Configuration (6) |
+| the same by `massimo user …` | yes | no | Configuration, "by the command line" (6) |
+| room renamed or deleted; device renamed, moved, removed | yes | `metadata`, `device_forgotten`, bare | the Cube's lines with their differences (1, 4), and the request's line with who (6) |
+| device or room configuration, week program, lock | yes | `config`, bare | the device's line with its differences (4); the request's (6) |
+| setpoint, mode | yes | `state` with its changes | unchanged; the request's line with who (6) |
+| pairing started, ended, a device paired | yes | the pairing events | the Cube's lines; the request's (6) |
+| restore planned, started; its steps and end | yes | `restore_step`, `restore_done` | System, with who started it (5) |
+| backup by hand, deleted | yes | no | System, with who (5) |
+| automatic backup, prune of backups, prune of the log | no | no | System (5) |
+| restart, reload, reboot and its taking back, update started | yes | no | System, with who (5) |
+| the settings file read again (SIGHUP, its watch, `POST /api/v1/reload`) | the request only | no | System, the variables' names (5) |
+| an update's outcome, after the restart | no | no | System, from the helper's status file (5) |
+| the server's start and stop | no | no | System (5) |
+| a Cube's address from discovery (`note`) | no | no | the Cube's, `address_changed` (5) |
+| a Cube found on the LAN, gone from it | no | `cube_found`, once per Cube | server-wide, `cube_found`, `cube_gone` (3, 5) |
 | sign-in, sign-out, preferences, a search | yes | no | stays in the audit only |
 
 ### Finding 3: the radio address
@@ -187,14 +189,18 @@ The store's `events.device`, the route's `device=`, the address
 `#log?device=…` and the UI (`logDeviceName`, `fillLogSelects`) all use the
 radio address; the line falls back to it when the device has no name,
 as do the device lists in `config.js`, `cubes.js` and `tiles.js`.
+The UI's device requests (`app.js`, `config.js`, `cubes.js`, `tiles.js`, six
+call sites) put the radio address in the path, and the audit's target is
+`device:` with whatever the path held.
 
 **The removed device:** `Client.ForgetDevice` (`internal/cubelan/client.go`)
 calls `Snapshot.Forget`, which drops the device's configuration, state and
 metadata, and only then emits `EventForgotten`;
 the pump finds no state, and the line has nothing but the radio address.
 The fix: `Forget` returns the device's last metadata (type, serial, name, room)
-and configuration's serial, the event carries it, and the pump builds the view
-from it.
+or its configuration's serial, the event carries it, and the pump builds the
+view from it.
+The line reads "Removed thermostat TEQ0000001 (Window)", the name as it was.
 
 **The `config 0a0101` line at a reconnect** is the Cube's own C line:
 the Cube is a device of type `cube` (`cube.DeviceCube`), its C line emits
@@ -208,15 +214,22 @@ So the store keeps the radio address, the protocol's key, and gains the serial
 a radio address is six hex digits, a serial ten characters.
 Block 1 maps a serial to its radio address through the snapshot;
 Block 3's column then finds a device the Cube no longer has.
+The UI sends the S/N, and the audit's target becomes `device:TEQ0000001`
+whichever form the path held; older rows keep theirs.
 
 ### Finding 4: what metadata and config lines say
 
+The Cube greets every connection with an H line (hello: serial, firmware,
+duty cycle, free slots, clock), its M line (the rooms and devices, sometimes in
+parts), a C line per device and one of its own, then its L line (the states);
+`Snapshot.apply` takes each on its own, and `connected` follows the L line.
 Every M line emits `metadata` with no detail, the greeting's included,
 and every C line `config`;
 so a reconnect logs `hello`, `metadata` and one `config` per device,
 the Cube's own included, even when nothing changed.
 `state` already carries its differences (`view.Changes`).
 An H line comes only in a greeting.
+None of these is in the server's text log; it says "cube connected" at Info.
 
 The M line holds the rooms (id, name, the room's radio group) and the devices
 (type, radio address, serial, name, room), so its differences are exact:
@@ -237,9 +250,28 @@ A C line's differences are its decoded fields (`cube.ThermostatConfig`,
 "Monday's program changed", "portal off", "time zone CET".
 Hidden devices stay out, as their events do now.
 
-**A reconnect** becomes one line:
-"connected: 12 devices in 5 rooms, firmware 1.1.3, duty cycle 3 %, 180 slots
-free", after a loss also "down for 5 min".
+**A reconnect**, after a loss of five minutes with a room renamed meanwhile,
+newest on top; at info:
+
+```
+20:05:12  metadata      Room "Bath" renamed "Bathroom", while disconnected
+20:05:12  connected     12 devices in 5 rooms, firmware 1.1.3, duty cycle 3 %, 180 slots free; down for 5 min
+20:00:07  disconnected  read tcp …: i/o timeout
+```
+
+and with debug chosen, the greeting's own lines among them:
+
+```
+20:05:12  metadata      Room "Bath" renamed "Bathroom", while disconnected
+20:05:12  connected     12 devices in 5 rooms, firmware 1.1.3, duty cycle 3 %, 180 slots free; down for 5 min
+20:05:12  config        Cube KEQ0000000  portal off, time zone CET/CEST
+20:05:12  config        Window left      comfort 21.0, eco 17.0, offset 0.0, …
+          … one per device, 12 in all …
+20:05:12  metadata      5 rooms, 12 devices
+20:05:12  hello         firmware 1.1.3, duty cycle 3 %, 180 slots free
+20:00:07  disconnected  read tcp …: i/o timeout
+```
+
 The driver marks a greeting's H, M and C events (`greeting`) and says why the
 connection began (`cause`: the start, after a loss, or a reconnect the server
 asked for).
@@ -247,16 +279,34 @@ The server compares the greeting's metadata and configurations with what it
 held before: in memory within a run, and after a restart the newest backup
 (its rooms, devices and configurations, decoded), which the backup watch reads
 at its first look anyway.
-What differs follows `connected` as its own lines, "changed while
-disconnected"; nothing when nothing did.
+What differs follows `connected` at info, "while disconnected";
+the greeting's own lines are stored at debug, each with its summary.
 A reconnect the server asked for (the follow-up's, an address change) writes
-no `connected` line, only its differences.
-The stream still sends every event, marked, since `app.js` reloads the rooms
-on `metadata` and the Cubes on `hello`; the log neither stores (D6-A) nor
-draws the marked ones.
-Outside a greeting, a `config` with no difference writes nothing (a follow-up
-re-read that finds the same C line), and one with no previous value says
-"configuration read".
+no `connected` line at info, only its differences, and its greeting at debug.
+Outside a greeting, a `config` with differences is at info, one without at
+debug (a follow-up re-read that finds the same C line),
+and a first one says "configuration read".
+The stream sends every event with its level, since `app.js` reloads the rooms
+on `metadata` and the Cubes on `hello`.
+In the text log, `cubelan` writes one Debug line per greeting message:
+"greeting: hello", "greeting: metadata", "greeting: config", "greeting: list",
+each with its gist (firmware, duty cycle and slots; rooms and devices; the
+device's S/N and type; the devices listed).
+
+### Levels
+
+`debug`, `info`, `warn` and `error`, as `MASSIMO_LOG_LEVEL` names them;
+stored as slog's numbers (−4, 0, 4, 8), so that "this level and above" is
+`level >= ?`.
+Each happening takes the level the text log gives it:
+`disconnected`, an address that differs from the configured one, an automatic
+backup or a restore that failed, an update that failed are `warn`;
+the greeting's own lines and a C line that changed nothing are `debug`;
+the rest `info`.
+`GET …/log?level=` keeps that level and above, `info` by default;
+the stream sends every level, and the log view drops what is below its choice.
+A client that read `kind=metadata` before now asks `level=debug` for the
+greeting's.
 
 ### The store: migration 0009
 
@@ -266,6 +316,7 @@ So 0009 rebuilds the table, the documented way, in the migration's one
 transaction: a new table, the rows copied with their new columns, the old one
 dropped, the new one renamed, the indexes made.
 No table references `events`, so the foreign keys stay on.
+Should AP ServerAnnouncements' migration merge first, this one is 0010.
 
 ```sql
 CREATE TABLE events (
@@ -275,6 +326,7 @@ CREATE TABLE events (
     time      TEXT    NOT NULL,
     kind      TEXT    NOT NULL,
     source    TEXT    NOT NULL DEFAULT '',  -- device, cube, system, config; '' an older binary's row
+    level     INTEGER NOT NULL DEFAULT 0,   -- slog's: -4 debug, 0 info, 4 warn, 8 error
     device    TEXT    NOT NULL DEFAULT '',  -- radio address, '' when none
     serial    TEXT    NOT NULL DEFAULT '',  -- the device's S/N, or the Cube's for its own lines
     user_id   INTEGER REFERENCES users (id),  -- who started it; NULL: the Cube, the server, the bootstrap token
@@ -296,27 +348,29 @@ CREATE INDEX events_user ON events (user_id) WHERE user_id IS NOT NULL;
   (cube_id, source) and the partial `events_user` are new;
   (cube_id, time) stays for the prune, which gains a pass for `cube_id IS NULL`,
   and for time ranges; (cube_id, kind) stays.
+- **The level has no index:** `level >= ?` is a range, and an index on it would
+  give up the id order; it is checked on the rows the walk reads.
+  An info page reads past the debug rows among them, about fourteen per
+  reconnect with twelve devices; a page of warnings may read further back.
 - **The backfill**, in the copy:
   `serial` from `data`'s `state.serial`, else from another row of the same Cube
   and radio address (one pass builds that map over the old index
   (cube_id, device), the copy uses it), else for the Cube's own C line from
   `cubes.serial` where `cubes.rf_address` matches;
   `source` `device` for a device's rows, `system` for the restore's,
-  `cube` for the rest; `user_id` NULL.
+  `cube` for the rest; `level` `warn` for `disconnected`, `debug` for `hello`,
+  `info` for the rest; `user_id` NULL.
   A row it cannot place keeps `serial` empty and ages out with `log.keep_days`.
 - **`min_reader` stays 1:** an older binary reads its Cube's rows by
   `cube_id = ?` and never meets a NULL one, and writes rows without the new
-  columns, which take their defaults; the new binary fills `source` and
-  `serial` of such rows (`source = ''`) at its start.
+  columns, which take their defaults; the new binary fills `source`, `level`
+  and `serial` of such rows (`source = ''`) at its start.
   A device page of an older binary walks the Cube's rows without its index,
   the 1.3 s at 90,000 rows that 0004 fixed: slow, not wrong.
-- **The cost:** every row is written once more, in one transaction,
-  and the WAL holds the new table until the checkpoint:
-  at the default 30 days, about 60 MB on an SD card (`docs/store.md`, the
-  events' note), so up to twice that on the card for a while.
-  `serve` answers only after the migration.
-  Measured on the owner's Raspberry Pi 1, with the owner's go: the migration on
-  a copy of its store, and a batch of 100 events before and after.
+- **The insert** gains two indexes; `TestEventSize` gives the bytes, and the
+  owner's Raspberry Pi 1 the time, with the owner's go (D12-A):
+  a batch of 100 events on 0008 and on 0009, and a page of warnings, with a
+  test binary on a copy of its store.
 
 ### The page
 
@@ -328,9 +382,9 @@ The cursor stays one id, since both walks share one sequence;
 a time bound becomes an id bound per walk, as now.
 `TestEventsPageQuery` checks every shape's plan for a sort.
 A device's page (`serial = ?`) needs the Cube's walk only.
-The route gains `source=` (`device`, `cube`, `system`, `config`) and `user=`
-(a login name, as the audit's route takes it); `device=` takes a S/N or a
-radio address.
+The route gains `source=` (`device`, `cube`, `system`, `config`), `level=`
+and `user=` (a login name, as the audit's route takes it);
+`device=` takes a S/N or a radio address.
 
 ### Who
 
@@ -348,11 +402,10 @@ An automatic job, a Cube's answer and a radio event have no who.
 | Source | Kinds |
 |--------|-------|
 | `device` | `state`, `config` (a device's C line), `paired`, `device_forgotten` |
-| `cube` | `connected`, `disconnected`, `metadata`, `config` (the Cube's own), `pairing_started`, `pairing_ended`, `address_changed`, `cube_found`, `cube_gone` |
+| `cube` | `connected`, `disconnected`, `hello`, `metadata`, `config` (the Cube's own), `pairing_started`, `pairing_ended`, `address_changed`, `cube_found`, `cube_gone` |
 | `system` | `server_started`, `server_stopping`, `settings_read`, `restart`, `reboot`, `reboot_cancelled`, `update`, `update_result`, `backup`, `backup_deleted`, `backups_pruned`, `log_pruned`, `restore_started`, `restore_step`, `restore_done` |
 | `config` | `change`: its `action` (the audit's, such as `cube.update`), its `target`, its `changes` from → to |
 
-`hello` stays a kind of the stream, never a line of the log (D5-A).
 Server-wide rows (`cube_id` NULL): the server's start, stop, restart, reload,
 reboot, update, prunes, `cube_found`, `cube_gone`, and the changes of settings,
 users, roles, keys and capabilities.
@@ -360,39 +413,62 @@ A Cube's own rows: its connection, address, rooms, devices, pairing, backups,
 restore, and its own changes (named, address, proxy, hidden, added, removed).
 They reach every Cube's stream, and are stored once.
 
+### The schema file
+
+`internal/store/schema.sql` is the schema as the last migration leaves it:
+`TestSchemaFile` applies every migration to an empty file, writes
+`sqlite_master`'s statements in a fixed order (tables by name, then their
+indexes), headed by the schema version and its `min_reader`,
+and fails with the difference when the file says otherwise;
+`go test ./internal/store -run TestSchemaFile -update` writes it again.
+One file is enough, since git keeps each version's (`git show <tag>:…`).
+It is for reading, and for a review: a migration's pull request shows its
+effect as a difference of the file.
+A store is still made by the migrations:
+they also insert rows (roles and capabilities in five of the eight, the node
+and tenant ids in Go), and SQLite keeps an altered table's statement apart from
+a fresh one's, so a second way to make a store would need a test of its own.
+`docs/store.md` section 5 keeps its readable listing and points to the file for
+the complete one.
+
 ### What changes, by file
 
 | File | Block | Change |
 |------|-------|--------|
-| `internal/cubelan/snapshot.go`, `client.go` | 1, 2 | `Forget` returns the last metadata; the forgotten event carries it; `greeting` and `cause` on the events |
-| `internal/server/server.go` | 1–4 | the pump: `serial`, `source`, the Cube's own C line, the greeting folded; `logServer` for the server's rows |
-| `internal/server/logdiff.go` (new) | 2 | the differences of metadata and configurations, and the `connected` summary |
-| `internal/server/log.go` | 1, 3 | `device=` by S/N, `source=`, `user=`, the two walks, `eventKinds` |
-| `internal/server/config_api.go`, `server.go` | 1 | `…/devices/{rf}` takes the S/N (D4-A), one helper for the five call sites |
-| `internal/server/discovery.go` | 3, 4 | `cubeFound` and `cubeGone` write server-wide rows; `note` writes `address_changed` |
-| `internal/server/backups.go`, `backups_api.go`, `restore_api.go`, `restart_api.go`, `reboot_api.go`, `update_api.go` | 4 | their System lines |
-| `cmd/massimo/serve.go`, `reload.go` | 4 | start, stop, the settings file read again, the update's outcome |
-| `internal/server/audit.go` and the handlers | 5 | the `change` line beside the audit row |
-| `cmd/massimo/user.go` | 5 | the command line's `change` lines |
+| `internal/cubelan/snapshot.go`, `client.go` | 1, 4 | `Forget` returns the last metadata; the forgotten event carries it; `greeting` and `cause` on the events; the greeting's Debug lines |
+| `internal/server/server.go` | 1, 3–5 | the pump: `serial`, `source`, the Cube's own C line, the levels, the greeting folded; `logServer` for the server's rows |
+| `internal/server/logdiff.go` (new) | 4 | the differences of metadata and configurations, the summaries |
+| `internal/server/log.go` | 1, 3 | `device=` by S/N, `source=`, `level=`, `user=`, the two walks, `eventKinds` |
+| `internal/server/config_api.go`, `server.go`, `audit.go` | 1 | `…/devices/{rf}` takes the S/N (D4-A), one helper for the five call sites; the target by S/N |
+| `internal/server/discovery.go` | 3, 5 | `cubeFound` and `cubeGone` write server-wide rows; `note` writes `address_changed` |
+| `internal/server/backups.go`, `backups_api.go`, `restore_api.go`, `restart_api.go`, `reboot_api.go`, `update_api.go` | 5 | their System lines |
+| `cmd/massimo/serve.go` (or `internal/serve`), `reload.go` | 5 | start, stop, the settings file read again, the update's outcome |
+| `internal/server/audit.go` and the handlers | 6 | the `change` line beside the audit row |
+| `cmd/massimo/user.go` | 6 | the command line's `change` lines |
+| `internal/store/schema.sql` (new), `store_test.go` | 2, 3 | the generated schema and its test |
 | `internal/store/migrations/0009_events_sources.sql`, `events.go`, `migrate.go` | 3 | the rebuild, the backfill, the columns, the walks, the prune |
-| `internal/server/ui/log.js`, `config.js`, `cubes.js`, `tiles.js`, `partials/log.html`, `i18n/*.json` | 1, 2, 4–6 | the S/N, the lines' texts, the choices |
-| `tools/ui-test/` | 1, 2, 6 | the log's S/N, lines and choices at 1100 and 390 px |
-| `docs/api-v1.md`, `docs/api-v1-openapi.yaml` | 1–5 | the events' fields and kinds, the route's parameters, the device path |
-| `docs/ui.md` | 1, 2, 4–6 | the log |
-| `docs/store.md` | 3 | the schema, migration 0009, the page |
-| `README.md` | 5 | `massimo user …` writes the log too |
-| `CHANGELOG.md` | 1–6 | a bullet each under Unreleased |
+| `internal/server/ui/log.js`, `app.js`, `config.js`, `cubes.js`, `tiles.js`, `partials/log.html`, `i18n/*.json` | 1, 4–7 | the S/N, the lines' texts, the choices |
+| `tools/ui-test/` | 1, 4, 7 | the log's S/N, lines and choices at 1100 and 390 px |
+| `docs/api-v1.md`, `docs/api-v1-openapi.yaml` | 1, 3–6 | the events' fields and kinds, the route's parameters, the device path |
+| `docs/ui.md` | 1, 4–7 | the log |
+| `docs/store.md` | 2, 3 | the schema file, the schema, migration 0009, the page |
+| `README.md` | 6 | `massimo user …` writes the log too |
+| `CHANGELOG.md` | 1–7 | a bullet each under Unreleased |
 
 ### Risks
 
-- **The rebuild on the Pi:** its time and its space on the SD card are unknown
-  until measured; if too slow, the copy can run in chunks of 5000 as the prune
-  does, at the price of a migration that is not one transaction.
-- **The insert:** two indexes more per row; `TestEventSize` gives the bytes,
-  the Pi the time.
+- **Two plans' migrations:** AP ServerAnnouncements also plans 0009;
+  the second to merge renumbers, and its tests say so (`TestMigrationSetChecked`).
+- **`serve`'s wiring moves** under AP ServerAnnouncements' Block 1:
+  Block 5 follows it there.
+- **The insert:** two indexes more per row; measured, not guessed.
+- **A page of warnings** walks back past every info and debug row: measured on
+  the Pi with the insert; an index per level is the fallback.
 - **The reference after a restart** is the newest backup, taken some minutes
   after a change (`backups.auto_min`): a change made just before a stop can be
   logged again after the start.
+- **The greeting at debug** adds about 20 kB per reconnect with thirty devices
+  (`TestEventSize`'s 640 bytes a row), within `log.keep_days`.
 - **Attributing who** relies on the request alone (D8-A): nothing guesses
   which of the Cube's answers belongs to which request.
 - **The stream** grows by the server's events on every Cube's stream;
@@ -413,14 +489,14 @@ A route that takes a new form gets a test that checks the line sent to the
 fake Cube, and `TestOpenAPICoversRoutes` holds the OpenAPI file to the routes.
 Every UI text goes through `t()` or `data-i18n` in all six languages,
 FR, IT, NL and PL machine-translated and marked.
-One functional commit per block, citing `AP Logging v1.0, Block <n>`,
+One functional commit per block, citing `AP Logging v1.1, Block <n>`,
 with its CHANGELOG bullet in the wrapped style of its neighbours.
 
 ### Block 1: LogSerial
 
 1. `internal/cubelan`: `Snapshot.Forget` returns the device's last metadata
-   (type, serial, name, room and the room's name) or, for an unlisted device,
-   its configuration's serial; `Event` gains `Gone`, set by `ForgetDevice`.
+   (type, serial, name, room) or, for an unlisted device, its configuration's
+   serial; `Event` gains `Gone`, set by `ForgetDevice`.
    `TestForgetDeviceCarriesLastView`.
 2. `internal/server/server.go`, the pump: every device event carries `serial`,
    from the metadata or the configuration, with or without a state;
@@ -432,15 +508,18 @@ with its CHANGELOG bullet in the wrapped style of its neighbours.
 3. `internal/server`: one helper resolves a path's or a query's device, a S/N
    or a radio address, through the snapshot, for `GET …/log?device=` and the
    five call sites of `…/devices/{rf}` (D4-A); a S/N the Cube doesn't have is
-   `404` on a path and an empty page on the log.
+   `404` on a path and an empty page on the log;
+   the audit's target is `device:` and the S/N, whichever form the path held.
    `TestDeviceRoutesTakeSerial`: each device route with the S/N sends the fake
    Cube the same line as with the radio address;
-   `TestLogDeviceFilterBySerial`.
+   `TestLogDeviceFilterBySerial`, `TestAuditTargetBySerial`.
 4. UI: the log line names the device, else its S/N, with the radio address in
-   expert mode only (as now); "Removed thermostat TEQ0000001 "Window" (Kitchen)";
+   expert mode only (as now); "Removed thermostat TEQ0000001 (Window)";
    the Cube's own line as "Cube KEQ0000000"; the device choice "Name ·
    TEQ0000001", its value and the address's `device=` the S/N, an old link's
    radio address read and replaced;
+   every device request sends the S/N (`app.js`, `config.js`, `cubes.js`,
+   `tiles.js`), the radio address only for a device without one;
    the fallbacks of `config.js`, `cubes.js` and `tiles.js` to the S/N.
    `tools/ui-test`: the log's S/N and the removed line.
 5. `docs/api-v1.md` ("Identifiers", the device routes, `GET …/log`, the
@@ -449,90 +528,117 @@ with its CHANGELOG bullet in the wrapped style of its neighbours.
 
    ```
    - The log names a device by its S/N, the radio address in expert mode
-     only, and a removed one as "Removed thermostat TEQ0000001"; the
-     device's routes take its S/N too (`docs/api-v1.md`, "Identifiers").
+     only, and a removed one as "Removed thermostat TEQ0000001 (Window)";
+     the device's routes take its S/N too (`docs/api-v1.md`, "Identifiers").
    ```
 
 **Verification:** the test gate; the new tests fail before steps 1 to 3;
 a device removed from the fake Cube logs its S/N.
 
-### Block 2: LogDetail
+### Block 2: SchemaFile
 
-1. `internal/cubelan`: `greeting` on the H, M and C events of a greeting;
-   `cause` on `EventConnected` (`start`, `loss`, `reconnect`).
-2. `internal/server/logdiff.go`: the differences of two metadata (the table of
-   Finding 4) and of two configurations of each type, hidden devices left out;
-   the `connected` summary (devices, rooms, firmware, duty cycle, free slots,
-   down for).
-   `TestMetadataChanges`, `TestConfigChanges`, table tests with the recorded
-   greeting.
-3. The pump: `metadata` and `config` carry `changes`; a greeting's marked
-   events go to the stream and not to the log (D5-A, D6-A);
-   `connected` carries `summary`, after the start and a loss;
-   the reference is the snapshot before the loss, and after a restart the
-   newest backup.
-   `TestReconnectIsOneLine`, `TestChangedWhileDisconnected`,
-   `TestChangedWhileServerDown`, `TestSameConfigWritesNothing`.
-4. UI: the texts of every change and of the summary, in all six languages;
-   the log view skips the marked events. `tools/ui-test`: a reconnect's line.
-5. `docs/api-v1.md` (the events' `changes`, `summary`, `greeting`, `cause`),
-   the OpenAPI file, `docs/ui.md` ("Log").
-6. `CHANGELOG.md`, Unreleased, Changed:
+1. `internal/store/store_test.go`: `TestSchemaFile` and its `-update` flag.
+2. `internal/store/schema.sql`, written by it at version 8.
+3. `docs/store.md`, section 5 and "Migrations": the file, how it is made and
+   checked.
+4. `CHANGELOG.md`, Unreleased, Added:
 
    ```
-   - The log's metadata and config lines say what changed, and a reconnect
-     is one line with the Cube's devices, rooms, firmware and duty cycle
-     (`docs/ui.md`, "Log").
+   - `internal/store/schema.sql` is the store's complete schema, made from
+     the migrations and checked by `go test` (`docs/store.md`,
+     "Migrations").
    ```
 
-**Verification:** the test gate; a fake Cube reconnecting with nothing changed
-logs one line, with a room renamed in between two.
+**Verification:** the test gate; a column added by hand to the file fails the
+test, `-update` brings it back.
 
 ### Block 3: LogStore
 
 1. `internal/store/migrations/0009_events_sources.sql` and its Go step
-   (`afterMigration[9]`): the rebuild and the backfill of the Analysis.
-   `TestMigration9` (rows, ids and uuids kept; `serial` and `source` filled,
-   the Cube's own C line placed; a NULL `cube_id` taken),
+   (`afterMigration[9]`): the rebuild and the backfill of the Analysis;
+   `schema.sql` written again.
+   `TestMigration9` (rows, ids and uuids kept; `serial`, `source` and `level`
+   filled, the Cube's own C line placed; a NULL `cube_id` taken),
    `TestMigratesAVersionOneFile` through 0009,
    `TestOlderReaderOnNine` (the 0008 queries and insert on a 0009 file).
-2. `internal/store/events.go`: `Event` gains `Source`, `Serial`, `UserID`,
-   `CubeID` 0 for the server's; `EventQuery` gains `Source`, `Serial`,
-   `UserID` and `Server` (with the server's rows); the two walks merged;
-   the prune's pass for `cube_id IS NULL`; the start's fill of `source = ''`.
+2. `internal/store/events.go`: `Event` gains `Source`, `Serial`, `Level`,
+   `UserID`, `CubeID` 0 for the server's; `EventQuery` gains `Source`,
+   `Serial`, `Level`, `UserID` and `Server` (with the server's rows);
+   the two walks merged; the prune's pass for `cube_id IS NULL`;
+   the start's fill of `source = ''`.
    `TestEventsPageQuery` for every new shape, `TestEventsWithServerRows`
-   (the merge, the cursor, the time bounds), `TestPruneServerEvents`,
-   `TestEventSize` updated.
+   (the merge, the cursor, the time bounds), `TestEventsByLevel`,
+   `TestPruneServerEvents`, `TestEventSize` updated.
 3. `internal/server`: `logServer` stores a server-wide event once and sends
    it to every Cube's stream (and to the rings of Cubes without a row);
-   `cube_found` moves to it; `GET …/log` takes `source=` and `user=`;
+   `cube_found` moves to it; every event carries `level`;
+   `GET …/log` takes `source=`, `level=` and `user=`;
    `by` filled at read and on the stream.
-   `TestLogSourceFilter`, `TestLogUserFilter`, `TestFoundCubeStoredOnce`.
+   `TestLogSourceFilter`, `TestLogLevelFilter`, `TestLogUserFilter`,
+   `TestFoundCubeStoredOnce`.
 4. `docs/store.md` (section 5's schema, "Migrations", stage (d)'s note),
-   `docs/api-v1.md` and the OpenAPI file (`GET …/log`'s parameters, `by`,
-   the server-wide events).
+   `docs/api-v1.md` and the OpenAPI file (`GET …/log`'s parameters, `level`,
+   `by`, the server-wide events).
 5. `CHANGELOG.md`, Unreleased, Added:
 
    ```
    - The log keeps the server's own events beside the Cube's, each with
-     its source and who started it; the store's migration 0009 rebuilds
-     its events table once (`docs/store.md`, "Migrations").
+     its source, its level and who started it; the store's migration 0009
+     rebuilds its events table once (`docs/store.md`, "Migrations").
    ```
 
 **Verification:** the test gate;
-on the owner's Raspberry Pi 1, **only with the owner's go**: a store test
-binary for linux/arm (GOARM=6) run on a copy of the box's `massimo.db` in a
-scratch directory, timing the migration and a batch of 100 events on 0008 and
-on 0009; the service and its file untouched, only the times leave the box;
-the times go into `docs/store.md` and a NOTE.
+on the owner's Raspberry Pi 1, **only with the owner's go** (D12-A):
+a store test binary for linux/arm (GOARM=6) run on a copy of the box's
+`massimo.db` in a scratch directory, timing a batch of 100 events on 0008 and
+on 0009, and a page of warnings; the service and its file untouched, only the
+times leave the box; the times go into `docs/store.md` and a NOTE.
 
-### Block 4: ServerEvents
+### Block 4: LogDetail
 
-1. `cmd/massimo/serve.go`: `server_started` (the version, the one before when
-   it changed, kept in `settings`), `server_stopping` (why: a signal, a
-   restart, an update, a reboot), written before the store's writer stops;
-   `update_result` once from the helper's status file when it is newer than
-   the last one logged.
+1. `internal/cubelan`: `greeting` on the H, M and C events of a greeting;
+   `cause` on `EventConnected` (`start`, `loss`, `reconnect`);
+   a Debug line per greeting message (D9-B).
+2. `internal/server/logdiff.go`: the differences of two metadata (the table of
+   Finding 4) and of two configurations of each type, hidden devices left out;
+   the summaries of a hello, a metadata and a configuration;
+   the `connected` summary (devices, rooms, firmware, duty cycle, free slots,
+   down for).
+   `TestMetadataChanges`, `TestConfigChanges`, `TestGreetingSummaries`,
+   table tests with the recorded greeting.
+3. The pump: `metadata` and `config` carry `changes`; a greeting's own events
+   at debug with their summaries; `connected` at info with `summary`, after the
+   start and a loss, its differences after it at info;
+   the reference is the snapshot before the loss, and after a restart the
+   newest backup.
+   `TestReconnectAtInfoIsOneLine`, `TestGreetingAtDebug`,
+   `TestChangedWhileDisconnected`, `TestChangedWhileServerDown`,
+   `TestSameConfigAtDebug`.
+4. UI: the texts of every change and summary, in all six languages;
+   the log asks `level=info` (expert mode `debug`) until Block 7's choice.
+   `tools/ui-test`: a reconnect's line.
+5. `docs/api-v1.md` (the events' `changes`, `summary`, `greeting`, `cause`,
+   the levels), the OpenAPI file, `docs/ui.md` ("Log").
+6. `CHANGELOG.md`, Unreleased, Changed:
+
+   ```
+   - The log's metadata and config lines say what changed, and a reconnect
+     is one line with the Cube's devices, rooms, firmware and duty cycle;
+     the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
+   ```
+
+**Verification:** the test gate; a fake Cube reconnecting with nothing changed
+logs one line at info, with a room renamed in between two, and its greeting
+at debug.
+
+### Block 5: ServerEvents
+
+1. `serve`'s start and stop, in `cmd/massimo/serve.go` or where AP
+   ServerAnnouncements moved them: `server_started` (the version, the one
+   before when it changed, kept in `settings`), `server_stopping` (why: a
+   signal, a restart, an update, a reboot), written before the store's writer
+   stops; `update_result` once from the helper's status file when it is newer
+   than the last one logged.
 2. `cmd/massimo/reload.go`: `settings_read`: why, the variables changed and
    those waiting for a restart, names only (D3-A), when something changed or
    a request asked.
@@ -540,7 +646,8 @@ the times go into `docs/store.md` and a NOTE.
    who; `backup` (its reason, with who for one by hand), `backup_deleted`,
    `backups_pruned`, `log_pruned` (only when rows went), `restore_started`;
    `restore_step` and `restore_done` under System;
-   `address_changed` in `note`, `cube_gone` in `cubeGone`.
+   `address_changed` in `note`, `cube_gone` in `cubeGone`; the failures at
+   `warn`.
 4. UI: their texts in all six languages.
 5. `docs/api-v1.md` and the OpenAPI file (the kinds), `docs/ui.md` ("Log").
 6. Tests: `TestServerStartAndStopLogged`, `TestSettingsReadNamesOnly`,
@@ -559,12 +666,12 @@ the times go into `docs/store.md` and a NOTE.
 started, then a backup by hand, a reload and a removed fake Cube's discovery:
 each one line.
 
-### Block 5: ChangeEvents
+### Block 6: ChangeEvents
 
 1. `internal/server`: a table beside `actions` maps each audited action to its
-   line: `change` under Configuration, a System kind of Block 4, or none (sign-in,
-   sign-out, preferences, the search, the ticket); with D8-A setpoints and
-   modes included.
+   line: `change` under Configuration, a System kind of Block 5, or none
+   (sign-in, sign-out, preferences, the search, the ticket); setpoints and
+   modes included (D8-A).
    A successful request writes it next to its audit row, with `user_id`:
    its `action`, its `target` (a device by S/N), its `changes` from → to
    (a Cube's name "" → "Upstairs"); a user, role or key with its ids, uuid
@@ -574,8 +681,7 @@ each one line.
 2. `cmd/massimo/user.go`: each command writes its `change` line with the
    audit row, straight into the store (`via: "cli"`).
    `TestUserCommandsLog`.
-3. D2-A: `by` for everyone who reads the log (with D2-B: for holders of
-   `audit` or `users`, filtered per subscriber).
+3. `by` for everyone who reads the log (D2-A).
 4. UI: the texts per action, in all six languages, "by Anna".
 5. `docs/api-v1.md` and the OpenAPI file (`change`, `by`), `docs/ui.md`,
    `README.md` (`massimo user …`).
@@ -590,12 +696,13 @@ each one line.
 **Verification:** the test gate; `tools/ui-test`: a Cube named in the UI shows
 its line with the user's name.
 
-### Block 6: LogFilter
+### Block 7: LogFilter
 
 1. UI: one choice beside the kind: all, System, Configuration, the Cube,
-   then each device by name and S/N; a choice of who for a server with users;
+   then each device by name and S/N; a choice of level (info and above by
+   default, warnings, debug); a choice of who for a server with users;
    the kind choice grouped by source.
-   The address after `#log`: `source=`, `device=` a S/N, `user=`.
+   The address after `#log`: `source=`, `level=`, `device=` a S/N, `user=`.
    Every text in all six languages; phone width first.
 2. `tools/ui-test`: the choices, the address, a reload, at 1100 and 390 px.
 3. `docs/ui.md` ("Log"): the choices and the address.
@@ -603,40 +710,47 @@ its line with the user's name.
 
    ```
    - The log chooses a source, System, Configuration, the Cube or one
-     device, and who made a change, kept in the address after `#log`
-     (`docs/ui.md`, "Log").
+     device, a level and who made a change, kept in the address after
+     `#log` (`docs/ui.md`, "Log").
    ```
 
 **Verification:** the test gate; `make ui-test` at 1100 and 390 px.
 
 ## Proposed commit message
 
-The plan's registration, a commit of its own on `main`
-before the first project write:
+The revision's commit, on `main`, before the run's first project write:
 
 ```
-chore(aps): +Logging v1.0
+chore(aps): +Logging v1.1
 
-The log names devices by their radio address, writes bare metadata and config lines, and shows nothing of a Cube's naming, the server's configuration or its own jobs; the plan gives it the S/N, readable lines and four sources with who made each change, the second of the three plans from the owner's tests of v0.12.0-alpha.1.
+The owner's answers at the gates of v1.0: the greeting's lines kept at debug beside the one connected line at info, with a level stored and chosen; the UI sends the S/N; a generated schema file; the Pi checks the insert only; the other decisions as recommended.
 
 Key changes:
-- GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md: the plan, six blocks, the audit of what the log misses in its Analysis.
+- GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md: seven blocks, the schema file as Block 2 and the store before the lines' detail; the levels; the decisions settled; beside AP ServerAnnouncements' migration 0009.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md::v1.0::2026-11-09::All::the first revision, by PLAN+
+File-revision-v1: GUIDELINES/wip/2026-11-09_00-23_AP_Logging_log_sources_and_serials.md::v1.1::2026-11-09::TL;DR, Discussion, Analysis, Implementation Plan::the owner's decisions D1 to D12, the levels and the schema file
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
 The blocks' commits:
 
 1. `fix(log): A device is named by its S/N, a removed one too`
-2. `feat(log): Metadata and config lines say what changed`
-3. `feat(store): The log keeps the server's events, their source and who`
-4. `feat(log): The server's own jobs and a Cube's address in the log`
-5. `feat(log): Every change says who made it`
-6. `feat(ui): The log chooses a source and who`
+2. `feat(store): The store's schema in one generated file`
+3. `feat(store): The log keeps the server's events, their source and level`
+4. `feat(log): Lines say what changed, the greeting's own at debug`
+5. `feat(log): The server's own jobs and a Cube's address in the log`
+6. `feat(log): Every change says who made it`
+7. `feat(ui): The log chooses a source, a level and who`
 
 ## Change History
 
 - v1.0 (2026-11-09): the first revision, from the owner's findings on
   v0.12.0-alpha.1 and the store input, after FoundCubes merged;
   D1 to D8 open at its gate.
+- v1.1 (2026-11-09): the owner's answers at the gates of v1.0:
+  D9-B, the greeting's lines at debug beside `connected` at info, with a level
+  column chosen in the API and the UI, replacing D6; D4-A with the UI sending
+  the S/N; D10-A, the schema file, as Block 2, with the store before the lines'
+  detail; D12-A, the Pi times the insert only; the removed line with the name as
+  it was; D1 to D3, D5, D7, D8 and D11 as recommended; beside AP
+  ServerAnnouncements' migration 0009.
