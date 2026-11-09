@@ -42,7 +42,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race fuzz ui-test ui-screenshots windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots mdns-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test apt-test release clean release-alpha
 
 # Development happens on main; a release promotes main to a release
 # branch, which is also the update channel boxes follow (internal/update).
@@ -122,6 +122,16 @@ RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/prox
 race:
 	MASSIMO_ENV_FILE=/dev/null go test -race $(RACEPKGS)
 
+# Every package's tests on 32-bit ARM, the armv6 binary that the armhf
+# package ships, run by QEMU as the Raspberry Pi 1's core (ARM1176) with
+# -short: qemu-arm from the system (Debian and Ubuntu: qemu-user), no
+# binfmt needed. CI's job armv6 runs it (GUIDELINES/project/CI.md,
+# section 2).
+QEMU_ARM ?= qemu-arm -cpu arm1176
+
+test-armv6:
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 MASSIMO_ENV_FILE=/dev/null go test -short -exec '$(QEMU_ARM)' ./...
+
 # The fuzz targets (Fuzz* in the packages that parse untrusted bytes:
 # the Cube's and LAN clients' lines, uploaded backups, stored hashes),
 # each for FUZZTIME; go test -fuzz takes one target at a time. A crash
@@ -147,6 +157,11 @@ ui-test:
 # start-up as ui-test; retaken at every change of the UI.
 ui-screenshots:
 	tools/ui-test/run.sh screenshots
+
+# serve's mDNS announcement and massimo discover against avahi, on three
+# hosts in Docker (tools/mdns-test/README.md); needs Docker with Compose v2.
+mdns-test:
+	tools/mdns-test/run.sh
 
 # Cross builds; each lands in $(OUT)/.
 windows:
@@ -176,6 +191,14 @@ darwin-arm64:
 darwin: darwin-amd64 darwin-arm64
 
 cross: linux linux-arm64 linux-armv7 linux-armv6 darwin windows
+
+# The store's benchmarks (internal/store/events_bench_test.go) as test
+# binaries for the Raspberry Pis, the Pi 5's arm64 and the Pi 1's armv6,
+# to run on a copy of a box's store (docs/store.md section 5, "Measuring
+# on a box").
+store-bench:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go test -c -trimpath -o $(OUT)/store-bench-linux-arm64 ./internal/store
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go test -c -trimpath -o $(OUT)/store-bench-linux-armv6 ./internal/store
 
 # The package's unit: the embedded one with the package's binary path and
 # without the update helper's flag (packaging/deb/unit.sh).

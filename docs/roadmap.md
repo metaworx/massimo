@@ -75,10 +75,6 @@ docs/handover-session.md is the context a session needs to work here.
     the budget reconnects; `serve -log` writing twice under a supervisor that
     keeps stderr; `detailsPanel` and `stepper` in components.js, written and
     without a caller; a UI test for each new panel in tools/ui-test/;
-    `store info` run from a directory whose `.env` the service user cannot read,
-    as the README's example does from a home directory
-    (`-env /etc/massimo/env` in the example,
-    or an unreadable default `.env` counted as absent in internal/env);
     `api: token not resolved` logged at ERROR for a request cancelled
     during the auth check;
     the update's own command marked dropped at the next start;

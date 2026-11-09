@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.15.1)
+# Massimo — CI Conventions (v1.17.2)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers; all four of the suite's cases, in four workers); Guidelines (section 4) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the same on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers; all four of the suite's cases, in four workers); mDNS against avahi (`make mdns-test`: `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client, in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the mDNS test or `ci.yml`, as the job Changed paths answers); Guidelines (section 4) |
 | push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
 | tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
@@ -49,6 +49,16 @@ Runs share a concurrency group per ref:
 a new push to a pull request cancels the run it supersedes,
 while a run of `main` is never cancelled,
 so every commit of `main` keeps its result.
+
+The armhf package ships the armv6 binary, which `make cross` only builds:
+Test (armv6, QEMU) runs every package's tests on it,
+as `qemu-arm -cpu arm1176` (the Raspberry Pi 1's core) runs each test binary,
+without binfmt and without a new action, Ubuntu's `qemu-user` from apt.
+`-short` keeps the emulation to a few minutes:
+`internal/server` takes the longest, about two minutes on a PC.
+The emulation's slowness brings out tests that rely on timing,
+as it did the store's prune racing a test's fill;
+such a test is fixed, not skipped under QEMU.
 
 The web UI smoke test (`make ui-test`) and the screenshot set
 (`make ui-screenshots`) run in the Screenshots job,
@@ -90,6 +100,25 @@ so a Changed paths job that fails runs it rather than letting the pull request
 through untested.
 A push to `main` runs the job whatever it changes,
 so a change elsewhere that breaks the page shows on the merge commit's run.
+
+The mDNS job runs `make mdns-test` (`tools/mdns-test/README.md`):
+three hosts in Docker on a bridge network of their own,
+a fake Cube with a MAC of eQ-3's prefix,
+a box running `serve` beside avahi-daemon, and a client with avahi of its own,
+where `serve` must share UDP 5353 with avahi,
+`avahi-browse` resolve it on both hosts,
+`massimo discover` list it and mark the proxy but not the Cube,
+and its goodbye take it out of the client's avahi.
+It is the announcement's only test against another implementation on Linux;
+the macOS and Windows jobs add Apple's mDNSResponder and Windows' mDNS,
+with a second `serve` on every address in a step of their own,
+the macOS one as a launchd daemon (section 7).
+A pull request runs the job only when it changes `internal/announce/`,
+`internal/serve/`, `internal/proxy/`, `internal/cubelan/`,
+`cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `tools/mdns-test/`
+or `.github/workflows/ci.yml`,
+as the job Changed paths answers, and a push to `main` always,
+as the Screenshots job does.
 
 Hardware is never touched by CI;
 the Windows and macOS jobs run against the fake Cube.
@@ -284,6 +313,20 @@ a box following a suite takes the release through `apt upgrade`.
   Once such a release is out the job takes the other branch by itself.
 - `ubuntu-latest` moves to a newer Ubuntu on GitHub's schedule;
   the annotation on every run says when.
+- The mDNS job needs the runner's Docker with Compose v2,
+  and builds the hosts' image, with avahi from Debian's packages, at each run.
+- The macOS and Windows jobs' mDNS steps need the runner's own multicast
+  to come back to it (the second `serve`'s announcements reach the system's
+  responder on the same machine); a runner that filters it fails the step.
+- On the macOS runner, macOS's local network privacy refuses the runner's own
+  processes every multicast send ("no route to host"),
+  and spares launchd daemons:
+  the macOS step runs its second `serve` as a launchd daemon in the system
+  domain, as `massimo install` runs the service,
+  asks `dns-sd`, which talks to mDNSResponder alone,
+  and does not ask `massimo discover`, a process of the runner's.
+  `dns-sd` is read through a pseudo-terminal of Python's:
+  under `script`, what it printed was lost.
 - The Debian package job's container has no systemd:
   the unit is enabled through deb-systemd-helper's symlinks and nothing starts,
   so the start on a real box is the owner's check.

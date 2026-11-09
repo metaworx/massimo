@@ -10,6 +10,9 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `massimo -no-env` reads no settings file, as `-env /dev/null` did,
+  also on Windows (`README.md`, "Cube variables").
+
 - `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
   `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
   `/etc/massimo/cloudflare.token` (`packaging/README.md`).
@@ -26,6 +29,10 @@ the next minor, a fix counts the suffix up.
   made from the migrations beside it and checked by `go test`
   (`docs/store.md`, "Migrations").
 
+- The store's tests migrate a store written by each release since
+  v0.7.0-alpha.1, kept as text dumps that `tools/store-fixture` makes
+  (`docs/store.md`, "Migrations").
+
 - The log keeps the server's own events beside the Cube's, each with
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
@@ -33,6 +40,10 @@ the next minor, a fix counts the suffix up.
 - The store's migration 0011 indexes the log's warnings and errors,
   so that a page of them reads those rows only, not the whole log:
   11 s at 90,000 events on a Raspberry Pi 1 before (`docs/store.md`).
+
+- Benchmarks of the log's writer and pages in `internal/store`, also on
+  a copy of a box's store, and `make store-bench` builds them for the
+  Raspberry Pis (`docs/store.md`, "Measuring on a box").
 
 - The log shows the server's start, stop, restart, reload, reboot,
   update, backups and prunes, and a Cube's new address or its leaving
@@ -81,6 +92,10 @@ the next minor, a fix counts the suffix up.
   TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
   to port 443, the one a router forwards (`README.md`, "Server").
 
+- CI runs the tests on 32-bit ARM under QEMU, as the Raspberry Pi 1's
+  core, and `make test-armv6` does the same where `qemu-arm` is
+  installed (`GUIDELINES/project/CI.md`).
+
 ### Changed
 
 - The Homebrew caveats and the settings template ask for nothing to fill
@@ -113,6 +128,10 @@ the next minor, a fix counts the suffix up.
 - The apt repository's address is `https://massimo.metaworx.ch/apt`,
   under the project's site: the install routes, building from source,
   the first settings and the privacy policy (`packaging/README.md`).
+
+- `make mdns-test` checks the mDNS announcement and `discover` against
+  avahi in Docker, and CI against mDNSResponder and Windows' mDNS as well
+  (`tools/mdns-test/README.md`).
 
 - serve takes a Cube that leaves two polls in a row unanswered for
   lost, within two polls and 10 s, and reconnects; it waited three
@@ -155,15 +174,19 @@ the next minor, a fix counts the suffix up.
 - `massimo user` and `massimo store` print their help, or refuse wrong
   arguments, without creating a store in the data directory first.
 
+- As the service user, without `-env`, the commands read
+  `/etc/massimo/env` and the store in `/var/lib/massimo` from any
+  directory, not a home's `.env` (`README.md`, "Cube variables").
+
 - serve's proxy no longer answers discovery for a Cube it has lost,
   so other servers and the original software see the Cube go; serve
   stays findable by mDNS (`docs/proxy.md`, "Discovery").
 
 ### Security
 
-- The service runs as `_massimo` on Linux too, as on macOS: the package
-  and `massimo install` rename their own `massimo` in place, and never
-  take over or purge a person's `massimo` (`packaging/README.md`).
+- On Linux the service runs as `_massimo`, as on macOS: the package and
+  `massimo install` rename their own `massimo`, spare a person's, and
+  name the `chown` after an older takeover (`packaging/README.md`).
 
 - `/var/lib/massimo`, the store, stays 0750 when the service starts;
   systemd made it 0755 at every start, so that every user of the box saw

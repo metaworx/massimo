@@ -187,6 +187,7 @@ with until its first clean stop.
 | Linux service (`massimo install`) | `/var/lib/massimo` | user `_massimo` | directory 0750 (`StateDirectory=massimo`, `StateDirectoryMode=0750`), file 0600 |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` | directory 0750 (`install.StateDir`), file 0600 |
 | Windows service | `C:\ProgramData\Massimo` | LocalSystem | the directory's ACL: SYSTEM and Administrators only (`winSettings`) |
+| A command as `_massimo` (Linux, macOS) | `/var/lib/massimo`, unless `-env`, `-data` or `MASSIMO_DATA` | user `_massimo` | as the services' |
 | Terminal run | the current directory, or `-data <dir>` | the user | file 0600 |
 
 These are the directories the installers create today (`internal/install`:
@@ -197,7 +198,9 @@ the update request already lives there on Linux and macOS.
 so no unit change is needed for the file to be created.
 
 The data directory is a global option like `-env`: `massimo -data
-<dir> serve …`, default `MASSIMO_DATA`, else the current directory. The
+<dir> serve …`, default `MASSIMO_DATA`, else the current directory;
+for the service user, the owner of `/etc/massimo/env`, without `-env`,
+`/var/lib/massimo` and that settings file alone (`useServiceDefaults`). The
 installers pass it explicitly in the unit,
 the plist and the Windows service arguments (`ServiceArgs`),
 so nothing depends on the working directory;
@@ -676,6 +679,39 @@ Notes on the tables:
   which is nothing at this scale.
   The columns are declared `TEXT`, not `DATETIME`, on purpose.
 
+### Measuring on a box
+
+The store's benchmarks (`internal/store/events_bench_test.go`)
+time the writer's batch of 100 events, `BenchmarkWriteEvents`,
+and pages of 200 of the busiest Cube, `BenchmarkEventsPage`:
+all of its events, its warnings, its errors, and with the server's rows.
+They share one store a run, made by their first call:
+a copy of a box's store when `MASSIMO_STORE_BENCH_COPY` names one,
+grown to `MASSIMO_STORE_BENCH_ROWS` events (90,000)
+with the newest 1000 events of its busiest Cube, cycled;
+else rows of their own, as `TestEventsPageQuery` fills them,
+3000 under `-short`.
+No writer runs, so nothing is pruned,
+and each batch adds its rows to the store the pages read.
+CI runs each once, to see that it still runs, and compares no time.
+
+On one of the owner's boxes, only with the owner's go:
+
+1. `make store-bench` builds `dist/store-bench-linux-arm64` for a Pi 5 and
+   `dist/store-bench-linux-armv6` for a Pi 1;
+   built from two commits, they compare a change.
+2. The owner copies the store as the service's user,
+   `sudo -u massimo massimo -env /dev/null -data /var/lib/massimo store backup /var/tmp/massimo-copy.db`,
+   and gives the copy to the user who runs the benchmarks.
+3. Each binary runs on the copy, one after the other,
+   its own store on the SD card (`TMPDIR=/var/tmp`, since `/tmp` is a tmpfs):
+   `TMPDIR=/var/tmp MASSIMO_STORE_BENCH_COPY=/var/tmp/massimo-copy.db ./store-bench-linux-armv6 -test.run '^$' -test.bench . -test.benchtime 30x -test.count 5`.
+   Its first line names the store, its events and their levels;
+   each benchmark's line gives the time a batch or a page took (`ns/op`)
+   and the events a page held.
+4. The copy and the binaries are deleted;
+   only the times leave the box, and the service and its file stay untouched.
+
 ### Migrations
 
 `internal/store/migrations/NNNN_<name>.sql`, embedded with `go:embed`,
@@ -731,9 +767,25 @@ Rules:
 - The store refuses a file it did not create (no `schema_version`
   table) rather than migrating a stranger's database.
 - Tests: migrating an empty file to the latest version,
-  migrating a file at every earlier version (the test keeps a fixture database
-  per released version),
+  migrating a file at every earlier version,
   and opening a newer additive version with an older reader.
+- The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
+  is the text dump of the store a release's `serve` wrote against the fake Cube,
+  one for each release since the store came (v0.7.0-alpha.1),
+  made by `tools/store-fixture/make.sh <tag>`.
+  The script builds the tag and sends every release the same requests:
+  the settings, setpoints, a room renamed, a user and a key,
+  a backup by hand, each where the release takes it.
+  Then it dumps the release's own `store backup` with `sqlite3 .dump`.
+  A dump is text, so a review reads it and `tools/identifiers` checks it;
+  only placeholders reach it.
+  `TestMigratesReleasedStores` loads each as its release left it and opens it,
+  which migrates it:
+  the file stays sound, no table loses a row, `events` keeps exactly its own,
+  every event has its source, and the log, the users and the backups read.
+  A pull request that adds a migration adds the dump of the newest release
+  when it is missing,
+  so that each release's file is migrated by every later binary.
 - `store.sql`, beside the migrations, is the schema they make of an empty file,
   generated, never edited by hand:
   every table as SQLite keeps its statement (an added column at its end),
@@ -1018,8 +1070,9 @@ who cannot sign in once it is off until a password is set for them.
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
-they take `-data` like `serve` and run as the service user
-(`sudo -u _massimo massimo -data /var/lib/massimo user add anna`),
+they take `-data` like `serve` and run as the service user,
+which reads the service's settings and store from any directory
+(`sudo -u _massimo massimo user add anna`),
 beside a running server thanks to WAL.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,
