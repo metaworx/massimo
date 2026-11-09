@@ -128,6 +128,12 @@ the next minor, a fix counts the suffix up.
   of one it trusts; the hour it is dated back made it 825 days and an
   hour (`README.md`, "Server").
 
+### Security
+
+- The web UI shows no self-signed certificate's fingerprint, which a man
+  in the middle passes along; its notice, also in the sign-in dialog,
+  asks to compare the browser's with `massimo tls show` (`docs/ui.md`).
+
 ## [0.12.0-alpha.1] - 2026-11-08
 
 ### Added

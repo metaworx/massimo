@@ -40,7 +40,7 @@
   "header.pending": "{n} en attente, les états peuvent encore changer",
   "header.pendingExpert.one": "{n} télégramme radio pas encore confirmé, les états peuvent encore changer",
   "header.pendingExpert.other": "{n} télégrammes radio pas encore confirmés, les états peuvent encore changer",
-  "header.selfSigned": "Certificat auto-signé ; comparez cette empreinte avec le journal du serveur (massimo tls show) :",
+  "header.selfSigned": "Certificat auto-signé : avant de vous connecter, comparez l’empreinte SHA-256 affichée dans les détails du certificat de votre navigateur avec celle qu’affiche massimo tls show sur le serveur.",
   "header.certUntil": "jusqu'au {date}",
   "header.certExpires.one": "Le certificat du serveur expire dans {n} jour : renouvelez-le, sinon les navigateurs refuseront la page.",
   "header.certExpires.other": "Le certificat du serveur expire dans {n} jours : renouvelez-le, sinon les navigateurs refuseront la page.",

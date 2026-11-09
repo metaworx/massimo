@@ -513,9 +513,11 @@ the server makes one at its first start for the box's names (its hostname,
 `<hostname>.local`, `localhost`, its addresses,
 and `-tls-names` for a name you gave it) into the data directory's `tls/`,
 valid 825 days and renewed 30 days before the end with the names it has;
-every browser warns once per device,
-and the fingerprint to compare is in the log, in `massimo config`,
-in `massimo tls show`, in `/healthz` and under the page's header.
+every browser warns once per device:
+compare the fingerprint in its certificate details with the one in the log,
+in `massimo config` or in `massimo tls show` on the box,
+before signing in, as the page asks (`/healthz` carries it too,
+but over the connection in question).
 A box whose address changed gets a new one with `massimo tls self-signed`,
 which a running server takes up at once.
 `-tls acme -tls-names <name>` gets a certificate from Let's Encrypt for a

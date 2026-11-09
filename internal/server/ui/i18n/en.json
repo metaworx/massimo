@@ -39,7 +39,7 @@
   "header.pending": "{n} pending, states may still change",
   "header.pendingExpert.one": "{n} radiogram not yet acknowledged, states may still change",
   "header.pendingExpert.other": "{n} radiograms not yet acknowledged, states may still change",
-  "header.selfSigned": "Self-signed certificate; compare this fingerprint with the server's log (massimo tls show):",
+  "header.selfSigned": "Self-signed certificate: before signing in, compare the SHA-256 fingerprint in your browser's certificate details with the one massimo tls show prints on the server.",
   "header.certUntil": "until {date}",
   "header.certExpires.one": "The server's certificate expires in {n} day: renew it, or browsers refuse the page.",
   "header.certExpires.other": "The server's certificate expires in {n} days: renew it, or browsers refuse the page.",

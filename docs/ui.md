@@ -108,9 +108,13 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   when the server was started, with how long ago,
   and the certificate the server serves (its source, names and expiry).
 - With a self-signed certificate (`massimo serve -tls self-signed`)
-  the browser warned once, and a line under the header shows the
-  certificate's fingerprint: compare it with the server's log,
-  or with `massimo tls show` on the box.
+  the browser warned once, and a line under the header,
+  and in the sign-in dialog, asks to compare the SHA-256 fingerprint in
+  the browser's certificate details with the one `massimo tls show` prints on the box,
+  or the server's log, before signing in.
+  The page shows no fingerprint itself:
+  it comes over the very connection in question,
+  and a man in the middle would pass the server's along, or rewrite it.
 - A certificate that ends within two weeks, or one the server could not
   get from Let's Encrypt yet, is a warning in the same line.
   The duty cycle and the free memory slots limit how many radio commands the

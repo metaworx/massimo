@@ -89,7 +89,7 @@
     </nav>
   </div>
   <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
-  <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span> <span id="tls-fingerprint" class="mono tls-fp"></span></p>
+  <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span></p>
   <details id="cube-found" class="cube-found hidden">
     <summary></summary>
     <div class="cube-found-body"></div>
@@ -301,6 +301,7 @@
   <form id="login-form">
     <h3 data-i18n="login.title">Sign in</h3>
     <p class="muted" data-i18n="login.text">This server asks who you are.</p>
+    <p id="login-tls" class="notice small hidden" role="note" data-i18n="header.selfSigned">Self-signed certificate: before signing in, compare the SHA-256 fingerprint in your browser's certificate details with the one massimo tls show prints on the server.</p>
     <label><span data-i18n="login.user">Name</span> <input type="text" id="login-user" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
     <label><span data-i18n="login.password">Password</span> <input type="password" id="login-password" autocomplete="current-password"></label>
     <details class="login-token">

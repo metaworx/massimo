@@ -40,7 +40,7 @@
   "header.pending": "{n} in behandeling, toestanden kunnen nog veranderen",
   "header.pendingExpert.one": "{n} radiotelegram nog niet bevestigd, toestanden kunnen nog veranderen",
   "header.pendingExpert.other": "{n} radiotelegrammen nog niet bevestigd, toestanden kunnen nog veranderen",
-  "header.selfSigned": "Zelfondertekend certificaat; vergelijk deze vingerafdruk met het logboek van de server (massimo tls show):",
+  "header.selfSigned": "Zelfondertekend certificaat: vergelijk vóór het aanmelden de SHA-256-vingerafdruk in de certificaatgegevens van je browser met die welke massimo tls show op de server toont.",
   "header.certUntil": "tot {date}",
   "header.certExpires.one": "Het certificaat van de server verloopt over {n} dag: vernieuw het, anders weigeren browsers de pagina.",
   "header.certExpires.other": "Het certificaat van de server verloopt over {n} dagen: vernieuw het, anders weigeren browsers de pagina.",

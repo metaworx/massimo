@@ -42,7 +42,7 @@
   "header.pendingExpert.few": "{n} telegramy radiowe nie zostały jeszcze potwierdzone, stany mogą się jeszcze zmienić",
   "header.pendingExpert.many": "{n} telegramów radiowych nie zostało jeszcze potwierdzonych, stany mogą się jeszcze zmienić",
   "header.pendingExpert.other": "{n} telegramu radiowego nie zostało jeszcze potwierdzone, stany mogą się jeszcze zmienić",
-  "header.selfSigned": "Certyfikat samopodpisany; porównaj ten odcisk z dziennikiem serwera (massimo tls show):",
+  "header.selfSigned": "Certyfikat samopodpisany: przed zalogowaniem porównaj odcisk SHA-256 w szczegółach certyfikatu w przeglądarce z tym, który pokazuje massimo tls show na serwerze.",
   "header.certUntil": "do {date}",
   "header.certExpires.one": "Certyfikat serwera wygasa za {n} dzień: odnów go, inaczej przeglądarki odrzucą stronę.",
   "header.certExpires.other": "Certyfikat serwera wygasa za {n} dni: odnów go, inaczej przeglądarki odrzucą stronę.",

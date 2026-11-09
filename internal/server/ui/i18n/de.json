@@ -39,7 +39,7 @@
   "header.pending": "{n} ausstehend, Zustände können sich noch ändern",
   "header.pendingExpert.one": "{n} Funktelegramm noch nicht bestätigt, Zustände können sich noch ändern",
   "header.pendingExpert.other": "{n} Funktelegramme noch nicht bestätigt, Zustände können sich noch ändern",
-  "header.selfSigned": "Selbstsigniertes Zertifikat; diesen Fingerabdruck mit dem Log des Servers vergleichen (massimo tls show):",
+  "header.selfSigned": "Selbstsigniertes Zertifikat: vor dem Anmelden den SHA-256-Fingerabdruck in den Zertifikatsdetails des Browsers mit dem vergleichen, den massimo tls show auf dem Server ausgibt.",
   "header.certUntil": "bis {date}",
   "header.certExpires.one": "Das Zertifikat des Servers läuft in {n} Tag ab: erneuern, sonst verweigern Browser die Seite.",
   "header.certExpires.other": "Das Zertifikat des Servers läuft in {n} Tagen ab: erneuern, sonst verweigern Browser die Seite.",
