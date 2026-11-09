@@ -203,7 +203,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | Capability | Allows | Routes |
 |---|---|---|
 | `read` | see everything of the Cubes and one's own user | every `GET` of a Cube, its rooms, devices, configuration, programmes, log, pairing, restore and backup state, the event stream and its ticket, `GET /api/v1/update`, `GET /api/v1/me` |
-| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
+| `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `/api/v1/me/push` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
 | `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}` |
@@ -638,6 +638,132 @@ the page then keeps its settings in the browser as before.
 A write is an audit row (`preference.set`, `preference.delete`,
 the target `preference:<key>`) but no command, since nothing goes to a Cube,
 and takes no `Idempotency-Key`.
+
+### Notifications: /api/v1/me/push, GET /api/v1/push/vapid
+
+`GET /api/v1/push/vapid`; `GET` and `POST /api/v1/me/push`;
+`DELETE /api/v1/me/push/{id}`.
+
+The server decides from the Cubes' events what to tell each user with a push subscription,
+by the rules the user chose in the preference `notify`.
+A notification is data, no text: its kind and values,
+which the page or the app renders in the user's language.
+Each one is written to the server's log as `notification`,
+with the user, the kind, the Cube, the device, its S/N and its room,
+pushed to the user's subscriptions by Web Push (see Delivery below),
+and sent on the user's own event streams as a `notification` event.
+
+**The preference `notify`**, through the preference routes above,
+a rule per kind; a kind left out, and a delay or threshold left out,
+keep the default:
+
+```json
+{"cube_offline": {"on": true, "after_min": 10}, "window_open": {"on": true, "after_min": 30},
+ "frost": {"on": true, "below_c": 8}, "battery_low": {"on": true}, "device_error": {"on": true},
+ "device_stale": {"on": false}, "paired": {"on": false}, "cube_found": {"on": false}, "update": {"on": false}}
+```
+
+| Kind | Told when | Default |
+|---|---|---|
+| `cube_offline` | the Cube disconnected and is not back within `after_min` | on, 10 min |
+| `cube_online` | the Cube is back after a `cube_offline` was told | on |
+| `window_open` | a window opened and is still open after `after_min` | on, 30 min |
+| `battery_low` | a device's battery went low | on |
+| `device_error` | a device reports an error or a link error | on |
+| `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
+| `device_stale` | a thermostat went past the stale threshold (`stale_after`) | off |
+| `paired` | a device joined by pairing | off |
+| `cube_found` | discovery found a Cube that is not configured | off |
+| `update` | `GET /api/v1/update` saw a newer release | off |
+
+`after_min` is 1 to 1440, `below_c` −10 to 20.
+A `PUT` of a document the rules cannot read (an unknown kind,
+a value out of bounds, `after_min` on a kind without a delay) is `400`.
+One kind is told once per device per half hour;
+a delay ends when its condition does.
+The rules keep their state in memory:
+a restart costs at most one repeated notification.
+A user without a subscription costs nothing.
+
+**The notification:**
+
+```json
+{"kind": "window_open", "cube": "KEQ0000000", "device": "0a0102", "serial": "MEQ0000001",
+ "device_name": "Window", "room": 3, "room_name": "Bath", "since": "2026-11-09T06:12:00Z",
+ "values": {"minutes": 30}, "time": "2026-11-09T06:42:00Z", "url": "/"}
+```
+
+`since` is when the condition began,
+for `cube_offline`, `cube_online` and `window_open`; `values` are the kind's:
+`minutes` (the delay), `down_minutes` (`cube_online`),
+`error` and `link_error` (`device_error`), `actual_c` and `below_c` (`frost`),
+`type` (`paired`), `address` (`cube_found`, whose `cube` is the one found),
+`version` (`update`).
+
+**Delivery.**
+A notification goes to every subscription of its user that may be sent to,
+by Web Push (RFC 8030), which UnifiedPush takes as well:
+the notification above as JSON, encrypted for the subscription (RFC 8291,
+`aes128gcm`, one record), so that the push service reads none of it,
+with a VAPID token (RFC 8292) signed by the server's key for the push service's origin,
+valid for 12 hours, its subject the box's node, `urn:uuid:<node_id>`.
+The request asks the push service to keep it a day (`TTL: 86400`),
+says `Urgency: high` for `frost` and `cube_offline`, `normal` for the rest,
+and `Topic: <kind>-<device or Cube>`,
+so that a newer one replaces one not delivered yet.
+A `2xx` is delivered and sets the subscription's `last_ok_at`;
+`404` and `410` remove the subscription;
+a `429` or a `5xx` is tried again after 5, 15 and 40 seconds;
+any other answer, or none, counts a failure,
+and a subscription failing for seven days,
+since its last delivery or its creation, is removed.
+A removal is a line in the server's log, which names the push service's host,
+never the endpoint's path.
+The server follows no redirect:
+an endpoint is not a way to send its requests elsewhere.
+The user's own event streams get the same notification at once,
+as a `notification` event (see GET /api/v1/cubes/{sn}/events),
+so that an open page shows it without a push;
+another user's streams never do.
+An app that embeds the server can take every notification itself as well
+(`internal/serve`, `Config.Deliverers`).
+
+**The subscription.**
+`GET /api/v1/push/vapid` is the server's VAPID public key (RFC 8292),
+`{"key": "<base64url>"}`, which the page gives `pushManager.subscribe`
+as `applicationServerKey`;
+made at the first request and kept in the store (docs/store.md section 5),
+for `read`.
+`POST /api/v1/me/push` takes the browser's `PushSubscription.toJSON()` and a label:
+
+```json
+{"endpoint": "https://push.example.net/send/…", "expirationTime": null,
+ "keys": {"p256dh": "<base64url>", "auth": "<base64url>"}, "label": "Firefox on the phone"}
+```
+
+and answers `201` with the row, or `200` when the endpoint was known,
+whose row then belongs to the caller:
+
+```json
+{"id": 4, "endpoint": "https://push.example.net/send/…", "label": "Firefox on the phone",
+ "created_at": "2026-11-09T06:00:00Z", "failures": 0, "current": true}
+```
+
+The endpoint is the push service's `http` or `https` URL
+(a UnifiedPush distributor on the LAN may be plain HTTP),
+`p256dh` an uncompressed P-256 point and `auth` 16 bytes, base64url;
+a label left out is the request's `User-Agent`, at most 100 characters.
+A subscription belongs to the user and to the session or API key that made it:
+revoking that, or removing the user, removes the subscription,
+and one whose session ended or whose user is disabled is not sent to.
+`GET /api/v1/me/push` lists the caller's, without their keys,
+`current` marking the one made with the caller's session or key;
+`DELETE …/{id}` removes one of them, `404` for another's.
+The three need `preferences`, which manager, operator and viewer have:
+a guest and an integration have no notifications.
+Without a signed-in user they answer `409`, without a store `503`.
+`POST` and `DELETE` are audit rows (`push.subscribe`, `push.unsubscribe`,
+the target `push:<id>`), no command.
 
 ### GET /api/v1/audit?before=&limit=&user=
 
@@ -1794,7 +1920,9 @@ its `state` is the device as the server knew it,
 with its type, serial, name and room), `cube_found` (with `cube`,
 a Cube that is not configured, see POST /cubes/discover),
 `restore_step` and `restore_done` (with `restore`, the progress of a restore,
-see POST /restore).
+see POST /restore),
+`notification` (with `notification`, what the stream's user is told, on that
+user's streams alone; see Notifications).
 The server's own lines, source `system`, each with its `summary` and, where a
 request asked for it, `by`:
 `server_started` (`version`, and `before` when it changed),

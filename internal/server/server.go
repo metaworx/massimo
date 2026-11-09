@@ -95,8 +95,10 @@ import (
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -217,6 +219,16 @@ type Options struct {
 	// StaleAfter is the stale threshold of the device views (0:
 	// view.StaleAfter); SetStaleAfter changes it while the server runs.
 	StaleAfter time.Duration
+	// notifyClock is the notification rules' clock, for the tests; nil
+	// is the real one.
+	notifyClock notify.Clock
+	// Deliverers take a user's notifications beside Web Push: an app
+	// embedding the server shows them itself (push.Local).
+	Deliverers []push.Deliverer
+	// pushClient and pushRetry are Web Push's client and waits, for the
+	// tests; nil for push.Sender's defaults.
+	pushClient *http.Client
+	pushRetry  []time.Duration
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
@@ -250,11 +262,18 @@ type Server struct {
 	log     *slog.Logger
 	stopWhy atomic.Value // string: why the server will stop (noteStop)
 	started time.Time    // when the server was created, for /healthz
-	mu      sync.RWMutex
-	cubes   map[string]*runtime // by serial, lower case
-	order   []string
-	mux     *http.ServeMux
-	handler http.Handler // the mux, behind the HSTS header with TLS
+	// notify runs the notification rules (push_api.go), nil without a
+	// store; vapidMu makes the VAPID key once; webPush delivers what the
+	// rules decide, and pushSlots bound the deliveries under way.
+	notify    *notify.Sink
+	vapidMu   sync.Mutex
+	webPush   *push.WebPush
+	pushSlots chan struct{}
+	mu        sync.RWMutex
+	cubes     map[string]*runtime // by serial, lower case
+	order     []string
+	mux       *http.ServeMux
+	handler   http.Handler // the mux, behind the HSTS header with TLS
 
 	limiter     failureLimiter
 	authLockout time.Duration // the lockout in effect, for the log
@@ -340,7 +359,7 @@ type runtime struct {
 	// the changes of the next one; only the pump uses it.
 	last map[cube.RFAddress]*view.State
 
-	subs   map[chan event]struct{}
+	subs   map[chan event]int64 // the stream subscribers, with their user's id (0 for none)
 	subsMu sync.Mutex
 	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
 	logMu  sync.Mutex
@@ -429,7 +448,10 @@ type event struct {
 	// Restore is the progress of a restore, for the "restore_step" and
 	// "restore_done" events.
 	Restore *restoreProgress `json:"restore,omitempty"`
-	Time    time.Time        `json:"time"`
+	// Notification is what a user is told, for a "notification" event,
+	// which only that user's streams get (push_api.go).
+	Notification *notify.Notification `json:"notification,omitempty"`
+	Time         time.Time            `json:"time"`
 	// ID is the event's row in the store, for GET …/log's paging; the
 	// stream's events and the ring's have none.
 	ID int64 `json:"id,omitempty"`
@@ -513,6 +535,22 @@ func (rt *runtime) send(ev event) {
 	rt.subsMu.Unlock()
 }
 
+// sendUser hands an event to the Cube's stream subscribers that are the
+// user's: a notification is for its user alone.
+func (rt *runtime) sendUser(userID int64, ev event) {
+	rt.subsMu.Lock()
+	for ch, u := range rt.subs {
+		if u != userID {
+			continue
+		}
+		select {
+		case ch <- ev:
+		default: // slow subscriber: drop
+		}
+	}
+	rt.subsMu.Unlock()
+}
+
 // logServer keeps an event of the server's, no Cube's: once in the
 // store, with no Cube (cube_id NULL), which every Cube's log shows, and
 // on every Cube's stream; a Cube without a row in the store keeps it in
@@ -567,10 +605,13 @@ func New(opts Options) *Server {
 		s.authLockout = DefaultAuthLockout
 	}
 	s.streamKeepAlive.Store(int64(30 * time.Second))
+	s.pushSlots = make(chan struct{}, maxDeliveries)
 	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
 	s.loadFound()
 	if opts.Store != nil {
+		s.notify = s.newNotify()
+		s.webPush = s.newWebPush()
 		s.refusals = newRefusalAudit(s.writeRefusal)
 		// MASSIMO_API_TOKEN becomes the owner's key, or follows the file (docs/store.md section 6).
 		if _, err := opts.Store.Bootstrap(context.Background(), opts.Token); err != nil {
@@ -625,6 +666,10 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
+	if s.notify != nil {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
+	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it
 	// Once ctx is done nothing new is tracked (track); taking the lock
@@ -792,6 +837,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			after := s.detail(ctx, rt, e, &ev)
 			ev.settle()
 			rt.remember(ev)
+			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()
 			for ch := range rt.subs {
 				select {
@@ -1044,6 +1090,10 @@ func (s *Server) routes() {
 	api("GET /api/v1/me/preferences/{key}", "any", s.getPreference)
 	api("PUT /api/v1/me/preferences/{key}", "preferences", s.putPreference)
 	api("DELETE /api/v1/me/preferences/{key}", "preferences", s.deletePreference)
+	api("GET /api/v1/push/vapid", "read", s.getVAPID)
+	api("GET /api/v1/me/push", "preferences", s.listPush)
+	api("POST /api/v1/me/push", "preferences", s.addPush)
+	api("DELETE /api/v1/me/push/{id}", "preferences", s.deletePush)
 	api("GET /api/v1/users", "users", s.listUsers)
 	api("POST /api/v1/users", "users", s.postUser)
 	api("GET /api/v1/users/{name}", "users", s.getUser)
@@ -1592,8 +1642,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusNotImplemented, "streaming not supported")
 	}
 	ch := make(chan event, 64)
+	p := principalOf(r)
 	rt.subsMu.Lock()
-	rt.subs[ch] = struct{}{}
+	rt.subs[ch] = p.userID()
 	rt.subsMu.Unlock()
 	defer func() {
 		rt.subsMu.Lock()
@@ -1613,7 +1664,6 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	fl.Flush()
 	keep := time.NewTicker(time.Duration(s.streamKeepAlive.Load()))
 	defer keep.Stop()
-	p := principalOf(r)
 	// The stream ends with the server's run too, so that a stop does not
 	// wait out the HTTP server's grace for a client that stays.
 	stopped := s.runContext().Done()

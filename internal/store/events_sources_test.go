@@ -63,7 +63,7 @@ func TestMigration9(t *testing.T) {
 	s8.Close()
 
 	s := open(t, dir)
-	if v, mr := s.SchemaVersion(); v != 9 || mr != 1 {
+	if v, mr := s.SchemaVersion(); v != SchemaVersion() || mr != 1 {
 		t.Fatalf("schema %d min_reader %d", v, mr)
 	}
 	page, err := s.Events(ctx, EventQuery{CubeID: cube.ID, Limit: 100})

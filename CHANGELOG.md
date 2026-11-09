@@ -61,6 +61,15 @@ the next minor, a fix counts the suffix up.
 - `serve -discover-listen <addr>` puts the discovery socket on another
   address than UDP 23272, for tests with a fake Cube (`README.md`).
 
+- Notification rules on the Cubes' events, per user in the `notify`
+  preference, and push subscriptions under `/api/v1/me/push` with the
+  server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
+
+- A notification is pushed to the user's subscribed browsers and
+  devices by Web Push (RFC 8030, 8291 and 8292), which UnifiedPush
+  takes as well, and sent on the event stream as `notification`
+  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+
 - The log says when Let's Encrypt issued or renewed a certificate by
   TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
   to port 443, the one a router forwards (`README.md`, "Server").
@@ -95,8 +104,8 @@ the next minor, a fix counts the suffix up.
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
 
 - The apt repository's address is `https://massimo.metaworx.ch/apt`,
-  under the project's site with its install routes and privacy policy
-  (`packaging/README.md`, "The apt repository").
+  under the project's site: the install routes, building from source,
+  the first settings and the privacy policy (`packaging/README.md`).
 
 ### Fixed
 
@@ -123,6 +132,10 @@ the next minor, a fix counts the suffix up.
 - The log names a device by its S/N, with the radio address in expert
   mode, and a removed one by its type, S/N and name as it was; device
   routes take the S/N too (`docs/api-v1.md`, "Identifiers").
+
+- A build from a release tag's checkout follows the tag's update
+  channel, such as `alpha`, no longer `HEAD`, which has no releases
+  (`README.md`, "From source").
 
 - A self-signed certificate is valid 825 days in all, as Apple requires
   of one it trusts; the hour it is dated back made it 825 days and an

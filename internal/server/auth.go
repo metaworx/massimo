@@ -120,6 +120,15 @@ func (p *principal) has(c string) bool {
 // named reports whether the principal is a user of the store.
 func (p *principal) named() bool { return p != nil && p.mode == modeUsers }
 
+// userID is the principal's user's row, 0 for none: an open server, the
+// token of a server without a store.
+func (p *principal) userID() int64 {
+	if !p.named() {
+		return 0
+	}
+	return p.user.ID
+}
+
 type ctxKey int
 
 const principalKey ctxKey = iota

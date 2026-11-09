@@ -1,9 +1,20 @@
 # Builds the massimo binary with the version taken from the nearest git tag
 # (semantic versioning: tag releases as vMAJOR.MINOR.PATCH) and the update
-# channel taken from the current branch (see internal/update).
+# channel taken from the current branch, or from the release tag a detached
+# HEAD is at (see internal/update).
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-dev)
-CHANNEL ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
+# The channel of a release tag's checkout is the one release.yml gives the
+# tag: its pre-release label (alpha of v0.12.0-alpha.1), else the "channel:"
+# line of its message. Any other detached HEAD stays HEAD, which has no
+# releases. release.yml passes CHANNEL itself.
+CHANNEL ?= $(shell b=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
+	if [ "$$b" = HEAD ] && t=$$(git describe --tags --exact-match 2>/dev/null); then \
+		c=$$(printf '%s\n' "$$t" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$$/\1/p'); \
+		[ -n "$$c" ] || c=$$(git for-each-ref --format='%(contents)' "refs/tags/$$t" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]'); \
+		b=$${c:-$$b}; \
+	fi; \
+	printf '%s' "$$b")
 LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.channel=$(CHANNEL)
 PKG      = ./cmd/massimo
 OUT      = dist
@@ -104,9 +115,9 @@ vet:
 	go vet ./...
 
 # The race detector on the packages whose goroutines meet: the server, the
-# store, the Cube client, the proxy, the server's wiring and its
-# announcement (the contract's test gate).
-RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy ./internal/serve ./internal/announce
+# store, the Cube client, the proxy, the server's wiring, its announcement
+# and its notification rules (the contract's test gate).
+RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy ./internal/serve ./internal/announce ./internal/notify
 
 race:
 	MASSIMO_ENV_FILE=/dev/null go test -race $(RACEPKGS)

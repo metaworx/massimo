@@ -337,6 +337,116 @@ paths:
         "409": {$ref: "#/components/responses/NoSignedInUser"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/push/vapid:
+    get:
+      summary: The server's VAPID public key, which a browser subscribes with
+      x-capability: read
+      description: |
+        The P-256 public key of the server's VAPID key pair (RFC 8292), as
+        pushManager.subscribe takes it for applicationServerKey; made at
+        the first request and kept in the store, whose settings do not
+        show it.
+      responses:
+        "200":
+          description: The key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: {type: string, description: "The uncompressed point, base64url without padding"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/me/push:
+    get:
+      summary: The signed-in user's push subscriptions
+      x-capability: preferences
+      description: Oldest first, without their keys; current marks the one made with the caller's session or key.
+      responses:
+        "200":
+          description: The subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/PushSubscription"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Subscribe a browser or an app to the signed-in user's notifications
+      x-capability: preferences
+      description: |
+        The body is the browser's PushSubscription.toJSON() and a label;
+        the subscription belongs to the user and to the caller's session
+        or key, and goes with them. The same endpoint again updates its
+        row (200), which then belongs to the caller. A label left out is
+        the request's User-Agent. An audit row (push.subscribe), no
+        command.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint: {type: string, description: "The push service's http or https URL, at most 2048 characters"}
+                keys:
+                  type: object
+                  required: [p256dh, auth]
+                  properties:
+                    p256dh: {type: string, description: "The subscriber's P-256 public key, uncompressed, base64url"}
+                    auth: {type: string, description: "The subscriber's 16-byte auth secret, base64url"}
+                label: {type: string, description: "At most 100 characters, such as Firefox on the phone"}
+      responses:
+        "200":
+          description: The endpoint's subscription, updated
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PushSubscription"}
+        "201":
+          description: A new subscription
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PushSubscription"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/me/push/{id}:
+    delete:
+      summary: Remove one of the signed-in user's push subscriptions
+      x-capability: preferences
+      description: An audit row (push.unsubscribe), no command.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: The user has no subscription of that id
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409": {$ref: "#/components/responses/NoSignedInUser"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/audit:
     get:
       summary: The audit, newest first
@@ -1743,7 +1853,9 @@ paths:
         device_forgotten (a device deleted from the Cube left the server's
         copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),
         restore_step and restore_done (with the progress of a restore in
-        "restore", see POST …/restore); the server's own, source system:
+        "restore", see POST …/restore), notification (with what the
+        stream's user is told in "notification", on that user's streams
+        alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
         reboot_cancelled, update, update_result, backup, backup_deleted,
         backups_pruned, log_pruned, restore_started; a Cube's own:
@@ -2404,6 +2516,16 @@ components:
         value: {description: The JSON document as stored}
         updated_at: {type: string, format: date-time}
         version: {type: integer, description: Counts the writes of the key; a later write wins}
+    PushSubscription:
+      type: object
+      properties:
+        id: {type: integer}
+        endpoint: {type: string}
+        label: {type: string, example: Firefox on the phone}
+        created_at: {type: string, format: date-time}
+        last_ok_at: {type: string, format: date-time, description: The last message the push service took; absent before the first}
+        failures: {type: integer, description: Failed deliveries since then}
+        current: {type: boolean, description: Made with the caller's session or key}
     CommandState:
       type: string
       enum: [queued, sent, acknowledged, failed, dropped]

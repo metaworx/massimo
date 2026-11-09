@@ -427,6 +427,7 @@ signed with the repository's own OpenPGP key (RSA 4096;
 not the Ed25519 release key of the manifest, which apt cannot use).
 To follow a channel, install the keyring package first, then the sources:
 
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_apt-sources.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 ```bash
 curl -fsSLo /tmp/massimo-archive-keyring.deb https://massimo.metaworx.ch/apt/massimo-archive-keyring.deb
 sudo apt install /tmp/massimo-archive-keyring.deb
@@ -439,6 +440,7 @@ Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
 EOF
 sudo apt update && sudo apt install massimo
 ```
+<!-- END GENERATED PARTIAL docs/fragments/_apt-sources.md -->
 
 `apt upgrade` then installs each release as it is published,
 and `apt install massimo=0.6.0~alpha.1` goes back to one still in the pool.
