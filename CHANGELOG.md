@@ -10,6 +10,9 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `massimo -no-env` reads no settings file, as `-env /dev/null` did,
+  also on Windows (`README.md`, "Cube variables").
+
 - `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
   `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
   `/etc/massimo/cloudflare.token` (`packaging/README.md`).

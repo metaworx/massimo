@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -30,6 +31,9 @@ var (
 	// the proxy) and env.ProxyRequired with -no-direct (no fallback to
 	// the Cube when the proxy does not answer).
 	proxyMode env.ProxyMode
+	// envGiven and noEnv record -env and -no-env, which exclude each
+	// other; -no-env reads no settings file.
+	envGiven, noEnv bool
 )
 
 // useDeviceSerial switches to the Cube that answered on the LAN. When a
@@ -46,7 +50,7 @@ func useDeviceSerial(serial string) {
 }
 
 // globalOptions parses options that precede the command name:
-// -env <file>, -data <dir>, -sn <serial>, -log-level <level>,
+// -env <file> or -no-env, -data <dir>, -sn <serial>, -log-level <level>,
 // -show-hidden, and -direct or -no-direct. It returns the remaining
 // arguments.
 func globalOptions(args []string) ([]string, error) {
@@ -56,6 +60,16 @@ func globalOptions(args []string) ([]string, error) {
 		case "env", "data", "sn", "log-level":
 		case "show-hidden", "no-ignore", "show-ghosts":
 			showHidden = true
+			args = args[1:]
+			continue
+		case "no-env":
+			if envGiven {
+				return nil, errEnvAndNoEnv
+			}
+			// os.DevNull, /dev/null or NUL, is a settings file that is
+			// always there and always empty.
+			noEnv = true
+			os.Setenv(env.FileVar, os.DevNull)
 			args = args[1:]
 			continue
 		case "direct", "no-direct":
@@ -81,6 +95,10 @@ func globalOptions(args []string) ([]string, error) {
 		}
 		switch name {
 		case "env":
+			if noEnv {
+				return nil, errEnvAndNoEnv
+			}
+			envGiven = true
 			os.Setenv(env.FileVar, value)
 		case "data":
 			os.Setenv(env.DataVar, value)
@@ -94,6 +112,9 @@ func globalOptions(args []string) ([]string, error) {
 	}
 	return args, nil
 }
+
+// errEnvAndNoEnv refuses -env with -no-env, in either order.
+var errEnvAndNoEnv = errors.New("-env and -no-env exclude each other")
 
 // dataDir is the data directory, where serve keeps massimo.db: -data,
 // else MASSIMO_DATA (also from the settings file), else the current

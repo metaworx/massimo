@@ -145,8 +145,12 @@ func logLevelState() string {
 }
 
 // envFileLine is config's line on the settings file: which, whether it
-// was found, and whether it is the service user's default.
+// was found, and whether it is the service user's default; none with
+// -no-env.
 func envFileLine() string {
+	if noEnv {
+		return "env file:      none (-no-env)"
+	}
 	file := env.File()
 	state := "not found"
 	if _, err := os.Stat(file); err == nil {

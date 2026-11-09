@@ -15,8 +15,8 @@ import (
 
 // The owner of the service's settings file, without -env or
 // MASSIMO_ENV_FILE, reads that file and keeps its data in the service's
-// directory; -env, MASSIMO_ENV_FILE, root, another user and a box
-// without the file keep ./.env and the current directory.
+// directory; -env, -no-env, MASSIMO_ENV_FILE, root, another user and a
+// box without the file keep ./.env and the current directory.
 func TestServiceUserDefaults(t *testing.T) {
 	uid := os.Geteuid()
 	if uid == 0 {
@@ -33,6 +33,7 @@ func TestServiceUserDefaults(t *testing.T) {
 	}{
 		{name: "the service user", euid: uid, defaults: true},
 		{name: "-env", args: []string{"-env", "given.env"}, euid: uid, file: "given.env"},
+		{name: "-no-env", args: []string{"-no-env"}, euid: uid, file: os.DevNull},
 		{name: "MASSIMO_ENV_FILE", fileVar: "other.env", euid: uid, file: "other.env"},
 		{name: "root", euid: 0, file: ".env"},
 		{name: "another user", euid: uid + 1, file: ".env"},

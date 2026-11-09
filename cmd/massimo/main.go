@@ -102,14 +102,15 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: massimo [-env <file>] [-data <dir>] [-sn <serial>] [-log-level <level>] [-show-hidden] [-direct | -no-direct] <command> [args]
+	fmt.Fprint(os.Stderr, `usage: massimo [-env <file> | -no-env] [-data <dir>] [-sn <serial>] [-log-level <level>] [-show-hidden] [-direct | -no-direct] <command> [args]
 
 Secrets such as MASSIMO_CUBE_KEY and MASSIMO_CUBE_IV are read from the
 environment, or from a .env file in the current directory (KEY=VALUE lines;
-override the path with -env or MASSIMO_ENV_FILE). Keep that file out of git.
-On Linux and macOS the service user, which owns /etc/massimo/env, reads
-that file alone and keeps its data in /var/lib/massimo, from any directory,
-unless -env or MASSIMO_ENV_FILE name another file.
+override the path with -env or MASSIMO_ENV_FILE; -no-env reads none). Keep
+that file out of git. On Linux and macOS the service user, which owns
+/etc/massimo/env, reads that file alone and keeps its data in
+/var/lib/massimo, from any directory, unless -env, -no-env or
+MASSIMO_ENV_FILE say otherwise.
 Several Cubes: put the serial into the variable names
 (MASSIMO_CUBE_KEQ0123456_KEY, _IV, _ADDRESS) and pick one with -sn or
 MASSIMO_CUBE_SN; with -sn and no address the Cube is discovered on the

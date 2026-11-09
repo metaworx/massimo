@@ -33,7 +33,7 @@ func serviceFiles(t *testing.T) (envPath, stateDir string) {
 	t.Setenv(env.DataVar, "")
 	t.Cleanup(func() {
 		serviceEnvPath, serviceStateDir = savedEnv, savedState
-		serviceDefaults = false
+		serviceDefaults, envGiven, noEnv = false, false, false
 		env.SetDefaultFile(".env")
 	})
 	return envPath, stateDir

@@ -839,12 +839,13 @@ a Cube that moved networks may need a power cycle.
 
 The Cubes are configured in the environment or in `.env` in the current
 directory (`KEY=VALUE` lines,
-`-env <file>` or `MASSIMO_ENV_FILE` for another file;
+`-env <file>` or `MASSIMO_ENV_FILE` for another file,
+`-no-env` for none;
 the environment wins over the file).
 On Linux and macOS the service user, the owner of `/etc/massimo/env`,
 reads that file alone and keeps its data in `/var/lib/massimo`,
 from any directory, as `sudo sshd` reads sshd's own configuration;
-`-env` or `MASSIMO_ENV_FILE` turns both off.
+`-env`, `-no-env` or `MASSIMO_ENV_FILE` turns both off.
 Keep the file out of git; `massimo config` shows what is in effect,
 secrets redacted.
 
