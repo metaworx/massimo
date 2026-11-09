@@ -100,6 +100,14 @@ the next minor, a fix counts the suffix up.
   core, and `make test-armv6` does the same where `qemu-arm` is
   installed (`GUIDELINES/project/CI.md`).
 
+- `make deb-systemd-test` checks the package under a real systemd, the
+  upgrade from v0.12.0-alpha.1 with the service running among its cases,
+  and CI runs it on trixie and bookworm (`GUIDELINES/project/CI.md`).
+
+- CI's macOS job installs on the template's settings first, the owner
+  line run as printed, a loaded job restarted and a booted-out one left
+  stopped (`packaging/launchd/template-test.sh`).
+
 ### Changed
 
 - The web UI's week programme editor is an element of its own,
