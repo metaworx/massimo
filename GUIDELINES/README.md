@@ -56,7 +56,7 @@ Editing a generated file is wasted work — change the fragment and re-run
 ---
 
 
-# Massimo — Project Contract (v1.3.3)
+# Massimo — Project Contract (v1.4.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -197,7 +197,9 @@ agent trips over most:
   `packaging/` and `docs/update-windows.md` for the installers,
   `docs/ui.md` for the UI,
   `docs/roadmap.md` and `docs/handover-session.md` at the end of a session by
-  the coordinating session only.
+  the coordinating session only,
+  but for a plan's items on the roadmap:
+  the session whose plan retires prunes them itself, at the retirement.
 - **Branches and pull requests**:
   develop on `main` through pull requests the owner merges;
   `alpha` is the release branch,
