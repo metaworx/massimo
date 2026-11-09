@@ -227,7 +227,8 @@ same install through apt (`sudo apt install ./massimo_<version>_arm64.deb`;
 `_armhf` for a 32-bit Raspberry Pi OS, the Pi 1 included, `_amd64` for a PC),
 creates the user and `/etc/massimo/env` to fill in,
 and owns the binary from then on:
-the web UI and `massimo update` say when a release is out and apt installs it,
+`massimo update` says when a release is out and leaves the install to apt,
+the web UI's Update has the package's helper run apt for the project's source,
 `apt purge massimo` removes everything.
 The project's apt repository makes that an `apt upgrade`:
 one suite per update channel, the snippet in
@@ -414,7 +415,8 @@ Details: [macOS](packaging/README.md#macos).
 (`sudo` for a daemon at boot),
 and the settings are in `$(brew --prefix)/etc/massimo/env`;
 brew then owns the binary and `brew upgrade` updates it,
-while the web UI and `massimo update` say when a release is out.
+which the web UI's Update runs as you under `brew services`,
+while `massimo update` says when a release is out.
 Details: [Homebrew](packaging/README.md#homebrew).
 
 ## Server

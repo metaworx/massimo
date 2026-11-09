@@ -10,15 +10,15 @@ remove)
 		systemctl --system daemon-reload >/dev/null || true
 	fi
 	if command -v deb-systemd-helper >/dev/null 2>&1; then
-		deb-systemd-helper mask massimo.service massimo-reboot.path >/dev/null || true
+		deb-systemd-helper mask massimo.service massimo-update.path massimo-reboot.path >/dev/null || true
 	fi
 	;;
 purge)
 	if command -v deb-systemd-helper >/dev/null 2>&1; then
-		deb-systemd-helper purge massimo.service massimo-reboot.path >/dev/null || true
-		deb-systemd-helper unmask massimo.service massimo-reboot.path >/dev/null || true
+		deb-systemd-helper purge massimo.service massimo-update.path massimo-reboot.path >/dev/null || true
+		deb-systemd-helper unmask massimo.service massimo-update.path massimo-reboot.path >/dev/null || true
 	fi
-	rm -rf /etc/massimo /var/lib/massimo /var/log/massimo
+	rm -rf /etc/massimo /var/lib/massimo /var/lib/massimo-update /var/log/massimo
 	if getent passwd massimo >/dev/null; then
 		deluser --system --quiet massimo || true
 	fi

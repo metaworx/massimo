@@ -199,6 +199,37 @@ func TestUpdateManaged(t *testing.T) {
 	}
 }
 
+// TestUpdateThroughApt: where apt owns the binary and the package's
+// helper is on, the button asks it as on a hand install, and the API
+// names apt; with the helper off, the reason is that.
+func TestUpdateThroughApt(t *testing.T) {
+	req := filepath.Join(t.TempDir(), "update-request")
+	off := ""
+	ts, _ := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Manager: "apt", Helper: func() string { return off }})
+	code, out := call(t, ts, "GET", "secret")
+	if code != 200 || out["manager"] != "apt" || out["can_update"] != true || out["blocked"] != nil {
+		t.Fatalf("GET: %d %v", code, out)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 202 {
+		t.Fatalf("POST: %d %v", code, out)
+	}
+	if b, err := os.ReadFile(req); err != nil || string(b) != "alpha\n" {
+		t.Fatalf("request %q, %v", b, err)
+	}
+	os.Remove(req)
+	off = "the update helper is off"
+	code, out = call(t, ts, "GET", "secret")
+	if code != 200 || out["manager"] != "apt" || out["can_update"] != false || out["blocked"] != off {
+		t.Fatalf("GET with the helper off: %d %v", code, out)
+	}
+	if code, _ := call(t, ts, "POST", "secret"); code != 403 {
+		t.Fatalf("POST with the helper off: %d", code)
+	}
+	if _, err := os.Stat(req); err == nil {
+		t.Fatal("a request was written with the helper off")
+	}
+}
+
 // An update request's 202 has no run that reports back to its command:
 // the command is acknowledged with the answer, and a retry with its
 // Idempotency-Key gets the 202 again instead of "still running".

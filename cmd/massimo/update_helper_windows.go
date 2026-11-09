@@ -11,14 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 
-	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/update"
 )
@@ -151,24 +149,6 @@ func (h *helperStarter) start() error {
 		}
 	}()
 	return nil
-}
-
-// helperEnv is the server's environment without the MASSIMO_ variables,
-// which hold the settings file's Cube keys and API token the helper does
-// not need, except the GitHub token and the test-only API base, and with
-// a settings file that does not exist.
-func helperEnv(environ []string) []string {
-	var out []string
-	for _, kv := range environ {
-		name, _, _ := strings.Cut(kv, "=")
-		switch {
-		case strings.EqualFold(name, update.TokenVar), strings.EqualFold(name, update.APIVar):
-		case len(name) >= 8 && strings.EqualFold(name[:8], "MASSIMO_"):
-			continue
-		}
-		out = append(out, kv)
-	}
-	return append(out, env.FileVar+"="+noEnvFile)
 }
 
 // jobFlags checks whether this process is in a job object whose

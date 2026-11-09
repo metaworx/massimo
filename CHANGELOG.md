@@ -50,6 +50,14 @@ the next minor, a fix counts the suffix up.
   fingerprint of a self-signed certificate, the biometric and
   notification switches; a browser sees it as the app's (`docs/app.md`).
 
+- The web UI's Update works on a box the Debian package installed: its
+  helper, enabled, upgrades massimo through apt from the massimo source
+  alone (`packaging/README.md`, "Debian package").
+
+- The web UI's Update works under Homebrew's service too: it runs
+  `brew upgrade` as the service's user and restarts the job
+  (`packaging/README.md`, "Homebrew").
+
 ### Changed
 
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,

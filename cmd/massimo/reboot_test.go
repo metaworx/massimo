@@ -39,6 +39,7 @@ func TestRebootBy(t *testing.T) {
 		{"systemd", unit, bySystemd, "", true},
 		{"launchd", daemon, byLaunchd, "", true},
 		{"homebrew", processInfo{goos: "darwin", getenv: envOf(map[string]string{"XPC_SERVICE_NAME": homebrewLabel}), pid: 4242, ppid: 1}, "", "Homebrew's service", false},
+		{"homebrew alpha", processInfo{goos: "darwin", getenv: envOf(map[string]string{"XPC_SERVICE_NAME": homebrewLabel + "-alpha"}), pid: 4242, ppid: 1}, "", "Homebrew's service", false},
 		{"terminal", processInfo{goos: "linux", getenv: envOf(nil), pid: 4242, ppid: 4000}, "", "only a server the system runs as a service", false},
 		{"windows terminal", processInfo{goos: "windows", getenv: envOf(nil), pid: 4242, ppid: 4000}, "", "only a server the system runs as a service", false},
 		{"a user's systemd shell", processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "17"}), pid: 4242, ppid: 4000}, "", "only a server", false},
