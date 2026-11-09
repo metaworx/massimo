@@ -1,32 +1,30 @@
-# AP Tls v1.1: TLS for massimo serve
+# AP Tls v1.2: TLS for massimo serve
 
 ## TL;DR
 
-`massimo serve` gets TLS in five blocks,
-every certificate source ending in one `GetCertificate` on one `tls.Config`:
-certificate files re-read when they change,
-a self-signed certificate the server makes, a reverse proxy in front,
-and Let's Encrypt by TLS-ALPN-01, HTTP-01 and DNS-01.
+`massimo serve` serves TLS, every certificate source ending in one
+`GetCertificate` on one `tls.Config`: files re-read when they change,
+a self-signed certificate it makes, a reverse proxy in front,
+Let's Encrypt by TLS-ALPN-01, HTTP-01 and DNS-01.
+Blocks 1 to 5 are on `main`;
+the owner's checks of 2026-11-08 and 09 add Blocks 6 to 8.
 
-- `-tls off | files | self-signed | acme`, `-tls-cert`, `-tls-key`,
-  `-tls-names`; `MASSIMO_TLS*` in the settings file, nothing in the store
-- files → stat per handshake, re-read on change, old pair kept on a bad one
-- HSTS on by default, one year; `-hsts <days>`, `0` off;
-  only when the server terminates TLS
-- `/healthz` → `https://` with TLS; the helper skips verification on loopback
-- self-signed → ECDSA P-256, 825 days, `<data>/tls/`,
-  renewed 30 days before expiry; fingerprint in the log, `massimo config`,
-  `massimo tls show`, `/healthz`, the UI header
-- `-trusted-proxies` → one `clientIP` everywhere; relative URLs in the UI
-- acme → autocert, TLS-ALPN-01; `-tls-http :80` for HTTP-01 and the redirect
-- DNS-01 → `-acme-dns-hook <script>` over `x/crypto/acme`, wildcards;
-  a sample hook for Infomaniak's API; certbot and lego into the files source
-- later: UPnP, a local CA
+- `-tls off | files | self-signed | acme`; `MASSIMO_TLS*` in the settings file
+- HSTS a year by default (`-hsts`), only where the server terminates TLS
+- self-signed → ECDSA P-256 in `<data>/tls/`, renewed 30 days before the end
+- acme → autocert (`-tls-http` for HTTP-01); DNS-01 → `-acme-dns-hook`
+- `-trusted-proxies` → one `clientIP`; relative URLs in the UI
+- v1.2: autocert's new certificate → a log line, as DNS-01's;
+  the plain port's redirect to `:443` → documented
+- v1.2: self-signed validity → 825 days counted from `NotBefore`
+- v1.2: the self-signed notice → "compare the browser's fingerprint with
+  `massimo tls show`", in the sign-in dialog too; no fingerprint in the page
 
 Rests on
 [2026-11-06_11-46_ANALYSIS_Tls_serve_tls_support.md](2026-11-06_11-46_ANALYSIS_Tls_serve_tls_support.md);
-the owner's decisions D1 to D13 are in the Discussion.
-Run order 1, 2, 4, 5, then 3, once store stage (b) is on `main`.
+the owner's checks are
+[2026-11-09_12-40_NOTE_Tls_v1.1_owners_checks.md](2026-11-09_12-40_NOTE_Tls_v1.1_owners_checks.md);
+the decisions D1 to D13 and D16 to D18 are in the Discussion.
 
 ### Blocks
 
@@ -40,6 +38,10 @@ Run order 1, 2, 4, 5, then 3, once store stage (b) is on `main`.
    the expiry watch and notice, `-tls-http :80` for HTTP-01
 5. TlsDns: `-acme-dns-hook` over `x/crypto/acme`, wildcards,
    the Infomaniak sample hook, certbot and lego recipes
+6. TlsLog: a line when autocert stores a certificate; the redirect documented
+7. TlsValidity: the self-signed certificate 825 days from its `NotBefore`
+8. TlsNotice: the notice asks for the browser's fingerprint before signing in,
+   in the sign-in dialog too, and the page shows none
 
 ## Discussion
 
@@ -143,6 +145,47 @@ Let's Encrypt's staging directory, is the owner's.
 **Who runs it:**
 this session, under the owner's signals.
 
+**v1.2, the owner's checks.**
+The owner's day of Blocks 2, 4 and 5 ran on 2026-11-08 and 2026-11-09,
+and [its NOTE](2026-11-09_12-40_NOTE_Tls_v1.1_owners_checks.md) records it:
+the port challenges against Pebble, DNS-01 with the Cloudflare hook against
+Let's Encrypt's staging directory, the Infomaniak hook against its API,
+the reverse proxy, and the notice on an iPhone.
+Three of its findings are this plan's, decided at that day's gates
+(numbered there after the plan's D13;
+the gates' D13 to D15 went to other plans):
+
+- **D16.**
+  autocert brings a certificate without a word in the log,
+  where the DNS-01 source logs "certificate issued":
+  a block of this plan (6) rather than a plan of its own.
+  The plain port redirects to `https://<name>:443/` whatever `-listen` says;
+  that is autocert's own fallback, and right behind a router that forwards 443,
+  so it is documented and not changed.
+- **D17.**
+  The self-signed certificate is valid 825 days and an hour (`NotBefore` an hour back,
+  `NotAfter` 825 days from now),
+  against D3's 825 days: Block 7 counts them from `NotBefore`.
+  Safari passed it, since Apple's limit applies to a certificate it trusts,
+  such as one installed as a profile.
+- **D18.**
+  The notice under the header shows the server's fingerprint and asks to
+  compare it with the log;
+  but the page comes over the very connection in question,
+  and a man in the middle passes the server's fingerprint along, or rewrites it.
+  The sign-in dialog, modal, also covers the notice before the password.
+  Block 8: the notice asks to compare the fingerprint in the browser's
+  certificate details with `massimo tls show` on the box before signing in,
+  the sign-in dialog shows it too, and the page shows no fingerprint.
+  `/healthz` keeps its `fingerprint`: a client that pins one,
+  as the apps do, compares it with the connection's own.
+
+**Branch for v1.2:**
+`claude/tls-notice` from `origin/main`, this revision and its NOTE first,
+Blocks 6 to 8 in order, one pull request for the three;
+pushed and opened on the owner's signal at the gate.
+`AuthWarning` and `HookDeps`, from the NOTE's item 2, are plans of their own.
+
 **Names chosen here**, routine and not decisions of the owner's:
 the package `internal/certs`;
 the owner's files installed as `cert.pem` and `key.pem` beside the settings;
@@ -183,7 +226,13 @@ What changes, by file:
 | `docs/ui.md` | 2, 3 | the header notice; the page works under a path prefix |
 | `docs/reverse-proxy.md` | 3 | new: nginx and Caddy samples, the Synology clicks, `-trusted-proxies`, the stream, HSTS from the proxy |
 | `go.mod`, `go.sum` | 4 | `golang.org/x/crypto` (autocert; Block 5 uses its `acme` package) |
-| `CHANGELOG.md` | 1, 2, 3, 4, 5 | a bullet per block under Unreleased |
+| `internal/certs/acme.go`, `acme_test.go` | 6 | the cache wrapped: a certificate autocert stores is logged with its name, expiry and fingerprint |
+| `cmd/massimo/serve.go`, `README.md` | 6 | `-tls-http`'s help and "Server": the redirect goes to port 443 |
+| `internal/certs/selfsigned.go`, `selfsigned_test.go` | 7 | `NotAfter` 825 days after `NotBefore` |
+| `internal/server/ui/index.html`, `app.js`, `i18n/*.json` | 8 | the notice's text, its copy in the sign-in dialog, the fingerprint gone from the page |
+| `tools/ui-test/test_tls.py` | 8 | the notice without a fingerprint; the sign-in dialog's copy |
+| `docs/ui.md`, `README.md` | 8 | the fingerprint compared in the browser's certificate view |
+| `CHANGELOG.md` | 1 to 8 | a bullet per block under Unreleased |
 
 **What stays:**
 plain HTTP by default (`-tls off`), `-listen`'s meaning and default,
@@ -628,6 +677,87 @@ the real certificate from Let's Encrypt's staging directory through the
 owner's Infomaniak token is the owner's day, with Block 4's, and its outcome
 goes into the completion gate's NOTE.
 
+### Block 6: TlsLog
+
+1. `internal/certs/acme.go`:
+   the manager's cache becomes `logCache`, wrapping `autocert.DirCache`:
+   a `Put` of a certificate (a key without `+`, or `<name>+rsa`;
+   not the account key `acme_account+key`, an HTTP-01 token `<token>+http-01`
+   or a TLS-ALPN-01 challenge's `<name>+token`)
+   logs `tls: certificate issued by the ACME directory` with the name,
+   the expiry and the fingerprint of the data's first certificate,
+   as the DNS-01 source's line does; `Get` and `Delete` pass through.
+   A certificate loaded from the cache at the start goes through `Get` alone,
+   so the line means a new one: the first order and each renewal.
+2. `acme_test.go`:
+   `TestACMELogsIssued`: a `Put` of a certificate stored as autocert stores it
+   (the key's PEM, then the chain's) logs the line with its fingerprint;
+   the account key, an HTTP-01 token and a challenge certificate log nothing;
+   `OpenACME`'s manager uses the wrapper.
+3. `-tls-http`'s help in `cmd/massimo/serve.go` and `install.go`,
+   and README.md "Server":
+   the redirect goes to `https://<name>:443/`, the port the router forwards,
+   whatever `-listen` says.
+4. The CHANGELOG bullet under Added:
+   the log says when Let's Encrypt issues or renews a certificate by
+   TLS-ALPN-01 or HTTP-01, as it does for DNS-01.
+
+**Verification:**
+the test gate; the NOTE's check 1 against Pebble, repeated by hand on this
+machine (Pebble and its relay downloaded for the purpose, not committed),
+logs the line once for each order, and not again after a restart that
+finds the certificate in the cache.
+
+### Block 7: TlsValidity
+
+1. `internal/certs/selfsigned.go`:
+   `Generate` takes `notBefore := now.Add(-time.Hour)` and
+   `NotAfter: notBefore.Add(SelfSignedValidity)`,
+   so the 825 days hold the hour dated back;
+   the doc comments say so.
+2. `selfsigned_test.go`:
+   `TestGenerate` checks the leaf's `NotAfter.Sub(NotBefore)` is
+   `SelfSignedValidity` and its `NotBefore` an hour before `now`.
+3. The CHANGELOG bullet under Fixed:
+   a self-signed certificate is valid 825 days in all,
+   as Apple requires of one it trusts;
+   the hour it is dated back made it 825 days and an hour.
+
+**Verification:**
+the test gate; `massimo tls self-signed` on a temporary data directory and
+`openssl x509 -dates` show 825 days between the two dates.
+
+### Block 8: TlsNotice
+
+1. `internal/server/ui/index.html`:
+   the notice under the header loses `#tls-fingerprint`;
+   the sign-in dialog gains `#login-tls`, a `notice` above its fields with
+   `data-i18n="header.selfSigned"`, hidden by default.
+2. `app.js`'s `renderTLS`:
+   no fingerprint; `#login-tls` shown while `/healthz` reports `self_signed`,
+   which the page reads before the sign-in dialog waits for a password;
+   the comment says why the page shows no fingerprint.
+3. `header.selfSigned` in the six `i18n/*.json`:
+   "Self-signed certificate: before signing in, compare the SHA-256 fingerprint
+   in your browser's certificate details with the one massimo tls show prints
+   on the server."
+   FR, IT, NL and PL machine-translated, as their files say.
+4. `tools/ui-test/test_tls.py`:
+   the notice's text and no fingerprint in the page;
+   in a context of its own without a token, the sign-in dialog shows the
+   notice with `/healthz` stubbed as self-signed, and hides it without TLS.
+5. The documents, `docs/ui.md` "Header" and README.md "Server":
+   the fingerprint is compared in the browser's certificate view with the
+   log or `massimo tls show`; the page shows none, and why.
+6. The CHANGELOG bullet under Security:
+   the web UI no longer shows a self-signed certificate's fingerprint,
+   which a man in the middle passes along;
+   its notice, in the sign-in dialog too, asks to compare the browser's with
+   `massimo tls show` before signing in.
+
+**Verification:**
+the test gate and `make ui-test` at 1100 and 390 px in English and German.
+
 ## Proposed commit message
 
 The plan's registration, a commit of its own before the first project write:
@@ -654,8 +784,36 @@ The blocks' commits, each written at its gate:
 4. `feat(serve): Let's Encrypt through autocert`
 5. `feat(serve): Let's Encrypt by DNS-01 through a hook`
 
+v1.2's registration, with the NOTE of the owner's checks,
+a commit of its own before Block 6:
+
+```
+chore(aps): +Tls v1.2, +NOTE Tls v1.1
+
+The owner's checks of AP Tls ran on 2026-11-08 and 2026-11-09, and three of their findings become blocks: autocert's certificate unlogged, the self-signed certificate an hour over its 825 days, and a notice whose fingerprint comes over the connection it should check.
+
+Key changes:
+- GUIDELINES/wip/2026-11-06_12-42_AP_Tls_serve_tls.md: v1.2, Blocks 6 to 8 and the owner's D16 to D18.
+- GUIDELINES/wip/2026-11-09_12-40_NOTE_Tls_v1.1_owners_checks.md: what each check found.
+
+File-revision-v1: GUIDELINES/wip/2026-11-06_12-42_AP_Tls_serve_tls.md::v1.2::2026-11-09::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Blocks 6 to 8 from the owner's checks
+File-revision-v1: GUIDELINES/wip/2026-11-09_12-40_NOTE_Tls_v1.1_owners_checks.md::v1.1::2026-11-09::All::the owner's checks
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+6. `feat(certs): The log says when autocert brings a certificate`
+7. `fix(certs): The self-signed certificate is valid 825 days, its hour back included`
+8. `fix(security:ui): The self-signed notice asks for the browser's fingerprint`
+
 ## Change History
 
+- v1.2 (2026-11-09): Blocks 6 to 8 from the owner's checks of 2026-11-08 and
+  09 (the NOTE of that name) and the owner's D16 to D18:
+  autocert's certificate logged and the plain port's redirect documented,
+  the self-signed validity counted from `NotBefore`,
+  and the notice asking for the browser's fingerprint,
+  in the sign-in dialog too;
+  the TL;DR rewritten, the file table extended.
 - v1.1 (2026-11-06): Block 5 TlsDns added on the owner's instruction,
   the `-acme-dns-hook` flow over `x/crypto/acme` with an Infomaniak sample
   hook and the certbot and lego recipes, to run before Block 3;
