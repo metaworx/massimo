@@ -6,6 +6,8 @@ package serve
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -203,5 +206,94 @@ func TestOpenIntervals(t *testing.T) {
 		if got := settings[k].InEffect; got != want {
 			t.Errorf("%s in effect %q, want %q", k, got, want)
 		}
+	}
+}
+
+// fakeAnnounce replaces the responder for the test: it records the
+// service, and fails with err where that is set.
+func fakeAnnounce(t *testing.T, err error) (got chan announce.Service, stopped chan struct{}) {
+	t.Helper()
+	got, stopped = make(chan announce.Service, 1), make(chan struct{})
+	old := startAnnounce
+	startAnnounce = func(ctx context.Context, svc announce.Service, log *slog.Logger) (func(), error) {
+		got <- svc
+		if err != nil {
+			return nil, err
+		}
+		return func() { <-ctx.Done(); close(stopped) }, nil
+	}
+	t.Cleanup(func() { startAnnounce = old })
+	return got, stopped
+}
+
+// With Config.Announce on, Run announces the server once it listens,
+// with its port, node, version and name, and waits for the goodbye when
+// it stops.
+func TestRunAnnounces(t *testing.T) {
+	clearCubeEnv(t)
+	got, stopped := fakeAnnounce(t, nil)
+	var log syncLog
+	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: t.TempDir(), Proxies: []string{"off"}, DiscoverInterval: &never,
+		Announce: Announce{On: true, Name: "box.example.lan", Version: "v0.12.0"}, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	svc := <-got
+	_, port, _ := net.SplitHostPort(inst.Addr())
+	if svc.Instance != "box.example.lan" || fmt.Sprint(svc.Port) != port || svc.Node != inst.Store().NodeID() || svc.Version != "v0.12.0" || svc.Fingerprint != nil {
+		t.Fatalf("service %+v", svc)
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("Run returned before the announcement stopped")
+	}
+	if !strings.Contains(log.String(), `msg="announced on the LAN" service=_massimo._tcp name=box port=`+port) {
+		t.Fatalf("log:\n%s", log.String())
+	}
+}
+
+// A responder that cannot start is a warning, and the server serves
+// unannounced; without a store nothing is announced.
+func TestRunUnannouncedWarns(t *testing.T) {
+	clearCubeEnv(t)
+	got, _ := fakeAnnounce(t, errors.New("no interface joined the mDNS group"))
+	var log syncLog
+	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: t.TempDir(), Proxies: []string{"off"}, DiscoverInterval: &never,
+		Announce: Announce{On: true}, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	<-got
+	var h map[string]any
+	getJSON(t, "http://"+inst.Addr()+"/healthz", &h)
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(log.String(), `level=WARN msg="not announced on the LAN" error="no interface joined the mDNS group"`) {
+		t.Fatalf("log:\n%s", log.String())
+	}
+
+	log = syncLog{}
+	inst, err = Open(context.Background(), Config{Listen: "127.0.0.1:0", Addr: "127.0.0.1:1", Proxies: []string{"off"}, DiscoverInterval: &never,
+		Announce: Announce{On: true}, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runInstance(t, inst)(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case svc := <-got:
+		t.Fatalf("announced without a store: %+v", svc)
+	default:
+	}
+	if !strings.Contains(log.String(), `msg="not announced on the LAN" reason="no store (-addr), so no node"`) {
+		t.Fatalf("log:\n%s", log.String())
 	}
 }

@@ -42,11 +42,19 @@ the next minor, a fix counts the suffix up.
   device, a level and who made a change, kept in the address after
   `#log` (`docs/ui.md`, "Log").
 
+- `serve` announces itself on the LAN by mDNS as `_massimo._tcp`
+  (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
+  and marks a proxy among the Cubes (`README.md`, "Server").
+
 ### Changed
 
-- `serve -help`, the settings file's template and the READMEs list what
-  `MASSIMO_REBOOT` takes: on, true, yes or 1, and their opposites, in
-  any case (`README.md`, "Server").
+- `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
+  and their opposites, in any case, as `serve -help`, the settings
+  file's template and the READMEs say (`README.md`, "Server").
+
+- `massimo discover -json` prints an object with `cubes` and `servers`,
+  no longer a list of Cubes; a serial heard from a Cube and from its
+  proxy is listed twice (`docs/proxy.md`).
 
 - `serve`'s wiring is the package `internal/serve`, which a program
   embedding the server calls as the command does; nothing changes for

@@ -138,6 +138,7 @@ so close the original MAX! software and stop any other server before `serve` con
 from then on they connect to the server's proxy instead of the Cube,
 see [Server](#server).
 The proxy needs TCP port 62910 and discovery UDP port 23272 open to the LAN,
+the announcement UDP port 5353,
 and the API its port (8099 below) when it listens on a LAN address;
 each subsection says what that means for the firewall.
 WSL 2 in its default network mode has no LAN broadcast and takes no inbound LAN
@@ -168,9 +169,9 @@ with the `.env` from above in the same directory,
 then open http://127.0.0.1:8099/ and enter the token;
 `-listen :8099` serves the page to the LAN as well,
 `-proxy off` leaves the proxy out for a first run.
-A firewall on the box must allow incoming 62910/tcp and 23272/udp,
+A firewall on the box must allow incoming 62910/tcp, 23272/udp and 5353/udp,
 and 8099/tcp for the page on the LAN (with ufw:
-`sudo ufw allow 62910/tcp && sudo ufw allow 23272/udp && sudo ufw allow 8099/tcp`).
+`sudo ufw allow 62910/tcp && sudo ufw allow 23272/udp && sudo ufw allow 5353/udp && sudo ufw allow 8099/tcp`).
 
 **As a service.**
 On a Linux with systemd, as root (`-dry-run` only shows what would be done):
@@ -258,8 +259,8 @@ PC" dialog with "Unknown publisher"
 The installed service and `massimo update` are not affected ([the test
 report](docs/windows-test-2026-11-05.md), observation 8).
 For the proxy and discovery,
-Windows Defender Firewall must let the program receive on TCP 62910 and UDP
-23272 on the private network (the installed service gets a rule for that,
+Windows Defender Firewall must let the program receive on TCP 62910, UDP
+23272 and UDP 5353 on the private network (the installed service gets a rule for that,
 a `serve` started by hand does not),
 and the original MAX! software must not be running.
 
@@ -567,8 +568,8 @@ as the Windows service by itself,
 and never in a terminal, in Docker or as Homebrew's service
 ([packaging/README.md](packaging/README.md), "Rebooting from the web UI").
 The switch is the owner's, off by default:
-`on`, `true`, `yes` or `1` switch it on,
-`off`, `false`, `no`, `0` or nothing off, in any case;
+`on`, `true`, `yes`, `1` or `enabled` switch it on,
+`off`, `false`, `no`, `0`, `disabled` or nothing off, in any case;
 another value stops `serve` at the start,
 and switches the reboot off with a warning when the settings file is read again.
 `serve` applies a change of `MASSIMO_REBOOT` in the settings file at once,
@@ -615,6 +616,23 @@ so give the server a different serial for discovery with `-proxy-serial`,
 for example the real one with the first letter changed,
 or block the Cube's UDP answers on the PC's firewall.
 See [docs/proxy.md](docs/proxy.md).
+
+`serve` announces itself on the LAN by mDNS (UDP port 5353) as `_massimo._tcp`,
+so that `massimo discover`, the apps and any DNS-SD browser find it unasked,
+such as `avahi-browse -r _massimo._tcp` or `dns-sd -B _massimo._tcp`:
+the instance is the box's host name,
+the SRV record its API's port on the host `massimo-<node>.local`,
+and the TXT record its node (`node`), version (`v`),
+whether it serves TLS (`tls`) and the certificate's SHA-256 (`fp`),
+which an app compares before it trusts a self-signed certificate.
+It is on by default where `-listen` is reachable from the LAN,
+and off on a loopback address;
+`-announce` (or `MASSIMO_ANNOUNCE`) switches it,
+taking the same values as `MASSIMO_REBOOT`, and `-addr` announces nothing.
+It shares port 5353 with the system's own responder (avahi, mDNSResponder,
+Windows' mDNS);
+where multicast is missing, as in a container without it,
+`serve` logs that it is not announced and runs on.
 
 ### Screenshots
 
@@ -700,7 +718,11 @@ one `name=text` per line with `\r\n` escapes and the placeholders `{i}`, `{s}`,
 
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address, firmware,
 and whether the Cube takes its address by DHCP or has a static one) via the UDP
-broadcast the original software uses;
+broadcast the original software uses,
+marking `proxy` a massimo serve that answers as a Cube (its MAC is not eQ-3's `00:1a:22`,
+or its address is an announced server's),
+and then the massimo servers that announce themselves by mDNS (name, address,
+TLS, version, node; `-json` prints both lists);
 it needs UDP port 23272 and a real LAN interface (not WSL 2).
 `portal-crypto iv` recovers a Cube's portal IV from one `e:` exchange.
 

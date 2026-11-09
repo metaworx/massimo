@@ -49,6 +49,22 @@ two seconds and to the Cube itself otherwise, so `status`, `backup`, `restore`,
 `cube` and `watch` work the same whether the server is running or not.
 `-addr` bypasses this.
 
+`massimo discover` lists the proxy among the Cubes, marked `proxy`,
+and the servers that announce themselves by mDNS in a table of their own (README.md,
+"Server").
+The proxy answers a search with the serial of the Cube it serves,
+unless `-proxy-serial` gives another,
+so a search hears that serial twice, from the Cube and from the proxy:
+`discover` lists both answers, each with its address and MAC.
+It tells the proxy's by the MAC, which the client's ARP cache has for the
+address that answered:
+a Cube's begins with eQ-3's `00:1a:22`,
+the proxy's is its host's network card's.
+Where the cache has none (the server on the same box as `discover`),
+the address decides: it is an announced server's.
+The Cube's discovery reply has no field for a MAC address,
+so the proxy cannot announce one inside the Cube protocol, and need not.
+
 ## What a client gets
 
 On connect, the greeting a real Cube sends: `H` with a fresh connection id,
@@ -137,11 +153,11 @@ the proxy asks for 60 seconds or ten minutes.
 ## Firewall
 
 On a host with ufw, the ports to open on the LAN interface: 62910/tcp (proxy),
-23272/udp (discovery),
+23272/udp (discovery), 5353/udp (the announcement by mDNS),
 and the API's port when it listens on a LAN address (8099/tcp by default):
 
 ```bash
-sudo ufw allow 62910/tcp && sudo ufw allow 23272/udp && sudo ufw allow 8099/tcp
+sudo ufw allow 62910/tcp && sudo ufw allow 23272/udp && sudo ufw allow 5353/udp && sudo ufw allow 8099/tcp
 ```
 
 ## Budget
