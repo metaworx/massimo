@@ -798,31 +798,50 @@ jobs:
       # a switch: written alone, as "-announce on" would end the flags at
       # "on". dns-sd runs under script, a terminal of its own, so that what
       # it printed is in the file when it is stopped.
+      # The first runs found nothing by discover, not even the server on
+      # the same Mac, so the step also prints what tells the runner's
+      # multicast from our responder: serve's log at debug (a group not
+      # joined, an announcement not sent), the interfaces, the sockets on
+      # UDP 5353, the route to 224.0.0.251, discover by unicast to the
+      # runner's own addresses, and every service type mDNSResponder sees.
       - name: mDNS beside mDNSResponder
         run: |
-          set -euo pipefail
-          go build -o massimo-mdns ./cmd/massimo
+          set -uo pipefail
+          go build -o massimo-mdns ./cmd/massimo || exit 1
           d="$(mktemp -d)"
           ./massimo-mdns fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
-          MASSIMO_ENV_FILE=/dev/null MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./massimo-mdns -data "$d" serve -listen 0.0.0.0:18097 -announce -proxy off -discover-interval 0 > mdns-serve.log 2>&1 &
+          MASSIMO_ENV_FILE=/dev/null MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./massimo-mdns -data "$d" serve -listen 0.0.0.0:18097 -announce -proxy off -discover-interval 0 -log-level debug > mdns-serve.log 2>&1 &
           serve=$!
           for i in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
-          cat mdns-serve.log
-          grep -q 'msg="announced on the LAN"' mdns-serve.log
-          if grep -q 'not announced' mdns-serve.log; then echo "::error::serve did not announce itself beside mDNSResponder"; exit 1; fi
-          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
+          if ! grep -q 'msg="announced on the LAN"' mdns-serve.log || grep -q 'not announced' mdns-serve.log; then cat mdns-serve.log; echo "::error::serve did not announce itself beside mDNSResponder"; exit 1; fi
           if grep -q 'cube proxy listening' mdns-serve.log; then echo "::error::serve's flags after -announce were not read"; exit 1; fi
-          ./massimo-mdns discover -json -wait 4s > mdns-discover.json
-          cat mdns-discover.json
-          if ! grep -q "\"node\": *\"$node\"" mdns-discover.json; then echo "::error::massimo discover does not find the server: the runner's multicast"; exit 1; fi
+          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
+          echo "--- interfaces"; ifconfig -a
+          echo "--- UDP 5353"; netstat -an -p udp | grep -E '[.:]5353 ' || true
+          echo "--- route to 224.0.0.251"; route -n get 224.0.0.251 || true
+          addrs=127.0.0.1
+          for a in $(ifconfig | awk '/inet / && $2 != "127.0.0.1" {print $2}'); do addrs="$addrs,$a"; done
+          echo "--- discover by multicast"
+          ./massimo-mdns discover -json -wait 4s > mdns-discover.json 2>&1; cat mdns-discover.json
+          echo "--- discover by unicast to $addrs"
+          ./massimo-mdns discover -json -wait 4s -addr "$addrs" > mdns-discover-unicast.json 2>&1; cat mdns-discover-unicast.json
+          echo "--- dns-sd: the service types mDNSResponder sees"
+          script -q mdns-types.txt dns-sd -B _services._dns-sd._udp local. > /dev/null 2>&1 &
+          types=$!
+          echo "--- dns-sd: _massimo._tcp"
           script -q mdns-zone.txt dns-sd -Z _massimo._tcp local. > /dev/null 2>&1 &
           browse=$!
           sleep 6
-          kill "$browse" || true
+          kill "$types" "$browse" || true
           sleep 1
-          cat mdns-zone.txt
-          if ! grep -q 'SRV.* 18097 ' mdns-zone.txt || ! grep -q "node=$node" mdns-zone.txt; then echo "::error::dns-sd does not resolve the server through mDNSResponder"; exit 1; fi
-          kill "$serve"
+          cat mdns-types.txt; echo "---"; cat mdns-zone.txt
+          echo "--- serve's log after the searches"; grep -vE 'device state|schema migrated' mdns-serve.log
+          kill "$serve" || true
+          ok=0
+          grep -q "\"node\": *\"$node\"" mdns-discover.json || { echo "::error::massimo discover does not find the server by multicast"; ok=1; }
+          grep -q "\"node\": *\"$node\"" mdns-discover-unicast.json || echo "::warning::massimo discover does not find the server by unicast either"
+          { grep -q 'SRV.* 18097 ' mdns-zone.txt && grep -q "node=$node" mdns-zone.txt; } || { echo "::error::dns-sd does not resolve the server through mDNSResponder"; ok=1; }
+          exit "$ok"
 
       - name: Logs
         if: always()
