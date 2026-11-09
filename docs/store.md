@@ -676,6 +676,39 @@ Notes on the tables:
   which is nothing at this scale.
   The columns are declared `TEXT`, not `DATETIME`, on purpose.
 
+### Measuring on a box
+
+The store's benchmarks (`internal/store/events_bench_test.go`)
+time the writer's batch of 100 events, `BenchmarkWriteEvents`,
+and pages of 200 of the busiest Cube, `BenchmarkEventsPage`:
+all of its events, its warnings, its errors, and with the server's rows.
+They share one store a run, made by their first call:
+a copy of a box's store when `MASSIMO_STORE_BENCH_COPY` names one,
+grown to `MASSIMO_STORE_BENCH_ROWS` events (90,000)
+with the newest 1000 events of its busiest Cube, cycled;
+else rows of their own, as `TestEventsPageQuery` fills them,
+3000 under `-short`.
+No writer runs, so nothing is pruned,
+and each batch adds its rows to the store the pages read.
+CI runs each once, to see that it still runs, and compares no time.
+
+On one of the owner's boxes, only with the owner's go:
+
+1. `make store-bench` builds `dist/store-bench-linux-arm64` for a Pi 5 and
+   `dist/store-bench-linux-armv6` for a Pi 1;
+   built from two commits, they compare a change.
+2. The owner copies the store as the service's user,
+   `sudo -u massimo massimo -env /dev/null -data /var/lib/massimo store backup /var/tmp/massimo-copy.db`,
+   and gives the copy to the user who runs the benchmarks.
+3. Each binary runs on the copy, one after the other,
+   its own store on the SD card (`TMPDIR=/var/tmp`, since `/tmp` is a tmpfs):
+   `TMPDIR=/var/tmp MASSIMO_STORE_BENCH_COPY=/var/tmp/massimo-copy.db ./store-bench-linux-armv6 -test.run '^$' -test.bench . -test.benchtime 30x -test.count 5`.
+   Its first line names the store, its events and their levels;
+   each benchmark's line gives the time a batch or a page took (`ns/op`)
+   and the events a page held.
+4. The copy and the binaries are deleted;
+   only the times leave the box, and the service and its file stay untouched.
+
 ### Migrations
 
 `internal/store/migrations/NNNN_<name>.sql`, embedded with `go:embed`,

@@ -34,6 +34,10 @@ the next minor, a fix counts the suffix up.
   so that a page of them reads those rows only, not the whole log:
   11 s at 90,000 events on a Raspberry Pi 1 before (`docs/store.md`).
 
+- Benchmarks of the log's writer and pages in `internal/store`, also on
+  a copy of a box's store, and `make store-bench` builds them for the
+  Raspberry Pis (`docs/store.md`, "Measuring on a box").
+
 - The log shows the server's start, stop, restart, reload, reboot,
   update, backups and prunes, and a Cube's new address or its leaving
   the LAN (`docs/ui.md`, "Log").
