@@ -1704,7 +1704,7 @@ paths:
                     level: {type: string, enum: [debug, info, warn, error]}
                     by:
                       type: object
-                      description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and the bootstrap token
+                      description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and a server without users
                       properties:
                         name: {type: string}
                         display_name: {type: string}

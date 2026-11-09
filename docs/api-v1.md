@@ -1742,7 +1742,8 @@ in every Cube's log.
 Each event says its `source` and its `level`,
 and `by` names who started it, as the user is named now
 (`{"name": "anna", "display_name": "Anna"}`):
-absent for the Cube, the server's own jobs and the bootstrap token.
+absent for the Cube, the server's own jobs and a server without users;
+the bootstrap token is a key of the first owner, whom it names, as the audit does.
 A client pages back with `before` set to the `id` of the oldest event it has,
 until a page is empty: the events of a burst share a millisecond,
 so a time does not page them without gaps or repeats.

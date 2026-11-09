@@ -416,7 +416,8 @@ type event struct {
 	// stream's events and the ring's have none.
 	ID int64 `json:"id,omitempty"`
 	// By is who started what the event says, as the users table names
-	// them now; absent for the Cube, the server and the bootstrap token.
+	// them now; absent for the Cube, the server's own jobs and a server
+	// without users (the bootstrap token is a key of the first owner).
 	By *eventUser `json:"by,omitempty"`
 	// userID is By's row in the store, kept in events.user_id.
 	userID int64
