@@ -23,14 +23,16 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
 apt-get -qq install -y "$deb" >/dev/null
 
-getent passwd massimo >/dev/null || fail "no user massimo"
-getent group massimo >/dev/null || fail "no group massimo"
-[ "$(stat -c %a:%U:%G /etc/massimo)" = 750:massimo:massimo ] || fail "/etc/massimo is $(stat -c %a:%U:%G /etc/massimo)"
-[ "$(stat -c %a:%U:%G /etc/massimo/env)" = 600:massimo:massimo ] || fail "/etc/massimo/env is $(stat -c %a:%U:%G /etc/massimo/env)"
+getent passwd _massimo >/dev/null || fail "no user _massimo"
+getent group _massimo >/dev/null || fail "no group _massimo"
+if getent passwd massimo >/dev/null; then fail "a user massimo beside _massimo"; fi
+[ "$(stat -c %a:%U:%G /etc/massimo)" = 750:_massimo:_massimo ] || fail "/etc/massimo is $(stat -c %a:%U:%G /etc/massimo)"
+[ "$(stat -c %a:%U:%G /etc/massimo/env)" = 600:_massimo:_massimo ] || fail "/etc/massimo/env is $(stat -c %a:%U:%G /etc/massimo/env)"
 cmp -s /etc/massimo/env /usr/share/massimo/env.template || fail "/etc/massimo/env is not the template"
-[ "$(stat -c %a:%U:%G /var/lib/massimo)" = 750:massimo:massimo ] || fail "/var/lib/massimo is $(stat -c %a:%U:%G /var/lib/massimo)"
+[ "$(stat -c %a:%U:%G /var/lib/massimo)" = 750:_massimo:_massimo ] || fail "/var/lib/massimo is $(stat -c %a:%U:%G /var/lib/massimo)"
 unit=/usr/lib/systemd/system/massimo.service
 grep -q '^ExecStart=/usr/bin/massimo ' "$unit" || fail "the unit does not run /usr/bin/massimo"
+grep -q '^StateDirectoryMode=0750$' "$unit" || fail "the unit leaves the state directory to systemd's 0755"
 grep '^ExecStart=' "$unit" | grep -q -- ' -update-request /var/lib/massimo/update-request' ||
 	fail "the unit lacks -update-request for the update helper"
 [ -L /etc/systemd/system/multi-user.target.wants/massimo.service ] || fail "the unit is not enabled"
@@ -75,6 +77,7 @@ mkdir -p /run/systemd/system
 for cmd in systemctl deb-systemd-invoke; do
 	printf '%s\n' '#!/bin/sh' \
 		"echo \"$cmd \$*\" >>/tmp/calls" \
+		'[ "$1" = stop ] && echo inactive >/tmp/state' \
 		'[ "$1" = is-active ] || exit 0' \
 		'state=$(cat /tmp/state 2>/dev/null || echo inactive)' \
 		'echo "$state"' \
@@ -93,7 +96,8 @@ restarted() { grep -q '^deb-systemd-invoke restart massimo.service$' /tmp/calls;
 # Never ran on the template: left for the owner, who is told how.
 reinstall inactive
 if restarted; then fail "started on the template: $(cat /tmp/calls)"; fi
-grep -q 'user add <name> -role owner' /tmp/out || fail "the message does not name user add: $(cat /tmp/out)"
+grep -q -F 'sudo -u _massimo /usr/bin/massimo -env /etc/massimo/env -data /var/lib/massimo user add <name> -role owner' /tmp/out ||
+	fail "the message does not name the owner line: $(cat /tmp/out)"
 grep -q 'sudo systemctl start massimo' /tmp/out || fail "the message does not name the start: $(cat /tmp/out)"
 # Started by its owner on the template and set up through the web UI:
 # restarted with the new binary, and no message.
@@ -114,6 +118,16 @@ echo 'MASSIMO_ANNOUNCE=off' >>/etc/massimo/env
 reinstall inactive
 restarted || fail "filled-in settings were not started: $(cat /tmp/calls)"
 cp /tmp/env /etc/massimo/env
+# An older package's account massimo with the service running: stopped
+# before the rename, which usermod refuses while a process runs as it,
+# and restarted after.
+usermod -l massimo _massimo && groupmod -n massimo _massimo
+uid=$(id -u massimo)
+reinstall active
+[ "$(id -u _massimo 2>/dev/null)" = "$uid" ] || fail "massimo was not renamed: $(cat /tmp/out)"
+grep -n -e '^deb-systemd-invoke stop massimo.service$' -e '^deb-systemd-invoke restart massimo.service$' /tmp/calls |
+	cut -d: -f2 | tr '\n' ' ' | grep -q '^deb-systemd-invoke stop massimo.service deb-systemd-invoke restart massimo.service $' ||
+	fail "not stopped before the rename and restarted after: $(cat /tmp/calls)"
 rm -r /run/systemd/system /usr/local/sbin/systemctl /usr/local/sbin/deb-systemd-invoke
 
 # The settings survive a reinstall and an upgrade.
@@ -135,7 +149,7 @@ mkdir -p /var/lib/massimo-update
 echo '{}' >/var/lib/massimo-update/status.json
 
 apt-get -qq purge -y massimo >/dev/null
-if getent passwd massimo >/dev/null; then fail "the user is left after purge"; fi
+if getent passwd _massimo >/dev/null; then fail "the user is left after purge"; fi
 [ ! -e /etc/massimo ] || fail "/etc/massimo is left after purge"
 [ ! -e /var/lib/massimo ] || fail "/var/lib/massimo is left after purge"
 [ ! -e /usr/share/massimo ] || fail "/usr/share/massimo is left after purge"
@@ -151,4 +165,33 @@ touch /etc/systemd/system/massimo.service
 if apt-get -qq install -y "$deb" >/tmp/out 2>&1; then fail "installed over a hand install"; fi
 grep -q 'massimo install -remove' /tmp/out || fail "the guard's message: $(cat /tmp/out)"
 rm /etc/systemd/system/massimo.service
+
+# An older package's account massimo, made as it made it, with a store
+# file of its own: renamed in place, its ID and the file's owner kept.
+adduser --system --group --home /var/lib/massimo --no-create-home \
+	--shell /usr/sbin/nologin --quiet massimo
+uid=$(id -u massimo)
+install -d -m 0750 -o massimo -g massimo /var/lib/massimo
+install -m 0600 -o massimo -g massimo /dev/null /var/lib/massimo/massimo.db
+apt-get -qq install -y "$deb" >/dev/null
+[ "$(id -u _massimo 2>/dev/null)" = "$uid" ] || fail "massimo was not renamed in place: $(getent passwd _massimo)"
+if getent passwd massimo >/dev/null; then fail "massimo is left beside _massimo"; fi
+if getent group massimo >/dev/null; then fail "the group massimo is left beside _massimo"; fi
+[ "$(stat -c %U:%G /var/lib/massimo/massimo.db)" = _massimo:_massimo ] ||
+	fail "the store is $(stat -c %U:%G /var/lib/massimo/massimo.db)'s"
+apt-get -qq purge -y massimo >/dev/null
+if getent passwd _massimo >/dev/null; then fail "the renamed user is left after purge"; fi
+
+# A person called massimo: left alone beside _massimo, and kept by the
+# purge.
+useradd -m -c 'Massimo Rossi' -s /bin/bash massimo
+person=$(getent passwd massimo)
+apt-get -qq install -y "$deb" >/dev/null
+[ "$(getent passwd massimo)" = "$person" ] || fail "the person's account changed: $(getent passwd massimo)"
+getent passwd _massimo >/dev/null || fail "no _massimo beside the person"
+[ "$(stat -c %U:%G /etc/massimo/env)" = _massimo:_massimo ] || fail "/etc/massimo/env is $(stat -c %U:%G /etc/massimo/env)'s"
+apt-get -qq purge -y massimo >/dev/null
+[ "$(getent passwd massimo)" = "$person" ] || fail "the purge took the person's account"
+if getent passwd _massimo >/dev/null; then fail "_massimo is left after purge"; fi
+userdel -r massimo 2>/dev/null || true
 echo "deb test: ok"

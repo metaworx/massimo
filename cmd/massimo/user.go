@@ -56,7 +56,7 @@ an RFC 3339 time, the end of a guest. -password-stdin reads the password
 from the first line of standard input, for scripts.
 The data directory is -data, else MASSIMO_DATA, else the current directory;
 for the service run it as its user, for example
-  sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator
+  sudo -u _massimo massimo -data /var/lib/massimo user add anna -role operator
 `)
 }
 

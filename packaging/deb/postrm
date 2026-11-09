@@ -19,11 +19,17 @@ purge)
 		deb-systemd-helper unmask massimo.service massimo-update.path massimo-reboot.path >/dev/null || true
 	fi
 	rm -rf /etc/massimo /var/lib/massimo /var/lib/massimo-update /var/log/massimo
-	if getent passwd massimo >/dev/null; then
-		deluser --system --quiet massimo || true
+	if getent passwd _massimo >/dev/null; then
+		deluser --system --quiet _massimo || true
 	fi
-	if getent group massimo >/dev/null; then
-		delgroup --system --quiet massimo || true
+	if getent group _massimo >/dev/null; then
+		delgroup --system --quiet _massimo || true
+	fi
+	# An older package's account massimo, where nothing renamed it since;
+	# a person's massimo, whose home is elsewhere, stays.
+	if [ "$(getent passwd massimo | cut -d: -f6)" = /var/lib/massimo ]; then
+		deluser --system --quiet massimo || true
+		delgroup --system --quiet massimo 2>/dev/null || true
 	fi
 	;;
 esac
