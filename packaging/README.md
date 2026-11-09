@@ -626,7 +626,7 @@ installer passes with `-data`:
 
 | Where | Data directory | Who |
 |---|---|---|
-| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, 0750) | user `_massimo` |
+| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, `StateDirectoryMode=0750`) | user `_massimo` |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` |
 | Windows service | `C:\ProgramData\Massimo` (SYSTEM and Administrators only) | LocalSystem |
 | Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |

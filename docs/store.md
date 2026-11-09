@@ -184,7 +184,7 @@ with until its first clean stop.
 
 | Where | Data directory | Who | Mode |
 |---|---|---|---|
-| Linux service (`massimo install`) | `/var/lib/massimo` | user `_massimo` | directory 0750 (`StateDirectory=massimo`), file 0600 |
+| Linux service (`massimo install`) | `/var/lib/massimo` | user `_massimo` | directory 0750 (`StateDirectory=massimo`, `StateDirectoryMode=0750`), file 0600 |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` | directory 0750 (`install.StateDir`), file 0600 |
 | Windows service | `C:\ProgramData\Massimo` | LocalSystem | the directory's ACL: SYSTEM and Administrators only (`winSettings`) |
 | Terminal run | the current directory, or `-data <dir>` | the user | file 0600 |

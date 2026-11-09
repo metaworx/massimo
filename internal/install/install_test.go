@@ -80,6 +80,14 @@ func TestInstallFresh(t *testing.T) {
 	if !strings.Contains(unit, " -data /var/lib/massimo serve ") || !strings.Contains(unit, "StateDirectory=massimo") {
 		t.Fatal("massimo.service does not pass -data /var/lib/massimo")
 	}
+	// systemd sets the state directory's mode at every start: 0755 unless
+	// the unit says otherwise.
+	if !strings.Contains(unit, "\nStateDirectoryMode=0750\n") {
+		t.Fatal("massimo.service leaves /var/lib/massimo at systemd's 0755")
+	}
+	if !strings.Contains(unit, "\nUser=_massimo\nGroup=_massimo\n") {
+		t.Fatal("massimo.service does not run as _massimo")
+	}
 	for _, f := range []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", LogrotateDir + "/massimo"} {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
 			t.Error(err)

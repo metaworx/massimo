@@ -32,6 +32,7 @@ cmp -s /etc/massimo/env /usr/share/massimo/env.template || fail "/etc/massimo/en
 [ "$(stat -c %a:%U:%G /var/lib/massimo)" = 750:_massimo:_massimo ] || fail "/var/lib/massimo is $(stat -c %a:%U:%G /var/lib/massimo)"
 unit=/usr/lib/systemd/system/massimo.service
 grep -q '^ExecStart=/usr/bin/massimo ' "$unit" || fail "the unit does not run /usr/bin/massimo"
+grep -q '^StateDirectoryMode=0750$' "$unit" || fail "the unit leaves the state directory to systemd's 0755"
 grep '^ExecStart=' "$unit" | grep -q -- ' -update-request /var/lib/massimo/update-request' ||
 	fail "the unit lacks -update-request for the update helper"
 [ -L /etc/systemd/system/multi-user.target.wants/massimo.service ] || fail "the unit is not enabled"

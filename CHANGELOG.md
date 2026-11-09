@@ -157,6 +157,10 @@ the next minor, a fix counts the suffix up.
   and `massimo install` rename their own `massimo` in place, and never
   take over or purge a person's `massimo` (`packaging/README.md`).
 
+- `/var/lib/massimo`, the store, stays 0750 when the service starts;
+  systemd made it 0755 at every start, so that every user of the box saw
+  the names of its files (`packaging/README.md`).
+
 - The web UI shows no self-signed certificate's fingerprint, which a man
   in the middle passes along; its notice, also in the sign-in dialog,
   asks to compare the browser's with `massimo tls show` (`docs/ui.md`).

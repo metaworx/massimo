@@ -33,7 +33,10 @@ SuccessExitStatus=75
 # applied at once, and the store checkpointed.
 ExecReload=/bin/kill -HUP $MAINPID
 WorkingDirectory=/var/lib/massimo
+# The store: 0750, set at every start, also on a directory that exists;
+# systemd's default is 0755.
 StateDirectory=massimo
+StateDirectoryMode=0750
 LogsDirectory=massimo
 
 NoNewPrivileges=yes
