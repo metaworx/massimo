@@ -50,6 +50,9 @@ the next minor, a fix counts the suffix up.
   fingerprint of a self-signed certificate, the biometric and
   notification switches; a browser sees it as the app's (`docs/app.md`).
 
+- `serve -discover-listen <addr>` puts the discovery socket on another
+  address than UDP 23272, for tests with a fake Cube (`README.md`).
+
 ### Changed
 
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,

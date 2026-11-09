@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/announce"
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -295,5 +296,67 @@ func TestRunUnannouncedWarns(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), `msg="not announced on the LAN" reason="no store (-addr), so no node"`) {
 		t.Fatalf("log:\n%s", log.String())
+	}
+}
+
+// postDiscover asks for a search and gives the answer's status and found
+// Cubes' serials.
+func postDiscover(t *testing.T, base string) (int, []string) {
+	t.Helper()
+	resp, err := http.Post(base+"/api/v1/cubes/discover", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Found []struct {
+			Serial string `json:"serial"`
+		} `json:"found"`
+	}
+	if resp.StatusCode == http.StatusOK {
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var serials []string
+	for _, f := range out.Found {
+		serials = append(serials, f.Serial)
+	}
+	return resp.StatusCode, serials
+}
+
+// Config.DiscoveryListen is the discovery socket's address: held by
+// another socket, a search answers 503 however free UDP 23272 is; once
+// it is free, the search finds the fake Cube that DiscoveryTargets asks,
+// which answers to that address.
+func TestOpenDiscoveryListen(t *testing.T) {
+	clearCubeEnv(t)
+	held, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	responder, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer responder.Close()
+	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", Addr: startFakeCube(t), DataDir: t.TempDir(), Proxies: []string{"off"},
+		RefreshInterval: &never, DiscoverInterval: &never, DiscoveryTargets: []string{responder.Addr()}, DiscoveryListen: held.LocalAddr().String(),
+		Logger: quietLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	base := "http://" + inst.Addr()
+	if code, found := postDiscover(t, base); code != http.StatusServiceUnavailable {
+		t.Fatalf("a search with the address held: %d %v, want 503", code, found)
+	}
+	held.Close()
+	if code, found := postDiscover(t, base); code != http.StatusOK || len(found) != 1 || found[0] != "KEQ0000000" {
+		t.Fatalf("a search with the address free: %d %v", code, found)
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
 	}
 }

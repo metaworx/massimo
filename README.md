@@ -867,7 +867,9 @@ the plain `MASSIMO_CUBE_ADDRESS` is that Cube's when `MASSIMO_CUBE_SN` names it,
 as for the other commands.
 `serve` runs discovery at the start and every 30 minutes (`-discover-interval`,
 `0` for only on request through the API,
-`-discover-target <host>` to ask given addresses instead of broadcasting),
+`-discover-target <host>` to ask given addresses instead of broadcasting,
+`-discover-listen <addr>` for a socket on another address than UDP 23272,
+which only a test's fake Cube answers to),
 lists Cubes it finds that are not configured in the API (`GET /api/v1/cubes`
 with `"configured": false`),
 keeps them in the store so that they are still listed after a restart,

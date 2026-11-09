@@ -82,6 +82,11 @@ type Config struct {
 	// DiscoveryTargets are sent the discovery requests instead of the
 	// broadcast, each host:port.
 	DiscoveryTargets []string
+	// DiscoveryListen is the local address of the discovery socket, for
+	// the searches and the proxy's answers, instead of UDP 23272, the
+	// only port the Cubes answer to and the original software asks; for
+	// tests, with DiscoveryTargets.
+	DiscoveryListen string
 	// TLS is the certificate source of the listener; the zero value
 	// serves plain HTTP.
 	TLS TLS
@@ -194,7 +199,7 @@ func open(ctx context.Context, cfg Config, log *slog.Logger, src certs.Source, s
 	if err != nil {
 		return nil, err
 	}
-	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, Logger: log, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
+	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: log, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot})
 	ln, err := net.Listen("tcp", cfg.Listen)
