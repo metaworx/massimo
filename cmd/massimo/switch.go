@@ -4,6 +4,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"strings"
 )
@@ -21,8 +22,33 @@ func parseSwitch(name, v string) (bool, error) {
 	return false, fmt.Errorf("%s %q: want on or off", name, v)
 }
 
-// switchHelp is how a switch's help says what it takes.
-const switchHelp = "on or off: also true or false, yes or no, 1 or 0, enabled or disabled, in any case"
+// switchHelp is how a switch's help says what it takes: the flag alone
+// is on, and a value follows its "=", since "-name off" would end the
+// flags at "off".
+func switchHelp(name string) string {
+	return "on or off: also true or false, yes or no, 1 or 0, enabled or disabled, in any case; -" + name + " alone is on, a value goes after =, as -" + name + "=off"
+}
+
+// strayHint is what an argument flag parsing stopped at needs, where it
+// is a switch's value given after a space: "-announce off" sets the
+// switch on and leaves "off", and every flag after it, unread.
+func strayHint(fs *flag.FlagSet, args []string, stray string) string {
+	if _, err := parseSwitch("", stray); err != nil || strings.TrimSpace(stray) == "" {
+		return ""
+	}
+	for i := 1; i < len(args); i++ {
+		if args[i] != stray {
+			continue
+		}
+		name := strings.TrimLeft(args[i-1], "-")
+		if f := fs.Lookup(name); f != nil {
+			if _, ok := f.Value.(*switchFlag); ok {
+				return fmt.Sprintf(": write -%s=%s, a switch takes its value after =", name, stray)
+			}
+		}
+	}
+	return ""
+}
 
 // switchFlag is an on/off flag read by parseSwitch; given alone, as
 // -name, it is on. set says whether the flag or its variable set it.
