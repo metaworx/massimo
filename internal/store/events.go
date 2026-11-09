@@ -63,6 +63,10 @@ const (
 	LevelError = 8
 )
 
+// warnTerm is the WHERE of migration 0011's index of the warnings and
+// errors, events_cube_warn, as a page's query writes it (eventsQuery).
+var warnTerm = fmt.Sprintf("level >= %d", LevelWarn)
+
 // LevelName is a level's name as MASSIMO_LOG_LEVEL and the API write it.
 func LevelName(level int) string {
 	switch {
@@ -592,6 +596,11 @@ func (s *Store) eventsWalk(ctx context.Context, q EventQuery, cube int64, limit 
 // first, the newest id before that time or the oldest at or after it,
 // and stays a filter without its index (+time), which keeps the id
 // order; the level is such a filter always, a range having no index.
+// A page at warn or above adds the literal level >= 4, the WHERE of the
+// partial index of the warnings and errors (migration 0011): SQLite
+// takes a partial index only for terms that imply its WHERE, and cannot
+// tell that of a bound value. The page then reads those rows alone
+// instead of every row of the Cube.
 func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 	where, args := []string{cubeTerm(cube)}, cubeArgs(cube)
 	if q.BeforeID > 0 {
@@ -623,6 +632,9 @@ func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 		where, args = append(where, "user_id = ?"), append(args, q.UserID)
 	}
 	if q.MinLevel != nil {
+		if *q.MinLevel >= LevelWarn {
+			where = append(where, warnTerm)
+		}
 		where, args = append(where, "+level >= ?"), append(args, *q.MinLevel)
 	}
 	return `SELECT id, cube_id, time, kind, source, level, device, serial, user_id, data FROM events WHERE ` + strings.Join(where, " AND ") +

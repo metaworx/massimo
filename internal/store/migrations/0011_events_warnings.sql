@@ -1,0 +1,18 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+-- Copyright (C) 2026 The Massimo Authors
+--
+-- min_reader: 1
+--
+-- The log's warnings and errors (AP Logging v1.2, Block 8;
+-- docs/store.md section 5): an index of those rows only, each Cube's in
+-- id order, since SQLite keeps the rowid last in an index, and the
+-- server's under cube_id IS NULL. A page of warnings reads them alone,
+-- newest first; without it, a Cube with fewer than a page of warnings
+-- had every one of its rows read, 11 s at 90,000 events on a Raspberry
+-- Pi 1 with the store's one connection held. SQLite uses the index for a
+-- query whose terms imply its WHERE, so a page at warn or above carries
+-- the literal level >= 4 (eventsQuery). Any other row costs the insert
+-- the check of the WHERE alone. Additive: a binary built for an earlier
+-- version writes and reads as before, and SQLite keeps the index up to
+-- date for its rows too.
+CREATE INDEX events_cube_warn ON events (cube_id) WHERE level >= 4;
