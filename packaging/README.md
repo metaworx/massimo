@@ -132,6 +132,9 @@ An account `massimo` that an older release made, with the home
 `/var/lib/massimo`, is renamed `_massimo` in place:
 it keeps its ID, so its files and a running service follow.
 Any other `massimo` is a person's, and is left alone, also by `-remove -purge`.
+Where an older release ran the service as such a person's account,
+its files are still that person's, which `_massimo` cannot read:
+`install` says so and names the `chown -R` that hands them to the service.
 It starts the service when the settings set more than the template does
 (its comments and blank lines aside),
 and restarts it when it runs;
@@ -324,6 +327,10 @@ and enable the service.
 The account `massimo` of an older package is renamed `_massimo` in place,
 keeping its ID, so its files and a running service follow;
 a person's `massimo` is left alone, also by a purge.
+Where an older package ran the service as a person's `massimo`,
+the files are still that person's, and the service cannot read them;
+the package says so and names
+`sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo`.
 A script of your own that names `massimo`, such as a certbot deploy hook,
 needs the new name.
 They start it only when the settings set more than the template does

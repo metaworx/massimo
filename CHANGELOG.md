@@ -160,9 +160,9 @@ the next minor, a fix counts the suffix up.
 
 ### Security
 
-- The service runs as `_massimo` on Linux too, as on macOS: the package
-  and `massimo install` rename their own `massimo` in place, and never
-  take over or purge a person's `massimo` (`packaging/README.md`).
+- On Linux the service runs as `_massimo`, as on macOS: the package and
+  `massimo install` rename their own `massimo`, spare a person's, and
+  name the `chown` after an older takeover (`packaging/README.md`).
 
 - `/var/lib/massimo`, the store, stays 0750 when the service starts;
   systemd made it 0755 at every start, so that every user of the box saw
