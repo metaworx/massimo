@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   `-tls acme`, such as Let's Encrypt's staging one for a first try
   (`packaging/README.md`, "Install with `massimo install`").
 
+- `internal/store/migrations/store.sql` is the store's complete schema,
+  made from the migrations beside it and checked by `go test`
+  (`docs/store.md`, "Migrations").
+
 - `serve` announces itself on the LAN by mDNS as `_massimo._tcp`
   (`-announce`, `MASSIMO_ANNOUNCE`); `massimo discover` lists the servers
   and marks a proxy among the Cubes (`README.md`, "Server").
@@ -57,6 +61,10 @@ the next minor, a fix counts the suffix up.
 - A search, and the periodic discovery, list only the Cubes that
   answered it: one that no longer answers leaves the Cube choice and
   System settings → Cubes (`docs/api-v1.md`, "GET /api/v1/cubes").
+
+- The log names a device by its S/N, with the radio address in expert
+  mode, and a removed one by its type, S/N and name as it was; device
+  routes take the S/N too (`docs/api-v1.md`, "Identifiers").
 
 ## [0.12.0-alpha.1] - 2026-11-08
 

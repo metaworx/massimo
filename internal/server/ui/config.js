@@ -342,7 +342,7 @@ async function sendRoomConfig(room, c, fields, label) {
 function deviceResults(label, res) {
   const lines = [t(res && res.ok ? "result.ok" : "cfg.notAll", { label })];
   for (const d of (res && res.devices) || []) {
-    const name = d.name || d.rf_address;
+    const name = deviceName(d);
     if (d.ok) lines.push(t("cfg.devOk", { name }));
     else if (d.discarded) lines.push(t("cfg.devDiscarded", { name }));
     else lines.push(t("cfg.devFailed", { name, error: d.error || t("cfg.failed") }));
@@ -392,7 +392,7 @@ function renderDeviceForm(room, c, d) {
   const form = configForm(room, c, key, () => sendDevice(room, c, d));
   form.className += " cfg-device";
   form.appendChild(elem("div", "device-main",
-    textEl("span", d.name || d.rf_address, "device-name"),
+    textEl("span", deviceName(d), "device-name"),
     textEl("span", typeName(d.type), "muted expert-only"),
     elem("span", "muted expert-only", deviceIds(d.serial, d.rf_address))));
   const name = document.createElement("input");
@@ -425,7 +425,7 @@ function renderDeviceForm(room, c, d) {
   form.appendChild(roomRow);
   if (e.confirmMove) {
     const target = state.rooms.find((r) => r.id === e.room_id);
-    const text = t("cfg.moveConfirm", { device: d.name || d.rf_address, room: target ? target.name : e.room_id });
+    const text = t("cfg.moveConfirm", { device: deviceName(d), room: target ? target.name : e.room_id });
     form.appendChild(confirmBox(text, { yes: t("cfg.move"), no: t("action.keep") }, () => {
       e.confirmMove = false;
       return configWrite(room, c, key, () => sendDevice(room, c, d, true));
@@ -435,7 +435,7 @@ function renderDeviceForm(room, c, d) {
       rerenderRoom(room);
     }));
   }
-  const label = d.name || d.rf_address;
+  const label = deviceName(d);
   const remove = button(t("device.remove"), { cls: "needs-structure remove-device", aria: t("device.removeLabel", { device: label }) }, () => {
     e.confirmRemove = true;
     rerenderRoom(room);
@@ -460,7 +460,7 @@ function renderDeviceForm(room, c, d) {
 // removeDeviceOfRoom removes a device of the room from the Cube
 // (removeFromCube, tiles.js) and shows the Devices tab again without it.
 async function removeDeviceOfRoom(room, c, d) {
-  setConfigResult(room, c, t("device.removing", { device: d.name || d.rf_address }), true);
+  setConfigResult(room, c, t("device.removing", { device: deviceName(d) }), true);
   const res = await removeFromCube(d);
   const again = state.rooms.find((r) => r.id === room.id);
   if (!again || !configUI(again)) {
@@ -495,7 +495,7 @@ function deviceChanges(room, c, d) {
 // another room is asked first.
 async function sendDevice(room, c, d, moveConfirmed) {
   const e = c.edit.devices[d.rf_address];
-  const label = d.name || d.rf_address;
+  const label = deviceName(d);
   const { meta, cfg, loaded } = deviceChanges(room, c, d);
   if (meta.name !== undefined && byteLength(meta.name) > NAME_BYTES) return setConfigResult(room, c, t("cfg.devNameTooLong", { name: label, n: NAME_BYTES }), false);
   if (meta.room_id !== undefined) {
@@ -512,7 +512,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
   let ok = true;
   try {
     if (Object.keys(cfg).length) {
-      const res = await api("PUT", base() + "/devices/" + d.rf_address + "/config", cfg);
+      const res = await api("PUT", devicePath(d) + "/config", cfg);
       lines.push(resultText(t("cfg.devSettings", { name: label }), res));
       if (res && res.discarded) ok = false;
       loaded.temp_offset = cfg.temp_offset !== undefined ? cfg.temp_offset : loaded.temp_offset;
@@ -520,7 +520,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
       state.details = {};
     }
     if (Object.keys(meta).length) {
-      const res = await api("PUT", base() + "/devices/" + d.rf_address, meta);
+      const res = await api("PUT", devicePath(d), meta);
       const done = t(meta.room_id !== undefined ? "cfg.devMoved" : "cfg.devRenamed", { name: label });
       lines.push(res && res.budget ? t("cfg.dutySuffix", { text: done, duty: res.budget.duty_cycle_pct }) : done);
     }

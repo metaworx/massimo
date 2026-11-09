@@ -99,7 +99,7 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
-  as in `#log?range=today&kind=state&device=0a0101` (see Log).
+  as in `#log?range=today&kind=state&device=MEQ0000101` (see Log).
   A page the role may not open shows Rooms instead.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
@@ -165,6 +165,8 @@ Every room has a tile:
   Expert mode adds each device's type, serial number and radio address,
   as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
   the radio address is not.
+  A device without a name is shown by its serial number, here and on every
+  page, and the page asks the server for a device by its serial.
   Valve, measured temperature, window and a low battery show how old they are;
   in expert mode also the exact time, and when the device was last heard from.
   A device that has not been heard from for more than 24 hours has a "Not seen
@@ -234,6 +236,11 @@ configuration and name changes, connections to the Cube, pairing,
 restores and errors.
 A lost connection is one line, however often the server tries again
 until the Cube is back.
+A line names its device by name, else by serial number,
+with the radio address after it in expert mode only;
+the Cube's own configuration reads "Cube KEQ0000000".
+A removed device reads "Removed radiator thermostat MEQ0000101 (Window)",
+with its name as it was.
 A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
@@ -260,7 +267,8 @@ The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
 The two choices in the head show one kind of event (all kinds by default)
-and one device (all devices); the server answers what matches,
+and one device (all devices), listed by name and serial number;
+the server answers what matches,
 and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, device, text).
 **Clear** sets the filter, the kind and the device back to all
@@ -268,7 +276,8 @@ and loads the log again, the range staying; it is off while none of them is set.
 The range, the kind and the device are in the address after `#log`,
 each left out at its default:
 `range=` one of `10m`, `1h`, `today`, `week`, `month` and `all`,
-`kind=` an event's kind and `device=` a radio address,
+`kind=` an event's kind and `device=` a device's serial number
+(a link's radio address takes the serial once the devices are loaded),
 so that a reload, a bookmark or a link opens the log with them,
 and the log's button opens it with the choices it had.
 A choice changes the address in place, so back still leaves the log.

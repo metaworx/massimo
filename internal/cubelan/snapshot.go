@@ -4,6 +4,7 @@
 package cubelan
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,11 @@ type Snapshot struct {
 	// forgotten are the devices Forget dropped: an L line does not bring
 	// one back, a C line for it or a new greeting does.
 	forgotten map[cube.RFAddress]bool
+	// delisted holds the last entry of a device an M line left out of
+	// the room and device list, until Forget takes it or a list names
+	// the device again: a removal writes the list without the device
+	// before the device is forgotten, and its event still names it.
+	delisted map[cube.RFAddress]cube.DeviceMeta
 }
 
 func newSnapshot() *Snapshot {
@@ -63,6 +69,19 @@ type Event struct {
 	Device cube.RFAddress  // for device events
 	Err    error           // for EventDisconnected
 	New    *cube.NewDevice // for EventPaired
+	Gone   *Gone           // for EventForgotten: the device as the snapshot knew it
+}
+
+// Gone is what the snapshot knew of a device it dropped (Forget): its
+// entry in the room and device list, or, for a device the list did not
+// hold, its configuration's type, serial and room. The event of a
+// forgotten device carries it, since the device is no longer there to
+// look up.
+type Gone struct {
+	Type   cube.DeviceType
+	Serial string
+	Name   string
+	RoomID uint8
 }
 
 // EventKind enumerates Event types.
@@ -179,6 +198,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		if err != nil {
 			return nil, err
 		}
+		s.noteDelistedLocked(md)
 		s.metadata = md
 		return []Event{{Kind: EventMetadata}}, nil
 	case 'C':
@@ -232,6 +252,28 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 
 func sameState(a, b cube.DeviceState) bool { return string(a.Raw) == string(b.Raw) }
 
+// noteDelistedLocked keeps the entries of the devices the new room and
+// device list md leaves out (delisted), and drops those it names again.
+func (s *Snapshot) noteDelistedLocked(md *cube.Metadata) {
+	listed := map[cube.RFAddress]bool{}
+	for _, d := range md.Devices {
+		listed[d.RFAddress] = true
+		delete(s.delisted, d.RFAddress)
+	}
+	if s.metadata == nil {
+		return
+	}
+	for _, d := range s.metadata.Devices {
+		if listed[d.RFAddress] {
+			continue
+		}
+		if s.delisted == nil {
+			s.delisted = map[cube.RFAddress]cube.DeviceMeta{}
+		}
+		s.delisted[d.RFAddress] = d
+	}
+}
+
 // noteLocked records a device address the first time it is seen.
 func (s *Snapshot) noteLocked(rf cube.RFAddress) {
 	for _, o := range s.order {
@@ -276,6 +318,49 @@ func (s *Snapshot) Config(rf cube.RFAddress) *cube.DeviceConfig {
 	return s.configs[rf]
 }
 
+// Serial returns a device's serial number: its entry in the room and
+// device list, else its configuration's; "" for a device the snapshot
+// does not know.
+func (s *Snapshot) Serial(rf cube.RFAddress) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.metadata != nil {
+		for _, d := range s.metadata.Devices {
+			if d.RFAddress == rf && d.Serial != "" {
+				return d.Serial
+			}
+		}
+	}
+	if c := s.configs[rf]; c != nil {
+		return c.Serial
+	}
+	return ""
+}
+
+// BySerial finds a device by its serial number, in any case: in the
+// room and device list, else among the configurations. The Cube's own
+// configuration is one of them, under the Cube's serial.
+func (s *Snapshot) BySerial(serial string) (cube.RFAddress, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if serial == "" {
+		return 0, false
+	}
+	if s.metadata != nil {
+		for _, d := range s.metadata.Devices {
+			if strings.EqualFold(d.Serial, serial) {
+				return d.RFAddress, true
+			}
+		}
+	}
+	for rf, c := range s.configs {
+		if strings.EqualFold(c.Serial, serial) {
+			return rf, true
+		}
+	}
+	return 0, false
+}
+
 // State returns a device's latest live state.
 func (s *Snapshot) State(rf cube.RFAddress) (cube.DeviceState, bool) {
 	s.mu.RLock()
@@ -311,17 +396,24 @@ func (s *Snapshot) Devices() []cube.RFAddress {
 // software does right after t:. A device the Cube keeps, one that never
 // answers its reset, stays in the Cube's L lines: they do not bring it
 // back, but a C line for it does, and a new greeting brings back
-// whatever the Cube still holds. It reports whether the snapshot knew
-// the device.
-func (s *Snapshot) Forget(rf cube.RFAddress) bool {
+// whatever the Cube still holds. It returns what the snapshot knew of
+// the device, taken before it is dropped, and whether it knew it.
+func (s *Snapshot) Forget(rf cube.RFAddress) (Gone, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.forgotten == nil {
 		s.forgotten = map[cube.RFAddress]bool{}
 	}
 	s.forgotten[rf] = true
-	_, known := s.configs[rf]
-	if _, ok := s.states[rf]; ok {
+	var gone Gone
+	c, known := s.configs[rf]
+	if known {
+		gone = Gone{Type: c.Type, Serial: c.Serial, RoomID: c.RoomID}
+	}
+	if st, ok := s.states[rf]; ok {
+		if !known {
+			gone.Type = st.Type
+		}
 		known = true
 	}
 	delete(s.configs, rf)
@@ -339,11 +431,24 @@ func (s *Snapshot) Forget(rf cube.RFAddress) bool {
 		kept = append(kept, o)
 	}
 	s.order = kept
+	// The list's entry names the device as the UI showed it: the current
+	// list's, else the last one before a list left the device out.
+	named := func(d cube.DeviceMeta) {
+		gone.Type, gone.Name, gone.RoomID = d.Type, d.Name, d.RoomID
+		if d.Serial != "" {
+			gone.Serial = d.Serial
+		}
+	}
+	if d, ok := s.delisted[rf]; ok {
+		named(d)
+		delete(s.delisted, rf)
+	}
 	if md := s.metadata; md != nil {
 		for i, d := range md.Devices {
 			if d.RFAddress != rf {
 				continue
 			}
+			named(d)
 			// A new value: readers hold the old one.
 			cp := *md
 			cp.Devices = append(append([]cube.DeviceMeta(nil), md.Devices[:i]...), md.Devices[i+1:]...)
@@ -352,7 +457,7 @@ func (s *Snapshot) Forget(rf cube.RFAddress) bool {
 			break
 		}
 	}
-	return known
+	return gone, known
 }
 
 // Updated is the time of the last message from the Cube.

@@ -286,10 +286,18 @@ async function apiRaw(method, path, body, contentType) {
   return resp;
 }
 
+// devicePath is the API path of a device of the selected Cube, by its
+// S/N, by its radio address only for a device without one (the API
+// takes either).
+function devicePath(d) {
+  return base() + "/devices/" + encodeURIComponent(d.serial || d.rf_address);
+}
+
 // deviceDetail fetches and caches a device's configuration.
-async function deviceDetail(rf) {
+async function deviceDetail(dev) {
+  const rf = dev.rf_address;
   if (state.details[rf]) return state.details[rf];
-  const d = await api("GET", base() + "/devices/" + rf);
+  const d = await api("GET", devicePath(dev));
   state.details[rf] = d;
   return d;
 }
@@ -386,8 +394,10 @@ function isThermostat(d) {
   return d.type === "radiator_thermostat" || d.type === "radiator_thermostat_plus" || d.type === "wall_thermostat";
 }
 
+// deviceName is how the page names a device: by its name, else its S/N,
+// the radio address only for a device without either.
 function deviceName(d) {
-  return d.name || d.rf_address;
+  return d.name || d.serial || d.rf_address;
 }
 
 // localDateTimeValue formats a Date for a datetime-local input.

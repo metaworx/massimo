@@ -335,6 +335,80 @@ func TestForgetDevice(t *testing.T) {
 	}
 }
 
+// The event of a forgotten device carries what the snapshot knew of it
+// before it was dropped: its type, serial, name and room from the room
+// and device list; and the serial finds the device until then, in any
+// case (AP Logging v1.1, Block 1).
+func TestForgetDeviceCarriesLastView(t *testing.T) {
+	_, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	waitEvent(t, c, EventConnected)
+	const rf cube.RFAddress = 0x0a010d
+	s := c.Snapshot()
+	var want cube.DeviceMeta
+	for _, d := range s.Metadata().Devices {
+		if d.RFAddress == rf {
+			want = d
+		}
+	}
+	if want.Serial == "" || want.Name == "" {
+		t.Fatalf("the greeting's entry for %s: %+v", rf, want)
+	}
+	if got := s.Serial(rf); got != want.Serial {
+		t.Fatalf("Serial(%s) = %q, want %q", rf, got, want.Serial)
+	}
+	if got, ok := s.BySerial(strings.ToLower(want.Serial)); !ok || got != rf {
+		t.Fatalf("BySerial(%q) = %s %v", want.Serial, got, ok)
+	}
+	c.ForgetDevice(rf)
+	e := waitEvent(t, c, EventForgotten)
+	if e.Gone == nil {
+		t.Fatal("no Gone on the event")
+	}
+	if g := *e.Gone; g.Type != want.Type || g.Serial != want.Serial || g.Name != want.Name || g.RoomID != want.RoomID {
+		t.Fatalf("Gone %+v, want the list's %+v", g, want)
+	}
+	if got := s.Serial(rf); got != "" {
+		t.Fatalf("Serial after Forget: %q", got)
+	}
+	if _, ok := s.BySerial(want.Serial); ok {
+		t.Fatal("BySerial finds a forgotten device")
+	}
+
+	// A removal writes the room and device list without the device
+	// first, then forgets it: the event still names it.
+	const other cube.RFAddress = 0x0a010a
+	md := *s.Metadata()
+	var kept []cube.DeviceMeta
+	var was cube.DeviceMeta
+	for _, d := range md.Devices {
+		if d.RFAddress == other {
+			was = d
+			continue
+		}
+		kept = append(kept, d)
+	}
+	md.Devices = kept
+	cmds, err := cube.WriteMetadataCommands(&md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.ApplyMetadataWrite(cmds)
+	for _, d := range s.Metadata().Devices {
+		if d.RFAddress == other {
+			t.Fatal("the list written without the device still names it")
+		}
+	}
+	c.ForgetDevice(other)
+	e = waitEvent(t, c, EventForgotten)
+	if e.Device != other || e.Gone == nil || e.Gone.Name != was.Name || e.Gone.Serial != was.Serial || e.Gone.RoomID != was.RoomID {
+		t.Fatalf("after the list without it: %+v, want %+v", e.Gone, was)
+	}
+}
+
 // Send returns once an L or C reply is in the snapshot, also when the
 // reader is slow to apply it, so that a read right after sees the reply.
 func TestSendReturnsWithTheReplyApplied(t *testing.T) {

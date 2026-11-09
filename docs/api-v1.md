@@ -281,7 +281,13 @@ and it will be removed in a later release.
 
 - `{sn}` is a Cube's serial number, as printed on it (`KEQ0000100`);
   case does not matter.
-- `{rf}` is a device's radio address, six hex digits (`0a0102`).
+- `{rf}` names a device: by its serial number, as printed on it (`MEQ0000101`),
+  case not mattering, or by its radio address, six hex digits (`0a0102`);
+  the two cannot be confused.
+  A serial reaches a device while the Cube has it, and a serial the Cube
+  does not have is `404`.
+  The answers carry both, `serial` and `rf_address`,
+  and the audit names a device by its serial (`device:MEQ0000101`).
 - `{id}` is a room number as the Cube assigns it (1..255).
 
 ## Errors
@@ -731,13 +737,15 @@ An update's `202` hands the work to the helper,
 which reports in `GET /api/v1/update`:
 its command is `acknowledged` with the answer.
 
-`GET /api/v1/commands/{id}` is one command with its steps:
+`GET /api/v1/commands/{id}` is one command with its steps;
+the command names a device by its serial number, as the audit does,
+and a step by its radio address, the radio command's:
 
 ```json
 {
   "id": "01a1b0c2-5a3e-7b1c-9d4e-0f1a2b3c4d5e",
   "action": "device.update",
-  "target": "device:0a010d",
+  "target": "device:MEQ0000106",
   "cube": "KEQ0000000",
   "user": "anna",
   "state": "acknowledged",
@@ -1719,7 +1727,8 @@ or an RFC 3339 time for the events before that time;
 so that a view of the last hour or of today is one request,
 with `before` as the cursor within it;
 `kind` keeps one kind (`state`, `config`, `connected`,
-…) and `device` one radio address.
+…) and `device` one device, by its serial number or its radio address;
+a serial the Cube does not have answers an empty page.
 A client pages back with `before` set to the `id` of the oldest event it has,
 until a page is empty: the events of a burst share a millisecond,
 so a time does not page them without gaps or repeats.
@@ -1764,11 +1773,23 @@ and sends `connected` when the Cube is back),
 `state`, `pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client
-of the proxy, left the server's copy), `cube_found` (with `cube`,
+of the proxy, left the server's copy;
+its `state` is the device as the server knew it,
+with its type, serial, name and room), `cube_found` (with `cube`,
 a Cube that is not configured, see POST /cubes/discover),
 `restore_step` and `restore_done` (with `restore`, the progress of a restore,
 see POST /restore).
 A comment line is sent every 30 seconds to keep the connection alive.
+
+An event of a device carries its radio address as `device` and its serial number
+as `serial`, also before the device has a state and after it is gone,
+and `source`: `device`, or `cube` for the Cube's own configuration,
+whose `config` event carries the Cube's serial:
+
+```
+event: config
+data: {"kind":"config","device":"0a0101","serial":"MEQ0000101","source":"device","time":"…"}
+```
 
 A `state` event that follows an earlier one for the same device also says what changed,
 whoever changed it, the server, another client or someone at the device:

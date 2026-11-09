@@ -305,6 +305,9 @@ the backup of the database holds none, and the store's first version is smaller.
 ## 5. Schema, version 1
 
 As SQLite would take it.
+The listing below is the readable one, and leaves some columns out;
+`internal/store/migrations/store.sql` is the complete schema at the latest version,
+as the migrations leave an empty file ("Migrations", below).
 Times are `TEXT` in RFC 3339 with the `Z` suffix (sortable,
 no time zone surprises on the Pi); JSON documents are `TEXT`;
 booleans are `INTEGER` 0 or 1; identifiers are the rowid.
@@ -538,7 +541,7 @@ Notes on the tables:
   `deleted_at TEXT` and `origin TEXT` (decision 14, taken),
   and the first migration seeds `settings` with `node.id` and `tenant.id`.
   The listing above leaves those columns out so that it stays readable;
-  the migration file has them.
+  the migration file has them, and so does `internal/store/migrations/store.sql`.
 - `roles`, `role_capabilities` and `capabilities_disabled` are the capability
   model of section 6;
   the first migration seeds the six default roles with their sets.
@@ -613,6 +616,25 @@ Rules:
   migrating a file at every earlier version (the test keeps a fixture database
   per released version),
   and opening a newer additive version with an older reader.
+- `store.sql`, beside the migrations, is the schema they make of an empty file,
+  generated, never edited by hand:
+  every table as SQLite keeps its statement (an added column at its end),
+  each followed by its indexes, by name,
+  under the schema version and its `min_reader`.
+  `TestStoreSQL` (`migrate_test.go`) fails, naming the first line that differs,
+  until a new migration writes it again with
+  `go test ./internal/store -run TestStoreSQL -update`;
+  the file goes into the migration's commit,
+  so that its pull request shows the migration's effect as a difference of it.
+  It is for reading: it is no migration,
+  the binary embeds only the numbered files,
+  and a store is made by the migrations alone,
+  which insert rows as well (the roles and capabilities, the node and tenant
+  ids) and are the path every upgrade takes.
+  One file is enough, since git keeps each version's
+  (`git show <tag>:internal/store/migrations/store.sql`).
+  `TestMigrationFilesNamed` holds the directory to the numbered migrations and
+  `store.sql`: a file of another name would be skipped without a word.
 
 ## 6. Users, roles and capabilities
 

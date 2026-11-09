@@ -72,9 +72,9 @@ func (s *Server) visibleRoom(rt *runtime, r *http.Request) (cube.RoomMeta, *cube
 
 // visibleDevice returns a device's configuration, or a 404 error.
 func (s *Server) visibleDevice(rt *runtime, r *http.Request) (cube.RFAddress, *cube.DeviceConfig, error) {
-	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
+	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
-		return 0, nil, fail(http.StatusBadRequest, "%v", err)
+		return 0, nil, err
 	}
 	c := rt.client.Snapshot().Config(rf)
 	if c == nil || rt.hidden()[rf] {
@@ -430,9 +430,9 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rf, err := cube.ParseRFAddress(r.PathValue("rf"))
+	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
-		return fail(http.StatusBadRequest, "%v", err)
+		return err
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()

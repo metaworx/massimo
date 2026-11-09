@@ -1681,7 +1681,7 @@ paths:
         - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
         - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
         - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
-        - {name: device, in: query, description: Only events of this radio address, schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: 0abcde}}
+        - {name: device, in: query, description: "Only events of this device, by its serial number or its radio address; a serial the Cube does not have answers an empty page", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
       responses:
         "200":
           description: Events as the stream sends them, each with its id in the log
@@ -1694,7 +1694,9 @@ paths:
                   properties:
                     id: {type: integer, description: The event's place in the log; absent for a Cube without a row in the store}
                     kind: {type: string}
-                    device: {type: string}
+                    device: {type: string, description: The device's radio address}
+                    serial: {type: string, description: "The device's serial number, also before it has a state and after it is gone; the Cube's for its own configuration"}
+                    source: {type: string, enum: [device, cube], description: "Whose a device's event is: the device's, or the Cube's own configuration"}
                     time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1712,12 +1714,15 @@ paths:
         hello, metadata, config, state, pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
         device_forgotten (a device deleted from the Cube left the server's
-        copy), cube_found (with a Cube that is not configured in "cube"),
+        copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),
         restore_step and restore_done (with the progress of a restore in
         "restore", see POST …/restore). A state
         event after a device's first one has "changes": per changed value
         of state, {"from": …, "to": …} (null for a value the device did not
-        have), and "reported" when the Cube gained or lost its state. A comment line
+        have), and "reported" when the Cube gained or lost its state. A
+        device's event carries its radio address in "device", its serial
+        number in "serial" and "source": device, or cube for the Cube's own
+        configuration. A comment line
         every 30 seconds keeps the stream alive. Browsers open it
         without headers: pass a ticket from POST …/events/ticket.
       security:
@@ -2136,8 +2141,8 @@ components:
       name: rf
       in: path
       required: true
-      description: Device radio address, six hex digits
-      schema: {type: string, pattern: "^[0-9a-fA-F]{6}$", example: "0a0102"}
+      description: "The device: its serial number, case-insensitive, or its radio address, six hex digits; a serial the Cube does not have is 404"
+      schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: "MEQ0000101"}
     id:
       name: id
       in: path

@@ -10,7 +10,9 @@ package store
 // migration that keeps the previous min_reader is additive; one that
 // raises it changes a meaning, and the store copies the file to
 // massimo.db.before-<version> before applying it, so that an older
-// binary has a file it can open after a rollback.
+// binary has a file it can open after a rollback. Only the numbered
+// files are embedded: migrations/store.sql beside them is the schema
+// they make, generated for reading (migrate_test.go, TestStoreSQL).
 
 import (
 	"context"
@@ -25,7 +27,7 @@ import (
 	"strconv"
 )
 
-//go:embed migrations/*.sql
+//go:embed migrations/[0-9]*.sql
 var embedded embed.FS
 
 // migration is one numbered SQL file.
