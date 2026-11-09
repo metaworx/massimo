@@ -10,22 +10,17 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"sort"
-	"strings"
 	"syscall"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
-	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/serve"
 	"go.metaworx.ch/massimo/internal/server"
-	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -38,9 +33,9 @@ func runServe(args []string) error {
 	}
 	listen := fs.String("listen", listenDefault, "address to listen on (default MASSIMO_LISTEN, else 127.0.0.1:8099)")
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones, for this run and without the store: massimo.db is neither opened nor created, and nothing is written")
-	poll := fs.Duration("poll", time.Minute, "how often to poll the device list (default the store's poll_interval, else 1m)")
-	refresh := fs.Duration("refresh", 6*time.Hour, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
-	discoverEvery := fs.Duration("discover-interval", 30*time.Minute, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API; default the store's discover_interval, else 30m)")
+	poll := fs.Duration("poll", server.DefaultPollInterval, "how often to poll the device list (default the store's poll_interval, else 1m)")
+	refresh := fs.Duration("refresh", server.DefaultRefreshInterval, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
+	discoverEvery := fs.Duration("discover-interval", server.DefaultDiscoverInterval, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API; default the store's discover_interval, else 30m)")
 	var discoverTargets []string
 	fs.Func("discover-target", "send discovery requests to this host[:port] instead of broadcasting (repeatable; for another subnet, or a fake Cube's -discovery)", func(v string) error {
 		if _, _, err := net.SplitHostPort(v); err != nil {
@@ -127,19 +122,9 @@ func runServe(args []string) error {
 	if rebootErr != nil && !given["allow-reboot"] {
 		return fmt.Errorf("serve: %w", rebootErr)
 	}
-	src, err := tlsSource(tlsOptions{mode: *tlsFlag, certPath: *tlsCert, keyPath: *tlsKey, names: *tlsNames, listen: *listen, dataDir: dataDir(),
-		email: *acmeEmail, directory: *acmeDirectory, httpAddr: *tlsHTTP, hook: *acmeDNSHook}, logger)
-	if err != nil {
-		return err
-	}
+	tlsCfg := serve.TLS{Mode: *tlsFlag, Cert: *tlsCert, Key: *tlsKey, Names: *tlsNames, ACMEEmail: *acmeEmail, ACMEDirectory: *acmeDirectory, HTTP: *tlsHTTP, DNSHook: *acmeDNSHook}
+	tlsInEffect := serve.TLSMode(*tlsFlag, *tlsCert, *tlsKey)
 
-	st, err := openServeStore(*addr, logger)
-	if err != nil {
-		return err
-	}
-	if st != nil {
-		defer closeStore(st, logger)
-	}
 	// SIGINT from a terminal, SIGTERM from systemd, launchd and kill, and
 	// the Windows service manager's stop: each stops the server, which
 	// writes the log's pending events, before the store is closed; so does
@@ -167,86 +152,36 @@ func runServe(args []string) error {
 			logger.Warn("the restart cannot be started from the API", "reason", restartBlocked)
 		}
 	}
-
-	// The flags given win for this run; otherwise the store's settings.
-	var staleAfter time.Duration
-	if st != nil {
-		for _, d := range []struct {
-			flag, key string
-			v         *time.Duration
-		}{{"poll", store.PollIntervalKey, poll}, {"refresh", store.RefreshIntervalKey, refresh}, {"discover-interval", store.DiscoverIntervalKey, discoverEvery}, {"", store.StaleAfterKey, &staleAfter}} {
-			if d.flag != "" && given[d.flag] {
-				continue
-			}
-			if v, ok, err := st.SettingDuration(ctx, d.key); err != nil {
-				logger.Warn("setting ignored", "key", d.key, "error", err)
-			} else if ok {
-				*d.v = v
-			}
-		}
-	}
-
-	setup, err := serveSetup(ctx, st, *addr, proxies, *proxySerial, logger)
-	if err != nil {
-		return err
-	}
 	reboot := serveReboot(logger, *allowReboot)
 	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
 		upd.Managed = m.String()
 	}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
-		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, src != nil, *updateRequest, *updateStatus); err != nil {
+		if upd.Start, upd.Blocked, err = serveUpdateHelper(logger, *listen, tlsInEffect != "off", *updateRequest, *updateStatus); err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
 	}
-	srv := server.New(server.Options{Cubes: setup.cubes, Token: *token, PollInterval: *poll, RefreshInterval: *refresh, DiscoverInterval: *discoverEvery, DiscoveryTargets: discoverTargets, Logger: logger, Version: versionString(), Proxy: setup.listeners, ShowHidden: showAll || showHidden,
-		Store: st, FileCubes: setup.fileCubes, SettingsFile: env.File(), StaleAfter: staleAfter, ProxyFixed: len(proxies) > 0, Update: upd, TLS: src, HSTSDays: hsts, TrustedProxies: trusted,
-		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, Reboot: reboot})
-	ln, err := net.Listen("tcp", *listen)
+
+	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), Serial: selectedSN, SerialGiven: snExplicit,
+		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets,
+		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot,
+		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: logger}
+	// The flags given win for this run; otherwise the store's settings.
+	for _, d := range []struct {
+		flag string
+		v    *time.Duration
+		to   **time.Duration
+	}{{"poll", poll, &cfg.PollInterval}, {"refresh", refresh, &cfg.RefreshInterval}, {"discover-interval", discoverEvery, &cfg.DiscoverInterval}} {
+		if given[d.flag] {
+			*d.to = d.v
+		}
+	}
+	inst, err := serve.Open(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	for _, c := range setup.cubes {
-		logger.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
-	}
-	auth := any(*token != "")
-	if st != nil {
-		auth = srv.AuthMode()
-	}
-	restartAttr := restartFor
-	if restartAttr == "" {
-		restartAttr = "none"
-	}
-	attrs := []any{"addr", ln.Addr().String(), "auth", auth, "restart", restartAttr, "reboot", rebootAttr(reboot), "sighup", hup, "tls", "off"}
-	hs := &http.Server{Handler: srv.Handler()}
-	if src != nil {
-		hs.TLSConfig = certs.Config(src)
-		cs := src.Status()
-		attrs = append(attrs[:len(attrs)-1], cs.Source, "names", strings.Join(cs.Names, ","), "expires", cs.NotAfter.Format(time.RFC3339), "fingerprint", cs.Fingerprint, "hsts_days", hsts)
-	}
-	if st != nil {
-		attrs = append(attrs, "data", st.Dir(), "node", st.NodeID())
-	} else {
-		attrs = append(attrs, "store", "none (-addr)")
-	}
-	logger.Info("api listening", attrs...)
-	if a, ok := src.(*certs.ACME); ok && *tlsHTTP != "" {
-		// The plain helper: the HTTP-01 challenge and a redirect to
-		// https://; serving it is what lets the manager use HTTP-01.
-		hln, err := net.Listen("tcp", *tlsHTTP)
-		if err != nil {
-			return fmt.Errorf("serve: -tls-http: %w", err)
-		}
-		logger.Info("http helper listening", "addr", hln.Addr().String(), "for", "the ACME HTTP-01 challenge and the redirect to https://")
-		go func() {
-			if err := serveHTTP(ctx, &http.Server{Handler: a.HTTPHandler()}, hln); err != nil {
-				logger.Error("http helper", "error", err)
-			}
-		}()
-	}
-	runDone := make(chan struct{})
-	go func() { srv.Run(ctx); close(runDone) }()
+	srv := inst.Server()
 	// The settings file while the server runs (reload.go): looked at every
 	// few seconds, and read again on SIGHUP where that is a reload, which
 	// also checkpoints the store.
@@ -259,12 +194,11 @@ func runServe(args []string) error {
 		if err != nil {
 			return server.ReloadResult{}, err
 		}
-		checkpointStore(rctx, st, logger)
+		checkpointStore(rctx, inst.Store(), logger)
 		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), ReadAt: time.Now()}, nil
 	})
 	srv.SetSettingsRead(settingsRead)
 	// GET /api/v1/config: the settings in effect, as massimo config shows
-	tlsInEffect := tlsMode(*tlsFlag, *tlsCert, *tlsKey)
 	srv.SetConfigView(func() server.ConfigView { return configView(*listen, tlsInEffect) })
 	if hup == sighupReload {
 		hups := make(chan os.Signal, 1)
@@ -277,24 +211,14 @@ func runServe(args []string) error {
 					return
 				case <-hups:
 					reloader.reload(ctx, "SIGHUP")
-					checkpointStore(ctx, st, logger)
+					checkpointStore(ctx, inst.Store(), logger)
 				}
 			}
 		}()
 	}
-	if src != nil {
-		go certs.Watch(ctx, src, certWatch)
-	}
-	err = serveHTTP(ctx, hs, ln)
-	if ctx.Err() != nil {
-		// The store is closed when this returns; the server's run writes
-		// the log's pending events first.
-		select {
-		case <-runDone:
-		case <-time.After(10 * time.Second):
-			logger.Warn("the server did not stop within 10s: the store closes under it, and what it writes from now on is lost")
-		}
-	}
+	// The store is closed when Run returns, once the server has written
+	// the log's pending events.
+	err = inst.Run(ctx)
 	if rs.asked.Load() {
 		logger.Info("stopped for a restart", "by", restartFor, "exit", exitRestart)
 	}
@@ -314,21 +238,6 @@ func serveReboot(log *slog.Logger, allowed bool) server.RebootOptions {
 		o.Reboot = rebootRequester(install.RebootRequest)
 	}
 	return o
-}
-
-// rebootAttr is the reboot in serve's first log line: who reboots, off
-// while the owner's switch is, no-helper while one is missing, none
-// where nobody can.
-func rebootAttr(o server.RebootOptions) string {
-	switch {
-	case o.By == "":
-		return "none"
-	case !o.Allowed:
-		return "off"
-	case o.Helper != nil && o.Helper() != "":
-		return "no-helper"
-	}
-	return o.By
 }
 
 // defaultUpdateStatus is the helper's status file where install puts it:
@@ -358,287 +267,4 @@ func serveUpdateHelper(log *slog.Logger, listen string, tls bool, request, statu
 		log.Warn("updates cannot be started from the API", "reason", blocked)
 	}
 	return start, blocked, nil
-}
-
-// closeStore closes serve's store and says so, or says why massimo.db
-// alone is behind: Close brings the WAL into the file first.
-func closeStore(st *store.Store, logger *slog.Logger) {
-	if err := st.Close(); err != nil {
-		logger.Error("store not closed cleanly", "path", st.File(), "error", err)
-		return
-	}
-	logger.Info("store closed", "path", st.File())
-}
-
-// openServeStore opens the store of the data directory, or, with -addr,
-// none: such a run serves one Cube for this run only and writes nothing,
-// not even the found Cubes.
-func openServeStore(addr string, logger *slog.Logger) (*store.Store, error) {
-	if addr != "" {
-		return nil, nil
-	}
-	st, err := store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
-	if err != nil {
-		return nil, fmt.Errorf("serve: %w", err)
-	}
-	return st, nil
-}
-
-// setup is what serve starts with: the Cubes, the proxy listeners, and
-// the settings file's view of each Cube.
-type setup struct {
-	cubes     []server.CubeConfig
-	listeners []server.ProxyListener
-	fileCubes map[string]store.FileCube
-}
-
-// target is one Cube to serve with its proxy values.
-type target struct {
-	cfg         server.CubeConfig
-	proxy       string // the listener address, "" for the default
-	proxySerial string
-}
-
-// serveSetup seeds the store from the settings file (store.Seed) and
-// resolves the Cubes to serve and the proxy listeners from the store's
-// rows, or, with -addr, from -addr and the file for this run as before
-// the store. -sn serves the one Cube; -proxy and -proxy-serial win over
-// the store for this run. The plain MASSIMO_CUBE_ADDRESS without a
-// serial is served from the file until the Cube reports its serial,
-// which the server then seeds.
-func serveSetup(ctx context.Context, st *store.Store, addr string, proxies []string, proxySerial string, logger *slog.Logger) (setup, error) {
-	file, plain, err := fileCubes()
-	if err != nil {
-		return setup{}, err
-	}
-	out := setup{fileCubes: map[string]store.FileCube{}}
-	var targets []target
-	if addr != "" {
-		// -addr: this one Cube for this run, nothing written; its values
-		// from the file, as before the store.
-		single := true
-		t := target{cfg: server.CubeConfig{Serial: selectedSN, Addr: addr, Source: store.SourceFlag},
-			proxy: env.Own(env.Proxy, selectedSN, single), proxySerial: env.Own(env.ProxySerial, selectedSN, single)}
-		list, err := env.HiddenList(selectedSN)
-		if err != nil {
-			return setup{}, fmt.Errorf("serve: %w", err)
-		}
-		t.cfg.Hidden, t.cfg.Name = list, env.Own(env.Name, selectedSN, single)
-		targets = append(targets, t)
-	} else {
-		if plain != nil {
-			if sn, err := st.PlainSerial(ctx); err != nil {
-				return setup{}, fmt.Errorf("serve: %w", err)
-			} else if sn != "" {
-				// The plain lines belong to the Cube that reported this
-				// serial before: compared with its row from now on.
-				plain.Serial = sn
-				file = append(file, *plain)
-				plain = nil
-			}
-		}
-		if _, err := st.Seed(ctx, env.File(), file); err != nil {
-			return setup{}, fmt.Errorf("serve: %w", err)
-		}
-		for _, fc := range file {
-			out.fileCubes[store.NormalSerial(fc.Serial)] = fc
-		}
-		rows, err := st.Cubes(ctx)
-		if err != nil {
-			return setup{}, fmt.Errorf("serve: %w", err)
-		}
-		for _, row := range rows {
-			if !row.Configured || snExplicit && !strings.EqualFold(row.Serial, selectedSN) {
-				continue // -sn serves that one Cube only
-			}
-			t, err := rowTarget(row)
-			if err != nil {
-				return setup{}, err
-			}
-			targets = append(targets, t)
-		}
-		switch {
-		case plain != nil && !snExplicit:
-			v := func(f string) string { return plain.Values[f].Value }
-			t := target{cfg: server.CubeConfig{Addr: v(store.FieldAddress), Name: v(store.FieldName), Source: store.SourceEnv, SeedFromFile: true},
-				proxy: v(store.FieldProxyAddress), proxySerial: v(store.FieldProxySerial)}
-			if t.cfg.Hidden, err = parseHidden(store.SplitHidden(v(store.FieldHidden))); err != nil {
-				return setup{}, err
-			}
-			targets = append(targets, t)
-			out.fileCubes[""] = *plain
-		case len(targets) == 0 && selectedSN != "":
-			// -sn or MASSIMO_CUBE_SN alone: found by discovery, for this
-			// run.
-			targets = append(targets, target{cfg: server.CubeConfig{Serial: strings.ToUpper(selectedSN), Source: store.SourceFlag}})
-		}
-	}
-	if len(targets) == 0 {
-		// Nothing to serve yet: the web UI adds a Cube (System settings →
-		// Cubes), as does the settings file at the next start.
-		logger.Warn("no cube configured yet: add one under System settings → Cubes in the web UI, set MASSIMO_CUBE_<SN>_ADDRESS, use -addr, or give the serial with -sn")
-		return out, nil
-	}
-	sort.SliceStable(targets, func(i, j int) bool { return targets[i].cfg.Serial < targets[j].cfg.Serial })
-	single := len(targets) == 1
-	for _, t := range targets {
-		out.cubes = append(out.cubes, t.cfg)
-	}
-	if len(proxies) > 0 {
-		for _, v := range proxies {
-			if v == "" || v == "off" || v == "none" {
-				out.listeners = nil
-				break
-			}
-			pl := server.ProxyListener{DiscoverySerial: proxySerial}
-			if sn, addr, ok := strings.Cut(v, "="); ok {
-				pl.Serial, v = sn, addr
-			}
-			pl.Addr = env.WithPort(v)
-			_, port, _ := net.SplitHostPort(pl.Addr)
-			pl.Discovery = port == env.CubePort
-			out.listeners = append(out.listeners, pl)
-		}
-	} else {
-		// One listener per Cube on its proxy address (the address clients
-		// use); a single Cube without one listens on :62910.
-		for _, t := range targets {
-			a := t.proxy
-			if a == "" && single {
-				a = ":" + env.CubePort
-			}
-			if a == "" {
-				logger.Warn("cube served without a proxy: several cubes are configured and this one has no proxy address", "serial", t.cfg.Serial)
-				continue
-			}
-			a = env.WithPort(a)
-			_, port, _ := net.SplitHostPort(a)
-			out.listeners = append(out.listeners, server.ProxyListener{Serial: t.cfg.Serial, Addr: a, Discovery: port == env.CubePort, DiscoverySerial: proxySerial})
-		}
-	}
-	for i := range out.listeners {
-		pl := &out.listeners[i]
-		if pl.Serial == "" && single {
-			// "" too for a Cube without a known serial: the server takes
-			// the one it reports.
-			pl.Serial = targets[0].cfg.Serial
-		} else if pl.Serial == "" {
-			return setup{}, fmt.Errorf("serve: several cubes configured; name the cube of each proxy listener as -proxy <serial>=%s, or pick one with -sn", pl.Addr)
-		}
-		if pl.DiscoverySerial == "" {
-			for _, t := range targets {
-				if strings.EqualFold(t.cfg.Serial, pl.Serial) {
-					pl.DiscoverySerial = t.proxySerial
-				}
-			}
-		}
-	}
-	return out, nil
-}
-
-// rowTarget is the target of a configured row of the store.
-func rowTarget(row store.Cube) (target, error) {
-	cfg, err := server.CubeFromRow(row)
-	if err != nil {
-		return target{}, fmt.Errorf("serve: cube %s: hidden: %w", row.Serial, err)
-	}
-	return target{cfg: cfg, proxy: row.ProxyAddress, proxySerial: row.ProxySerial}, nil
-}
-
-// parseHidden reads a hidden list of radio addresses.
-func parseHidden(list []string) ([]cube.RFAddress, error) {
-	var out []cube.RFAddress
-	for _, a := range list {
-		rf, err := cube.ParseRFAddress(a)
-		if err != nil {
-			return nil, fmt.Errorf("hidden: %w", err)
-		}
-		out = append(out, rf)
-	}
-	return out, nil
-}
-
-// fileCubes reads the settings file's Cubes by the rule serve used
-// before the store: every Cube with an _ADDRESS, and by serial every one
-// with a _NAME or a _PROXY but no _ADDRESS; without any of those, the
-// plain MASSIMO_CUBE_ADDRESS, with the serial of -sn or MASSIMO_CUBE_SN
-// when one is given, else returned as plain. The plain forms of _NAME,
-// _PROXY and _PROXY_SERIAL apply only with a single Cube; the plain
-// _IGNORE applies to every Cube.
-func fileCubes() (cubes []store.FileCube, plain *store.FileCube, err error) {
-	have := map[string]bool{}
-	var serials []string
-	for _, name := range []string{env.Address, env.Name, env.Proxy} {
-		sns, _ := env.Serials(name)
-		for _, sn := range sns {
-			if !have[sn] {
-				have[sn] = true
-				serials = append(serials, sn)
-			}
-		}
-	}
-	sort.Strings(serials)
-	if len(serials) == 0 {
-		if os.Getenv(env.Address) == "" {
-			return nil, nil, nil
-		}
-		fc, err := fileCube(strings.ToUpper(selectedSN), true, true)
-		if err != nil {
-			return nil, nil, err
-		}
-		if fc.Serial == "" {
-			return nil, &fc, nil
-		}
-		return []store.FileCube{fc}, nil, nil
-	}
-	single := len(serials) == 1
-	for _, sn := range serials {
-		// The plain address is the one Cube's when MASSIMO_CUBE_SN (or
-		// -sn) names it, as env.Get reads it for the other commands.
-		fc, err := fileCube(sn, single, single && strings.EqualFold(sn, selectedSN))
-		if err != nil {
-			return nil, nil, err
-		}
-		cubes = append(cubes, fc)
-	}
-	return cubes, nil, nil
-}
-
-// fileCube reads one Cube's lines; sn "" is the plain forms only. The
-// plain MASSIMO_CUBE_ADDRESS counts only for plainCube: the Cube served
-// when no Cube has lines of its own, or the one Cube that has some when
-// MASSIMO_CUBE_SN names it.
-func fileCube(sn string, single, plainCube bool) (store.FileCube, error) {
-	fc := store.FileCube{Serial: sn, Values: map[string]store.FileValue{}}
-	line := func(field, name string, plainToo bool) {
-		if sn != "" {
-			if variable, v := env.PerCubeValue(name, sn); v != "" {
-				fc.Values[field] = store.FileValue{Variable: variable, Value: v}
-				return
-			}
-		}
-		if plainToo || sn == "" {
-			if v := os.Getenv(name); v != "" {
-				fc.Values[field] = store.FileValue{Variable: name, Value: v}
-			}
-		}
-	}
-	line(store.FieldAddress, env.Address, plainCube)
-	line(store.FieldName, env.Name, single)
-	line(store.FieldProxyAddress, env.Proxy, single)
-	line(store.FieldProxySerial, env.ProxySerial, single)
-	line(store.FieldHidden, env.Ignore, true)
-	if h, ok := fc.Values[store.FieldHidden]; ok {
-		list, err := env.ParseList(h.Variable, h.Value)
-		if err != nil {
-			return fc, err
-		}
-		var norm []string
-		for _, rf := range list {
-			norm = append(norm, rf.String())
-		}
-		h.Value = strings.Join(norm, ",")
-		fc.Values[store.FieldHidden] = h
-	}
-	return fc, nil
 }

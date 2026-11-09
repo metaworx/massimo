@@ -28,6 +28,10 @@ the next minor, a fix counts the suffix up.
   `MASSIMO_REBOOT` takes: on, true, yes or 1, and their opposites, in
   any case (`README.md`, "Server").
 
+- `serve`'s wiring is the package `internal/serve`, which a program
+  embedding the server calls as the command does; nothing changes for
+  `massimo serve` itself.
+
 ### Fixed
 
 - A device list or a configuration the Cube client asked for is in its

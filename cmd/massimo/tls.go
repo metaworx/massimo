@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
+	"go.metaworx.ch/massimo/internal/serve"
 )
 
 // runTLS handles massimo tls show | self-signed: the certificate serve
@@ -51,7 +52,7 @@ for the service run it as its user, for example
 		}
 		listen := os.Getenv("MASSIMO_LISTEN")
 		certPath, keyPath := certs.SelfSignedPaths(dataDir())
-		st, err := certs.Generate(certPath, keyPath, certs.Names(listenHost(listen), certs.ParseNames(*names)), time.Now())
+		st, err := certs.Generate(certPath, keyPath, certs.Names(serve.ListenHost(listen), certs.ParseNames(*names)), time.Now())
 		if err != nil {
 			return fmt.Errorf("tls: %w", err)
 		}
