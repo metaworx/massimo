@@ -94,9 +94,9 @@ linux/arm64, darwin/arm64 and windows/amd64 without any C toolchain.
   The server writes a few thousand rows a day and reads a page of the log now and then;
   on the Pi 1 that is nothing.
   Measured on 2026-11-09 (section 5, `events`):
-  the writer's batch of 100 events takes 0.15 s on the Pi 1,
-  but a page of warnings that read all of 90,000 events took 11 s,
-  a walk that migration 0011's index of the warnings ends.
+  the writer's batch of 100 events takes 0.15 s on the Pi 1;
+  a page of errors, which read all of 90,000 events, took 5 to 16 s there,
+  and since migration 0011's index of the warnings 1.7 s.
 - Queries: real SQL, so the log can be paged and filtered by time,
   kind and device, the audit by user, the backups listed and pruned by age,
   all in the engine with indexes; retention is one `DELETE`.
@@ -541,7 +541,10 @@ Notes on the tables:
   and cannot tell that of a bound value.
   Such a page reads those rows only, under 2 ms on a PC at 90,000 events
   where it took 90 to 120 ms (`TestEventsPageQuery`);
-  a page of errors reads at most the warnings.
+  a page of errors reads at most the warnings:
+  1.7 s on the Pi 1 at 90,000 events, a third of which are warnings there.
+  The server writes no line at `error`, and the UI offers no such choice,
+  so only `GET …/log?level=error` meets that walk.
   With a kind, a source, a device or a user as well,
   the page reads that term's index and checks the level on its rows.
   A batch of 100 events with a third warnings took 2 to 3 ms on the PC
@@ -575,7 +578,16 @@ Notes on the tables:
     The same walk takes 11 s on the Pi 1
     (a page of errors, of which it has none),
     5 to 16 s from one page to the next.
-    Migration 0011's index ends that walk; the Pis have not timed it yet.
+  - Measured again on 2026-11-09 on new copies of both stores,
+    with a test binary at schema 10 and one at 11, at 90,000 events:
+    migration 0011 takes a page of 200 warnings from 58 ms to 1.9 ms on the Pi 5,
+    and from 99 ms to 75 ms on the Pi 1, whose walk was short already;
+    a page of errors, of which neither has any,
+    from 153 ms to 2.0 ms on the Pi 5,
+    and from 5.6 s to 1.7 s on the Pi 1, where it reads every warning.
+    The writer's batch of 100 events took 146 ms at 10 and 145 ms at 11 on the Pi 1,
+    3.3 ms and 3.4 ms on the Pi 5:
+    the index costs the insert nothing to measure.
 - `audit` makes durable what today only the log has:
   which client sent which write.
   The `api()` wrapper in `server.go` is the one place every handler passes through,
