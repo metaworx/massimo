@@ -1115,7 +1115,8 @@ objects of the found Cubes above:
 No body.
 A call while a run is going waits for it and gets its result, the same `ran_at`.
 `503` when the server cannot have the discovery port (UDP 23272,
-the only one the Cubes answer to), for example because another program holds it.
+the only one the Cubes answer to, or the address of `serve -discover-listen`),
+for example because another program holds it.
 `serve` also runs discovery at the start and every 30 minutes (`-discover-interval`,
 `0` for on request only),
 and every minute while a Cube configured by serial has no address yet.

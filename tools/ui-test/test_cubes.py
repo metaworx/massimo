@@ -8,8 +8,6 @@ as found. Each test puts the server's store back as it was, since every
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
-import pytest
-
 from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
@@ -35,12 +33,13 @@ def test_name_saved_and_taken_back(page, case):
     form.locator("button[type=submit]").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Renamed')", 5), "the new name is saved"
     assert "Renamed" in cube_item(page, "KEQ0000100").text_content(), "the Cube choice shows the new name"
+    # The panel is drawn again after the state changed: waited for.
     take = panel.locator(".take-file[data-field=name]")
-    assert take.count() == 1 and "MASSIMO_CUBE_KEQ0000100_NAME" in panel.locator(".cube-differs").inner_text(), \
-        "the settings file's name is offered"
+    assert wait_until(page, f"!!document.querySelector(\"{PANEL} .take-file[data-field=name]\")", 5) and \
+        "MASSIMO_CUBE_KEQ0000100_NAME" in panel.locator(".cube-differs").inner_text(), "the settings file's name is offered"
     take.click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Fake Cube')", 5), "the file's value taken"
-    assert panel.locator(".cube-differs").count() == 0, "no difference left"
+    assert wait_until(page, f"!document.querySelector(\"{PANEL} .cube-differs\")", 5), "no difference left"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the Cube's panel"
 
 
@@ -80,8 +79,7 @@ def test_found_cube_added_and_removed(page):
         wait_until(page, "!discovery.running", 10)
     show_view(page, "system")
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
-    if found.count() == 0:
-        pytest.skip("no found Cube to add (discovery did not answer)")
+    assert found.count() == 1, "the found Cube in System settings → Cubes"
     assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in System settings → Cubes"
     found.locator("button").click()
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add serves the found Cube"

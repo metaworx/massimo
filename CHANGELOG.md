@@ -58,11 +58,22 @@ the next minor, a fix counts the suffix up.
   `brew upgrade` as the service's user and restarts the job
   (`packaging/README.md`, "Homebrew").
 
+- `serve -discover-listen <addr>` puts the discovery socket on another
+  address than UDP 23272, for tests with a fake Cube (`README.md`).
+
 - Notification rules on the Cubes' events, per user in the `notify`
   preference, and push subscriptions under `/api/v1/me/push` with the
   server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
 
 ### Changed
+
+- The Homebrew caveats and the settings template ask for nothing to fill
+  in and name the first owner; `brew services restart` follows
+  `brew upgrade` (`packaging/README.md`, "Homebrew").
+
+- `massimo install` restarts a running service also on the template's
+  settings and leaves a box that never ran for its owner, on every
+  platform, naming `massimo user add` and the web UI (`README.md`).
 
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
   and their opposites, in any case, as `serve -help`, the settings
@@ -76,6 +87,9 @@ the next minor, a fix counts the suffix up.
   embedding the server calls as the command does; nothing changes for
   `massimo serve` itself.
 
+- CI runs all four cases of the web UI suite on a pull request too, in
+  four workers (`GUIDELINES/project/CI.md`, section 2).
+
 - The log's metadata and config lines say what changed, and a reconnect
   is one line with the Cube's devices, rooms, firmware and duty cycle;
   the greeting's own lines are kept at debug (`docs/ui.md`, "Log").
@@ -85,6 +99,10 @@ the next minor, a fix counts the suffix up.
   (`packaging/README.md`, "The apt repository").
 
 ### Fixed
+
+- The Debian package restarts a running service on an upgrade, also on
+  the template's settings, and leaves a box that never ran stopped, even
+  when a release changed the template's comments (`packaging/README.md`).
 
 - A device list or a configuration the Cube client asked for is in its
   state when the command returns, so that a read right after sees it;

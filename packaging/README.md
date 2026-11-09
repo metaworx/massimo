@@ -46,9 +46,9 @@ such as every failed attempt to reach a lost Cube
 and every command the proxy passes on to it;
 the log then grows faster, so remove the line again after the diagnosis.
 `env.template` does not carry it:
-the package and `install` start the service only once the settings file
-differs from the template,
-and a new line there would make an untouched file differ after an upgrade.
+the package and `install` start a stopped service only when the settings
+set more than the template does, comments and blank lines aside,
+so a new setting there would make an untouched file look filled in after an upgrade.
 
 The repository's `.gitattributes` keeps everything in this directory with LF line endings,
 also in a Windows checkout with `core.autocrlf`,
@@ -123,18 +123,34 @@ sudo ./massimo-linux-armv6 install
 (`releases/latest` skips pre-releases; while there are only alphas,
 take the URL from the releases page.)
 It installs the binary as `/usr/local/bin/massimo`,
-creates the system user `massimo` and `/etc/massimo/env` (a commented template,
+creates the system user `massimo`, its state directory `/var/lib/massimo`
+and `/etc/massimo/env` (the commented template,
 or a copy of `-settings <.env>`), writes `massimo.service`,
 the update helper `massimo-update.path` and `.service` and the log rotation,
-enables them, and starts the service unless the settings are still the template.
+and enables them.
+It starts the service when the settings set more than the template does
+(its comments and blank lines aside),
+and restarts it when it runs;
+a box that never ran on the template's settings is left for its owner,
+because a server without users answers every device on the local network,
+as README.md, "Server", says.
 It warns when a Cube's `_PROXY` address is not one of the box's addresses (serve
 could not listen there and would restart every ten seconds;
 install adds no addresses) and when `MASSIMO_API_TOKEN` is missing.
-Fill in `/etc/massimo/env` as described below,
-then `sudo systemctl start massimo`.
+Nothing needs to go into `/etc/massimo/env` for the first start.
+Either create the owner first and then start the service:
+
+```bash
+sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo systemctl start massimo
+```
+
+or start it and create the owner in the web UI from the local network,
+which until then may use it unasked;
+the Cubes are added there too (System settings → Cubes, "Found on the LAN").
 
 Running `install` again, from a newer binary,
-replaces the binary and the units and restarts the service;
+replaces the binary and the units and restarts the service by the same rule;
 existing settings are kept,
 and a unit that differs from the new one (edited with `systemctl edit --full`)
 is kept as `<unit>.bak`.
@@ -294,18 +310,36 @@ the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudfla
 (see `-acme-dns-hook` above),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
-its scripts create the user `massimo` and `/etc/massimo/env` from the template
-when they are missing, enable the service,
-and start it once the file differs from the template,
-so that a fresh box does not serve the LAN without a token.
-Fill in `/etc/massimo/env` as "Install by hand" describes,
-then `sudo systemctl start massimo`.
+its scripts create the user `massimo`, `/etc/massimo/env` from the template
+and the state directory `/var/lib/massimo` when they are missing,
+and enable the service.
+They start it only when the settings set more than the template does
+(its comments and blank lines aside),
+because a server without users answers every device on the local network,
+as README.md, "Server", says:
+on a fresh box the first start is the owner's.
+Nothing needs to go into `/etc/massimo/env` for that.
+Either create the owner first and then start the service:
+
+```bash
+sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo systemctl start massimo
+```
+
+or start it and create the owner in the web UI from the local network,
+which until then may use it unasked.
+The Cubes are added there too, under System settings → Cubes,
+"Found on the LAN";
+`/etc/massimo/env` takes what the web UI does not,
+as "Install by hand" describes.
 The service listens on the LAN, so it announces itself by mDNS (README.md,
 "Server"; `MASSIMO_ANNOUNCE=off` stops it);
 a firewall on the box lets in 5353/udp for that,
 beside 62910/tcp and 23272/udp for the proxy and 8099/tcp for the page (with ufw:
 `sudo ufw allow 5353/udp`).
-The next package upgrades the binary and restarts the service;
+The next package upgrades the binary and restarts a running service,
+whatever the settings, and leaves a stopped one stopped,
+unless its settings are filled in;
 the settings and the store are left alone.
 
 **One owner of the binary.**
@@ -322,7 +356,7 @@ and the web UI's button has the package's update helper run apt
 the update helper's path unit enabled, or disabled with `-no-update-helper`,
 `-reboot-helper` and `-no-reboot-helper` as the reboot helper's path unit
 enabled or disabled,
-then a restart.
+then a restart, by the rule of "Install with `massimo install`".
 `massimo install -remove` points at `apt remove massimo`;
 `apt purge massimo` takes the settings, the store, the logs and the user too,
 as `-remove -purge` does.
@@ -847,7 +881,7 @@ massimo-windows-amd64.exe install -settings .env
 
 It installs the binary as `C:\Program Files\Massimo\massimo.exe`,
 the settings as `C:\ProgramData\Massimo\env` (without `-settings`,
-a template to fill in) with the log `serve.log` next to them,
+the template) with the log `serve.log` next to them,
 in a folder only SYSTEM and the Administrators can read,
 since the settings hold the Cube keys.
 It creates the service `massimo` (Massimo in the Services console):
@@ -856,6 +890,11 @@ running `massimo -env C:\ProgramData\Massimo\env serve -listen :8099 -log …`;
 and a firewall rule for the program on private and domain networks (not public ones),
 which covers the API, the Cube proxy, discovery and the mDNS announcement.
 `-listen <addr>` changes the address, and installing again keeps it.
+It starts the service by the rule of "Install with `massimo install`":
+a box that never ran on the template's settings is left for its owner,
+who creates the owner first from an administrator PowerShell,
+`& "C:\Program Files\Massimo\massimo.exe" -data "C:\ProgramData\Massimo" user add <name> -role owner`,
+or after `sc.exe start massimo` in the web UI.
 `-tls-cert <pem> -tls-key <pem>` copies the files into `C:\ProgramData\Massimo\`
 and sets `MASSIMO_TLS`,
 `MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` in the settings, as on Linux;
@@ -932,8 +971,11 @@ and in the update helper are the same everywhere:
 - the hidden system user and group `_massimo` (made with `dscl`,
   the first free ID from 400; it has no shell and no login),
   which runs the server;
-- the settings `/etc/massimo/env` (without `-settings`, a template to fill in),
+- the settings `/etc/massimo/env` (without `-settings`, the template),
   mode 0600, owned by `_massimo`;
+  the service starts by the rule of "Install with `massimo install`",
+  the owner made first with
+  `sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner`;
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
 - the log `/var/log/massimo/serve.log`:
@@ -1005,8 +1047,15 @@ keeps the store in `$(brew --prefix)/var/massimo` and the log in
 and its service runs `massimo serve -listen :8099` as you while you are logged in;
 `sudo brew services start massimo-alpha` installs a LaunchDaemon that runs as
 root at boot instead.
-Fill in the settings file (the Cubes and `MASSIMO_API_TOKEN`),
-then start or restart the service.
+Nothing needs to go into the settings file for a start:
+brew never starts the service by itself,
+and until it has an owner every device on the local network may use it,
+so create the owner in the web UI at once,
+or before the start with
+`massimo -data $(brew --prefix)/var/massimo user add <name> -role owner`;
+the Cubes are added there too.
+`brew upgrade` does not restart a running service;
+`brew services restart massimo-alpha` does.
 
 One owner of the binary: brew owns it,
 and the marker under the formula's `share/massimo` tells massimo so.

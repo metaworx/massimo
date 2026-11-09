@@ -1,9 +1,11 @@
 # Python packages for the web UI suite (tools/ui-test/conftest.py and
 # test_*.py) and screenshots.py: page.clock needs Playwright 1.45, the
 # suite's hook wrapper pytest 8; axe-playwright-python (MIT, with
-# axe-core inside, MPL-2.0) is the accessibility check of test_connect.py.
+# axe-core inside, MPL-2.0) is the accessibility check of test_connect.py;
+# pytest-xdist (MIT) runs the suite's workers (run.sh, UI_TEST_WORKERS).
 # After installing them: python -m playwright install chromium
 playwright>=1.45
 pytest>=8.0
 pytest-playwright>=0.5
+pytest-xdist>=3.6
 axe-playwright-python>=0.1.8

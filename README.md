@@ -192,12 +192,17 @@ sudo ./massimo-linux-arm64 install -settings .env
 
 installs the binary as `/usr/local/bin/massimo`,
 creates the system user `massimo`,
-copies the `.env` to `/etc/massimo/env` (without `-settings` a commented
-template to fill in, and the service is then not started),
+copies the `.env` to `/etc/massimo/env` (without `-settings` the commented template,
+which is all a first start needs),
 writes `massimo.service`,
 the update helper `massimo-update.path` and `.service` and the log rotation,
 enables them and starts the service,
 which listens on `:8099` on every interface.
+On the template's settings it only restarts a service that runs:
+a server without users answers every device on the local network (see "Server"),
+so the first start is the owner's,
+after `sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner`
+or followed by the first-owner form of the web UI.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
 `-no-update-helper` leaves the helper out,
@@ -284,8 +289,9 @@ In PowerShell opened with "Run as administrator", in that folder:
 ```
 
 installs the binary as `C:\Program Files\Massimo\massimo.exe`,
-the settings as `C:\ProgramData\Massimo\env` (without `-settings` a template to
-fill in) with the logs `serve.log` and `service.log` next to them,
+the settings as `C:\ProgramData\Massimo\env` (without `-settings` the template,
+and the first start is then the owner's, as on Linux)
+with the logs `serve.log` and `service.log` next to them,
 in a folder only SYSTEM and the Administrators can read,
 the service `massimo` ("Massimo" in the Services console: automatic start,
 LocalSystem, restarted after 10 s on failure, listening on `:8099`;
@@ -395,7 +401,8 @@ sudo ./massimo-darwin-arm64 install -settings .env
 
 installs the Linux layout: the binary `/usr/local/bin/massimo`,
 the hidden user `_massimo`,
-the settings `/etc/massimo/env` (without `-settings` a template to fill in),
+the settings `/etc/massimo/env` (without `-settings` the template,
+and the first start is then the owner's, as on Linux),
 the state `/var/lib/massimo`,
 the log `/var/log/massimo/serve.log` (launchd appends to it; it is not rotated),
 and in `/Library/LaunchDaemons` the daemon `ch.metaworx.massimo` (started at
@@ -425,7 +432,8 @@ Details: [macOS](packaging/README.md#macos).
 (`sudo` for a daemon at boot),
 and the settings are in `$(brew --prefix)/etc/massimo/env`;
 brew then owns the binary and `brew upgrade` updates it,
-which the web UI's Update runs as you under `brew services`,
+which the web UI's Update runs as you under `brew services`
+(by hand, `brew services restart massimo-alpha` then runs the new one),
 while `massimo update` says when a release is out.
 Details: [Homebrew](packaging/README.md#homebrew).
 
@@ -879,7 +887,9 @@ the plain `MASSIMO_CUBE_ADDRESS` is that Cube's when `MASSIMO_CUBE_SN` names it,
 as for the other commands.
 `serve` runs discovery at the start and every 30 minutes (`-discover-interval`,
 `0` for only on request through the API,
-`-discover-target <host>` to ask given addresses instead of broadcasting),
+`-discover-target <host>` to ask given addresses instead of broadcasting,
+`-discover-listen <addr>` for a socket on another address than UDP 23272,
+which only a test's fake Cube answers to),
 lists Cubes it finds that are not configured in the API (`GET /api/v1/cubes`
 with `"configured": false`),
 keeps them in the store so that they are still listed after a restart,

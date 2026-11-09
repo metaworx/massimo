@@ -142,8 +142,9 @@ jobs:
   # the screenshot set, uploaded as the artifact ui-screenshots
   # (tools/ui-test/README.md). Nothing is compared with the committed
   # set: the job fails when a test fails or a shot cannot be taken, not
-  # when a picture changed; a failed test's trace, screenshot and video,
-  # kept in tools/ui-test/results/, are uploaded as ui-test-results. It
+  # when a picture changed; a failed test's screenshot and video, and the
+  # trace of its run once more, kept in tools/ui-test/results/, are
+  # uploaded as ui-test-results. It
   # runs in Microsoft's Playwright image, which holds the browsers and
   # their system libraries, so that nothing goes
   # through apt (which took up to 11 minutes on the runner). The image's
@@ -177,15 +178,15 @@ jobs:
       - name: Playwright
         run: pip install "playwright==1.64.1" -r tools/ui-test/requirements.txt
 
-      # UI_TEST_REQUIRED: a missing Playwright, pytest or
-      # pytest-playwright fails the job instead of skipping the suite.
-      # PYTEST_ADDOPTS: a pull request runs two of the four cases, both
-      # widths and both languages; a push to main runs all four.
+      # UI_TEST_REQUIRED: a missing Playwright, pytest,
+      # pytest-playwright or pytest-xdist fails the job instead of
+      # skipping the suite or running it in one process. run.sh runs all
+      # four cases in four workers, one per CPU of the runner, each
+      # against a server set of its own, on a push and a pull request.
       - name: Smoke test
         run: tools/ui-test/run.sh
         env:
           UI_TEST_REQUIRED: 1
-          PYTEST_ADDOPTS: ${{ github.event_name == 'pull_request' && '-k "1100-en or 390-de"' || '' }}
 
       - name: Screenshots
         run: tools/ui-test/run.sh screenshots

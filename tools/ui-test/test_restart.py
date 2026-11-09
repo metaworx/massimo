@@ -136,6 +136,8 @@ def test_sign_in_offers_the_key_after_an_open_server(page):
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens"
     assert not page.evaluate("document.getElementById('login-token').closest('details').open"), "folded on a server that always asked"
     page.evaluate("document.getElementById('login-dialog').close()")
+    # askLogin() hands out the open dialog's promise until its close event ran.
+    assert wait_until(page, "loginPromise === null", 5), "the dialog's close handled"
     body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": False})
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
     page.evaluate("loadMe()")

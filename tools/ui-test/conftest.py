@@ -3,14 +3,18 @@
 """The fixtures of the web UI suite, run by tools/ui-test/run.sh (make
 ui-test) against the server and the fake Cube it starts; it hands over
 the page's address in UI_TEST_URL and the API token in UI_TEST_TOKEN.
+In pytest-xdist's workers, which run.sh starts with a server set each,
+worker gw<n> takes set n's addresses and log from UI_TEST_URL_<n>,
+UI_TEST_DOWN_URL_<n> and UI_TEST_SERVE_LOG_<n> in place of the plain
+names, before this module or a test file reads them.
 
 Every test runs four times, at 1100 and 390 px wide and in English and
 German, the language from the browser context's locale (`case`, with the
 ids 1100-en, 390-en, 1100-de and 390-de). Each run gets a browser context
 of its own from pytest-playwright, with the token in localStorage before
 the page loads, and `page` is the page loaded with its room tiles and
-its event stream open. The four cases share the one server, so a test
-that changes the server's store puts it back; the settings the page
+its event stream open. The four cases share the one server of a worker,
+so a test that changes the server's store puts it back; the settings the page
 keeps on the server for the token's user are removed before every page.
 
 A test marked used_ticket gets a used ticket for its first stream
@@ -24,9 +28,10 @@ The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
 test and a stubbed 503 of the discovery are expected.
 
-pytest-playwright keeps the trace, the screenshot and the video of a
-failed test (pytest.ini) under the directory run.sh names with
---output, tools/ui-test/results/.
+pytest-playwright keeps the screenshot and the video of a failed test
+(pytest.ini) under the directory run.sh names with --output,
+tools/ui-test/results/, and the trace of a failed test that run.sh runs
+once more under results/retry/.
 """
 import json
 import os
@@ -34,6 +39,14 @@ import ssl
 import urllib.request
 
 import pytest
+
+_WORKER = os.environ.get("PYTEST_XDIST_WORKER", "")
+if _WORKER.startswith("gw"):
+    for _name in ("UI_TEST_URL", "UI_TEST_DOWN_URL", "UI_TEST_SERVE_LOG"):
+        _set = f"{_name}_{_WORKER[2:]}"
+        if _set not in os.environ:
+            raise RuntimeError(f"worker {_WORKER} has no server set ({_set}): give run.sh UI_TEST_WORKERS rather than pytest -n")
+        os.environ[_name] = os.environ[_set]
 
 pytest.register_assert_rewrite("helpers")
 
@@ -169,7 +182,8 @@ def guard(request, case, watch):
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item):
     """The guard's checks run as part of the test, so that a console
-    error fails the test itself and pytest-playwright keeps its trace."""
+    error fails the test itself, and pytest-playwright keeps its
+    screenshot, its video and, on run.sh's retry, its trace."""
     result = yield
     guard = item.funcargs.get("guard")
     if guard is not None:

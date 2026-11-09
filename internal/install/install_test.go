@@ -88,9 +88,78 @@ func TestInstallFresh(t *testing.T) {
 			t.Errorf("no %q in %q", c, rec.cmds)
 		}
 	}
-	// A fresh template holds no Cubes: enabled, not started.
+	// Only the template: enabled, not started, and the way to the owner
+	// said, in the state directory the install made for it.
 	if rec.has("systemctl restart") || !strings.Contains(out.String(), "not started") {
 		t.Fatalf("started with the template: %q\n%s", rec.cmds, out.String())
+	}
+	if !strings.Contains(out.String(), "create the owner first: "+linuxUserAdd+"\n") || !strings.Contains(out.String(), "then start it: sudo systemctl start massimo\n") {
+		t.Errorf("the message:\n%s", out.String())
+	}
+	if !rec.has("chown massimo:massimo " + filepath.Join(root, StateDir)) {
+		t.Errorf("no state directory: %q", rec.cmds)
+	}
+}
+
+// isActive answers systemctl is-active with state.
+func isActive(state string) func(string, ...string) ([]byte, error) {
+	return func(name string, args ...string) ([]byte, error) {
+		if name == "systemctl" && len(args) > 0 && args[0] == "is-active" {
+			return []byte(state + "\n"), nil
+		}
+		return nil, nil
+	}
+}
+
+func TestOnlyTemplate(t *testing.T) {
+	tmpl := []byte(envTemplate())
+	for _, c := range []struct {
+		name, cur string
+		want      bool
+	}{
+		{"the template", envTemplate(), true},
+		{"an older template's comments", "# an older comment\n\nMASSIMO_LOG=/var/log/massimo/serve.log\n\n", true},
+		{"CRLF and blanks around", strings.ReplaceAll(envTemplate(), "\n", "  \r\n"), true},
+		{"a setting added", envTemplate() + "MASSIMO_API_TOKEN=x\n", false},
+		{"a comment uncommented", strings.Replace(envTemplate(), "# MASSIMO_ANNOUNCE=off", "MASSIMO_ANNOUNCE=off", 1), false},
+		{"the template's setting taken out", "# nothing here\n", false},
+	} {
+		if got := onlyTemplate([]byte(c.cur), tmpl); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Installing again: the first start stays the owner's while the settings
+// are only the template's, and whatever runs is restarted.
+func TestInstallStartRule(t *testing.T) {
+	for _, c := range []struct {
+		name, env, state string
+		started          bool
+	}{
+		{"the template, stopped", envTemplate(), "inactive", false},
+		{"the template, failed", envTemplate(), "failed", false},
+		{"the template, running", envTemplate(), "active", true},
+		{"the template, in its restart pause", envTemplate(), "activating", true},
+		{"an older template, stopped", "# an older comment\nMASSIMO_LOG=/var/log/massimo/serve.log\n", "inactive", false},
+		{"a setting of its own, stopped", envTemplate() + "MASSIMO_ANNOUNCE=off\n", "inactive", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root, bin := setup(t)
+			os.MkdirAll(filepath.Join(root, EnvDir), 0o750)
+			os.WriteFile(filepath.Join(root, EnvPath), []byte(c.env), 0o600)
+			rec := &recorder{}
+			var out bytes.Buffer
+			if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: rec.run, Output: isActive(c.state)}); err != nil {
+				t.Fatal(err)
+			}
+			if got := rec.has("systemctl restart massimo.service"); got != c.started {
+				t.Errorf("restarted: %v, want %v; %q", got, c.started, rec.cmds)
+			}
+			if strings.Contains(out.String(), "not started") == c.started {
+				t.Errorf("the message:\n%s", out.String())
+			}
+		})
 	}
 }
 
