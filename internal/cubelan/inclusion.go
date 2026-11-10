@@ -70,9 +70,20 @@ func (c *Client) StartInclusion(timeout time.Duration) error {
 func (c *Client) EndInclusion() bool {
 	inc := &c.inclusion
 	inc.mu.Lock()
+	ended, paired := inc.endLocked()
+	inc.mu.Unlock()
+	if ended {
+		c.endedInclusion(paired)
+	}
+	return ended
+}
+
+// endLocked marks inclusion mode as ended and closes the watchers'
+// channels, with inc.mu held; it reports whether it was running and how
+// many devices joined.
+func (inc *inclusion) endLocked() (bool, int) {
 	if !inc.state.Active {
-		inc.mu.Unlock()
-		return false
+		return false, 0
 	}
 	inc.state.Active = false
 	inc.state.Ended = time.Now()
@@ -84,11 +95,13 @@ func (c *Client) EndInclusion() bool {
 		close(ch)
 	}
 	inc.watchers = nil
-	paired := len(inc.state.Paired)
-	inc.mu.Unlock()
+	return true, len(inc.state.Paired)
+}
+
+// endedInclusion reports the end of inclusion mode, outside inc.mu.
+func (c *Client) endedInclusion(paired int) {
 	c.emit(Event{Kind: EventPairingEnded})
 	c.log.Info("cube pairing ended", "addr", c.Address(), "paired", paired)
-	return true
 }
 
 // Inclusion returns the pairing state.
@@ -129,9 +142,10 @@ func (c *Client) WatchInclusion() (<-chan cube.Message, func()) {
 }
 
 // handleNewDevice takes an N line: a device that joined, or, empty, the
-// end of inclusion mode. The device is in the state before a watcher
-// gets the line, in one critical section: the proxy relays the line to
-// its client, which may ask for the state at once.
+// end of inclusion mode. The device, or the end, is in the state before
+// a watcher can read the line, in one critical section: the proxy relays
+// the line to its client, which may ask for the state at once. The end
+// closes the watchers' channels after the line, which they read first.
 func (c *Client) handleNewDevice(m cube.Message) {
 	var nd *cube.NewDevice
 	if m.Data != "" {
@@ -151,9 +165,15 @@ func (c *Client) handleNewDevice(m cube.Message) {
 		default: // a watcher that does not read loses lines
 		}
 	}
+	ended, paired := false, 0
+	if m.Data == "" {
+		ended, paired = inc.endLocked()
+	}
 	inc.mu.Unlock()
 	if m.Data == "" {
-		c.EndInclusion()
+		if ended {
+			c.endedInclusion(paired)
+		}
 		return
 	}
 	if nd == nil {
