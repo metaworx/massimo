@@ -1,4 +1,4 @@
-# Handover: verifying the configuration writes on real hardware
+# Test plan: verifying the configuration writes on real hardware
 
 For an agent or a person at the Cube.
 The configuration API and the UI panels (temperatures, device settings, offsets,
