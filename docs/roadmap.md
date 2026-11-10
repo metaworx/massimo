@@ -4,7 +4,7 @@ What is still to be done, in order.
 The frame is docs/design.md: target environments, architecture, drivers,
 Loxone ownership, multi-user and the public server, with their phases.
 What is done is in CHANGELOG.md, one section per release;
-docs/handover-session.md is the context a session needs to work here.
+GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
 
 1. **On the hardware**, by the owner, with a session watching the log:
    3. Pairing (docs/api-v1.md, "Pairing"): the six steps of pull request #10,

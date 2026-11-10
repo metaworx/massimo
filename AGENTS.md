@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.7.0)
+- Massimo — Project Contract (v1.7.1)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -407,7 +407,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.7.0)
+# Massimo — Project Contract (v1.7.1)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -571,8 +571,9 @@ the ones an agent trips over most come first:
   `docs/api-v1.md` and the OpenAPI file for every route,
   `packaging/` and `docs/update-windows.md` for the installers,
   `docs/ui.md` for the UI,
-  `docs/roadmap.md` and `docs/handover-session.md` at the end of a session by
-  the coordinating session only,
+  `docs/roadmap.md` and the session handover, `GUIDELINES/wip/HANDOVER.md`
+  (a standing document: rewritten in place, never dated),
+  at the end of a session by the coordinating session only,
   but for a plan's items on the roadmap:
   the session whose plan retires prunes them itself, at the retirement.
 - **Branches and pull requests**:
