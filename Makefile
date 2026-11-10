@@ -1,8 +1,9 @@
 # Builds the massimo binary with the version taken from the nearest git tag
 # (semantic versioning: tag releases as vMAJOR.MINOR.PATCH) and the
-# flavour it is released as (see internal/update).
+# flavour it is released as (see internal/update). Only the version tags
+# count: the rolling builds' tags (release/devel) are no version.
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-dev)
+VERSION ?= $(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo v0.0.0-dev)
 # The flavour of a release tag's commit is the tag's pre-release label
 # (alpha of v0.12.0-alpha.1), stable for a tag without one; any other
 # build is devel, the flavour of the builds of main. release.yml passes
@@ -71,7 +72,7 @@ release-alpha:
 		echo "release-alpha: main has uncommitted changes" >&2; exit 1; fi; \
 	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
 		echo "release-alpha: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
-	if done=$$(git describe --tags --exact-match $$sha 2>/dev/null); then \
+	if done=$$(git describe --tags --exact-match --match 'v[0-9]*' $$sha 2>/dev/null); then \
 		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
 	last=$$(git tag -l 'v0.*.*-alpha.*' | awk -F'[.-]' '{print $$2, $$NF, $$0}' | sort -k1,1n -k2,2n | tail -1); \
 	minor=$${last%% *}; n=$$(echo "$$last" | cut -d' ' -f2); \
