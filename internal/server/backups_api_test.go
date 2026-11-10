@@ -314,6 +314,36 @@ func TestRestoreKeepsBackups(t *testing.T) {
 	}
 }
 
+// A restore reads done only once the file it restored is the backup
+// reference: a backup check right after it compares the Cube with the
+// file, not with the before_restore backup of the state before it, which
+// took an automatic backup of the state just restored (AP RestoreRace).
+func TestRestoreDoneAfterItsReference(t *testing.T) {
+	_, ts, s, _ := startStored(t, Options{})
+	rt := s.cubes["keq0000100"]
+	f := withRoomName(backupOf(t, ts), "Restored")
+	want := backup.ConfigHash(f)
+	hash := plan(t, ts, "", f)["plan"].(string)
+	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 202 {
+		t.Fatalf("restore: %d %v", code, out)
+	}
+	// Without HTTP in between, so that a window after done is not missed.
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		if run, _ := rt.restoreStatus(); run.State == "done" {
+			break
+		} else if run.State == "failed" || time.Now().After(deadline) {
+			t.Fatalf("the restore: %+v", run)
+		}
+		time.Sleep(50 * time.Microsecond)
+	}
+	rt.bk.mu.Lock()
+	ref := rt.bk.ref
+	rt.bk.mu.Unlock()
+	if ref != want {
+		t.Fatalf("at done, the reference is %q, not the file's %q", ref, want)
+	}
+}
+
 // The five settings in the API, auto_min never above auto_max.
 func TestBackupSettingsAPI(t *testing.T) {
 	_, ts, _, _ := startStored(t, Options{})

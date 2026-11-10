@@ -242,10 +242,12 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		switch now := time.Now(); {
 		case lost.IsZero():
+			// The warning first, then Lost, then the event: whoever sees
+			// Lost sees the warning, and whoever reads the event sees Lost.
 			lost, warned = now, now
+			c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 			c.lost.Store(true)
 			c.emit(Event{Kind: EventDisconnected, Err: err})
-			c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 		case now.Sub(warned) >= c.opts.RemindEvery:
 			warned = now
 			c.log.Warn("cube still unreachable", "addr", c.Address(), "down_for", now.Sub(lost).Round(time.Second), "error", err)
@@ -328,12 +330,14 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 					ev.Cause, ev.DownFor = CauseLoss, time.Since(lost)
 				}
 				c.log.Debug("greeting: list", "addr", c.Address(), "devices", len(c.snap.Devices()))
-				c.emit(ev)
+				// The line before the event, as for a loss: whoever reads
+				// the event sees the connection's line.
 				if lost.IsZero() {
 					c.log.Info("cube connected", "addr", c.Address())
 				} else {
 					c.log.Info("cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
 				}
+				c.emit(ev)
 			}
 		}
 	}()
