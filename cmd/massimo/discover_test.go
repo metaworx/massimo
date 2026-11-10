@@ -11,17 +11,20 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 )
 
-// A Cube is marked proxy by a MAC that is not eQ-3's, or by an announced
-// server's address; without a MAC the address alone decides. The real
-// Cube and the proxy that answers with its serial are both listed.
+// A Cube is marked proxy when the search took it for one, or when the
+// search could not tell and its address is an announced server's; an
+// answer the search took for a Cube's stays one, even from a server's
+// address. The real Cube and the proxy that answers with its serial are
+// both listed.
 func TestMarkProxies(t *testing.T) {
-	cube := cubelan.Discovered{Serial: "KEQ0000000", IP: net.ParseIP("192.0.2.20"), MAC: "00:1a:22:01:02:03"}
-	byMAC := cubelan.Discovered{Serial: "KEQ0000000", IP: net.ParseIP("192.0.2.30"), MAC: "02:00:00:01:02:03"}
-	byAddress := cubelan.Discovered{Serial: "KEQ0000001", IP: net.ParseIP("192.0.2.40")}
-	unknown := cubelan.Discovered{Serial: "KEQ0000002", IP: net.ParseIP("192.0.2.50")}
+	cube := cubelan.Discovered{Serial: "KEQ0000000", IP: net.ParseIP("192.0.2.20"), MAC: "00:1a:22:01:02:03", Kind: cubelan.KindCube}
+	byKind := cubelan.Discovered{Serial: "KEQ0000000", IP: net.ParseIP("192.0.2.30"), MAC: "02:00:00:01:02:03", Kind: cubelan.KindProxy}
+	byAddress := cubelan.Discovered{Serial: "KEQ0000001", IP: net.ParseIP("192.0.2.40"), Kind: cubelan.KindUnknown}
+	unknown := cubelan.Discovered{Serial: "KEQ0000002", IP: net.ParseIP("192.0.2.50"), Kind: cubelan.KindUnknown}
+	cubeAtServer := cubelan.Discovered{Serial: "KEQ0000003", IP: net.ParseIP("192.0.2.40"), Kind: cubelan.KindCube}
 	servers := []announce.Found{{Name: "box", From: net.ParseIP("192.0.2.41"), Addrs: []net.IP{net.ParseIP("192.0.2.40")}}}
-	got := markProxies([]cubelan.Discovered{cube, byMAC, byAddress, unknown}, servers)
-	want := []bool{false, true, true, false}
+	got := markProxies([]cubelan.Discovered{cube, byKind, byAddress, unknown, cubeAtServer}, servers)
+	want := []bool{false, true, true, false, false}
 	if len(got) != len(want) {
 		t.Fatalf("%d cubes", len(got))
 	}

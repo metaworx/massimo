@@ -225,7 +225,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		r = proxy.NewResponder(s.log)
 		go r.Serve(rctx, pc)
 	}
-	answers, err := r.Discover(ctx, s.discoveryTargets(), wait)
+	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
 	if err != nil && len(answers) == 0 {
 		return nil, err
 	}
@@ -265,8 +265,8 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	arrived := !known || f.state == foundGone
 	f.state = foundPresent
 	f.Address, f.RFAddress, f.Firmware, f.LastSeen = d.IP.String(), d.RFAddress.String(), d.Firmware, now
-	if mac := cubelan.LookupMAC(d.IP); mac != "" {
-		f.MAC = mac
+	if d.MAC != "" {
+		f.MAC = d.MAC
 	}
 	if d.DHCP != nil {
 		dhcp := *d.DHCP
