@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.29.0)
+# Massimo — CI Conventions (v1.30.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -351,6 +351,12 @@ so that a red newest commit does not cost a night whose second-last was green
 (the owner's rule); `meta` reads the runs with `actions: read`,
 which ci.yml's `release` job grants too.
 `rolling` takes `nightly` only from the schedule or by hand on `main`.
+The rolling builds' tags are no versions,
+so every `git describe` asks for the version tags alone (`--match 'v[0-9]*'`):
+the Makefile's `VERSION` and `FLAVOUR`, `make release-alpha`'s check,
+and `meta`'s.
+Without it, on 2026-11-10 every commit after the first `release/devel`
+described as `release/devel-1-g…`, which `make packages` could not name a package by.
 `packaging/apt/publish.sh` leaves the rolling releases out:
 their packages' versions do not sort yet (AptUpdate's DebVersion).
 Every release below 1.0.0 is a pre-release on GitHub.

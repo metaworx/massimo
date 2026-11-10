@@ -139,7 +139,8 @@ jobs:
             # checkout leaves the tag without its annotation; fetch it again.
             git fetch --quiet --force origin "refs/tags/${tag}:refs/tags/${tag}"
             sha="$(git rev-parse "${tag}^{commit}")"
-            if [ "$(git describe --tags --exact-match "$sha")" != "$tag" ]; then
+            # The version tags alone: release/devel may name the same commit.
+            if [ "$(git describe --tags --exact-match --match 'v[0-9]*' "$sha")" != "$tag" ]; then
               echo "::error::git describe does not name ${tag} for ${sha}."
               exit 1
             fi
