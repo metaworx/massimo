@@ -30,7 +30,7 @@ Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/upd
 internal/install, cmd/massimo, internal/server/update_api.go,
 internal/server/ui/update.js,
 .github/workflows/ci.yml) and from the test of the Windows service on a real PC
-(docs/windows-test-2026-11-05.md).
+(docs/reports/windows-test-2026-11-05.md).
 Read packaging/README.md ("Updating", "From the web UI", "Windows") first;
 this document does not repeat what is there.
 
@@ -684,7 +684,7 @@ Both reports are referenced from the plan.
 **.github/workflows/ci.yml.**
 The Windows job as in section 6.
 
-**docs/roadmap.md, docs/handover-session.md.**
+**docs/roadmap.md, GUIDELINES/wip/HANDOVER.md.**
 Not touched by this pull request;
 the implementing session updates item 8 and 15 and the follow-up list.
 

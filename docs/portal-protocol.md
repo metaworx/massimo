@@ -83,7 +83,7 @@ its decompiled code or public analyses, and says so.
 
 Not yet verified with Massimo on hardware:
 the configuration endpoints of the API and the UI panels on them (test plan in
-docs/handover-write-test.md), and pairing.
+docs/testing-writes.md), and pairing.
 
 ## Transport
 

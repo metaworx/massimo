@@ -70,20 +70,15 @@ the web UI in any current browser, on a phone or a desktop.
   engine, schema, users and roles, migration of installed boxes
 - [docs/server.md](docs/server.md): the server mode: encryption at rest,
   the public server, sync, and what the store prepares for them
-- [docs/handover-write-test.md](docs/handover-write-test.md):
+- [docs/testing-writes.md](docs/testing-writes.md):
   the test plan for the configuration writes on real hardware,
-  [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
+  [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md) its results
 - [docs/testing-windows.md](docs/testing-windows.md):
   the test plan for the Windows service on a real PC,
-  [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
+  [docs/reports/windows-test-2026-11-05.md](docs/reports/windows-test-2026-11-05.md) its results
 - [docs/update-windows.md](docs/update-windows.md):
   the design for updates from the web UI on Windows: the options,
   the recommendation, the changes per file, the CI and real-PC tests
-- [docs/handover-session.md](docs/handover-session.md):
-  the context a session needs: how the project moves, where things run,
-  the conventions, the checkout
-- [docs/review-2026-11-05.md](docs/review-2026-11-05.md):
-  code review with findings, extraction proposals and the coding standard
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
 - [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
@@ -285,7 +280,7 @@ PC" dialog with "Unknown publisher"
 ([screenshot](docs/images/windows-smartscreen-unknown-publisher.png)):
 "Run anyway" runs it, and starting it from a console shows no dialog at all.
 The installed service and `massimo update` are not affected ([the test
-report](docs/windows-test-2026-11-05.md), observation 8).
+report](docs/reports/windows-test-2026-11-05.md), observation 8).
 For the proxy and discovery,
 Windows Defender Firewall must let the program receive on TCP 62910, UDP
 23272 and UDP 5353 on the private network (the installed service gets a rule for that,
@@ -324,7 +319,7 @@ Get-Content C:\ProgramData\Massimo\serve.log -Tail 20
 ```
 
 Details: [Windows](packaging/README.md#windows), and the test on a real
-PC in [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md).
+PC in [docs/reports/windows-test-2026-11-05.md](docs/reports/windows-test-2026-11-05.md).
 
 **Update.**
 An installed service is updated with the installed binary,

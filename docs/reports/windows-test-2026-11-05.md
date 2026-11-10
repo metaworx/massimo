@@ -335,7 +335,7 @@ None of these is a failure.
    which also needs reputation to build before the warning goes away.
 
    ![SmartScreen: "Windows protected your PC", Unknown publisher,
-   with Run anyway and Don't run](images/windows-smartscreen-unknown-publisher.png)
+   with Run anyway and Don't run](../images/windows-smartscreen-unknown-publisher.png)
 9. **Reconnect backoff caps at 64 s.**
    After a Cube outage the service can take up to a minute to notice the Cube is back.
    Fine for heating, just worth knowing when reading logs.

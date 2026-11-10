@@ -73,24 +73,8 @@ then this file.
 
 ## Conventions
 
-- Every command that talks to a Cube goes through the proxy of the `serve` that holds it;
-  a direct connection takes the Cube's only slot (`-no-direct` refuses the fallback,
-  `-direct` forces it).
-  Nothing is sent to a real Cube without the owner's go:
-  a radio write costs duty cycle.
-  Tests and manual runs use `MASSIMO_ENV_FILE=/dev/null` or the fake Cube
-  (`massimo fakecube`), never the checkout's `.env`.
-- A client of the API needs a token: `MASSIMO_API_TOKEN` is the owner's key,
-  every other user has one of their own (docs/api-v1.md, "Authentication");
-  without one the API answers 401.
-  A signed-in manager, operator or viewer keeps the web UI's settings and
-  colour schemes on the server (docs/store.md section 9 (c)).
-- Hardware findings go into docs/portal-protocol.md the day they are made,
-  with the date and the Cube firmware;
-  the lessons of the hardware days are there ("Lessons from the hardware days")
-  and in packaging/README.md ("Learnings").
-- The owner's Windows service, the Pi and the Mac are touched only on the
-  owner's word in the session.
+The project contract's §3 (in AGENTS.md and GUIDELINES/README.md) holds them,
+the coding standard with them.
 
 ## The checkout on jaguar
 
@@ -98,8 +82,7 @@ Go 1.26, `gh`, commit and tag signing through the repository's git config
 and KeePassXC's SSH agent (run `timeout 60 git commit …`:
 a locked agent hangs instead of failing),
 the Playwright venv for `make ui-test` in tools/ui-test/.venv.
-The conventions are AGENTS.md and documents referenced therein;
-docs/review-2026-11-05.md has the coding standard they came from.
+The conventions are AGENTS.md and the documents it references.
 The web UI's tests are the pytest suite in tools/ui-test/ (`make ui-test`;
 one test with `PYTEST_ADDOPTS='-k "<name> and 390-de"'`,
 tools/ui-test/README.md); a UI change brings its test there,
