@@ -122,6 +122,10 @@ the next minor, a fix counts the suffix up.
   from the tag's label, `stable` without one; the `channel:` line is no
   longer read (`GUIDELINES/project/CI.md`, "Releases").
 
+- The release branch is `release/alpha`, moved by CI once the release is
+  out; `make release-alpha` pushes only `main` and the tag (`README.md`,
+  "Versions").
+
 - The web UI's week programme editor is an element of its own,
   `<massimo-week-program>`, for a Home Assistant card to use too; it
   works as before (`docs/ui.md`).

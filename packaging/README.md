@@ -730,8 +730,9 @@ it then names the copy `massimo.db.before-<version>` it made before.
 ## Updating
 
 Development happens on `main`;
-`make release-alpha` promotes it to the release branch `alpha` and tags it,
-and `.github/workflows/release.yml` builds, signs and publishes the release.
+`make release-alpha` tags it, CI tests the tag, and `.github/workflows/release.yml`
+builds, signs and publishes the release, then fast-forwards the release branch
+`release/alpha` to it.
 Each release belongs to an **update channel**, its release branch:
 `alpha` for the `v0.1.0-alpha.N` releases,
 later `beta` and a stable one the same way.

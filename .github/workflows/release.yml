@@ -133,8 +133,11 @@ jobs:
       SHA: ${{ needs.meta.outputs.sha }}
       PRERELEASE: ${{ needs.meta.outputs.prerelease }}
     steps:
-      # The public key and the tag's message; nothing from here is run.
+      # The public key, the tag's message and the history the release
+      # branch is pushed from; nothing from here is run.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -196,6 +199,36 @@ jobs:
           # The target is the tag's commit; a box reads the flavour from
           # the tag's label (internal/update, hintedFlavour).
           gh release create "$TAG" --verify-tag --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+
+      # The release branch follows the published release: release/<flavour>
+      # names what the flavour's boxes are offered. It is pushed with a
+      # deploy key, since GitHub refuses GITHUB_TOKEN a branch update that
+      # changes .github/workflows/, which a release's commits often do; the
+      # ruleset on release/* lets only a fast-forward through, and the first
+      # push makes the branch. GitHub's host keys come from its API, over
+      # HTTPS. Without the key the branch stays and the release stands.
+      - name: Move the release branch
+        env:
+          DEPLOY_KEY: ${{ secrets.RELEASE_BRANCH_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="release/${FLAVOUR}"
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::warning::RELEASE_BRANCH_DEPLOY_KEY is not set; ${branch} stays where it is."
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${branch}" >/dev/null; then
+            echo "::error::a tag ${branch} exists; a name is never both a branch and a tag."
+            exit 1
+          fi
+          umask 077
+          ssh_dir="$(mktemp -d)"
+          trap 'rm -rf "${ssh_dir:?}"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts"
+          git push "git@github.com:${GITHUB_REPOSITORY}.git" "${SHA}:refs/heads/${branch}"
+          echo "${branch} is ${SHA} (${TAG})"
 
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the

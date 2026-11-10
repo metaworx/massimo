@@ -42,21 +42,20 @@ DEB_IMAGE ?= debian:trixie-slim
 
 .PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test release clean release-alpha
 
-# Development happens on main; a release promotes main to a release
-# branch, which is also the update channel boxes follow (internal/update).
-# Versions: below v1.0.0, and with any suffix, a release is a pre-release;
-# below v1.0.0 a minor may break things. A new feature or breaking change
-# starts the next minor (make release-alpha BUMP=minor: v0.2.0-alpha.1),
-# a fix or iteration counts the suffix up (v0.2.0-alpha.2); the suffix
-# names the channel, so promoting to a beta branch would tag -beta.N.
+# Development happens on main; a release is a tag on main, whose label is
+# the release's flavour (internal/update): -alpha.N is alpha, and a beta
+# would tag -beta.N. Versions: below v1.0.0, and with any suffix, a
+# release is a pre-release; below v1.0.0 a minor may break things. A new
+# feature or breaking change starts the next minor (make release-alpha
+# BUMP=minor: v0.2.0-alpha.1), a fix or iteration counts the suffix up
+# (v0.2.0-alpha.2).
 # release-alpha runs on main, checked out, clean and equal to origin/main.
 # changelog.sh cuts CHANGELOG.md's [Unreleased] into the release's section,
 # makes the chore(release) commit on main and the signed tag at it with that
-# section as its message; main, alpha fast-forwarded to that commit and the
-# tag are then pushed atomically, all or nothing, and
-# .github/workflows/release.yml builds, signs and publishes the release.
-# It refuses when alpha has commits main lacks (alpha is only ever
-# fast-forwarded), when main's head is released already, when changelog.sh
+# section as its message; main and the tag are then pushed atomically, all
+# or nothing, and CI tests the tag and releases it (ci.yml calling
+# release.yml), which then fast-forwards the branch release/alpha to it.
+# It refuses when main's head is released already, when changelog.sh
 # check finds something and when [Unreleased] holds no bullet. DRY=1 runs
 # every step as a dry run: changelog.sh says what it would cut and tag, and
 # the push is printed, not made. ASSISTED_BY=agent:model gives the release
@@ -64,7 +63,7 @@ DEB_IMAGE ?= debian:trixie-slim
 # release needs none.
 CHANGELOG_SH = GUIDELINES/shared/tools/changelog.sh
 release-alpha:
-	@git fetch --quiet --tags origin main alpha && \
+	@git fetch --quiet --tags origin main && \
 	sha=$$(git rev-parse origin/main) && \
 	if [ "$$(git symbolic-ref --quiet --short HEAD)" != main ]; then \
 		echo "release-alpha: check out main first; the release commit is made on it" >&2; exit 1; fi; \
@@ -72,8 +71,6 @@ release-alpha:
 		echo "release-alpha: main has uncommitted changes" >&2; exit 1; fi; \
 	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
 		echo "release-alpha: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
-	if ! git merge-base --is-ancestor origin/alpha $$sha; then \
-		echo "release-alpha: alpha has commits that main lacks; bring them into main first" >&2; exit 1; fi; \
 	if done=$$(git describe --tags --exact-match $$sha 2>/dev/null); then \
 		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
 	last=$$(git tag -l 'v0.*.*-alpha.*' | awk -F'[.-]' '{print $$2, $$NF, $$0}' | sort -k1,1n -k2,2n | tail -1); \
@@ -88,7 +85,7 @@ release-alpha:
 		echo "release-alpha: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
 	if [ -n "$(DRY)" ]; then \
 		$(CHANGELOG_SH) $$cut || exit 1; \
-		echo "release-alpha: would run: git push --atomic origin main <the release commit>:refs/heads/alpha refs/tags/$$next"; \
+		echo "release-alpha: would run: git push --atomic origin main refs/tags/$$next"; \
 		exit 0; fi; \
 	$(CHANGELOG_SH) -q $$cut || { \
 		echo "release-alpha: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
@@ -97,9 +94,9 @@ release-alpha:
 	rel=$$(git rev-parse HEAD) && \
 	if [ "$$(git rev-parse $$rel^)" != "$$sha" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
 		echo "release-alpha: the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
-	git push --atomic origin main $$rel:refs/heads/alpha refs/tags/$$next || { \
+	git push --atomic origin main refs/tags/$$next || { \
 		echo "release-alpha: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
-	echo "released $$next ($$rel) on alpha; follow it at https://github.com/metaworx/massimo/actions"
+	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/alpha: https://github.com/metaworx/massimo/actions"
 
 all: test build
 

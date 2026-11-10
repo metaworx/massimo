@@ -1018,8 +1018,9 @@ in its Cube list pick the entry with the serve host's address (started with
 ## Versions
 
 Development happens on `main`.
-`make release-alpha` promotes `main` to the branch `alpha` and tags it as the
-next pre-release, which the release workflow builds, signs and publishes.
+`make release-alpha` tags `main` as the next pre-release,
+which CI tests, builds, signs and publishes,
+and then fast-forwards the branch `release/alpha` to it.
 Everything below `v1.0.0`, and every version with a suffix (`-alpha.N`,
 `-beta.N`, …), is a pre-release;
 only a plain `vX.Y.Z` from `v1.0.0` on is stable.
@@ -1027,8 +1028,8 @@ Below `v1.0.0` a minor release may break things.
 A new feature or breaking change starts the next minor
 (`make release-alpha BUMP=minor` gives `v0.2.0-alpha.1`),
 a fix or another round counts the suffix up (`v0.2.0-alpha.2`);
-the suffix names the channel,
-so promoting to a later `beta` branch tags `-beta.N`.
+the suffix names the flavour,
+so a later beta release tags `-beta.N`, and its branch is `release/beta`.
 
 A release is made on `main`, checked out, clean and equal to `origin/main`.
 `make release-alpha` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
@@ -1036,9 +1037,12 @@ section with `GUIDELINES/shared/tools/changelog.sh`,
 commits it on `main` as `chore(release): vX.Y.Z-alpha.N`, and tags that commit,
 signed, with the section as the tag's message,
 so the tag carries the release notes, and the GitHub release shows them.
-It then pushes `main`, `alpha` and the tag together or not at all.
-It refuses when `alpha` has commits `main` lacks,
-when `main`'s head is released already,
+It then pushes `main` and the tag together or not at all;
+CI's run of the tag waits for the whole suite before it releases
+(`GUIDELINES/project/CI.md`, "Releases"),
+and moves `release/alpha` once the release is out,
+so that the branch names what the alpha boxes are offered.
+It refuses when `main`'s head is released already,
 when `changelog.sh check` finds something,
 and when `[Unreleased]` holds no bullet.
 `make release-alpha DRY=1` shows what it would cut, tag and push,
