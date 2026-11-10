@@ -29,19 +29,25 @@ BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-l
 # the binaries above with nfpm at a pinned version through `go run`;
 # NFPM=nfpm uses an installed one. Their version is the tag without its
 # v and with ~ for -, so that 0.7.0~alpha.1 sorts before 0.7.0 as dpkg
-# compares versions; nfpm is given that version, not the tag, so that the
-# control Version and the file name agree. armhf holds the armv6 binary,
-# which runs on every 32-bit Raspberry Pi OS, the Pi 1 included.
+# compares versions. A build between tags carries what git describe adds
+# behind a +, its - as . (0.7.0~alpha.1+3.gabc1234, with .dirty for a
+# changed tree), which sorts after the tag it follows and before the
+# next; with a ~ it would sort before its own tag, and apt would take a
+# box on it back to that release. nfpm is given that version, not the
+# tag, so that the control Version and the file name agree; debTag
+# (cmd/massimo/update_apt.go) reads it back, and TestDebVersion checks
+# both through `make debver`. armhf holds the armv6 binary, which runs
+# on every 32-bit Raspberry Pi OS, the Pi 1 included.
 NFPM_VERSION = v2.48.0
 NFPM    ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
-DEBVER   = $(shell echo '$(VERSION)' | sed 's/^v//; s/-/~/g')
+DEBVER   = $(shell echo '$(VERSION)' | sed -E 's/^v//; s/-([0-9]+)-g([0-9a-f]+)-dirty$$/+\1.g\2.dirty/; s/-([0-9]+)-g([0-9a-f]+)$$/+\1.g\2/; s/-dirty$$/+dirty/; s/-/~/g')
 PACKAGES = massimo_$(DEBVER)_amd64.deb massimo_$(DEBVER)_arm64.deb massimo_$(DEBVER)_armhf.deb
 # Reproducible packages: every file in them carries the commit's time.
 export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date +%s)
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test site release release-files clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver deb-test deb-systemd-test apt-test site release release-files clean release-alpha
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, and a beta
@@ -211,6 +217,10 @@ packages: linux linux-arm64 linux-armv6 deb-unit
 
 # The amd64 package installed, checked and purged in a Debian container
 # (packaging/deb/test.sh); DEB_IMAGE picks the release.
+# The package version of VERSION, which TestDebVersion reads.
+debver:
+	@echo '$(DEBVER)'
+
 deb-test:
 	docker run --rm -v "$(CURDIR)/$(OUT):/dist:ro" -v "$(CURDIR)/packaging/deb/test.sh:/test.sh:ro" $(DEB_IMAGE) bash /test.sh
 
