@@ -3,7 +3,7 @@
 The update helper of
 [AP AptUpdate v1.0](2026-11-09_04-42_AP_AptUpdate_update_button_apt_brew.md)
 on a real box, run on 2026-11-10 at the owner's word ("Yes, run them"),
-from `main` at `d8c2016`.
+from `main` at "Merge pull request #155 from metaworx/claude/init-tests".
 The real Mac and the button against the signed repository are still to come.
 
 1. **The route back to the release was dropped.**
@@ -16,7 +16,7 @@ The real Mac and the button against the signed repository are still to come.
    and serve failed with `open /etc/massimo/env: permission denied`.
    This is the version-order finding F1,
    with a worse outcome than it had before the rename.
-2. **Two test builds instead**, from `d8c2016` with the channel `alpha`:
+2. **Two test builds instead**, from that commit, with the channel `alpha`:
    `make packages VERSION=v0.12.0-alpha.1.1 CHANNEL=alpha`, then `.2`.
    dpkg sorts `0.12.0~alpha.1.1` and `0.12.0~alpha.1.2` after `0.12.0~alpha.1`,
    and before `0.12.0~alpha.2`, `0.12.0` and `0.13.0~alpha.1`.
