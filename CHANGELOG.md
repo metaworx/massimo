@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- Every release carries its build record, `massimo-build.txt`, listed in
+  the signed manifest, and GitHub's build provenance of every file it
+  publishes (`README.md`, "Installing").
+
 - The site is deployed by `.github/workflows/site.yml` at every run of
   the release workflow, so that a push to `main` updates its docs; CI's
   `Site` job builds the docs of every pull request.

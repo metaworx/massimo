@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.32.0)
+# Massimo — CI Conventions (v1.33.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -319,6 +319,27 @@ a cache another run wrote would otherwise reach the release's binaries.
 CodeQL's alert 6, cache poisoning by the nightly build's checkout of the commit
 `meta` picked, was dismissed as a false positive:
 that commit is always one of `main`'s first parents.
+`make release` runs the build through `tee` and writes the build record,
+`massimo-build.txt` (`packaging/build-record.sh`):
+the runner and its image,
+the toolchain and the `go env` values that shape a build,
+the command and its `-ldflags`,
+which Go leaves out of a binary built with `-trimpath`,
+`go version -m` of every binary and of nfpm, built again for it,
+then the whole log.
+`SHA256SUMS` and the manifest list it, so the release key's or the rolling
+key's signature covers it;
+`build` holds no secret, so the log holds none.
+`build` then attests the provenance of every file it made,
+the manifest and the record included (`actions/attest-build-provenance`,
+with `id-token` and `attestations`, which ci.yml's `release` job grants):
+a statement signed through Sigstore with the job's OIDC token,
+not with the project's keys,
+naming the repository, the workflow, the commit and the runner;
+`gh attestation verify <file> -R metaworx/massimo` checks one.
+Only the manifest's signature is not attested,
+since `sign` and `rolling` make it.
+It runs in `build`, not beside the keys, which run nothing but openssl and gh.
 
 A push to `main` whose suite passed becomes the `devel` build:
 the same `make release`, as the version `git describe` calls the commit

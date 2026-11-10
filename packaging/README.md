@@ -63,8 +63,10 @@ afterwards, clients connect to the server's proxy instead of the Cube.
 ## Download or build
 
 Every release on <https://github.com/metaworx/massimo/releases> has the binaries below,
-`SHA256SUMS` and a signed manifest;
-`sha256sum -c SHA256SUMS --ignore-missing` checks a download.
+`SHA256SUMS`, a signed manifest and the build record, `massimo-build.txt`;
+`sha256sum -c SHA256SUMS --ignore-missing` checks a download,
+and `gh attestation verify <file> -R metaworx/massimo` that the project's
+release workflow built it (README.md, "Installing").
 To build instead, pick the target for the board (all need a 32-bit or 64-bit
 Linux to match):
 
