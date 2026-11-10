@@ -1,21 +1,19 @@
 # Builds the massimo binary with the version taken from the nearest git tag
-# (semantic versioning: tag releases as vMAJOR.MINOR.PATCH) and the update
-# channel taken from the current branch, or from the release tag a detached
-# HEAD is at (see internal/update).
+# (semantic versioning: tag releases as vMAJOR.MINOR.PATCH) and the
+# flavour it is released as (see internal/update).
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-dev)
-# The channel of a release tag's checkout is the one release.yml gives the
-# tag: its pre-release label (alpha of v0.12.0-alpha.1), else the "channel:"
-# line of its message. Any other detached HEAD stays HEAD, which has no
-# releases. release.yml passes CHANNEL itself.
-CHANNEL ?= $(shell b=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
-	if [ "$$b" = HEAD ] && t=$$(git describe --tags --exact-match 2>/dev/null); then \
-		c=$$(printf '%s\n' "$$t" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$$/\1/p'); \
-		[ -n "$$c" ] || c=$$(git for-each-ref --format='%(contents)' "refs/tags/$$t" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]'); \
-		b=$${c:-$$b}; \
-	fi; \
-	printf '%s' "$$b")
-LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.flavour=$(CHANNEL)
+# The flavour of a release tag's commit is the tag's pre-release label
+# (alpha of v0.12.0-alpha.1), stable for a tag without one; any other
+# build is devel, the flavour of the builds of main. release.yml passes
+# FLAVOUR itself, and RELEASE, the GitHub release's tag, for a rolling
+# build (release/devel).
+FLAVOUR ?= $(shell t=$$(git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null); \
+	f=$$(printf '%s\n' "$$t" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$$/\1/p'); \
+	if [ -z "$$f" ] && printf '%s\n' "$$t" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then f=stable; fi; \
+	printf '%s' "$${f:-devel}")
+RELEASE  ?=
+LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.flavour=$(FLAVOUR)
 PKG      = ./cmd/massimo
 OUT      = dist
 # Cross builds are static (no cgo) and do not record the build machine's paths.
@@ -230,12 +228,12 @@ apt-test:
 # release builds every binary and package and the files a GitHub release
 # carries besides them: SHA256SUMS for people, and the manifest the
 # release workflow signs and `massimo update` verifies. Run by the
-# workflow with VERSION and CHANNEL set; locally it shows what a release
-# would hold.
+# workflow with VERSION and FLAVOUR set, and RELEASE for a rolling build;
+# locally it shows what a release would hold.
 release: clean cross packages
 	cd $(OUT) && sha256sum $(BINARIES) $(PACKAGES) > SHA256SUMS
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
-		-flavour $(CHANNEL) -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
+		-flavour $(FLAVOUR) -release '$(RELEASE)' -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
 
 clean:
 	rm -rf massimo $(OUT)

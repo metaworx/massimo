@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.21.0)
+# Massimo — CI Conventions (v1.22.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main`, a pull request), `.github/workflows/release.yml` (tags `v*`), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a tag `v*`, a pull request), `.github/workflows/release.yml` (called by ci.yml once its tests have passed), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
 
 There is no other platform.
 
@@ -35,14 +35,24 @@ There is no other platform.
 | Trigger | Jobs |
 |---------|------|
 | push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line and discovery; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client, in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job Changed paths answers); Guidelines (section 4) |
-| push to a release branch (`alpha`, later `beta` and a stable one) | nothing: it is a fast-forward of a tested commit; the tag runs release.yml |
-| tag `v*` | release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
+| after every job above | All tests passed: fails unless none of them failed or was cancelled; then, on a push, Release (release.yml), which releases a tag and nothing else so far |
+| push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: the release moved it to a commit ci.yml had tested |
+| tag `v*` | every job above, as for a push to `main`; then release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
 Each commit runs the workflow once:
 a push to a pull request's branch runs it as the pull request's,
 not a second time as a push,
 and the commits `main` receives run it as pushes to `main`.
+A release commit runs it twice, as a push to `main` and as its tag's:
+skipping one would take a condition on every job,
+and the repository is public, so the second run costs no paid minutes.
+The release waits for the whole suite of the tag's run,
+and runs with the tag as its ref,
+which is why ci.yml calls release.yml (`workflow_call`)
+rather than release.yml listening for ci.yml's end (`workflow_run`):
+such a run carries the default branch,
+which the `signing` environment does not admit.
 The release branches receive only commits already on `main`,
 so a push to one runs nothing.
 Runs share a concurrency group per ref:
@@ -267,18 +277,20 @@ the tag's push starts release.yml.
 So a released section and its tag agree from the start, which is what
 `changelog.sh check` holds them to in the guidelines job.
 `DRY=1` runs every step as a dry run.
-The update channel of a release is the pre-release identifier of the tag's name
-(`v0.7.0-alpha.1` is on `alpha`),
-then a `channel:` line in the tag message (which `make release-alpha` no longer writes:
-the name of every tag it makes holds the channel),
-then the one branch holding the commit.
-The GitHub release is created with the channel as its target,
-which a box reads, with the tag's name, to leave another channel's release
-unfetched (`internal/update`, `hintedChannel`);
-neither is signed, the manifest decides.
+The flavour of a release (`internal/update`) is the pre-release identifier
+of the tag's name (`v0.7.0-alpha.1` is `alpha`), `stable` for a tag without one;
+a box on a channel takes its own flavour's releases and every more stable one's.
+The `channel:` line of a tag message and the branch holding the commit,
+which older tags fell back to, no longer count;
+a tag whose commit is not on `main` is refused.
+The GitHub release is created with the tag's commit as its target;
+a box reads the flavour from the tag's name to leave a release its channel
+does not take unfetched (`internal/update`, `hintedFlavour`);
+the name is not signed, the manifest decides,
+and `sign` refuses a manifest whose flavour is not the tag's.
 The GitHub release's notes are the body of the tag's message,
-that section, then a sentence naming the channel and how to install and verify;
-a tag with no body (a `channel:` line does not count) gets the sentence alone.
+that section, then a sentence naming the flavour and how to install and verify;
+a tag with no body (an old `channel:` line does not count) gets the sentence alone.
 A tag whose commit `git describe` does not name is refused.
 Every release below 1.0.0 is a pre-release on GitHub.
 The boxes on the alpha channel (the Raspberry Pi) take a release through

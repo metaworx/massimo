@@ -1,44 +1,50 @@
 name: Release
 
-# A version tag (v1.2.3, v0.1.0-alpha.10) is tested, built for every
-# platform (the binaries, and the Debian packages holding them), signed
-# and published as a GitHub release, which `massimo update` installs
+# The release of a commit CI has tested. ci.yml calls this workflow as its
+# last job, once every test job has passed (workflow_call), so that it
+# runs with the caller's ref, which the environments' rules are matched
+# against: a v* tag here, where the signing environment admits the tags
+# alone. A workflow started by workflow_run would carry the default
+# branch whatever started it.
+#
+# A version tag (v1.2.3, v0.1.0-alpha.10) is built for every platform
+# (the binaries, and the Debian packages holding them), signed and
+# published as a GitHub release, which `massimo update` installs
 # (internal/update).
 #
-# The jobs, a key in one each: `build` runs the toolchain and the
-# third-party actions and holds no secret; `sign` holds the release key
-# through the `signing` environment, which only v* tags may use, runs
-# nothing but openssl and gh on what build handed over, checks the
-# signature against the public key compiled into massimo before
-# publishing, and publishes exactly what it signed. `homebrew` then
-# pushes the formula to the tap (publish.yml). `apt-build` holds
-# the apt repository's key through the same environment and rebuilds
-# the site from the releases (packaging/apt/publish.sh); `apt-deploy`
-# puts it on GitHub Pages. Both are skipped until the owner has made
-# the key (packaging/README.md, "The apt repository").
+# The jobs, a key in one each: `meta` decides what the run releases;
+# `build` runs the toolchain and the third-party actions and holds no
+# secret; `sign` holds the release key through the `signing` environment,
+# which only v* tags may use, runs nothing but openssl and gh on what
+# build handed over, checks the signature against the public key compiled
+# into massimo and the flavour against the tag before publishing, and
+# publishes exactly what it signed. `homebrew` then pushes the formula to
+# the tap (publish.yml). `apt-build` holds the apt repository's key
+# through the same environment and rebuilds the site from the releases
+# (packaging/apt/publish.sh); `apt-deploy` puts it on GitHub Pages.
 #
-# The update channel of a release is the release branch it was promoted
-# to, which is the pre-release identifier of the tag's name (v0.7.0-alpha.1
-# is on channel alpha); for a tag without one, a "channel:" line in the
-# tag message, else the one branch on GitHub holding its commit. The name
-# comes first because the message is the release's CHANGELOG.md section
-# (`make release-alpha` tags with changelog.sh), which names no channel;
-# that section is also the GitHub release's notes. Development happens on
-# main; the release branches only ever fast-forward to it.
+# The flavour of a release (internal/update) is the pre-release label of
+# its tag (v0.7.0-alpha.1 is alpha), stable for a tag without one
+# (v1.0.0); the tag message's channel: line and the branch holding the
+# commit no longer count. The commit must be on main, where every release
+# is cut (`make release-alpha`); the tag's message is the release's
+# CHANGELOG.md section, which is also the GitHub release's notes.
 on:
-  push:
-    tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Test and build
+  meta:
+    name: What to release
     runs-on: ubuntu-latest
     outputs:
+      kind: ${{ steps.meta.outputs.kind }}
       tag: ${{ steps.meta.outputs.tag }}
-      channel: ${{ steps.meta.outputs.channel }}
+      sha: ${{ steps.meta.outputs.sha }}
+      version: ${{ steps.meta.outputs.version }}
+      flavour: ${{ steps.meta.outputs.flavour }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,43 +54,54 @@ jobs:
       - name: Release metadata
         id: meta
         run: |
-          tag="${GITHUB_REF_NAME}"
-          # checkout leaves the tag without its annotation; fetch it again.
-          git fetch --quiet --force origin "refs/tags/${tag}:refs/tags/${tag}"
-          sha="$(git rev-parse "${tag}^{commit}")"
-          if [ "$(git describe --tags --exact-match "$sha")" != "$tag" ]; then
-            echo "::error::git describe does not name ${tag} for ${sha}."
-            exit 1
-          fi
-          channel="$(printf '%s\n' "$tag" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')"
-          if [ -z "$channel" ]; then
-            channel="$(git for-each-ref --format='%(contents)' "refs/tags/${tag}" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]')"
-          fi
-          if [ -z "$channel" ]; then
-            branches="$(git branch -r --format='%(refname:lstrip=3)' --contains "$sha" | grep -vx HEAD || true)"
-            if [ "$(printf '%s\n' "$branches" | grep -c .)" != 1 ]; then
-              echo "::error::${tag} names no channel, and its commit is on these branches, not on exactly one: ${branches:-none}"
+          kind=skip tag="" sha="" version="" flavour="" prerelease=true
+          case "$GITHUB_REF" in
+          refs/tags/v*)
+            tag="${GITHUB_REF_NAME}"
+            # checkout leaves the tag without its annotation; fetch it again.
+            git fetch --quiet --force origin "refs/tags/${tag}:refs/tags/${tag}"
+            sha="$(git rev-parse "${tag}^{commit}")"
+            if [ "$(git describe --tags --exact-match "$sha")" != "$tag" ]; then
+              echo "::error::git describe does not name ${tag} for ${sha}."
               exit 1
             fi
-            channel="$branches"
-          fi
-          if ! printf '%s' "$channel" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$'; then
-            echo "::error::invalid channel '${channel}'."
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$sha" "origin/${channel}"; then
-            echo "::error::${tag} names channel ${channel}, but ${sha} is not on that branch on GitHub."
-            exit 1
-          fi
-          # 0.x is pre-release by definition, as is any -suffix.
-          prerelease=false
-          case "$tag" in v0.*|*-*) prerelease=true ;; esac
-          echo "release ${tag} (${sha}) on channel ${channel}, prerelease ${prerelease}"
+            flavour="$(printf '%s\n' "$tag" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')"
+            if [ -z "$flavour" ] && printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              flavour=stable
+            fi
+            if [ -z "$flavour" ]; then
+              echo "::error::${tag} names no flavour: a release tag is vX.Y.Z or vX.Y.Z-<label>.N."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$sha" origin/main; then
+              echo "::error::${tag} (${sha}) is not on main, where every release is cut."
+              exit 1
+            fi
+            # 0.x is pre-release by definition, as is any -suffix.
+            case "$tag" in v0.*|*-*) ;; *) prerelease=false ;; esac
+            kind=release version="$tag"
+            ;;
+          esac
+          echo "${kind}: ${version:-nothing} (${sha:-no commit}), flavour ${flavour:-none}"
           {
+            echo "kind=${kind}"
             echo "tag=${tag}"
-            echo "channel=${channel}"
+            echo "sha=${sha}"
+            echo "version=${version}"
+            echo "flavour=${flavour}"
             echo "prerelease=${prerelease}"
           } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: meta
+    if: needs.meta.outputs.kind != 'skip'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          fetch-depth: 0
 
       # The same toolchain as ci.yml: a supported line, newest patch.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -92,14 +109,9 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      - name: go vet
-        run: go vet ./...
-
-      - name: go test
-        run: go test ./...
-
+      # Tested by ci.yml's jobs before this workflow was called.
       - name: Build every binary and package, SHA256SUMS and the manifest
-        run: make release VERSION="${{ steps.meta.outputs.tag }}" CHANNEL="${{ steps.meta.outputs.channel }}"
+        run: make release VERSION="${{ needs.meta.outputs.version }}" FLAVOUR="${{ needs.meta.outputs.flavour }}"
 
       - name: Hand the files to the signing job
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -110,15 +122,16 @@ jobs:
 
   sign:
     name: Sign and publish
-    needs: build
+    needs: [ meta, build ]
+    if: needs.meta.outputs.kind == 'release'
     runs-on: ubuntu-latest
     environment: signing
     permissions:
       contents: write
     env:
-      TAG: ${{ needs.build.outputs.tag }}
-      CHANNEL: ${{ needs.build.outputs.channel }}
-      PRERELEASE: ${{ needs.build.outputs.prerelease }}
+      TAG: ${{ needs.meta.outputs.tag }}
+      SHA: ${{ needs.meta.outputs.sha }}
+      PRERELEASE: ${{ needs.meta.outputs.prerelease }}
     steps:
       # The public key and the tag's message; nothing from here is run.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,6 +140,20 @@ jobs:
         with:
           name: release
           path: dist
+
+      # The flavour comes from the tag here again, not from meta, which
+      # ran beside the build: a manifest of another flavour is refused.
+      - name: Check the manifest's tag and flavour
+        run: |
+          flavour="$(printf '%s\n' "$TAG" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')"
+          flavour="${flavour:-stable}"
+          echo "FLAVOUR=${flavour}" >> "$GITHUB_ENV"
+          grep -q "\"tag\": \"${TAG}\"" dist/massimo-release.json || { echo "::error::the manifest is not ${TAG}'s"; exit 1; }
+          grep -q "\"channel\": \"${flavour}\"" dist/massimo-release.json || { echo "::error::the manifest's flavour is not ${flavour}"; exit 1; }
+          if grep -q '"release":' dist/massimo-release.json; then
+            echo "::error::a numbered release's manifest names another release"
+            exit 1
+          fi
 
       - name: Sign the manifest
         env:
@@ -147,7 +174,6 @@ jobs:
           openssl pkeyutl -verify -pubin -inkey internal/update/release-key.pem -rawin \
             -in dist/massimo-release.json -sigfile "$RUNNER_TEMP/sig.bin"
           (cd dist && sha256sum -c SHA256SUMS)
-          grep -q "\"tag\": \"${TAG}\"" dist/massimo-release.json
 
       - name: Publish the GitHub release
         env:
@@ -155,7 +181,7 @@ jobs:
         run: |
           flags=()
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
-          sentence="Channel: \`${CHANNEL}\`. Install or update with \`massimo update\`, or install the Debian package with \`apt install ./massimo_<version>_<arch>.deb\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
+          sentence="Flavour: \`${FLAVOUR}\`, which boxes on the channel \`${FLAVOUR}\` and on every less stable one take. Install or update with \`massimo update\`, or install the Debian package with \`apt install ./massimo_<version>_<arch>.deb\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
           # The notes are the tag message's body, the release's CHANGELOG.md
           # section as changelog.sh wrote it, then the sentence; an old tag's
           # channel: line is not part of them, and a tag with no body gets
@@ -167,10 +193,9 @@ jobs:
           else
             printf '%s\n' "$sentence" > "$RUNNER_TEMP/notes.md"
           fi
-          # The target is the channel: a box reads it before it fetches the
-          # manifest of a release whose tag has no label (internal/update,
-          # hintedChannel); the tag exists, so nothing is made from it.
-          gh release create "$TAG" --verify-tag --target "$CHANNEL" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+          # The target is the tag's commit; a box reads the flavour from
+          # the tag's label (internal/update, hintedFlavour).
+          gh release create "$TAG" --verify-tag --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
 
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the
@@ -178,10 +203,11 @@ jobs:
   # creates with its own token starts no workflow of its own.
   homebrew:
     name: Homebrew
-    needs: [ build, sign ]
+    needs: [ meta, sign ]
+    if: needs.meta.outputs.kind == 'release'
     uses: ./.github/workflows/publish.yml
     with:
-      tag: ${{ needs.build.outputs.tag }}
+      tag: ${{ needs.meta.outputs.tag }}
     secrets:
       HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
@@ -192,7 +218,8 @@ jobs:
   # key. The site has no state: every release rebuilds it from GitHub.
   apt-build:
     name: Build the apt repository
-    needs: sign
+    needs: [ meta, sign ]
+    if: needs.meta.outputs.kind == 'release'
     runs-on: ubuntu-latest
     environment: signing
     outputs:
