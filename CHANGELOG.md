@@ -18,6 +18,12 @@ the next minor, a fix counts the suffix up.
   tag that CI moved since the checkout last fetched it no longer
   stops it ("would clobber existing tag").
 
+- A release commit is tested once, by its tag's run: CI's run of `main`
+  skips it and makes no `devel` build under the release's own version.
+
+- CI's macOS job no longer fails now and then with exit code 141: a pipe
+  into `grep` reads to the end, so no writer is cut off.
+
 ## [0.13.0-alpha.1] - 2026-11-10
 
 ### Added

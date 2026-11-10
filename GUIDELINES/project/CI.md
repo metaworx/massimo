@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.34.0)
+# Massimo — CI Conventions (v1.35.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line and discovery; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job Changed paths answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client, in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job Changed paths answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line and discovery; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client, in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled; then, on a push, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
 | tag `v*` | every job above, as for a push to `main`; then release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
@@ -59,10 +59,31 @@ so a push to one runs nothing.
 A job after one that can be skipped names a status function in its `if:`:
 GitHub otherwise adds `success()`,
 which is false while any job up the chain was skipped, not only its own `needs`.
-Changed paths is skipped on every push,
-so All tests passed (`!cancelled()`) and Release
-(`!cancelled() && … && needs.tests.result == 'success'`) say so;
+Fuzz is skipped on every pull request, and every job on a release commit's push,
+so the test jobs, All tests passed and Release
+(`!cancelled() && … && needs.tests.result == 'success'`) name one;
 without it the first `devel` build, on 2026-11-10, was skipped.
+Every test job waits for What to test, the gate that opens ci.yml:
+on a push to `main` of a release commit,
+whose summary opens with `chore(release): `,
+it answers `suite=false`,
+and every job is skipped, All tests passed and Release too.
+`make release-alpha` pushes `main` and the tag atomically,
+and `main` must equal `origin/main` before,
+so the tag's run tests that very commit;
+running the suite on `main` as well tested it twice
+and made a `devel` build under the release's own version (owner, 2026-11-10,
+as file_checksum_search keeps one run per release).
+The nightly build still finds the commit, through its tag's run.
+Only an answer of `false` skips a job:
+a gate that fails leaves its answers empty, so every job runs,
+and All tests passed fails on the gate's result,
+since the required checks, which a skipped job passes, do not include it.
+A pipe into `grep` in a step reads to the end (`grep … >/dev/null`,
+not `grep -q`):
+under `pipefail` a `grep -q` that exits at its match kills a writer still writing,
+which failed the macOS job with exit code 141 on 2026-11-10
+(`massimo tls show | grep -q`).
 Runs share a concurrency group per ref:
 a new push to a pull request cancels the run it supersedes,
 while a run of `main` is never cancelled,
@@ -107,14 +128,14 @@ A pull request runs the job only when it changes `internal/server/ui/`,
 the paths the contract asks `make ui-test` for and the job's own definition,
 and then on all four cases,
 so that a case it would have left out does not fail first on `main`.
-The job Changed paths answers that from the pull request's merge commit,
+The job What to test answers that from the pull request's merge commit,
 whose first parent is the base branch.
 The condition sits on the job, not on the workflow's trigger:
 "Screenshots" is a required check on `main`,
 and a job skipped by its `if:` counts as passed,
 while a workflow that a path filter never starts leaves the check waiting.
 Only an answer of `false` skips the job,
-so a Changed paths job that fails runs it rather than letting the pull request
+so a What to test job that fails runs it rather than letting the pull request
 through untested.
 A push to `main` runs the job whatever it changes,
 so a change elsewhere that breaks the page shows on the merge commit's run.
@@ -143,7 +164,7 @@ A pull request runs the job only when it changes `internal/announce/`,
 `internal/serve/`, `internal/proxy/`, `internal/cubelan/`,
 `cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `tools/lan-test/`
 or `.github/workflows/ci.yml`,
-as the job Changed paths answers, and a push to `main` always,
+as the job What to test answers, and a push to `main` always,
 as the Screenshots job does.
 
 Hardware is never touched by CI;
