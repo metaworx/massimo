@@ -142,6 +142,9 @@ jobs:
           # The target is the tag's commit; a box reads the flavour from
           # the tag's label (internal/update, hintedFlavour).
           gh release create "$TAG" --verify-tag --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+          # Every file under its own name, or SHA256SUMS and the manifest
+          # name files the release lacks (packaging/release-assets.sh).
+          packaging/release-assets.sh "$TAG" dist/massimo-* dist/*.deb dist/SHA256SUMS
 
       # The release branch follows the published release: release/<flavour>
       # names what the flavour's boxes are offered. It is pushed with a
@@ -272,7 +275,11 @@ jobs:
       # its signature after them, so that a box which reads the new
       # manifest finds its files already there; then the tag, and the notes
       # and the files the new build lacks (the debs carry the version in
-      # their name) last. The tag is pushed with the deploy key
+      # their name) last. Before the tag moves, every file must be an asset
+      # under its own name (packaging/release-assets.sh): a file GitHub
+      # renamed would otherwise be deleted below as not the build's; the
+      # step fails and the release keeps its old tag. The tag is pushed
+      # with the deploy key
       # ROLLING_TAG_DEPLOY_KEY: GitHub refused GITHUB_TOKEN the move once
       # main's workflow files had changed since the commit (2026-11-10);
       # without the key the token tries.
@@ -286,6 +293,7 @@ jobs:
           title="${FLAVOUR} ${VERSION}"
           if ! cur="$(git rev-parse --verify --quiet "refs/tags/${RELEASE}^{commit}")"; then
             gh release create "$RELEASE" --target "$SHA" --prerelease --latest=false --title "$title" --notes-file "$RUNNER_TEMP/notes.md" "${files[@]}"
+            packaging/release-assets.sh "$RELEASE" "${files[@]}"
             echo "${RELEASE} made at ${SHA}"
             exit 0
           fi
@@ -300,6 +308,7 @@ jobs:
           done
           gh release upload "$RELEASE" --clobber "${payload[@]}"
           gh release upload "$RELEASE" --clobber "${manifest[@]}"
+          packaging/release-assets.sh "$RELEASE" "${files[@]}"
           if [ -n "$TAG_KEY" ]; then
             ssh_dir="$(mktemp -d)"
             trap 'rm -rf "${ssh_dir:?}"' EXIT
