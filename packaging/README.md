@@ -498,8 +498,18 @@ and deployed to the project's GitHub Pages with `actions/deploy-pages`;
 it has no state of its own,
 so a release that is deleted on GitHub leaves the pool at the next release,
 and a change to the pages is online with the next release.
+Each release also carries the signed index as `massimo-apt-index.tar.gz`,
+so that the site can be rebuilt from `main` without the key,
+which only the release tags reach:
+`apt/dists/` as signed, `apt/massimo.asc`, `apt/massimo.sources`,
+`apt/massimo-archive-keyring.deb`, and `apt/pool.tsv`,
+one line per package of the pool, tab-separated:
+its path under `apt/`, its SHA-256,
+and the download URL of the release file it is,
+or `included` for a package in the tarball itself (the keyring package);
+`publish.sh --index-asset <file>` writes it.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease` and the pages,
+verifies `InRelease`, the pages and the index asset,
 and installs from it in a container as the snippet above does,
 then upgrades to a newer package through the update helper while another
 process holds apt's lock,

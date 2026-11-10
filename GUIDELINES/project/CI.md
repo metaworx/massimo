@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.25.0)
+# Massimo — CI Conventions (v1.26.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -364,6 +364,11 @@ and whose `github-pages` environment must allow the tags `v*`:
 GitHub makes it allowing the default branch only,
 and the deploy runs for the release's tag;
 a box following a suite takes the release through `apt upgrade`.
+`apt-build` also attaches the signed index to the release,
+`massimo-apt-index.tar.gz` with `pool.tsv`
+(packaging/README.md, "The apt repository"),
+so that a deploy of the site from `main` can serve the repository
+without the apt key, which stays with the tags.
 
 ## 7. Runner Constraints
 

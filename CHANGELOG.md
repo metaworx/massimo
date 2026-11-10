@@ -26,6 +26,10 @@ the next minor, a fix counts the suffix up.
   tests passed, if newer than the last one (`GUIDELINES/project/CI.md`,
   "Releases").
 
+- A release carries its signed apt index, `massimo-apt-index.tar.gz`, for
+  a site rebuilt without the key (`packaging/README.md`, "The apt
+  repository").
+
 - The event stream gives every event an id and resumes after the last
   one a client read, or says `resync`; the web UI resumes with it
   (`docs/api-v1.md`, "GET …/events").
