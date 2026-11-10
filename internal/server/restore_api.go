@@ -193,15 +193,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		if tracked {
 			defer s.wg.Done()
 		}
-		s.runRestore(ctx, rt, run, p, commandOf(r.Context()))
-		rt.restoreMu.Lock()
-		done := run.State == "done"
-		rt.restoreMu.Unlock()
-		if done {
-			// The file restored is the reference now: the next look says
-			// whether the Cube took all of it (backups.go).
-			rt.bk.restored(backup.ConfigHash(src.file))
-		}
+		s.runRestore(ctx, rt, run, p, commandOf(r.Context()), backup.ConfigHash(src.file))
 	}()
 	writeJSON(w, http.StatusAccepted, restoreAnswer(run.ID, len(p.Steps)))
 	return nil
@@ -513,8 +505,12 @@ func (rt *runtime) restoreStatus() (restoreRun, bool) {
 // runRestore sends the plan's steps one after the other and reports
 // each as a restore_step event, then restore_done; it stops at the
 // first failure, as the command does. Devices whose configuration was
-// written are followed up like after any configuration write.
-func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p *backup.Plan, command string) {
+// written are followed up like after any configuration write. A plan
+// run without an error makes hash, the file's configuration, the backup
+// reference before the run reads done, so that no backup check in
+// between compares the restored Cube with its state before the restore
+// (backups.go).
+func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p *backup.Plan, command, hash string) {
 	var configured []cube.RFAddress
 	radio := false
 	w := rt.writer()
@@ -549,6 +545,11 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	})
 	if radio {
 		rt.afterWrite(configured...)
+	}
+	if err == nil {
+		// The file restored is the reference now: the next look says
+		// whether the Cube took all of it.
+		rt.bk.restored(hash)
 	}
 	finished := time.Now()
 	rt.restoreMu.Lock()

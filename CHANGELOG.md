@@ -250,6 +250,10 @@ the next minor, a fix counts the suffix up.
   deadline, "context deadline exceeded" with no input written
   (golang/go#75804; `GUIDELINES/project/CI.md`, section 3).
 
+- A finished restore no longer gets an automatic backup of the state it
+  restored, which a backup check could take before the restored file
+  became the reference; under QEMU the armv6 job found it.
+
 ### Security
 
 - The release build and the job holding the apt key restore no Actions
