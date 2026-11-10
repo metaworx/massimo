@@ -1,4 +1,4 @@
-# AP Site v1.0: docs on the site
+# AP Site v1.1: docs on the site
 
 ## TL;DR
 
@@ -62,7 +62,7 @@ carries the documentation, rendered per channel.
 
 ## Analysis
 
-### What is on `main` (bb2095b)
+### What is on `main` after #159 (Channels), `bb2095b`
 
 - `release.yml` is called by `ci.yml` after "All tests passed" on every push
   (and by its own schedule, and by hand). `meta` gives `kind`: `release` for
@@ -209,3 +209,5 @@ One per block, in the project's form, each citing
 
 - v1.0 (2026-11-10): the plan, by `PLAN++ Site`; D1 to D6, D9 from the Site
   analysis, D2 as Channels D12-A, D13-A as recommended.
+- v1.1 (2026-11-10): the Analysis heading names the state of `main` by
+  its pull request, the commit at the end (the owner's D1-A).
