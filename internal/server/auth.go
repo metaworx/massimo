@@ -804,14 +804,25 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	}
 	var p *principal
 	var why error
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+	// offered: the request presented something to check, a Bearer
+	// header (an empty one included, which arrives as "Bearer", its
+	// space trimmed) or a stream ticket or token. Only such a request
+	// guesses, and only its refusal counts toward the lockout; one
+	// without any is refused all the same, uncounted, so that a page
+	// before its sign-in, or a scanner behind a proxy that is not
+	// trusted, does not lock the address out.
+	h := r.Header.Get("Authorization")
+	offered := h == "Bearer" || strings.HasPrefix(h, "Bearer ")
+	if strings.HasPrefix(h, "Bearer ") {
 		p, why = s.resolve(ctx, mode, strings.TrimPrefix(h, "Bearer "), ip)
 	}
 	if p == nil && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events") {
 		q := r.URL.Query()
-		if tp, ok := s.tickets.redeem(q.Get("ticket"), strings.ToLower(r.PathValue("sn"))); ok {
+		ticket, tok := q.Get("ticket"), q.Get("token")
+		offered = offered || ticket != "" || tok != ""
+		if tp, ok := s.tickets.redeem(ticket, strings.ToLower(r.PathValue("sn"))); ok {
 			p = tp
-		} else if tok := q.Get("token"); tok != "" {
+		} else if tok != "" {
 			if p, why = s.resolve(ctx, mode, tok, ip); p != nil {
 				w.Header().Set("Deprecation", tokenQueryDeprecated)
 			}
@@ -828,7 +839,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			s.log.Error("api: token not resolved", "error", why)
 			writeError(w, http.StatusInternalServerError, "authentication failed; see the log")
 		default:
-			if s.limiter.fail(ctx, key) {
+			if offered && s.limiter.fail(ctx, key) {
 				s.log.Warn("api: address locked out after failed token checks", "remote", ip, "for", s.authLockout)
 			}
 			writeError(w, http.StatusUnauthorized, errBadToken.Error())

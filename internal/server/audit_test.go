@@ -205,7 +205,9 @@ func (b countingBody) Close() error { return nil }
 // Requests refused before anyone is known, without a token, with a
 // wrong one or from a locked-out address, leave one audit row per
 // address and minute with their count, written when the minute ends (here:
-// when the server stops), and none of their bodies is read.
+// when the server stops), and none of their bodies is read. Only the
+// wrong tokens count toward the lockout: the tenth, the twentieth
+// request, locks the address out for the last ten.
 func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	s := New(opts)
@@ -216,7 +218,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	var read atomic.Int64
 	body := strings.Repeat(`{"mode":"auto"}`, 1000)
 	codes := map[int]int{}
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		r := httptest.NewRequest("PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", countingBody{strings.NewReader(body), &read})
 		r.RemoteAddr = "192.0.2.10:4321"
 		if i%2 == 1 {
@@ -226,8 +228,8 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 		s.Handler().ServeHTTP(w, r)
 		codes[w.Code]++
 	}
-	if codes[401] != 10 || codes[429] != 10 {
-		t.Fatalf("answers %v, want ten 401 and ten 429", codes)
+	if codes[401] != 20 || codes[429] != 10 {
+		t.Fatalf("answers %v, want twenty 401 and ten 429", codes)
 	}
 	if n := read.Load(); n != 0 {
 		t.Errorf("%d bytes of refused bodies read", n)
@@ -246,7 +248,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	json.Unmarshal(row.Detail, &d)
 	statuses, _ := d["statuses"].(map[string]any)
 	if row.Result != store.ResultRefused || row.Remote != "192.0.2.10" || row.Action != "setpoint" || row.Cube != "KEQ0000100" || row.UserID != 0 ||
-		d["count"] != float64(20) || statuses["401"] != float64(10) || statuses["429"] != float64(10) || d["body"] != nil || d["bytes"] != nil {
+		d["count"] != float64(30) || statuses["401"] != float64(20) || statuses["429"] != float64(10) || d["body"] != nil || d["bytes"] != nil {
 		t.Fatalf("row %+v, detail %v", row, d)
 	}
 }

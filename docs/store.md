@@ -1093,6 +1093,8 @@ The audit records them with `user_id` NULL and `remote` `cli`.
 `authLimiter` keeps its behaviour, backed by `auth_failures` (section 5):
 a failed token, ticket or password check counts against the address and,
 for a login, against the user name;
+a request that offers no token and no ticket is refused uncounted
+(`docs/api-v1.md`, "Authentication");
 ten in a minute lock for five minutes with `429` and `Retry-After`.
 The counters survive a restart,
 which closes the loophole where a restart cleared them.
