@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.33.0)
+# Massimo — CI Conventions (v1.34.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -389,6 +389,12 @@ the Makefile's `VERSION` and `FLAVOUR`, `make release-alpha`'s check,
 and `meta`'s.
 Without it, on 2026-11-10 every commit after the first `release/devel`
 described as `release/devel-1-g…`, which `make packages` could not name a package by.
+A rolling tag moves, so nothing fetches it unforced:
+`git fetch --tags` refuses to move a checkout's older copy of one
+("would clobber existing tag", 2026-11-10).
+`make release-alpha` fetches `main` and the version tags alone (`refs/tags/v*`),
+and `git fetch --force origin 'refs/tags/release/*:refs/tags/release/*'`
+brings a checkout's own copies up to date.
 `packaging/apt/publish.sh` leaves the rolling releases out:
 their packages' versions do not sort yet (AptUpdate's DebVersion).
 Every release below 1.0.0 is a pre-release on GitHub.

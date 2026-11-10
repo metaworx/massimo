@@ -51,6 +51,9 @@ DEB_IMAGE ?= debian:trixie-slim
 # BUMP=minor: v0.2.0-alpha.1), a fix or iteration counts the suffix up
 # (v0.2.0-alpha.2).
 # release-alpha runs on main, checked out, clean and equal to origin/main.
+# It fetches main and the version tags alone: CI moves the rolling tags
+# (release/devel, release/nightly) in place, and fetch --tags refuses to
+# move a checkout's older copy of one ("would clobber existing tag").
 # changelog.sh cuts CHANGELOG.md's [Unreleased] into the release's section,
 # makes the chore(release) commit on main and the signed tag at it with that
 # section as its message; main and the tag are then pushed atomically, all
@@ -64,7 +67,8 @@ DEB_IMAGE ?= debian:trixie-slim
 # release needs none.
 CHANGELOG_SH = GUIDELINES/shared/tools/changelog.sh
 release-alpha:
-	@git fetch --quiet --tags origin main && \
+	@git fetch --quiet origin main 'refs/tags/v*:refs/tags/v*' || { \
+		echo "release-alpha: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
 	sha=$$(git rev-parse origin/main) && \
 	if [ "$$(git symbolic-ref --quiet --short HEAD)" != main ]; then \
 		echo "release-alpha: check out main first; the release commit is made on it" >&2; exit 1; fi; \
