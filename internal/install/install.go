@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"go.metaworx.ch/massimo/packaging"
 )
@@ -931,5 +932,28 @@ func writeAtomic(path string, b []byte, mode os.FileMode) error {
 		os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := renameOver(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// renameHeldWait is how long renameOver retries a rename over a file
+// another process holds; a variable for the tests.
+var renameHeldWait = 5 * time.Second
+
+// renameOver renames tmp over path. Windows refuses that while another
+// process holds path: the image of a process that is still exiting (a
+// service reports stopped just before), or a file a scanner reads for a
+// moment. Such a refusal (renameHeld) is retried for renameHeldWait.
+func renameOver(tmp, path string) error {
+	deadline := time.Now().Add(renameHeldWait)
+	for {
+		err := os.Rename(tmp, path)
+		if err == nil || !renameHeld(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

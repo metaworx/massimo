@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Fixed
+
+- `massimo install` over a running Windows service waits until the
+  service's process has exited before it replaces `massimo.exe`, in
+  place of failing now and then with "Access is denied".
+
 ## [0.13.0-alpha.1] - 2026-11-10
 
 ### Added

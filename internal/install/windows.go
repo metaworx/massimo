@@ -273,7 +273,10 @@ func RemoveWindows(o Options, purge bool) error {
 }
 
 // stopService stops a service that is not stopped, and reports whether
-// it was running (or starting, or pausing) when asked.
+// it was running (or starting, or pausing) when asked. It returns once
+// the service's process has exited, not only once the service reports
+// stopped: the process reports that itself, just before it exits, and
+// until it has gone Windows refuses to replace its binary.
 func stopService(in *installer, s *mgr.Service) (bool, error) {
 	st, err := s.Query()
 	if err != nil || st.State == svc.Stopped {
@@ -283,10 +286,61 @@ func stopService(in *installer, s *mgr.Service) (bool, error) {
 	if in.DryRun {
 		return true, nil
 	}
+	// Opened before the stop, so that the ID cannot name another process
+	// by the time it is waited for.
+	proc := openProcess(st.ProcessId)
+	if proc != 0 {
+		defer windows.CloseHandle(proc)
+	}
 	if _, err := s.Control(svc.Stop); err != nil {
 		return true, fmt.Errorf("stop the service: %w", err)
 	}
-	return true, waitState(s, svc.Stopped, time.Minute)
+	if err := waitState(s, svc.Stopped, time.Minute); err != nil {
+		return true, err
+	}
+	if proc == 0 {
+		return true, nil // writeAtomic's retry is left
+	}
+	return true, waitExit(proc, st.ProcessId, processExitWait)
+}
+
+// processExitWait is how long a stop waits for the service's process to
+// exit once it reported stopped; serve is given stopWait, 20 seconds
+// (cmd/massimo/service_windows.go).
+const processExitWait = 30 * time.Second
+
+// openProcess opens process pid to wait for it; 0 when pid is 0, as for
+// a service without a process, or when it cannot be opened.
+func openProcess(pid uint32) windows.Handle {
+	if pid == 0 {
+		return 0
+	}
+	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
+	if err != nil {
+		return 0
+	}
+	return h
+}
+
+// waitExit waits until the process h, whose ID is pid, has exited, at
+// most timeout.
+func waitExit(h windows.Handle, pid uint32, timeout time.Duration) error {
+	ev, err := windows.WaitForSingleObject(h, uint32(timeout/time.Millisecond))
+	switch {
+	case err != nil:
+		return fmt.Errorf("wait for the service's process %d: %w", pid, err)
+	case ev == uint32(windows.WAIT_TIMEOUT):
+		return fmt.Errorf("the service stopped, but its process %d did not exit within %s", pid, timeout)
+	}
+	return nil
+}
+
+// renameHeld reports whether a rename failed because another process
+// holds a file: the image of a running process refuses a rename over it
+// with access denied, a file open without delete sharing with a sharing
+// violation.
+func renameHeld(err error) bool {
+	return errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION)
 }
 
 func waitState(s *mgr.Service, want svc.State, timeout time.Duration) error {
