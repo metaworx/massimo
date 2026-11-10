@@ -29,13 +29,16 @@ BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-l
 # the binaries above with nfpm at a pinned version through `go run`;
 # NFPM=nfpm uses an installed one. Their version is the tag without its
 # v and with ~ for -, so that 0.7.0~alpha.1 sorts before 0.7.0 as dpkg
-# compares versions; nfpm is given that version, not the tag, so that the
-# control Version and the file name agree. armhf holds the armv6 binary,
-# which runs on every 32-bit Raspberry Pi OS, the Pi 1 included.
+# compares versions; nfpm is given that version, not the tag. The file
+# name writes the ~ as a dot (DEBFILE, massimo_0.7.0.alpha.1_amd64.deb),
+# the name GitHub gives the asset, so that SHA256SUMS and the manifest
+# name the files the release holds. armhf holds the armv6 binary, which
+# runs on every 32-bit Raspberry Pi OS, the Pi 1 included.
 NFPM_VERSION = v2.48.0
 NFPM    ?= go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
 DEBVER   = $(shell echo '$(VERSION)' | sed 's/^v//; s/-/~/g')
-PACKAGES = massimo_$(DEBVER)_amd64.deb massimo_$(DEBVER)_arm64.deb massimo_$(DEBVER)_armhf.deb
+DEBFILE  = $(subst ~,.,$(DEBVER))
+PACKAGES = massimo_$(DEBFILE)_amd64.deb massimo_$(DEBFILE)_arm64.deb massimo_$(DEBFILE)_armhf.deb
 # Reproducible packages: every file in them carries the commit's time.
 export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date +%s)
 # The container the package test runs in (make deb-test).
@@ -205,9 +208,9 @@ deb-unit:
 
 # One Debian package per architecture, from the binaries of `make cross`.
 packages: linux linux-arm64 linux-armv6 deb-unit
-	VERSION=$(DEBVER) NFPM_ARCH=amd64 BINARY=$(OUT)/massimo-linux-amd64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_amd64.deb
-	VERSION=$(DEBVER) NFPM_ARCH=arm64 BINARY=$(OUT)/massimo-linux-arm64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_arm64.deb
-	VERSION=$(DEBVER) NFPM_ARCH=arm6 BINARY=$(OUT)/massimo-linux-armv6 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBVER)_armhf.deb
+	VERSION=$(DEBVER) NFPM_ARCH=amd64 BINARY=$(OUT)/massimo-linux-amd64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBFILE)_amd64.deb
+	VERSION=$(DEBVER) NFPM_ARCH=arm64 BINARY=$(OUT)/massimo-linux-arm64 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBFILE)_arm64.deb
+	VERSION=$(DEBVER) NFPM_ARCH=arm6 BINARY=$(OUT)/massimo-linux-armv6 $(NFPM) package -f packaging/nfpm.yaml -p deb -t $(OUT)/massimo_$(DEBFILE)_armhf.deb
 
 # The amd64 package installed, checked and purged in a Debian container
 # (packaging/deb/test.sh); DEB_IMAGE picks the release.

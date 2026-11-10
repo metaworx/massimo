@@ -302,8 +302,10 @@ the logs and the user.
 ## Debian package
 
 Every release also carries a Debian package per architecture,
-`massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`,
-the release's version written as dpkg sorts it (`0.7.0~alpha.1` for `v0.7.0-alpha.1`).
+`massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`.
+The package's version is the release's written as dpkg sorts it
+(`0.7.0~alpha.1` for `v0.7.0-alpha.1`), and the file name writes its `~`
+as a dot (`massimo_0.7.0.alpha.1_arm64.deb`), as GitHub names the asset.
 The armhf one holds the armv6 binary and runs on every 32-bit Raspberry Pi OS,
 the Pi 1 and the Zero included (Debian's own armhf needs a Pi 2 or later).
 On a Debian, Ubuntu, Raspberry Pi OS or LoxBerry box:
