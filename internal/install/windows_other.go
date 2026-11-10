@@ -17,3 +17,7 @@ func RemoveWindows(Options, bool) error { return errNotWindows }
 
 // RestartService restarts a Windows service; only on Windows.
 func RestartService(string) error { return errNotWindows }
+
+// renameHeld is false: only Windows refuses a rename over a file another
+// process holds.
+func renameHeld(error) bool { return false }
