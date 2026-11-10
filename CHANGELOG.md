@@ -8,6 +8,8 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.13.0-alpha.2] - 2026-11-10
+
 ### Fixed
 
 - `massimo install` over a running Windows service waits until the
