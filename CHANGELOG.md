@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Changed
 
+- CI builds a release beside the tests and signs it once they have
+  passed, about five minutes sooner; the nightly build has a workflow of
+  its own (`GUIDELINES/project/CI.md`, section 2).
+
 - A request to the API without a token, ticket or `?token=` is still
   refused with 401 but no longer counts toward the address's lockout:
   only wrong tokens, tickets and passwords do (`docs/api-v1.md`).

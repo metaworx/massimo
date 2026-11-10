@@ -1,0 +1,220 @@
+name: Build
+
+# The build of a release, before it is signed: called by ci.yml beside
+# the test jobs, for a push of main or of a v* tag, so that the files are
+# ready when the tests have passed, and by nightly.yml for the nightly
+# build; release.yml then signs and publishes what it built. It holds no
+# secret, and its answers are this workflow's outputs.
+#
+# `meta` decides what the run releases: a version tag (v1.2.3,
+# v0.1.0-alpha.10) as itself; a push to main as the devel build, the one
+# GitHub release tagged release/devel, its version what git describe calls
+# the commit; the schedule or a start by hand (nightly.yml) as the nightly
+# build, release/nightly, of the newest commit of main whose suite passed
+# and that is newer than the one it carries. The flavour of a release
+# (internal/update) is the pre-release label of its tag (v0.7.0-alpha.1
+# is alpha), stable for a tag without one (v1.0.0). The commit must be on
+# main, where every release is cut (`make release-alpha`). `build` runs
+# the toolchain and the third-party actions, builds every platform's
+# binaries and the Debian packages holding them, writes the build record
+# (massimo-build.txt, its log among it), which the signed manifest lists,
+# attests the provenance of every file it built (GitHub's build
+# provenance, through Sigstore), and hands the files to release.yml as
+# the run's artifact `release`.
+on:
+  workflow_call:
+    outputs:
+      kind:
+        value: ${{ jobs.meta.outputs.kind }}
+      tag:
+        value: ${{ jobs.meta.outputs.tag }}
+      sha:
+        value: ${{ jobs.meta.outputs.sha }}
+      version:
+        value: ${{ jobs.meta.outputs.version }}
+      flavour:
+        value: ${{ jobs.meta.outputs.flavour }}
+      release:
+        value: ${{ jobs.meta.outputs.release }}
+      prerelease:
+        value: ${{ jobs.meta.outputs.prerelease }}
+
+permissions:
+  contents: read
+
+jobs:
+  meta:
+    name: What to release
+    runs-on: ubuntu-latest
+    # actions: the nightly build reads which commits' suites passed.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      kind: ${{ steps.meta.outputs.kind }}
+      tag: ${{ steps.meta.outputs.tag }}
+      sha: ${{ steps.meta.outputs.sha }}
+      version: ${{ steps.meta.outputs.version }}
+      flavour: ${{ steps.meta.outputs.flavour }}
+      release: ${{ steps.meta.outputs.release }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # A rolling build is published only for a commit after the one its
+      # release names: runs of main are never cancelled, so an older run
+      # can end after a newer one (the rolling job checks again).
+      - name: Release metadata
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          kind=skip tag="" sha="" version="" flavour="" release="" prerelease=true
+          # rolling <flavour> <commit>: kind and version for a rolling build
+          # of the commit, or kind skip where its release is at or after it.
+          rolling() {
+            release="release/$1"
+            if git ls-remote --exit-code --heads origin "$release" >/dev/null; then
+              echo "::error::a branch ${release} exists; a name is never both a branch and a tag."
+              exit 1
+            fi
+            git fetch --quiet --force origin "+refs/tags/${release}:refs/tags/${release}" 2>/dev/null || true
+            if cur="$(git rev-parse --verify --quiet "refs/tags/${release}^{commit}")" &&
+              git merge-base --is-ancestor "$2" "$cur"; then
+              echo "${release} is ${cur}, at or after ${2}: nothing to publish."
+              return
+            fi
+            kind="$1" flavour="$1" sha="$2"
+            version="$(git describe --tags --match 'v[0-9]*' "$sha")"
+          }
+          # passed <commit>: whether a run of ci.yml for the commit (its
+          # push to main, or a tag's) had its job "All tests passed" succeed.
+          passed() {
+            local id
+            for id in $(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=$1&event=push&per_page=20" --jq '.workflow_runs[].id'); do
+              if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs?per_page=100" \
+                --jq '.jobs[] | select(.name == "All tests passed" and .conclusion == "success") | .id' | grep -q .; then
+                return 0
+              fi
+            done
+            return 1
+          }
+          # The event is the caller's (push) where ci.yml called this.
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+          schedule:refs/heads/main | workflow_dispatch:refs/heads/main)
+            # The owner's rule: the newest commit of main whose suite
+            # passed and that is newer than the nightly build's, so that
+            # a red last commit does not cost a night whose second-last
+            # was green. main's first parents, newest first, at most 100,
+            # down to the nightly build's commit.
+            git fetch --quiet --force origin "+refs/tags/release/nightly:refs/tags/release/nightly" 2>/dev/null || true
+            cur="$(git rev-parse --verify --quiet "refs/tags/release/nightly^{commit}" || true)"
+            pick=""
+            for c in $(git rev-list --first-parent --max-count=100 origin/main); do
+              if [ -n "$cur" ] && git merge-base --is-ancestor "$c" "$cur"; then
+                break
+              fi
+              if passed "$c"; then
+                pick="$c"
+                break
+              fi
+            done
+            if [ -n "$pick" ]; then
+              rolling nightly "$pick"
+            else
+              echo "no commit of main after ${cur:-the start} has passed its suite: no nightly build."
+            fi
+            ;;
+          push:refs/heads/main)
+            rolling devel "$GITHUB_SHA"
+            ;;
+          push:refs/tags/v*)
+            tag="${GITHUB_REF_NAME}"
+            # checkout leaves the tag without its annotation; fetch it again.
+            git fetch --quiet --force origin "refs/tags/${tag}:refs/tags/${tag}"
+            sha="$(git rev-parse "${tag}^{commit}")"
+            # The version tags alone: release/devel may name the same commit.
+            if [ "$(git describe --tags --exact-match --match 'v[0-9]*' "$sha")" != "$tag" ]; then
+              echo "::error::git describe does not name ${tag} for ${sha}."
+              exit 1
+            fi
+            flavour="$(printf '%s\n' "$tag" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')"
+            if [ -z "$flavour" ] && printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              flavour=stable
+            fi
+            if [ -z "$flavour" ]; then
+              echo "::error::${tag} names no flavour: a release tag is vX.Y.Z or vX.Y.Z-<label>.N."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$sha" origin/main; then
+              echo "::error::${tag} (${sha}) is not on main, where every release is cut."
+              exit 1
+            fi
+            # 0.x is pre-release by definition, as is any -suffix.
+            case "$tag" in v0.*|*-*) ;; *) prerelease=false ;; esac
+            kind=release version="$tag"
+            ;;
+          esac
+          echo "${kind}: ${version:-nothing} (${sha:-no commit}), flavour ${flavour:-none}"
+          {
+            echo "kind=${kind}"
+            echo "tag=${tag}"
+            echo "sha=${sha}"
+            echo "version=${version}"
+            echo "flavour=${flavour}"
+            echo "release=${release}"
+            echo "prerelease=${prerelease}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Binaries and packages
+    needs: meta
+    if: needs.meta.outputs.kind != 'skip'
+    runs-on: ubuntu-latest
+    # id-token and attestations: the build's provenance, signed through
+    # Sigstore with the job's OIDC token; no secret is held here.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          fetch-depth: 0
+
+      # The same toolchain as ci.yml: a supported line, newest patch.
+      # No cache: a release is built from the module proxy and nothing a
+      # cache restores, which another run could have written.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+          check-latest: true
+          cache: false
+
+      # Tested by ci.yml's jobs before this workflow was called. The build
+      # record, massimo-build.txt, holds this step's log; SHA256SUMS and
+      # the manifest list it (packaging/build-record.sh).
+      - name: Build every binary and package, the build record, SHA256SUMS and the manifest
+        run: make release VERSION="${{ needs.meta.outputs.version }}" FLAVOUR="${{ needs.meta.outputs.flavour }}" RELEASE="${{ needs.meta.outputs.release }}"
+
+      # GitHub's build provenance of every file the release publishes but
+      # the manifest's signature, which the signing job makes: the binaries,
+      # the packages, the record, SHA256SUMS and the manifest, each by its
+      # SHA-256. gh attestation verify <file> -R <repository> checks one.
+      - name: Attest the build's provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/massimo-*
+            dist/*.deb
+            dist/SHA256SUMS
+
+      - name: Hand the files to the signing job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
