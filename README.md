@@ -118,7 +118,8 @@ on a document under `docs/` that is not).
 Massimo is one binary per platform with the web UI inside;
 there is nothing else to install.
 Every [release](https://github.com/metaworx/massimo/releases) carries the binaries below,
-`SHA256SUMS` and the signed manifest that `massimo update` verifies.
+`SHA256SUMS`, the signed manifest that `massimo update` verifies,
+and the build record, `massimo-build.txt`.
 Every release so far is a pre-release of the flavour `alpha` (see
 [Versions](#versions)), which `releases/latest` skips,
 so take the newest release from the page and put its tag in place of `<tag>` below.
@@ -152,6 +153,21 @@ so what is left to trust is the first install.
 To trust no build but your own, build it from the signed source:
 [From source](https://github.com/metaworx/massimo#from-source).
 <!-- END GENERATED PARTIAL docs/fragments/_trust.md -->
+
+The build record says how a release was built:
+the runner,
+the Go version and every library of each binary with its checksum (`go version -m`,
+which also reads a downloaded binary),
+and the build's whole log;
+`SHA256SUMS` and the signed manifest list it.
+GitHub's build provenance says who built each file,
+the record and `SHA256SUMS` included:
+the project's release workflow, at which commit, on a GitHub runner,
+signed through Sigstore rather than with the project's keys:
+
+```bash
+gh attestation verify massimo-linux-amd64 -R metaworx/massimo
+```
 
 `serve` reads its settings from the environment or from a `.env` in the
 directory it is started from (see [Cube variables](#cube-variables)).
@@ -517,7 +533,7 @@ and follows the `devel` builds.
 The other targets:
 `make linux`, `make linux-armv7` and `make darwin` (both Mac architectures)
 build one more release binary each;
-`make release` adds `SHA256SUMS` and the release manifest;
+`make release` adds the build record, `SHA256SUMS` and the release manifest;
 `make vet`, `make test` and `make clean` do what they say;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).

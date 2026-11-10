@@ -41,7 +41,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test site release clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test site release release-files clean release-alpha
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, and a beta
@@ -232,14 +232,31 @@ site:
 	packaging/site/build.sh --out $(OUT)/site --no-apt --ref main=HEAD
 
 # release builds every binary and package and the files a GitHub release
-# carries besides them: SHA256SUMS for people, and the manifest the
-# release workflow signs and `massimo update` verifies. Run by the
+# carries besides them: the build record (packaging/build-record.sh), which
+# holds the build's log, SHA256SUMS for people, and the manifest the
+# release workflow signs and `massimo update` verifies; SHA256SUMS and the
+# manifest list the record, so the signature covers it. Run by the
 # workflow with VERSION and FLAVOUR set, and RELEASE for a rolling build;
-# locally it shows what a release would hold.
-release: clean cross packages
-	cd $(OUT) && sha256sum $(BINARIES) $(PACKAGES) > SHA256SUMS
+# locally it shows what a release would hold. The build runs as a sub-make
+# through tee, under bash with pipefail, so that its failure still fails
+# the release; the command line's VERSION, FLAVOUR and RELEASE reach it.
+RECORD = massimo-build.txt
+release: SHELL := bash
+release: .SHELLFLAGS := -eo pipefail -c
+release: clean
+	mkdir -p $(OUT)
+	started=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
+	$(MAKE) --no-print-directory release-files VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' 2>&1 | tee $(OUT)/build.log; \
+	VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' LDFLAGS='$(LDFLAGS)' BUILD_STARTED="$$started" \
+		packaging/build-record.sh $(OUT)/build.log github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION) \
+		$(addprefix $(OUT)/,$(BINARIES)) > $(OUT)/$(RECORD)
+	rm -f $(OUT)/build.log
+	cd $(OUT) && sha256sum $(BINARIES) $(PACKAGES) $(RECORD) > SHA256SUMS
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
-		-flavour $(FLAVOUR) -release '$(RELEASE)' -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
+		-flavour $(FLAVOUR) -release '$(RELEASE)' -dir $(OUT) $(BINARIES) $(PACKAGES) $(RECORD) > $(OUT)/massimo-release.json
+
+# The binaries and packages of a release, which `make release` logs.
+release-files: cross packages
 
 clean:
 	rm -rf massimo $(OUT)
