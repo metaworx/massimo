@@ -24,11 +24,12 @@ check() {
 }
 
 # inst <args>: apt-get install, its output in /tmp/out without the
-# carriage returns apt writes. A build from main sorts before
-# v0.12.0-alpha.1 until the next release; dpkg runs the same scripts for
-# that downgrade as for an upgrade.
+# carriage returns apt writes. Without --allow-downgrades: every case
+# goes from v0.12.0-alpha.1 up, and a build between tags sorts after the
+# tag it follows (the Makefile's DEBVER), so apt refusing a downgrade here
+# means a package that sorts wrong.
 inst() {
-	apt-get -qq install -y --allow-downgrades "$@" 2>&1 | tr -d '\r' >/tmp/out
+	apt-get -qq install -y "$@" 2>&1 | tr -d '\r' >/tmp/out
 	[ "${PIPESTATUS[0]}" -eq 0 ] || {
 		echo "  apt failed:"
 		sed 's/^/    | /' /tmp/out
