@@ -1091,6 +1091,9 @@ Its channel is `MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
 else its build's flavour;
 every channel's newest build is at `release/<channel>`,
 a branch for the numbered flavours, a tag for the rolling ones.
+The documentation of each channel's newest build is on the site,
+<https://massimo.metaworx.ch/docs/>, with `main`'s beside it
+(see [packaging/README.md](packaging/README.md#the-site)).
 Boxes get each release from `massimo update` or the web UI
 (see [packaging/README.md](packaging/README.md#updating)).
 `make` builds carry the version from `git describe`, `go run` builds

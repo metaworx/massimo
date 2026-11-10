@@ -164,8 +164,9 @@ for spec in ${refs[@]+"${refs[@]}"}; do
 done
 [ "$no_docs" = 1 ] || python3 "$root/packaging/site/site.py" index --out "$site"
 
-# 4. Every link of every page, then the site where it was asked for.
-python3 "$root/packaging/site/site.py" check --out "$site"
+# 4. Every link of every page, where the docs are there for the home's to
+# point at, then the site where it was asked for.
+[ "$no_docs" = 1 ] || python3 "$root/packaging/site/site.py" check --out "$site"
 mkdir -p "$(dirname "$out")"
 mv "$site" "$out"
 echo "build.sh: $out holds the site (suites: $suites)"

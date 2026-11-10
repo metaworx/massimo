@@ -16,7 +16,7 @@ the next minor, a fix counts the suffix up.
 
 - `packaging/site/build.sh` builds the site without a key: the apt
   repository from a release's index asset, the pages, and the docs of
-  every channel under `/docs/`, checked link by link; `make site`.
+  every channel under `/docs/`, linked from the home; `make site`.
 
 - A release has a flavour, and a box takes its channel's releases and
   every more stable flavour's; the rolling `devel` and `nightly` builds
