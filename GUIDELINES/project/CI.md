@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.24.0)
+# Massimo — CI Conventions (v1.25.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a tag `v*`, a pull request), `.github/workflows/release.yml` (called by ci.yml once its tests have passed), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a tag `v*`, a pull request), `.github/workflows/release.yml` (called by ci.yml once its tests have passed; daily at 02:30 UTC and by hand on `main` for the nightly build), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
 
 There is no other platform.
 
@@ -38,6 +38,7 @@ There is no other platform.
 | after every job above | All tests passed: fails unless none of them failed or was cancelled; then, on a push, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6) |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
 | tag `v*` | every job above, as for a push to `main`; then release.yml: build every target without cgo and the Debian packages, sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
+| daily at 02:30 UTC, or by hand (`gh workflow run release.yml --ref main`) | release.yml alone: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
 Each commit runs the workflow once:
@@ -324,6 +325,16 @@ and `rolling` runs one at a time per flavour.
 The notes name the build, the commits since the previous one,
 and `CHANGELOG.md`'s `[Unreleased]` as `changelog.sh preview` writes it,
 once the guidelines carry that command (v4.54.0).
+Once a day release.yml runs on its own schedule for the `nightly` build,
+`release/nightly`, replaced in place as `devel` is.
+It runs no tests: it walks `main`'s first parents from the newest,
+down to the commit the nightly build carries,
+and takes the first whose run of ci.yml (its push, or its tag's)
+had "All tests passed" succeed,
+so that a red newest commit does not cost a night whose second-last was green
+(the owner's rule); `meta` reads the runs with `actions: read`,
+which ci.yml's `release` job grants too.
+`rolling` takes `nightly` only from the schedule or by hand on `main`.
 `packaging/apt/publish.sh` leaves the rolling releases out:
 their packages' versions do not sort yet (AptUpdate's DebVersion).
 Every release below 1.0.0 is a pre-release on GitHub.

@@ -22,6 +22,10 @@ the next minor, a fix counts the suffix up.
   build, one release replaced in place (`GUIDELINES/project/CI.md`,
   "Releases").
 
+- A `nightly` build, once a day, of the newest commit of `main` whose
+  tests passed, if newer than the last one (`GUIDELINES/project/CI.md`,
+  "Releases").
+
 - The event stream gives every event an id and resumes after the last
   one a client read, or says `resync`; the web UI resumes with it
   (`docs/api-v1.md`, "GET …/events").

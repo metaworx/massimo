@@ -992,7 +992,8 @@ jobs:
           done
 
   # The release of a pushed commit (release.yml), with the permissions its
-  # jobs need: contents to publish, pages and id-token to deploy the site.
+  # jobs need: contents to publish, pages and id-token to deploy the site,
+  # actions for meta, which the nightly build needs.
   release:
     name: Release
     needs: tests
@@ -1001,5 +1002,6 @@ jobs:
       contents: write
       pages: write
       id-token: write
+      actions: read
     uses: ./.github/workflows/release.yml
     secrets: inherit

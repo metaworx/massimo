@@ -12,7 +12,10 @@ name: Release
 # published as a GitHub release, which `massimo update` installs
 # (internal/update). A push to main is built the same way as the devel
 # build, the one GitHub release tagged release/devel, replaced in place
-# (`rolling`); its version is what git describe calls the commit.
+# (`rolling`); its version is what git describe calls the commit. Once a
+# day (schedule) the nightly build, release/nightly, is made the same way
+# of the newest commit of main whose suite passed and that is newer than
+# the one it carries; by hand with `gh workflow run release.yml --ref main`.
 #
 # The jobs, a key in one each: `meta` decides what the run releases;
 # `build` runs the toolchain and the third-party actions and holds no
@@ -36,6 +39,9 @@ name: Release
 # CHANGELOG.md section, which is also the GitHub release's notes.
 on:
   workflow_call:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,6 +50,10 @@ jobs:
   meta:
     name: What to release
     runs-on: ubuntu-latest
+    # actions: the nightly build reads which commits' suites passed.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       kind: ${{ steps.meta.outputs.kind }}
       tag: ${{ steps.meta.outputs.tag }}
@@ -62,6 +72,8 @@ jobs:
       # can end after a newer one (the rolling job checks again).
       - name: Release metadata
         id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           kind=skip tag="" sha="" version="" flavour="" release="" prerelease=true
           # rolling <flavour> <commit>: kind and version for a rolling build
@@ -81,11 +93,48 @@ jobs:
             kind="$1" flavour="$1" sha="$2"
             version="$(git describe --tags --match 'v[0-9]*' "$sha")"
           }
-          case "$GITHUB_REF" in
-          refs/heads/main)
+          # passed <commit>: whether a run of ci.yml for the commit (its
+          # push to main, or a tag's) had its job "All tests passed" succeed.
+          passed() {
+            local id
+            for id in $(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=$1&event=push&per_page=20" --jq '.workflow_runs[].id'); do
+              if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs?per_page=100" \
+                --jq '.jobs[] | select(.name == "All tests passed" and .conclusion == "success") | .id' | grep -q .; then
+                return 0
+              fi
+            done
+            return 1
+          }
+          # The event is the caller's (push) where ci.yml called this.
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+          schedule:refs/heads/main | workflow_dispatch:refs/heads/main)
+            # The owner's rule: the newest commit of main whose suite
+            # passed and that is newer than the nightly build's, so that
+            # a red last commit does not cost a night whose second-last
+            # was green. main's first parents, newest first, at most 100,
+            # down to the nightly build's commit.
+            git fetch --quiet --force origin "+refs/tags/release/nightly:refs/tags/release/nightly" 2>/dev/null || true
+            cur="$(git rev-parse --verify --quiet "refs/tags/release/nightly^{commit}" || true)"
+            pick=""
+            for c in $(git rev-list --first-parent --max-count=100 origin/main); do
+              if [ -n "$cur" ] && git merge-base --is-ancestor "$c" "$cur"; then
+                break
+              fi
+              if passed "$c"; then
+                pick="$c"
+                break
+              fi
+            done
+            if [ -n "$pick" ]; then
+              rolling nightly "$pick"
+            else
+              echo "no commit of main after ${cur:-the start} has passed its suite: no nightly build."
+            fi
+            ;;
+          push:refs/heads/main)
             rolling devel "$GITHUB_SHA"
             ;;
-          refs/tags/v*)
+          push:refs/tags/v*)
             tag="${GITHUB_REF_NAME}"
             # checkout leaves the tag without its annotation; fetch it again.
             git fetch --quiet --force origin "refs/tags/${tag}:refs/tags/${tag}"
@@ -269,7 +318,7 @@ jobs:
   rolling:
     name: Sign and publish the ${{ needs.meta.outputs.flavour }} build
     needs: [ meta, build ]
-    if: needs.meta.outputs.kind == 'devel'
+    if: needs.meta.outputs.kind == 'devel' || needs.meta.outputs.kind == 'nightly'
     runs-on: ubuntu-latest
     environment: signing-rolling
     concurrency:
@@ -297,11 +346,13 @@ jobs:
           path: dist
 
       # The flavour this run may publish comes from its event here, not
-      # from meta: devel from a push to main alone.
+      # from meta: devel from a push to main, nightly from the schedule or
+      # by hand on main.
       - name: Check the manifest's version, flavour and release
         run: |
           case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
           push:refs/heads/main) allowed=devel ;;
+          schedule:refs/heads/main | workflow_dispatch:refs/heads/main) allowed=nightly ;;
           *) allowed="" ;;
           esac
           if [ "$FLAVOUR" != "$allowed" ]; then
