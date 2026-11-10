@@ -61,7 +61,7 @@ func KeyPath(dir string) string { return filepath.Join(dir, KeyFileName) }
 // loadIdentity reads node.id and the key pair, creating the key file
 // (mode 0600) when there is none.
 func (s *Store) loadIdentity() error {
-	id, err := s.settingString(context.Background(), NodeIDKey)
+	id, err := s.SettingString(context.Background(), NodeIDKey)
 	if err != nil {
 		return fmt.Errorf("store: node.id: %w", err)
 	}
@@ -129,7 +129,7 @@ func (s *Store) NodeID() string { return s.nodeID }
 
 // TenantID returns the identifier of the tenant the file belongs to,
 // tenant.id.
-func (s *Store) TenantID() (string, error) { return s.settingString(context.Background(), TenantIDKey) }
+func (s *Store) TenantID() (string, error) { return s.SettingString(context.Background(), TenantIDKey) }
 
 // NodePublicKey returns the node's Ed25519 public key; nil on a store
 // opened read-only.

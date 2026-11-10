@@ -1,21 +1,19 @@
 # Builds the massimo binary with the version taken from the nearest git tag
-# (semantic versioning: tag releases as vMAJOR.MINOR.PATCH) and the update
-# channel taken from the current branch, or from the release tag a detached
-# HEAD is at (see internal/update).
+# (semantic versioning: tag releases as vMAJOR.MINOR.PATCH) and the
+# flavour it is released as (see internal/update).
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-dev)
-# The channel of a release tag's checkout is the one release.yml gives the
-# tag: its pre-release label (alpha of v0.12.0-alpha.1), else the "channel:"
-# line of its message. Any other detached HEAD stays HEAD, which has no
-# releases. release.yml passes CHANNEL itself.
-CHANNEL ?= $(shell b=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
-	if [ "$$b" = HEAD ] && t=$$(git describe --tags --exact-match 2>/dev/null); then \
-		c=$$(printf '%s\n' "$$t" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$$/\1/p'); \
-		[ -n "$$c" ] || c=$$(git for-each-ref --format='%(contents)' "refs/tags/$$t" | sed -n 's/^channel: *//p' | head -n1 | tr -d '[:space:]'); \
-		b=$${c:-$$b}; \
-	fi; \
-	printf '%s' "$$b")
-LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.channel=$(CHANNEL)
+# The flavour of a release tag's commit is the tag's pre-release label
+# (alpha of v0.12.0-alpha.1), stable for a tag without one; any other
+# build is devel, the flavour of the builds of main. release.yml passes
+# FLAVOUR itself, and RELEASE, the GitHub release's tag, for a rolling
+# build (release/devel).
+FLAVOUR ?= $(shell t=$$(git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null); \
+	f=$$(printf '%s\n' "$$t" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$$/\1/p'); \
+	if [ -z "$$f" ] && printf '%s\n' "$$t" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then f=stable; fi; \
+	printf '%s' "$${f:-devel}")
+RELEASE  ?=
+LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.flavour=$(FLAVOUR)
 PKG      = ./cmd/massimo
 OUT      = dist
 # Cross builds are static (no cgo) and do not record the build machine's paths.
@@ -44,21 +42,20 @@ DEB_IMAGE ?= debian:trixie-slim
 
 .PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test release clean release-alpha
 
-# Development happens on main; a release promotes main to a release
-# branch, which is also the update channel boxes follow (internal/update).
-# Versions: below v1.0.0, and with any suffix, a release is a pre-release;
-# below v1.0.0 a minor may break things. A new feature or breaking change
-# starts the next minor (make release-alpha BUMP=minor: v0.2.0-alpha.1),
-# a fix or iteration counts the suffix up (v0.2.0-alpha.2); the suffix
-# names the channel, so promoting to a beta branch would tag -beta.N.
+# Development happens on main; a release is a tag on main, whose label is
+# the release's flavour (internal/update): -alpha.N is alpha, and a beta
+# would tag -beta.N. Versions: below v1.0.0, and with any suffix, a
+# release is a pre-release; below v1.0.0 a minor may break things. A new
+# feature or breaking change starts the next minor (make release-alpha
+# BUMP=minor: v0.2.0-alpha.1), a fix or iteration counts the suffix up
+# (v0.2.0-alpha.2).
 # release-alpha runs on main, checked out, clean and equal to origin/main.
 # changelog.sh cuts CHANGELOG.md's [Unreleased] into the release's section,
 # makes the chore(release) commit on main and the signed tag at it with that
-# section as its message; main, alpha fast-forwarded to that commit and the
-# tag are then pushed atomically, all or nothing, and
-# .github/workflows/release.yml builds, signs and publishes the release.
-# It refuses when alpha has commits main lacks (alpha is only ever
-# fast-forwarded), when main's head is released already, when changelog.sh
+# section as its message; main and the tag are then pushed atomically, all
+# or nothing, and CI tests the tag and releases it (ci.yml calling
+# release.yml), which then fast-forwards the branch release/alpha to it.
+# It refuses when main's head is released already, when changelog.sh
 # check finds something and when [Unreleased] holds no bullet. DRY=1 runs
 # every step as a dry run: changelog.sh says what it would cut and tag, and
 # the push is printed, not made. ASSISTED_BY=agent:model gives the release
@@ -66,7 +63,7 @@ DEB_IMAGE ?= debian:trixie-slim
 # release needs none.
 CHANGELOG_SH = GUIDELINES/shared/tools/changelog.sh
 release-alpha:
-	@git fetch --quiet --tags origin main alpha && \
+	@git fetch --quiet --tags origin main && \
 	sha=$$(git rev-parse origin/main) && \
 	if [ "$$(git symbolic-ref --quiet --short HEAD)" != main ]; then \
 		echo "release-alpha: check out main first; the release commit is made on it" >&2; exit 1; fi; \
@@ -74,8 +71,6 @@ release-alpha:
 		echo "release-alpha: main has uncommitted changes" >&2; exit 1; fi; \
 	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
 		echo "release-alpha: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
-	if ! git merge-base --is-ancestor origin/alpha $$sha; then \
-		echo "release-alpha: alpha has commits that main lacks; bring them into main first" >&2; exit 1; fi; \
 	if done=$$(git describe --tags --exact-match $$sha 2>/dev/null); then \
 		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
 	last=$$(git tag -l 'v0.*.*-alpha.*' | awk -F'[.-]' '{print $$2, $$NF, $$0}' | sort -k1,1n -k2,2n | tail -1); \
@@ -90,7 +85,7 @@ release-alpha:
 		echo "release-alpha: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
 	if [ -n "$(DRY)" ]; then \
 		$(CHANGELOG_SH) $$cut || exit 1; \
-		echo "release-alpha: would run: git push --atomic origin main <the release commit>:refs/heads/alpha refs/tags/$$next"; \
+		echo "release-alpha: would run: git push --atomic origin main refs/tags/$$next"; \
 		exit 0; fi; \
 	$(CHANGELOG_SH) -q $$cut || { \
 		echo "release-alpha: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
@@ -99,9 +94,9 @@ release-alpha:
 	rel=$$(git rev-parse HEAD) && \
 	if [ "$$(git rev-parse $$rel^)" != "$$sha" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
 		echo "release-alpha: the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
-	git push --atomic origin main $$rel:refs/heads/alpha refs/tags/$$next || { \
+	git push --atomic origin main refs/tags/$$next || { \
 		echo "release-alpha: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
-	echo "released $$next ($$rel) on alpha; follow it at https://github.com/metaworx/massimo/actions"
+	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/alpha: https://github.com/metaworx/massimo/actions"
 
 all: test build
 
@@ -230,12 +225,12 @@ apt-test:
 # release builds every binary and package and the files a GitHub release
 # carries besides them: SHA256SUMS for people, and the manifest the
 # release workflow signs and `massimo update` verifies. Run by the
-# workflow with VERSION and CHANNEL set; locally it shows what a release
-# would hold.
+# workflow with VERSION and FLAVOUR set, and RELEASE for a rolling build;
+# locally it shows what a release would hold.
 release: clean cross packages
 	cd $(OUT) && sha256sum $(BINARIES) $(PACKAGES) > SHA256SUMS
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
-		-channel $(CHANNEL) -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
+		-flavour $(FLAVOUR) -release '$(RELEASE)' -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
 
 clean:
 	rm -rf massimo $(OUT)

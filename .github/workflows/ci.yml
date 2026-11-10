@@ -1,18 +1,21 @@
 name: CI
 
 # Once per commit: a push to main, or a pull request (each push to its
-# branch), never both. Formatting, vet, the tests, a cross build of every
-# release binary (so that a tag finds nothing new to fail on),
-# govulncheck, the Debian package in a container, and the Windows service
-# on a Windows runner. A pull request runs the web UI's suite only when
-# it changes the UI, the suite or this file, and on two of its four cases,
-# and the mDNS test against avahi only when it changes the announcement,
-# discovery, the test or this file; a push to main runs all of it. A push to a release branch (alpha) runs
-# nothing: it is a fast-forward of a commit main has tested; the tag runs
-# release.yml.
+# branch), never both; and a release tag. Formatting, vet, the tests, a
+# cross build of every release binary, govulncheck, the Debian package in
+# a container, and the Windows service on a Windows runner. A pull
+# request runs the web UI's suite only when it changes the UI, the suite
+# or this file, and on two of its four cases, and the mDNS test against
+# avahi only when it changes the announcement, discovery, the test or
+# this file; a push to main or of a tag runs all of it. Once every test
+# job has passed ("All tests passed"), a push calls release.yml, which
+# releases a tag, and a push to main as the devel build. A push to a release branch
+# (release/alpha) runs nothing: the release moved it to a commit this
+# workflow had tested.
 on:
   push:
     branches: [ main ]
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
   pull_request:
 
 # A new push to a pull request cancels the run it supersedes; runs of
@@ -426,7 +429,7 @@ jobs:
           }
           EOF
           . ./ci-lib.sh
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo.exe ./cmd/massimo
           ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
@@ -577,13 +580,13 @@ jobs:
           # On the channel ci, which the stub's tags name, as release.yml's
           # do theirs (internal/update, hintedChannel).
           asset=massimo-windows-amd64.exe
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=ci" -o ci1.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=ci" -o ci1.exe ./cmd/massimo
           mkdir -p ci-stub/dl/v0.0.0-ci.2 ci-stub/dl/v0.0.0-ci.3
-          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.channel=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.flavour=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
           cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
           for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
             d="ci-stub/dl/$tag"
-            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -channel ci -dir "$d" "$asset" > "$d/massimo-release.json"
+            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -flavour ci -dir "$d" "$asset" > "$d/massimo-release.json"
             ci-tools/sign.exe sign ci-tools/ci-key "$d/massimo-release.json" > "$d/massimo-release.json.sig"
           done
           # The release list in GitHub's shape, one release at a time.
@@ -724,7 +727,7 @@ jobs:
           MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo ./cmd/massimo
           ./massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
@@ -968,3 +971,37 @@ jobs:
       - name: Checks, with the pull request's commit messages
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: GUIDELINES/shared/tools/check --commit-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  # One job that stands for all of the above: it fails unless none of
+  # them failed or was cancelled (a pull request skips some). The release
+  # waits for it, and the nightly build looks for it among a commit's runs
+  # (release.yml).
+  tests:
+    name: All tests passed
+    needs: [ test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines ]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every test job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: ${RESULTS}"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done
+
+  # The release of a pushed commit (release.yml), with the permissions its
+  # jobs need: contents to publish, pages and id-token to deploy the site,
+  # actions for meta, which the nightly build needs.
+  release:
+    name: Release
+    needs: tests
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+      actions: read
+    uses: ./.github/workflows/release.yml
+    secrets: inherit

@@ -10,6 +10,26 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- A release has a flavour, and a box takes its channel's releases and
+  every more stable flavour's; the rolling `devel` and `nightly` builds
+  verify with a key of their own (`README.md`, "Versions").
+
+- The setting `update.channel` chooses the channel a box follows, its
+  build's flavour by default, and an update to another flavour keeps it
+  (`docs/api-v1.md`, "GET /api/v1/update").
+
+- Every push to `main` whose tests pass is published as the `devel`
+  build, one release replaced in place (`GUIDELINES/project/CI.md`,
+  "Releases").
+
+- A `nightly` build, once a day, of the newest commit of `main` whose
+  tests passed, if newer than the last one (`GUIDELINES/project/CI.md`,
+  "Releases").
+
+- A release carries its signed apt index, `massimo-apt-index.tar.gz`, for
+  a site rebuilt without the key (`packaging/README.md`, "The apt
+  repository").
+
 - The event stream gives every event an id and resumes after the last
   one a client read, or says `resync`; the web UI resumes with it
   (`docs/api-v1.md`, "GET …/events").
@@ -109,6 +129,14 @@ the next minor, a fix counts the suffix up.
   stopped (`packaging/launchd/template-test.sh`).
 
 ### Changed
+
+- A release waits for CI's whole suite on its tag and takes its flavour
+  from the tag's label, `stable` without one; the `channel:` line is no
+  longer read (`GUIDELINES/project/CI.md`, "Releases").
+
+- The release branch is `release/alpha`, moved by CI once the release is
+  out; `make release-alpha` pushes only `main` and the tag (`README.md`,
+  "Versions").
 
 - The session handover and the 2026-11-05 review left `docs/` for
   `GUIDELINES/wip/`, its coding standard for the contract; the write
@@ -223,6 +251,10 @@ the next minor, a fix counts the suffix up.
   (golang/go#75804; `GUIDELINES/project/CI.md`, section 3).
 
 ### Security
+
+- The release build and the job holding the apt key restore no Actions
+  cache, so that nothing another run wrote reaches a release
+  (`GUIDELINES/project/CI.md`, "Releases").
 
 - On Linux the service runs as `_massimo`, as on macOS: the package and
   `massimo install` rename their own `massimo`, spare a person's, and

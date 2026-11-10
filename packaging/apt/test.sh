@@ -16,7 +16,7 @@ mkdir -m 700 "$GNUPGHOME"
 gpg --batch --quiet --quick-gen-key --passphrase '' 'Massimo CI <ci@example.invalid>' rsa3072 sign 1d
 key=$(gpg --list-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')
 
-"$root/packaging/apt/publish.sh" --out "$work/site" --key "$key" --from "$root/dist" --channel alpha
+"$root/packaging/apt/publish.sh" --out "$work/site" --key "$key" --from "$root/dist" --channel alpha --index-asset "$work/index.tar.gz"
 
 # The suite verifies against the exported key, as apt will check it.
 gpg --export "$key" >"$work/keyring.gpg"
@@ -31,6 +31,33 @@ for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources ind
 		exit 1
 	}
 done
+
+# The index asset: the signed suites as the site has them, and pool.tsv
+# naming every package of the pool with its sum; a --from directory's
+# packages are in the tarball itself.
+mkdir "$work/index"
+tar -C "$work/index" -xzf "$work/index.tar.gz"
+for f in apt/dists/alpha/InRelease apt/massimo.asc apt/massimo.sources apt/massimo-archive-keyring.deb apt/pool.tsv; do
+	[ -s "$work/index/$f" ] || {
+		echo "FAIL: the index asset lacks $f" >&2
+		exit 1
+	}
+done
+cmp -s "$work/index/apt/dists/alpha/InRelease" "$work/site/apt/dists/alpha/InRelease" || {
+	echo "FAIL: the index asset's InRelease is not the site's" >&2
+	exit 1
+}
+pool=$(cd "$work/site/apt" && find pool -name '*.deb' | sort)
+if [ "$(cut -f1 "$work/index/apt/pool.tsv" | sort)" != "$pool" ]; then
+	echo "FAIL: pool.tsv does not list the pool" >&2
+	exit 1
+fi
+while IFS=$'\t' read -r path sum url; do
+	if [ "$url" != included ] || [ "$(sha256sum "$work/index/apt/$path" | cut -d' ' -f1)" != "$sum" ]; then
+		echo "FAIL: pool.tsv's $path ($url) is not the package in the tarball" >&2
+		exit 1
+	fi
+done <"$work/index/apt/pool.tsv"
 
 # The pages are packaging/site's: the index with the suites in place of
 # its placeholder, the privacy policy as it is; the sample names the

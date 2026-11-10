@@ -4,7 +4,7 @@
 package server
 
 // Software updates: GET /api/v1/update says whether a newer signed release
-// is out on the update channel, POST /api/v1/update asks the update
+// is out on the update channel (updateChannel), POST /api/v1/update asks the update
 // helper to install it (internal/update): through a request file that a
 // systemd path unit (packaging/systemd) or launchd (packaging/launchd)
 // watches, and on Windows by starting the helper itself (Start). The
@@ -21,13 +21,21 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/notify"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
 // UpdateOptions configure the update endpoints.
 type UpdateOptions struct {
 	Version string // the build version, "v0.1.0-alpha.9", without the Go details
-	Channel string // the update channel (a branch name)
+	// Flavour is what the build was released as (update.Flavours): the
+	// channel the server follows unless Channel or the store's
+	// update.channel says otherwise.
+	Flavour string
+	// Channel, where set, is the channel whatever the store says:
+	// MASSIMO_UPDATE_CHANNEL, or the suite or formula a package manager
+	// follows.
+	Channel string
 	// Request is the file that asks the root helper for an update; empty
 	// means no helper is installed and updates cannot be started here.
 	Request string
@@ -67,8 +75,51 @@ const checkEvery = 10 * time.Minute
 type updateCheck struct {
 	mu      sync.Mutex
 	at      time.Time
+	channel string // the channel checked
 	release *update.Release
 	err     error
+}
+
+// updateChannel is the channel updates come from: Channel where set,
+// else the store's update.channel, else the build's flavour.
+func (s *Server) updateChannel(ctx context.Context) string {
+	if c := s.opts.Update.Channel; c != "" {
+		return c
+	}
+	if c := s.storedChannel(ctx); c != "" {
+		return c
+	}
+	return s.opts.Update.Flavour
+}
+
+// storedChannel is the store's update.channel, "" where unset or there
+// is no store.
+func (s *Server) storedChannel(ctx context.Context) string {
+	if s.opts.Store == nil {
+		return ""
+	}
+	c, err := s.opts.Store.SettingString(ctx, store.UpdateChannelKey)
+	if err != nil {
+		s.log.Warn("update channel not read", "error", err)
+		return ""
+	}
+	return c
+}
+
+// keepChannel stores the channel the box follows before it installs a
+// release of another flavour, where neither Channel nor the store names
+// one: the new binary's flavour would otherwise become the channel, and a
+// box on beta that installs a stable release would follow stable from
+// then on.
+func (s *Server) keepChannel(ctx context.Context, channel string, rel *update.Release) {
+	if s.opts.Update.Channel != "" || s.opts.Store == nil || rel == nil || rel.Flavour == s.opts.Update.Flavour || s.storedChannel(ctx) != "" {
+		return
+	}
+	if err := s.opts.Store.SetSetting(ctx, store.UpdateChannelKey, channel); err != nil {
+		s.log.Warn("update channel not kept", "channel", channel, "error", err)
+		return
+	}
+	s.log.Info("update channel kept", "channel", channel, "flavour", s.opts.Update.Flavour, "release_flavour", rel.Flavour)
 }
 
 func (s *Server) finder() ReleaseFinder {
@@ -80,15 +131,15 @@ func (s *Server) finder() ReleaseFinder {
 
 // latest returns the newest release on the channel, checked at most every
 // checkEvery unless refresh is set.
-func (s *Server) latest(ctx context.Context, refresh bool) (*update.Release, time.Time, error) {
+func (s *Server) latest(ctx context.Context, channel string, refresh bool) (*update.Release, time.Time, error) {
 	c := &s.updates
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if refresh || c.at.IsZero() || time.Since(c.at) > checkEvery {
+	if refresh || c.at.IsZero() || time.Since(c.at) > checkEvery || c.channel != channel {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		c.release, c.err = s.finder().Latest(ctx, s.opts.Update.Channel)
-		c.at = time.Now()
+		c.release, c.err = s.finder().Latest(ctx, channel)
+		c.at, c.channel = time.Now(), channel
 	}
 	return c.release, c.at, c.err
 }
@@ -108,8 +159,8 @@ func (s *Server) updateBlocked(ctx context.Context) string {
 		return s.opts.Update.Helper()
 	case s.opts.Update.Blocked != "":
 		return s.opts.Update.Blocked
-	case !update.ValidChannel(s.opts.Update.Channel):
-		return "no update channel: set MASSIMO_UPDATE_CHANNEL"
+	case !update.ValidChannel(s.updateChannel(ctx)):
+		return "no update channel: set the setting update.channel or MASSIMO_UPDATE_CHANNEL (a build without the Makefile has no flavour)"
 	}
 	if v, ok := update.ParseVersion(s.opts.Update.Version); !ok || v.Dirty {
 		return "this is a development or modified build; update it by hand (massimo update -force)"
@@ -119,6 +170,7 @@ func (s *Server) updateBlocked(ctx context.Context) string {
 
 type updateView struct {
 	Current    string         `json:"current"`
+	Flavour    string         `json:"flavour,omitempty"`
 	Channel    string         `json:"channel"`
 	Manager    string         `json:"manager,omitempty"`
 	Latest     string         `json:"latest,omitempty"`
@@ -132,10 +184,18 @@ type updateView struct {
 }
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
+	v, _ := s.updateRelease(ctx, refresh)
+	return v
+}
+
+// updateRelease is updateState with the release it found, if any.
+func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *update.Release) {
 	u := s.opts.Update
-	v := updateView{Current: u.Version, Channel: u.Channel, Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
-	if update.ValidChannel(u.Channel) {
-		rel, at, err := s.latest(ctx, refresh)
+	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
+	var found *update.Release
+	if update.ValidChannel(v.Channel) {
+		rel, at, err := s.latest(ctx, v.Channel, refresh)
+		found = rel
 		v.CheckedAt = at
 		if err != nil {
 			v.CheckError = err.Error()
@@ -155,7 +215,7 @@ func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 		}
 	}
 	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
-	return v
+	return v, found
 }
 
 func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) error {
@@ -169,7 +229,7 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	if why := s.updateBlocked(r.Context()); why != "" {
 		return fail(http.StatusForbidden, "%s", why)
 	}
-	v := s.updateState(r.Context(), true)
+	v, rel := s.updateRelease(r.Context(), true)
 	switch {
 	case v.Helper != nil && v.Helper.Running():
 		return fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
@@ -185,6 +245,7 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	// and start, and the helper that start left at work answers it.
 	s.updateMu.Lock()
 	defer s.updateMu.Unlock()
+	s.keepChannel(r.Context(), v.Channel, rel)
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {
 		return fail(http.StatusInternalServerError, "asking the update helper: %v", err)
 	}

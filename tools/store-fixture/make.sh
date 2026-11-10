@@ -51,7 +51,7 @@ print(*[x.getsockname()[1] for x in s])
 for x in s: x.close()')
 
 git -C "$root" -c submodule.recurse=false worktree add -q --detach "$work/src" "$tag"
-(cd "$work/src" && CGO_ENABLED=0 go build -ldflags "-X main.version=$tag -X main.channel=alpha" -o "$work/massimo" ./cmd/massimo)
+(cd "$work/src" && CGO_ENABLED=0 go build -ldflags "-X main.version=$tag -X main.flavour=alpha" -o "$work/massimo" ./cmd/massimo)
 git -C "$root" worktree remove --force "$work/src"
 m=$work/massimo
 data=$work/data

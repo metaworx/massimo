@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.7.1)
+- Massimo — Project Contract (v1.8.0)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -407,7 +407,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.7.1)
+# Massimo — Project Contract (v1.8.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -432,7 +432,7 @@ so that the two cannot drift apart.
 | Language(s)           | declared as `project.languages` in `GUIDELINES/config.ini`, kept honest by `GUIDELINES/shared/tools/detect-languages.sh --check` |
 | Source directories    | `cmd/massimo/` (the command line and `serve`), `internal/` (the packages: `protocol/cube`, `cubelan`, `engine`, `server` with the web UI in `server/ui/`, `proxy`, `backup`, `store`, `update`, `install`, …), `packaging/` (unit files, plists, the installers' assets), `tools/ui-test/` (the Playwright smoke test), `docs/` (the protocol findings, the API, the designs, the handovers) |
 | Shipped-code paths    | declared as `project.shipped` in `GUIDELINES/config.ini` and listed below; kept honest by `GUIDELINES/shared/tools/changelog.sh check` (rule: `GUIDELINES/shared/COMMIT.md` §5) |
-| Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature, `DRY=1` to see it first) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main`, `alpha` and the tag are pushed atomically; `README.md`, "Versions" |
+| Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature, `DRY=1` to see it first) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main` and the tag are pushed atomically; CI tests the tag, releases it and then fast-forwards `release/alpha` to it; `README.md`, "Versions" |
 | Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`, is recommended, and CI's Race job runs it), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`), and `make lan-test` for a change to discovery, the mDNS announcement (`internal/announce`), `discover` or the proxy's discovery answers (Docker with Compose v2, `tools/lan-test/README.md`) |
 | Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `GUIDELINES/shared/lang/go/LINTING.md` requires per platform; `govulncheck ./...` runs in CI for linux and windows; no other linter |
 | Commit summary        | declared as `[commit]` in `GUIDELINES/config.ini` and shown below; held to it by `GUIDELINES/shared/tools/commit-msg.sh` (rule: `GUIDELINES/shared/COMMIT.md` §3.1) |
@@ -578,8 +578,9 @@ the ones an agent trips over most come first:
   the session whose plan retires prunes them itself, at the retirement.
 - **Branches and pull requests**:
   develop on `main` through pull requests the owner merges;
-  `alpha` is the release branch,
-  only ever fast-forwarded by `make release-alpha`.
+  `release/alpha` is the release branch, only ever fast-forwarded,
+  by the release once it is out (`GUIDELINES/project/CI.md`, "Releases");
+  `release/devel` and `release/nightly` are tags, moved by CI.
   A branch merges `origin/main` before its pull request (merge,
   never rebase a stack).
   Commits are signed (SSH, the repository's git config);

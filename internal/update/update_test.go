@@ -5,6 +5,7 @@ package update
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -90,6 +91,132 @@ func TestAssetName(t *testing.T) {
 func TestReleaseKeyParses(t *testing.T) {
 	if len(ReleaseKey()) != ed25519.PublicKeySize {
 		t.Fatal("bad compiled-in key")
+	}
+	if len(RollingKey()) != ed25519.PublicKeySize {
+		t.Fatal("bad compiled-in rolling key")
+	}
+	if ReleaseKey().Equal(RollingKey()) {
+		t.Fatal("the rolling key is the release key")
+	}
+}
+
+func TestAccepts(t *testing.T) {
+	for _, tc := range []struct {
+		channel, flavour string
+		want             bool
+	}{
+		{"alpha", "alpha", true},
+		{"alpha", "beta", true},
+		{"alpha", "stable", true},
+		{"alpha", "nightly", false},
+		{"alpha", "devel", false},
+		{"devel", "devel", true},
+		{"devel", "nightly", true},
+		{"devel", "stable", true},
+		{"nightly", "devel", false},
+		{"nightly", "alpha", true},
+		{"stable", "beta", false},
+		{"stable", "stable", true},
+		{"main", "alpha", false}, // a branch's own name takes only itself
+		{"ci", "ci", true},
+		{"alpha", "ci", false},
+	} {
+		if got := Accepts(tc.channel, tc.flavour); got != tc.want {
+			t.Errorf("Accepts(%q, %q) = %v", tc.channel, tc.flavour, got)
+		}
+	}
+}
+
+func TestLatestRollingBuilds(t *testing.T) {
+	pub, priv := testKey(t)
+	rollPub, rollPriv := testKey(t)
+	gh := newFakeGitHub(t)
+	bin := map[string][]byte{"massimo-linux-armv6": []byte("v9")}
+	gh.add(t, priv, "v0.12.0-alpha.1", "alpha", bin, nil)
+	gh.addRolling(t, rollPriv, "v0.12.0-alpha.1-37-gabc1234", "devel", bin)
+	gh.addRolling(t, rollPriv, "v0.12.0-alpha.1-30-gdef5678", "nightly", bin)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, RollingKey: rollPub}
+	ctx := context.Background()
+
+	for channel, want := range map[string]string{
+		"devel":   "v0.12.0-alpha.1-37-gabc1234",
+		"nightly": "v0.12.0-alpha.1-30-gdef5678",
+		"alpha":   "v0.12.0-alpha.1",
+		"stable":  "",
+	} {
+		r, err := c.Latest(ctx, channel)
+		if err != nil || (want == "") != (r == nil) || (r != nil && r.Tag != want) {
+			t.Errorf("%s: %+v %v, want %q", channel, r, err, want)
+		}
+	}
+	r, err := c.ByTag(ctx, "release/devel")
+	if err != nil || r.Tag != "v0.12.0-alpha.1-37-gabc1234" || r.Release != "release/devel" {
+		t.Fatalf("ByTag release/devel: %+v %v", r, err)
+	}
+
+	// The next alpha release is newer than the devel build before it.
+	gh.add(t, priv, "v0.12.0-alpha.2", "alpha", bin, nil)
+	if r, err := c.Latest(ctx, "devel"); err != nil || r == nil || r.Tag != "v0.12.0-alpha.2" {
+		t.Fatalf("devel after the next alpha: %+v %v", r, err)
+	}
+}
+
+func TestRollingKeySignsRollingFlavoursAlone(t *testing.T) {
+	pub, priv := testKey(t)
+	rollPub, rollPriv := testKey(t)
+	gh := newFakeGitHub(t)
+	bin := map[string][]byte{"massimo-linux-armv6": []byte("v9")}
+	gh.add(t, rollPriv, "v0.13.0-alpha.1", "alpha", bin, nil)            // an alpha signed with the rolling key
+	gh.addRolling(t, priv, "v0.12.0-alpha.1-2-gabc1234", "nightly", bin) // the release key signs anything
+	gh.addManifest(t, rollPriv, Manifest{Tag: "v0.12.0-alpha.1-3-gabc1234", Release: "release/devel", Flavour: "devel"}, bin, nil)
+	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub, RollingKey: rollPub}
+	ctx := context.Background()
+
+	if _, err := c.ByTag(ctx, "v0.13.0-alpha.1"); err == nil || !strings.Contains(err.Error(), "does not sign the flavour") {
+		t.Fatalf("an alpha signed with the rolling key: %v", err)
+	}
+	if r, err := c.Latest(ctx, "alpha"); r != nil {
+		t.Fatalf("alpha took %+v (%v)", r, err)
+	}
+	if r, err := c.Latest(ctx, "nightly"); err != nil || r == nil || r.Release != "release/nightly" {
+		t.Fatalf("nightly signed with the release key: %+v %v", r, err)
+	}
+	if r, err := c.Latest(ctx, "devel"); err != nil || r == nil || r.Release != "release/devel" {
+		t.Fatalf("devel: %+v %v", r, err)
+	}
+	// Without the rolling key, its builds do not verify.
+	c.RollingKey = nil
+	if _, err := c.ByTag(ctx, "release/devel"); err == nil || !strings.Contains(err.Error(), "does not verify") {
+		t.Fatalf("without the rolling key: %v", err)
+	}
+}
+
+func TestManifestVersions(t *testing.T) {
+	pub, priv := testKey(t)
+	sign := func(m Manifest) ([]byte, []byte) {
+		b, _ := json.Marshal(m)
+		return b, []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(priv, b)))
+	}
+	for _, tc := range []struct {
+		m  Manifest
+		ok bool
+	}{
+		{Manifest{Tag: "v0.12.0-alpha.1", Flavour: "alpha"}, true},
+		{Manifest{Tag: "v0.12.0-alpha.1-3-gabc1234", Flavour: "devel"}, true},
+		{Manifest{Tag: "v0.12.0-alpha.1-3-gabc1234", Flavour: "alpha"}, false},
+		{Manifest{Tag: "v0.12.0-alpha.1-3-gabc1234-dirty", Flavour: "devel"}, false},
+		{Manifest{Tag: "v0.12.0-alpha.1-dirty", Flavour: "alpha"}, false},
+		{Manifest{Tag: "release/devel", Flavour: "devel"}, false},
+	} {
+		b, sig := sign(tc.m)
+		if _, err := VerifyManifest(pub, b, sig); (err == nil) != tc.ok {
+			t.Errorf("%+v: %v", tc.m, err)
+		}
+	}
+	// A manifest from before the release field still verifies by its tag.
+	var old Manifest
+	if err := json.Unmarshal([]byte(`{"tag":"v0.12.0-alpha.1","commit":"c","channel":"alpha","prerelease":true,"assets":{}}`), &old); err != nil || old.Flavour != "alpha" || old.Release != "" {
+		t.Fatalf("%+v %v", old, err)
 	}
 }
 
@@ -188,8 +315,22 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 
 // add publishes a release signed with key; edit may change the manifest
 // bytes after signing.
-func (f *fakeGitHub) add(t *testing.T, key ed25519.PrivateKey, tag, channel string, binaries map[string][]byte, edit func([]byte) []byte) {
-	m := Manifest{Tag: tag, Commit: "c0ffee", Channel: channel, Prerelease: true, Assets: map[string]string{}}
+func (f *fakeGitHub) add(t *testing.T, key ed25519.PrivateKey, tag, flavour string, binaries map[string][]byte, edit func([]byte) []byte) {
+	f.addManifest(t, key, Manifest{Tag: tag, Commit: "c0ffee", Flavour: flavour, Prerelease: true}, binaries, edit)
+}
+
+// addRolling publishes a rolling build of the flavour at version, as
+// the release release/<flavour>, signed with key.
+func (f *fakeGitHub) addRolling(t *testing.T, key ed25519.PrivateKey, version, flavour string, binaries map[string][]byte) {
+	f.addManifest(t, key, Manifest{Tag: version, Release: RollingPrefix + flavour, Commit: "c0ffee", Flavour: flavour, Prerelease: true}, binaries, nil)
+}
+
+// addManifest publishes the release m names (m.Release, else m.Tag),
+// its assets' sums filled in, signed with key; edit may change the
+// manifest bytes after signing.
+func (f *fakeGitHub) addManifest(t *testing.T, key ed25519.PrivateKey, m Manifest, binaries map[string][]byte, edit func([]byte) []byte) {
+	tag := cmp.Or(m.Release, m.Tag)
+	m.Assets = map[string]string{}
 	var assets []map[string]any
 	for name, b := range binaries {
 		sum := sha256.Sum256(b)
@@ -564,12 +705,12 @@ func TestLatestWithoutReleaseOnChannel(t *testing.T) {
 	gh.add(t, priv, "v0.1.0-alpha.9", "alpha", bin, nil)
 	gh.releases = append(gh.releases, map[string]any{"tag_name": "v0.1.0-alpha.10", "html_url": "https://example/v0.1.0-alpha.10", "assets": []any{}})
 	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
-	if r, err := c.Latest(context.Background(), "main"); r != nil || err != nil {
-		t.Fatalf("main, which has no release: %+v %v", r, err)
+	if r, err := c.Latest(context.Background(), "stable"); r != nil || err != nil {
+		t.Fatalf("stable, which has no release: %+v %v", r, err)
 	}
 	_, other := testKey(t)
-	gh.add(t, other, "v0.2.0", "main", bin, nil) // a tag without a label, nor a target
-	if r, err := c.Latest(context.Background(), "main"); r != nil || err == nil || !strings.Contains(err.Error(), "does not verify") {
+	gh.add(t, other, "v0.2.0", "stable", bin, nil) // a tag without a label
+	if r, err := c.Latest(context.Background(), "stable"); r != nil || err == nil || !strings.Contains(err.Error(), "does not verify") {
 		t.Fatalf("beside a release that does not verify: %+v %v", r, err)
 	}
 }
@@ -658,7 +799,6 @@ func TestLatestSkipsOtherChannelsUnfetched(t *testing.T) {
 		gh.add(t, priv, "v0.1.0-alpha."+n, "alpha", bin, nil)
 	}
 	gh.add(t, priv, "v0.2.0", "stable", bin, nil)
-	gh.releases[len(gh.releases)-1]["target_commitish"] = "stable"
 	c := &Client{API: gh.srv.URL, Repo: Repo, HTTP: gh.srv.Client(), Key: pub}
 	fetched := func() (tags []string) {
 		for p := range gh.auth {
@@ -677,17 +817,25 @@ func TestLatestSkipsOtherChannelsUnfetched(t *testing.T) {
 	if got := fetched(); len(got) != 0 {
 		t.Errorf("main fetched the files of other channels' releases: %v", got)
 	}
-	if r, err := c.Latest(context.Background(), "alpha"); err != nil || r == nil || r.Tag != "v0.1.0-alpha.5" {
+	// alpha takes the stable release too, which is the newest.
+	if r, err := c.Latest(context.Background(), "alpha"); err != nil || r == nil || r.Tag != "v0.2.0" {
 		t.Fatalf("alpha: %+v %v", r, err)
 	}
-	if got, want := fetched(), []string{"/dl/v0.1.0-alpha.5/" + ManifestName, "/dl/v0.1.0-alpha.5/" + SignatureName}; !slices.Equal(got, want) {
-		t.Errorf("alpha fetched %v, want the newest alpha's alone", got)
+	if got, want := fetched(), []string{"/dl/v0.2.0/" + ManifestName, "/dl/v0.2.0/" + SignatureName}; !slices.Equal(got, want) {
+		t.Errorf("alpha fetched %v, want the newest release's alone", got)
 	}
 	if r, err := c.Latest(context.Background(), "stable"); err != nil || r == nil || r.Tag != "v0.2.0" {
-		t.Fatalf("stable, by its target: %+v %v", r, err)
+		t.Fatalf("stable, by its plain tag: %+v %v", r, err)
 	}
 	if got := fetched(); len(got) != 2 {
 		t.Errorf("stable fetched %v, want v0.2.0's alone", got)
+	}
+	gh.add(t, priv, "v0.3.0-alpha.1", "alpha", bin, nil)
+	if r, err := c.Latest(context.Background(), "stable"); err != nil || r == nil || r.Tag != "v0.2.0" {
+		t.Fatalf("stable beside a newer alpha: %+v %v", r, err)
+	}
+	if got := fetched(); len(got) != 2 {
+		t.Errorf("stable fetched %v, want v0.2.0's alone, not the alpha's", got)
 	}
 }
 

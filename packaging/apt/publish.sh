@@ -11,8 +11,8 @@ set -euo pipefail
 
 usage() {
 	cat >&2 <<'EOF'
-usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owner/name>]
-       publish.sh --out <dir> --key <fingerprint> --from <dir> --channel <name>
+usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owner/name>] [--index-asset <file>]
+       publish.sh --out <dir> --key <fingerprint> --from <dir> --channel <name> [--index-asset <file>]
 
   --out <dir>        the site: <dir>/apt holds the repository, <dir> the pages of packaging/site
   --key <fpr>        the OpenPGP key in gpg's keyring that signs the suites; its
@@ -22,6 +22,10 @@ usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owne
   --from <dir>       take every .deb in <dir> instead of GitHub's releases …
   --channel <name>   … as the one suite <name>
   --base-url <url>   what the sources snippet names (default https://massimo.metaworx.ch/apt)
+  --index-asset <f>  also write the signed index as a tarball, for a site rebuilt without the key:
+                     apt/dists, massimo.asc, massimo.sources, the keyring package and apt/pool.tsv,
+                     one line per package of the pool - its path under apt/, its SHA-256 and the
+                     download URL of the release file it is, or "included" for one in the tarball
 
 NFPM names the nfpm command for the keyring package (default: go run at the Makefile's version).
 EOF
@@ -35,6 +39,7 @@ releases=10
 repo=metaworx/massimo
 from=""
 channel=""
+index_asset=""
 base_url=https://massimo.metaworx.ch/apt
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -45,6 +50,7 @@ while [ $# -gt 0 ]; do
 	--from) from=$2; shift 2 ;;
 	--channel) channel=$2; shift 2 ;;
 	--base-url) base_url=$2; shift 2 ;;
+	--index-asset) index_asset=$2; shift 2 ;;
 	-h | --help) usage ;;
 	*) echo "publish.sh: unknown argument $1" >&2; usage ;;
 	esac
@@ -61,6 +67,9 @@ NFPM=${NFPM:-go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$nfpm_version}
 
 apt=$out/apt
 mkdir -p "$apt/pool" "$apt/dists"
+# Where each package of the pool came from, by its path under apt/: the
+# download URL of its release file (--index-asset).
+declare -A urls=()
 
 # gpg signs with the key; a passphrase comes from the environment, never
 # from the command line.
@@ -87,7 +96,9 @@ if [ -n "$from" ]; then
 	mkdir -p "$apt/pool/$channel"
 	cp "$from"/*.deb "$apt/pool/$channel/"
 else
-	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')
+	# The numbered releases alone: a rolling build's release (release/devel)
+	# gets no suite of its own until its packages' versions sort.
+	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]"))')
 	channels=""
 	while read -r tag; do
 		[ -n "$tag" ] || continue
@@ -104,6 +115,9 @@ else
 			debs=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name | select(endswith(".deb"))')
 			[ -n "$debs" ] || continue
 			gh release download "$tag" --repo "$repo" --pattern '*.deb' --dir "$apt/pool/$ch" --clobber
+			while read -r deb; do
+				urls["pool/$ch/$deb"]="https://github.com/$repo/releases/download/$tag/$deb"
+			done <<<"$debs"
 		done <<<"$newest"
 	done
 fi
@@ -187,4 +201,27 @@ EOF
 cp -R "$root/packaging/site/." "$out/"
 suite_list=${suites% }
 sed "s/{{SUITES}}/${suite_list// /, }/g" "$root/packaging/site/index.html" >"$out/index.html"
+
+# 5. The signed index on its own (--index-asset): what a site rebuilt from
+# main needs to serve the repository without the key, the pool fetched
+# again by pool.tsv and checked by its sums. A package not from a release
+# (the keyring package, a --from directory's) is in the tarball itself.
+if [ -n "$index_asset" ]; then
+	stage=$(mktemp -d)
+	trap 'rm -f "${keyring:?}"; rm -rf "${stage:?}"' EXIT
+	mkdir -p "$stage/apt"
+	cp -R "$apt/dists" "$apt/massimo.asc" "$apt/massimo.sources" "$apt/massimo-archive-keyring.deb" "$stage/apt/"
+	: >"$stage/apt/pool.tsv"
+	for deb in "$apt"/pool/*/*.deb; do
+		rel=${deb#"$apt"/}
+		url=${urls[$rel]:-included}
+		printf '%s\t%s\t%s\n' "$rel" "$(sha256sum "$deb" | cut -d' ' -f1)" "$url" >>"$stage/apt/pool.tsv"
+		if [ "$url" = included ]; then
+			mkdir -p "$stage/apt/$(dirname "$rel")"
+			cp "$deb" "$stage/apt/$rel"
+		fi
+	done
+	tar -C "$stage" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - apt | gzip -9 -n >"$index_asset"
+	echo "publish.sh: $index_asset holds the signed index and pool.tsv"
+fi
 echo "publish.sh: $out holds the suites ${suites% }"
