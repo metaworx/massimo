@@ -416,10 +416,14 @@ jobs:
       # its signature after them, so that a box which reads the new
       # manifest finds its files already there; then the tag, and the notes
       # and the files the new build lacks (the debs carry the version in
-      # their name) last.
+      # their name) last. The tag is pushed with the deploy key
+      # ROLLING_TAG_DEPLOY_KEY: GitHub refused GITHUB_TOKEN the move once
+      # main's workflow files had changed since the commit (2026-11-10);
+      # without the key the token tries.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_KEY: ${{ secrets.ROLLING_TAG_DEPLOY_KEY }}
         run: |
           git fetch --quiet --force origin "+refs/tags/${RELEASE}:refs/tags/${RELEASE}" 2>/dev/null || true
           files=(dist/massimo-* dist/*.deb dist/SHA256SUMS)
@@ -440,8 +444,18 @@ jobs:
           done
           gh release upload "$RELEASE" --clobber "${payload[@]}"
           gh release upload "$RELEASE" --clobber "${manifest[@]}"
-          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE}" -f sha="$SHA" -F force=true >/dev/null
-          gh release edit "$RELEASE" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
+          if [ -n "$TAG_KEY" ]; then
+            ssh_dir="$(mktemp -d)"
+            trap 'rm -rf "${ssh_dir:?}"' EXIT
+            (umask 077 && printf '%s\n' "$TAG_KEY" > "$ssh_dir/key")
+            gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+            GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts" \
+              git push --force "git@github.com:${GITHUB_REPOSITORY}.git" "${SHA}:refs/tags/${RELEASE}"
+          else
+            echo "::warning::ROLLING_TAG_DEPLOY_KEY is not set; the token moves ${RELEASE}, which GitHub may refuse."
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE}" -f sha="$SHA" -F force=true >/dev/null
+          fi
+          gh release edit "$RELEASE" --target "$SHA" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
           keep="$(for f in "${files[@]}"; do basename "$f"; done)"
           gh release view "$RELEASE" --json assets --jq '.assets[].name' | while read -r name; do
             if ! printf '%s\n' "$keep" | grep -qxF "$name"; then

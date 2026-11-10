@@ -902,7 +902,9 @@ its public half is `internal/update/rolling-key.pem`,
 and a binary accepts it for those two flavours alone,
 so that a key `main` can reach signs nothing a box on `alpha` or above takes.
 `RELEASE_BRANCH_DEPLOY_KEY`, in `signing` too, is the private half of a deploy key
-with write access, with which the release fast-forwards `release/<flavour>`.
+with write access, with which the release fast-forwards `release/<flavour>`;
+`ROLLING_TAG_DEPLOY_KEY`, in `signing-rolling`, that of another,
+with which the rolling builds move `release/devel` and `release/nightly`.
 The repository's rulesets keep the `v*` tags from being moved or deleted
 and let the `release/*` branches only fast-forward
 (GUIDELINES/project/CI.md, section 6).

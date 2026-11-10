@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.31.0)
+# Massimo — CI Conventions (v1.32.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -267,6 +267,7 @@ and on 2026-11-08 it read a Dependabot pull request's that way.
 |------|-----------|---------|
 | `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by `v*` tags only, each run approved by the owner | release.yml, to sign the release manifest; its public half is `internal/update/release-key.pem` |
 | `MASSIMO_ROLLING_KEY` | the `signing-rolling` environment, usable by `main` only | release.yml's `rolling`, to sign the manifest of a `devel` or `nightly` build; its public half is `internal/update/rolling-key.pem`, which boxes accept for those two flavours alone |
+| `ROLLING_TAG_DEPLOY_KEY` | the `signing-rolling` environment; its public half a deploy key with write access, "rolling tags (release.yml)" | release.yml's `rolling`, to move `release/devel` and `release/nightly` to the new build (section 6); without it the token tries |
 | `RELEASE_BRANCH_DEPLOY_KEY` | the `signing` environment; its public half a deploy key with write access, "release branches (release.yml)" | release.yml's `sign`, to fast-forward `release/<flavour>` to the published release (section 6); without it the branch stays |
 | `HOMEBREW_TAP_DEPLOY_KEY` | a repository secret, once the owner has made the tap and the key (packaging/README.md, "Homebrew") | publish.yml, handed over by release.yml's `homebrew` job, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
 | `MASSIMO_APT_KEY`, `MASSIMO_APT_KEY_PASSPHRASE` | the `signing` environment, once the owner has made the key (packaging/README.md, "The apt repository") | release.yml's `apt-build` job, to sign the apt suites; the site's `massimo.asc` is its public half; without them the apt jobs are skipped |
@@ -330,12 +331,22 @@ It is one GitHub release, `release/devel`, a pre-release replaced in place:
 the binaries, packages and sums uploaded over the old ones,
 then the manifest and its signature,
 so that a box reading the new manifest finds its files already there,
-the tag moved with the API,
+the tag pushed with the deploy key `ROLLING_TAG_DEPLOY_KEY`,
 the notes rewritten and the files the new build lacks deleted.
+`GITHUB_TOKEN` moved the tag once and was refused the next time
+(`Resource not accessible by integration`, 2026-11-10),
+after other merges had changed `main`'s workflow files since the commit;
+GitHub keeps the token from some reference updates that touch workflow files,
+and a deploy key is not held to that.
 Editing a release notifies no watcher, as creating one at every merge would.
 Runs of `main` are never cancelled, so an older one can end last:
 `meta` and `rolling` each publish only a commit after the one the release names,
 and `rolling` runs one at a time per flavour.
+GitHub keeps one waiting job per concurrency group,
+so a newer push cancels an older push's waiting `rolling` job,
+and that run reads "cancelled" though its tests passed;
+the nightly build goes by the job "All tests passed", not by the run,
+and dropping the rule could interleave two builds' uploads.
 `rolling` also checks the flavour against the run's event,
 `devel` only for a push to `main`.
 The notes name the build, the commits since the previous one,
