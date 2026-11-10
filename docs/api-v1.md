@@ -249,7 +249,13 @@ own name are open to it for its display name and its password.
 Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
 answered `429` with a `Retry-After` header, the right token included.
-A wrong ticket counts as a failed check,
+A failed check is a wrong token, an empty `Bearer` header among them,
+or a wrong ticket;
+a request that offers neither (no `Authorization: Bearer`,
+no `ticket` or `token` on the stream) is answered `401` and counts as none,
+since it guesses nothing:
+a page before its sign-in, or a scanner behind a proxy not in
+`-trusted-proxies`, does not lock the address out.
 and a failed login counts against the address and against the user name,
 so that password guessing from many addresses locks the name.
 With a store the counters survive a restart.
@@ -294,7 +300,7 @@ and it will be removed in a later release.
 
 Errors are `{"error": "<message>"}` with a matching status: `400` bad input,
 `401` missing or wrong token, `403` a user who may not do this,
-`429` locked out after repeated wrong tokens,
+`429` locked out after repeated wrong tokens, tickets or passwords,
 `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before it was sent (or,
 for a restore, a guard rail: see POST /restore),
