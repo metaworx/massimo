@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.6.0)
+# {{project_name}} — Project Contract (v1.7.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -76,9 +76,8 @@ edit the config, not this block:
 
 ## 3. Project-Specific Conventions
 
-The coding standard at the end of `docs/review-2026-11-05.md` and the
-"Conventions" of `docs/handover-session.md` are the rules; the ones an
-agent trips over most:
+The rules of the code and of the work on it;
+the ones an agent trips over most come first:
 
 - **Secrets and identities.**
   No keys, IVs, tokens, real device names or real Cube serials in code,
@@ -86,6 +85,8 @@ agent trips over most:
   and for a radio address `0a0101`:
   `tools/identifiers` fails `go test` on a serial, a MAC or a radio address
   that is not one, unless its `allowed.txt` names it with a reason.
+  Keys, IVs and tokens are redacted in every printout, a log's included;
+  real room and device names appear only in the owner's pastes.
   `.env`, backups and logs are gitignored.
   The checkout's `.env` points at real hardware,
   so tests and manual runs use `MASSIMO_ENV_FILE=/dev/null` or the fake Cube
@@ -96,17 +97,39 @@ agent trips over most:
   a command the hardware has not confirmed says so in its comment and in
   `docs/portal-protocol.md`.
   Hardware findings go into `docs/portal-protocol.md` the day they are made,
-  with the date and the Cube firmware.
+  with the date and the Cube firmware;
+  the lessons of the hardware days are there ("Lessons from the hardware days")
+  and in `packaging/README.md` ("Learnings").
   A Cube serves one LAN client at a time:
   commands go through the proxy of a running `serve`,
-  never to a Cube another program holds;
+  never to a Cube another program holds (`-no-direct` refuses the direct
+  fallback, `-direct` forces it);
   a radio write costs duty cycle (about 1.25 % each, 36 s of air time an hour),
   so nothing is sent to a real Cube without the owner's go.
+- **Go code.**
+  The Go of `go.mod`, the standard library first.
+  `gofmt` and `go vet` clean, and no `//nolint` outside `third_party/`.
+  Every file opens with the SPDX line `AGPL-3.0-or-later` and the copyright
+  line; JavaScript and CSS carry a one-line licence comment.
+  A package comment says what the package is for;
+  every exported symbol has a comment that is a sentence,
+  an unexported helper one where its name does not say it.
+  Errors are wrapped with context (`fmt.Errorf("serve: %w", err)`),
+  a sentinel error lives in the package that defines the condition
+  (`cubelan.ErrNotConnected`), an HTTP error goes through `fail(status, …)`;
+  input never panics.
+  Logging is `slog` key-value pairs: Info for an event a user wants in the log,
+  Warn for anything the Cube refused, Error for what failed on our side,
+  Debug for per-line traffic.
 - **Tests** run against the fake Cube with the recorded greeting;
   none needs hardware or the network.
   A new API route gets a test that checks the exact line sent to the fake Cube,
   and `TestOpenAPICoversRoutes` fails when `docs/api-v1-openapi.yaml` and the
   routes differ.
+- **The API.**
+  A client needs a token: `MASSIMO_API_TOKEN` is the owner's key,
+  every other user has one of their own (`docs/api-v1.md`, "Authentication");
+  without one the API answers 401.
 - **The web UI** is plain HTML, CSS and JavaScript under `internal/server/ui/`,
   embedded with `go:embed`: no build step, no framework, no inline handlers,
   no `innerHTML`, API text only through `textContent`.
@@ -116,6 +139,7 @@ agent trips over most:
   Shared elements come from `components.js`,
   and a label with its control is the one row style, `.field`,
   or `.field.wide` for a control on a line of its own.
+  Every icon-only control is labelled, and every control keyboard operable.
   Every text goes through `t()` or `data-i18n`, its key in all six
   `ui/i18n/<lang>.json` (FR/IT/NL/PL machine-translated and marked);
   CSS variables for light and dark, phone width first (390 px),
@@ -144,6 +168,8 @@ agent trips over most:
   hardware work goes through the Raspberry Pi's `serve` or the Windows side.
   Windows executables run from WSL through interop and use Windows networking;
   elevation needs `gsudo` and the owner's UAC confirmation.
+  The owner's Windows service, the Pi and the Mac are touched only on the
+  owner's word in the session.
 
 ## 4. Document Governance
 
