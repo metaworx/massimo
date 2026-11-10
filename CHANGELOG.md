@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Changed
+
+- CI builds a release beside the tests and signs it once they have
+  passed, about five minutes sooner; the nightly build has a workflow of
+  its own (`GUIDELINES/project/CI.md`, section 2).
+
 ## [0.13.0-alpha.2] - 2026-11-10
 
 ### Fixed

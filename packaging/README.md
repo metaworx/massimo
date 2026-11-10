@@ -783,9 +783,9 @@ it then names the copy `massimo.db.before-<version>` it made before.
 ## Updating
 
 Development happens on `main`;
-`make release-alpha` tags it, CI tests the tag, and `.github/workflows/release.yml`
-builds, signs and publishes the release, then fast-forwards the release branch
-`release/alpha` to it.
+`make release-alpha` tags it, CI tests the tag while `.github/workflows/build.yml`
+builds it, and `.github/workflows/release.yml` signs and publishes the release,
+then fast-forwards the release branch `release/alpha` to it.
 Each release has a **flavour**, from the least stable to the most:
 `devel`, every commit of `main` whose tests passed;
 `nightly`, once a day the newest of those;

@@ -9,9 +9,10 @@ name: CI
 # avahi only when it changes the announcement, discovery, the test or
 # this file; a push to main or of a tag runs all of it, but for a push
 # to main of a release commit, which its tag's run tests (What to test).
-# Once every test job has passed ("All tests passed"), a push calls
-# release.yml, which
-# releases a tag, and a push to main as the devel build. A push to a release branch
+# A push builds the release beside the tests (build.yml), and once every
+# test job has passed ("All tests passed") calls release.yml, which signs
+# and publishes a tag as its release, and a push to main as the devel
+# build. The nightly build is nightly.yml's. A push to a release branch
 # (release/alpha) runs nothing: the release moved it to a commit this
 # workflow had tested.
 on:
@@ -1030,6 +1031,23 @@ jobs:
   # them failed or was cancelled (a pull request skips some). The release
   # waits for it, and the nightly build looks for it among a commit's runs
   # (release.yml).
+  # The release's build (build.yml), beside the test jobs, so that its
+  # files are ready when they have passed: for a push of main or of a
+  # tag, unless What to test answered suite=false. It holds no secret,
+  # and nothing is signed until All tests passed; a build whose tests fail
+  # is thrown away with the run. actions: What to release reads runs for
+  # the nightly build; id-token and attestations: the build's provenance.
+  build:
+    name: Build
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build.yml
+
   # One check for the whole suite, which the release waits for. It counts
   # What to test with the others, so that a gate that failed fails it,
   # although every job ran; for a release commit pushed to main,
@@ -1049,23 +1067,29 @@ jobs:
             case "$r" in success|skipped) ;; *) exit 1 ;; esac
           done
 
-  # The release of a pushed commit (release.yml), with the permissions its
-  # jobs need: contents to publish, pages and id-token to deploy the site,
-  # id-token and attestations for the build's provenance, actions for meta,
-  # which the nightly build needs.
+  # The release of a pushed commit (release.yml), once All tests passed
+  # and the build is done, with build.yml's answers as inputs and the
+  # permissions its jobs need: contents to publish, pages and id-token to
+  # deploy the site.
   # The condition names its status function: without one GitHub adds
   # success(), which is false while any job up the chain was skipped, as
   # Fuzz is on a pull request and Changed paths, now What to test, was on
   # a push (2026-11-10: the first devel build was skipped so).
   release:
     name: Release
-    needs: tests
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.tests.result == 'success' }}
+    needs: [ tests, build ]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.tests.result == 'success' && needs.build.result == 'success' }}
     permissions:
       contents: write
       pages: write
       id-token: write
-      attestations: write
-      actions: read
     uses: ./.github/workflows/release.yml
     secrets: inherit
+    with:
+      kind: ${{ needs.build.outputs.kind }}
+      tag: ${{ needs.build.outputs.tag }}
+      sha: ${{ needs.build.outputs.sha }}
+      version: ${{ needs.build.outputs.version }}
+      flavour: ${{ needs.build.outputs.flavour }}
+      release: ${{ needs.build.outputs.release }}
+      prerelease: ${{ needs.build.outputs.prerelease }}

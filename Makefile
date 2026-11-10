@@ -245,12 +245,16 @@ site:
 # through tee, under bash with pipefail, so that its failure still fails
 # the release; the command line's VERSION, FLAVOUR and RELEASE reach it.
 RECORD = massimo-build.txt
+# The binaries and packages build side by side; -Otarget keeps each
+# target's output together, so that the record's log reads target by
+# target. A make without -O (macOS's 3.81) runs it with RELEASE_JOBS=.
+RELEASE_JOBS ?= -j4 -Otarget
 release: SHELL := bash
 release: .SHELLFLAGS := -eo pipefail -c
 release: clean
 	mkdir -p $(OUT)
 	started=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
-	$(MAKE) --no-print-directory release-files VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' 2>&1 | tee $(OUT)/build.log; \
+	$(MAKE) --no-print-directory $(RELEASE_JOBS) release-files VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' 2>&1 | tee $(OUT)/build.log; \
 	VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' LDFLAGS='$(LDFLAGS)' BUILD_STARTED="$$started" \
 		packaging/build-record.sh $(OUT)/build.log github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION) \
 		$(addprefix $(OUT)/,$(BINARIES)) > $(OUT)/$(RECORD)
