@@ -8,6 +8,12 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+### Changed
+
+- A request to the API without a token, ticket or `?token=` is still
+  refused with 401 but no longer counts toward the address's lockout:
+  only wrong tokens, tickets and passwords do (`docs/api-v1.md`).
+
 ## [0.13.0-alpha.2] - 2026-11-10
 
 ### Fixed

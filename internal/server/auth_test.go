@@ -181,6 +181,54 @@ func TestFailedTokensLockTheAddressOut(t *testing.T) {
 	}
 }
 
+// A request that offers no token, ticket or ?token= guesses nothing: it
+// is refused, but does not count toward the lockout. An empty Bearer
+// header is offered, and counts.
+func TestRequestsWithoutTokenAreNotCounted(t *testing.T) {
+	dir := t.TempDir()
+	opts := storeOptions(t, dir, "secret")
+	opts.AuthFailures = 3
+	_, ts, s := startWith(t, opts)
+	cubes := ts.URL + "/api/v1/cubes"
+	stream := cubes + "/KEQ0000100/events"
+	for i := 0; i < 5; i++ {
+		for _, url := range []string{cubes, stream, stream + "?ticket=&token="} {
+			if r := send(t, "GET", url, ""); r.StatusCode != 401 {
+				t.Fatalf("%s without a token: %d", url, r.StatusCode)
+			}
+		}
+	}
+	keys, err := s.opts.Store.Lockout(3, time.Minute, time.Minute).Keys(context.Background())
+	if err != nil || len(keys) != 0 {
+		t.Fatalf("requests without a token counted: %v %v", keys, err)
+	}
+	if r := send(t, "GET", cubes, "secret"); r.StatusCode != 200 {
+		t.Fatalf("right token after requests without one: %d", r.StatusCode)
+	}
+	emptyBearer := func() int {
+		req, _ := http.NewRequest("GET", cubes, nil)
+		req.Header.Set("Authorization", "Bearer ")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for i := 0; i < 3; i++ {
+		if code := emptyBearer(); code != 401 {
+			t.Fatalf("empty Bearer %d: %d", i+1, code)
+		}
+	}
+	if r := send(t, "GET", cubes, "secret"); r.StatusCode != 429 {
+		t.Fatalf("after three empty Bearer headers: %d", r.StatusCode)
+	}
+	// Locked out, a request without a token is 429 too.
+	if r := send(t, "GET", cubes, ""); r.StatusCode != 429 {
+		t.Fatalf("without a token during the lockout: %d", r.StatusCode)
+	}
+}
+
 func TestClientIP(t *testing.T) {
 	proxies, err := ParseTrustedProxies("127.0.0.1, 10.0.0.0/8 ::1")
 	if err != nil || len(proxies) != 3 || proxies[1].String() != "10.0.0.0/8" || proxies[0].String() != "127.0.0.1/32" {
