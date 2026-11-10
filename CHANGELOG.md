@@ -14,6 +14,10 @@ the next minor, a fix counts the suffix up.
   service's process has exited before it replaces `massimo.exe`, in
   place of failing now and then with "Access is denied".
 
+- `make release-alpha` fetches the version tags alone, so a rolling
+  tag that CI moved since the checkout last fetched it no longer
+  stops it ("would clobber existing tag").
+
 ## [0.13.0-alpha.1] - 2026-11-10
 
 ### Added
