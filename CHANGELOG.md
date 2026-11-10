@@ -18,6 +18,10 @@ the next minor, a fix counts the suffix up.
   build's flavour by default, and an update to another flavour keeps it
   (`docs/api-v1.md`, "GET /api/v1/update").
 
+- Every push to `main` whose tests pass is published as the `devel`
+  build, one release replaced in place (`GUIDELINES/project/CI.md`,
+  "Releases").
+
 - The event stream gives every event an id and resumes after the last
   one a client read, or says `resync`; the web UI resumes with it
   (`docs/api-v1.md`, "GET …/events").

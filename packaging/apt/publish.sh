@@ -87,7 +87,9 @@ if [ -n "$from" ]; then
 	mkdir -p "$apt/pool/$channel"
 	cp "$from"/*.deb "$apt/pool/$channel/"
 else
-	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')
+	# The numbered releases alone: a rolling build's release (release/devel)
+	# gets no suite of its own until its packages' versions sort.
+	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]"))')
 	channels=""
 	while read -r tag; do
 		[ -n "$tag" ] || continue

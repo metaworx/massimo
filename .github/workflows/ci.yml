@@ -9,7 +9,7 @@ name: CI
 # avahi only when it changes the announcement, discovery, the test or
 # this file; a push to main or of a tag runs all of it. Once every test
 # job has passed ("All tests passed"), a push calls release.yml, which
-# releases a tag and nothing else so far. A push to a release branch
+# releases a tag, and a push to main as the devel build. A push to a release branch
 # (release/alpha) runs nothing: the release moved it to a commit this
 # workflow had tested.
 on:

@@ -3,14 +3,16 @@ name: Release
 # The release of a commit CI has tested. ci.yml calls this workflow as its
 # last job, once every test job has passed (workflow_call), so that it
 # runs with the caller's ref, which the environments' rules are matched
-# against: a v* tag here, where the signing environment admits the tags
-# alone. A workflow started by workflow_run would carry the default
-# branch whatever started it.
+# against: a v* tag, which the signing environment admits alone, or main,
+# which signing-rolling admits. A workflow started by workflow_run would
+# carry the default branch whatever started it.
 #
 # A version tag (v1.2.3, v0.1.0-alpha.10) is built for every platform
 # (the binaries, and the Debian packages holding them), signed and
 # published as a GitHub release, which `massimo update` installs
-# (internal/update).
+# (internal/update). A push to main is built the same way as the devel
+# build, the one GitHub release tagged release/devel, replaced in place
+# (`rolling`); its version is what git describe calls the commit.
 #
 # The jobs, a key in one each: `meta` decides what the run releases;
 # `build` runs the toolchain and the third-party actions and holds no
@@ -18,7 +20,10 @@ name: Release
 # which only v* tags may use, runs nothing but openssl and gh on what
 # build handed over, checks the signature against the public key compiled
 # into massimo and the flavour against the tag before publishing, and
-# publishes exactly what it signed. `homebrew` then pushes the formula to
+# publishes exactly what it signed; `rolling` does the same for a rolling
+# build with the rolling key, through the signing-rolling environment,
+# which main may use, and whose key boxes accept for the rolling flavours
+# alone. `homebrew` then pushes the formula to
 # the tap (publish.yml). `apt-build` holds the apt repository's key
 # through the same environment and rebuilds the site from the releases
 # (packaging/apt/publish.sh); `apt-deploy` puts it on GitHub Pages.
@@ -45,17 +50,41 @@ jobs:
       sha: ${{ steps.meta.outputs.sha }}
       version: ${{ steps.meta.outputs.version }}
       flavour: ${{ steps.meta.outputs.flavour }}
+      release: ${{ steps.meta.outputs.release }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
+      # A rolling build is published only for a commit after the one its
+      # release names: runs of main are never cancelled, so an older run
+      # can end after a newer one (the rolling job checks again).
       - name: Release metadata
         id: meta
         run: |
-          kind=skip tag="" sha="" version="" flavour="" prerelease=true
+          kind=skip tag="" sha="" version="" flavour="" release="" prerelease=true
+          # rolling <flavour> <commit>: kind and version for a rolling build
+          # of the commit, or kind skip where its release is at or after it.
+          rolling() {
+            release="release/$1"
+            if git ls-remote --exit-code --heads origin "$release" >/dev/null; then
+              echo "::error::a branch ${release} exists; a name is never both a branch and a tag."
+              exit 1
+            fi
+            git fetch --quiet --force origin "+refs/tags/${release}:refs/tags/${release}" 2>/dev/null || true
+            if cur="$(git rev-parse --verify --quiet "refs/tags/${release}^{commit}")" &&
+              git merge-base --is-ancestor "$2" "$cur"; then
+              echo "${release} is ${cur}, at or after ${2}: nothing to publish."
+              return
+            fi
+            kind="$1" flavour="$1" sha="$2"
+            version="$(git describe --tags --match 'v[0-9]*' "$sha")"
+          }
           case "$GITHUB_REF" in
+          refs/heads/main)
+            rolling devel "$GITHUB_SHA"
+            ;;
           refs/tags/v*)
             tag="${GITHUB_REF_NAME}"
             # checkout leaves the tag without its annotation; fetch it again.
@@ -89,6 +118,7 @@ jobs:
             echo "sha=${sha}"
             echo "version=${version}"
             echo "flavour=${flavour}"
+            echo "release=${release}"
             echo "prerelease=${prerelease}"
           } >> "$GITHUB_OUTPUT"
 
@@ -111,7 +141,7 @@ jobs:
 
       # Tested by ci.yml's jobs before this workflow was called.
       - name: Build every binary and package, SHA256SUMS and the manifest
-        run: make release VERSION="${{ needs.meta.outputs.version }}" FLAVOUR="${{ needs.meta.outputs.flavour }}"
+        run: make release VERSION="${{ needs.meta.outputs.version }}" FLAVOUR="${{ needs.meta.outputs.flavour }}" RELEASE="${{ needs.meta.outputs.release }}"
 
       - name: Hand the files to the signing job
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -229,6 +259,129 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$ssh_dir/known_hosts"
           git push "git@github.com:${GITHUB_REPOSITORY}.git" "${SHA}:refs/heads/${branch}"
           echo "${branch} is ${SHA} (${TAG})"
+
+  # A rolling build: signed with the rolling key and published as the one
+  # release release/<flavour>, which is replaced in place. Editing a
+  # release notifies no watcher, as creating one at every merge would.
+  # One run at a time per flavour; a run that finds a newer build
+  # published leaves it. A box downloading while the files are swapped
+  # fails the signature check and tries again at its next check.
+  rolling:
+    name: Sign and publish the ${{ needs.meta.outputs.flavour }} build
+    needs: [ meta, build ]
+    if: needs.meta.outputs.kind == 'devel'
+    runs-on: ubuntu-latest
+    environment: signing-rolling
+    concurrency:
+      group: rolling-${{ needs.meta.outputs.flavour }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      FLAVOUR: ${{ needs.meta.outputs.flavour }}
+      RELEASE: ${{ needs.meta.outputs.release }}
+      VERSION: ${{ needs.meta.outputs.version }}
+      SHA: ${{ needs.meta.outputs.sha }}
+    steps:
+      # The public key, CHANGELOG.md and changelog.sh for the notes, and
+      # the history for the ancestry; nothing from here is built.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          fetch-depth: 0
+          submodules: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+
+      # The flavour this run may publish comes from its event here, not
+      # from meta: devel from a push to main alone.
+      - name: Check the manifest's version, flavour and release
+        run: |
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+          push:refs/heads/main) allowed=devel ;;
+          *) allowed="" ;;
+          esac
+          if [ "$FLAVOUR" != "$allowed" ]; then
+            echo "::error::this run (${GITHUB_EVENT_NAME} of ${GITHUB_REF}) may not publish ${FLAVOUR}."
+            exit 1
+          fi
+          for want in "\"tag\": \"${VERSION}\"" "\"release\": \"release/${FLAVOUR}\"" "\"channel\": \"${FLAVOUR}\"" "\"commit\": \"${SHA}\""; do
+            grep -qF "$want" dist/massimo-release.json || { echo "::error::the manifest lacks ${want}"; exit 1; }
+          done
+
+      - name: Sign the manifest
+        env:
+          MASSIMO_ROLLING_KEY: ${{ secrets.MASSIMO_ROLLING_KEY }}
+        run: |
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MASSIMO_ROLLING_KEY" > "$key"
+          openssl pkeyutl -sign -inkey "$key" -rawin -in dist/massimo-release.json | base64 -w0 > dist/massimo-release.json.sig
+          echo >> dist/massimo-release.json.sig
+
+      - name: Verify against the compiled-in rolling key
+        run: |
+          base64 -d dist/massimo-release.json.sig > "$RUNNER_TEMP/sig.bin"
+          openssl pkeyutl -verify -pubin -inkey internal/update/rolling-key.pem -rawin \
+            -in dist/massimo-release.json -sigfile "$RUNNER_TEMP/sig.bin"
+          (cd dist && sha256sum -c SHA256SUMS)
+
+      # The notes: what the build is, the commits since the build before
+      # it, and CHANGELOG.md's [Unreleased] as the next release would
+      # write it (changelog.sh preview, from guidelines v4.54.0).
+      - name: Write the notes
+        run: |
+          git fetch --quiet --force origin "+refs/tags/${RELEASE}:refs/tags/${RELEASE}" 2>/dev/null || true
+          prev="$(git rev-parse --verify --quiet "refs/tags/${RELEASE}^{commit}" || true)"
+          {
+            printf 'The %s build of `%s` (%s), replaced in place by the next one. Boxes on the channel `%s` take it with `massimo update` or the web UI; it is signed with the rolling key, which boxes accept for the rolling flavours alone.\n\n' "$FLAVOUR" "$VERSION" "$SHA" "$FLAVOUR"
+            if [ -n "$prev" ] && git merge-base --is-ancestor "$prev" "$SHA"; then
+              printf '## Commits since the previous %s build\n\n' "$FLAVOUR"
+              git log --first-parent --format='- %s (%h)' "${prev}..${SHA}"
+              echo
+            fi
+            printf '## Unreleased\n\n'
+            if preview="$(GUIDELINES/shared/tools/changelog.sh preview 2>/dev/null)"; then
+              printf '%s\n' "$preview"
+            else
+              echo "CHANGELOG.md's [Unreleased] is shown here once the guidelines carry changelog.sh preview (v4.54.0)."
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      # Published only where the release still names a commit before this
+      # one; then the files first, the tag second, the notes and the files
+      # the new build lacks (the debs carry the version in their name) last.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --quiet --force origin "+refs/tags/${RELEASE}:refs/tags/${RELEASE}" 2>/dev/null || true
+          files=(dist/massimo-* dist/*.deb dist/SHA256SUMS)
+          title="${FLAVOUR} ${VERSION}"
+          if ! cur="$(git rev-parse --verify --quiet "refs/tags/${RELEASE}^{commit}")"; then
+            gh release create "$RELEASE" --target "$SHA" --prerelease --latest=false --title "$title" --notes-file "$RUNNER_TEMP/notes.md" "${files[@]}"
+            echo "${RELEASE} made at ${SHA}"
+            exit 0
+          fi
+          if git merge-base --is-ancestor "$SHA" "$cur"; then
+            echo "${RELEASE} is ${cur}, at or after ${SHA}: left as it is."
+            exit 0
+          fi
+          gh release upload "$RELEASE" --clobber "${files[@]}"
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE}" -f sha="$SHA" -F force=true >/dev/null
+          gh release edit "$RELEASE" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
+          keep="$(for f in "${files[@]}"; do basename "$f"; done)"
+          gh release view "$RELEASE" --json assets --jq '.assets[].name' | while read -r name; do
+            if ! printf '%s\n' "$keep" | grep -qxF "$name"; then
+              gh release delete-asset "$RELEASE" "$name" --yes
+            fi
+          done
+          echo "${RELEASE} moved from ${cur} to ${SHA}"
 
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the
