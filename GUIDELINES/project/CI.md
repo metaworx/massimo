@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.27.0)
+# Massimo — CI Conventions (v1.28.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -56,6 +56,13 @@ such a run carries the default branch,
 which the `signing` environment does not admit.
 The release branches receive only commits already on `main`,
 so a push to one runs nothing.
+A job after one that can be skipped names a status function in its `if:`:
+GitHub otherwise adds `success()`,
+which is false while any job up the chain was skipped, not only its own `needs`.
+Changed paths is skipped on every push,
+so All tests passed (`!cancelled()`) and Release
+(`!cancelled() && … && needs.tests.result == 'success'`) say so;
+without it the first `devel` build, on 2026-11-10, was skipped.
 Runs share a concurrency group per ref:
 a new push to a pull request cancels the run it supersedes,
 while a run of `main` is never cancelled,

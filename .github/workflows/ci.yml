@@ -994,10 +994,14 @@ jobs:
   # The release of a pushed commit (release.yml), with the permissions its
   # jobs need: contents to publish, pages and id-token to deploy the site,
   # actions for meta, which the nightly build needs.
+  # The condition names its status function: without one GitHub adds
+  # success(), which is false while any job up the chain was skipped, and
+  # Changed paths always is on a push (2026-11-10: the first devel build
+  # was skipped so).
   release:
     name: Release
     needs: tests
-    if: github.event_name == 'push'
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.tests.result == 'success' }}
     permissions:
       contents: write
       pages: write
