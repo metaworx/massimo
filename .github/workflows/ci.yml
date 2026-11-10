@@ -36,6 +36,41 @@ env:
   GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
+  # What a pull request changes, for the Screenshots and LAN jobs: ui is
+  # true when it touches the web UI, its suite or this file, lan when it
+  # touches the announcement, discovery, the proxy, the LAN test or this
+  # file (GUIDELINES/project/CI.md, section 2). The run checks out the pull request's merge commit, whose
+  # first parent is the base branch. The list is taken before it is
+  # matched, so that grep -q ending the pipe early cannot fail the step
+  # under pipefail; a step that fails anyway leaves ui empty, and the
+  # Screenshots job then runs. A push to main skips this job.
+  changes:
+    name: Changed paths
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      ui: ${{ steps.paths.outputs.ui }}
+      lan: ${{ steps.paths.outputs.lan }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the merge commit and its parents
+
+      - name: Paths
+        id: paths
+        run: |
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          if grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ui=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
+            echo "lan=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "lan=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     name: Vet and test
     runs-on: ubuntu-latest
@@ -142,41 +177,6 @@ jobs:
           name: fuzz-crash
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
-
-  # What a pull request changes, for the Screenshots and LAN jobs: ui is
-  # true when it touches the web UI, its suite or this file, lan when it
-  # touches the announcement, discovery, the proxy, the LAN test or this
-  # file (GUIDELINES/project/CI.md, section 2). The run checks out the pull request's merge commit, whose
-  # first parent is the base branch. The list is taken before it is
-  # matched, so that grep -q ending the pipe early cannot fail the step
-  # under pipefail; a step that fails anyway leaves ui empty, and the
-  # Screenshots job then runs. A push to main skips this job.
-  changes:
-    name: Changed paths
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      ui: ${{ steps.paths.outputs.ui }}
-      lan: ${{ steps.paths.outputs.lan }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2 # the merge commit and its parents
-
-      - name: Paths
-        id: paths
-        run: |
-          changed="$(git diff --name-only HEAD^1 HEAD)"
-          if grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
-            echo "ui=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ui=false" >> "$GITHUB_OUTPUT"
-          fi
-          if grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
-            echo "lan=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "lan=false" >> "$GITHUB_OUTPUT"
-          fi
 
   # The web UI in Chromium against the fake Cube: the pytest suite, then
   # the screenshot set, uploaded as the artifact ui-screenshots
