@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.26.0)
+# Massimo — CI Conventions (v1.27.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -305,6 +305,12 @@ The GitHub release's notes are the body of the tag's message,
 that section, then a sentence naming the flavour and how to install and verify;
 a tag with no body (an old `channel:` line does not count) gets the sentence alone.
 A tag whose commit `git describe` does not name is refused.
+`build`, and `apt-build`, which holds the apt key, restore no Actions cache
+(`setup-go`'s `cache: false`):
+a cache another run wrote would otherwise reach the release's binaries.
+CodeQL's alert 6, cache poisoning by the nightly build's checkout of the commit
+`meta` picked, was dismissed as a false positive:
+that commit is always one of `main`'s first parents.
 
 A push to `main` whose suite passed becomes the `devel` build:
 the same `make release`, as the version `git describe` calls the commit

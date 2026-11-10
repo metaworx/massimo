@@ -248,6 +248,10 @@ the next minor, a fix counts the suffix up.
 
 ### Security
 
+- The release build and the job holding the apt key restore no Actions
+  cache, so that nothing another run wrote reaches a release
+  (`GUIDELINES/project/CI.md`, "Releases").
+
 - On Linux the service runs as `_massimo`, as on macOS: the package and
   `massimo install` rename their own `massimo`, spare a person's, and
   name the `chown` after an older takeover (`packaging/README.md`).

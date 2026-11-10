@@ -183,10 +183,13 @@ jobs:
           fetch-depth: 0
 
       # The same toolchain as ci.yml: a supported line, newest patch.
+      # No cache: a release is built from the module proxy and nothing a
+      # cache restores, which another run could have written.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26'
           check-latest: true
+          cache: false
 
       # Tested by ci.yml's jobs before this workflow was called.
       - name: Build every binary and package, SHA256SUMS and the manifest
@@ -473,12 +476,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.HAS_APT_KEY == 'true'
 
-      # nfpm, for the keyring package, through go run at the Makefile's version.
+      # nfpm, for the keyring package, through go run at the Makefile's
+      # version; no cache in a job that holds the apt key.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: env.HAS_APT_KEY == 'true'
         with:
           go-version: '1.26'
           check-latest: true
+          cache: false
 
       - name: Build the site from the releases
         id: site
