@@ -8,6 +8,8 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.13.0-alpha.1] - 2026-11-10
+
 ### Added
 
 - Every release carries its build record, `massimo-build.txt`, listed in
