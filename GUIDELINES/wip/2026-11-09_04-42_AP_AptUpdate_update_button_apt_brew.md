@@ -1,20 +1,21 @@
-# AP AptUpdate v1.0: Update button through apt and brew
+# AP AptUpdate v1.1: Update button through apt and brew
 
 ## TL;DR
 
 The web UI's update button works where apt or brew owns massimo:
 a root helper of the `.deb` runs apt for the massimo source only,
 and on a Homebrew box the server starts a helper that runs brew.
-The outcome goes into the status file the UI already reads.
+v1.1 adds Block 5: a package built between two releases sorts after the one it follows.
 
+- Blocks 1 to 4 merged (#127 within #128); a real apt box passed
 - marker `apt` + helper enabled → the button; "managed by apt" → "installed by apt"
 - `massimo-update.path` + the deb's own `.service` → `massimo update -request …`
 - `apt-get update` of `massimo.sources` only, retried on its lock;
   `apt-get install --only-upgrade massimo`, lock timeout 120 s
 - `/healthz` must report the new version; no downgrade, the way back named
-- channel = the source's suite, not `MASSIMO_UPDATE_CHANNEL`
 - brew: `update`, `upgrade`, `services restart` from a detached helper; never as root
-- pull requests: Blocks 1 to 3, then Block 4 stacked on them
+- `DEBVER` between tags: `0.12.0~alpha.1~117~g3d7588f` → `0.12.0~alpha.1+117.g3d7588f`
+- Block 5: its own pull request, from `main`
 
 ### Blocks
 
@@ -29,15 +30,18 @@ The outcome goes into the status file the UI already reads.
 4. BrewUpdate: the server starts a brew helper on a Homebrew box,
    the helper runs brew, the label check fixed, the macOS CI upgrade,
    the documents; its own pull request
+5. DebVersion: a build between tags gets its `git describe` part behind a `+`,
+   `debTag` reads it back, the systemd cases upgrade without `--allow-downgrades`,
+   `packaging/README.md`; its own pull request
 
 ## Discussion
 
 The owner wants this:
 "Installs on hosts with apt packages and apt sources should still be available
 from the web interface."
-Today a package install makes the server refuse
-(`UpdateOptions.Managed`, the first reason `updateBlocked` gives),
-and the UI shows the newer version and the apt command.
+Before this plan, a package install made the server refuse
+(`UpdateOptions.Managed`, the first reason `updateBlocked` gave),
+and the UI showed the newer version and the apt command.
 
 **What this plan takes over**, from the Debian package's work so far:
 the web UI's update button running apt or brew through a helper
@@ -59,6 +63,23 @@ ends here for the button;
   not downgrade; the status names the way back.
 - **`PLAN++ D2-B`** (2026-11-09), with D1-A and D3-A as recommended,
   and then: "make Block 4 it's own pr so that 1-3 can already land".
+- **D10-A** (2026-11-10, "Yes, run them"):
+  this session ran the real apt box's test itself, over SSH.
+- **D9-A** (2026-11-10, `PLAN+ F1 fix`):
+  finding F1, a build between tags sorting before its tag, is fixed in this plan.
+
+**Where it stands** (2026-11-10):
+Blocks 1 to 4 are on `main`: #128, which carried #127, merged on 2026-11-09.
+A Raspberry Pi 5 without a Cube ran the helper end to end
+through a local repository
+([the NOTE](2026-11-10_00-53_NOTE_AptUpdate_v1.0_real_box_run.md)).
+It took two test builds, `v0.12.0-alpha.1.1` and `.2`,
+because a build from `main` sorts below the release (F1).
+Still open beside Block 5:
+the button against the signed repository, once a release is out;
+the real Mac (D11, the owner's: hand it to the session "Run Hardware/Owner tests",
+or install Homebrew there for it).
+Retiring the plan stays the owner's call (D7).
 
 **Names chosen here**, routine and not the owner's decisions:
 
@@ -71,18 +92,22 @@ ends here for the button;
 - `massimo install` on a packaged box: the helper enabled unless `-no-update-helper`,
   as on a hand install; no new flag
 - the API field `manager` (`apt`, `brew`) in `GET /api/v1/update`
-- the branches `claude/apt-update` (Blocks 1 to 3) and
-  `claude/brew-update` (Block 4, from the first)
+- the branches `claude/apt-update` (Blocks 1 to 3),
+  `claude/brew-update` (Block 4, from the first) and
+  `claude/deb-version` (Block 5, from `main`)
 
 **Not in this plan:**
 rpm and dnf, which have no package yet;
 an automatic downgrade (D3-A);
 `massimo update` by hand on a packaged box, which keeps refusing;
 the URIs of the boxes still on the old repository address,
-which are edited by hand as `packaging/README.md` says.
+which are edited by hand as `packaging/README.md` says;
+the version of a build with no tag behind it (`git describe --always`),
+which was never a valid package version and stays as it is.
 
 **Who runs it:**
-this session, under the owner's `PLAN++ D2-B` of 2026-11-09.
+this session, under the owner's `PLAN++ D2-B` of 2026-11-09 for Blocks 1 to 4;
+Block 5 waits for the owner's signal at this revision's gate.
 Nothing is sent to a real box or the Mac without the owner's word.
 
 ## Analysis
@@ -128,7 +153,8 @@ and runs, with `DEBIAN_FRONTEND=noninteractive` and `LC_ALL=C`:
 2. `apt-get install -y -q --only-upgrade -o Dpkg::Options::=--force-confdef
    -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 massimo`;
 3. the version before and after from `dpkg-query -W -f='${Version}' massimo`,
-   as a tag `v` + the version with `~` → `-` (the Makefile's `DEBVER` reversed).
+   as a tag `v` + the version with `~` → `-` (the Makefile's `DEBVER` reversed;
+   Block 5 adds the part behind a `+`).
 
 Status: `checking` during 1, `installing` during 2,
 `up-to-date` when the version did not change
@@ -158,8 +184,8 @@ add the user, run `systemctl daemon-reload` and restart the service.
 The deb's own unit keeps `NoNewPrivileges`, `ProtectHome=read-only`, `PrivateTmp`,
 `ProtectKernelTunables`, `ProtectKernelModules` and `ProtectControlGroups`,
 and drops the rest.
-A container has no systemd, so the unit's sandbox is proven on a real box only:
-the owner's go and a release newer than the box's.
+The sandbox has been proven since:
+under systemd in a container, and on the real box of 2026-11-10.
 
 `packaging/deb/unit.sh` stops dropping `-update-request` from `massimo.service`.
 `postinst` enables `massimo-update.path` with debhelper's snippet for a unit it
@@ -212,6 +238,74 @@ instead of "Homebrew's service runs as a user".
 `restartBy` is unaffected (launchd is the parent either way).
 Block 4 matches the label by its prefix.
 
+### A build between tags (Block 5)
+
+`DEBVER` is the tag without its `v`, every `-` as `~`.
+A build after a tag, `v0.12.0-alpha.1-117-g3d7588f`,
+becomes `0.12.0~alpha.1~117~g3d7588f`,
+and dpkg sorts a `~` before the end of a version: before `0.12.0~alpha.1`.
+So apt takes the release for the newer package.
+`apt upgrade` and the helper take such a box back to the release's code,
+and the build installs over the release only with `--allow-downgrades`.
+Since the account is `_massimo`, that step back breaks the box:
+v0.12.0-alpha.1's postinst adds a second account `massimo`,
+and serve fails with `open /etc/massimo/env: permission denied`
+(measured under systemd in a container, 2026-11-10).
+A release is not affected: a tag has no part after it.
+Only packages built by hand between tags are,
+and the CI jobs that install them.
+
+**The fix:** the part `git describe` adds goes behind a `+`, its `-` as `.`:
+
+| `VERSION` | `DEBVER` today | `DEBVER` then |
+|-----------|----------------|---------------|
+| `v0.12.0-alpha.1` | `0.12.0~alpha.1` | the same |
+| `v0.12.0-alpha.1-117-g3d7588f` | `0.12.0~alpha.1~117~g3d7588f` | `0.12.0~alpha.1+117.g3d7588f` |
+| `v0.12.0-alpha.1-117-g3d7588f-dirty` | `0.12.0~alpha.1~117~g3d7588f~dirty` | `0.12.0~alpha.1+117.g3d7588f.dirty` |
+| `v0.12.0-alpha.1-dirty` | `0.12.0~alpha.1~dirty` | `0.12.0~alpha.1+dirty` |
+| `v1.0.0-3-gabcdef0` | `1.0.0~3~gabcdef0` | `1.0.0+3.gabcdef0` |
+| `v0.12.0-alpha.1.1` | `0.12.0~alpha.1.1` | the same |
+
+With `sed -E`, `$$` in the Makefile:
+`s/^v//; s/-([0-9]+)-g([0-9a-f]+)-dirty$/+\1.g\2.dirty/;
+s/-([0-9]+)-g([0-9a-f]+)$/+\1.g\2/; s/-dirty$/+dirty/; s/-/~/g`.
+After the first three expressions no `-` is left behind the `+`.
+No label or `t` command, so BSD sed reads it as GNU sed does.
+
+Checked on 2026-11-10 with `dpkg --compare-versions`:
+
+- `0.12.0~alpha.1` < `0.12.0~alpha.1+117.g3d7588f` < `0.12.0~alpha.1+225.gd8c2016`
+  < `0.12.0~alpha.2` < `0.12.0` < `0.13.0~alpha.1`;
+- `1.0.0` < `1.0.0+3.gabcdef0` < `1.0.1~alpha.1`;
+- `0.12.0~alpha.1` < `0.12.0~alpha.1+dirty`,
+  and a dirty build after its clean one;
+- an installed `0.12.0~alpha.1~117~g3d7588f` < `0.12.0~alpha.1+117.g3d7588f`:
+  a box on the old form upgrades onto the new one.
+
+nfpm builds the `+` form as it is
+(`make packages DEBVER=0.12.0~alpha.1+225.gd8c2016`:
+the file names and the control `Version` agree).
+`packaging/apt/publish.sh` reads no version from a file name.
+`packaging/apt/test.sh`'s newer package, `$old+t1`, still sorts after `$old`.
+
+**`debTag` reads it back:**
+the part before the `+` with `~` → `-`,
+then a `-` and the part after it with `.` → `-`:
+`0.12.0~alpha.1+117.g3d7588f` → `v0.12.0-alpha.1-117-g3d7588f`,
+which is what the binary reports,
+and `waitHealthy` compares that string exactly.
+A version without a `+`, the old form included, reads as before.
+
+**CI proves the order from then on:**
+`packaging/deb/systemd-cases.sh` installs v0.12.0-alpha.1, then the build.
+Its `inst` passes `--allow-downgrades` today, because the build sorted below.
+Without the flag, `apt-get -y` refuses a downgrade,
+so the upgrade cases fail if a build ever sorts below the release again.
+
+Nothing else makes or reads a package version:
+`git grep` finds only `DEBVER`, `debTag` and its test,
+the systemd cases' flag and `packaging/README.md`.
+
 ### What changes, by file
 
 | File | Block | Change |
@@ -230,21 +324,28 @@ Block 4 matches the label by its prefix.
 | `cmd/massimo/update_brew.go`, `serve.go`, `restart.go`, `reboot.go`, tests | 4 | the brew helper, its starter, the label |
 | `packaging/homebrew/massimo.rb.in`, `.github/workflows/ci.yml` | 4 | the caveats; the macOS job upgrades between two renders |
 | `packaging/README.md`, `README.md`, `docs/ui.md` | 4 | "Homebrew": the button |
-| `CHANGELOG.md` | 1 to 4 | one bullet for apt, amended by Blocks 2 and 3; one for brew |
+| `Makefile` | 5 | `DEBVER` with the `+`, its comment |
+| `cmd/massimo/update_apt.go`, `update_apt_test.go` | 5 | `debTag` reads the `+`; the cases |
+| `packaging/deb/systemd-cases.sh` | 5 | `inst` without `--allow-downgrades`, its comment |
+| `packaging/README.md` | 5 | "Debian package": a build between releases |
+| `CHANGELOG.md`, `CHANGELOG.d/Fixed/` | 1 to 5 | one bullet for apt, amended by Blocks 2 and 3; one for brew; Block 5's as a fragment |
 
 `docs/update-windows.md` is unaffected: nothing changes on Windows.
 
 ### Risks
 
-- The deb's unit sandbox is untested until a real box upgrades through it.
 - `apt-get update` of one source leaves the other lists as they were;
   a dependency newer than those lists know is not found,
   and the install fails with apt's message, as `apt upgrade` would with stale lists.
-- The postinst restarts the service only when `/etc/massimo/env` differs from the
-  template; a server running on the template's settings is not restarted,
+- The postinst restarts the service only when it runs or `/etc/massimo/env`
+  sets more than the template; a stopped server on the template's settings stays stopped,
   and the health check reports it.
 - launchd may stop a helper started from its job despite the new session;
   the real Mac decides, and the CI job's upgrade runs without `brew services`.
+- dpkg sorts `+` before `.`, so a build between tags sorts below a hand-made
+  version such as the test builds' `0.12.0~alpha.1.1`.
+  The box of 2026-11-10 is on such a build;
+  it takes the next release, and a build from `main` only by hand.
 
 ## Implementation Plan
 
@@ -254,10 +355,12 @@ Each block ends with the contract's test gate:
 and `GUIDELINES/shared/tools/check --commit-range origin/main..HEAD`.
 Nothing reaches a Cube, a real box or the Mac;
 the containers and CI are the evidence.
-One functional commit per block, citing `AP AptUpdate v1.0, Block <n>`,
-with its CHANGELOG bullet.
+One functional commit per block, citing `AP AptUpdate v1.0, Block <n>`
+(Block 5: `v1.1`), with its CHANGELOG bullet.
 
 ### Block 1: AptHelper
+
+Done, in #127.
 
 1. `cmd/massimo/update_apt.go`: the commands as fixed argument lists,
    the run through a replaceable variable, the lock retry
@@ -276,6 +379,8 @@ with its CHANGELOG bullet.
 **Verification:** the test gate; the stand-in sees exactly the two command lines.
 
 ### Block 2: AptPackage
+
+Done, in #127.
 
 1. `packaging/deb/massimo-update.service`, as the Analysis says;
    `nfpm.yaml` ships it and `packaging/systemd/massimo-update.path`.
@@ -302,6 +407,8 @@ with its CHANGELOG bullet.
 
 ### Block 3: AptButton
 
+Done, in #127.
+
 1. `internal/install`: `AptSource`, the first suite read from it, `UpdatePathWant`; tests.
 2. `cmd/massimo/serve.go`: the apt options of the Analysis; tests over a root
    with the marker, the source, the link and the variable.
@@ -319,6 +426,8 @@ with its CHANGELOG bullet.
 Then the branch merges `origin/main`, is pushed and gets its pull request.
 
 ### Block 4: BrewUpdate
+
+Done, in #128, with the fix of its Windows test.
 
 On `claude/brew-update`, from Block 3's commit; its own pull request,
 based on the first one's branch.
@@ -340,23 +449,56 @@ based on the first one's branch.
 **Verification:** the test gate, the macOS job;
 the real Mac with the owner's go.
 
+### Block 5: DebVersion
+
+On `claude/deb-version`, from `main` after this revision's commit;
+its own pull request.
+
+1. `Makefile`: `DEBVER` as the Analysis says;
+   its comment: a tag's form, and a build between tags behind a `+`,
+   which sorts after the tag it follows and before the next.
+2. `cmd/massimo/update_apt.go`: `debTag` cuts at the first `+`;
+   its comment names both forms.
+3. `cmd/massimo/update_apt_test.go`, `TestDebTag`:
+   the `+` forms of the Analysis's table (with `.dirty`, `+dirty`, a release
+   without a pre-release), the old `~` form, and the cases it has.
+4. `packaging/deb/systemd-cases.sh`: `inst` without `--allow-downgrades`;
+   its comment says why: a build that sorted below the release would fail here.
+5. `packaging/README.md`, "Debian package":
+   a package built between releases, its version, and where dpkg sorts it.
+6. The changelog's fragment `CHANGELOG.d/Fixed/claude-deb-version.md`
+   (COMMIT.md §5.5): a package built between two releases sorts after the one
+   it follows, so apt no longer takes it back to that release.
+
+**Verification:** the test gate;
+`make packages` at a commit after the tag: the files named `…+<n>.g<sha>_…`;
+`dpkg --compare-versions` of that version against the tag it follows (gt)
+and the next pre-release (lt);
+`make deb-test`, `make deb-systemd-test` (all five cases) and `make apt-test`,
+on trixie and bookworm.
+Then the branch is pushed and gets its pull request.
+
 ## Proposed commit message
 
-The plan's registration, a commit of its own on main before the first project write:
+This revision, a commit of its own on `main` before Block 5's branch:
 
 ```
-chore(aps): +AptUpdate v1.0
+chore(aps): +AptUpdate v1.1
 
-The web UI's update button works where apt or brew owns massimo: a root helper of the Debian package runs apt for the massimo source only, and on a Homebrew box the server starts a helper that runs brew.
+Block 5 added to the plan: a package built between two releases gets its git describe part behind a +, so that dpkg sorts it after the release it follows; with the owner's D9-A and D10-A, and Blocks 1 to 4 marked done.
 
 Key changes:
-- GUIDELINES/wip/2026-11-09_04-42_AP_AptUpdate_update_button_apt_brew.md: the plan, four blocks, the owner's route 1, D1-A, D2-B and D3-A, Block 4 a pull request of its own.
+- GUIDELINES/wip/2026-11-09_04-42_AP_AptUpdate_update_button_apt_brew.md: v1.1, Block 5 (DebVersion), the finding F1 measured, where the plan stands.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_04-42_AP_AptUpdate_update_button_apt_brew.md::v1.0::2026-11-09::All::the first revision, by PLAN++ D2-B
+File-revision-v1: GUIDELINES/wip/2026-11-09_04-42_AP_AptUpdate_update_button_apt_brew.md::v1.1::2026-11-10::All::Block 5 for F1; D9-A, D10-A; Blocks 1 to 4 done
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
-The blocks' commits:
+Block 5's commit:
+`fix(packaging): A package built between releases sorts after the one it follows`,
+citing `AP AptUpdate v1.1, Block 5`.
+
+The blocks' earlier commits:
 `feat(update): The update helper upgrades through apt on a packaged box`,
 `feat(packaging): The Debian package ships the update helper, enabled`,
 `feat(server): The update button on a box apt owns`,
@@ -367,3 +509,8 @@ The blocks' commits:
 - v1.0 (2026-11-09): the first revision, from the owner's wish and the Debian
   package's carried-over helper, with route 1, D1-A, D2-B and D3-A,
   and Block 4 as a pull request of its own.
+- v1.1 (2026-11-10): Block 5 (DebVersion) for finding F1, a build between tags
+  sorting before its tag, with D9-A ("PLAN+ F1 fix") and D10-A ("Yes, run them");
+  Blocks 1 to 4 marked done; the real apt box's run and its NOTE named;
+  the sandbox risk dropped, proven; the start-rule risk brought up to ServiceStart;
+  Block 5's bullet a fragment, as the guidelines now ask.
