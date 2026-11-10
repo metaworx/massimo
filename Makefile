@@ -41,7 +41,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test release clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages deb-test deb-systemd-test apt-test site release clean release-alpha
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, and a beta
@@ -222,6 +222,14 @@ deb-systemd-test:
 # installed from in a Debian container (packaging/apt/test.sh).
 apt-test:
 	packaging/apt/test.sh $(DEB_IMAGE)
+
+# The site's pages and the docs of the commit checked out, without the apt
+# repository, into $(OUT)/site, every link checked (packaging/site/build.sh;
+# packaging/README.md, "The site"). Serve it to read it, the links are
+# root-relative: python3 -m http.server -d $(OUT)/site
+site:
+	rm -rf $(OUT)/site
+	packaging/site/build.sh --out $(OUT)/site --no-apt --ref main=HEAD
 
 # release builds every binary and package and the files a GitHub release
 # carries besides them: SHA256SUMS for people, and the manifest the

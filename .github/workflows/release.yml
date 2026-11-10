@@ -28,8 +28,11 @@ name: Release
 # which main may use, and whose key boxes accept for the rolling flavours
 # alone. `homebrew` then pushes the formula to
 # the tap (publish.yml). `apt-build` holds the apt repository's key
-# through the same environment and rebuilds the site from the releases
-# (packaging/apt/publish.sh); `apt-deploy` puts it on GitHub Pages.
+# through the same environment and rebuilds the repository from the
+# releases (packaging/apt/publish.sh); `site` (site.yml) builds the site
+# around it, with the docs of every channel, and puts it on GitHub Pages,
+# also for a run that releases nothing, from the newest release's signed
+# index.
 #
 # The flavour of a release (internal/update) is the pre-release label of
 # its tag (v0.7.0-alpha.1 is alpha), stable for a tag without one
@@ -464,8 +467,9 @@ jobs:
   # The apt repository: the packages of the newest releases of every
   # flavour, one suite per flavour, signed with the repository key
   # (MASSIMO_APT_KEY, with its passphrase, in the signing environment)
-  # and built into the Pages artifact; nothing of it runs without the
-  # key. The site has no state: every release rebuilds it from GitHub.
+  # and handed to the site as the artifact apt; nothing of it runs
+  # without the key. It has no state: every release rebuilds it from
+  # GitHub.
   # The signed index also goes onto the release as
   # massimo-apt-index.tar.gz, with pool.tsv naming where each package
   # comes from, so that a site rebuilt from main serves the repository
@@ -495,7 +499,7 @@ jobs:
           check-latest: true
           cache: false
 
-      - name: Build the site from the releases
+      - name: Build the apt repository from the releases
         id: site
         if: env.HAS_APT_KEY == 'true'
         env:
@@ -519,28 +523,31 @@ jobs:
           TAG: ${{ needs.meta.outputs.tag }}
         run: gh release upload "$TAG" --clobber "$RUNNER_TEMP/massimo-apt-index.tar.gz"
 
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: env.HAS_APT_KEY == 'true'
         with:
-          path: site
+          name: apt
+          path: site/apt
+          if-no-files-found: error
+          retention-days: 1
 
-  # Pages deploys from the artifact. Two settings of the owner's
-  # (packaging/README.md, "The apt repository"): the repository's Pages
-  # source is "GitHub Actions", and the github-pages environment GitHub
-  # then makes, which deploys from the default branch only, also allows
-  # the tags v* (Settings → Environments → github-pages → Deployment
-  # branches and tags), since this job runs for a tag; else it is refused.
-  apt-deploy:
-    name: Deploy the apt repository
-    needs: apt-build
-    if: needs.apt-build.outputs.built == 'true'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  # The site (site.yml): after the release and the rolling build, so
+  # that the docs of release/devel and release/nightly are the ones just
+  # published; the apt repository apt-build has just signed, or else the
+  # newest release's signed index. For every run, so that a push to main
+  # brings its docs onto the site; not where apt-build or the rolling
+  # build failed.
+  site:
+    name: Site
+    needs: [ meta, apt-build, rolling ]
+    if: >-
+      ${{ !cancelled() && needs.meta.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apt-build.result)
+      && contains(fromJSON('["success","skipped"]'), needs.rolling.result) }}
     permissions:
+      contents: read
       pages: write
       id-token: write
-    steps:
-      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
-        id: deployment
+    uses: ./.github/workflows/site.yml
+    with:
+      apt-artifact: ${{ needs.apt-build.outputs.built == 'true' && 'apt' || '' }}

@@ -972,13 +972,30 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: GUIDELINES/shared/tools/check --commit-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
 
+  # The site's pages and the docs of the commit (packaging/site/build.sh;
+  # packaging/README.md, "The site"), without the apt repository and never
+  # deployed: it fails on a document under docs/ missing from
+  # docs/fragments/_documents.md, on a link to a file the commit does not
+  # have, and on one to a page or heading that is not there. The deploy is
+  # site.yml's, which release.yml calls.
+  site:
+    name: Site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      - name: Build the pages and the docs of the commit
+        run: packaging/site/build.sh --out site --no-apt --ref main=HEAD
+
   # One job that stands for all of the above: it fails unless none of
   # them failed or was cancelled (a pull request skips some). The release
   # waits for it, and the nightly build looks for it among a commit's runs
   # (release.yml).
   tests:
     name: All tests passed
-    needs: [ test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines ]
+    needs: [ test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:

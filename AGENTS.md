@@ -1,10 +1,10 @@
 <!-- GENERATED FILE - DO NOT EDIT.
      Source: shared/_AGENTS.md + project/_CONTRACT.md
      Regenerate: GUIDELINES/shared/tools/sync-docs.sh
-     Contract version: v3.26.0 -->
+     Contract version: v3.29.0 -->
 
 
-# AI Agent Guidelines (v3.26.0)
+# AI Agent Guidelines (v3.29.0)
 
 Core behavioral rules for AI agents working on this codebase.  
 All agents MUST comply.
@@ -14,7 +14,7 @@ refer to linked documents for extended guidance.
 ## Contents
 
 <!-- BEGIN GENERATED CONTENTS - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
-- AI Agent Guidelines (v3.26.0)
+- AI Agent Guidelines (v3.29.0)
   1. Critical Behavioral Rules (STRICT)
     - 1.1 Gate Message Mechanism
     - 1.2 Action Plan (AP) Requirement
@@ -122,7 +122,8 @@ refer to linked documents for extended guidance.
 - Writing a *new* [UAMF](#4-user-accessible-message-files-uamf),
   or scratch to `GUIDELINES/temp/` (§1.5),
   does NOT constitute a source-file edit, and is ALLOWED under every signal.
-- In `GUIDELINES/wip/`, any signal MAY add a NOTE or an analysis;
+- In `GUIDELINES/wip/`, any signal MAY add a NOTE or an analysis,
+  or rewrite a standing document (§4);
   all else there is for `PLAN+`, `PLAN++` and the `EXEC` family (§5.1).
 
 ### 2.1 Rule Map & Canonical Owners (STRICT)
@@ -210,13 +211,14 @@ that follows strict rules:
 - **An Action Plan is not a UAMF** - it is revised in place,
   its history git's (§5.1).
   Files in `messages/`, and NOTEs and analyses in `wip/`, are UAMFs.
+- **Nor is a standing document** in `wip/`, below.
 
 Where a file is written depends on what it is and how long it needs to live:
 
 | Directory | Tracked | For |
 |-----------|---------|-----|
 | `GUIDELINES/messages/` | no  | the default: analyses and findings written for the user |
-| `GUIDELINES/wip/`      | yes | each open Action Plan (§5), its NOTEs (§5.4), and any analysis it rests on |
+| `GUIDELINES/wip/`      | yes | each open Action Plan (§5), its NOTEs (§5.4), any analysis it rests on, and the project's standing documents |
 | `GUIDELINES/temp/`     | no  | scratch that is not a UAMF at all |
 
 **An analysis in `wip/`** is named `YYYY-MM-DD_HH-NN_ANALYSIS_<Name>_<slug>.md`,
@@ -225,6 +227,24 @@ One in `messages/` that a plan comes to rest on is copied there,
 keeping its timestamp; the original stays.
 Its fate at retirement is `GUIDELINES/shared/COMMIT.md` §6;
 one kept for another plan keeps its name.
+
+**A standing document in `wip/`** is kept current rather than dated,
+such as the handover a new session reads first.
+
+- It is named without a timestamp, such as `HANDOVER.md`,
+  and any undated `*.md` in `wip/` is one.
+- It is rewritten in place, its history git's, and is not a UAMF.
+- It is written under any signal (§2),
+  and committed as any tracked file is, through the commit gate:
+  alone, as `[UPDATE] wip: <name> <what>` (`GUIDELINES/shared/COMMIT.md` §6),
+  or with the work it describes.
+- It is no plan's, and no plan's retirement takes it.
+  It retires at its owner's word, once no tracked document names it
+  (`GUIDELINES/shared/COMMIT.md` §6).
+- Another document names it by its path:
+  `wip/<name>.md` from inside `wip/`,
+  `GUIDELINES/wip/<name>.md` from anywhere else,
+  so that `GUIDELINES/shared/tools/check-citations.sh` finds a name left behind.
 
 In an overlay - a guidelines root that is a repository of its own,
 in a project that does not carry the guidelines -
@@ -243,6 +263,10 @@ Citation rules follow from that, and they are absolute:
 - **Nothing that outlives the change may cite either.**
   If a conclusion is worth citing from a contract,
   a shared document or a README, it belongs *in* that document.
+- **A standing document is the exception.**
+  A tracked document anywhere MAY name one by its path:
+  its name carries no date, so the name holds as long as the file does.
+  Every such name is removed before it retires.
 
 ## 5. Action Plan (AP)
 
@@ -472,7 +496,7 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 - **Component:** required, but of a release and a merge: a name of letters, digits, `.`, `_`, `/` and `-`; behind a role's token, after a colon: `fix(security:api): Close a hole`.
 - **An incompatible change:** `feat(api)!: Remove a call`, or a `BREAKING CHANGE:` trailer.
 - **A plan's own commit:** `chore(aps): +Name v1.0` (COMMIT.md §6).
-- **An agent's commit:** ends with `Assisted-by: AGENT_NAME:MODEL_VERSION` - the tool or harness, then the exact model id, e.g. `Assisted-by: ClaudeCode:claude-opus-5-5` (COMMIT.md §3.3).
+- **An agent's commit:** ends with `Assisted-by: AGENT_NAME:MODEL_VERSION` - the tool or harness, then the exact model id, e.g. `Assisted-by: claude-code:claude-opus-5-5` (COMMIT.md §3.3).
 
 | Role | Opens with | For |
 |------|------------|-----|
@@ -480,7 +504,7 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 | fix | `fix:` | bug fixes |
 | security | `fix(security):` | security fixes and hardening |
 | cleanup | `style:` | formatting and layout only, no functional change |
-| wip | `style(wip):` for a rename, `chore(wip):` otherwise | an intermediate state; a non-wip commit follows |
+| wip | `wip:` | an intermediate state; a non-wip commit follows |
 | update | `chore:` | environment, dependency or test-config updates, plans |
 | release | `chore(release):` | the version bump, made by changelog.sh cut |
 | merge | `merge:` | a commit with more than one parent |

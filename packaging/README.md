@@ -487,17 +487,12 @@ A new key would reach the boxes only through a keyring package carrying both
 keys on a site the old key still signs, which `publish.sh` does not make:
 it signs with one key.
 
-The site is built by `packaging/apt/publish.sh` in the release workflow (the
-pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
-the keyring package by nfpm,
-and at the site's root the pages of `site/`:
-`index.html`, the home with the install routes, its suites filled in,
-and `privacy.html`, the privacy policy of the project and its apps,
-which the app stores' listings link)
-and deployed to the project's GitHub Pages with `actions/deploy-pages`;
+The repository is built by `packaging/apt/publish.sh` in the release
+workflow (the pool from GitHub's releases, `apt-ftparchive`, `InRelease`
+signed by gpg, the keyring package by nfpm) and put on the site with the
+pages and the docs (see "The site");
 it has no state of its own,
-so a release that is deleted on GitHub leaves the pool at the next release,
-and a change to the pages is online with the next release.
+so a release that is deleted on GitHub leaves the pool at the next release.
 Each release also carries the signed index as `massimo-apt-index.tar.gz`,
 so that the site can be rebuilt from `main` without the key,
 which only the release tags reach:
@@ -509,7 +504,8 @@ and the download URL of the release file it is,
 or `included` for a package in the tarball itself (the keyring package);
 `publish.sh --index-asset <file>` writes it.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease`, the pages and the index asset,
+verifies `InRelease` and the index asset,
+builds the site from the repository and again from the index asset alone,
 and installs from it in a container as the snippet above does,
 then upgrades to a newer package through the update helper while another
 process holds apt's lock,
@@ -529,8 +525,9 @@ The owner's steps, once:
 - Then Environments → `github-pages` → Deployment branches and tags:
   add a rule for the tags `v*`.
   The environment GitHub makes for Pages deploys from the default branch only,
-  and the deploy runs for a release's tag,
-  so without the rule every deploy is refused.
+  and a release's deploy runs for its tag,
+  so without the rule a release's deploy is refused;
+  a push to `main` deploys under the default rule.
 - The domain (the CNAME, the custom domain and HTTPS set on 2026-11-09):
   verify `metaworx.ch` for the account under its settings → Pages,
   with the TXT record GitHub names, so that no other account can claim it;
@@ -565,6 +562,50 @@ sudo sed -i 's#https://metaworx.github.io/massimo/apt#https://massimo.metaworx.c
 ```
 
 The file keeps its name, and the keyring package and the key stay as they are.
+
+## The site
+
+The project's site, <https://massimo.metaworx.ch>, is built by
+`packaging/site/build.sh`, without a key, and deployed to GitHub Pages by
+`.github/workflows/site.yml`, which the release workflow calls at every run:
+a release, a push to `main` (the devel build) and the nightly build.
+It holds:
+
+- `apt/`, the apt repository: the one a release's run has just signed, or,
+  in every other run, the newest release's `massimo-apt-index.tar.gz`, its
+  pool downloaded by `pool.tsv` and every package checked by its sum.
+  No release carries one before the first release made after 2026-11-10;
+  until then only a release with the key deploys,
+  since a deploy replaces the whole site and one without `apt/` would take
+  the repository offline (`build.sh` exits 3, and the job ends green).
+- At the root, the pages of `site/`:
+  `index.html`, the home with the install routes, its suites filled in,
+  `privacy.html`, the privacy policy of the project and its apps,
+  which the app stores' listings link,
+  and `site.css`, the stylesheet of every page.
+- Under `docs/<channel>/`, the documentation of each channel,
+  built from its newest build, `release/<channel>`
+  (a branch for `alpha`, `beta` and `stable`,
+  a tag for `devel` and `nightly`), and under `docs/main/` from `main`.
+  The documents are those `docs/fragments/_documents.md` lists,
+  the list in README.md's "Documentation" too;
+  each is converted by the guidelines' `md_html.py`,
+  with the heading ids GitHub gives, links between the documents to their
+  pages, and every other link to GitHub at that commit, or to the guidelines
+  at its pin, by `packaging/site/site.py` into `doc.html.in`.
+  `docs/channels.json` names the channels built,
+  a selector on every page (`docs.js`) changes to the same page of another,
+  and `docs/` sends a reader to the most stable one.
+  A build without the list (every build before 2026-11-10) gets no docs:
+  its `docs/` still held the working documents.
+
+The build fails on a document under `docs/` missing from the list
+(for `main`), on a link to a file the commit does not have,
+and on a link to a page or a heading that is not there.
+CI's `Site` job builds the pages and the docs of every pull request that way,
+and `make site` those of the checkout into `dist/site`;
+the links are root-relative, so read it served,
+`python3 -m http.server -d dist/site`.
 
 ## Install by hand
 

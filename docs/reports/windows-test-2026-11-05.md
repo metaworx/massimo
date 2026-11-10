@@ -1,9 +1,9 @@
 # Massimo Windows service: test report
 
-Tested on 2026-11-05 on Martin's machine "jaguar",
+Tested on 2026-11-05 on the owner's Windows PC,
 following the plan in docs/testing-windows.md,
 which at the time was a briefing in a session's scratch space.
-Release under test: **v0.4.0-alpha.1** (Martin's choice;
+Release under test: **v0.4.0-alpha.1** (the owner's choice;
 the briefing named v0.3.0-alpha.1,
 and v0.5.0-alpha.1 was published while the test ran).
 No Massimo code was changed.
@@ -17,26 +17,26 @@ all Cube traffic went to `massimo fakecube` on 127.0.0.1:62999.
   still says "Windows 10 Pro for Workstations").
 - PowerShell 7 from the Claude desktop app, non-elevated.
   Elevated steps ran as `gsudo pwsh -NoProfile -NonInteractive -File <script>`
-  with a gsudo credentials cache that Martin enabled for the session process.
+  with a gsudo credentials cache that the owner enabled for the session process.
 - Defender: real-time protection on, signatures 1.463.134.0.
   **No detections** for any massimo binary.
   The test itself left no Defender/Operational event;
-  Martin's browser download afterwards left one (event 2050, Information:
+  the owner's browser download afterwards left one (event 2050, Information:
   "has uploaded a file for further analysis",
   the automatic sample submission of an unknown binary).
   See observation 8.
 - SmartScreen: **silent during the test**,
   because curl.exe writes no Mark-of-the-Web stream and there was nothing to check.
   **It warns on a browser download launched by double-click**:
-  Martin downloaded v0.5.0-alpha.1 with a browser afterwards and got "Windows
+  The owner downloaded v0.5.0-alpha.1 with a browser afterwards and got "Windows
   protected your PC", Unknown publisher.
   The same file runs from a console without a dialog.
   See observation 8.
-- Network profile: the only active connection is Wi-Fi "Altocumulus",
+- Network profile: the only active connection is the home Wi-Fi,
   categorised **Public** at the start.
   See step 4.
 - Pre-existing and untouched:
-  a `massimo portal` process from Martin's WSL build listening on :8080
+  a `massimo portal` process from the owner's WSL build listening on :8080
   and 192.168.1.45:80.
   No port overlap with the service (8099, 62910, UDP 23272).
 
@@ -95,12 +95,12 @@ all Cube traffic went to `massimo fakecube` on 127.0.0.1:62999.
 - `netsh advfirewall firewall show rule name=Massimo`:
   Enabled Yes, In, Profiles **Domain,Private**,
   Program `C:\Program Files\Massimo\massimo.exe`, Action Allow.
-- Remote device: Martin's machine "mint" could **not** connect at first.
+- Remote device: a second machine on the LAN could **not** connect at first.
   Diagnosis: the active firewall profile was Public only,
   the Massimo rule covers Domain and Private,
   and no other enabled inbound rule covered massimo.exe or port 8099.
-  After switching "Altocumulus 2" to Private (`Set-NetConnectionProfile`),
-  **mint reached the UI at http://192.168.1.73:8099/** with no service restart.
+  After switching the Wi-Fi's profile to Private (`Set-NetConnectionProfile`),
+  **it reached the UI at http://192.168.1.73:8099/** with no service restart.
   So the rule works and the Public exclusion behaves as documented.
 - Service configuration (`sc qc`, `sc qfailure`, `sc qdescription`, registry):
   START_TYPE 2 AUTO_START (not delayed), SERVICE_START_NAME LocalSystem,
@@ -193,8 +193,8 @@ all Cube traffic went to `massimo fakecube` on 127.0.0.1:62999.
   and `"connected": true` with firmware, 6 rooms and 6 devices at 19:19:53.
   The service reconnected by itself, about 44 s after the Cube came back.
 - Side effect of the reboot, not a Massimo issue:
-  the Wi-Fi came back under the profile name "Altocumulus" (Public) instead of
-  "Altocumulus 2" (Private), so the step 4 Private setting did not carry over.
+  the Wi-Fi came back under its older profile (Public) instead of
+  the one set to Private, so the step 4 Private setting did not carry over.
 
 - `serve.log` (read before removal) shows the reconnect in detail:
   after the boot-time start at 19:15:36 it logged
@@ -303,13 +303,13 @@ None of these is a failure.
    The README's Windows section could tell people to check
    `Get-NetConnectionProfile` and switch the network to Private.
    Windows also re-matched the SSID to a different profile after the reboot
-   ("Altocumulus 2" → "Altocumulus"), which was Public again.
+   (from the second profile of the network to its first), which was Public again.
 7. **`-remove` deletes the firewall rule**, not `-purge`.
    The README is right; step 9 of docs/testing-windows.md says otherwise.
 8. **SmartScreen warns when a browser download is double-clicked.**
    The test's curl downloads carried no Mark-of-the-Web,
    so SmartScreen never ran during the nine steps.
-   After the test Martin downloaded v0.5.0-alpha.1 from the releases page with a
+   After the test the owner downloaded v0.5.0-alpha.1 from the releases page with a
    browser (the file got the mark: `ZoneId=3`,
    referrer `github.com/metaworx/massimo/releases`;
    hash matches SHA256SUMS) and launched it from Explorer.
@@ -344,11 +344,11 @@ None of these is a failure.
 
 - Nothing of Massimo is installed: no service, no `C:\Program Files\Massimo`,
   no `C:\ProgramData\Massimo`, no firewall rule, no test folder,
-  and no massimo process at all (Martin's WSL `portal` did not come back after the reboot;
+  and no massimo process at all (the owner's WSL `portal` did not come back after the reboot;
   I did not start it).
-- The Wi-Fi profile "Altocumulus 2" was set to Private on Martin's request during step 4;
-  after the reboot the active profile was "Altocumulus" (Public).
-  Martin set that one to Private afterwards.
-- Martin's browser download of v0.5.0-alpha.1 is still in his Downloads folder,
+- The Wi-Fi's profile was set to Private on the owner's request during step 4;
+  after the reboot the active profile was the older one (Public).
+  The owner set that one to Private afterwards.
+- The owner's browser download of v0.5.0-alpha.1 is still in the Downloads folder,
   Mark-of-the-Web included; it was only run with `version`.
-- The repository clone is in `C:\Users\mdr\projects\massimo` on jaguar.
+- The repository clone is in the owner's user folder on that PC.

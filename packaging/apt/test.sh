@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # The apt repository built from dist/ with a throwaway key, verified, and
 # installed from in a Debian container (`make apt-test`, CI's "Debian
-# package" job): proves the site's shape, the signature and the keyring
-# package without any key of the project's. Needs gpg, apt-ftparchive and
-# docker on the host, and the packages of `make packages` in dist/.
+# package" job): proves the repository's shape, the signature and the
+# keyring package without any key of the project's, and the site that
+# packaging/site/build.sh makes of it, from the repository and from its
+# index asset. Needs gpg, apt-ftparchive, curl and docker on the host, and
+# the packages of `make packages` in dist/.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -24,7 +26,7 @@ gpgv --keyring "$work/keyring.gpg" "$work/site/apt/dists/alpha/InRelease" 2>/dev
 	echo "FAIL: InRelease does not verify" >&2
 	exit 1
 }
-for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources index.html privacy.html \
+for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources \
 	apt/dists/alpha/Release.gpg apt/dists/alpha/main/binary-amd64/Packages.gz apt/dists/alpha/main/binary-armhf/Packages; do
 	[ -s "$work/site/$f" ] || {
 		echo "FAIL: $f missing" >&2
@@ -59,10 +61,29 @@ while IFS=$'\t' read -r path sum url; do
 	fi
 done <"$work/index/apt/pool.tsv"
 
-# The pages are packaging/site's: the index with the suites in place of
-# its placeholder, the privacy policy as it is; the sample names the
-# site's address by default.
-index=$(<"$work/site/index.html")
+# The site, built from the repository and again from its index asset
+# alone, as a run of main builds it: the same suites and pool, and the
+# pages of packaging/site, the index with the suites in place of its
+# placeholder, the privacy policy and the stylesheet as they are.
+"$root/packaging/site/build.sh" --out "$work/pages" --apt "$work/site/apt" --no-docs
+"$root/packaging/site/build.sh" --out "$work/pages-index" --apt-index "$work/index.tar.gz" --no-docs
+for d in pages pages-index; do
+	cmp -s "$work/site/apt/dists/alpha/InRelease" "$work/$d/apt/dists/alpha/InRelease" || {
+		echo "FAIL: $d's InRelease is not the repository's" >&2
+		exit 1
+	}
+	if [ "$(cd "$work/$d/apt" && find pool -name '*.deb' | sort)" != "$pool" ]; then
+		echo "FAIL: $d's pool is not the repository's" >&2
+		exit 1
+	fi
+	for f in site.css docs.js; do
+		cmp -s "$root/packaging/site/$f" "$work/$d/$f" || {
+			echo "FAIL: $d's $f is not packaging/site's" >&2
+			exit 1
+		}
+	done
+done
+index=$(<"$work/pages/index.html")
 if grep -qF '{{' <<<"$index"; then
 	echo "FAIL: index.html keeps a placeholder" >&2
 	exit 1
@@ -71,7 +92,7 @@ grep -qF 'One suite per update channel: alpha.' <<<"$index" || {
 	echo "FAIL: index.html does not name the suite alpha" >&2
 	exit 1
 }
-cmp -s "$root/packaging/site/privacy.html" "$work/site/privacy.html" || {
+cmp -s "$root/packaging/site/privacy.html" "$work/pages/privacy.html" || {
 	echo "FAIL: privacy.html is not packaging/site's" >&2
 	exit 1
 }

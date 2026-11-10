@@ -10,6 +10,14 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- The site is deployed by `.github/workflows/site.yml` at every run of
+  the release workflow, so that a push to `main` updates its docs; CI's
+  `Site` job builds the docs of every pull request.
+
+- `packaging/site/build.sh` builds the site without a key: the apt
+  repository from a release's index asset, the pages, and the docs of
+  every channel under `/docs/`, linked from the home; `make site`.
+
 - A release has a flavour, and a box takes its channel's releases and
   every more stable flavour's; the rolling `devel` and `nightly` builds
   verify with a key of their own (`README.md`, "Versions").
