@@ -583,7 +583,7 @@ jobs:
           cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
           for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
             d="ci-stub/dl/$tag"
-            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -channel ci -dir "$d" "$asset" > "$d/massimo-release.json"
+            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -flavour ci -dir "$d" "$asset" > "$d/massimo-release.json"
             ci-tools/sign.exe sign ci-tools/ci-key "$d/massimo-release.json" > "$d/massimo-release.json.sig"
           done
           # The release list in GitHub's shape, one release at a time.

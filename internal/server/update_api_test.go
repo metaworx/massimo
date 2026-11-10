@@ -33,7 +33,7 @@ func (f *fakeFinder) Latest(ctx context.Context, channel string) (*update.Releas
 		return nil, nil
 	}
 	v, _ := update.ParseVersion(f.tag)
-	return &update.Release{Manifest: update.Manifest{Tag: f.tag, Channel: channel}, Version: v, URL: "https://example/" + f.tag}, nil
+	return &update.Release{Manifest: update.Manifest{Tag: f.tag, Flavour: channel}, Version: v, URL: "https://example/" + f.tag}, nil
 }
 
 func updateServer(t *testing.T, token, request string, f *fakeFinder) (*httptest.Server, string) {

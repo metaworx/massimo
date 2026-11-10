@@ -160,7 +160,7 @@ func runUpdate(args []string) (err error) {
 	}
 	newer := !curOK || update.Compare(rel.Version, cur) > 0
 	fmt.Printf("running:  %s (channel %s)\n", versionOr(version), versionOr(channel))
-	fmt.Printf("release:  %s (channel %s, %s)\n          %s\n", rel.Tag, rel.Channel, rel.Commit, rel.URL)
+	fmt.Printf("release:  %s (%s, %s)\n          %s\n", rel.Tag, rel.Flavour, rel.Commit, rel.URL)
 	if *want == "" && !newer {
 		fmt.Println("up to date")
 		status(update.Status{State: "up-to-date", From: version, To: rel.Tag, Channel: *ch})

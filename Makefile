@@ -235,7 +235,7 @@ apt-test:
 release: clean cross packages
 	cd $(OUT) && sha256sum $(BINARIES) $(PACKAGES) > SHA256SUMS
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
-		-channel $(CHANNEL) -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
+		-flavour $(CHANNEL) -dir $(OUT) $(BINARIES) $(PACKAGES) > $(OUT)/massimo-release.json
 
 clean:
 	rm -rf massimo $(OUT)

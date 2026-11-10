@@ -4,18 +4,29 @@
 // Package update finds Massimo releases on GitHub, verifies them and
 // replaces the running binary with a newer one.
 //
-// Every release carries massimo-release.json, a manifest naming the tag,
-// the commit, the update channel (the branch the tag was made on) and the
-// SHA-256 of every binary, and massimo-release.json.sig, an Ed25519
-// signature of the manifest's exact bytes made by the release workflow
-// with a key that only tag builds can use. The public key is compiled in
-// (release-key.pem), so a binary accepts only what that key signed: a
-// release, an asset or a manifest changed on GitHub or on the way fails
-// verification. SHA256SUMS is published as well, for people checking a
-// download by hand.
+// Every release carries massimo-release.json, a manifest naming the
+// version, the commit, the flavour (what the build was released as:
+// alpha for v0.12.0-alpha.1, stable for v1.0.0, devel and nightly for the
+// rolling builds) and the SHA-256 of every binary, and
+// massimo-release.json.sig, an Ed25519 signature of the manifest's exact
+// bytes made by the release workflow. Numbered releases are signed with
+// a key that only tag builds can use (release-key.pem), the rolling
+// builds with a second one that main can use (rolling-key.pem), which is
+// accepted for the rolling flavours alone. Both public keys are compiled
+// in, so a binary accepts only what they signed: a release, an asset or a
+// manifest changed on GitHub or on the way fails verification.
+// SHA256SUMS is published as well, for people checking a download by
+// hand.
+//
+// A box follows a channel, one of the flavours: it takes the newest
+// release whose flavour is its channel or a more stable one (Accepts).
+// The rolling builds are one GitHub release each, tagged release/devel
+// and release/nightly and replaced in place; their version is the one in
+// their manifest.
 package update
 
 import (
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -34,6 +45,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 )
@@ -58,6 +70,9 @@ const maxVerify = 30
 //go:embed release-key.pem
 var releaseKeyPEM []byte
 
+//go:embed rolling-key.pem
+var rollingKeyPEM []byte
+
 // ReleaseKey returns the compiled-in public key releases are signed with.
 func ReleaseKey() ed25519.PublicKey {
 	k, err := ParsePublicKey(releaseKeyPEM)
@@ -65,6 +80,41 @@ func ReleaseKey() ed25519.PublicKey {
 		panic("update: bad compiled-in release key: " + err.Error())
 	}
 	return k
+}
+
+// RollingKey returns the compiled-in public key the rolling builds are
+// signed with, which is accepted for the rolling flavours alone.
+func RollingKey() ed25519.PublicKey {
+	k, err := ParsePublicKey(rollingKeyPEM)
+	if err != nil {
+		panic("update: bad compiled-in rolling key: " + err.Error())
+	}
+	return k
+}
+
+// Flavours are what a build is released as, from the least stable to the
+// most: a box following one takes it and every one after it (Accepts).
+var Flavours = []string{"devel", "nightly", "alpha", "beta", "stable"}
+
+// RollingPrefix begins the tag of a rolling build's GitHub release, the
+// flavour after it: release/devel. The release branches share it
+// (release/alpha), which is why a name is never both a branch and a tag.
+const RollingPrefix = "release/"
+
+// Rolling says whether a flavour's builds are one release replaced in
+// place, built from main rather than from a tag.
+func Rolling(flavour string) bool { return flavour == "devel" || flavour == "nightly" }
+
+// Accepts says whether a box following channel takes a release of this
+// flavour: the same name, or a flavour at least as stable as the channel.
+// A name that is not one of the Flavours (a branch's own, the phase-0 of
+// the first releases) takes only itself.
+func Accepts(channel, flavour string) bool {
+	if channel == flavour {
+		return true
+	}
+	c, f := slices.Index(Flavours, channel), slices.Index(Flavours, flavour)
+	return c >= 0 && f >= c
 }
 
 // ParsePublicKey reads an Ed25519 public key in PEM ("BEGIN PUBLIC KEY",
@@ -87,9 +137,17 @@ func ParsePublicKey(b []byte) (ed25519.PublicKey, error) {
 
 // Manifest is the signed description of one release.
 type Manifest struct {
-	Tag        string            `json:"tag"`
-	Commit     string            `json:"commit"`
-	Channel    string            `json:"channel"`
+	// Tag is the version: the release tag, or for a rolling build what
+	// git describe calls its commit, v0.12.0-alpha.1-37-gabc1234.
+	Tag string `json:"tag"`
+	// Release is the tag of the GitHub release where it is not Tag:
+	// release/devel.
+	Release string `json:"release,omitempty"`
+	Commit  string `json:"commit"`
+	// Flavour is what the build was released as. Its JSON name is the
+	// channel's of the binaries already out, which take a release whose
+	// "channel" is the one they follow.
+	Flavour    string            `json:"channel"`
 	Prerelease bool              `json:"prerelease"`
 	Assets     map[string]string `json:"assets"` // file name → SHA-256, hex
 }
@@ -142,11 +200,14 @@ func goarm() string {
 
 // Client talks to the GitHub releases API.
 type Client struct {
-	API   string // https://api.github.com
-	Repo  string
-	HTTP  *http.Client
-	Key   ed25519.PublicKey
-	Token string // optional, for the API only: see TokenVar
+	API  string // https://api.github.com
+	Repo string
+	HTTP *http.Client
+	Key  ed25519.PublicKey
+	// RollingKey, where set, also verifies a manifest, of a rolling
+	// flavour only.
+	RollingKey ed25519.PublicKey
+	Token      string // optional, for the API only: see TokenVar
 	// Idle is the longest pause in a download's data, DownloadIdle
 	// when 0; the download itself has no time limit of the client's.
 	Idle time.Duration
@@ -178,7 +239,7 @@ const APIVar = "MASSIMO_UPDATE_API"
 // NewClient returns a client for Repo with the compiled-in key and the
 // token from TokenVar, if set.
 func NewClient() *Client {
-	c := &Client{API: "https://api.github.com", Repo: Repo, HTTP: &http.Client{Timeout: 2 * time.Minute}, Key: ReleaseKey(), Token: os.Getenv(TokenVar)}
+	c := &Client{API: "https://api.github.com", Repo: Repo, HTTP: &http.Client{Timeout: 2 * time.Minute}, Key: ReleaseKey(), RollingKey: RollingKey(), Token: os.Getenv(TokenVar)}
 	if api := strings.TrimRight(os.Getenv(APIVar), "/"); api != "" {
 		c.API, c.Token = api, ""
 	}
@@ -186,12 +247,11 @@ func NewClient() *Client {
 }
 
 type ghRelease struct {
-	TagName         string `json:"tag_name"`
-	TargetCommitish string `json:"target_commitish"`
-	HTMLURL         string `json:"html_url"`
-	Draft           bool   `json:"draft"`
-	Prerelease      bool   `json:"prerelease"`
-	Assets          []struct {
+	TagName    string `json:"tag_name"`
+	HTMLURL    string `json:"html_url"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
+	Assets     []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
 		API  string `json:"url"` // the API's, which fileAccept gets the bytes of
@@ -370,7 +430,7 @@ func (c *Client) list(ctx context.Context) ([]ghRelease, error) {
 }
 
 // errNoManifest is a release from before the signed manifests: no
-// channel's, and no reason why a channel has no release.
+// flavour's, and no reason why a channel has no release.
 var errNoManifest = errors.New("no signed manifest")
 
 // verify fetches a release's manifest and signature and checks both.
@@ -395,20 +455,39 @@ func (c *Client) verify(ctx context.Context, gr ghRelease) (*Release, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := VerifyManifest(c.Key, manifest, sig)
+	m, err := c.verifyManifest(manifest, sig)
 	if err != nil {
 		return nil, fmt.Errorf("release %s: %w", gr.TagName, err)
 	}
-	if m.Tag != gr.TagName {
-		return nil, fmt.Errorf("release %s carries the manifest of %s", gr.TagName, m.Tag)
+	if name := cmp.Or(m.Release, m.Tag); name != gr.TagName {
+		return nil, fmt.Errorf("release %s carries the manifest of %s", gr.TagName, name)
 	}
 	r.Manifest = *m
 	r.Version, _ = ParseVersion(m.Tag)
 	return r, nil
 }
 
+// verifyManifest checks the manifest against the release key, else
+// against the rolling key, which signs the rolling flavours alone.
+func (c *Client) verifyManifest(manifest, sig []byte) (*Manifest, error) {
+	m, err := VerifyManifest(c.Key, manifest, sig)
+	if err == nil || c.RollingKey == nil {
+		return m, err
+	}
+	m, rerr := VerifyManifest(c.RollingKey, manifest, sig)
+	switch {
+	case rerr != nil:
+		return nil, err // the release key's reason
+	case !Rolling(m.Flavour):
+		return nil, fmt.Errorf("signed with the rolling key, which does not sign the flavour %q", m.Flavour)
+	}
+	return m, nil
+}
+
 // VerifyManifest checks the signature (base64, as openssl and base64
-// write it) over the manifest's bytes and parses the manifest.
+// write it) over the manifest's bytes and parses the manifest. Its
+// version is a release tag, or for a rolling flavour a build some
+// commits after one; never a modified build.
 func VerifyManifest(key ed25519.PublicKey, manifest, sig []byte) (*Manifest, error) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sig)))
 	if err != nil {
@@ -421,23 +500,47 @@ func VerifyManifest(key ed25519.PublicKey, manifest, sig []byte) (*Manifest, err
 	if err := json.Unmarshal(manifest, &m); err != nil {
 		return nil, fmt.Errorf("manifest: %w", err)
 	}
-	if _, ok := ParseVersion(m.Tag); !ok {
+	v, ok := ParseVersion(m.Tag)
+	switch {
+	case !ok:
 		return nil, fmt.Errorf("manifest names no version tag (%q)", m.Tag)
+	case v.Dirty, !v.Tag() && !Rolling(m.Flavour):
+		return nil, fmt.Errorf("manifest's version %s is no release of the flavour %q", m.Tag, m.Flavour)
 	}
 	return &m, nil
 }
 
-// Latest returns the newest signed release on the channel, or nil when
-// the channel has none. A release whose tag or target names another
-// channel (hintedChannel) is left out unfetched; the others are tried
-// newest first by version, and one that fails verification is skipped,
-// its error kept for when no release of the channel verifies; one
-// without a manifest, from before the manifests, is skipped without an
-// error.
+// Latest returns the newest signed release a box on the channel takes
+// (Accepts), or nil when there is none. A release whose tag hints at a
+// flavour the channel does not take (hintedFlavour) is left out
+// unfetched. The rolling builds, whose version is in their manifest
+// alone, are verified first; the numbered releases are then tried newest
+// first by version, as long as one is newer than the best so far, and
+// one that fails verification is skipped, its error kept for when
+// nothing verifies; one without a manifest, from before the manifests, is
+// skipped without an error.
 func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	rels, err := c.list(ctx)
 	if err != nil {
 		return nil, err
+	}
+	var best *Release
+	var firstErr error
+	try := func(gr ghRelease) bool {
+		r, err := c.verify(ctx, gr)
+		if err != nil {
+			if firstErr == nil && !errors.Is(err, errNoManifest) {
+				firstErr = err
+			}
+			return false
+		}
+		if !Accepts(channel, r.Flavour) {
+			return false
+		}
+		if best == nil || Compare(r.Version, best.Version) > 0 {
+			best = r
+		}
+		return true
 	}
 	type cand struct {
 		gr ghRelease
@@ -445,57 +548,65 @@ func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 	}
 	var cands []cand
 	for _, gr := range rels {
-		if hint := hintedChannel(gr); hint != "" && hint != channel {
+		if gr.Draft {
 			continue
 		}
-		if v, ok := ParseVersion(gr.TagName); ok && !gr.Draft && v.Tag() {
+		if hint := hintedFlavour(gr); hint != "" && !Accepts(channel, hint) {
+			continue
+		}
+		if strings.HasPrefix(gr.TagName, RollingPrefix) {
+			try(gr)
+		} else if v, ok := ParseVersion(gr.TagName); ok && v.Tag() {
 			cands = append(cands, cand{gr, v})
 		}
 	}
-	// Newest first; a handful of releases, so a simple insertion sort.
-	for i := 1; i < len(cands); i++ {
-		for j := i; j > 0 && Compare(cands[j].v, cands[j-1].v) > 0; j-- {
-			cands[j], cands[j-1] = cands[j-1], cands[j]
-		}
-	}
-	var firstErr error
+	slices.SortStableFunc(cands, func(a, b cand) int { return Compare(b.v, a.v) })
 	if len(cands) > maxVerify {
 		cands = cands[:maxVerify] // a channel without a recent release has none worth installing
 	}
 	for _, cd := range cands {
-		r, err := c.verify(ctx, cd.gr)
-		if err != nil {
-			if firstErr == nil && !errors.Is(err, errNoManifest) {
-				firstErr = err
-			}
-			continue
+		if best != nil && Compare(cd.v, best.Version) <= 0 {
+			break
 		}
-		if r.Channel == channel {
-			return r, nil
+		if try(cd.gr) {
+			break
 		}
+	}
+	if best != nil {
+		return best, nil
 	}
 	return nil, firstErr
 }
 
-// labelRe is release.yml's rule for the channel a tag names: its
+// labelRe is release.yml's rule for the flavour a tag names: its
 // pre-release label, as alpha of v0.9.0-alpha.1.
 var labelRe = regexp.MustCompile(`^v[0-9][0-9.]*-([a-z][a-z0-9]*)\.[0-9]+$`)
 
-// hintedChannel is the channel a release names before its manifest is
-// fetched, "" where it names none: release.yml makes the label of a tag
-// its channel (labelRe) and creates the release with the channel as its
-// target, which a tag without a label goes by. Neither is signed, so the
-// hint only spares the requests for another channel's release; the
+// plainRe is a tag without a label, which release.yml releases as stable.
+var plainRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// hintedFlavour is the flavour a release names before its manifest is
+// fetched, "" where it names none: release.yml makes a tag's label its
+// flavour, stable without one, and tags a rolling build's release with
+// the flavour after RollingPrefix. Neither is signed, so the hint only
+// spares the requests for releases the channel does not take; the
 // manifest decides. The two releases before v0.1.0-alpha.12 are on
 // phase-0 under alpha's label and are no longer found there.
-func hintedChannel(gr ghRelease) string {
+func hintedFlavour(gr ghRelease) string {
+	if f, ok := strings.CutPrefix(gr.TagName, RollingPrefix); ok {
+		return f
+	}
 	if m := labelRe.FindStringSubmatch(gr.TagName); m != nil {
 		return m[1]
 	}
-	return gr.TargetCommitish
+	if plainRe.MatchString(gr.TagName) {
+		return "stable"
+	}
+	return ""
 }
 
-// ByTag returns the signed release with this tag, on whatever channel.
+// ByTag returns the signed release with this tag (release/devel for a
+// rolling build), of whatever flavour.
 func (c *Client) ByTag(ctx context.Context, tag string) (*Release, error) {
 	rels, err := c.list(ctx)
 	if err != nil {
