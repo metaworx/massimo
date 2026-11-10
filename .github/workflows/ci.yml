@@ -7,8 +7,10 @@ name: CI
 # request runs the web UI's suite only when it changes the UI, the suite
 # or this file, and on two of its four cases, and the mDNS test against
 # avahi only when it changes the announcement, discovery, the test or
-# this file; a push to main or of a tag runs all of it. Once every test
-# job has passed ("All tests passed"), a push calls release.yml, which
+# this file; a push to main or of a tag runs all of it, but for a push
+# to main of a release commit, which its tag's run tests (What to test).
+# Once every test job has passed ("All tests passed"), a push calls
+# release.yml, which
 # releases a tag, and a push to main as the devel build. A push to a release branch
 # (release/alpha) runs nothing: the release moved it to a commit this
 # workflow had tested.
@@ -36,43 +38,61 @@ env:
   GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
-  # What a pull request changes, for the Screenshots and LAN jobs: ui is
-  # true when it touches the web UI, its suite or this file, lan when it
-  # touches the announcement, discovery, the proxy, the LAN test or this
-  # file (GUIDELINES/project/CI.md, section 2). The run checks out the pull request's merge commit, whose
-  # first parent is the base branch. The list is taken before it is
-  # matched, so that grep -q ending the pipe early cannot fail the step
-  # under pipefail; a step that fails anyway leaves ui empty, and the
-  # Screenshots job then runs. A push to main skips this job.
+  # What the run tests, the one job every test job waits for. suite is
+  # false for a push to main of a release commit (its summary opens with
+  # "chore(release): "): make release-alpha pushes main and the tag at
+  # once, and the tag's run tests the same commit, so main's run skips
+  # every job and makes no devel build (GUIDELINES/project/CI.md,
+  # section 2). ui and lan, for the Screenshots and LAN jobs, are true for
+  # a push; for a pull request, ui is true when it touches the web UI, its
+  # suite or this file, lan when it touches the announcement, discovery,
+  # the proxy, the LAN test or this file. The run checks out the pull
+  # request's merge commit, whose first parent is the base branch. The
+  # list is taken before it is matched, so that grep -q ending the pipe
+  # early cannot fail the step under pipefail. Only an answer of false
+  # skips a job: a step that fails anyway leaves every answer empty, so
+  # every job runs, and All tests passed counts this job's failure.
+  # Every job's condition names its status function for that reason.
   changes:
-    name: Changed paths
-    if: github.event_name == 'pull_request'
+    name: What to test
     runs-on: ubuntu-latest
     outputs:
-      ui: ${{ steps.paths.outputs.ui }}
-      lan: ${{ steps.paths.outputs.lan }}
+      suite: ${{ steps.what.outputs.suite }}
+      ui: ${{ steps.what.outputs.ui }}
+      lan: ${{ steps.what.outputs.lan }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2 # the merge commit and its parents
 
-      - name: Paths
-        id: paths
+      - name: What to test
+        id: what
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          changed="$(git diff --name-only HEAD^1 HEAD)"
-          if grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
-            echo "ui=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ui=false" >> "$GITHUB_OUTPUT"
+          suite=true ui=true lan=true
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] &&
+            [[ "$MESSAGE" == "chore(release): "* ]]; then
+            echo "a release commit: its tag's run tests it."
+            suite=false
           fi
-          if grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
-            echo "lan=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "lan=false" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
+            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
+          echo "suite=${suite} ui=${ui} lan=${lan}"
+          {
+            echo "suite=${suite}"
+            echo "ui=${ui}"
+            echo "lan=${lan}"
+          } >> "$GITHUB_OUTPUT"
 
   test:
     name: Vet and test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,6 +136,8 @@ jobs:
   # it, so that neither waits for the other.
   race:
     name: Race
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,6 +156,8 @@ jobs:
   # Pi 1's core, beside Vet and test; make cross only builds it.
   armv6:
     name: Test (armv6, QEMU)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,7 +181,8 @@ jobs:
   # to be committed as a seed with its fix.
   fuzz:
     name: Fuzz
-    if: github.event_name == 'push'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -192,12 +217,12 @@ jobs:
   # section 3). The image has no make: the steps run what the make
   # targets run. The slideshow is built and committed with the set, not
   # here. It runs for every push to main and for a pull request whose
-  # changes job did not answer false; skipped by this condition, the
+  # What to test answered ui=true; skipped by this condition, the
   # required check counts as passed.
   screenshots:
     name: Screenshots
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.ui != 'false') }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.ui != 'false' }}
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
@@ -254,12 +279,12 @@ jobs:
   # client, discover listing it and marking the proxy, and its goodbye.
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
-  # a pull request whose changes job did not answer false, as Screenshots
+  # a pull request whose What to test answered lan=true, as Screenshots
   # does; skipped by this condition, the check counts as passed.
   lan:
     name: LAN against avahi
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.lan != 'false') }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.lan != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -276,6 +301,8 @@ jobs:
   # for the platforms with code of their own.
   govulncheck:
     name: govulncheck (${{ matrix.goos }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -307,6 +334,8 @@ jobs:
   # upgrade from v0.12.0-alpha.1 with the service running.
   deb:
     name: Debian package (${{ matrix.image }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -356,6 +385,8 @@ jobs:
   # that one cannot run as a service), and removal.
   windows:
     name: Windows service
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -420,7 +451,7 @@ jobs:
             st=""
             for i in $(seq 90); do
               st="$(cat "$data/update-status.json" 2>/dev/null || true)"
-              echo "$st" | grep -Eq '"state": "(done|rolled-back|failed|up-to-date)"' && break
+              echo "$st" | grep -E '"state": "(done|rolled-back|failed|up-to-date)"' >/dev/null && break
               sleep 2
             done
             echo "$st"
@@ -439,7 +470,7 @@ jobs:
           sc.exe qc massimo | tee qc.txt
           grep -q -- '-update-request C:\\ProgramData\\Massimo\\update-request -update-status C:\\ProgramData\\Massimo\\update-status.json' qc.txt
           up
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
 
           # Installing again keeps the address and restarts the service.
           ./massimo.exe install
@@ -457,16 +488,16 @@ jobs:
           . ./ci-lib.sh
           post_update
           now="$(curl -fsS "$health")"
-          if echo "$st" | grep -q '"state": "done"'; then
-            echo "$now" | grep -vq 'v0.0.0-ci.1'
+          if echo "$st" | grep '"state": "done"' >/dev/null; then
+            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
             test -f "$bin.prev"
             # Back by hand, with the binary that is installed.
             "$bin" update -rollback -restart massimo
             up
-            curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+            curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
           else
-            echo "$st" | grep -q '"state": "rolled-back"'
-            echo "$now" | grep -q 'v0.0.0-ci.1'
+            echo "$st" | grep '"state": "rolled-back"' >/dev/null
+            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null
             test -f "$bin.failed"
           fi
           test ! -e "$data/update-request"
@@ -488,9 +519,9 @@ jobs:
           now="$(curl -fsS "$health")"
           echo "update exit $status, server: $now"
           if [ "$status" = 0 ]; then
-            echo "$now" | grep -vq 'v0.0.0-ci.1'
+            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
           else
-            echo "$now" | grep -q 'v0.0.0-ci.1'   # rolled back
+            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null   # rolled back
             test -f "$bin.failed"
           fi
 
@@ -604,13 +635,13 @@ jobs:
           printf 'MASSIMO_UPDATE_API=http://127.0.0.1:8123\n' >> "$data/env"
           ./ci1.exe install
           up
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
           # A failure kept from earlier goes with the next successful update.
           echo stale > "$bin.failed"
 
           post_update
-          echo "$st" | grep -q '"state": "done"'
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.2'
+          echo "$st" | grep '"state": "done"' >/dev/null
+          curl -fsS "$health" | grep 'v0.0.0-ci.2' >/dev/null
           test -f "$bin.prev"
           test ! -e "$bin.failed"
 
@@ -618,8 +649,8 @@ jobs:
           start=$(date +%s)
           post_update
           echo "rolled back after $(( $(date +%s) - start )) s"
-          echo "$st" | grep -q '"state": "rolled-back"'
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.2'
+          echo "$st" | grep '"state": "rolled-back"' >/dev/null
+          curl -fsS "$health" | grep 'v0.0.0-ci.2' >/dev/null
           cmp "$bin.failed" "ci-stub/dl/v0.0.0-ci.3/$asset"
           powershell -NoProfile -Command "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 20 | Where-Object { \$_.Id -in 7000,7009,7031,7034 } | Format-List TimeCreated,Id,Message" | tee events.txt
           grep -Eq 'Id +: (7000|7009|7034)' events.txt
@@ -685,6 +716,8 @@ jobs:
 
   macos:
     name: macOS LaunchDaemon
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -735,15 +768,15 @@ jobs:
           up() { for i in $(seq 30); do curl -fsSk "$health" && return; sleep 2; done; return 1; }
 
           sudo ./massimo install -settings ci.env -listen 127.0.0.1:18099 -tls self-signed
-          sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | head -3
+          sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | sed -n 1,3p
           up
-          curl -fsSk "$health" | grep -q 'v0.0.0-ci.1'
-          curl -fsSk "$health" | grep -Eq '"self_signed": ?true'
-          curl -fsSkI "$health" | grep -qi 'strict-transport-security: max-age=31536000'
+          curl -fsSk "$health" | grep 'v0.0.0-ci.1' >/dev/null
+          curl -fsSk "$health" | grep -E '"self_signed": ?true' >/dev/null
+          curl -fsSkI "$health" | grep -i 'strict-transport-security: max-age=31536000' >/dev/null
           test "$(sudo stat -f %Su:%Lp /var/lib/massimo/tls/self-signed.key)" = _massimo:600
           sudo grep -q 'MASSIMO_TLS=self-signed' /etc/massimo/env
           sudo grep -q '<string>https://127.0.0.1:18099/healthz</string>' /Library/LaunchDaemons/ch.metaworx.massimo-update.plist
-          sudo -u _massimo ./massimo -data /var/lib/massimo -env /etc/massimo/env tls show | grep -q 'SHA256:'
+          sudo -u _massimo ./massimo -data /var/lib/massimo -env /etc/massimo/env tls show | grep 'SHA256:' >/dev/null
           test "$(sudo stat -f %Su:%Lp /etc/massimo/env)" = _massimo:600
           if cat /etc/massimo/env 2>/dev/null; then echo "::error::settings readable"; exit 1; fi
           dscl . -read /Users/_massimo IsHidden UserShell
@@ -772,21 +805,21 @@ jobs:
           fi
           for i in $(seq 90); do
             st="$(cat /var/lib/massimo-update/status.json 2>/dev/null || true)"
-            echo "$st" | grep -Eq '"state": "(done|rolled-back|failed)"' && break
+            echo "$st" | grep -E '"state": "(done|rolled-back|failed)"' >/dev/null && break
             sleep 2
           done
           echo "$st"
           up
           now="$(curl -fsSk "$health")"
-          if echo "$st" | grep -q '"state": "done"'; then
-            echo "$now" | grep -vq 'v0.0.0-ci.1'
+          if echo "$st" | grep '"state": "done"' >/dev/null; then
+            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
             # Back by hand, with the binary that knows launchd.
             sudo ./massimo update -rollback -binary /usr/local/bin/massimo -restart ch.metaworx.massimo
             sleep 3; up
-            curl -fsSk "$health" | grep -q 'v0.0.0-ci.1'
+            curl -fsSk "$health" | grep 'v0.0.0-ci.1' >/dev/null
           else
-            echo "$st" | grep -q '"state": "rolled-back"'
-            echo "$now" | grep -q 'v0.0.0-ci.1'
+            echo "$st" | grep '"state": "rolled-back"' >/dev/null
+            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null
             test -f /usr/local/bin/massimo.failed
           fi
 
@@ -843,7 +876,7 @@ jobs:
           cat "$RUNNER_TEMP/update-status.json"
           test "$(basename "$(readlink "$(brew --prefix)/opt/massimo-ci")")" = 0.0.0-ci.2
           grep -q '"state": "done"' "$RUNNER_TEMP/update-status.json"
-          "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep -q 'v0.0.0-ci.2'
+          "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep 'v0.0.0-ci.2' >/dev/null
           brew uninstall --force massimo-ci
           rm -rf "$tap"
 
@@ -946,6 +979,8 @@ jobs:
   # messages of the pull request's commits.
   guidelines:
     name: Guidelines
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -980,6 +1015,8 @@ jobs:
   # site.yml's, which release.yml calls.
   site:
     name: Site
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -993,10 +1030,14 @@ jobs:
   # them failed or was cancelled (a pull request skips some). The release
   # waits for it, and the nightly build looks for it among a commit's runs
   # (release.yml).
+  # One check for the whole suite, which the release waits for. It counts
+  # What to test with the others, so that a gate that failed fails it,
+  # although every job ran; for a release commit pushed to main,
+  # which What to test leaves untested, it is skipped, and so is Release.
   tests:
     name: All tests passed
-    needs: [ test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
-    if: ${{ !cancelled() }}
+    needs: [ changes, test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - name: Every test job passed or was skipped
@@ -1013,9 +1054,9 @@ jobs:
   # id-token and attestations for the build's provenance, actions for meta,
   # which the nightly build needs.
   # The condition names its status function: without one GitHub adds
-  # success(), which is false while any job up the chain was skipped, and
-  # Changed paths always is on a push (2026-11-10: the first devel build
-  # was skipped so).
+  # success(), which is false while any job up the chain was skipped, as
+  # Fuzz is on a pull request and Changed paths, now What to test, was on
+  # a push (2026-11-10: the first devel build was skipped so).
   release:
     name: Release
     needs: tests
