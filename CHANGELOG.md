@@ -10,6 +10,10 @@ the next minor, a fix counts the suffix up.
 
 ### Added
 
+- `packaging/site/build.sh` builds the site without a key: the apt
+  repository from a release's index asset, the pages, and the docs of
+  every channel under `/docs/`, checked link by link; `make site`.
+
 - A release has a flavour, and a box takes its channel's releases and
   every more stable flavour's; the rolling `devel` and `nightly` builds
   verify with a key of their own (`README.md`, "Versions").

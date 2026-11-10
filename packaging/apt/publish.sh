@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Builds the project's site (packaging/README.md, "The apt repository"):
-# the pages of packaging/site at its root, and under apt/ the Debian
-# packages of the newest releases of every update channel, one suite per
-# channel, indexed with apt-ftparchive and signed with the repository's
-# OpenPGP key. The site has no state of its own: the release workflow
-# rebuilds it from GitHub's releases at every release and deploys it to
-# the project's GitHub Pages, https://massimo.metaworx.ch; the test feeds
-# it a directory of packages and a throwaway key instead.
+# Builds the project's apt repository (packaging/README.md, "The apt
+# repository"): under <out>/apt the Debian packages of the newest releases
+# of every update channel, one suite per channel, indexed with
+# apt-ftparchive and signed with the repository's OpenPGP key. It has no
+# state of its own: the release workflow rebuilds it from GitHub's
+# releases at every release, and packaging/site/build.sh puts it on the
+# project's site, https://massimo.metaworx.ch, with the pages and the
+# docs; the test feeds it a directory of packages and a throwaway key
+# instead.
 set -euo pipefail
 
 usage() {
@@ -14,7 +15,7 @@ usage() {
 usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owner/name>] [--index-asset <file>]
        publish.sh --out <dir> --key <fingerprint> --from <dir> --channel <name> [--index-asset <file>]
 
-  --out <dir>        the site: <dir>/apt holds the repository, <dir> the pages of packaging/site
+  --out <dir>        <dir>/apt holds the repository (packaging/site/build.sh --apt takes it)
   --key <fpr>        the OpenPGP key in gpg's keyring that signs the suites; its
                      passphrase, if any, in APT_KEY_PASSPHRASE
   --releases <n>     the newest releases kept per channel (default 10)
@@ -180,11 +181,10 @@ for pool in "$apt"/pool/*/; do
 	sign "$dist/Release" "$dist/Release.gpg" --detach-sign
 done
 
-# 4. The snippet and the pages. Signed-By names the keyring package's
-# file, so that the key apt verifies with is the one the newest keyring
-# package carries; the box installs that package first. The pages are
-# packaging/site's, copied as they are, with the suites in place of the
-# index page's placeholder.
+# 4. The snippet. Signed-By names the keyring package's file, so that the
+# key apt verifies with is the one the newest keyring package carries; the
+# box installs that package first. The pages beside the repository are
+# packaging/site/build.sh's, which takes this apt/ as it is.
 suites=$(for pool in "$apt"/pool/*/; do basename "$pool"; done | tr '\n' ' ')
 cat >"$apt/massimo.sources" <<EOF
 # The Massimo apt repository (https://massimo.metaworx.ch,
@@ -198,9 +198,6 @@ Suites: ${suites%% *}
 Components: main
 Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
 EOF
-cp -R "$root/packaging/site/." "$out/"
-suite_list=${suites% }
-sed "s/{{SUITES}}/${suite_list// /, }/g" "$root/packaging/site/index.html" >"$out/index.html"
 
 # 5. The signed index on its own (--index-asset): what a site rebuilt from
 # main needs to serve the repository without the key, the pool fetched
