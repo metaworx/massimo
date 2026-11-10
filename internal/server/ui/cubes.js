@@ -652,8 +652,9 @@ function cubePanel(c) {
 }
 
 // foundRow is a Cube found on the LAN, from its template
-// (tpl-found-row): its serial, address and firmware, in expert mode its
-// radio and MAC address, how long ago it answered, and Add (addCube),
+// (tpl-found-row): its serial, address and firmware, the massimo proxies
+// that answer for it, in expert mode its radio and MAC address and the
+// gateway it uses, how long ago it answered, and Add (addCube),
 // which serves it at once; the header's list of found Cubes (app.js) and
 // System settings → Cubes show it.
 function foundRow(c) {
@@ -668,8 +669,11 @@ function foundRow(c) {
   };
   // dhcp is absent until the Cube has answered the c request.
   const dhcp = c.dhcp === true ? t("cubes.dhcp") : c.dhcp === false ? t("cubes.static") : "";
-  part(".found-facts", [c.address, dhcp, c.firmware ? t("budget.firmware") + " " + c.firmware : ""]);
-  part(".found-extra", [c.rf_address, c.mac]);
+  // proxies are the other addresses that answered for its serial.
+  const proxies = (c.proxies || []).join(", ");
+  part(".found-facts", [c.address, dhcp, c.firmware ? t("budget.firmware") + " " + c.firmware : "",
+    proxies ? t("cubes.viaProxy", { address: proxies }) : ""]);
+  part(".found-extra", [c.rf_address, c.mac, c.gateway ? t("cubes.gateway") + " " + c.gateway : ""]);
   const add = li.querySelector(".add-cube");
   const age = ageEl(c.last_seen, false, true);
   if (age) add.before(age);

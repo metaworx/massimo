@@ -68,6 +68,16 @@ type foundCube struct {
 	// answer to c in this process's latest discovery that had one; nil
 	// until then. It is kept in memory only, not in the store.
 	DHCP *bool `json:"dhcp,omitempty"`
+	// Gateway, Netmask and DNS are the addresses the Cube uses, from its
+	// answer to N in this process's latest discovery that had one; kept
+	// in memory only, as DHCP.
+	Gateway string   `json:"gateway,omitempty"`
+	Netmask string   `json:"netmask,omitempty"`
+	DNS     []string `json:"dns,omitempty"`
+	// Proxies are the other addresses that answered for the Cube's
+	// serial in the latest run, massimo proxies (docs/proxy.md); in
+	// memory only.
+	Proxies []string `json:"proxies,omitempty"`
 	// Configured says whether the server serves the Cube when the copy
 	// is handed out. It is set on the copies only, never kept on the
 	// entry, since a Cube is added and removed without discovery
@@ -293,6 +303,18 @@ func (s *Server) noteSerial(ctx context.Context, answers []cubelan.Discovered, n
 		dhcp := *d.DHCP
 		f.DHCP = &dhcp
 	}
+	if d.Gateway != nil || d.Netmask != nil {
+		f.Gateway, f.Netmask, f.DNS = ipString(d.Gateway), ipString(d.Netmask), nil
+		for _, ip := range d.DNS {
+			f.DNS = append(f.DNS, ip.String())
+		}
+	}
+	f.Proxies = nil
+	for _, a := range answers {
+		if a.IP.String() != f.Address {
+			f.Proxies = append(f.Proxies, a.IP.String())
+		}
+	}
 	cp := *f
 	cp.Configured = rt != nil
 	s.foundMu.Unlock()
@@ -347,6 +369,14 @@ func ownOf(answers []cubelan.Discovered) cubelan.Discovered {
 		}
 	}
 	return answers[0]
+}
+
+// ipString is ip's text, "" for none.
+func ipString(ip net.IP) string {
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
 }
 
 // answeredFrom reports whether one of answers came from host.

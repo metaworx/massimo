@@ -424,6 +424,8 @@
   "cubes.addLabel": "{serial} hinzufügen",
   "cubes.dhcp": "DHCP",
   "cubes.static": "feste Adresse",
+  "cubes.viaProxy": "über Proxy {address}",
+  "cubes.gateway": "Gateway",
   "cubes.added": "{serial} hinzugefügt; der Server verbindet sich jetzt.",
   "cubes.failed": "{serial}: {error}",
   "cubes.remove": "Entfernen",

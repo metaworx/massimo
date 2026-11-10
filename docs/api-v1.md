@@ -954,6 +954,10 @@ then every Cube discovery found on the LAN that is not configured:
     "rf_address": "0a0b0c",
     "firmware": "1.1.3",
     "dhcp": true,
+    "gateway": "192.168.1.1",
+    "netmask": "255.255.255.0",
+    "dns": ["192.168.1.1"],
+    "proxies": ["192.168.1.40"],
     "found_at": "2026-11-04T14:30:01+01:00",
     "last_seen": "2026-11-04T15:00:02+01:00"
   }
@@ -965,8 +969,12 @@ A configured Cube has the fields below;
 `mac` and `last_seen` (when it last answered discovery) only once discovery has seen it.
 A found Cube has only the fields shown: `address` is the IP it answered from,
 its own where a massimo proxy answers for it too (docs/proxy.md),
+and `proxies` the other addresses that answered for its serial in the latest run;
 `found_at` when the server first saw it, `last_seen` its latest answer;
 `mac` comes from the host's ARP cache and may be missing.
+`gateway`, `netmask` and `dns` are the addresses the Cube uses,
+from its answer to the `N` request of this server run's latest discovery that had one,
+kept in memory only as `dhcp` is.
 `dhcp` says whether the Cube takes its address by DHCP (`true`) or has a static
 one (`false`):
 discovery asks each Cube that answers for its network configuration (the `c` request,

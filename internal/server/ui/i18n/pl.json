@@ -439,6 +439,8 @@
   "cubes.addLabel": "dodaj {serial}",
   "cubes.dhcp": "DHCP",
   "cubes.static": "stały adres",
+  "cubes.viaProxy": "przez proxy {address}",
+  "cubes.gateway": "brama",
   "cubes.added": "Dodano {serial}; serwer teraz się z nim łączy.",
   "cubes.failed": "{serial}: {error}",
   "cubes.remove": "Usuń",

@@ -209,9 +209,22 @@ The same socket serves the server's own discovery of Cubes (the API's
 `POST /api/v1/cubes/discover`, at the start and every 30 minutes):
 the Cubes answer to port 23272 only,
 so the request goes out from it and their answers come back to it.
+The search is the one `massimo discover` runs:
+it asks every answer for the addresses in use (`N`) and the stored configuration (`c`),
+which a Cube answers and the proxy does not,
+so an answer to either is a Cube's,
+and one without, from a MAC that is not eQ-3's, a proxy's.
 The proxy answers that request too;
 an answer from one of the host's own addresses with one of the server's serials
 is its own and left out.
+
+Another server on the LAN, with no proxy serial set here,
+hears the Cube's serial from the Cube and from this proxy:
+it lists the Cube once (docs/api-v1.md, "GET /api/v1/cubes"),
+at its own address, with this server's address under `proxies`.
+A Cube it serves by serial only goes to the proxy,
+since this server holds the Cube's one LAN connection,
+and stays there while the proxy answers.
 
 ## Not supported yet
 

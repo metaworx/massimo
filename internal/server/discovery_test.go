@@ -97,7 +97,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	for k := range cubes[1] {
 		switch k {
-		case "serial", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "found_at", "last_seen":
+		case "serial", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
 		default:
 			t.Errorf("unexpected field %q in a found cube", k)
 		}
@@ -484,6 +484,12 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 		}
 		if f := found[0].(map[string]any); f["address"] != "127.0.0.2" || f["mac"] != "00:1a:22:00:00:02" || f["dhcp"] != true {
 			t.Fatalf("run %d: the found cube %v", i, f)
+		}
+		// Its proxies, and the addresses it uses from its answer to N:
+		// the fake's lease, a /24 with the gateway at .1.
+		f := found[0].(map[string]any)
+		if p, _ := f["proxies"].([]any); len(p) != 1 || p[0] != "127.0.0.3" || f["gateway"] != "127.0.0.1" || f["netmask"] != "255.255.255.0" {
+			t.Fatalf("run %d: proxies and addresses %v", i, f)
 		}
 	}
 	var cubes []map[string]any
