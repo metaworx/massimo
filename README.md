@@ -96,7 +96,7 @@ Massimo is one binary per platform with the web UI inside;
 there is nothing else to install.
 Every [release](https://github.com/metaworx/massimo/releases) carries the binaries below,
 `SHA256SUMS` and the signed manifest that `massimo update` verifies.
-Every release so far is a pre-release on the update channel `alpha` (see
+Every release so far is a pre-release of the flavour `alpha` (see
 [Versions](#versions)), which `releases/latest` skips,
 so take the newest release from the page and put its tag in place of `<tag>` below.
 
@@ -234,7 +234,8 @@ sudo massimo update -restart massimo.service -health http://127.0.0.1:8099/healt
 sudo massimo install -remove              # -purge: the settings, state, logs and user too
 ```
 
-`update` installs the newest signed release of the channel and puts the old
+`update` installs the newest signed release the box's update channel takes
+([Versions](#versions)) and puts the old
 binary back when the restarted server does not report the new version
 (`-rollback` goes back by hand);
 the button under System settings → Software in the web UI asks the helper to do the same,
@@ -257,7 +258,7 @@ the web UI's Update has the package's helper run apt for the project's source,
 `apt purge massimo` removes everything.
 The project's apt repository, <https://massimo.metaworx.ch/apt/>,
 makes that an `apt upgrade`:
-one suite per update channel, the snippet in
+one suite per flavour, the snippet in
 [The apt repository](packaging/README.md#the-apt-repository).
 Details: [Debian package](packaging/README.md#debian-package).
 
@@ -479,13 +480,15 @@ Raspberry Pi OS, `make windows` for Windows,
 and `make cross` every release binary, all into `dist/`.
 The binary goes in as a release's does,
 `sudo ./massimo install -dry-run -settings .env`, then without `-dry-run`.
-It follows the tag's update channel,
+It follows the tag's flavour, `alpha` for an `-alpha.N` tag,
 so the web UI and `massimo update` say when a release is out,
 and they install the project's binary, checked against its signed manifest;
 to stay on your own builds, build the next tag and run `install` again,
 which replaces the binary and keeps the settings.
 A tag up to v0.12.0-alpha.1 follows `HEAD` instead, which has no releases,
-unless built with `make CHANNEL=alpha`.
+unless built with `make CHANNEL=alpha`;
+a build of anything but a release tag is `devel`,
+and follows the `devel` builds.
 <!-- END GENERATED PARTIAL docs/fragments/_build.md -->
 
 The other targets:
@@ -495,8 +498,9 @@ build one more release binary each;
 `make vet`, `make test` and `make clean` do what they say;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
-A build from `main` follows the channel `main`, which has no releases,
-unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
+A build from `main`, or any other branch, is of the flavour `devel`
+and follows the `devel` builds,
+unless `MASSIMO_UPDATE_CHANNEL` or the setting `update.channel` names another channel,
 see [packaging/README.md](packaging/README.md#updating).
 
 ## Server
@@ -1049,8 +1053,23 @@ and when `[Unreleased]` holds no bullet.
 and does none of it;
 `ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
 
-Boxes following the update channel `alpha` get each release from `massimo
-update` or the web UI (see [packaging/README.md](packaging/README.md#updating)).
+Every release has a flavour, from the least stable to the most:
+`devel`, every commit of `main` whose tests passed;
+`nightly`, once a day the newest of those;
+`alpha`, the `-alpha.N` tags;
+later `beta`, the `-beta.N` tags, and `stable`, a plain `vX.Y.Z`.
+`devel` and `nightly` are one GitHub release each,
+`release/devel` and `release/nightly`, replaced in place,
+signed with a key of their own that boxes accept for those two alone.
+A box follows an update channel, one of those names,
+and takes its channel's releases and every more stable flavour's:
+a box on `alpha` takes a later beta or stable release too.
+Its channel is `MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
+else its build's flavour;
+every channel's newest build is at `release/<channel>`,
+a branch for the numbered flavours, a tag for the rolling ones.
+Boxes get each release from `massimo update` or the web UI
+(see [packaging/README.md](packaging/README.md#updating)).
 `make` builds carry the version from `git describe`, `go run` builds
 report the commit only with `go run -buildvcs=true`.
 

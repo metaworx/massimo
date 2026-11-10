@@ -743,20 +743,37 @@ Development happens on `main`;
 `make release-alpha` tags it, CI tests the tag, and `.github/workflows/release.yml`
 builds, signs and publishes the release, then fast-forwards the release branch
 `release/alpha` to it.
-Each release belongs to an **update channel**, its release branch:
-`alpha` for the `v0.1.0-alpha.N` releases,
-later `beta` and a stable one the same way.
-A release binary follows its channel;
-a binary built from another branch follows that branch, which has no releases,
-unless `MASSIMO_UPDATE_CHANNEL=alpha` is set (`massimo update -check` shows the channel).
+Each release has a **flavour**, from the least stable to the most:
+`devel`, every commit of `main` whose tests passed;
+`nightly`, once a day the newest of those;
+`alpha`, the `vX.Y.Z-alpha.N` releases;
+later `beta` (`-beta.N`) and `stable` (a plain `vX.Y.Z`).
+`devel` and `nightly` are one GitHub release each, `release/devel` and
+`release/nightly`, replaced in place by the next build;
+the others are a release per tag.
+A box follows an **update channel**, one of those names,
+and takes the newest release of its channel's flavour or a more stable one:
+a box on `alpha` takes a beta or stable release too,
+one on `devel` everything.
+The channel is `MASSIMO_UPDATE_CHANNEL` where set,
+else the setting `update.channel` (`PUT /api/v1/settings`,
+`{"update.channel": "devel"}`; the web UI's selector is still to come),
+else the flavour of the running binary;
+`massimo update -channel <name>` uses another for one run,
+and `massimo update -check` shows the channel and where it came from.
+Before the web UI's Update installs a release of another flavour,
+the server stores its channel as `update.channel` where nothing names one,
+so that a box on `beta` stays on `beta` after a stable release;
+`massimo update` by hand cannot write the server's store, and says so instead.
+A build of anything but a release tag is of the flavour `devel`.
 A release is installed only when it is newer than the running version,
 so switching the channel never goes back in version;
-`-version <tag>` installs a given release,
+`-version <tag>` installs a given release (`release/devel` the devel build),
 older ones too.
-A check fetches the signed manifests of its channel's releases alone,
-known by the tag's label (`-alpha.N` is on `alpha`),
-or, for a tag without one, by the release's target,
-which release.yml sets to the channel.
+A check fetches the signed manifests of the releases its channel takes alone,
+known by the tag's label (`-alpha.N` is `alpha`, a plain tag `stable`)
+or the rolling build's tag;
+neither is signed, the manifest decides.
 v0.1.0-alpha.10 and .11 were made before the branch was renamed
 and are signed for `phase-0` under alpha's label,
 so a check on `phase-0` finds no release;
@@ -834,8 +851,20 @@ on Windows the server starts the helper itself (see "Windows");
 the Debian package's own helper runs apt (see "Debian package").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`,
-a secret of the repository's `signing` environment that only `v*` tags can use;
+a secret of the repository's `signing` environment that only `v*` tags can use,
+and where each run waits for the owner's approval;
 its public half is `internal/update/release-key.pem`.
+The rolling key signs the `devel` and `nightly` builds:
+`MASSIMO_ROLLING_KEY`, a secret of the `signing-rolling` environment,
+which only `main` can use;
+its public half is `internal/update/rolling-key.pem`,
+and a binary accepts it for those two flavours alone,
+so that a key `main` can reach signs nothing a box on `alpha` or above takes.
+`RELEASE_BRANCH_DEPLOY_KEY`, in `signing` too, is the private half of a deploy key
+with write access, with which the release fast-forwards `release/<flavour>`.
+The repository's rulesets keep the `v*` tags from being moved or deleted
+and let the `release/*` branches only fast-forward
+(GUIDELINES/project/CI.md, section 6).
 A new key needs a release built with the new public key before releases signed
 with it are accepted.
 

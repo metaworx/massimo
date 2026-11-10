@@ -30,10 +30,12 @@ Raspberry Pi OS, `make windows` for Windows,
 and `make cross` every release binary, all into `dist/`.
 The binary goes in as a release's does,
 `sudo ./massimo install -dry-run -settings .env`, then without `-dry-run`.
-It follows the tag's update channel,
+It follows the tag's flavour, `alpha` for an `-alpha.N` tag,
 so the web UI and `massimo update` say when a release is out,
 and they install the project's binary, checked against its signed manifest;
 to stay on your own builds, build the next tag and run `install` again,
 which replaces the binary and keeps the settings.
 A tag up to v0.12.0-alpha.1 follows `HEAD` instead, which has no releases,
-unless built with `make CHANNEL=alpha`.
+unless built with `make CHANNEL=alpha`;
+a build of anything but a release tag is `devel`,
+and follows the `devel` builds.
