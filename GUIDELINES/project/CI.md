@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.27.0)
+# Massimo — CI Conventions (v1.29.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -56,6 +56,13 @@ such a run carries the default branch,
 which the `signing` environment does not admit.
 The release branches receive only commits already on `main`,
 so a push to one runs nothing.
+A job after one that can be skipped names a status function in its `if:`:
+GitHub otherwise adds `success()`,
+which is false while any job up the chain was skipped, not only its own `needs`.
+Changed paths is skipped on every push,
+so All tests passed (`!cancelled()`) and Release
+(`!cancelled() && … && needs.tests.result == 'success'`) say so;
+without it the first `devel` build, on 2026-11-10, was skipped.
 Runs share a concurrency group per ref:
 a new push to a pull request cancels the run it supersedes,
 while a run of `main` is never cancelled,
@@ -320,7 +327,10 @@ signed by `rolling` in the `signing-rolling` environment with
 `nightly` alone, so that a key `main` can reach signs nothing an `alpha`
 box takes.
 It is one GitHub release, `release/devel`, a pre-release replaced in place:
-the files uploaded over the old ones, the tag moved with the API,
+the binaries, packages and sums uploaded over the old ones,
+then the manifest and its signature,
+so that a box reading the new manifest finds its files already there,
+the tag moved with the API,
 the notes rewritten and the files the new build lacks deleted.
 Editing a release notifies no watcher, as creating one at every merge would.
 Runs of `main` are never cancelled, so an older one can end last:

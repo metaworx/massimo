@@ -408,8 +408,11 @@ jobs:
           cat "$RUNNER_TEMP/notes.md"
 
       # Published only where the release still names a commit before this
-      # one; then the files first, the tag second, the notes and the files
-      # the new build lacks (the debs carry the version in their name) last.
+      # one; then the binaries, packages and sums first, the manifest and
+      # its signature after them, so that a box which reads the new
+      # manifest finds its files already there; then the tag, and the notes
+      # and the files the new build lacks (the debs carry the version in
+      # their name) last.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -426,7 +429,13 @@ jobs:
             echo "${RELEASE} is ${cur}, at or after ${SHA}: left as it is."
             exit 0
           fi
-          gh release upload "$RELEASE" --clobber "${files[@]}"
+          manifest=(dist/massimo-release.json dist/massimo-release.json.sig)
+          payload=()
+          for f in "${files[@]}"; do
+            case "$f" in dist/massimo-release.json | dist/massimo-release.json.sig) ;; *) payload+=("$f") ;; esac
+          done
+          gh release upload "$RELEASE" --clobber "${payload[@]}"
+          gh release upload "$RELEASE" --clobber "${manifest[@]}"
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE}" -f sha="$SHA" -F force=true >/dev/null
           gh release edit "$RELEASE" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
           keep="$(for f in "${files[@]}"; do basename "$f"; done)"
