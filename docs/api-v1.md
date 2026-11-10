@@ -964,6 +964,7 @@ then every Cube discovery found on the LAN that is not configured:
 A configured Cube has the fields below;
 `mac` and `last_seen` (when it last answered discovery) only once discovery has seen it.
 A found Cube has only the fields shown: `address` is the IP it answered from,
+its own where a massimo proxy answers for it too (docs/proxy.md),
 `found_at` when the server first saw it, `last_seen` its latest answer;
 `mac` comes from the host's ARP cache and may be missing.
 `dhcp` says whether the Cube takes its address by DHCP (`true`) or has a static
@@ -1138,7 +1139,8 @@ The answer is that of `GET`.
 ### POST /api/v1/cubes/discover
 
 Looks for Cubes on the LAN now (UDP discovery, about three seconds) and
-answers with every Cube that answered, configured or not, as the
+answers with every Cube that answered, configured or not, once each,
+at its own address where a proxy answered for it too, as the
 objects of the found Cubes above:
 
 ```json
@@ -1176,8 +1178,15 @@ and serve's log says "cube gone from the LAN";
 the stream sends nothing for it.
 
 A configured Cube that answers from another address than configured is logged;
-one configured by serial only, without an address,
-is connected at the address it answers from and reconnected when that changes.
+one configured by serial only, without an address, follows discovery:
+it keeps its address while that answers,
+else takes the address of a proxy that answers for it
+(a proxy answers only while its serve holds the Cube,
+whose one LAN connection is then taken),
+else the Cube's own, and reconnects when that changes, at most once a run.
+An answer that is neither a Cube's nor a proxy's for sure
+(no answer to `N` or `c` and no MAC, README.md "Command line")
+is taken only by a Cube without an address yet.
 
 ### GET /api/v1/cubes/{sn}
 

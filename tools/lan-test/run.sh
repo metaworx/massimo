@@ -16,8 +16,8 @@
 #   3. that, the cable back, a search finds it again and logs it found;
 # then brings up the box, a serve beside avahi-daemon whose proxy answers
 # discovery for the Cube and which polls it every 5 s, and checks
-#   4. that a search lists the Cube's serial from its address and from
-#      the box's;
+#   4. that, while the box's proxy answers for the Cube too, a search
+#      lists the Cube once, at its own address;
 #   5. that serve announces itself beside avahi, UDP 5353 shared;
 #   6. that avahi-browse resolves the service, its node, version, TLS
 #      and fingerprint, on the box and on the client, to the box;
@@ -31,7 +31,7 @@
 # when a check failed. Needs Docker with Compose v2; exit 1 on a failed
 # check, 2 without Docker.
 set -euo pipefail
-readonly VERSION=1.2.0
+readonly VERSION=1.3.0
 readonly SERIAL=KEQ0000100
 readonly CUBE_MAC=00:1a:22:00:00:01
 readonly BUILD=v0.0.0-lan-test
@@ -140,12 +140,16 @@ within 30 finds_cube || fail "the searcher's search does not find $SERIAL again:
 within 5 logged_found 2 || fail "the searcher does not log $SERIAL found again"
 ok "the cable back, a search finds $SERIAL again, and the searcher logs it found once more"
 
-# 4. The box's proxy answers too: one serial from two addresses.
+# 4. The box's proxy answers too: one serial from two addresses, which
+# the searcher lists as one Cube at its own address. The client's
+# massimo discover shows the box's answer first.
 compose up --detach box >/dev/null 2>&1 || compose up --detach box
 box_ip="$(ip_of box)"
-both() { search && cube_listed && grep -q "^$SERIAL $box_ip " <<<"$answers"; }
-within 30 both || fail "the searcher's search does not list $SERIAL from $cube_ip and from the box's $box_ip: ${answers:-nothing}"
-ok "with the box's proxy up, a search lists $SERIAL from the Cube's $cube_ip and from the box's $box_ip"
+box_answers() { compose exec -T client /m/massimo discover -json -wait 2s 2>/dev/null | grep -q "\"ip\": \"$box_ip\""; }
+within 30 box_answers || fail "the box's proxy does not answer the client's discover for $SERIAL"
+once() { search && cube_listed && [ "$(grep -c "^$SERIAL " <<<"$answers")" -eq 1 ]; }
+within 10 once || fail "the searcher's search does not list $SERIAL once, at $cube_ip: ${answers:-nothing}"
+ok "with the box's proxy up, a search lists $SERIAL once, at the Cube's $cube_ip, not at the box's $box_ip"
 
 # 5. serve announces itself beside avahi-daemon.
 box_log() { compose logs --no-color box 2>&1; }

@@ -940,7 +940,11 @@ paths:
         configured is announced as a cube_found event on every Cube's
         stream when it first answers, and again when it answers after a
         complete run without it; not after a restart. A found Cube that
-        does not answer a complete run leaves GET /api/v1/cubes.
+        does not answer a complete run leaves GET /api/v1/cubes. Each
+        Cube is listed once, at its own address where a massimo proxy
+        answers for it too; one configured by serial only keeps its
+        address while that answers, else takes the proxy's, else its
+        own, at most one move a run.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
