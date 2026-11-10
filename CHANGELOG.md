@@ -203,6 +203,10 @@ the next minor, a fix counts the suffix up.
 
 ### Fixed
 
+- A client of the proxy that asks for the pairing state as soon as the
+  Cube's end of pairing is relayed sees pairing ended, not still active
+  (`docs/proxy.md`, "Pairing").
+
 - The Debian package restarts a running service on an upgrade, also on
   the template's settings, and leaves a box that never ran stopped, even
   when a release changed the template's comments (`packaging/README.md`).

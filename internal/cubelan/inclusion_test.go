@@ -40,6 +40,47 @@ func TestPairedBeforeRelayed(t *testing.T) {
 	}
 }
 
+// The end of pairing is in the state once a watcher has the Cube's empty
+// N line, for the same reason: the proxy relays that line, and its
+// client may ask at once. It failed once in CI's armv6 job under QEMU
+// (TestProxyPairing, "pairing still active").
+func TestEndedBeforeRelayed(t *testing.T) {
+	c := New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	for i := 0; i < 2000; i++ {
+		if err := c.StartInclusion(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		lines, stop := c.WatchInclusion()
+		// The watcher spins rather than waits, so that it asks for the
+		// state the moment the line is there, as a client on another core
+		// can; a parked goroutine wakes too late to see the gap.
+		active, ready := make(chan bool, 1), make(chan struct{})
+		go func() {
+			close(ready)
+			for {
+				select {
+				case m, ok := <-lines:
+					if !ok || m.Type != 'N' || m.Data != "" {
+						t.Errorf("try %d: the watcher got %v, %v, want the empty N line", i, m, ok)
+					}
+					active <- c.Inclusion().Active
+					return
+				default:
+				}
+			}
+		}()
+		<-ready
+		c.handleNewDevice(cube.Message{Type: 'N'})
+		if <-active {
+			t.Fatalf("try %d: pairing still active when the watcher had its end", i)
+		}
+		if _, ok := <-lines; ok {
+			t.Fatalf("try %d: the watcher's channel is open after the end", i)
+		}
+		stop()
+	}
+}
+
 func TestInclusionDeliversNewDevices(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
