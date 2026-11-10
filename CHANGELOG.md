@@ -254,6 +254,10 @@ the next minor, a fix counts the suffix up.
   restored, which a backup check could take before the restored file
   became the reference; under QEMU the armv6 job found it.
 
+- A Cube's loss and return are logged before their events, the loss
+  also before the client reports the Cube lost, as `docs/proxy.md` says;
+  under QEMU the armv6 job found the other order.
+
 ### Security
 
 - The release build and the job holding the apt key restore no Actions

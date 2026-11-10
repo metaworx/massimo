@@ -706,9 +706,7 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { srv2.Close() })
 	eventually(t, "greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
-	// The client logs the return right after the event, so the line may
-	// still be on its way.
-	eventually(t, "the re-established line", func() bool { return logs.count("INFO", "cube connection re-established") >= 1 })
+	// The client logs the return before the event (AP LostOrder).
 	if n := logs.count("WARN", "cube connection lost"); n != 1 {
 		t.Errorf("%d cube connection lost lines, want 1", n)
 	}
@@ -777,6 +775,8 @@ func TestLostFromALossToTheNextGreeting(t *testing.T) {
 
 	srv.Close()
 	eventually(t, "the loss", c.Lost)
+	// The event follows Lost, and countEvents reads it on its own.
+	eventually(t, "the disconnected event", func() bool { return evs.get(EventDisconnected) >= 1 })
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
@@ -825,6 +825,62 @@ func TestSilentCubeIsLostAfterTwoPolls(t *testing.T) {
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
+}
+
+// holdLost is a log handler that holds the first "cube connection lost"
+// record until release is closed, and drops every other.
+type holdLost struct {
+	once    *sync.Once
+	held    chan struct{}
+	release chan struct{}
+}
+
+func (h holdLost) Enabled(context.Context, slog.Level) bool { return true }
+func (h holdLost) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h holdLost) WithGroup(string) slog.Handler            { return h }
+func (h holdLost) Handle(_ context.Context, r slog.Record) error {
+	if r.Message == "cube connection lost" {
+		h.once.Do(func() { close(h.held); <-h.release })
+	}
+	return nil
+}
+
+// A loss is reported in the order Lost promises: while the warning is
+// being written, Lost is false and no EventDisconnected is sent; after
+// it, both follow (AP LostOrder).
+func TestLostAfterItsWarning(t *testing.T) {
+	srv, addr := startFake(t)
+	h := holdLost{once: new(sync.Once), held: make(chan struct{}), release: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: slog.New(h)})
+	go c.Run(ctx)
+	eventually(t, "first greeting", c.Connected)
+
+	srv.Close()
+	select {
+	case <-h.held:
+	case <-time.After(10 * time.Second):
+		close(h.release)
+		t.Fatal("no cube connection lost warning")
+	}
+	lost := c.Lost()
+	var disconnected int
+	for drained := false; !drained; {
+		select {
+		case e := <-c.Events():
+			if e.Kind == EventDisconnected {
+				disconnected++
+			}
+		default:
+			drained = true
+		}
+	}
+	close(h.release)
+	if lost || disconnected != 0 {
+		t.Errorf("while the warning is written: lost %v, %d disconnected events", lost, disconnected)
+	}
+	eventually(t, "the loss after the warning", c.Lost)
 }
 
 // One poll the Cube answers late, or not at all, followed by one it
@@ -901,9 +957,7 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { srv.Close() })
 	eventually(t, "greeting", func() bool { return evs.get(EventConnected) == 1 })
-	// The client logs the return right after the event, so the line may
-	// still be on its way.
-	eventually(t, "the re-established line", func() bool { return logs.count("INFO", "cube connection re-established") >= 1 })
+	// The client logs the return before the event (AP LostOrder).
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
