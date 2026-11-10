@@ -1947,6 +1947,7 @@ paths:
                 backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
+                update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1967,8 +1968,11 @@ paths:
         only on request), the intervals at the next start; the whole
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
-        alone); null goes back to the default. Every value is checked
-        before any is written. The answer is that of GET.
+        alone); update.channel, devel, nightly, alpha, beta or stable,
+        the releases the box takes (its own flavour's and every more
+        stable one's; the default is the build's flavour); null goes back
+        to the default. Every value is checked before any is written. The
+        answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -2908,9 +2912,10 @@ components:
       type: object
       properties:
         current: {type: string, description: The running version}
-        channel: {type: string, description: The update channel, a branch name; the apt source's suite where apt owns the binary}
+        flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta or stable; absent for a build without the Makefile"}
+        channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the flavour; the apt source's suite where apt owns the binary"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
-        latest: {type: string, description: Newest signed release on the channel}
+        latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
         release_url: {type: string}
         available: {type: boolean, description: latest is newer than current}
         checked_at: {type: string, format: date-time}

@@ -1080,6 +1080,7 @@ The server's settings in the store:
   "poll_interval":     {"value": "1m",  "default": "1m",  "set": false, "in_effect": "1m",  "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
+  "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
 }
@@ -1114,11 +1115,15 @@ and the users sign in by OPAQUE alone, so that no password crosses;
 the API keys are not touched.
 A user still of `auth_version` 1 cannot sign in then,
 until someone with `users` sets a password for it.
+`update.channel` is the update channel (see `GET /api/v1/update`),
+one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
+the build's flavour by default, and applies at once;
+`MASSIMO_UPDATE_CHANNEL`, where set, is used instead, as `in_effect` shows.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
-and `auth.password_login` `true` or `false`.
+`auth.password_login` `true` or `false`, and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.
@@ -2078,14 +2083,19 @@ but the route answers all the same.
 
 ### GET /api/v1/update?refresh=1
 
-Whether a newer signed release is out on the server's update channel (the branch
-it was built from, or `MASSIMO_UPDATE_CHANNEL`;
-on a box the Debian package installed, the suite of its apt source).
+Whether a newer signed release is out on the server's update channel:
+`MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
+else the build's `flavour`, what it was released as;
+on a box the Debian package installed, the suite of its apt source.
+A channel takes the releases of its own flavour and of every more stable one,
+in the order `devel`, `nightly`, `alpha`, `beta`, `stable`
+([README.md](../README.md), "Versions").
 The server asks GitHub at most every ten minutes; `refresh` asks now.
 
 ```json
 {
   "current": "v0.1.0-alpha.9",
+  "flavour": "alpha",
   "channel": "alpha",
   "latest": "v0.1.0-alpha.10",
   "release_url": "https://github.com/metaworx/massimo/releases/tag/v0.1.0-alpha.10",
@@ -2116,6 +2126,9 @@ with `message` on failure.
 
 Asks the update helper to install the newest release on the channel:
 the server writes the channel into its request file,
+having stored it as `update.channel` first where the release is of another
+flavour and neither the variable nor the setting names a channel,
+so that a box on `beta` stays on it after installing a stable release;
 and the helper (started by `massimo-update.path` as root on Linux,
 by launchd's `ch.metaworx.massimo-update` on macOS,
 by the server itself as a detached process on Windows;

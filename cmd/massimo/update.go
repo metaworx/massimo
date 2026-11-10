@@ -22,30 +22,59 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
-// channel is the update channel, the branch the build was made from; set
-// at build time by the Makefile like version.
-var channel = ""
+// flavour is what the build was released as (update.Flavours), the
+// channel it follows unless told otherwise; set at build time by the
+// Makefile like version.
+var flavour = ""
 
 // packaged says whether a package manager owns this binary, in which case
 // update leaves the install to it; a variable for the test.
 var packaged = func() (install.Manager, bool) { return install.Packaged("") }
 
-// updateChannel is the channel updates come from: MASSIMO_UPDATE_CHANNEL,
-// else the one compiled in.
-func updateChannel() string {
+// Where updateChannel found the channel.
+const (
+	fromVariable = "MASSIMO_UPDATE_CHANNEL"
+	fromSetting  = "the setting update.channel"
+	fromFlavour  = "the build's flavour"
+)
+
+// updateChannel is the channel updates come from, as serve resolves it:
+// MASSIMO_UPDATE_CHANNEL, else the store's update.channel where
+// readStore allows reading it, else the build's flavour; and where it came from.
+// The store is opened read-only: a root process must not write serve's
+// store.
+func updateChannel(readStore bool) (string, string) {
 	if c := os.Getenv("MASSIMO_UPDATE_CHANNEL"); c != "" {
-		return c
+		return c, fromVariable
 	}
-	return channel
+	if readStore {
+		if c := storedUpdateChannel(); c != "" {
+			return c, fromSetting
+		}
+	}
+	return flavour, fromFlavour
+}
+
+// storedUpdateChannel is the store's update.channel, "" where it is not
+// set or there is no store to read.
+func storedUpdateChannel() string {
+	st, err := openStoreToRead()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+	c, _ := st.SettingString(context.Background(), store.UpdateChannelKey)
+	return c
 }
 
 func runUpdate(args []string) (err error) {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	check := fs.Bool("check", false, "only show whether a newer release is out")
-	ch := fs.String("channel", updateChannel(), "update channel: the branch whose releases to follow (default MASSIMO_UPDATE_CHANNEL, else the branch this build came from)")
+	ch := fs.String("channel", "", "update channel: devel, nightly, alpha, beta or stable, which takes its own and every more stable flavour's releases (default MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the build's flavour)")
 	want := fs.String("version", "", "install this release tag instead of the newest, even an older one")
 	rollback := fs.Bool("rollback", false, "go back to the binary before the last update (again: forward)")
 	binary := fs.String("binary", "", "the binary to replace (default: this one)")
@@ -57,13 +86,14 @@ func runUpdate(args []string) (err error) {
 	yes := fs.Bool("yes", false, "do not ask before installing")
 	force := fs.Bool("force", false, "also replace a development or modified build")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <branch>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update. Where a package manager owns massimo, update leaves the\ninstall to it, and the helper of the Debian package runs apt.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo update [-check] [-channel <name>] [-version <tag>] [-rollback] [-restart <unit> [-health <url>]]\n\nFind the newest signed release on the update channel on GitHub, verify\nit and replace this binary with it (the old one is kept as <binary>.prev).\nA release is installed only when it is newer than the running version,\nunless -version names it. Replacing an installed binary needs root (an\nadministrator on Windows, where the running .exe is renamed aside);\nsee packaging/README.md, also for the update helper that lets the web UI\nstart an update. Where a package manager owns massimo, update leaves the\ninstall to it, and the helper of the Debian package runs apt.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	ctx := context.Background()
+	chFrom := "-channel"
 	last := "" // the state this run last wrote to the status file
 	status := func(s update.Status) {
 		last = s.State
@@ -81,7 +111,7 @@ func runUpdate(args []string) (err error) {
 		if !ok {
 			return nil // the path unit fired for a request already taken
 		}
-		if c != "" {
+		if c != "" && *ch == "" {
 			*ch = c
 		}
 		*yes = true
@@ -94,6 +124,12 @@ func runUpdate(args []string) (err error) {
 				status(update.Status{State: "failed", From: version, Channel: *ch, Message: err.Error()})
 			}
 		}()
+	}
+
+	// The helper reads its channel from the request, and nothing else the
+	// server's user can write: not the store.
+	if *ch == "" {
+		*ch, chFrom = updateChannel(*request == "")
 	}
 
 	// A package manager that owns the binary keeps owning it: -check still
@@ -140,7 +176,7 @@ func runUpdate(args []string) (err error) {
 		}
 	}
 	if *want == "" && !update.ValidChannel(*ch) {
-		return errors.New("no update channel: set -channel or MASSIMO_UPDATE_CHANNEL (a build without the Makefile has none)")
+		return errors.New("no update channel: set -channel, MASSIMO_UPDATE_CHANNEL or the setting update.channel (a build without the Makefile has no flavour)")
 	}
 
 	status(update.Status{State: "checking", From: version, Channel: *ch})
@@ -159,12 +195,15 @@ func runUpdate(args []string) (err error) {
 		return err
 	}
 	newer := !curOK || update.Compare(rel.Version, cur) > 0
-	fmt.Printf("running:  %s (channel %s)\n", versionOr(version), versionOr(channel))
+	fmt.Printf("running:  %s (%s, channel %s from %s)\n", versionOr(version), versionOr(flavour), versionOr(*ch), chFrom)
 	fmt.Printf("release:  %s (%s, %s)\n          %s\n", rel.Tag, rel.Flavour, rel.Commit, rel.URL)
 	if *want == "" && !newer {
 		fmt.Println("up to date")
 		status(update.Status{State: "up-to-date", From: version, To: rel.Tag, Channel: *ch})
 		return nil
+	}
+	if chFrom == fromFlavour && rel.Flavour != flavour && *request == "" {
+		fmt.Printf("note: this box follows %s, its build's flavour; once %s is installed it follows %s, unless MASSIMO_UPDATE_CHANNEL or the setting update.channel names a channel\n", *ch, rel.Tag, rel.Flavour)
 	}
 	if *check {
 		fmt.Println("a newer release is out; `massimo update` installs it")

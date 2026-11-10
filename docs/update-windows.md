@@ -766,7 +766,7 @@ so a stub needs no second variable), and in the job:
    The list holds one of them at a time:
    the file is rewritten between the two runs.
 3. `install` again from the test-key `v0.0.0-ci.1` binary,
-   built with `-X main.channel=ci` as the stub's `v0.0.0-ci.2` is,
+   built with `-X main.flavour=ci` as the stub's `v0.0.0-ci.2` is,
    since a check leaves out unfetched a release whose tag names another channel,
    with `MASSIMO_UPDATE_API=http://127.0.0.1:8123` in `ci.env`;
    then the block of stage 1 twice:

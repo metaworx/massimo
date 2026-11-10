@@ -170,7 +170,7 @@ func runServe(args []string) error {
 		}
 	}
 	reboot := serveReboot(logger, allowReboot.on)
-	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
+	upd := server.UpdateOptions{Version: version, Flavour: flavour, Channel: os.Getenv("MASSIMO_UPDATE_CHANNEL"), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
 		packagedUpdate(&upd, m, "", os.Getenv)
 		if m.Name == "brew" {

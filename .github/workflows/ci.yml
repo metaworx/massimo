@@ -426,7 +426,7 @@ jobs:
           }
           EOF
           . ./ci-lib.sh
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo.exe ./cmd/massimo
           ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
@@ -577,9 +577,9 @@ jobs:
           # On the channel ci, which the stub's tags name, as release.yml's
           # do theirs (internal/update, hintedChannel).
           asset=massimo-windows-amd64.exe
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=ci" -o ci1.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=ci" -o ci1.exe ./cmd/massimo
           mkdir -p ci-stub/dl/v0.0.0-ci.2 ci-stub/dl/v0.0.0-ci.3
-          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.channel=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.flavour=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
           cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
           for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
             d="ci-stub/dl/$tag"
@@ -724,7 +724,7 @@ jobs:
           MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo ./cmd/massimo
           ./massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env

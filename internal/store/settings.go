@@ -21,6 +21,10 @@ const (
 	DiscoverIntervalKey = "discover_interval"
 )
 
+// UpdateChannelKey is the update channel the box follows, one of
+// update.Flavours as a JSON string; unset, it follows its build's flavour.
+const UpdateChannelKey = "update.channel"
+
 // Setting is one row of settings.
 type Setting struct {
 	Key       string
@@ -64,9 +68,9 @@ func (s *Store) Setting(ctx context.Context, key string) (json.RawMessage, bool,
 	return json.RawMessage(v), true, nil
 }
 
-// settingString returns a setting that holds a JSON string, "" when it
+// SettingString returns a setting that holds a JSON string, "" when it
 // is not set.
-func (s *Store) settingString(ctx context.Context, key string) (string, error) {
+func (s *Store) SettingString(ctx context.Context, key string) (string, error) {
 	v, ok, err := s.Setting(ctx, key)
 	if err != nil || !ok {
 		return "", err
@@ -80,7 +84,7 @@ func (s *Store) settingString(ctx context.Context, key string) (string, error) {
 
 // SettingDuration returns a duration setting, and whether it is set.
 func (s *Store) SettingDuration(ctx context.Context, key string) (time.Duration, bool, error) {
-	str, err := s.settingString(ctx, key)
+	str, err := s.SettingString(ctx, key)
 	if err != nil || str == "" {
 		return 0, false, err
 	}

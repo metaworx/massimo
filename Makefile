@@ -15,7 +15,7 @@ CHANNEL ?= $(shell b=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
 		b=$${c:-$$b}; \
 	fi; \
 	printf '%s' "$$b")
-LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.channel=$(CHANNEL)
+LDFLAGS  = -s -w -X main.version=$(VERSION) -X main.flavour=$(CHANNEL)
 PKG      = ./cmd/massimo
 OUT      = dist
 # Cross builds are static (no cgo) and do not record the build machine's paths.

@@ -14,6 +14,10 @@ the next minor, a fix counts the suffix up.
   every more stable flavour's; the rolling `devel` and `nightly` builds
   verify with a key of their own (`README.md`, "Versions").
 
+- The setting `update.channel` chooses the channel a box follows, its
+  build's flavour by default, and an update to another flavour keeps it
+  (`docs/api-v1.md`, "GET /api/v1/update").
+
 - The event stream gives every event an id and resumes after the last
   one a client read, or says `resync`; the web UI resumes with it
   (`docs/api-v1.md`, "GET …/events").

@@ -26,8 +26,8 @@ func serveBrewUpdate(log *slog.Logger, upd *server.UpdateOptions, m install.Mana
 		k, err = brewHelperPlan(exe, os.Geteuid(), job)
 	}
 	if err == nil {
-		if c := os.Getenv("MASSIMO_UPDATE_CHANNEL"); c != "" && c != channel {
-			err = fmt.Errorf("brew follows the channel %s of the formula %s; MASSIMO_UPDATE_CHANNEL=%s is not used under brew", channel, k.formula, c)
+		if c := os.Getenv("MASSIMO_UPDATE_CHANNEL"); c != "" && c != flavour {
+			err = fmt.Errorf("brew follows the channel %s of the formula %s; MASSIMO_UPDATE_CHANNEL=%s is not used under brew", flavour, k.formula, c)
 		}
 	}
 	var health string
@@ -43,5 +43,5 @@ func serveBrewUpdate(log *slog.Logger, upd *server.UpdateOptions, m install.Mana
 	upd.Request, upd.Status = filepath.Join(dir, "update-request"), filepath.Join(dir, "update-status.json")
 	restart := fmt.Sprintf("gui/%d/%s", os.Getuid(), job)
 	upd.Start = brewHelperStarter(log, exe, upd.Request, upd.Status, restart, health, filepath.Join(k.prefix, "var", "log", "massimo-update.log"))
-	upd.Managed, upd.Manager, upd.Channel = "", "brew", channel
+	upd.Managed, upd.Manager, upd.Channel = "", "brew", flavour
 }
