@@ -84,12 +84,12 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     `install` warning that the API is open to the LAN
     while the server signs users in (AuthWarning).
 13. **Housekeeping**:
-    the `.env` copies and the release key in the Mint box's session scratchpad,
+    the `.env` copies and the release key in the Linux test box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;
     `/etc/sudoers.d/massimo-test` on the Mac; on the Pi `~/massimo-alpha12.*`,
     `/usr/local/bin/massimo.alpha9.bak` and, once the M7 setup is settled,
     `/etc/massimo/env.before-m7` (keep `massimo.prev`);
-    on jaguar the merged branches `claude/tls*`, `backup/claude/tls*`,
+    on the development PC the merged branches `claude/tls*`, `backup/claude/tls*`,
     `claude/ci-update-race`, `claude/heuristic-noether-90a440`,
     `claude/store-c` and `claude/store-d*`,
     and the worktree `xenodochial-pasteur-c0e0c8` once its session is gone.

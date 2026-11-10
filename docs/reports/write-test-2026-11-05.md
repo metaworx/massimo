@@ -149,5 +149,5 @@ and nothing reports that except the device's link-error flag.
   Commands run from other machines should name the proxy with `-addr` instead of
   relying on the fallback.
 - The Pi's fixed addresses .200 (web UI and API) and .201 (Cube proxy) are
-  outside the router's DHCP range of 20 to 199 (confirmed by Martin).
+  outside the router's DHCP range of 20 to 199 (confirmed by the owner).
   The earlier .49 and .50 are no longer used.
