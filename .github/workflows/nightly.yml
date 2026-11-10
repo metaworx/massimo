@@ -1,0 +1,50 @@
+name: Nightly
+
+# The nightly build, release/nightly: once a day, and by hand with
+# `gh workflow run nightly.yml --ref main`. build.yml's What to release
+# takes the newest commit of main whose run of ci.yml had All tests
+# passed succeed and that is newer than the one the nightly build carries;
+# it runs no tests of its own. build.yml builds it and release.yml signs
+# it with the rolling key and publishes it, as ci.yml does for the devel
+# build; both see this workflow's event, schedule or workflow_dispatch,
+# from which the rolling job admits the flavour nightly alone, and its
+# ref, main, which the signing-rolling environment admits. The site is
+# deployed also for a run that has nothing to build.
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # actions: What to release reads ci.yml's runs; id-token and
+  # attestations: the build's provenance.
+  build:
+    name: Build
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build.yml
+
+  # contents to publish, pages and id-token to deploy the site.
+  release:
+    name: Release
+    needs: build
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      kind: ${{ needs.build.outputs.kind }}
+      tag: ${{ needs.build.outputs.tag }}
+      sha: ${{ needs.build.outputs.sha }}
+      version: ${{ needs.build.outputs.version }}
+      flavour: ${{ needs.build.outputs.flavour }}
+      release: ${{ needs.build.outputs.release }}
+      prerelease: ${{ needs.build.outputs.prerelease }}
