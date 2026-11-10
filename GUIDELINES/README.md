@@ -121,7 +121,7 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 - **Component:** required, but of a release and a merge: a name of letters, digits, `.`, `_`, `/` and `-`; behind a role's token, after a colon: `fix(security:api): Close a hole`.
 - **An incompatible change:** `feat(api)!: Remove a call`, or a `BREAKING CHANGE:` trailer.
 - **A plan's own commit:** `chore(aps): +Name v1.0` (COMMIT.md §6).
-- **An agent's commit:** ends with `Assisted-by: AGENT_NAME:MODEL_VERSION` - the tool or harness, then the exact model id, e.g. `Assisted-by: ClaudeCode:claude-opus-5-5` (COMMIT.md §3.3).
+- **An agent's commit:** ends with `Assisted-by: AGENT_NAME:MODEL_VERSION` - the tool or harness, then the exact model id, e.g. `Assisted-by: claude-code:claude-opus-5-5` (COMMIT.md §3.3).
 
 | Role | Opens with | For |
 |------|------------|-----|
@@ -129,7 +129,7 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 | fix | `fix:` | bug fixes |
 | security | `fix(security):` | security fixes and hardening |
 | cleanup | `style:` | formatting and layout only, no functional change |
-| wip | `style(wip):` for a rename, `chore(wip):` otherwise | an intermediate state; a non-wip commit follows |
+| wip | `wip:` | an intermediate state; a non-wip commit follows |
 | update | `chore:` | environment, dependency or test-config updates, plans |
 | release | `chore(release):` | the version bump, made by changelog.sh cut |
 | merge | `merge:` | a commit with more than one parent |
