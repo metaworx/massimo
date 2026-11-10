@@ -304,6 +304,10 @@ the logs and the user.
 Every release also carries a Debian package per architecture,
 `massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`,
 the release's version written as dpkg sorts it (`0.7.0~alpha.1` for `v0.7.0-alpha.1`).
+A package built between releases,
+such as a rolling build's or one of `make packages`,
+carries what `git describe` adds behind a `+` (`0.7.0~alpha.1+3.gabc1234`),
+so that dpkg sorts it after the release it follows and before the next one.
 The armhf one holds the armv6 binary and runs on every 32-bit Raspberry Pi OS,
 the Pi 1 and the Zero included (Debian's own armhf needs a Pi 2 or later).
 On a Debian, Ubuntu, Raspberry Pi OS or LoxBerry box:
