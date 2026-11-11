@@ -4,7 +4,7 @@
 pageContents, backToTop): their order, the row of section buttons,
 folding kept in the browser, back to top, the columns where there is
 room, and a Cube's panel in two columns."""
-from helpers import named_buttons, scroll_width, show_view, wait_until
+from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
 CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-roles", "sys-caps", "sys-backup"]
 
@@ -122,6 +122,10 @@ def test_header_and_page_bar_stay(page, case):
         const y = document.getElementById('sys-users').getBoundingClientRect().top;
         return y >= bar - 1 && y <= bar + 40;
     })()""", 5), "the card chosen comes in under the row"
+    # an instant scroll sent while the menu's smooth one ends can be undone
+    # by it (scroll_settled)
+    assert scroll_settled(page), "the menu's scroll comes to rest"
     page.evaluate("window.scrollTo(0, 0)")
-    assert wait_until(page, "!document.body.classList.contains('scrolled')", 3), "at the top the header is whole again"
+    assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
+        "at the top the header is whole again"
     show_view(page, "tiles")
