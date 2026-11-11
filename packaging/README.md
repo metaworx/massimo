@@ -292,7 +292,7 @@ Its certificate then goes into Massimo's files instead of nginx's:
 A="--home /etc/acme.sh --config-home /etc/acme.sh --cert-home /etc/acme.sh/certs"
 sudo acme.sh $A --install-cert -d massimo.example.net --ecc \
     --fullchain-file /etc/massimo/cert.pem --key-file /etc/massimo/key.pem \
-    --reloadcmd "chown massimo:massimo /etc/massimo/cert.pem /etc/massimo/key.pem"
+    --reloadcmd "chown _massimo:_massimo /etc/massimo/cert.pem /etc/massimo/key.pem"
 sudo massimo install -tls-cert /etc/massimo/cert.pem -tls-key /etc/massimo/key.pem
 ```
 
