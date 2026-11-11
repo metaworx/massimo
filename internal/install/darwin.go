@@ -48,7 +48,7 @@ const (
 	DarwinLog      = LogDir + "/serve.log"
 	// DarwinStderrLog is launchd's file of serve's stderr, which holds
 	// only what the Go runtime prints itself: serve writes DarwinLog.
-	DarwinStderrLog = "/var/log/massimo-serve.stderr.log"
+	DarwinStderrLog = LogDir + "/serve.stderr.log"
 	// darwinLogGroup reads the log, as adm does on Linux.
 	darwinLogGroup = "admin"
 
@@ -296,33 +296,37 @@ func (in *installer) checkDarwinSettings() {
 
 // logFiles hands an older release's log, which launchd wrote, to the
 // admin group, 0640, as serve makes the files it rotates; and makes
-// launchd's file of serve's stderr the service user's, which launchd
-// opens as that user, the admin group's to read. It lies in /var/log,
-// which only root may write, so it cannot be swapped for a link.
+// launchd's file of serve's stderr beside it the service user's, which
+// launchd opens as that user, the admin group's to read. A link the
+// service user put in their place is left alone: a link gains them
+// nothing at launchd's open, but root's chmod would follow it.
 func (in *installer) logFiles() error {
-	if fi, err := os.Lstat(in.path(DarwinLog)); err == nil && fi.Mode().IsRegular() {
-		if err := in.run("chown", "-h", DarwinUser+":"+darwinLogGroup, in.path(DarwinLog)); err != nil {
-			return err
-		}
-		if err := in.run("chmod", "0640", in.path(DarwinLog)); err != nil {
-			return err
-		}
-	}
-	p := in.path(DarwinStderrLog)
-	if _, err := os.Lstat(p); errors.Is(err, os.ErrNotExist) {
+	stderr, made := in.path(DarwinStderrLog), false
+	if _, err := os.Lstat(stderr); errors.Is(err, os.ErrNotExist) {
 		in.say("make %s", DarwinStderrLog)
+		made = true
 		if !in.DryRun {
-			f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
+			// O_EXCL follows no link.
+			f, err := os.OpenFile(stderr, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 			if err != nil {
 				return err
 			}
 			f.Close()
 		}
 	}
-	if err := in.run("chown", "-h", DarwinUser+":"+darwinLogGroup, p); err != nil {
-		return err
+	for _, p := range []string{in.path(DarwinLog), stderr} {
+		fi, err := os.Lstat(p)
+		if !(p == stderr && made) && (err != nil || !fi.Mode().IsRegular()) {
+			continue
+		}
+		if err := in.run("chown", "-h", DarwinUser+":"+darwinLogGroup, p); err != nil {
+			return err
+		}
+		if err := in.run("chmod", "0640", p); err != nil {
+			return err
+		}
 	}
-	return in.run("chmod", "0640", p)
+	return nil
 }
 
 // darwinUser makes the hidden system user and group _massimo, with the
@@ -520,7 +524,7 @@ func RemoveDarwin(o Options, purge bool) error {
 		fmt.Fprintf(in.Out, "kept %s, %s, %s and the user %s (remove them with -purge)\n", EnvDir, StateDir, LogDir, DarwinUser)
 		return nil
 	}
-	for _, p := range []string{EnvDir, StateDir, HelperStateDir, LogDir, DarwinStderrLog, HelperLog, RebootLog} {
+	for _, p := range []string{EnvDir, StateDir, HelperStateDir, LogDir, HelperLog, RebootLog} {
 		in.remove(p, true)
 	}
 	if in.Root == "" && in.Run(dscl, ".", "-read", "/Users/"+DarwinUser) != nil {

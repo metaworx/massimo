@@ -56,10 +56,10 @@
 	  on stderr (-log-process-format none). launchd appends stderr to this
 	  file, which then holds only what serve prints before its log and
 	  what the Go runtime prints itself, such as a panic; install makes
-	  it _massimo's, as launchd opens it as the job's user, in /var/log,
-	  where only root may write, so that it cannot be swapped for a link.
+	  it _massimo's, the group admin's to read, as launchd opens it as
+	  the job's user.
 	-->
 	<key>StandardErrorPath</key>
-	<string>/var/log/massimo-serve.stderr.log</string>
+	<string>/var/log/massimo/serve.stderr.log</string>
 </dict>
 </plist>

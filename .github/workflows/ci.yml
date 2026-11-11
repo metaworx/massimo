@@ -901,7 +901,7 @@ jobs:
 
           sudo ./massimo install -remove -purge
           if sudo launchctl print system/ch.metaworx.massimo >/dev/null 2>&1; then echo "::error::still loaded"; exit 1; fi
-          for p in /usr/local/bin/massimo /etc/massimo /var/lib/massimo /var/log/massimo /var/log/massimo-serve.stderr.log \
+          for p in /usr/local/bin/massimo /etc/massimo /var/lib/massimo /var/log/massimo \
                    /Library/LaunchDaemons/ch.metaworx.massimo.plist /Library/LaunchDaemons/ch.metaworx.massimo-update.plist; do
             if [ -e "$p" ]; then echo "::error::$p left"; exit 1; fi
           done

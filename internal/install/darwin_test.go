@@ -109,8 +109,8 @@ func TestInstallDarwinNoHelperAndTemplate(t *testing.T) {
 		t.Errorf("env template: %s", env)
 	}
 	// serve writes the log in the service user's directory, the admin
-	// group's to read; launchd's file of its stderr is the service user's,
-	// in root's /var/log.
+	// group's to read; launchd's file of its stderr beside it is the
+	// service user's.
 	if !rec.has("chown _massimo:admin "+filepath.Join(root, LogDir)) || !rec.has("chmod 0750 "+filepath.Join(root, LogDir)) {
 		t.Errorf("log directory: %q", rec.cmds)
 	}

@@ -1110,8 +1110,8 @@ and in the update helper are the same everywhere:
   in `/var/log/massimo`, `_massimo:admin` 0750
   (install warns of a `MASSIMO_LOG` in the settings, which the flag overrides);
   `-log-process-format none` keeps it off stderr, which launchd appends to
-  `/var/log/massimo-serve.stderr.log`, `_massimo`'s (launchd opens it as the
-  job's user) in root's `/var/log`, so that it cannot be swapped for a link,
+  `/var/log/massimo/serve.stderr.log`, `_massimo:admin` 0640
+  (launchd opens it as the job's user),
   and which holds only what serve prints before its log
   and what the Go runtime prints itself, such as a panic.
 - the LaunchDaemon `ch.metaworx.massimo` in `/Library/LaunchDaemons`:
@@ -1173,7 +1173,9 @@ brew services start massimo-alpha
 The formula builds `bin/massimo` with Go,
 writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
 keeps the store in `$(brew --prefix)/var/massimo` and the log in
-`$(brew --prefix)/var/log/massimo.log`,
+`$(brew --prefix)/var/log/massimo/serve.log`,
+which serve writes and rotates itself (`-log`, `-log-process-format none`;
+`var/log/massimo.log` takes only what it prints before the log),
 and its service runs `massimo serve -listen :8099` as you while you are logged in;
 `sudo brew services start massimo-alpha` installs a LaunchDaemon that runs as
 root at boot instead.

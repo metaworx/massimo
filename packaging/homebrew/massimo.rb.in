@@ -26,7 +26,7 @@ class @CLASS@ < Formula
     (share/"massimo"/"packaged").write "brew\nbrew upgrade @NAME@\nbrew uninstall @NAME@\n"
     template = (buildpath/"packaging/env.template").read
     template = template.sub("MASSIMO_LOG=/var/log/massimo/serve.log",
-                            "# The log is #{var}/log/massimo.log, written by brew services; no MASSIMO_LOG here.")
+                            "# The log is #{var}/log/massimo/serve.log: the service passes -log; no MASSIMO_LOG here.")
     (share/"massimo"/"env.template").write template
   end
 
@@ -36,7 +36,7 @@ class @CLASS@ < Formula
   post_install_steps do
     mkdir_p "massimo", base: :etc
     mkdir_p "massimo", base: :var
-    mkdir_p "log", base: :var
+    mkdir_p "log/massimo", base: :var
     unless_path_exists "massimo/env", base: :etc do
       copy "share/massimo/env.template", "massimo/env", source_base: :prefix, target_base: :etc
       set_permissions "massimo/env", "0600", base: :etc
@@ -44,7 +44,10 @@ class @CLASS@ < Formula
   end
 
   service do
-    run [opt_bin/"massimo", "-env", etc/"massimo/env", "-data", var/"massimo", "serve", "-listen", ":8099"]
+    # serve writes and rotates its log itself, as on every platform;
+    # brew's file takes what it prints before the log, and a panic.
+    run [opt_bin/"massimo", "-env", etc/"massimo/env", "-data", var/"massimo", "serve", "-listen", ":8099",
+         "-log", var/"log/massimo/serve.log", "-log-process-format", "none"]
     keep_alive true
     working_dir var/"massimo"
     log_path var/"log/massimo.log"
