@@ -264,7 +264,28 @@ there `curl` and `jq`, which the package suggests without installing them,
 the token file and the `massimo install` line are all it takes,
 with `-acme-dns-hook /usr/share/massimo/acme-dns-hooks/<provider>.sh`.
 
-Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:
+For a DNS provider without a script here,
+an ACME client that knows its API writes the files of `-tls-cert` and `-tls-key`,
+and the server takes up each renewal by itself:
+acme.sh has DNS API scripts for well over a hundred providers (`--dns dns_<provider>`,
+with the variables its wiki names for each),
+lego (`--dns <provider>`) about as many, certbot's DNS plugins the common ones.
+acme.sh is set up as in docs/reverse-proxy.md, step 3:
+its directories, the token kept for the renewals,
+and the timer Debian's package lacks.
+Its certificate then goes into Massimo's files instead of nginx's:
+
+```bash
+A="--home /etc/acme.sh --config-home /etc/acme.sh --cert-home /etc/acme.sh/certs"
+sudo acme.sh $A --install-cert -d massimo.example.net --ecc \
+    --fullchain-file /etc/massimo/cert.pem --key-file /etc/massimo/key.pem \
+    --reloadcmd "chown massimo:massimo /etc/massimo/cert.pem /etc/massimo/key.pem"
+sudo massimo install -tls-cert /etc/massimo/cert.pem -tls-key /etc/massimo/key.pem
+```
+
+`massimo install` reads the files before it writes them back as the service user's,
+and the `chown` keeps them so after each renewal.
+certbot does the same for Infomaniak:
 `certbot certonly --authenticator dns-infomaniak -d massimo.example.net` with
 the plugin `certbot-dns-infomaniak` (`pip install`) and its credentials file
 (`dns_infomaniak_token = …`, mode 0600, `--dns-infomaniak-credentials`),
@@ -272,7 +293,9 @@ plus the deploy hook above that copies the files;
 certbot's renewal service sees no shell environment,
 so the token goes into the credentials file or the unit's `Environment=`.
 `lego --dns infomaniak -d massimo.example.net run` with
-`INFOMANIAK_ACCESS_TOKEN` is the other way.
+`INFOMANIAK_ACCESS_TOKEN` is the other way,
+with a newer lego than Debian 13's 4.9.1, which fails with Infomaniak
+(docs/reverse-proxy.md, step 3).
 An install with another `-tls` mode removes the variables of the one before
 (`MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`,
 `MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`,
