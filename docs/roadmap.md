@@ -30,8 +30,8 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
    the checks "Debian package (debian:trixie-slim)" and "(debian:bookworm-slim)"
    added to the ruleset on `main`;
    the repository `metaworx/homebrew-massimo` created,
-   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY`,
-   then `gh workflow run publish.yml -f tag=<newest release>` once;
+   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY` of the `signing` environment,
+   then `gh workflow run publish.yml --ref <tag> -f tag=<tag>` once;
    until then the tap job skips itself.
    The first release with the deploy key set proves the Homebrew job.
 3. **Packaging, the rest**

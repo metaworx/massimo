@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.39.0)
+# Massimo — CI Conventions (v1.40.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -368,7 +368,7 @@ and on 2026-11-08 it read a Dependabot pull request's that way.
 | `MASSIMO_ROLLING_KEY` | the `signing-rolling` environment, usable by `main` only | release.yml's `rolling`, to sign the manifest of a `devel` or `nightly` build; its public half is `internal/update/rolling-key.pem`, which boxes accept for those two flavours alone |
 | `ROLLING_TAG_DEPLOY_KEY` | the `signing-rolling` environment; its public half a deploy key with write access, "rolling tags (release.yml)" | release.yml's `rolling`, to move `release/devel` and `release/nightly` to the new build (section 6); without it the token tries |
 | `RELEASE_BRANCH_DEPLOY_KEY` | the `signing` environment; its public half a deploy key with write access, "release branches (release.yml)" | release.yml's `sign`, to fast-forward `release/<flavour>` to the published release (section 6); without it the branch stays |
-| `HOMEBREW_TAP_DEPLOY_KEY` | a repository secret, once the owner has made the tap and the key (packaging/README.md, "Homebrew") | publish.yml, handed over by release.yml's `homebrew` job, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
+| `HOMEBREW_TAP_DEPLOY_KEY` | the `signing` environment (packaging/README.md, "Homebrew"); a repository secret until 2026-11-11, which any run on any branch could read (D56-A) | publish.yml, called by release.yml's `homebrew` job, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
 | `MASSIMO_APT_KEY`, `MASSIMO_APT_KEY_PASSPHRASE` | the `signing` environment, once the owner has made the key (packaging/README.md, "The apt repository") | release.yml's `apt-build` job, to sign the apt suites; the site's `massimo.asc` is its public half; without them the apt jobs are skipped |
 | `GITHUB_TOKEN` | provided by GitHub | the release jobs to publish, the Windows and macOS jobs as `MASSIMO_GITHUB_TOKEN`, for the release checks against the API's rate limit and the release files through the API |
 
@@ -486,6 +486,15 @@ so that a red newest commit does not cost a night whose second-last was green
 (the owner's rule); `meta` reads the runs with `actions: read`,
 which the `build` jobs of ci.yml and nightly.yml grant.
 `rolling` takes `nightly` only from the schedule or by hand on `main`.
+Where `main`'s head is a release commit, its version tag at it,
+the nightly build builds nothing and deploys no site,
+by `meta`'s output `site` and release.yml's input (D55-A):
+the tag's run deploys the same commit,
+and Pages keeps the first deploy of a commit.
+On 2026-11-11 the nightly build started while the release of v0.14.0-alpha.1
+waited for its approval, deployed the site with the index of the release before,
+and the release's own deploy of the commit reported success and changed nothing,
+so that apt did not offer the release until a nightly build of the next commit.
 The rolling builds' tags are no versions,
 so every `git describe` asks for the version tags alone (`--match 'v[0-9]*'`):
 the Makefile's `VERSION` and `FLAVOUR`, `make release-alpha`'s check,
@@ -505,22 +514,38 @@ The boxes on the alpha channel (the Raspberry Pi) take a release through
 `massimo update` or the web UI;
 nothing in CI touches them.
 The Homebrew formula is pushed from the same run:
-release.yml's `homebrew` job calls publish.yml once `sign` has published the release.
+release.yml's `homebrew` job calls publish.yml,
+which pushes it once `sign` has published the release.
 publish.yml does not listen for `release: published` itself,
 because the release is created with the run's own `GITHUB_TOKEN`,
 and GitHub starts no workflow for an event that token causes
 (only `workflow_dispatch` and `repository_dispatch` are exempt):
 until this was moved, the tap was never updated and nothing said so.
 A release published before the tap existed gets its formula by hand,
-`gh workflow run publish.yml -f tag=<tag>`,
+`gh workflow run publish.yml --ref <tag> -f tag=<tag>`,
+on the tag since the `signing` environment admits `v*` tags alone,
 which renders the formula from the tag's own template
 and changes nothing when the tap holds it already.
 A release also carries a Debian package per architecture,
 and once the apt key is set the `apt-build` job rebuilds the apt repository from
 the newest ten releases of every channel (`packaging/apt/publish.sh`,
 one suite per channel) and hands it to the job `site` as the artifact `apt`.
+A release asks for the owner's approval once (D57-A, 2026-11-11).
+`sign`, `apt-build` and publish.yml's job each hold a key of `signing`,
+and one review lets every job of the run waiting on it then run,
+so the three start together.
+The other two wait for "Sign and publish" to succeed,
+and stop when it ended otherwise (`packaging/wait-for-job.sh`);
+reading the run's jobs takes `actions: read`,
+which ci.yml's and nightly.yml's `release` jobs grant.
+With `needs: sign` they reached the environment after it,
+and GitHub asked again.
+An approval cannot be handed from one job to another,
+but by a custom deployment protection rule,
+a GitHub App the project would host.
 `site` (site.yml, `packaging/site/build.sh`; packaging/README.md, "The site")
-runs at every run of release.yml, after `apt-build` and the rolling build:
+runs at every run of release.yml,
+after `sign`, `apt-build` and the rolling build:
 it puts the pages of `packaging/site/` at the root and the docs of every
 channel under `docs/`, and deploys it to the project's GitHub Pages,
 <https://massimo.metaworx.ch> by the custom domain of the repository's Pages settings

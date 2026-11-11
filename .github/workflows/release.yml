@@ -19,9 +19,12 @@ name: Release
 # rolling key, through the signing-rolling environment, which main may
 # use, and whose key boxes accept for the rolling flavours alone, as the
 # one release release/<flavour>, replaced in place. `homebrew` then pushes
-# the formula to the tap (publish.yml). `apt-build` holds the apt
-# repository's key through the same environment and rebuilds the
-# repository from the releases (packaging/apt/publish.sh); `site`
+# the formula to the tap (publish.yml) with the tap's key, and
+# `apt-build` holds the apt repository's key, both through the signing
+# environment too, and rebuilds the repository from the releases
+# (packaging/apt/publish.sh). Both start beside `sign` and wait for it
+# inside (packaging/wait-for-job.sh), so that one approval lets the
+# three of them run (D57-A, 2026-11-11); `site`
 # (site.yml) builds the site around it, with the docs of every channel,
 # and puts it on GitHub Pages, also for a run that releases nothing, from
 # the newest release's signed index. The tag's message is the release's
@@ -58,6 +61,11 @@ on:
         description: 'whether a release is a pre-release (true or false)'
         type: string
         required: true
+      site:
+        description: 'false where the site is not to be deployed (a nightly build at a release commit)'
+        type: string
+        required: false
+        default: 'true'
 
 permissions:
   contents: read
@@ -332,14 +340,21 @@ jobs:
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the
   # tap's deploy key. It runs from here because the release this run
-  # creates with its own token starts no workflow of its own.
+  # creates with its own token starts no workflow of its own. It starts
+  # beside sign and waits for it inside (wait), in the signing
+  # environment, so that one approval lets sign, apt-build and it run:
+  # GitHub asks again for a job that reaches the environment later.
+  # actions: the wait reads this run's jobs.
   homebrew:
     name: Homebrew
-    needs: sign
     if: inputs.kind == 'release'
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ inputs.tag }}
+      wait: true
     secrets:
       HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
@@ -353,14 +368,17 @@ jobs:
   # massimo-apt-index.tar.gz, with pool.tsv naming where each package
   # comes from, so that a site rebuilt from main serves the repository
   # without the key, which stays with the tags.
+  # It starts beside sign, as homebrew does, and waits for it first
+  # (packaging/wait-for-job.sh), so that one approval lets both run;
+  # actions: the wait reads this run's jobs.
   apt-build:
     name: Build the apt repository
-    needs: sign
     if: inputs.kind == 'release'
     runs-on: ubuntu-latest
     environment: signing
     permissions:
       contents: write
+      actions: read
     outputs:
       built: ${{ steps.site.outputs.built }}
     env:
@@ -368,6 +386,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.HAS_APT_KEY == 'true'
+
+      # The repository is built from the published releases, this one's
+      # among them.
+      - name: Wait for Sign and publish
+        if: env.HAS_APT_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: packaging/wait-for-job.sh "Sign and publish"
 
       # nfpm, for the keyring package, through go run at the Makefile's
       # version; no cache in a job that holds the apt key.
@@ -415,12 +441,15 @@ jobs:
   # published; the apt repository apt-build has just signed, or else the
   # newest release's signed index. For every run, so that a push to main
   # brings its docs onto the site; not where apt-build or the rolling
-  # build failed.
+  # build failed, nor where the caller says so: a nightly build at a
+  # release commit leaves the deploy to the tag's run, since Pages keeps
+  # the first deploy of a commit.
   site:
     name: Site
-    needs: [ apt-build, rolling ]
+    needs: [ sign, apt-build, rolling ]
     if: >-
-      ${{ !cancelled()
+      ${{ !cancelled() && inputs.site != 'false'
+      && contains(fromJSON('["success","skipped"]'), needs.sign.result)
       && contains(fromJSON('["success","skipped"]'), needs.apt-build.result)
       && contains(fromJSON('["success","skipped"]'), needs.rolling.result) }}
     permissions:
