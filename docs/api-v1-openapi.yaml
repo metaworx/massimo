@@ -1796,7 +1796,7 @@ paths:
         - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
         - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
         - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
-        - {name: source, in: query, description: "Only events of this source: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's (a command's steps, its holds), the server's sign-ins", schema: {type: string, enum: [device, cube, system, config, queue, server]}}
+        - {name: source, in: query, description: "Only events of this source: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's (a command's steps, its holds), the server's sign-ins, the LAN proxy's", schema: {type: string, enum: [device, cube, system, config, queue, server, proxy]}}
         - {name: level, in: query, description: "Only events of this level and above; info by default", schema: {type: string, enum: [debug, info, warn, error], default: info}}
         - {name: device, in: query, description: "Only events of this device, by its serial number or its radio address, also one the Cube no longer has", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
         - {name: user, in: query, description: "Only events this user started, by the login name, a removed user's too; a name the server does not know answers an empty page", schema: {type: string, example: anna}}
@@ -1815,7 +1815,7 @@ paths:
                     kind: {type: string}
                     device: {type: string, description: The device's radio address}
                     serial: {type: string, description: "The device's serial number, also before it has a state and after it is gone; the Cube's for its own configuration"}
-                    source: {type: string, enum: [device, cube, system, config, queue, server], description: "Whose the event is: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's, the server's sign-ins"}
+                    source: {type: string, enum: [device, cube, system, config, queue, server, proxy], description: "Whose the event is: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's, the server's sign-ins, the LAN proxy's"}
                     level: {type: string, enum: [debug, info, warn, error]}
                     summary: {type: object, description: "What a line holds in short: a connection's devices, rooms, firmware, duty_cycle_pct, free_memory_slots, cause and down_for_s; a hello's budget; a list's rooms and devices; a configuration's main values"}
                     list_changes:
@@ -1871,7 +1871,10 @@ paths:
         step of the command named in "command": its state queued, sent,
         acknowledged, retried, dropped or failed) and hold (the radio
         commands waiting); the server's sign-ins, source server, for a
-        user with audit alone: login, login_failed, locked_out. A state
+        user with audit alone: login, login_failed, locked_out; the LAN
+        proxy's, source proxy: proxy_connected, proxy_disconnected,
+        proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
+        proxy_pairing, proxy_warning. A state
         event after a device's first one has "changes": per changed value
         of state, {"from": …, "to": …} (null for a value the device did not
         have), and "reported" when the Cube gained or lost its state. A

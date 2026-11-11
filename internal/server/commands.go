@@ -170,6 +170,9 @@ func (o *stepObserver) started(cmd engine.Command) {
 		o.s.log.Error("commands: step not marked sent", "step", id, "error", err)
 	}
 	o.stepEvent(cmd, o.of[cmd.Seq], id, store.StateSent, "debug", nil)
+	if cmd.Target != 0 && radioLines(cmd) > 0 {
+		o.rt.sentTo.sent(cmd.Target, o.of[cmd.Seq])
+	}
 }
 
 func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
@@ -205,6 +208,9 @@ func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 	}
 	if state != store.StateAcknowledged {
 		level, summary["error"] = "warn", result["error"]
+		if cmd.Target != 0 {
+			o.rt.sentTo.forget(cmd.Target, parent)
+		}
 	}
 	o.stepEvent(cmd, parent, id, state, level, summary)
 }

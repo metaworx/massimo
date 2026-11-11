@@ -391,6 +391,9 @@ type runtime struct {
 	// evlog takes the events' lines (eventline.go): the server's root
 	// logger, each line saying its own source.
 	evlog *slog.Logger
+	// sentTo names, per device, the command last sent to it, for the
+	// device's next state line (proxylog.go).
+	sentTo stateCommands
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -834,6 +837,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 							ev.Changes = view.Changes(prev, dv.State)
 						}
 						rt.last[e.Device] = dv.State
+						ev.Command = rt.sentTo.take(e.Device)
 					}
 				}
 			}

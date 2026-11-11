@@ -7,12 +7,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -388,6 +391,9 @@ func TestSetpointLinesByCommand(t *testing.T) {
 		getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+id, &evs)
 		got = got[:0]
 		for _, e := range evs {
+			if e.Kind == "state" {
+				continue // a device's new state, where the room's command reached one
+			}
 			state, _ := e.Summary["state"].(string)
 			got = append(got, e.Kind+":"+state+":"+e.Level)
 			if e.Command != rows[0].CommandID {
@@ -445,5 +451,76 @@ func TestSignInLinesForAuditorsAlone(t *testing.T) {
 	}
 	if n := sees(&subscriber{audit: true}); n != 3 {
 		t.Errorf("an auditor's stream sees %d sign-in lines, want 3", n)
+	}
+}
+
+// A proxy client's setpoint is a command of the store, with no user and
+// the client's address, whose step and the device's next state are found
+// by ?command=; the client's connection is a line of source proxy.
+func TestProxyClientsCommandInTheLog(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyAddr := ln.Addr().String()
+	ln.Close()
+	fc, ts, _, st := startStored(t, Options{PollInterval: 50 * time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}})
+	conn, r := proxyClient(t, proxyAddr)
+	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d}, 21, cube.ModeManual, cube.Until{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The S reply, past the L lines the proxy pushes as the polls come.
+	conn.Write([]byte(m.Wire()))
+	for {
+		reply, err := r.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reply.Type == 'S' {
+			break
+		}
+		if reply.Type != 'L' {
+			t.Fatalf("%s answered %v", m, reply)
+		}
+	}
+	var id int64
+	eventually(t, "the proxy client's command acknowledged", func() bool {
+		var evs []event
+		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?source=queue", &evs)
+		for _, e := range evs {
+			if e.Kind == "command" && e.Summary["state"] == store.StateAcknowledged {
+				id = e.Command
+			}
+		}
+		return id != 0
+	})
+	c, ok, err := st.Command(t.Context(), id)
+	if err != nil || !ok || c.Action != "proxy.radio" || c.Target != "device:0a010d" || c.UserID != 0 || len(c.Steps) != 1 || !strings.Contains(string(c.Request), `"remote":"127.0.0.1:`) {
+		t.Fatalf("the proxy client's command: %+v %v %v", c, ok, err)
+	}
+	eventually(t, "the command finished", func() bool {
+		c, _, _ = st.Command(t.Context(), id)
+		return c.State == store.StateAcknowledged
+	})
+
+	// The device's new state names the command.
+	greeting, _ := fakecube.LoadGreeting(fixture)
+	raw, _ := base64.StdEncoding.DecodeString(greeting[len(greeting)-1].Data)
+	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
+	eventually(t, "the state line of the command", func() bool {
+		var evs []event
+		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+strconv.FormatInt(id, 10), &evs)
+		kinds := map[string]bool{}
+		for _, e := range evs {
+			kinds[e.Kind] = true
+		}
+		return kinds["command"] && kinds["state"]
+	})
+	var evs []event
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?source=proxy", &evs)
+	if len(evs) == 0 || evs[0].Kind != "proxy_connected" || !strings.HasPrefix(fmt.Sprint(evs[0].Summary["remote"]), "127.0.0.1:") {
+		t.Fatalf("the proxy's lines: %+v", evs)
 	}
 }

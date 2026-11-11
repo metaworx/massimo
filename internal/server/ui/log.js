@@ -22,7 +22,8 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "login", "login_failed", "locked_out"];
+  "change", "command", "hold", "login", "login_failed", "locked_out",
+  "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
 // LOG_COUNT events, the last 10 minutes, the last hour, today, this week
@@ -53,7 +54,7 @@ const logState = {
 
 // LOG_SOURCES are the sources of an event, as the server names them, in
 // the order of the source choice.
-const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server"];
+const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server", "proxy"];
 
 // LOG_KIND_SOURCE groups the kinds by the source they come from, for the
 // kind choice; a kind of more than one (config) goes with the devices.
@@ -64,6 +65,8 @@ const LOG_KIND_SOURCE = {
   change: "config",
   command: "queue", hold: "queue",
   login: "server", login_failed: "server", locked_out: "server",
+  proxy_connected: "proxy", proxy_disconnected: "proxy", proxy_refused: "proxy", proxy_discarded: "proxy",
+  proxy_deleted: "proxy", proxy_delete_refused: "proxy", proxy_pairing: "proxy", proxy_warning: "proxy",
 };
 
 // LOG_LEVELS are the levels of an event, lowest first, as the server
@@ -311,6 +314,24 @@ function logSummaryText(kind, s) {
       return t("log.sum.login", { user: s.user || "–", remote: s.remote || "–" });
     case "login_failed":
       return t("log.sum.loginFailed", { user: s.user || "–", remote: s.remote || "–" });
+    case "proxy_connected":
+      return t("log.sum.proxyConnected", { remote: s.remote || "–" });
+    case "proxy_disconnected":
+      return t("log.sum.proxyDisconnected", { remote: s.remote || "–" });
+    case "proxy_refused":
+      return t("log.sum.proxyRefused", { remote: s.remote || "–" });
+    case "proxy_discarded":
+      return t("log.sum.proxyDiscarded", { remote: s.remote || "–", duty: num(s.duty_pct) });
+    case "proxy_deleted":
+      return t("log.sum.proxyDeleted", { remote: s.remote || "–", devices: (s.devices || []).join(", ") || "–" });
+    case "proxy_delete_refused":
+      if (s.why === "hidden") return t("log.sum.proxyDeleteHidden", { remote: s.remote || "–", devices: (s.devices || []).join(", ") || "–" });
+      return t("log.sum.proxyDeleteRefused", { remote: s.remote || "–" });
+    case "proxy_pairing":
+      if (s.joined) return t("log.sum.proxyJoined", { remote: s.remote || "–" });
+      return t("log.sum.proxyPairing", { remote: s.remote || "–", seconds: num(s.seconds) });
+    case "proxy_warning":
+      return logWord("log.proxyWarn.", s.what);
     case "locked_out":
       return t("log.sum.lockedOut", { remote: s.remote || "–", for: s.for || "–", after: logWord("log.lockedAfter.", s.after) });
   }

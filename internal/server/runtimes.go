@@ -234,7 +234,8 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 		return false
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
-		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial())})
+		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
+		OnEvent: rt.proxyEvent, Command: s.proxyCommand(rt)})
 	var r *proxy.Responder
 	if pl.Discovery {
 		if r = s.ensureResponder(); r != nil {

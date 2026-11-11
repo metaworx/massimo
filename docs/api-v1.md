@@ -850,6 +850,12 @@ the action and the target as the audit names them, the request, and a state;
 and every protocol command the request puts on the Cube's queue is a **step** beneath it,
 written by the queue as it goes.
 The audit row of the request names the command in `command_id`.
+A line a client of the LAN proxy passes on to the Cube is a command as well,
+with no user and no audit row: its `action` is `proxy.radio` (an `s:`),
+`proxy.delete` (a `t:`), `proxy.metadata` (an `m:`), … and its `request` the
+client's address (`remote`) and the line's letter; it is `dropped` where the
+Cube discarded it.
+The log's lines of a command name it (`GET …/log?command=`).
 
 The states are those of docs/design.md section 5:
 `queued` while the request runs and nothing has gone to the Cube,
@@ -1889,8 +1895,8 @@ also one the Cube no longer has.
 `source` keeps one source: `device` (a device's), `cube` (the Cube's own:
 its connection, configuration, rooms, pairing, a Cube found on the LAN),
 `system` (the server's own jobs), `config` (a change of the configuration),
-`queue` (a command's steps on the radio, its holds) or `server` (the
-sign-ins).
+`queue` (a command's steps on the radio, its holds), `server` (the
+sign-ins) or `proxy` (the LAN proxy's clients).
 `level` keeps that level and above, `debug`, `info`, `warn` or `error`;
 `info` by default, so that a client asks for `level=debug` to see the
 debug lines (the Cube's `hello`).
@@ -2002,6 +2008,23 @@ discarded it, the device's error state was reset and it was sent again),
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).
+The LAN proxy's, source `proxy`, with the client's `remote`:
+`proxy_connected`, `proxy_disconnected`,
+`proxy_refused` at `warn` (the Cube is not connected),
+`proxy_discarded` at `warn` (a radio command answered as discarded and not
+sent, the duty cycle at `duty_pct`),
+`proxy_deleted` (the `devices` a client deleted),
+`proxy_delete_refused` at `warn` (`why`: `hidden`, with the `devices`, or
+`not_understood`), `proxy_pairing` (`seconds`, or `joined`)
+and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
+`pairing_not_stopped`, `metadata_multipart`, `metadata_not_understood` or
+`metadata_not_encoded`).
+A line a proxy client passes on to the Cube is a command
+(`GET /api/v1/commands/{id}`) with no user, its `action` `proxy.radio`,
+`proxy.delete`, `proxy.metadata`, … and its `request` the client's `remote`
+and the line's letter; its step's lines name it.
+A device's next `state` line after a command was sent to it, within two
+minutes, names that command too.
 Setpoints are changes too; a sign-in, a preference, a search, a restore's
 plan and the requests whose own line is the server's (a backup, a restore,
 a restart, …) write none.
