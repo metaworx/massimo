@@ -19,6 +19,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/safefile"
 )
 
 // A self-signed certificate the server makes for the box's names at its
@@ -192,19 +194,9 @@ func Generate(certPath, keyPath string, names []string, now time.Time) (Status, 
 	return st, err
 }
 
-// writeAtomic writes b to a temporary file beside path, mode 0600, and
-// renames it over.
+// writeAtomic writes b to path whole, mode 0600 (internal/safefile).
 func writeAtomic(path string, b []byte) error {
-	tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
-	os.Remove(tmp)
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
+	return safefile.Write(path, b, safefile.Options{Mode: 0o600})
 }
 
 // Names are the names a self-signed certificate holds for this box: the

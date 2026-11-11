@@ -158,7 +158,7 @@ func (in *installer) tlsFiles(certDst, keyDst, env string, chown bool) error {
 			}
 		}
 		if chown {
-			if err := in.run("chown", in.svcUser+":"+in.svcUser, in.path(f[1])); err != nil {
+			if err := in.run("chown", "-h", in.svcUser+":"+in.svcUser, in.path(f[1])); err != nil {
 				return err
 			}
 		}
@@ -190,7 +190,7 @@ func (in *installer) setSettings(env string, chown bool, vars [][2]string) error
 		return err
 	}
 	if chown {
-		return in.run("chown", in.svcUser+":"+in.svcUser, in.path(env))
+		return in.run("chown", "-h", in.svcUser+":"+in.svcUser, in.path(env))
 	}
 	return nil
 }

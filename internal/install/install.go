@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/safefile"
 	"go.metaworx.ch/massimo/packaging"
 )
 
@@ -418,7 +419,7 @@ func (in *installer) packagedSettings() (bool, error) {
 			return false, err
 		}
 	}
-	return true, in.run("chown", in.svcUser+":"+in.svcUser, env)
+	return true, in.run("chown", "-h", in.svcUser+":"+in.svcUser, env)
 }
 
 func (in *installer) binary() error {
@@ -638,7 +639,7 @@ func (in *installer) settings() (bool, error) {
 			return false, err
 		}
 	}
-	return startable, in.run("chown", in.svcUser+":"+in.svcUser, env)
+	return startable, in.run("chown", "-h", in.svcUser+":"+in.svcUser, env)
 }
 
 // checkSettings warns about settings the service will trip over. A proxy
@@ -906,54 +907,14 @@ func (in *installer) remove(p string, all bool) {
 	}
 }
 
-// writeAtomic writes to a temporary file beside path and renames it over.
-func writeAtomic(path string, b []byte, mode os.FileMode) error {
-	tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
-	os.Remove(tmp)
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Chmod(tmp, mode); err != nil { // umask
-		os.Remove(tmp)
-		return err
-	}
-	if err := renameOver(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
-}
-
-// renameHeldWait is how long renameOver retries a rename over a file
-// another process holds; a variable for the tests.
+// renameHeldWait is how long a write retries a rename over a file
+// another process holds, on Windows: the image of a process that is still
+// exiting (a service reports stopped just before), or a file a scanner
+// reads for a moment. A variable for the tests.
 var renameHeldWait = 5 * time.Second
 
-// renameOver renames tmp over path. Windows refuses that while another
-// process holds path: the image of a process that is still exiting (a
-// service reports stopped just before), or a file a scanner reads for a
-// moment. Such a refusal (renameHeld) is retried for renameHeldWait.
-func renameOver(tmp, path string) error {
-	deadline := time.Now().Add(renameHeldWait)
-	for {
-		err := os.Rename(tmp, path)
-		if err == nil || !renameHeld(err) || time.Now().After(deadline) {
-			return err
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+// writeAtomic writes b to path whole, with mode (internal/safefile): a
+// temporary file beside it, synced, renamed over it.
+func writeAtomic(path string, b []byte, mode os.FileMode) error {
+	return safefile.Write(path, b, safefile.Options{Mode: mode, HeldWait: renameHeldWait})
 }

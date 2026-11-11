@@ -335,14 +335,6 @@ func waitExit(h windows.Handle, pid uint32, timeout time.Duration) error {
 	return nil
 }
 
-// renameHeld reports whether a rename failed because another process
-// holds a file: the image of a running process refuses a rename over it
-// with access denied, a file open without delete sharing with a sharing
-// violation.
-func renameHeld(err error) bool {
-	return errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION)
-}
-
 func waitState(s *mgr.Service, want svc.State, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {

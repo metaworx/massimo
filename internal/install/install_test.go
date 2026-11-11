@@ -93,7 +93,7 @@ func TestInstallFresh(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	for _, c := range []string{"useradd --system", "chown _massimo:_massimo " + filepath.Join(root, EnvPath), "systemctl daemon-reload", "systemctl enable massimo.service", "systemctl enable --now massimo-update.path"} {
+	for _, c := range []string{"useradd --system", "chown -h _massimo:_massimo " + filepath.Join(root, EnvPath), "systemctl daemon-reload", "systemctl enable massimo.service", "systemctl enable --now massimo-update.path"} {
 		if !rec.has(c) {
 			t.Errorf("no %q in %q", c, rec.cmds)
 		}
@@ -512,7 +512,7 @@ func TestInstallTLSFiles(t *testing.T) {
 	if fi, _ := os.Stat(keyDst); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("key mode %v", fi.Mode())
 	}
-	if !rec.has("chown _massimo:_massimo "+certDst) || !rec.has("chown _massimo:_massimo "+filepath.Join(root, EnvPath)) {
+	if !rec.has("chown -h _massimo:_massimo "+certDst) || !rec.has("chown -h _massimo:_massimo "+filepath.Join(root, EnvPath)) {
 		t.Fatalf("not owned by the service user: %q", rec.cmds)
 	}
 	env := read(t, filepath.Join(root, EnvPath))

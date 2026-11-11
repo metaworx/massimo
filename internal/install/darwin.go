@@ -302,7 +302,7 @@ func (in *installer) logFile(owner string) error {
 		}
 		f.Close()
 	}
-	return in.run("chown", owner, p)
+	return in.run("chown", "-h", owner, p)
 }
 
 // darwinUser makes the hidden system user and group _massimo, with the

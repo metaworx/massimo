@@ -10,9 +10,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/safefile"
 )
 
 // The server cannot replace its own binary. It asks for an update by
@@ -37,18 +38,14 @@ const (
 var ErrHelperRunning = errors.New("an update is already running")
 
 // WriteRequest asks the helper for an update to the newest release on
-// the channel. A helper reading the last request in the same moment
-// holds it open, which on Windows refuses the rename for a few
-// milliseconds (renameRetrying).
+// the channel, the file written whole (internal/safefile). A helper
+// reading the last request in the same moment holds it open, which on
+// Windows refuses the rename for a few milliseconds; safefile retries it.
 func WriteRequest(path, channel string) error {
 	if !ValidChannel(channel) {
 		return fmt.Errorf("invalid channel %q", channel)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(channel+"\n"), 0o644); err != nil {
-		return err
-	}
-	return renameRetrying(tmp, path)
+	return safefile.Write(path, []byte(channel+"\n"), safefile.Options{Mode: 0o644})
 }
 
 // TakeRequest reads and removes the request file; it reports false when
@@ -127,25 +124,10 @@ func WriteStatus(path string, s Status) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
-		return err
-	}
-	return renameRetrying(tmp, path)
-}
-
-// renameRetrying renames tmp over path. On Windows a rename over a file
-// another process has open fails (Go opens files without
-// FILE_SHARE_DELETE), which happens when the server reads the status, or
-// the helper the request, in the same moment; a few retries ride that
-// out.
-func renameRetrying(tmp, path string) error {
-	err := os.Rename(tmp, path)
-	for i := 0; err != nil && runtime.GOOS == "windows" && i < 10; i++ {
-		time.Sleep(50 * time.Millisecond)
-		err = os.Rename(tmp, path)
-	}
-	return err
+	// The server reading the status in the same moment holds it open,
+	// which on Windows refuses the rename for a few milliseconds;
+	// safefile retries it.
+	return safefile.Write(path, append(b, '\n'), safefile.Options{Mode: 0o644})
 }
 
 // ReadStatus reads the status file; no file gives a zero Status.

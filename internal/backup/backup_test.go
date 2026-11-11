@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +94,29 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		if !reflect.DeepEqual(f, g) {
 			t.Fatalf("%s: round trip differs:\n%+v\n%+v", name, f, g)
 		}
+	}
+}
+
+// A backup saved over an existing file replaces it whole and keeps its
+// mode; nothing else is left beside it.
+func TestSaveReplacesWhole(t *testing.T) {
+	_, _, _, f := take(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "b.json")
+	if err := os.WriteFile(path, []byte("an older, longer backup that is not JSON at all"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if g, err := Load(path); err != nil || !reflect.DeepEqual(f, g) {
+		t.Fatalf("after the save: %v", err)
+	}
+	if fi, _ := os.Stat(path); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode %v, want the kept 0640", fi.Mode().Perm())
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("beside the backup: %v", entries)
 	}
 }
 

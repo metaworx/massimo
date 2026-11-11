@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/safefile"
 )
 
 // rebootVar is the variable behind serve's -allow-reboot.
@@ -71,19 +72,14 @@ func rebootBy(p processInfo, root string) (by, blocked string, helper func() str
 }
 
 // rebootRequester returns what asks the root helper for the reboot: the
-// request file at path, written to a temporary file beside it and renamed,
+// request file at path, written whole (internal/safefile),
 // then up to rebootTake for the helper to take it. A request it did not
 // take is removed, so that it cannot reboot the computer at some later
 // start of the helper.
 func rebootRequester(path string) func() error {
 	return func() error {
-		tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
 		line := "massimo: reboot requested at " + time.Now().UTC().Format(time.RFC3339) + "\n"
-		if err := os.WriteFile(tmp, []byte(line), 0o600); err != nil {
-			return fmt.Errorf("writing the reboot request: %w", err)
-		}
-		if err := os.Rename(tmp, path); err != nil {
-			os.Remove(tmp)
+		if err := safefile.Write(path, []byte(line), safefile.Options{Mode: 0o600}); err != nil {
 			return fmt.Errorf("writing the reboot request: %w", err)
 		}
 		for deadline := time.Now().Add(rebootTake); time.Now().Before(deadline); time.Sleep(rebootPoll) {

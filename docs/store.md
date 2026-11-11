@@ -170,7 +170,9 @@ the server runs;
 they belong to the database and are copied with it or not at all (a copy of the
 `.db` alone while the server runs can miss the last transactions;
 `massimo store backup <file>`, stage (a),
-uses SQLite's online backup to write a consistent copy).
+writes a consistent copy with SQLite's `VACUUM INTO`,
+to a temporary file renamed into place once complete,
+so that a crash leaves the file empty, never a partial database).
 A clean stop of `serve` brings the WAL into `massimo.db` before it closes the
 store (`PRAGMA wal_checkpoint(TRUNCATE)`, which also runs while another program
 has the file open, where SQLite's own checkpoint at the last close does not)
