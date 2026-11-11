@@ -320,7 +320,8 @@ Times are `TEXT` in RFC 3339 with the `Z` suffix (sortable,
 no time zone surprises on the Pi); JSON documents are `TEXT`;
 booleans are `INTEGER` 0 or 1; identifiers are the rowid.
 The dialect stays in the subset PostgreSQL takes with mechanical changes
-(`INTEGER PRIMARY KEY` to identity columns, `TEXT` times to `timestamptz`,
+(`INTEGER PRIMARY KEY`, with `AUTOINCREMENT` or without, to identity columns,
+`TEXT` times to `timestamptz`,
 JSON `TEXT` to `jsonb`), so the server mode is a second migration directory,
 not a second schema.
 There is no `tenant_id` and no `tenants` table (decided 2026-11-06,
@@ -487,7 +488,7 @@ CREATE INDEX audit_time ON audit (time);
 CREATE INDEX audit_user ON audit (user_id, time);
 
 CREATE TABLE backups (
-    id         INTEGER PRIMARY KEY,
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,  -- migration 0013
     cube_id    INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
     taken_at   TEXT    NOT NULL,
     reason     TEXT    NOT NULL CHECK (reason IN ('auto', 'manual', 'before_restore', 'upload')),  -- migration 0005
@@ -613,6 +614,9 @@ Notes on the tables:
   Retention per Cube: the newest `backups.keep_newest` whatever their age,
   of the others `auto` for `backups.keep_days_auto` days and the rest for
   `backups.keep_days_manual` (open decision 5's 90 and 365).
+  The prune deletes the rows, so the id is `AUTOINCREMENT` (migration 0013):
+  SQLite never gives a deleted backup's id to a later one,
+  and an id the API named before a prune names no other backup.
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -750,6 +754,15 @@ the writer of a binary of version 9 fills those (`source` empty) at its start
 an index of the log's warnings and errors alone (section 5, `events`),
 additively: a binary of before writes and reads as it did,
 and SQLite keeps the index for its rows too.
+`0013_backups_autoincrement.sql` (AP BackupIds v1.0) makes `backups` again
+with `AUTOINCREMENT`, as 0005 made it:
+without it SQLite gives a new row the highest id plus one,
+so a prune that removed the newest backup handed its id to the next.
+The copy starts `sqlite_sequence` at the highest id left,
+and the rename carries it to the new table;
+an id pruned before the upgrade can still be given out once more.
+It keeps `min_reader` 1: the columns and their meaning stay,
+and a binary of before chooses a new id by the table's schema as well.
 Rules:
 
 - A migration is additive when it only adds tables,
@@ -1384,7 +1397,7 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
 
 - Files: `internal/store/backups.go` (add, list, read,
   delete as a tombstone without the file, the prune),
-  migration 0005 (the four reasons);
+  migrations 0005 (the four reasons) and 0013 (an id never given out twice);
   `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the
   routes); `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
   `backup.js` with its partials (the Settings panel).
@@ -1416,11 +1429,14 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   restore and delete, a restore from a file; a restore shows its plan first,
   then each step as the Cube took it.
 - Tests: the store's round trip,
-  the prune by reason and age and the migration's copy; the hash;
+  the prune by reason and age and the migration's copy;
+  no id given out again after a prune or a purged tombstone,
+  and 0013's copy with its sequence; the hash;
   the first backup, none without a change,
   one after a quiet window and one at `auto_max`;
   the change against the one before after deleting the newest,
-  and one at once after deleting all or pruning the only one;
+  and one at once, with an id of its own,
+  after deleting all or pruning the only one;
   the routes and the settings' check;
   a restore keeping `before_restore` and `upload`, by id, and clean after;
   the diff of a backup against itself and an edited copy;

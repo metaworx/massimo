@@ -188,10 +188,11 @@ func TestBackupPruneNewest(t *testing.T) {
 	if _, ok, err := st.StoredBackup(ctx, s.cubes["keq0000100"].storeID.Load(), first.ID); ok || err != nil {
 		t.Fatalf("the first backup is not pruned (%v)", err)
 	}
-	// The prune removes the row, so the next may get its id: the time tells them apart.
+	// The prune removes the row, and the next takes a new id all the same
+	// (migration 0013), so that an id read before names no other backup.
 	if !within(time.Second, func() bool {
 		_, l = historyOf(t, ts.URL)
-		return reasons(l) == "auto" && l.Backups[0].TakenAt.After(first.TakenAt)
+		return reasons(l) == "auto" && l.Backups[0].ID > first.ID
 	}) {
 		t.Fatalf("after pruning the only backup: %q, changed %v", reasons(l), l.Changed)
 	}
