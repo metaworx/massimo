@@ -1,4 +1,4 @@
-# AP OneLog v1.0: One log, tagged lines
+# AP OneLog v1.1: One log, tagged lines
 
 ## TL;DR
 
@@ -11,8 +11,11 @@ rotates the file itself, and is written from the same records as the log rows.
 - `-log` file 0644 → 0640, group `adm` through a set-group-id directory
 - rotation in serve: size, a format change, SIGHUP;
   kept by count and a minimum total; logrotate dropped; the Mac on `-log`
+- a rotation says so: the old file's last line,
+  then `log_rotated` in the new file, the store and on stderr
 - `source=`, `kind=`, `cube=`, `command=` on every process-log line
-- `events` → `log` + `command_id` + `visibility` (migration 0014)
+- `events` → `log` + `command_id` + `visibility` (migration 0014);
+  `commands` with `AUTOINCREMENT`, a pruned id never given out again
 - one write path: an event is its slog line; duplicate `slog` calls go
 - command steps, queue holds, sign-ins, lockouts → log rows
 - proxy clients → commands rows; connections, refusals, deletes → log rows
@@ -21,9 +24,9 @@ rotates the file itself, and is written from the same records as the log rows.
 ### Blocks
 
 1. Process-log formats and the log file's permissions
-2. Rotation in serve; the deb without logrotate; the Mac on `-log`
+2. Rotation in serve, its notices, the deb and the Mac
 3. Tags on every process-log line
-4. Store: migration 0014, `events` → `log`, `command_id`, `visibility`
+4. Store: migration 0014 for `log` and `commands`
 5. One write path for events and their slog lines
 6. Commands, queue holds, sign-ins and lockouts as log rows
 7. The proxy's clients: commands rows and connection lines
@@ -86,6 +89,28 @@ and the owner proposed one log as the master, with the others as details.
   `events` renamed `log` in the migration that adds its columns.
 - **D9-A:**
   the Log page in this plan.
+
+**After Block 1** (block gate of 2026-11-11, `PLAN++ D13A D14B`):
+
+- **D13-A:**
+  a rotation says so twice: the old file's last line, in that file's format,
+  with the reason and the new name; and, once the new file is open,
+  a `log_rotated` system event - the new file's first line,
+  a row in the store and a line on stderr -
+  its summary the files kept and deleted.
+  The event is sent after the writer's lock is released,
+  since a line logged from inside the writer would wait for that lock.
+- **D14-B:**
+  `commands` made again with `AUTOINCREMENT` in migration 0014,
+  so that a pruned command's id is never given to the next one (the finding of
+  the session of AP BackupIds:
+  without it SQLite gives a new row the highest id plus one,
+  so the prune of the newest command hands its id out again,
+  and `GET /api/v1/commands/{id}` read before the prune names another command).
+  Foreign keys are off around that migration,
+  since `DROP TABLE` with them on deletes the rows first,
+  which would set every `audit.command_id` to NULL; not A,
+  a prune that keeps the newest command, which leaves the schema as it is.
 
 Settled on the way: migration 0013 is AP BackupIds' (merged as pull request
 #178), so this plan's migration is 0014;
@@ -196,7 +221,7 @@ each flag's precedence over the general one and the default, `none`,
 an unknown value, both outputs from one record,
 the file's mode on a new and on a wider existing file.
 
-### Block 2: Rotation in serve; the deb without logrotate; the Mac on `-log`
+### Block 2: Rotation in serve, its notices, the deb and the Mac
 
 1. A small package (`internal/logfile`):
    a writer over the `-log` file that rotates `serve.log` → `serve.log.1`,
@@ -209,21 +234,28 @@ the file's mode on a new and on a wider existing file.
    and the writer appends.
 2. serve rotates on SIGHUP where SIGHUP is a reload,
    and on `POST /api/v1/reload`, which does what SIGHUP does.
-3. The flags with their `MASSIMO_LOG_…` variables, in `flagVars`.
-4. The deb: `packaging/logrotate/massimo` and the `logrotate` dependency go,
+3. The notices (D13-A): the writer ends the old file with a line in its format,
+   `log rotated`, with the reason (`size`, `format`, `sighup`,
+   `reload`) and the new name; once its lock is released,
+   serve sends the `log_rotated` system event (source `system`,
+   its summary the reason, the files kept and deleted),
+   which is the new file's first line, a row in the store and a line on stderr;
+   `docs/api-v1.md` lists the kind.
+4. The flags with their `MASSIMO_LOG_…` variables, in `flagVars`.
+5. The deb: `packaging/logrotate/massimo` and the `logrotate` dependency go,
    the conffile removed through the maintainer scripts;
    the files logrotate made keep their names and join the retention.
-5. The Mac: the plist passes `-log` and `-log-process-format none`;
+6. The Mac: the plist passes `-log` and `-log-process-format none`;
    `StandardErrorPath` is `serve.stderr.log`;
    `massimo install` writes it so, and CI's Mac job greps the new file.
-6. Documents: `README.md`, `packaging/README.md`, `docs/update-windows.md`
+7. Documents: `README.md`, `packaging/README.md`, `docs/update-windows.md`
    (serve.log is rotated now).
 
 **Verification:**
 as Block 1, and `make lan-test` is not needed; tests: rotation at the size,
 at a format change, on request; retention by count and minimum;
 gzip of all but the newest; logrotate's existing names adopted;
-a refused rename.
+a refused rename; the old file's last line and the event after it.
 
 ### Block 3: Tags on every process-log line
 
@@ -234,22 +266,39 @@ line concerns one; `kind=` and `command=` come with Block 5.
 **Verification:**
 the test gate; a test that every logger the server hands out carries a source.
 
-### Block 4: Store: migration 0014, `events` → `log`, `command_id`, `visibility`
+### Block 4: Store: migration 0014 for `log` and `commands`
 
 1. `0014_log.sql`:
    the table made again as `log` (as 0009 made `events`), every row copied,
    with `command_id` (a reference to `commands`, `ON DELETE SET NULL`)
    and `visibility` (`read` or `audit`, `read` by default),
-   its indexes, one on `command_id`;
-   `store.sql` written again;
-   the release dumps migrated by `TestMigratesReleasedStores`.
-2. `GET …/log?command=<id>`;
+   its indexes, one on `command_id`.
+2. In the same migration `commands` made again with
+   `INTEGER PRIMARY KEY AUTOINCREMENT` (D14-B), every row copied with its id,
+   `parent_id` and the rest, its indexes made again,
+   `sqlite_sequence` starting at its highest id;
+   the migration runner runs a migration that declares `-- foreign_keys: off`
+   with foreign keys off (set outside its transaction),
+   and checks `PRAGMA foreign_key_check` before the commit,
+   so that `audit.command_id`, `log.command_id` and `parent_id` keep their rows;
+   a test that the audit's links survive the migration,
+   and that a pruned newest command's id is not given out again.
+3. `store.sql` written again
+   (`go test ./internal/store -run TestStoreSQL -update`);
+   the dump of v0.14.0-alpha.1, the newest release,
+   added as `internal/store/testdata/releases/v0.14.0-alpha.1.sql` by
+   `tools/store-fixture/make.sh v0.14.0-alpha.1` (`docs/store.md`,
+   "Migrations");
+   `TestMigratesReleasedStores` migrates every dump through 0014 and checks the
+   commands' `sqlite_sequence` beside the backups'.
+4. `GET …/log?command=<id>`;
    rows of `audit` visibility only for a caller with `audit`; `docs/api-v1.md`,
    the OpenAPI file, `docs/store.md`.
 
 **Verification:**
 the test gate with `-race` for `internal/store` and `internal/server`;
-the migration's copy, the filter, the visibility.
+the migration's copy, the commands' ids and the audit's links,
+the filter, the visibility.
 
 ### Block 5: One write path for events and their slog lines
 
@@ -303,18 +352,18 @@ texts in all six `ui/i18n/<lang>.json`; `docs/ui.md`.
 
 ## Proposed commit message
 
-Block 1:
+Block 2:
 
 ```
-feat(serve): The log file is JSON and readable by the admin group
+feat(serve): serve rotates its log file and says so
 
-serve logs plain on stderr and JSON in its -log file, -log-format, -log-file-format and -log-process-format choosing otherwise, and the file is 0640 in a directory of group adm (AP OneLog, Block 1).
+serve rotates its -log file itself, at a size, at a change of its format and on a reload, keeps it by count and a minimum total, and says so at the end of the old file and in a log_rotated event (AP OneLog, Block 2).
 
 Key changes:
-- serve's logger: one record to a handler per output, the more specific flag winning over -log-format and that over the default
-- the log file: made 0640, a wider one of the service user's narrowed at the open
-- /var/log/massimo: _massimo:adm 2750 from the postinst and massimo install, the unit without LogsDirectory=
-- the three variables in internal/env and the reload's flags; README.md, packaging/README.md and env.template
+- internal/logfile: the rotating writer, gzip of all but the newest, logrotate's names adopted, the retention by -log-keep and -log-keep-min
+- serve: the rotation on SIGHUP and POST /api/v1/reload, the old file's last line and the log_rotated event after it
+- the deb without logrotate; the Mac's plist on -log, its stderr in serve.stderr.log
+- README.md, packaging/README.md, docs/update-windows.md and docs/api-v1.md
 
 Assisted-by: claude-code:claude-opus-5-5
 ```
@@ -323,3 +372,8 @@ Assisted-by: claude-code:claude-opus-5-5
 
 - **v1.0** (2026-11-11): the first revision, by `PLAN++` as recommended,
   D10 with SIGHUP.
+- **v1.1** (2026-11-11): after Block 1, by `PLAN++ D13A D14B`:
+  the rotation's notices in Block 2 (D13-A);
+  `commands` with `AUTOINCREMENT` in Block 4 (D14-B),
+  with the migration runner's switch for foreign keys;
+  Block 4 adds the dump of v0.14.0-alpha.1, released after v1.0.
