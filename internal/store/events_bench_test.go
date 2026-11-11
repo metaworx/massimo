@@ -83,7 +83,7 @@ func makeBenchStore(b *testing.B) {
 	bench.s = s
 	opened := time.Since(began)
 	if copied != "" {
-		if err := s.db.QueryRowContext(ctx, `SELECT cube_id FROM events WHERE cube_id IS NOT NULL GROUP BY cube_id ORDER BY count(*) DESC LIMIT 1`).Scan(&bench.cube); err != nil {
+		if err := s.db.QueryRowContext(ctx, `SELECT cube_id FROM log WHERE cube_id IS NOT NULL GROUP BY cube_id ORDER BY count(*) DESC LIMIT 1`).Scan(&bench.cube); err != nil {
 			b.Fatalf("the copy's busiest Cube: %v", err)
 		}
 		if bench.tmpl, err = s.Events(ctx, EventQuery{CubeID: bench.cube, Limit: MaxEventsPage}); err != nil {
@@ -140,14 +140,14 @@ func benchBatch(n int, next *int) []Event {
 
 func benchCount(b *testing.B, s *Store) int {
 	var n int
-	if err := s.db.QueryRow(`SELECT count(*) FROM events`).Scan(&n); err != nil {
+	if err := s.db.QueryRow(`SELECT count(*) FROM log`).Scan(&n); err != nil {
 		b.Fatal(err)
 	}
 	return n
 }
 
 func benchLevels(b *testing.B, s *Store) string {
-	rows, err := s.db.Query(`SELECT level, count(*) FROM events GROUP BY level ORDER BY level`)
+	rows, err := s.db.Query(`SELECT level, count(*) FROM log GROUP BY level ORDER BY level`)
 	if err != nil {
 		b.Fatal(err)
 	}

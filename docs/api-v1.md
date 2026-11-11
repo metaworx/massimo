@@ -1856,7 +1856,7 @@ also as the event's `error`.
 `error`.
 Both are in `GET …/log`.
 
-### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=
+### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=&command=
 
 A page of the Cube's events, oldest first,
 the same objects the event stream sends (`kind`, `device`, `state`, `error`,
@@ -1894,6 +1894,13 @@ its connection, configuration, rooms, pairing, a Cube found on the LAN),
 debug lines (the Cube's `hello`).
 `user` keeps the events a user started, by the login name, a removed user's too;
 a name the server does not know answers an empty page.
+`command` keeps the events of one command, by its id
+(`GET /api/v1/commands/{id}`):
+its attempt, a discard and a retry, its outcome.
+An event of a command names it in `command`,
+until `commands.keep_days` prunes the command.
+The events only a user with `audit` sees (sign-ins, lockouts)
+are on such a user's pages alone.
 The page holds the server's own events too, kept once with no Cube,
 in every Cube's log.
 Each event says its `source` and its `level`,
@@ -1919,7 +1926,7 @@ A device hidden later keeps its events in the log until `log.keep_days` removes 
 A page before a time first looks up the newest event before it,
 which reads the Cube's times up to there: an `id` is the quicker cursor.
 A page since a time looks up the oldest event at or after it the same way.
-`400` for a bad `before`, `limit`, `source`, `level` or `device`.
+`400` for a bad `before`, `limit`, `source`, `level`, `device` or `command`.
 
 ### GET /api/v1/cubes/{sn}/events
 

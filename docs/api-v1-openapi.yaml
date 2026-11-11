@@ -1800,9 +1800,10 @@ paths:
         - {name: level, in: query, description: "Only events of this level and above; info by default", schema: {type: string, enum: [debug, info, warn, error], default: info}}
         - {name: device, in: query, description: "Only events of this device, by its serial number or its radio address, also one the Cube no longer has", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
         - {name: user, in: query, description: "Only events this user started, by the login name, a removed user's too; a name the server does not know answers an empty page", schema: {type: string, example: anna}}
+        - {name: command, in: query, description: "Only the events of this command (GET /api/v1/commands/{id}): its attempt, a discard and a retry, its outcome", schema: {type: integer, minimum: 1, example: 42}}
       responses:
         "200":
-          description: Events as the stream sends them, each with its id in the log
+          description: Events as the stream sends them, each with its id in the log; those only a user with audit sees (sign-ins, lockouts) for such a user alone
           content:
             application/json:
               schema:
@@ -1832,6 +1833,7 @@ paths:
                           serial: {type: string}
                     changes: {type: object, description: "A state event's or a config event's differences, by name: {from, to}"}
                     while_disconnected: {type: boolean, description: What a connection's greeting found changed while the Cube was disconnected or the server down}
+                    command: {type: integer, description: "The command the event belongs to (GET /api/v1/commands/{id}); absent for none, and once the command is pruned"}
                     by:
                       type: object
                       description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and a server without users

@@ -4,7 +4,8 @@
 package store
 
 // The Cubes' events (docs/store.md section 9 (d)): what the server's
-// event stream sends, kept in the events table so that the log survives
+// event stream sends, kept in the log table (the events table before
+// migration 0014, and a view of it since) so that the log survives
 // a restart and reaches back further than the 500 events the server
 // held in memory. AddEvent never blocks: it hands the event to one
 // goroutine, RunEvents, which writes a batch in one transaction at 100
@@ -95,7 +96,14 @@ func ParseLevel(name string) (int, bool) {
 	return 0, false
 }
 
-// Event is one row of events: a Cube's, or with CubeID 0 the server's.
+// The visibilities of a row: read for what a user with read sees, audit
+// for the rows only a user with audit sees (migration 0014).
+const (
+	VisibilityRead  = "read"
+	VisibilityAudit = "audit"
+)
+
+// Event is one row of the log: a Cube's, or with CubeID 0 the server's.
 type Event struct {
 	ID     int64
 	CubeID int64 // 0: the server's, cube_id NULL
@@ -107,25 +115,33 @@ type Event struct {
 	Serial string // the device's serial number, or the Cube's for its own lines
 	UserID int64  // who started it, 0 for nobody
 	Data   json.RawMessage
+	// CommandID is the command the row belongs to, 0 for none; the
+	// prune of the command clears it.
+	CommandID int64
+	// Visibility is VisibilityRead or VisibilityAudit; "" is read.
+	Visibility string
 }
 
 // EventQuery selects a page of a Cube's events, and with Server the
 // server's as well: those before an id or a time and at or after a time,
-// of a kind, a source, a device, a serial and a user, at and above a
-// level, at most Limit (MaxEventsPage).
+// of a kind, a source, a device, a serial, a user and a command, at and
+// above a level, of the read visibility and with Audit of the audit's
+// too, at most Limit (MaxEventsPage).
 type EventQuery struct {
-	CubeID   int64
-	Server   bool      // the server's events too (cube_id NULL)
-	BeforeID int64     // 0: no bound
-	Before   time.Time // zero: no bound
-	Since    time.Time // zero: no bound; the events at or after it
-	Kind     string    // "": every kind
-	Source   string    // "": every source
-	Device   string    // "": every device; a radio address, which no index serves
-	Serial   string    // "": every device; a serial number
-	UserID   int64     // 0: anyone's and no one's
-	MinLevel *int      // nil: every level
-	Limit    int
+	CubeID    int64
+	Server    bool      // the server's events too (cube_id NULL)
+	BeforeID  int64     // 0: no bound
+	Before    time.Time // zero: no bound
+	Since     time.Time // zero: no bound; the events at or after it
+	Kind      string    // "": every kind
+	Source    string    // "": every source
+	Device    string    // "": every device; a radio address, which no index serves
+	Serial    string    // "": every device; a serial number
+	UserID    int64     // 0: anyone's and no one's
+	CommandID int64     // 0: any command's and none's
+	MinLevel  *int      // nil: every level
+	Audit     bool      // the rows of the audit visibility too
+	Limit     int
 }
 
 // eventWriter is the state of the writer goroutine.
@@ -317,7 +333,7 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 			return err
 		}
 		defer tx.Rollback()
-		stmt, err := tx.PrepareContext(ctx, `INSERT INTO events (uuid, cube_id, time, kind, source, level, device, serial, user_id, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		stmt, err := tx.PrepareContext(ctx, `INSERT INTO log (uuid, cube_id, time, kind, source, level, device, serial, user_id, data, command_id, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			return err
 		}
@@ -327,7 +343,12 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 			if at.IsZero() {
 				at = s.now()
 			}
-			if _, err := stmt.ExecContext(ctx, newUUID(), nullID(e.CubeID), formatTime(at), e.Kind, e.Source, e.Level, e.Device, e.Serial, nullID(e.UserID), string(e.Data)); err != nil {
+			vis := e.Visibility
+			if vis == "" {
+				vis = VisibilityRead
+			}
+			if _, err := stmt.ExecContext(ctx, newUUID(), nullID(e.CubeID), formatTime(at), e.Kind, e.Source, e.Level, e.Device, e.Serial, nullID(e.UserID), string(e.Data),
+				nullID(e.CommandID), vis); err != nil {
 				return err
 			}
 		}
@@ -438,7 +459,7 @@ func (s *Store) pruneEvents(ctx context.Context, now time.Time, between func() b
 cubes:
 	for _, cube := range cubes {
 		for {
-			res, err := s.db.ExecContext(ctx, `DELETE FROM events WHERE id IN (SELECT id FROM events WHERE `+cubeTerm(cube)+` AND time < ? LIMIT ?)`,
+			res, err := s.db.ExecContext(ctx, `DELETE FROM log WHERE id IN (SELECT id FROM log WHERE `+cubeTerm(cube)+` AND time < ? LIMIT ?)`,
 				cubeArgs(cube, cutoff, pruneChunk)...)
 			if err != nil {
 				return removed, fmt.Errorf("store: prune events: %w", err)
@@ -519,7 +540,7 @@ func (s *Store) fillSources(ctx context.Context) error {
 		return err
 	}
 	for _, cube := range cubes {
-		if _, err := s.db.ExecContext(ctx, `UPDATE events SET
+		if _, err := s.db.ExecContext(ctx, `UPDATE log SET
 			source = CASE
 				WHEN coalesce(json_extract(data, '$.source'), '') != '' THEN json_extract(data, '$.source')
 				WHEN kind IN ('restore_step', 'restore_done') THEN 'system'
@@ -576,13 +597,13 @@ func (s *Store) eventsWalk(ctx context.Context, q EventQuery, cube int64, limit 
 	out := []Event{}
 	for rows.Next() {
 		var e Event
-		var cubeID, userID sql.NullInt64
+		var cubeID, userID, commandID sql.NullInt64
 		var at sql.NullString
 		var data string
-		if err := rows.Scan(&e.ID, &cubeID, &at, &e.Kind, &e.Source, &e.Level, &e.Device, &e.Serial, &userID, &data); err != nil {
+		if err := rows.Scan(&e.ID, &cubeID, &at, &e.Kind, &e.Source, &e.Level, &e.Device, &e.Serial, &userID, &data, &commandID, &e.Visibility); err != nil {
 			return nil, fmt.Errorf("store: events: %w", err)
 		}
-		e.CubeID, e.UserID = cubeID.Int64, userID.Int64
+		e.CubeID, e.UserID, e.CommandID = cubeID.Int64, userID.Int64, commandID.Int64
 		e.Time, e.Data = parseTime(at), json.RawMessage(data)
 		out = append(out, e)
 	}
@@ -608,12 +629,12 @@ func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 	}
 	if !q.Before.IsZero() {
 		at := formatTime(q.Before)
-		where = append(where, "id <= (SELECT max(id) FROM events WHERE "+cubeTerm(cube)+" AND time < ?)", "+time < ?")
+		where = append(where, "id <= (SELECT max(id) FROM log WHERE "+cubeTerm(cube)+" AND time < ?)", "+time < ?")
 		args = append(args, cubeArgs(cube, at, at)...)
 	}
 	if !q.Since.IsZero() {
 		at := formatTime(q.Since)
-		where = append(where, "id >= (SELECT min(id) FROM events WHERE "+cubeTerm(cube)+" AND time >= ?)", "+time >= ?")
+		where = append(where, "id >= (SELECT min(id) FROM log WHERE "+cubeTerm(cube)+" AND time >= ?)", "+time >= ?")
 		args = append(args, cubeArgs(cube, at, at)...)
 	}
 	if q.Kind != "" {
@@ -631,12 +652,19 @@ func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 	if q.UserID != 0 {
 		where, args = append(where, "user_id = ?"), append(args, q.UserID)
 	}
+	if q.CommandID != 0 {
+		where, args = append(where, "command_id = ?"), append(args, q.CommandID)
+	}
+	if !q.Audit {
+		// A filter, as the level: few rows are the audit's.
+		where = append(where, "+visibility = '"+VisibilityRead+"'")
+	}
 	if q.MinLevel != nil {
 		if *q.MinLevel >= LevelWarn {
 			where = append(where, warnTerm)
 		}
 		where, args = append(where, "+level >= ?"), append(args, *q.MinLevel)
 	}
-	return `SELECT id, cube_id, time, kind, source, level, device, serial, user_id, data FROM events WHERE ` + strings.Join(where, " AND ") +
+	return `SELECT id, cube_id, time, kind, source, level, device, serial, user_id, data, command_id, visibility FROM log WHERE ` + strings.Join(where, " AND ") +
 		` ORDER BY id DESC LIMIT ?`, append(args, limit)
 }

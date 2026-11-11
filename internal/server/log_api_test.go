@@ -321,3 +321,49 @@ func TestLogWithoutStore(t *testing.T) {
 		t.Fatalf("an empty page: %d %s", code, raw)
 	}
 }
+
+// A page by command holds that command's events alone, each naming it;
+// an event of the audit visibility is on the page of a user with audit
+// and on no other user's; command takes a positive id.
+func TestLogByCommandAndVisibility(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	viewer := userToken(t, st, "anna", store.RoleViewer)
+	cmd, err := st.AddCommand(ctx, store.Command{Action: "setpoint"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	s.logServer(event{Kind: "command", Source: "queue", Time: now, Command: cmd.ID})
+	s.logServer(event{Kind: "login", Source: "server", Time: now, audit: true})
+	s.logServer(event{Kind: "change", Source: "config", Time: now})
+
+	var evs []event
+	if code := getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?command="+strconv.FormatInt(cmd.ID, 10), &evs); code != 200 || len(evs) != 1 || evs[0].Kind != "command" || evs[0].Command != cmd.ID {
+		t.Fatalf("the command's page: %d %+v", code, evs)
+	}
+	kinds := func(token string) map[string]bool {
+		t.Helper()
+		var page []event
+		if code := getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/log?limit=1000", &page); code != 200 {
+			t.Fatalf("log: %d", code)
+		}
+		seen := map[string]bool{}
+		for _, e := range page {
+			seen[e.Kind] = true
+		}
+		return seen
+	}
+	if seen := kinds("secret"); !seen["login"] || !seen["change"] {
+		t.Errorf("the owner's page: %v", seen)
+	}
+	if seen := kinds(viewer); seen["login"] || !seen["change"] {
+		t.Errorf("a viewer's page: %v", seen)
+	}
+	for _, bad := range []string{"0", "-1", "x"} {
+		if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/log?command="+bad, "secret", ""); code != 400 {
+			t.Errorf("command=%s: %d", bad, code)
+		}
+	}
+}

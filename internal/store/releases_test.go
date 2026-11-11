@@ -19,8 +19,10 @@ import (
 // came, v0.7.0-alpha.1. Each is loaded into a file as the release left
 // it and opened, which migrates it to this binary's version: the file
 // stays sound, every table keeps its rows, the log's exactly, every event
-// has its source, the log, the users and the backups read, and the
-// backups' sequence starts at their highest id (migration 0013).
+// has its source, the log, the users and the backups read, the
+// backups' and the commands' sequences start at their highest id
+// (migrations 0013 and 0014), and the events, the log's rows since 0014,
+// read through their view as before.
 func TestMigratesReleasedStores(t *testing.T) {
 	dumps, err := filepath.Glob(filepath.Join("testdata", "releases", "v*.sql"))
 	if err != nil || len(dumps) < 6 {
@@ -53,17 +55,22 @@ func TestMigratesReleasedStores(t *testing.T) {
 			}
 			rows.Close()
 			after := tableRows(t, s.db)
+			// 0014 renamed the events the log.
+			after["events"] = after["log"]
 			for table, n := range before {
 				switch {
 				case table == "events" && after[table] != n:
-					t.Errorf("events: %d rows after the migration, %d before", after[table], n)
+					t.Errorf("events: %d rows of the log after the migration, %d before", after[table], n)
 				case after[table] < n:
 					t.Errorf("%s: %d rows after the migration, %d before", table, after[table], n)
 				}
 			}
-			var unsourced int
-			if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM events WHERE source = ''`).Scan(&unsourced); err != nil || unsourced != 0 {
+			var unsourced, viewed int
+			if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM log WHERE source = ''`).Scan(&unsourced); err != nil || unsourced != 0 {
 				t.Errorf("%d events without a source, %v", unsourced, err)
+			}
+			if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM events`).Scan(&viewed); err != nil || viewed != after["log"] {
+				t.Errorf("the view events: %d rows of %d, %v", viewed, after["log"], err)
 			}
 			cubes, err := s.Cubes(ctx)
 			if err != nil || len(cubes) != 1 {
@@ -79,9 +86,12 @@ func TestMigratesReleasedStores(t *testing.T) {
 			if b, err := s.Backups(ctx, cubes[0].ID); err != nil || len(b) != after["backups"] {
 				t.Errorf("backups: %d of %d, %v", len(b), after["backups"], err)
 			}
-			var top, seq int64
-			if err := s.db.QueryRowContext(ctx, `SELECT coalesce(max(id), 0), coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'backups'), 0) FROM backups`).Scan(&top, &seq); err != nil || seq != top {
-				t.Errorf("backups: sqlite_sequence at %d, the highest id %d, %v", seq, top, err)
+			for _, table := range []string{"backups", "commands"} {
+				var top, seq int64
+				// The names are the test's own.
+				if err := s.db.QueryRowContext(ctx, `SELECT coalesce(max(id), 0), coalesce((SELECT seq FROM sqlite_sequence WHERE name = ?), 0) FROM `+table, table).Scan(&top, &seq); err != nil || seq != top {
+					t.Errorf("%s: sqlite_sequence at %d, the highest id %d, %v", table, seq, top, err)
+				}
 			}
 			if _, err := s.Settings(ctx); err != nil {
 				t.Errorf("settings: %v", err)

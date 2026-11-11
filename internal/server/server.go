@@ -469,8 +469,15 @@ type event struct {
 	// them now; absent for the Cube, the server's own jobs and a server
 	// without users (the bootstrap token is a key of the first owner).
 	By *eventUser `json:"by,omitempty"`
-	// userID is By's row in the store, kept in events.user_id.
+	// Command is the command the event belongs to (its attempt, a
+	// discard and a retry, its outcome), GET /api/v1/commands/{id}; 0
+	// for none, and once the command is pruned.
+	Command int64 `json:"command,omitempty"`
+	// userID is By's row in the store, kept in log.user_id.
 	userID int64
+	// audit marks an event only a user with audit sees (the log's
+	// visibility audit).
+	audit bool
 	// seq is the event's number on the Cube's stream, its id there
 	// (resume.go); 0 for an event the stream did not publish.
 	seq uint64
