@@ -9,7 +9,9 @@ name: Nightly
 # build; both see this workflow's event, schedule or workflow_dispatch,
 # from which the rolling job admits the flavour nightly alone, and its
 # ref, main, which the signing-rolling environment admits. The site is
-# deployed also for a run that has nothing to build.
+# deployed also for a run that has nothing to build, but for one at a
+# release commit, main's head while its tag's run is still going: that
+# run deploys the same commit, and Pages keeps the first deploy of one.
 on:
   schedule:
     - cron: '30 2 * * *'
@@ -30,7 +32,9 @@ jobs:
       attestations: write
     uses: ./.github/workflows/build.yml
 
-  # contents to publish, pages and id-token to deploy the site.
+  # contents to publish, pages and id-token to deploy the site, actions
+  # for the release's jobs that wait for Sign and publish: a called job
+  # may ask for no more than this, whether it runs or not.
   release:
     name: Release
     needs: build
@@ -38,6 +42,7 @@ jobs:
       contents: write
       pages: write
       id-token: write
+      actions: read
     uses: ./.github/workflows/release.yml
     secrets: inherit
     with:
@@ -48,3 +53,4 @@ jobs:
       flavour: ${{ needs.build.outputs.flavour }}
       release: ${{ needs.build.outputs.release }}
       prerelease: ${{ needs.build.outputs.prerelease }}
+      site: ${{ needs.build.outputs.site }}

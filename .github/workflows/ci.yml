@@ -1183,6 +1183,8 @@ jobs:
   # success(), which is false while any job up the chain was skipped, as
   # Fuzz is on a pull request and Changed paths, now What to test, was on
   # a push (2026-11-10: the first devel build was skipped so).
+  # actions: release.yml's apt-build and homebrew read the run's jobs
+  # while they wait for Sign and publish.
   release:
     name: Release
     needs: [ tests, build ]
@@ -1191,6 +1193,7 @@ jobs:
       contents: write
       pages: write
       id-token: write
+      actions: read
     uses: ./.github/workflows/release.yml
     secrets: inherit
     with:

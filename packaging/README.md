@@ -914,6 +914,8 @@ so that a key `main` can reach signs nothing a box on `alpha` or above takes.
 with write access, with which the release fast-forwards `release/<flavour>`;
 `ROLLING_TAG_DEPLOY_KEY`, in `signing-rolling`, that of another,
 with which the rolling builds move `release/devel` and `release/nightly`.
+`HOMEBREW_TAP_DEPLOY_KEY` and the apt key are in `signing` as well (see "Homebrew"),
+and one approval lets every job holding one of them run.
 The repository's rulesets keep the `v*` tags from being moved or deleted
 and let the `release/*` branches only fast-forward
 (GUIDELINES/project/CI.md, section 6).
@@ -1225,10 +1227,15 @@ The owner's steps, once:
   the workflow writes `Formula/<name>.rb`.
 - Make a deploy key, `ssh-keygen -t ed25519 -f tap-deploy-key -N ''`:
   the public half as a deploy key of the tap with write access,
-  the private half as the repository secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository
-  (GUIDELINES/project/CI.md, section 5).
+  the private half as the secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository's
+  `signing` environment (GUIDELINES/project/CI.md, section 5),
+  `gh secret set HOMEBREW_TAP_DEPLOY_KEY --env signing < tap-deploy-key`.
+  A repository secret of that name, where it was kept until 2026-11-11,
+  is deleted once the environment holds it:
+  any run on any branch can read a repository secret.
 - For the newest release, published before the tap existed:
-  `gh workflow run publish.yml -f tag=<tag>`;
+  `gh workflow run publish.yml --ref <tag> -f tag=<tag>`,
+  approved as a release is;
   every later release pushes its formula itself.
 
 ## Resource use

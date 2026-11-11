@@ -11,7 +11,9 @@ name: Build
 # GitHub release tagged release/devel, its version what git describe calls
 # the commit; the schedule or a start by hand (nightly.yml) as the nightly
 # build, release/nightly, of the newest commit of main whose suite passed
-# and that is newer than the one it carries. The flavour of a release
+# and that is newer than the one it carries, and nothing, with no site
+# (the output site), where main's head is a release commit, which its
+# tag's run builds and deploys. The flavour of a release
 # (internal/update) is the pre-release label of its tag (v0.7.0-alpha.1
 # is alpha), stable for a tag without one (v1.0.0). The commit must be on
 # main, where every release is cut (`make release-alpha`). `build` runs
@@ -38,6 +40,8 @@ on:
         value: ${{ jobs.meta.outputs.release }}
       prerelease:
         value: ${{ jobs.meta.outputs.prerelease }}
+      site:
+        value: ${{ jobs.meta.outputs.site }}
 
 permissions:
   contents: read
@@ -58,6 +62,7 @@ jobs:
       flavour: ${{ steps.meta.outputs.flavour }}
       release: ${{ steps.meta.outputs.release }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
+      site: ${{ steps.meta.outputs.site }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,7 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          kind=skip tag="" sha="" version="" flavour="" release="" prerelease=true
+          kind=skip tag="" sha="" version="" flavour="" release="" prerelease=true site=true
           # rolling <flavour> <commit>: kind and version for a rolling build
           # of the commit, or kind skip where its release is at or after it.
           rolling() {
@@ -104,27 +109,38 @@ jobs:
           # The event is the caller's (push) where ci.yml called this.
           case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
           schedule:refs/heads/main | workflow_dispatch:refs/heads/main)
-            # The owner's rule: the newest commit of main whose suite
-            # passed and that is newer than the nightly build's, so that
-            # a red last commit does not cost a night whose second-last
-            # was green. main's first parents, newest first, at most 100,
-            # down to the nightly build's commit.
-            git fetch --quiet --force origin "+refs/tags/release/nightly:refs/tags/release/nightly" 2>/dev/null || true
-            cur="$(git rev-parse --verify --quiet "refs/tags/release/nightly^{commit}" || true)"
-            pick=""
-            for c in $(git rev-list --first-parent --max-count=100 origin/main); do
-              if [ -n "$cur" ] && git merge-base --is-ancestor "$c" "$cur"; then
-                break
-              fi
-              if passed "$c"; then
-                pick="$c"
-                break
-              fi
-            done
-            if [ -n "$pick" ]; then
-              rolling nightly "$pick"
+            # A release commit at main's head is its tag's run's: that run
+            # builds it and deploys the site at the same commit, and Pages
+            # keeps the first deploy of a commit (D55-A, 2026-11-11). The
+            # commit and its tag are pushed together, so the tag is there.
+            at="$(git tag --points-at "$GITHUB_SHA" --list 'v[0-9]*')"
+            at="${at%%$'\n'*}"
+            if [ -n "$at" ]; then
+              echo "main's head is the release commit of ${at}: its own run builds and deploys it; no nightly build, no site."
+              site=false
             else
-              echo "no commit of main after ${cur:-the start} has passed its suite: no nightly build."
+              # The owner's rule: the newest commit of main whose suite
+              # passed and that is newer than the nightly build's, so that
+              # a red last commit does not cost a night whose second-last
+              # was green. main's first parents, newest first, at most 100,
+              # down to the nightly build's commit.
+              git fetch --quiet --force origin "+refs/tags/release/nightly:refs/tags/release/nightly" 2>/dev/null || true
+              cur="$(git rev-parse --verify --quiet "refs/tags/release/nightly^{commit}" || true)"
+              pick=""
+              for c in $(git rev-list --first-parent --max-count=100 origin/main); do
+                if [ -n "$cur" ] && git merge-base --is-ancestor "$c" "$cur"; then
+                  break
+                fi
+                if passed "$c"; then
+                  pick="$c"
+                  break
+                fi
+              done
+              if [ -n "$pick" ]; then
+                rolling nightly "$pick"
+              else
+                echo "no commit of main after ${cur:-the start} has passed its suite: no nightly build."
+              fi
             fi
             ;;
           push:refs/heads/main)
@@ -166,6 +182,7 @@ jobs:
             echo "flavour=${flavour}"
             echo "release=${release}"
             echo "prerelease=${prerelease}"
+            echo "site=${site}"
           } >> "$GITHUB_OUTPUT"
 
   build:
