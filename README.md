@@ -602,7 +602,7 @@ the server asks the script to set and clear a TXT record under `_acme-challenge.
 so no port has to be open, the name may point at the box's LAN address,
 and wildcards (`-tls-names '*.example.net,example.net'`) work;
 `packaging/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh` are the scripts
-for a zone at Infomaniak or at Cloudflare,
+for a zone at Infomaniak or at Cloudflare (they need `curl` and `jq`),
 and any other provider's API fits in a dozen lines (see
 [packaging/README.md](packaging/README.md)).
 A certificate that ends within two weeks, or an order that has not succeeded,

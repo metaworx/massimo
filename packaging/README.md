@@ -224,7 +224,8 @@ so its own secret comes from a file;
 a run ends after two minutes, with every process it started.
 `packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
 Infomaniak (its name servers, not merely registered there):
-it needs `curl` and `jq`,
+it needs `curl` and `jq` (`sudo apt install curl jq`;
+it names the one that is missing),
 and a token with the DNS scope from the API section of the Infomaniak
 manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
 It hands the token to `curl` on its standard input, never on its command line,
@@ -259,7 +260,8 @@ sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /us
 
 A box with the Debian package has both scripts already,
 as `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`:
-there the token file and the `massimo install` line are all it takes,
+there `curl` and `jq`, which the package suggests without installing them,
+the token file and the `massimo install` line are all it takes,
 with `-acme-dns-hook /usr/share/massimo/acme-dns-hooks/<provider>.sh`.
 
 Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:
@@ -307,7 +309,7 @@ the update helper's `massimo-update.path` and the package's own `massimo-update.
 enabled (see "Updates through apt" below),
 the log rotation and the marker `/usr/share/massimo/packaged`,
 the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
-(see `-acme-dns-hook` above),
+(see `-acme-dns-hook` above; it suggests their `curl` and `jq`),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
 its scripts create the user `massimo`, `/etc/massimo/env` from the template
