@@ -684,6 +684,11 @@ the others still cover `-log-keep-min` (5M), so that many small files stay
 (`MASSIMO_LOG_ROTATE_SIZE`, `MASSIMO_LOG_KEEP`, `MASSIMO_LOG_KEEP_MIN`).
 The old file's last line says so, and the new file's first,
 which is a line `log_rotated` in the web UI's log too.
+Every line says whose it is, `source=` (`system`, `server`, `cube`,
+`device`, `queue`, `proxy`, `store`, …), and `cube=` where it concerns one;
+every event of the web UI's log is one line as well,
+with its `kind=` and, for a command's, `command=`,
+written from the same record as the log's row.
 `-log-level debug` (or `MASSIMO_LOG_LEVEL`; `info`, the default,
 `warn` and `error`) adds the Debug lines,
 such as every failed attempt to reach a lost Cube

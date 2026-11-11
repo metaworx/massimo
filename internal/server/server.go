@@ -387,6 +387,10 @@ type runtime struct {
 	// structure is the lock of a change of rooms, devices and their
 	// metadata, see lockStructure.
 	structure chan struct{}
+
+	// evlog takes the events' lines (eventline.go): the server's root
+	// logger, each line saying its own source.
+	evlog *slog.Logger
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -539,6 +543,7 @@ func (rt *runtime) remember(ev event) {
 // for the log, settled.
 func (rt *runtime) emit(ev event) {
 	ev.settle()
+	rt.line(ev)
 	rt.remember(ev)
 	rt.send(ev)
 }
@@ -561,6 +566,7 @@ func (rt *runtime) sendUser(userID int64, ev event) {
 func (s *Server) logServer(ev event) {
 	ev.settle()
 	s.nameUser(context.Background(), &ev)
+	eventLine(s.opts.Logger, "", ev)
 	if st := s.opts.Store; st != nil {
 		st.AddEvent(storedEvent(0, ev))
 	}
@@ -828,11 +834,6 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 							ev.Changes = view.Changes(prev, dv.State)
 						}
 						rt.last[e.Device] = dv.State
-						attrs := stateAttrs(rt.cubeSerial(), dv)
-						if len(ev.Changes) > 0 {
-							attrs = append(attrs, "changed", changedNames(ev.Changes))
-						}
-						s.log.Info("device state", attrs...)
 					}
 				}
 			}
@@ -851,6 +852,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			after := s.detail(ctx, rt, e, &ev)
 			ev.settle()
+			rt.line(ev)
 			rt.remember(ev)
 			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()

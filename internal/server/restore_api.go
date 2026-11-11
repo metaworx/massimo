@@ -180,8 +180,8 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 	if !rt.startRestore(run) {
 		return s.refuseRestore(rt, http.StatusConflict, "a restore is already running")
 	}
-	s.log.Info("restore started", "cube", rt.cubeSerial(), "id", run.ID, "steps", len(p.Steps), "radio_commands", v.RadioCommands, "duty_pct", v.Budget.DutyCyclePct)
-	s.emitBy(rt, systemEvent("restore_started", userIDOf(r), map[string]any{"id": run.ID, "steps": len(p.Steps), "radio_commands": v.RadioCommands}))
+	s.emitBy(rt, systemEvent("restore_started", userIDOf(r), map[string]any{"id": run.ID, "steps": len(p.Steps), "radio_commands": v.RadioCommands,
+		"duty_pct": v.Budget.DutyCyclePct}))
 	// Counted in s.wg while Run runs, so that Run waits for the restore's
 	// restore_done; before Run (the tests), on the background context.
 	ctx := s.track()
@@ -560,12 +560,11 @@ func (s *Server) runRestore(ctx context.Context, rt *runtime, run *restoreRun, p
 	}
 	done := restoreProgress{ID: run.ID, Steps: len(run.Steps), OK: err == nil, Error: run.Error, State: run.State, Sent: run.Sent}
 	rt.restoreMu.Unlock()
-	rt.emit(event{Kind: "restore_done", Error: done.Error, Time: finished, Restore: &done})
+	finishedEv := event{Kind: "restore_done", Error: done.Error, Time: finished, Restore: &done}
+	if done.Error != "" {
+		finishedEv.Level = "warn"
+	}
+	rt.emit(finishedEv)
 	s.finishCommand(command, err == nil, map[string]any{"id": run.ID, "state": done.State, "sent": done.Sent, "steps": done.Steps, "error": done.Error},
 		restoreAnswer(run.ID, len(p.Steps)))
-	if err != nil {
-		s.log.Warn("restore failed", "cube", rt.cubeSerial(), "id", run.ID, "sent", done.Sent, "steps", done.Steps, "error", err)
-		return
-	}
-	s.log.Info("restore done", "cube", rt.cubeSerial(), "id", run.ID, "sent", done.Sent, "steps", done.Steps)
 }

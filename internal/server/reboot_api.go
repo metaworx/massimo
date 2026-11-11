@@ -92,7 +92,6 @@ func (s *Server) SetRebootAllowed(on bool) {
 	cancelled := !on && p.takeBack()
 	p.mu.Unlock()
 	if cancelled {
-		s.log.Warn("reboot taken back: switched off")
 		s.noteStop("")
 		s.logServer(systemEvent("reboot_cancelled", 0, map[string]any{"why": "switched off"}))
 	}
@@ -192,11 +191,6 @@ func (s *Server) startReboot(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusConflict, rebootWaiting)
 	}
-	attrs := []any{"by", v.By, "delay", delay.String(), "at", at.Format(time.RFC3339), "remote", s.clientIP(r)}
-	if p := principalOf(r); p.named() {
-		attrs = append(attrs, "user", p.user.Name)
-	}
-	s.log.Info("reboot requested", attrs...)
 	s.noteStop("reboot")
 	s.logServer(systemEvent("reboot", userIDOf(r), map[string]any{"by": v.By, "at": at.UTC().Format(time.RFC3339)}))
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "by": v.By, "at": at})
@@ -232,10 +226,9 @@ func (s *Server) rebootNow(gen uint64) {
 	s.log.Info("rebooting the computer", "by", s.opts.Reboot.By)
 	err := s.opts.Reboot.Reboot()
 	if err != nil {
-		s.log.Error("reboot not started", "error", err)
 		s.noteStop("")
 		failed := systemEvent("reboot", 0, map[string]any{"by": s.opts.Reboot.By})
-		failed.Level, failed.Error = "warn", err.Error()
+		failed.Level, failed.Error = "error", err.Error()
 		s.logServer(failed)
 		p.failed(gen, err.Error())
 		return
@@ -278,11 +271,6 @@ func (s *Server) cancelReboot(w http.ResponseWriter, r *http.Request) error {
 	case !waits || !taken:
 		return fail(http.StatusConflict, "no reboot is waiting")
 	}
-	attrs := []any{"remote", s.clientIP(r)}
-	if pr := principalOf(r); pr.named() {
-		attrs = append(attrs, "user", pr.user.Name)
-	}
-	s.log.Info("reboot taken back", attrs...)
 	s.noteStop("")
 	s.logServer(systemEvent("reboot_cancelled", userIDOf(r), nil))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

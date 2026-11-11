@@ -115,8 +115,8 @@ for f in json.load(sys.stdin).get("found") or []:
 cube_listed() { grep -q "^$SERIAL $cube_ip $CUBE_MAC false " <<<"$answers"; }
 finds_cube() { search && cube_listed; }
 searcher_log() { compose logs --no-color --no-log-prefix searcher 2>&1; }
-gone_lines() { searcher_log | grep -c -- "msg=\"cube gone from the LAN, not configured\" source=server serial=$SERIAL ip=$cube_ip " || true; }
-found_lines() { searcher_log | grep -c -- "msg=\"cube found on the LAN, not configured\" source=server serial=$SERIAL ip=$cube_ip mac=$CUBE_MAC" || true; }
+gone_lines() { searcher_log | grep -c -- "msg=\"cube gone from the LAN\" source=cube kind=cube_gone serial=$SERIAL ip=$cube_ip " || true; }
+found_lines() { searcher_log | grep -c -- "msg=\"cube found on the LAN\" source=cube kind=cube_found serial=$SERIAL ip=$cube_ip mac=$CUBE_MAC" || true; }
 logged_found() { [ "$(found_lines)" -ge "$1" ]; }
 
 # 1. A search finds the Cube, with no proxy on the LAN.

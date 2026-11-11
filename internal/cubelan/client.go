@@ -35,6 +35,11 @@ type Options struct {
 	// RemindEvery is how often a Cube that stays unreachable is warned
 	// of again. 0 is a day; the tests set less.
 	RemindEvery time.Duration
+	// EventLines says that the caller writes a line of its own for each
+	// event (serve's server, which logs every event it keeps): the
+	// client's lines of a connection, a loss, a device paired and a
+	// device forgotten go to debug then, so that the log says each once.
+	EventLines bool
 }
 
 // Client is a persistent, reconnecting connection to one Cube.
@@ -205,6 +210,15 @@ func (c *Client) Connected() bool { return c.online.Load() }
 // connects again on purpose (Reconnect), and while it has not tried yet.
 func (c *Client) Lost() bool { return c.lost.Load() }
 
+// eventLevel is the level of the client's line of an event: debug where
+// the caller writes the event's own line (Options.EventLines).
+func (c *Client) eventLevel(level slog.Level) slog.Level {
+	if c.opts.EventLines {
+		return slog.LevelDebug
+	}
+	return level
+}
+
 // Ready is closed after the first complete greeting.
 func (c *Client) Ready() <-chan struct{} { return c.ready }
 
@@ -245,7 +259,7 @@ func (c *Client) Run(ctx context.Context) error {
 			// The warning first, then Lost, then the event: whoever sees
 			// Lost sees the warning, and whoever reads the event sees Lost.
 			lost, warned = now, now
-			c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
+			c.log.Log(context.Background(), c.eventLevel(slog.LevelWarn), "cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 			c.lost.Store(true)
 			c.emit(Event{Kind: EventDisconnected, Err: err})
 		case now.Sub(warned) >= c.opts.RemindEvery:
@@ -333,9 +347,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 				// The line before the event, as for a loss: whoever reads
 				// the event sees the connection's line.
 				if lost.IsZero() {
-					c.log.Info("cube connected", "addr", c.Address())
+					c.log.Log(context.Background(), c.eventLevel(slog.LevelInfo), "cube connected", "addr", c.Address())
 				} else {
-					c.log.Info("cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
+					c.log.Log(context.Background(), c.eventLevel(slog.LevelInfo), "cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
 				}
 				c.emit(ev)
 			}
@@ -644,7 +658,7 @@ func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
 func (c *Client) ForgetDevice(rf cube.RFAddress) {
 	if gone, ok := c.snap.Forget(rf); ok {
 		c.emit(Event{Kind: EventForgotten, Device: rf, Gone: &gone})
-		c.log.Info("device forgotten", "addr", c.Address(), "device", rf, "serial", gone.Serial)
+		c.log.Log(context.Background(), c.eventLevel(slog.LevelInfo), "device forgotten", "addr", c.Address(), "device", rf, "serial", gone.Serial)
 	}
 }
 
