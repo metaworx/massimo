@@ -24,6 +24,15 @@ handed over before the stream opens again.
 test_login.py opens a context of its own, without the token, from
 pytest-playwright's new_context with the case's viewport and locale.
 
+A page without the token counts a failed token check against 127.0.0.1
+with every API request it sends, and the files of a worker share its
+server: ten within a minute, a sign-in's wrong password among them, lock
+the address out for five minutes (429). After a test that used
+new_context, one request with the token forgets them (the autouse
+fixture failed_checks_forgotten); after every test, the set's store,
+massimo.db beside UI_TEST_SERVE_LOG, has none counted against an address,
+or the test errors at teardown.
+
 The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
 test and a stubbed 503 of the discovery are expected.
@@ -35,6 +44,7 @@ once more under results/retry/.
 """
 import json
 import os
+import sqlite3
 import ssl
 import urllib.request
 
@@ -112,14 +122,43 @@ def api_call(method, path, body=None, token=None):
     return json.loads(text) if text else None
 
 
+def address_failures():
+    """The failed checks the set's store counts against an address, as
+    (key, count, locked until); None without the store's directory
+    (UI_TEST_SERVE_LOG), for a server started by hand."""
+    log = os.environ.get("UI_TEST_SERVE_LOG", "")
+    if not log:
+        return None
+    db = sqlite3.connect(f"file:{os.path.join(os.path.dirname(log), 'massimo.db')}?mode=ro", uri=True)
+    try:
+        return db.execute("SELECT key, count, locked_until FROM auth_failures WHERE key LIKE 'addr:%' ORDER BY key").fetchall()
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def failed_checks_forgotten(request):
+    """After a test that opened a context without the token (new_context),
+    whose page's requests each counted a failed token check against the
+    address, a request with the token forgets them; then, after every
+    test, none is left, so that no file brings the next one on its
+    worker closer to the lockout. Set up before new_context, this is torn
+    down after it, once its contexts are closed."""
+    yield
+    if TOKEN and "new_context" in request.fixturenames:
+        api_call("GET", "api/v1/me")
+    left = address_failures()
+    assert not left, f"the test leaves failed token checks counted against the address (key, count, locked until): {left}"
+
+
 def clear_preferences():
     """The token's user keeps the page's settings on the server, and the
     four cases share the server: its preferences are removed before
-    every page, so that a test starts from the defaults as a fresh
-    browser does."""
+    every page, its notification rules among them, so that a test starts
+    from the defaults as a fresh browser does."""
     if not TOKEN:
         return
-    for key in ("ui", "schemes"):
+    for key in ("ui", "schemes", "notify"):
         api_call("DELETE", "api/v1/me/preferences/" + key)
 
 

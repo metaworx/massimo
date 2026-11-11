@@ -17,21 +17,55 @@ settings() {
 
 case "$1" in
 configure)
-	if ! getent passwd massimo >/dev/null; then
-		adduser --system --group --home /var/lib/massimo --no-create-home \
-			--shell /usr/sbin/nologin --quiet massimo
+	# The service account is _massimo, a name no person has. The account
+	# massimo that an older package or `massimo install` made, with the
+	# home /var/lib/massimo, is renamed in place: usermod keeps its ID, so
+	# its files follow. usermod refuses an account a process runs as, so a
+	# running service is stopped first and started again below. Any other
+	# massimo is a person's, and is left alone.
+	stopped=no
+	if ! getent passwd _massimo >/dev/null; then
+		if [ "$(getent passwd massimo | cut -d: -f6)" = /var/lib/massimo ]; then
+			if [ -d /run/systemd/system ] && command -v deb-systemd-invoke >/dev/null 2>&1; then
+				case "$(systemctl is-active massimo.service 2>/dev/null || true)" in
+				active | activating | reloading)
+					deb-systemd-invoke stop massimo.service >/dev/null || true
+					stopped=yes
+					;;
+				esac
+			fi
+			if ! usermod -l _massimo massimo; then
+				echo "massimo: the user massimo could not be renamed _massimo; stop what runs as massimo, then: sudo dpkg --configure -a" >&2
+				exit 1
+			fi
+			if getent group massimo >/dev/null && ! getent group _massimo >/dev/null; then
+				groupmod -n _massimo massimo
+			fi
+		else
+			adduser --system --group --home /var/lib/massimo --no-create-home \
+				--shell /usr/sbin/nologin --quiet _massimo
+		fi
 	fi
 	if [ ! -d /etc/massimo ]; then
-		install -d -m 0750 -o massimo -g massimo /etc/massimo
+		install -d -m 0750 -o _massimo -g _massimo /etc/massimo
 	fi
 	# Written once, never replaced: it holds the Cube keys and the token.
 	if [ ! -e /etc/massimo/env ]; then
-		install -m 0600 -o massimo -g massimo /usr/share/massimo/env.template /etc/massimo/env
+		install -m 0600 -o _massimo -g _massimo /usr/share/massimo/env.template /etc/massimo/env
 	fi
 	# systemd makes it at the first start (StateDirectory=); made here, so
 	# that `massimo user add` can create the owner before that.
 	if [ ! -d /var/lib/massimo ]; then
-		install -d -m 0750 -o massimo -g massimo /var/lib/massimo
+		install -d -m 0750 -o _massimo -g _massimo /var/lib/massimo
+	fi
+	# An older package or `massimo install` that found a person's account
+	# massimo ran the service as that person, whose files these still are,
+	# and _massimo cannot read them. Ours is _massimo by now, renamed or
+	# made, so a massimo that owns the settings is a person's. Said, not
+	# done: what in /etc/massimo is the service's is the owner's call.
+	if [ "$(stat -c %U /etc/massimo/env 2>/dev/null)" = massimo ]; then
+		echo "massimo: /etc/massimo/env belongs to the user massimo, which an older release ran the service as; the service runs as _massimo now and cannot read it" >&2
+		echo "massimo: hand the service its files: sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo" >&2
 	fi
 	# Enabled as `massimo install` enables (debhelper's snippet, so that a
 	# box without a running systemd gets the same symlinks).
@@ -72,14 +106,14 @@ configure)
 		state=$(systemctl is-active massimo.service 2>/dev/null || true)
 		case "$state" in
 		active | activating | reloading) start=yes ;;
-		*) start=no ;;
+		*) start=$stopped ;;
 		esac
 		if [ "$(settings /etc/massimo/env)" != "$(settings /usr/share/massimo/env.template)" ]; then
 			start=yes
 		fi
 		if [ "$start" = no ]; then
 			echo "massimo: not started: until it has an owner, every device on the local network may use it" >&2
-			echo "massimo: create the owner first: sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner" >&2
+			echo "massimo: create the owner first: sudo -u _massimo /usr/bin/massimo user add <name> -role owner" >&2
 			echo "massimo: then start it: sudo systemctl start massimo" >&2
 			echo "massimo: or start it and create the owner in the web UI; the Cubes are added there (System settings → Cubes)" >&2
 		elif command -v deb-systemd-invoke >/dev/null 2>&1; then

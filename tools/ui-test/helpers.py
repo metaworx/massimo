@@ -42,6 +42,30 @@ def wait_until(page, expr, seconds):
     return False
 
 
+def scroll_settled(page, seconds=3):
+    """Waits until the page has not scrolled for ten animation frames;
+    false if it is still scrolling after so many seconds. Chromium runs a
+    smooth scroll on the compositor, and an instant scroll sent while it
+    ends can be undone by it: the page back where the smooth scroll was
+    going. Frames, not polls from here: two equal readings 200 ms apart
+    can be one pause of a starved renderer."""
+    return page.evaluate("""(ms) => new Promise((done) => {
+        const end = performance.now() + ms;
+        let last = window.scrollY, still = 0;
+        const frame = () => {
+            if (window.scrollY !== last) {
+                last = window.scrollY;
+                still = 0;
+            } else if (++still >= 10) {
+                return done(true);
+            }
+            if (performance.now() > end) return done(false);
+            requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+    })""", seconds * 1000)
+
+
 def scroll_width(page):
     """The page's width with what sticks out of it; more than the
     viewport's width is a horizontal scroll."""
@@ -170,16 +194,16 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
 # The pages of the main area: how a user opens each, and the section it
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}
-VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs"}
+VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs", "notify": "#menu-notify"}
 VIEW_FOLDED = {"log": "#menu-log", "system": "#menu-system"}  # in ☰ below 600 px
-VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "system": "#system"}
+VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "notify": "#notify", "system": "#system"}
 
 
 def show_view(page, view):
     """A page of the main area, opened as a user opens it: Rooms, the log
     and System settings with their button in the header, or on a narrow
-    screen the log and System settings from ☰, My profile and My settings
-    from the 👤 menu."""
+    screen the log and System settings from ☰, My profile, My settings
+    and Notifications from the 👤 menu."""
     if view in VIEW_MENU:
         open_user_menu(page)
         page.locator(VIEW_MENU[view]).click()

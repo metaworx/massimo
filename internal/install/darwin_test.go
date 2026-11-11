@@ -58,7 +58,7 @@ func TestInstallDarwin(t *testing.T) {
 		dscl + " . -create /Groups/_massimo PrimaryGroupID 401", // 400 is a group's
 		dscl + " . -create /Users/_massimo UniqueID 401",
 		dscl + " . -create /Users/_massimo IsHidden 1",
-		"chown _massimo:_massimo " + filepath.Join(root, EnvPath),
+		"chown -h _massimo:_massimo " + filepath.Join(root, EnvPath),
 		"chown _massimo:_massimo " + filepath.Join(root, StateDir),
 		"chown root:wheel " + filepath.Join(root, HelperStateDir),
 		launchctl + " bootstrap system " + PlistPath(HelperLabel),
@@ -106,14 +106,14 @@ func TestInstallDarwinNoHelperAndTemplate(t *testing.T) {
 	if env := read(t, filepath.Join(root, EnvPath)); !strings.Contains(env, "by the user _massimo.") || strings.Contains(env, "\nMASSIMO_LOG=") {
 		t.Errorf("env template: %s", env)
 	}
-	if _, err := os.Stat(filepath.Join(root, DarwinLog)); err != nil || !rec.has("chown _massimo:_massimo "+filepath.Join(root, DarwinLog)) {
+	if _, err := os.Stat(filepath.Join(root, DarwinLog)); err != nil || !rec.has("chown -h _massimo:_massimo "+filepath.Join(root, DarwinLog)) {
 		t.Errorf("log file: %v", err)
 	}
 	// Only the template: not started, and the way to the owner said.
 	if rec.has(launchctl+" bootstrap system "+PlistPath(Label)) || !strings.Contains(out.String(), "not started") {
 		t.Errorf("started without settings: %s", out.String())
 	}
-	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner\n") ||
+	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner\n") ||
 		!strings.Contains(out.String(), "then start it: sudo launchctl bootstrap system "+PlistPath(Label)+"\n") {
 		t.Errorf("the message: %s", out.String())
 	}
@@ -197,7 +197,7 @@ func TestInstallDarwinTLS(t *testing.T) {
 	if err := InstallDarwin(o); err != nil {
 		t.Fatal(err)
 	}
-	if read(t, filepath.Join(root, EnvDir, certName)) != "CERT" || !rec.has("chown _massimo:_massimo "+filepath.Join(root, EnvDir, keyName)) {
+	if read(t, filepath.Join(root, EnvDir, certName)) != "CERT" || !rec.has("chown -h _massimo:_massimo "+filepath.Join(root, EnvDir, keyName)) {
 		t.Fatalf("files: %q", rec.cmds)
 	}
 	if !strings.Contains(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") {

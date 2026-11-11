@@ -53,7 +53,7 @@ challenge instead, with no port and wildcards); -tls off switches TLS
 off again. Run the service once with -hsts 0 over TLS first, or browsers
 refuse http:// for a year.
 
-- Linux with systemd: the binary as %s, the user massimo, %s,
+- Linux with systemd: the binary as %s, the user _massimo, %s,
   the units massimo.service and the update helper
   massimo-update.path/.service, with -reboot-helper the reboot helper
   massimo-reboot.path/.service, and the log rotation; a unit edited by

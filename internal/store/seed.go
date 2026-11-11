@@ -105,7 +105,7 @@ const PlainSerialKey = "seed.plain_serial"
 
 // PlainSerial returns the serial PlainSerialKey holds, "" when none.
 func (s *Store) PlainSerial(ctx context.Context) (string, error) {
-	return s.settingString(ctx, PlainSerialKey)
+	return s.SettingString(ctx, PlainSerialKey)
 }
 
 // fromFile sets a row's configuration from the file: configured, from

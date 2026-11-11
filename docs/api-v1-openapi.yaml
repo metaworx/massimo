@@ -940,7 +940,11 @@ paths:
         configured is announced as a cube_found event on every Cube's
         stream when it first answers, and again when it answers after a
         complete run without it; not after a restart. A found Cube that
-        does not answer a complete run leaves GET /api/v1/cubes.
+        does not answer a complete run leaves GET /api/v1/cubes. Each
+        Cube is listed once, at its own address where a massimo proxy
+        answers for it too; one configured by serial only keeps its
+        address while that answers, else takes the proxy's, else its
+        own, at most one move a run.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -1870,6 +1874,13 @@ paths:
         configuration. A comment line
         every 30 seconds keeps the stream alive. Browsers open it
         without headers: pass a ticket from POST …/events/ticket.
+        Every event carries an id, "<epoch>-<number>"; the connection's
+        state events none but the last, which carries the newest. A client
+        that reconnects with the last id it read, in Last-Event-ID or
+        last_event_id, gets the events since and no state burst; an id the
+        server no longer holds gets a resync event, then the state burst.
+        A client that falls behind is sent what is queued, then the stream
+        ends.
       security:
         - bearer: []
         - ticket: []
@@ -1878,6 +1889,8 @@ paths:
       parameters:
         - {$ref: "#/components/parameters/sn"}
         - {name: ticket, in: query, description: Single-use ticket from POST …/events/ticket, schema: {type: string}}
+        - {name: last_event_id, in: query, description: "The last event id the client read, to resume after it; Last-Event-ID wins where both are given", schema: {type: string}}
+        - {name: Last-Event-ID, in: header, description: "The last event id the client read, as a browser's retry sends it", schema: {type: string}}
         - {name: token, in: query, deprecated: true, description: "The API token itself; deprecated, it ends up in URLs and logs. Answered with the header Deprecation: @1793836800 (RFC 9745)", schema: {type: string}}
       responses:
         "200":
@@ -1938,6 +1951,7 @@ paths:
                 backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
+                update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -1958,8 +1972,11 @@ paths:
         only on request), the intervals at the next start; the whole
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
-        alone); null goes back to the default. Every value is checked
-        before any is written. The answer is that of GET.
+        alone); update.channel, devel, nightly, alpha, beta or stable,
+        the releases the box takes (its own flavour's and every more
+        stable one's; the default is the build's flavour); null goes back
+        to the default. Every value is checked before any is written. The
+        answer is that of GET.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -2899,9 +2916,10 @@ components:
       type: object
       properties:
         current: {type: string, description: The running version}
-        channel: {type: string, description: The update channel, a branch name; the apt source's suite where apt owns the binary}
+        flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta or stable; absent for a build without the Makefile"}
+        channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the flavour; the apt source's suite where apt owns the binary"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
-        latest: {type: string, description: Newest signed release on the channel}
+        latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
         release_url: {type: string}
         available: {type: boolean, description: latest is newer than current}
         checked_at: {type: string, format: date-time}
@@ -2940,11 +2958,21 @@ components:
       properties:
         serial: {type: string}
         configured: {type: boolean}
-        address: {type: string, description: The IP it answered from}
+        address: {type: string, description: "The IP it answered from, its own where a massimo proxy answers for it too"}
         mac: {type: string, description: From the host's ARP cache; absent when unknown}
         rf_address: {type: string}
         firmware: {type: string, example: "1.1.3"}
         dhcp: {type: boolean, description: "Whether the Cube takes its address by DHCP, from its answer to the c request in this server run's latest discovery that had one; absent until it has answered c"}
+        gateway: {type: string, description: "The gateway the Cube uses, from its answer to the N request in this server run's latest discovery that had one; absent until then"}
+        netmask: {type: string, description: The netmask the Cube uses, as gateway}
+        dns:
+          type: array
+          items: {type: string}
+          description: The DNS servers the Cube uses, as gateway
+        proxies:
+          type: array
+          items: {type: string}
+          description: "The other addresses that answered for the Cube's serial in the latest run: massimo proxies (docs/proxy.md); absent when none did"
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Cube:

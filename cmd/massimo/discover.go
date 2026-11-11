@@ -26,7 +26,7 @@ func runDiscover(args []string) error {
 	asJSON := fs.Bool("json", false, "print JSON instead of the tables: an object with the cubes and the servers")
 	addrs := fs.String("addr", "", "comma-separated IPs to ask directly instead of broadcasting")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo discover [-wait 3s] [-json] [-addr ip,ip]\n\nFind Cubes on the local network with a UDP broadcast (port 23272), and\nthe massimo servers that announce themselves by mDNS (_massimo._tcp).\nA Cube that is a massimo serve's proxy is marked proxy: by its MAC, which\nis not eQ-3's, or by its address, an announced server's. The broadcast\nmust reach the Cube's network: from WSL 2 in NAT mode it does not; use\nthe Windows binary, mirrored networking, or -addr.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo discover [-wait 3s] [-json] [-addr ip,ip]\n\nFind Cubes on the local network with a UDP broadcast (port 23272), and\nthe massimo servers that announce themselves by mDNS (_massimo._tcp).\nA Cube that is a massimo serve's proxy is marked proxy: it answers neither\nN nor c, and its MAC is not eQ-3's or its address is an announced server's.\nThe broadcast must reach the Cube's network: from WSL 2 in NAT mode it does\nnot; use the Windows binary, mirrored networking, or -addr.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -90,15 +90,15 @@ func nonNilFound(s []announce.Found) []announce.Found {
 }
 
 // markProxies marks the Cubes that are a massimo serve's proxy: those
-// whose MAC, from the ARP cache, is not eQ-3's, and those whose address
-// is an announced server's; where the ARP cache gives no MAC, the
-// address alone decides.
+// the search took for one (cubelan.KindProxy: no answer to N or c, a MAC
+// that is not eQ-3's), and those it could not tell whose address is an
+// announced server's. An answer the search took for a Cube's stays one.
 func markProxies(cubes []cubelan.Discovered, servers []announce.Found) []foundCube {
 	out := []foundCube{}
 	for _, c := range cubes {
-		proxy := c.MAC != "" && !cubelan.IsEQ3MAC(c.MAC)
+		proxy := c.Kind == cubelan.KindProxy
 		for _, s := range servers {
-			proxy = proxy || s.Has(c.IP)
+			proxy = proxy || (c.Kind != cubelan.KindCube && s.Has(c.IP))
 		}
 		out = append(out, foundCube{Discovered: c, Proxy: proxy})
 	}

@@ -31,9 +31,10 @@ type DiscoveryResponder struct {
 	RFAddress cube.RFAddress
 	Firmware  uint16 // e.g. 0x0113
 
-	pc       net.PacketConn
-	silent   atomic.Bool
-	noConfig atomic.Bool
+	pc           net.PacketConn
+	silent       atomic.Bool
+	noConfig     atomic.Bool
+	identifyOnly atomic.Bool
 
 	mu sync.Mutex
 	// netConfig is what the c reply carries and a C request replaces:
@@ -123,6 +124,10 @@ func (d *DiscoveryResponder) SetSilent(silent bool) { d.silent.Store(silent) }
 // whose answer gets lost.
 func (d *DiscoveryResponder) SetConfigSilent(silent bool) { d.noConfig.Store(silent) }
 
+// SetIdentifyOnly makes the responder answer the identify request
+// alone, as a massimo proxy does, or every request again.
+func (d *DiscoveryResponder) SetIdentifyOnly(only bool) { d.identifyOnly.Store(only) }
+
 // Close stops the responder.
 func (d *DiscoveryResponder) Close() error { return d.pc.Close() }
 
@@ -140,6 +145,9 @@ func (d *DiscoveryResponder) serve() {
 			continue
 		}
 		op := b[18]
+		if op != 'I' && d.identifyOnly.Load() {
+			continue
+		}
 		want := strings.TrimRight(string(b[8:18]), "*")
 		if want != "" && want != d.Serial {
 			continue

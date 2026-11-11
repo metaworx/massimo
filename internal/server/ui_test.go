@@ -46,7 +46,7 @@ func TestUIServed(t *testing.T) {
 		!strings.Contains(body, `<base href="../">`) || !strings.Contains(body, `http-equiv="Content-Security-Policy"`) {
 		t.Fatalf("GET /ui/connect.html: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js"} {
+	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/week-program.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js", "/ui/notify.js", "/ui/notifytext.js"} {
 		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
@@ -60,12 +60,33 @@ func TestUIServed(t *testing.T) {
 	if code, _, body := get("/ui/vendor/opaque.LICENSE"); code != 200 || !strings.HasPrefix(body, "MIT License") {
 		t.Fatalf("GET /ui/vendor/opaque.LICENSE: %d", code)
 	}
+	// The service worker and the manifest beside the page, so that the
+	// worker's scope and the manifest's addresses are the page's; the
+	// icons the manifest names.
+	if code, ct, body := get("/sw.js"); code != 200 || !strings.Contains(ct, "javascript") || !strings.Contains(body, `importScripts("ui/notifytext.js")`) {
+		t.Fatalf("GET /sw.js: %d %s", code, ct)
+	}
+	code, ct, body := get("/manifest.webmanifest")
+	var manifest struct {
+		StartURL string `json:"start_url"`
+		Display  string
+		Icons    []struct{ Src, Sizes, Purpose string }
+	}
+	if code != 200 || ct != "application/manifest+json" || json.Unmarshal([]byte(body), &manifest) != nil || manifest.StartURL != "." || manifest.Display != "standalone" || len(manifest.Icons) != 3 {
+		t.Fatalf("GET /manifest.webmanifest: %d %s %s", code, ct, body)
+	}
+	for _, icon := range manifest.Icons {
+		if code, ct, body := get("/" + icon.Src); code != 200 || ct != "image/png" || !strings.HasPrefix(body, "\x89PNG") {
+			t.Fatalf("GET /%s: %d %s", icon.Src, code, ct)
+		}
+	}
 	resp, err := http.Get(ts.URL + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self' 'wasm-unsafe-eval';") || strings.Contains(csp, "'unsafe-eval'") && !strings.Contains(csp, "'wasm-unsafe-eval'") {
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self' 'wasm-unsafe-eval';") || strings.Contains(csp, "'unsafe-eval'") && !strings.Contains(csp, "'wasm-unsafe-eval'") ||
+		!strings.Contains(csp, "worker-src 'self';") || !strings.Contains(csp, "manifest-src 'self';") {
 		t.Fatalf("the page's CSP: %s", csp)
 	}
 	for _, lang := range uiLanguages {
@@ -74,7 +95,7 @@ func TestUIServed(t *testing.T) {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
 	}
-	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/nope.js", "/other"} {
+	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/nope.js", "/ui/icons/", "/ui/icons/nope.png", "/other"} {
 		if code, _, _ := get(p); code != 404 {
 			t.Fatalf("GET %s: %d, want 404", p, code)
 		}

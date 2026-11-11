@@ -103,7 +103,12 @@ with the page's DOM, console and network at every step.
   and what a test lists in `watch.expected` are expected;
 - the marker `used_ticket`: the page's first stream gets a used ticket,
   which the server refuses with 401,
-  and the page is handed over before the stream is open again.
+  and the page is handed over before the stream is open again;
+- `failed_checks_forgotten` (autouse): after a test that opened a context
+  without the token (`new_context`), one request with the token forgets the
+  failed token checks its pages counted against 127.0.0.1;
+  after every test, the set's store (`massimo.db` beside `UI_TEST_SERVE_LOG`)
+  has none counted against an address, or the test errors at teardown.
 
 `fake_bridge.js` is the app's bridge for `test_connect.py`,
 `window.massimo` as docs/app.md describes it,
@@ -111,6 +116,9 @@ recording every call in `window.__fakeBridge.calls`.
 
 `helpers.py` holds the texts the tests expect in both languages,
 the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
+`scroll_settled`, which waits for a smooth scroll to end
+before a test scrolls on its own
+(Chromium's compositor can undo an instant scroll sent during it),
 `open_user_menu` and `sign_out` for the header's 👤 menu,
 and `show_view`, which opens a page as a user does:
 Rooms, the log and System settings with their header button,
@@ -120,6 +128,12 @@ My profile and My settings from the 👤 menu.
 The four cases share the one server of a worker,
 so a test that changes the server's store puts it back;
 what a test stores in the browser goes with its context.
+So do the files of a worker, in whatever order the scheduler gives them,
+and the API's lockout is the server's too:
+a page without the token counts a failed token check with every request,
+and ten within a minute, a wrong password among them,
+lock the address out for five minutes (429),
+hence `failed_checks_forgotten`.
 
 ## What the tests check
 
@@ -329,6 +343,27 @@ what a test stores in the browser goes with its context.
   keeps none in the browser, and hands a sign-in and a sign-out to the bridge.
   axe-core (`axe-playwright-python`) finds no violation on the connect page
   in each state the tests open.
+- `test_notifications.py`, 👤 → Notifications:
+  the rules show their defaults, a delay and a switch changed reach the
+  owner's preference `notify`, a delay out of bounds is refused, and the page
+  reads them back;
+  this browser turned on and off against a fake `pushManager`,
+  put into the page by `add_init_script` and a reload,
+  since a headless browser has no push service:
+  the worker registered beside the page and told the language,
+  the subscription posted with its name and marked in the list,
+  and removed at the server and in the browser;
+  another device removed by its Remove;
+  the toast of a notification from the stream and from the service worker,
+  shown once;
+  a guest's page, which says why it has none, and a browser without push;
+  and the page's own `sw.js` taking a push that Chromium's DevTools deliver:
+  the page's toast while the page is in front, and, made to see no window,
+  the system's notification in the language the page told it.
+  The subscriptions go to the loopback's discard port, so that a notification
+  the server decides meanwhile reaches no network,
+  and each test removes what it made.
+  axe-core finds no violation on the page in each of its states.
 - Every button on every page the tests open has an accessible name (its text,
   `aria-label`, `aria-labelledby` or `title`),
   and the pages have no horizontal scroll where the tests look for one.
@@ -351,9 +386,10 @@ named `<page>-<width>-<theme>-<lang>.png` and listed in one place,
 `SETS` in the script:
 the Rooms page, a tile's device list, the configuration's tabs Temperatures,
 Devices, Week programme and Copy, the House panel, the log, the 👤 menu,
-the Cube choice open, My profile, My settings, the Appearance editor,
-System settings, its Maintenance with the store and the settings in effect
-(fixed answers: the run's temporary directory and ports differ),
+the Cube choice open, My profile, My settings, Notifications,
+the Appearance editor, System settings,
+its Maintenance with the store and the settings in effect (fixed answers:
+the run's temporary directory and ports differ),
 the Cube choice with a found Cube and System settings → Cubes,
 at 1100 px in light and dark (`data-theme`), in English;
 the Rooms page, ☰ open, the Cube choice open, My settings and System

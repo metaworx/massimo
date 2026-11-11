@@ -200,8 +200,16 @@ func dpkgVersion(ctx context.Context) (string, error) {
 	return v, nil
 }
 
-// debTag is the release tag of a package version: the Makefile's DEBVER
-// (0.13.0~alpha.1 for v0.13.0-alpha.1) read backwards.
+// debTag is the version the binary of a package reports: the Makefile's
+// DEBVER read backwards, 0.13.0~alpha.1 for v0.13.0-alpha.1, and for a
+// build between tags the part git describe adds behind the +,
+// 0.13.0~alpha.1+3.gabc1234 for v0.13.0-alpha.1-3-gabc1234. A package of
+// the older form, ~ throughout, reads as it did.
 func debTag(v string) string {
-	return "v" + strings.ReplaceAll(v, "~", "-")
+	base, build, between := strings.Cut(v, "+")
+	tag := "v" + strings.ReplaceAll(base, "~", "-")
+	if between {
+		tag += "-" + strings.ReplaceAll(build, ".", "-")
+	}
+	return tag
 }

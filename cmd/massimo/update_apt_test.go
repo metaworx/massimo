@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -272,9 +273,67 @@ func TestAptUpdateOnlyAsTheHelper(t *testing.T) {
 }
 
 func TestDebTag(t *testing.T) {
-	for v, want := range map[string]string{"0.13.0~alpha.1": "v0.13.0-alpha.1", "1.0.0": "v1.0.0", "0.13.0~alpha.1~rc~2": "v0.13.0-alpha.1-rc-2"} {
+	for v, want := range map[string]string{
+		"0.13.0~alpha.1": "v0.13.0-alpha.1", "1.0.0": "v1.0.0", "0.13.0~alpha.1~rc~2": "v0.13.0-alpha.1-rc-2",
+		"0.13.0~alpha.2+3.gabc1234":       "v0.13.0-alpha.2-3-gabc1234",
+		"0.13.0~alpha.2+3.gabc1234.dirty": "v0.13.0-alpha.2-3-gabc1234-dirty",
+		"0.13.0~alpha.2+dirty":            "v0.13.0-alpha.2-dirty",
+		"1.0.0+3.gabc1234":                "v1.0.0-3-gabc1234",
+		// The older form of a build between tags, still installed on a box.
+		"0.13.0~alpha.2~3~gabc1234": "v0.13.0-alpha.2-3-gabc1234",
+	} {
 		if got := debTag(v); got != want {
 			t.Errorf("debTag(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// TestDebVersion: the Makefile's DEBVER for each form git describe gives,
+// which debTag reads back to the version the binary reports, and, where
+// dpkg is installed, the order apt sees: a build between tags after the
+// tag it follows and before the next one, so that apt never takes it
+// back to its tag.
+func TestDebVersion(t *testing.T) {
+	makeCmd, err := exec.LookPath("make")
+	if err != nil {
+		t.Skip("no make")
+	}
+	for version, deb := range map[string]string{
+		"v0.13.0-alpha.2":                  "0.13.0~alpha.2",
+		"v0.13.0-alpha.2-3-gabc1234":       "0.13.0~alpha.2+3.gabc1234",
+		"v0.13.0-alpha.2-3-gabc1234-dirty": "0.13.0~alpha.2+3.gabc1234.dirty",
+		"v0.13.0-alpha.2-dirty":            "0.13.0~alpha.2+dirty",
+		"v1.0.0":                           "1.0.0",
+		"v1.0.0-3-gabc1234":                "1.0.0+3.gabc1234",
+	} {
+		out, err := exec.Command(makeCmd, "-s", "--no-print-directory", "-C", filepath.Join("..", ".."), "debver", "VERSION="+version).CombinedOutput()
+		if err != nil {
+			t.Fatalf("make debver VERSION=%s: %v: %s", version, err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != deb {
+			t.Errorf("DEBVER of %s = %q, want %q", version, got, deb)
+		}
+		if got := debTag(deb); got != version {
+			t.Errorf("debTag(%q) = %q, want %q", deb, got, version)
+		}
+	}
+	dpkg, err := exec.LookPath("dpkg")
+	if err != nil {
+		return
+	}
+	for _, o := range [][2]string{
+		{"0.13.0~alpha.2", "0.13.0~alpha.2+3.gabc1234"},
+		{"0.13.0~alpha.2+3.gabc1234", "0.13.0~alpha.2+12.gabc1234"},
+		{"0.13.0~alpha.2+3.gabc1234", "0.13.0~alpha.2+3.gabc1234.dirty"},
+		{"0.13.0~alpha.2+12.gabc1234", "0.13.0~alpha.3"},
+		{"0.13.0~alpha.2+12.gabc1234", "0.13.0"},
+		{"0.13.0~alpha.2+12.gabc1234", "0.14.0~alpha.1"},
+		{"1.0.0", "1.0.0+3.gabc1234"},
+		{"1.0.0+3.gabc1234", "1.0.1~alpha.1"},
+		{"0.13.0~alpha.2~3~gabc1234", "0.13.0~alpha.2+3.gabc1234"},
+	} {
+		if err := exec.Command(dpkg, "--compare-versions", o[0], "lt", o[1]).Run(); err != nil {
+			t.Errorf("dpkg does not sort %s before %s: %v", o[0], o[1], err)
 		}
 	}
 }

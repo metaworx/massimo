@@ -36,12 +36,7 @@ func runConfig(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	envFile := env.File()
-	state := "not found"
-	if _, err := os.Stat(envFile); err == nil {
-		state = "loaded"
-	}
-	fmt.Printf("env file:      %s (%s)\n", envFile, state)
+	fmt.Println(envFileLine())
 	src := "none"
 	switch {
 	case snExplicit:
@@ -49,7 +44,7 @@ func runConfig(args []string) error {
 	case selectedSN != "":
 		src = env.SN
 	}
-	fmt.Printf("data dir:      %s (%s)\n", dataDir(), storeState())
+	fmt.Println(dataDirLine())
 	fmt.Printf("log level:     %s\n", logLevelState())
 	fmt.Printf("selected cube: %s (from %s)\n", orNone(selectedSN), src)
 	fmt.Println("for the commands (serve takes these from its store, see below):")
@@ -147,6 +142,34 @@ func logLevelState() string {
 		return "info (default)"
 	}
 	return strings.ToLower(l.String()) + " (" + env.LogLevel + ", " + env.Source(env.LogLevel) + ")"
+}
+
+// envFileLine is config's line on the settings file: which, whether it
+// was found, and whether it is the service user's default; none with
+// -no-env.
+func envFileLine() string {
+	if noEnv {
+		return "env file:      none (-no-env)"
+	}
+	file := env.File()
+	state := "not found"
+	if _, err := os.Stat(file); err == nil {
+		state = "loaded"
+	}
+	if serviceDefaults {
+		state += "; the service user's default, -env for another"
+	}
+	return fmt.Sprintf("env file:      %s (%s)", file, state)
+}
+
+// dataDirLine is config's line on the data directory: which, its store,
+// and whether it is the service user's default.
+func dataDirLine() string {
+	state := storeState()
+	if serviceDefaults && os.Getenv(env.DataVar) == "" {
+		state += "; the service user's default"
+	}
+	return fmt.Sprintf("data dir:      %s (%s)", dataDir(), state)
 }
 
 // storeState says whether the data directory has a store and its

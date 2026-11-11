@@ -32,6 +32,10 @@ What the signed-in role may not do is not shown (docs/api-v1.md,
 "Authentication").
 The live updates come over a stream that opens with a single-use ticket,
 so the session never appears in a URL.
+After an interruption the page opens a new stream that resumes after the
+last event it read, so what happened meanwhile still arrives;
+where the server no longer holds it, the page reloads the rooms
+(docs/api-v1.md, "GET …/events").
 
 ## Header
 
@@ -82,7 +86,7 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   current state now, and **the Cube's clock**.
 - **👤** drops down who is signed in, with the role,
   or the API key and whose it is;
-  **My profile** and **My settings**, which open those pages,
+  **My profile**, **My settings** and **Notifications**, which open those pages,
   and **Sign out**, which ends the session, each with its icon;
   its tooltip names who is signed in, by display name and login.
   The items of **☰** have the icons of their pages.
@@ -406,6 +410,59 @@ without the switches.
   A token the file lacks takes the default's value, unknown ones are ignored,
   and a file that is not a scheme says so under the buttons.
 
+## Notifications
+
+👤 → **Notifications** chooses which events notify you and where,
+for a user whose role has the capability `preferences` (manager,
+operator and viewer by default);
+a guest, a server without users and the server's API key see a line saying why
+they have none.
+The server decides what to tell you, from the Cubes' events,
+and sends it to your devices by Web Push (docs/api-v1.md, "Notifications"),
+also while no page is open.
+
+- **On this device**:
+  whether this browser is notified,
+  with **Turn on on this device** or **Turn off on this device**.
+  Turning on asks the browser's permission once,
+  subscribes with the server's key and tells the server,
+  under the **Name of this device** given before,
+  or the browser's own name when it is left empty.
+  The browser must reach the page over HTTPS, or from its own address;
+  without push, or with notifications blocked for the page, a line says so.
+  On an iPhone or iPad the page has to be added to the Home Screen first.
+- **What notifies you**:
+  a switch per kind, with its delay or threshold, each with its help:
+  a window open (after 30 min), frost (below 8 °C), a low battery,
+  a device's error, the Cube out of reach (after 10 min) and back,
+  and, off by default, a device that sends no news, a device paired,
+  a new Cube on the network and a new version of Massimo.
+  A change is saved a second after the last one;
+  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C.
+  One kind notifies once per device per half hour.
+- **Your devices**:
+  every browser and app notified for you,
+  with its name, when it was added and last notified,
+  and the deliveries that failed since;
+  this browser is marked, and **Remove** ends one.
+  Revoking a session or a key under My profile removes the devices it subscribed.
+
+While the page is open,
+a notification shows at its foot for ten seconds instead,
+in the page's language, with × to close it;
+the same one from the stream and from the push shows once.
+The page is at most 640 px wide, as My settings is.
+
+**The installable page.**
+`manifest.webmanifest` names the page, its icons and its colours,
+so that a phone's browser offers to add it to the Home Screen,
+where it opens without the browser's bar.
+Its service worker, `sw.js`, beside the page so that it covers the page,
+shows a notification in the language the page last told it
+(the texts of the page's tables, kept for when the server is out of reach),
+or hands it to the page in front, and a tap opens the page.
+It caches nothing else: the page loads from the server as before.
+
 ## System settings
 
 The cog in the header, **System settings**, holds what is the server's,
@@ -506,7 +563,8 @@ to the top of the page.
   **Remove** stops serving the Cube;
   it keeps its settings and history in the store and is listed under **Found on
   the LAN** while discovery hears it, with its address,
-  DHCP flag and firmware and **Add**,
+  DHCP flag and firmware, "via proxy at …" where a massimo proxy answers for it,
+  in expert mode its radio and MAC address and the gateway it uses, and **Add**,
   which serves a found Cube at once (also in the list of found Cubes under the header).
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 
@@ -623,6 +681,12 @@ is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
+The week programme editor is an element of its own, `<massimo-week-program>`
+(`week-program.js`), so that a Home Assistant card can use the same editor:
+it holds the editor's behaviour, works on a model the page keeps,
+builds its controls with a kit the page gives it (`components.js`, `t()`),
+and tells the page of every edit with a `change` event;
+the programme tab puts it in a form with Cancel, Send and the two resets.
 A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.

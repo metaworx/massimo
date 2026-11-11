@@ -4,7 +4,7 @@ What is still to be done, in order.
 The frame is docs/design.md: target environments, architecture, drivers,
 Loxone ownership, multi-user and the public server, with their phases.
 What is done is in CHANGELOG.md, one section per release;
-docs/handover-session.md is the context a session needs to work here.
+GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
 
 1. **On the hardware**, by the owner, with a session watching the log:
    3. Pairing (docs/api-v1.md, "Pairing"): the six steps of pull request #10,
@@ -30,8 +30,8 @@ docs/handover-session.md is the context a session needs to work here.
    the checks "Debian package (debian:trixie-slim)" and "(debian:bookworm-slim)"
    added to the ruleset on `main`;
    the repository `metaworx/homebrew-massimo` created,
-   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY`,
-   then `gh workflow run publish.yml -f tag=<newest release>` once;
+   its deploy key in `HOMEBREW_TAP_DEPLOY_KEY` of the `signing` environment,
+   then `gh workflow run publish.yml --ref <tag> -f tag=<tag>` once;
    until then the tap job skips itself.
    The first release with the deploy key set proves the Homebrew job.
 3. **Packaging, the rest**
@@ -75,10 +75,6 @@ docs/handover-session.md is the context a session needs to work here.
     the budget reconnects; `serve -log` writing twice under a supervisor that
     keeps stderr; `detailsPanel` and `stepper` in components.js, written and
     without a caller; a UI test for each new panel in tools/ui-test/;
-    `store info` run from a directory whose `.env` the service user cannot read,
-    as the README's example does from a home directory
-    (`-env /etc/massimo/env` in the example,
-    or an unreadable default `.env` counted as absent in internal/env);
     `api: token not resolved` logged at ERROR for a request cancelled
     during the auth check;
     the update's own command marked dropped at the next start;
@@ -88,12 +84,12 @@ docs/handover-session.md is the context a session needs to work here.
     `install` warning that the API is open to the LAN
     while the server signs users in (AuthWarning).
 13. **Housekeeping**:
-    the `.env` copies and the release key in the Mint box's session scratchpad,
+    the `.env` copies and the release key in the Linux test box's session scratchpad,
     its SSH key on the Pi; the M7 reservations for the house Cube and the Pi;
     `/etc/sudoers.d/massimo-test` on the Mac; on the Pi `~/massimo-alpha12.*`,
     `/usr/local/bin/massimo.alpha9.bak` and, once the M7 setup is settled,
     `/etc/massimo/env.before-m7` (keep `massimo.prev`);
-    on jaguar the merged branches `claude/tls*`, `backup/claude/tls*`,
+    on the development PC the merged branches `claude/tls*`, `backup/claude/tls*`,
     `claude/ci-update-race`, `claude/heuristic-noether-90a440`,
     `claude/store-c` and `claude/store-d*`,
     and the worktree `xenodochial-pasteur-c0e0c8` once its session is gone.
@@ -105,7 +101,15 @@ docs/handover-session.md is the context a session needs to work here.
     published on F-Droid and on Google Play.
 17. **An iOS app**:
     the same as the Android app; published on the App Store.
-18. **Discovery and the proxy**:
-    check whether Massimo can announce its own MAC address,
-    and whether `discover` can show which of the Cubes it lists is a proxy,
-    the one without an eQ-3 MAC prefix.
+19. **Channels, the next steps** (AP Channels v1.0):
+    apt suites and Homebrew formulae for `devel` and `nightly`,
+    once AptUpdate's DebVersion makes their versions sort,
+    with an apt key of their own;
+    `beta` and `stable` with `make release-beta` and its stable counterpart,
+    `rc` as `-rc.N` tags on `beta`,
+    and a suite and a formula taking every more stable flavour;
+    the channel's selector in the UI (System settings → Software);
+    "All tests passed" as the ruleset's one required check;
+    the old `alpha` branch deleted once `release/alpha` has had a release;
+    the guidelines at v4.54.0 or later, for `changelog.sh preview` in the
+    rolling builds' notes.

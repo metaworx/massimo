@@ -61,6 +61,9 @@ type Client struct {
 	reconnecting atomic.Bool
 	// online is set while a connection is up and its greeting complete.
 	online atomic.Bool
+	// lost is set from the loss Run reports to the next complete
+	// greeting, see Lost.
+	lost atomic.Bool
 	// inclusion is the pairing state, see inclusion.go.
 	inclusion inclusion
 
@@ -87,6 +90,33 @@ var (
 	ErrBusy         = errors.New("cubelan: another command is waiting for its reply")
 )
 
+// replyTimeout is Send's error for a command the Cube did not answer
+// within the reply timeout.
+type replyTimeout struct {
+	want, cmd byte
+	after     time.Duration
+}
+
+func (e *replyTimeout) Error() string {
+	return fmt.Sprintf("cubelan: no %c reply to %c command within %s", e.want, e.cmd, e.after)
+}
+
+// keepAlive finds a dead Cube between polls: after 15 s without traffic
+// a probe every 5 s, and the third unanswered one ends the connection,
+// about 30 s after the Cube went. The Cube acknowledges the probes
+// (checked on hardware on 2026-11-09). Go's default, 15 s apart and 9
+// probes, needs 150 s of silence, which a poll every minute never
+// leaves. A probe is not sent while a poll's bytes are unacknowledged;
+// that case is pollMisses'.
+var keepAlive = net.KeepAliveConfig{Enable: true, Idle: 15 * time.Second, Interval: 5 * time.Second, Count: 3}
+
+// pollMisses is how many polls in a row, with no line from the Cube
+// between them, the Cube may leave unanswered before its connection is
+// taken for lost: one may be late, two are a Cube that is gone, as one
+// whose network cable is out, which TCP would notice only after many
+// minutes. The read deadline is the backstop.
+const pollMisses = 2
+
 // New creates a client; Run starts it.
 func New(opts Options) *Client {
 	if opts.ReplyTimeout == 0 {
@@ -102,7 +132,7 @@ func New(opts Options) *Client {
 		opts.RemindEvery = 24 * time.Hour
 	}
 	if opts.Dialer == nil {
-		d := &net.Dialer{Timeout: 10 * time.Second}
+		d := &net.Dialer{Timeout: 10 * time.Second, KeepAliveConfig: keepAlive}
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
 	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
@@ -169,6 +199,12 @@ func (c *Client) Events() <-chan Event { return c.evs }
 // received the connection's complete greeting.
 func (c *Client) Connected() bool { return c.online.Load() }
 
+// Lost reports whether the Cube is lost: from the loss Run reports
+// (EventDisconnected and the warning "cube connection lost") to the next
+// complete greeting. Unlike Connected it stays false while the client
+// connects again on purpose (Reconnect), and while it has not tried yet.
+func (c *Client) Lost() bool { return c.lost.Load() }
+
 // Ready is closed after the first complete greeting.
 func (c *Client) Ready() <-chan struct{} { return c.ready }
 
@@ -206,9 +242,12 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 		switch now := time.Now(); {
 		case lost.IsZero():
+			// The warning first, then Lost, then the event: whoever sees
+			// Lost sees the warning, and whoever reads the event sees Lost.
 			lost, warned = now, now
-			c.emit(Event{Kind: EventDisconnected, Err: err})
 			c.log.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
+			c.lost.Store(true)
+			c.emit(Event{Kind: EventDisconnected, Err: err})
 		case now.Sub(warned) >= c.opts.RemindEvery:
 			warned = now
 			c.log.Warn("cube still unreachable", "addr", c.Address(), "down_for", now.Sub(lost).Round(time.Second), "error", err)
@@ -259,6 +298,7 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 	c.snap.beginGreeting()
 	r := cube.NewReader(conn)
 	var greeted atomic.Bool
+	var lines atomic.Int64 // read on this connection, for the missed polls
 	readErr := make(chan error, 1)
 	go func() {
 		for {
@@ -268,10 +308,12 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 				readErr <- err
 				return
 			}
+			lines.Add(1)
 			c.handle(m)
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
 				c.online.Store(true)
+				c.lost.Store(false)
 				// Swap the greeted channel before anyone can see the
 				// client as ready, so that a Reconnect right after Ready
 				// waits for the next greeting, not this one.
@@ -288,12 +330,14 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 					ev.Cause, ev.DownFor = CauseLoss, time.Since(lost)
 				}
 				c.log.Debug("greeting: list", "addr", c.Address(), "devices", len(c.snap.Devices()))
-				c.emit(ev)
+				// The line before the event, as for a loss: whoever reads
+				// the event sees the connection's line.
 				if lost.IsZero() {
 					c.log.Info("cube connected", "addr", c.Address())
 				} else {
 					c.log.Info("cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
 				}
+				c.emit(ev)
 			}
 		}
 	}()
@@ -304,6 +348,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		defer t.Stop()
 		poll = t.C
 	}
+	// missed counts the polls in a row that went unanswered with no line
+	// read between them (pollMisses); linesAtMiss is lines at the last.
+	missed, linesAtMiss := 0, int64(0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -312,7 +359,31 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		case err := <-readErr:
 			return greeted.Load(), err
 		case <-poll:
-			if _, err := c.Send(ctx, cube.CmdList); err != nil && !errors.Is(err, ErrBusy) {
+			_, err := c.Send(ctx, cube.CmdList)
+			var timeout *replyTimeout
+			switch {
+			case err == nil:
+				missed = 0
+			case errors.Is(err, ErrBusy):
+				// Another command waits for its reply, which tells the
+				// same; nothing is counted.
+			case errors.As(err, &timeout) && c.Inclusion().Active:
+				// While pairing runs, a poll the Cube leaves unanswered
+				// counts nothing: whether the Cube answers l: then is
+				// not confirmed.
+				missed = 0
+				c.log.Warn("poll failed", "error", err)
+			case errors.As(err, &timeout):
+				if n := lines.Load(); missed > 0 && n == linesAtMiss {
+					missed++
+				} else {
+					missed, linesAtMiss = 1, n
+				}
+				if missed >= pollMisses {
+					return greeted.Load(), fmt.Errorf("cubelan: %d polls in a row unanswered: %w", missed, err)
+				}
+				c.log.Warn("poll failed", "error", err)
+			default:
 				c.log.Warn("poll failed", "error", err)
 			}
 		}
@@ -320,7 +391,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 }
 
 // readDeadline is generous: the Cube is silent between polls, and with
-// polling disabled it may be silent for a long time.
+// polling disabled it may be silent for a long time. The keepalive
+// (keepAlive) and, with polling, two unanswered polls (pollMisses) end
+// the connection to a dead Cube sooner; the deadline is the backstop.
 func (c *Client) readDeadline() time.Duration {
 	if c.opts.PollInterval > 0 {
 		return 3*c.opts.PollInterval + 30*time.Second
@@ -478,7 +551,7 @@ func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error)
 		return reply, nil
 	case <-time.After(c.opts.ReplyTimeout):
 		c.clearPending(p)
-		return cube.Message{}, fmt.Errorf("cubelan: no %c reply to %c command within %s", want, m.Type, c.opts.ReplyTimeout)
+		return cube.Message{}, &replyTimeout{want: want, cmd: m.Type, after: c.opts.ReplyTimeout}
 	case <-ctx.Done():
 		c.clearPending(p)
 		return cube.Message{}, ctx.Err()

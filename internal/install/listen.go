@@ -36,7 +36,7 @@ func splitListen(addr string) (host, port string, err error) {
 
 // listenDropIns returns the two drop-ins for a listen address: the
 // address for serve (with the capability to bind a port below 1024,
-// which the user massimo lacks, for it or for the plain helper address
+// which the user _massimo lacks, for it or for the plain helper address
 // httpAddr of -tls-http) and the matching /healthz URL for the update
 // helper, https:// when the service has TLS.
 func listenDropIns(addr string, tls bool, httpAddr string) (serve, health string, err error) {

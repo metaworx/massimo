@@ -1,0 +1,20 @@
+<!-- 👤 → Notifications: why a user has none, this browser's subscription, the events that notify with their delays and the frost threshold, and the user's devices, notify.js; it draws #notify-rules and #notify-devices. -->
+<p id="notify-none" class="notice hidden" role="note"></p>
+<div id="notify-body" class="notify">
+  <h3 class="notify-group" data-i18n="notify.thisDevice">On this device</h3>
+  <p id="notify-device-state" class="small notify-state" role="status"></p>
+  <div id="notify-label-row" class="field wide hidden">
+    <label for="notify-label" data-i18n="notify.label">Name of this device</label>
+    <span data-help="notify.label" data-help-label="notify.label"></span>
+    <input type="text" id="notify-label" class="field-control" maxlength="100" autocomplete="off" placeholder="Firefox on the phone" data-i18n-attr="placeholder:notify.labelPlaceholder">
+  </div>
+  <div class="actions"><span class="actions-right">
+    <button type="button" id="notify-off" class="hidden" data-i18n="notify.turnOff">Turn off on this device</button>
+    <button type="button" id="notify-on" class="primary hidden" data-i18n="notify.turnOn">Turn on on this device</button>
+  </span></div>
+  <h3 class="notify-group" data-i18n="notify.events">What notifies you</h3>
+  <div id="notify-rules"></div>
+  <h3 class="notify-group" data-i18n="notify.devices">Your devices</h3>
+  <div id="notify-devices"></div>
+  <p id="notify-msg" class="small cubes-msg hidden" role="status"></p>
+</div>

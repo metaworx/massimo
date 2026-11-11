@@ -151,7 +151,7 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	certDst := filepath.Join(root, EnvDir, certName)
-	if read(t, certDst) != "CERT" || !rec.has("chown massimo:massimo "+certDst) || strings.Count(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") != 1 {
+	if read(t, certDst) != "CERT" || !rec.has("chown -h _massimo:_massimo "+certDst) || strings.Count(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") != 1 {
 		t.Fatalf("TLS files on a packaged box: %v", rec.cmds)
 	}
 
@@ -172,7 +172,7 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 	if err := Install(Options{Root: root2, Out: &out, Run: rec2.run}); err != nil {
 		t.Fatal(err)
 	}
-	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") || !strings.Contains(out.String(), "user add <name> -role owner") {
+	if rec2.has("systemctl restart") || !strings.Contains(out.String(), "not started") || !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/bin/massimo user add <name> -role owner\n") {
 		t.Fatalf("started with the template: %v %s", rec2.cmds, out.String())
 	}
 

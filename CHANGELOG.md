@@ -8,7 +8,136 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.14.0-alpha.1] - 2026-11-11
+
 ### Added
+
+- A found Cube lists the proxies that answer for it and the addresses it
+  uses, gateway, netmask and DNS; the web UI shows "via proxy at …"
+  (`docs/api-v1.md`, "GET /api/v1/cubes").
+
+- The files massimo writes go through `internal/safefile`: whole, synced
+  and renamed into place, keeping the replaced file's link, owner, mode
+  and attributes, or in place where only the file is writable.
+
+### Changed
+
+- CI builds a release beside the tests and signs it once they have
+  passed, about five minutes sooner; the nightly build has a workflow of
+  its own (`GUIDELINES/project/CI.md`, section 2).
+
+- A request to the API without a token, ticket or `?token=` is still
+  refused with 401 but no longer counts toward the address's lockout:
+  only wrong tokens, tickets and passwords do (`docs/api-v1.md`).
+
+- serve's search asks each Cube for the addresses it uses as well, and
+  massimo discover asks all Cubes at once; a proxy is told by its MAC or
+  by its silence to N and c (`README.md`, "Command line").
+
+- A change to the plans, the guidelines' documents or the changelog
+  alone runs the Guidelines checks and no tests, and makes no devel
+  build (`GUIDELINES/project/CI.md`, section 2).
+
+- CI does not test again code that has passed: a branch's retirement
+  after its green run, and its merge into `main`, run only what had not
+  run (`GUIDELINES/project/CI.md`, section 2).
+
+### Fixed
+
+- A package built between two releases sorts after the one it follows,
+  `0.13.0~alpha.2+3.gabc1234`, so that apt no longer takes it back to
+  that release (`packaging/README.md`, "Debian package").
+
+- The Debian packages are named as GitHub names their assets, the `~`
+  and `+` of the version written as dots: `sha256sum -c SHA256SUMS`
+  checks them, and the `devel` and `nightly` builds keep theirs.
+
+- A release fails where GitHub renames a file it uploads, before a
+  `devel` or `nightly` build moves its tag and deletes the files it does
+  not name (`packaging/release-assets.sh`).
+
+- A Cube heard from its own address and from a proxy is one found Cube,
+  and serve following it by discovery stays at one of them: it moved to
+  each answer in turn, every run (`docs/api-v1.md`).
+
+- The settings file watch's test writes each content whole, renamed into
+  place: a busy runner paused between truncating the file and writing it,
+  and the watch saw two changes where the test made one.
+
+- A `massimo backup` file and a store copy cut short by a kill or a full
+  disk no longer replace a good backup or leave a partial database under
+  the copy's name (`docs/store.md`).
+
+- A pruned backup's id is never given to a later backup, so a list
+  loaded before the prune can no longer delete or download another
+  backup by its id (migration 0013; `docs/store.md` section 9).
+
+### Security
+
+- `massimo install` hands the files it wrote to the service user with
+  `chown -h`: a link the service put in their place no longer has root
+  give it the link's target.
+
+## [0.13.0-alpha.2] - 2026-11-10
+
+### Fixed
+
+- `massimo install` over a running Windows service waits until the
+  service's process has exited before it replaces `massimo.exe`, in
+  place of failing now and then with "Access is denied".
+
+- `make release-alpha` fetches the version tags alone, so a rolling
+  tag that CI moved since the checkout last fetched it no longer
+  stops it ("would clobber existing tag").
+
+- A release commit is tested once, by its tag's run: CI's run of `main`
+  skips it and makes no `devel` build under the release's own version.
+
+- CI's macOS job no longer fails now and then with exit code 141: a pipe
+  into `grep` reads to the end, so no writer is cut off.
+
+## [0.13.0-alpha.1] - 2026-11-10
+
+### Added
+
+- Every release carries its build record, `massimo-build.txt`, listed in
+  the signed manifest, and GitHub's build provenance of every file it
+  publishes (`README.md`, "Installing").
+
+- The site is deployed by `.github/workflows/site.yml` at every run of
+  the release workflow, so that a push to `main` updates its docs; CI's
+  `Site` job builds the docs of every pull request.
+
+- `packaging/site/build.sh` builds the site without a key: the apt
+  repository from a release's index asset, the pages, and the docs of
+  every channel under `/docs/`, linked from the home; `make site`.
+
+- A release has a flavour, and a box takes its channel's releases and
+  every more stable flavour's; the rolling `devel` and `nightly` builds
+  verify with a key of their own (`README.md`, "Versions").
+
+- The setting `update.channel` chooses the channel a box follows, its
+  build's flavour by default, and an update to another flavour keeps it
+  (`docs/api-v1.md`, "GET /api/v1/update").
+
+- Every push to `main` whose tests pass is published as the `devel`
+  build, one release replaced in place (`GUIDELINES/project/CI.md`,
+  "Releases").
+
+- A `nightly` build, once a day, of the newest commit of `main` whose
+  tests passed, if newer than the last one (`GUIDELINES/project/CI.md`,
+  "Releases").
+
+- A release carries its signed apt index, `massimo-apt-index.tar.gz`, for
+  a site rebuilt without the key (`packaging/README.md`, "The apt
+  repository").
+
+- The event stream gives every event an id and resumes after the last
+  one a client read, or says `resync`; the web UI resumes with it
+  (`docs/api-v1.md`, "GET …/events").
+
+- `massimo -no-env` reads no settings file, as `-env /dev/null` did,
+  also on Windows (`README.md`, "Cube variables").
 
 - `packaging/acme-dns-hooks/cloudflare.sh` is the DNS-01 hook of
   `serve -acme-dns-hook` for a zone at Cloudflare, with its token in
@@ -26,6 +155,10 @@ the next minor, a fix counts the suffix up.
   made from the migrations beside it and checked by `go test`
   (`docs/store.md`, "Migrations").
 
+- The store's tests migrate a store written by each release since
+  v0.7.0-alpha.1, kept as text dumps that `tools/store-fixture` makes
+  (`docs/store.md`, "Migrations").
+
 - The log keeps the server's own events beside the Cube's, each with
   its source, its level and the user who started it; the store's
   migration 0009 rebuilds its events table once (`docs/store.md`).
@@ -33,6 +166,10 @@ the next minor, a fix counts the suffix up.
 - The store's migration 0011 indexes the log's warnings and errors,
   so that a page of them reads those rows only, not the whole log:
   11 s at 90,000 events on a Raspberry Pi 1 before (`docs/store.md`).
+
+- Benchmarks of the log's writer and pages in `internal/store`, also on
+  a copy of a box's store, and `make store-bench` builds them for the
+  Raspberry Pis (`docs/store.md`, "Measuring on a box").
 
 - The log shows the server's start, stop, restart, reload, reboot,
   update, backups and prunes, and a Cube's new address or its leaving
@@ -69,24 +206,59 @@ the next minor, a fix counts the suffix up.
   preference, and push subscriptions under `/api/v1/me/push` with the
   server's VAPID key at `GET /api/v1/push/vapid` (`docs/api-v1.md`).
 
-- A notification is pushed to the user's subscribed browsers and
-  devices by Web Push (RFC 8030, 8291 and 8292), which UnifiedPush
-  takes as well, and sent on the event stream as `notification`
-  (`docs/api-v1.md`, "GET /api/v1/cubes/{sn}/events").
+- A notification is pushed by Web Push (RFC 8291, 8292) to the user's
+  browsers and devices, UnifiedPush's too, and sent on the event stream
+  as `notification` (`docs/api-v1.md`, "Notifications").
+
+- 👤 → Notifications chooses which events notify and turns them on for
+  this browser, and the page installs as an app, with a manifest and a
+  service worker (`docs/ui.md`, "Notifications").
 
 - The log says when Let's Encrypt issued or renewed a certificate by
   TLS-ALPN-01 or HTTP-01, as it does for DNS-01; `-tls-http` redirects
   to port 443, the one a router forwards (`README.md`, "Server").
 
+- CI runs the tests on 32-bit ARM under QEMU, as the Raspberry Pi 1's
+  core, and `make test-armv6` does the same where `qemu-arm` is
+  installed (`GUIDELINES/project/CI.md`).
+
+- `make deb-systemd-test` checks the package under a real systemd, the
+  upgrade from v0.12.0-alpha.1 with the service running among its cases,
+  and CI runs it on trixie and bookworm (`GUIDELINES/project/CI.md`).
+
+- CI's macOS job installs on the template's settings first, the owner
+  line run as printed, a loaded job restarted and a booted-out one left
+  stopped (`packaging/launchd/template-test.sh`).
+
 ### Changed
+
+- A release waits for CI's whole suite on its tag and takes its flavour
+  from the tag's label, `stable` without one; the `channel:` line is no
+  longer read (`GUIDELINES/project/CI.md`, "Releases").
+
+- The release branch is `release/alpha`, moved by CI once the release is
+  out; `make release-alpha` pushes only `main` and the tag (`README.md`,
+  "Versions").
+
+- The session handover and the 2026-11-05 review left `docs/` for
+  `GUIDELINES/wip/`, its coding standard for the contract; the write
+  test's plan is `docs/testing-writes.md`, its reports `docs/reports/`.
+
+- The web UI's week programme editor is an element of its own,
+  `<massimo-week-program>`, for a Home Assistant card to use too; it
+  works as before (`docs/ui.md`).
+
+- The role `integration` may configure: week programmes, temperatures,
+  device settings; migration 0012 adds it where the role is still the
+  seeded one (`docs/store.md` section 6).
 
 - The Homebrew caveats and the settings template ask for nothing to fill
   in and name the first owner; `brew services restart` follows
   `brew upgrade` (`packaging/README.md`, "Homebrew").
 
 - `massimo install` restarts a running service also on the template's
-  settings and leaves a box that never ran for its owner, on every
-  platform, naming `massimo user add` and the web UI (`README.md`).
+  settings and leaves a box that never ran for its owner, naming the web
+  UI and a `massimo user add` line that runs anywhere (`README.md`).
 
 - `MASSIMO_REBOOT` and `-allow-reboot` take on, true, yes, 1 or enabled,
   and their opposites, in any case, as `serve -help`, the settings
@@ -111,7 +283,23 @@ the next minor, a fix counts the suffix up.
   under the project's site: the install routes, building from source,
   the first settings and the privacy policy (`packaging/README.md`).
 
+- `make lan-test` checks discovery, the mDNS announcement and
+  `discover` in Docker, against avahi, with a Cube's cable pulled and a
+  second server's proxy (`tools/lan-test/README.md`).
+
+- CI checks the announcement beside mDNSResponder and Windows' mDNS,
+  and runs discovery's tests on Windows as well
+  (`GUIDELINES/project/CI.md`).
+
+- serve takes a silent Cube for lost and reconnects: after about 30 s
+  without traffic, or two polls in a row unanswered; it waited three
+  polls and 30 s (`README.md`, "Server").
+
 ### Fixed
+
+- A client of the proxy that asks for the pairing state as soon as the
+  Cube's end of pairing is relayed sees pairing ended, not still active
+  (`docs/proxy.md`, "Pairing").
 
 - The Debian package restarts a running service on an upgrade, also on
   the template's settings, and leaves a box that never ran stopped, even
@@ -145,11 +333,58 @@ the next minor, a fix counts the suffix up.
   of one it trusts; the hour it is dated back made it 825 days and an
   hour (`README.md`, "Server").
 
+- `massimo user` and `massimo store` print their help, or refuse wrong
+  arguments, without creating a store in the data directory first.
+
+- As the service user, without `-env`, the commands read
+  `/etc/massimo/env` and the store in `/var/lib/massimo` from any
+  directory, not a home's `.env` (`README.md`, "Cube variables").
+
+- serve's proxy no longer answers discovery for a Cube it has lost,
+  so other servers and the original software see the Cube go; serve
+  stays findable by mDNS (`docs/proxy.md`, "Discovery").
+
+- A device that joins during pairing is in the server's pairing state
+  before a proxy client receives its N line; a race test found the
+  other order now and then.
+
+- The queue's observer test holds its first command until the next two
+  are queued, as it assumed; under QEMU the armv6 job found the queue
+  starting it first.
+
+- `make fuzz` no longer fails a target on Go 1.26's own `-fuzztime`
+  deadline, "context deadline exceeded" with no input written
+  (golang/go#75804; `GUIDELINES/project/CI.md`, section 3).
+
+- A finished restore no longer gets an automatic backup of the state it
+  restored, which a backup check could take before the restored file
+  became the reference; under QEMU the armv6 job found it.
+
+- A Cube's loss and return are logged before their events, the loss
+  also before the client reports the Cube lost, as `docs/proxy.md` says;
+  under QEMU the armv6 job found the other order.
+
 ### Security
+
+- The release build and the job holding the apt key restore no Actions
+  cache, so that nothing another run wrote reaches a release
+  (`GUIDELINES/project/CI.md`, "Releases").
+
+- On Linux the service runs as `_massimo`, as on macOS: the package and
+  `massimo install` rename their own `massimo`, spare a person's, and
+  name the `chown` after an older takeover (`packaging/README.md`).
+
+- `/var/lib/massimo`, the store, stays 0750 when the service starts;
+  systemd made it 0755 at every start, so that every user of the box saw
+  the names of its files (`packaging/README.md`).
 
 - The web UI shows no self-signed certificate's fingerprint, which a man
   in the middle passes along; its notice, also in the sign-in dialog,
   asks to compare the browser's with `massimo tls show` (`docs/ui.md`).
+
+- `serve -allow-reboot off` no longer allows the reboot: `serve` refuses
+  an argument it does not take, and a switch takes its value after `=`,
+  as `-allow-reboot=off` (`README.md`, "Server").
 
 ## [0.12.0-alpha.1] - 2026-11-08
 

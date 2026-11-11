@@ -23,17 +23,24 @@ import (
 )
 
 type fakeFinder struct {
-	tag   string // "" = no release
-	calls int
+	tag     string // "" = no release
+	flavour string // the release's flavour; "" = the channel asked for
+	calls   int
+	channel string // the channel last asked for
 }
 
 func (f *fakeFinder) Latest(ctx context.Context, channel string) (*update.Release, error) {
 	f.calls++
+	f.channel = channel
 	if f.tag == "" {
 		return nil, nil
 	}
 	v, _ := update.ParseVersion(f.tag)
-	return &update.Release{Manifest: update.Manifest{Tag: f.tag, Channel: channel}, Version: v, URL: "https://example/" + f.tag}, nil
+	flavour := f.flavour
+	if flavour == "" {
+		flavour = channel
+	}
+	return &update.Release{Manifest: update.Manifest{Tag: f.tag, Flavour: flavour}, Version: v, URL: "https://example/" + f.tag}, nil
 }
 
 func updateServer(t *testing.T, token, request string, f *fakeFinder) (*httptest.Server, string) {
@@ -295,5 +302,81 @@ func TestUpdatePostsOneAtATime(t *testing.T) {
 	slices.Sort(codes)
 	if overlaps.Load() != 0 || !slices.Equal(codes, []int{202, 409}) {
 		t.Fatalf("two POSTs at once: %v, %d starts overlapping", codes, overlaps.Load())
+	}
+}
+
+// The channel is MASSIMO_UPDATE_CHANNEL where set, else the store's
+// update.channel, else the build's flavour; an update to a release of
+// another flavour stores the channel first, so that the box stays on it.
+func TestUpdateChannelFromTheStore(t *testing.T) {
+	dir := t.TempDir()
+	f := &fakeFinder{tag: "v0.2.0-beta.2"}
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Update = UpdateOptions{Version: "v0.2.0-beta.1", Flavour: "beta", Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"), Finder: f}
+	_, ts, s := startWith(t, opts)
+	ctx := context.Background()
+	get := func() map[string]any {
+		t.Helper()
+		resp, text := callWith(t, ts, "GET", "/api/v1/update", "secret", "", nil)
+		var out map[string]any
+		if resp.StatusCode != 200 || json.Unmarshal([]byte(text), &out) != nil {
+			t.Fatalf("GET: %d %s", resp.StatusCode, text)
+		}
+		return out
+	}
+	put := func(body string) (int, string) {
+		t.Helper()
+		resp, text := callWith(t, ts, "PUT", "/api/v1/settings", "secret", body, nil)
+		return resp.StatusCode, text
+	}
+
+	if out := get(); out["channel"] != "beta" || out["flavour"] != "beta" || f.channel != "beta" {
+		t.Fatalf("the flavour's channel: %v, asked %q", out, f.channel)
+	}
+	code, text := put(`{"update.channel": "alpha"}`)
+	var settings map[string]settingView
+	if code != 200 || json.Unmarshal([]byte(text), &settings) != nil ||
+		settings[store.UpdateChannelKey] != (settingView{Value: "alpha", Default: "beta", Set: true, InEffect: "alpha", Applies: "now"}) {
+		t.Fatalf("PUT alpha: %d %s", code, text)
+	}
+	if out := get(); out["channel"] != "alpha" || f.channel != "alpha" {
+		t.Fatalf("the stored channel: %v, asked %q", out, f.channel)
+	}
+	for _, bad := range []string{`{"update.channel": "main"}`, `{"update.channel": 3}`} {
+		if code, text := put(bad); code != 400 || !strings.Contains(text, "want one of devel, nightly, alpha, beta, stable") {
+			t.Fatalf("PUT %s: %d %s", bad, code, text)
+		}
+	}
+	if code, text := put(`{"update.channel": null}`); code != 200 {
+		t.Fatalf("PUT null: %d %s", code, text)
+	}
+	if out := get(); out["channel"] != "beta" {
+		t.Fatalf("back to the flavour's: %v", out)
+	}
+
+	// A release of the beta flavour leaves the store as it is.
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", nil); resp.StatusCode != 202 {
+		t.Fatalf("POST: %d %s", resp.StatusCode, text)
+	}
+	if c, _ := s.opts.Store.SettingString(ctx, store.UpdateChannelKey); c != "" {
+		t.Fatalf("stored %q for a release of the box's own flavour", c)
+	}
+	os.Remove(opts.Update.Request)
+	// A stable release: the channel beta is stored before the request.
+	f.tag, f.flavour = "v0.2.0", "stable"
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", nil); resp.StatusCode != 202 {
+		t.Fatalf("POST stable: %d %s", resp.StatusCode, text)
+	}
+	if c, _ := s.opts.Store.SettingString(ctx, store.UpdateChannelKey); c != "beta" {
+		t.Fatalf("stored %q before installing a stable release, want beta", c)
+	}
+	if c, ok, err := update.TakeRequest(opts.Update.Request); err != nil || !ok || c != "beta" {
+		t.Fatalf("the request: %q %v %v", c, ok, err)
+	}
+
+	// MASSIMO_UPDATE_CHANNEL wins over the store.
+	s.opts.Update.Channel = "devel"
+	if out := get(); out["channel"] != "devel" || f.channel != "devel" {
+		t.Fatalf("the variable's channel: %v, asked %q", out, f.channel)
 	}
 }

@@ -10,7 +10,8 @@ name: Publish
 # for "release: published" itself: a release that a workflow creates with
 # its own token starts no other workflow, so that event never came. By
 # hand, for a release already out (the tap set up after it), with
-# `gh workflow run publish.yml -f tag=<tag>`.
+# `gh workflow run publish.yml --ref <tag> -f tag=<tag>`: the signing
+# environment, which holds the tap's key, admits v* tags alone.
 on:
   workflow_call:
     inputs:
@@ -18,6 +19,11 @@ on:
         description: The release's tag.
         required: true
         type: string
+      wait:
+        description: Whether to wait for this run's job "Sign and publish" first.
+        required: false
+        type: boolean
+        default: false
     secrets:
       HOMEBREW_TAP_DEPLOY_KEY:
         required: false
@@ -32,9 +38,17 @@ permissions:
   contents: read
 
 jobs:
+  # In the signing environment, which admits v* tags alone and waits for
+  # the owner's approval, as the release's other keys are: the tap's key
+  # lives there (D56-A, 2026-11-11), and the environment's secret is the
+  # one used, not one release.yml hands over. actions: the wait.
   homebrew:
     name: Homebrew formula
     runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: read
+      actions: read
     env:
       HAS_TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY != '' }}
     steps:
@@ -44,6 +58,13 @@ jobs:
         if: env.HAS_TAP_KEY == 'true'
         with:
           ref: refs/tags/${{ inputs.tag }}
+      # Called by release.yml beside sign: no formula for a release that
+      # was not published.
+      - name: Wait for Sign and publish
+        if: env.HAS_TAP_KEY == 'true' && inputs.wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: packaging/wait-for-job.sh "Sign and publish"
 
       # The tap is cloned first: the formula conflicts with the other
       # formulae then in it (all install bin/massimo), and brew wants a

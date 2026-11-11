@@ -5,10 +5,12 @@ package install
 
 import (
 	"bytes"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -78,12 +80,20 @@ func TestInstallFresh(t *testing.T) {
 	if !strings.Contains(unit, " -data /var/lib/massimo serve ") || !strings.Contains(unit, "StateDirectory=massimo") {
 		t.Fatal("massimo.service does not pass -data /var/lib/massimo")
 	}
+	// systemd sets the state directory's mode at every start: 0755 unless
+	// the unit says otherwise.
+	if !strings.Contains(unit, "\nStateDirectoryMode=0750\n") {
+		t.Fatal("massimo.service leaves /var/lib/massimo at systemd's 0755")
+	}
+	if !strings.Contains(unit, "\nUser=_massimo\nGroup=_massimo\n") {
+		t.Fatal("massimo.service does not run as _massimo")
+	}
 	for _, f := range []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", LogrotateDir + "/massimo"} {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
 			t.Error(err)
 		}
 	}
-	for _, c := range []string{"useradd --system", "chown massimo:massimo " + filepath.Join(root, EnvPath), "systemctl daemon-reload", "systemctl enable massimo.service", "systemctl enable --now massimo-update.path"} {
+	for _, c := range []string{"useradd --system", "chown -h _massimo:_massimo " + filepath.Join(root, EnvPath), "systemctl daemon-reload", "systemctl enable massimo.service", "systemctl enable --now massimo-update.path"} {
 		if !rec.has(c) {
 			t.Errorf("no %q in %q", c, rec.cmds)
 		}
@@ -93,10 +103,10 @@ func TestInstallFresh(t *testing.T) {
 	if rec.has("systemctl restart") || !strings.Contains(out.String(), "not started") {
 		t.Fatalf("started with the template: %q\n%s", rec.cmds, out.String())
 	}
-	if !strings.Contains(out.String(), "create the owner first: "+linuxUserAdd+"\n") || !strings.Contains(out.String(), "then start it: sudo systemctl start massimo\n") {
+	if !strings.Contains(out.String(), "create the owner first: sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner\n") || !strings.Contains(out.String(), "then start it: sudo systemctl start massimo\n") {
 		t.Errorf("the message:\n%s", out.String())
 	}
-	if !rec.has("chown massimo:massimo " + filepath.Join(root, StateDir)) {
+	if !rec.has("chown _massimo:_massimo " + filepath.Join(root, StateDir)) {
 		t.Errorf("no state directory: %q", rec.cmds)
 	}
 }
@@ -256,11 +266,144 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("%q", rec.cmds)
 	}
 	rec = &recorder{}
-	if err := Remove(Options{Root: root, Out: &bytes.Buffer{}, Run: rec.run}, true); err != nil {
+	sys := system{passwd: map[string]string{User: ownEntry(User)}}
+	if err := Remove(Options{Root: root, Out: &bytes.Buffer{}, Run: rec.run, Output: sys.output}, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, EnvDir)); err == nil || !rec.has("userdel massimo") {
+	if _, err := os.Stat(filepath.Join(root, EnvDir)); err == nil || !rec.has("userdel "+User) {
 		t.Fatalf("purge: %v %q", err, rec.cmds)
+	}
+}
+
+// system answers the read-only questions install asks the system:
+// systemctl is-active with active, getent passwd and group from the
+// entries; an account or group not listed is not there.
+type system struct {
+	active string
+	passwd map[string]string // the name's passwd line
+	groups []string
+	owner  string // what stat -c %U says of any file; "" fails
+}
+
+func (s system) output(name string, args ...string) ([]byte, error) {
+	switch {
+	case name == "systemctl" && len(args) > 0 && args[0] == "is-active":
+		return []byte(s.active + "\n"), nil
+	case name == "getent" && len(args) == 2 && args[0] == "passwd":
+		if e, ok := s.passwd[args[1]]; ok {
+			return []byte(e + "\n"), nil
+		}
+		return nil, errors.New("exit status 2")
+	case name == "stat" && len(args) == 3 && args[0] == "-c" && args[1] == "%U":
+		if s.owner == "" {
+			return nil, errors.New("exit status 1")
+		}
+		return []byte(s.owner + "\n"), nil
+	case name == "getent" && len(args) == 2 && args[0] == "group":
+		if slices.Contains(s.groups, args[1]) {
+			return []byte(args[1] + ":x:101:\n"), nil
+		}
+		return nil, errors.New("exit status 2")
+	}
+	return nil, nil
+}
+
+// ownEntry is the passwd line of an account an install or the package
+// made: its home is the state directory. personEntry is a person's.
+func ownEntry(name string) string { return name + ":x:100:101::/var/lib/massimo:/usr/sbin/nologin" }
+
+const personEntry = "massimo:x:1000:1000:Massimo Rossi,,,:/home/massimo:/bin/bash"
+
+func TestServiceAccount(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		sys       system
+		want, not []string
+	}{
+		{"none", system{}, []string{"useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell"}, []string{"usermod", "groupmod"}},
+		{"there", system{passwd: map[string]string{User: ownEntry(User)}}, nil, []string{"useradd", "usermod", "groupmod"}},
+		{"an older install's", system{passwd: map[string]string{formerUser: ownEntry(formerUser)}, groups: []string{formerUser}},
+			[]string{"usermod -l _massimo massimo", "groupmod -n _massimo massimo"}, []string{"useradd"}},
+		{"an older install's, the group taken", system{passwd: map[string]string{formerUser: ownEntry(formerUser)}, groups: []string{formerUser, User}},
+			[]string{"usermod -l _massimo massimo"}, []string{"useradd", "groupmod"}},
+		{"an older install's, running", system{active: "active", passwd: map[string]string{formerUser: ownEntry(formerUser)}, groups: []string{formerUser}},
+			[]string{"systemctl stop massimo.service", "usermod -l _massimo massimo", "systemctl restart massimo.service"}, []string{"useradd"}},
+		{"a person's", system{passwd: map[string]string{formerUser: personEntry}, groups: []string{formerUser}},
+			[]string{"useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell"}, []string{"usermod", "groupmod"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root, bin := setup(t)
+			rec := &recorder{}
+			var out bytes.Buffer
+			// A stop stops: systemctl answers inactive after it.
+			sys := c.sys
+			run := func(name string, args ...string) error {
+				if name == "systemctl" && len(args) > 0 && args[0] == "stop" {
+					sys.active = "inactive"
+				}
+				return rec.run(name, args...)
+			}
+			output := func(name string, args ...string) ([]byte, error) { return sys.output(name, args...) }
+			if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: run, Output: output}); err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range c.want {
+				if !rec.has(w) {
+					t.Errorf("no %q in %q", w, rec.cmds)
+				}
+			}
+			for _, n := range c.not {
+				if rec.has(n) {
+					t.Errorf("%q in %q", n, rec.cmds)
+				}
+			}
+			if rec.has("useradd") && !strings.HasSuffix(rec.cmds[0], " "+User) {
+				t.Errorf("useradd makes %q", rec.cmds[0])
+			}
+			// usermod refuses an account a process runs as: the stop
+			// comes first.
+			if i, j := slices.IndexFunc(rec.cmds, func(c string) bool { return strings.HasPrefix(c, "systemctl stop") }),
+				slices.IndexFunc(rec.cmds, func(c string) bool { return strings.HasPrefix(c, "usermod") }); i > j {
+				t.Errorf("stopped after the rename: %q", rec.cmds)
+			}
+		})
+	}
+}
+
+func TestRemoveAccounts(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		passwd    map[string]string
+		want, not []string
+		say       string
+	}{
+		{"a person's massimo stays", map[string]string{User: ownEntry(User), formerUser: personEntry},
+			[]string{"userdel _massimo"}, []string{"userdel massimo"}, "kept the user massimo, which is not the service's"},
+		{"an older install's, never renamed", map[string]string{formerUser: ownEntry(formerUser)},
+			[]string{"userdel massimo"}, []string{"userdel _massimo"}, "remove the user massimo"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root, bin := setup(t)
+			Install(Options{Root: root, Binary: bin, Out: &bytes.Buffer{}, Run: (&recorder{}).run})
+			rec := &recorder{}
+			var out bytes.Buffer
+			if err := Remove(Options{Root: root, Out: &out, Run: rec.run, Output: system{passwd: c.passwd}.output}, true); err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range c.want {
+				if !rec.has(w) {
+					t.Errorf("no %q in %q", w, rec.cmds)
+				}
+			}
+			for _, n := range c.not {
+				if rec.has(n) {
+					t.Errorf("%q in %q", n, rec.cmds)
+				}
+			}
+			if !strings.Contains(out.String(), c.say) {
+				t.Errorf("no %q in %s", c.say, out.String())
+			}
+		})
 	}
 }
 
@@ -369,7 +512,7 @@ func TestInstallTLSFiles(t *testing.T) {
 	if fi, _ := os.Stat(keyDst); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("key mode %v", fi.Mode())
 	}
-	if !rec.has("chown massimo:massimo "+certDst) || !rec.has("chown massimo:massimo "+filepath.Join(root, EnvPath)) {
+	if !rec.has("chown -h _massimo:_massimo "+certDst) || !rec.has("chown -h _massimo:_massimo "+filepath.Join(root, EnvPath)) {
 		t.Fatalf("not owned by the service user: %q", rec.cmds)
 	}
 	env := read(t, filepath.Join(root, EnvPath))
@@ -657,5 +800,32 @@ func TestTLSVariablesAreKnown(t *testing.T) {
 		if !env.Known(k) {
 			t.Errorf("%s is not a variable serve knows", k)
 		}
+	}
+}
+
+func TestTakenOver(t *testing.T) {
+	const chown = "hand the service its files: sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo\n"
+	for _, c := range []struct {
+		name, owner string
+		want        bool
+	}{
+		{"a person's massimo owns the settings", formerUser, true},
+		{"the service's", User, false},
+		{"no answer", "", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root, bin := setup(t)
+			sys := system{passwd: map[string]string{formerUser: personEntry}, owner: c.owner}
+			var out bytes.Buffer
+			if err := Install(Options{Root: root, Binary: bin, Out: &out, Run: (&recorder{}).run, Output: sys.output}); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(out.String(), chown); got != c.want {
+				t.Errorf("chown named %v, want %v: %s", got, c.want, out.String())
+			}
+			if c.want && !strings.Contains(out.String(), "warning: /etc/massimo/env belongs to the user massimo, which an older release ran the service as") {
+				t.Errorf("no warning: %s", out.String())
+			}
+		})
 	}
 }

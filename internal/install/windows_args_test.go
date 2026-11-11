@@ -44,7 +44,7 @@ func TestWindowsLayout(t *testing.T) {
 		t.Fatalf("listen %q", got)
 	}
 	tmpl := windowsEnvTemplate(p)
-	if !strings.Contains(tmpl, `MASSIMO_LOG=D:\Data\Massimo\serve.log`) || strings.Contains(tmpl, "/var/log") || strings.Contains(tmpl, "user massimo") {
+	if !strings.Contains(tmpl, `MASSIMO_LOG=D:\Data\Massimo\serve.log`) || strings.Contains(tmpl, "/var/log") || strings.Contains(tmpl, "user "+User) {
 		t.Fatal(tmpl)
 	}
 }

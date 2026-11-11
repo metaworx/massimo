@@ -833,7 +833,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (isShown("profile") || isShown("prefs") || isShown("system")) return true;
+  if (isShown("profile") || isShown("prefs") || isShown("notify") || isShown("system")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -963,6 +963,10 @@ const EVENTS_RETRY_MAX_MS = 60000;
 let eventsGen = 0; // counts the connections; an outdated one does nothing
 let eventsRetry = EVENTS_RETRY_MS;
 let eventsTimer = null;
+// eventsLast is the last event id read and the Cube it is of: the next
+// stream sends it as last_event_id and resumes after it, without the
+// state burst, or answers resync when it cannot.
+let eventsLast = null;
 
 function closeEvents() {
   eventsGen++;
@@ -993,17 +997,35 @@ async function connectEvents() {
     return;
   }
   if (gen !== eventsGen) return; // another connect or close came first
-  const es = new EventSource(base() + "/events?ticket=" + encodeURIComponent(ticket));
+  const serial = state.serial;
+  const resume = eventsLast && eventsLast.serial === serial ? eventsLast.id : "";
+  const es = new EventSource(base() + "/events?ticket=" + encodeURIComponent(ticket) +
+    (resume ? "&last_event_id=" + encodeURIComponent(resume) : ""));
   state.events = es;
+  // on adds a listener that first notes the event's id for the next stream.
+  const on = (kind, fn) => es.addEventListener(kind, (ev) => {
+    if (ev.lastEventId) eventsLast = { serial, id: ev.lastEventId };
+    fn(ev);
+  });
   es.onopen = () => {
     state.eventsOpen = true;
     eventsRetry = EVENTS_RETRY_MS;
   };
-  let initial = true; // the connect burst of state events is not log traffic
-  setTimeout(() => {
-    initial = false;
-  }, 1500);
-  es.addEventListener("state", (ev) => {
+  // The connect burst of state events is not log traffic; a resumed
+  // stream has none, unless the server answers resync and sends it.
+  let initial = false;
+  const burst = () => {
+    initial = true;
+    setTimeout(() => {
+      initial = false;
+    }, 1500);
+  };
+  if (!resume) burst();
+  on("resync", () => {
+    burst();
+    Promise.resolve(refresh()).catch(() => {});
+  });
+  on("state", (ev) => {
     const data = JSON.parse(ev.data);
     if (data.state) updateDevice(data.state);
     if (!initial) appendLogEvent(data);
@@ -1017,43 +1039,45 @@ async function connectEvents() {
     const done = handler(data);
     if (done && typeof done.catch === "function") done.catch(() => {});
   };
-  es.addEventListener("hello", logged(() => loadCubes()));
-  es.addEventListener("metadata", logged(() => loadRooms()));
+  on("hello", logged(() => loadCubes()));
+  on("metadata", logged(() => loadRooms()));
   // Pairing (cubes.js): a device that joined is among the devices
   // without a room once the server read its C line, which the reload
   // after its config event finds as well.
-  const serial = state.serial;
-  es.addEventListener("pairing_started", logged(() => pairingEvent(serial)));
-  es.addEventListener("pairing_ended", logged(() => pairingEvent(serial)));
-  es.addEventListener("paired", (ev) => {
+  on("pairing_started", logged(() => pairingEvent(serial)));
+  on("pairing_ended", logged(() => pairingEvent(serial)));
+  on("paired", (ev) => {
     const data = JSON.parse(ev.data);
     appendLogEvent(data);
     pairingJoined(serial, data.paired);
     loadRooms().catch(() => {});
   });
-  es.addEventListener("device_forgotten", logged(() => loadRooms()));
-  es.addEventListener("connected", logged(() => refresh()));
-  es.addEventListener("disconnected", logged(() => loadCubes()));
-  es.addEventListener("config", logged((data) => {
+  on("device_forgotten", logged(() => loadRooms()));
+  on("connected", logged(() => refresh()));
+  on("disconnected", logged(() => loadCubes()));
+  on("config", logged((data) => {
     // a device that just joined pairing: its C line makes it a device without a room
     if (data && data.device && !state.unlisted.some((d) => d.rf_address === data.device) &&
         !state.rooms.some((r) => r.devices.some((d) => d.rf_address === data.device))) loadRooms().catch(() => {});
   }));
-  es.addEventListener("cube_found", (ev) => {
+  on("cube_found", (ev) => {
     const data = JSON.parse(ev.data);
     appendLogEvent(data);
     addFound(data.cube);
   });
   // A restore's steps and its end go to the log and to the backup panel
   // that sent it (backup.js).
-  es.addEventListener("restore_step", logged(restoreEvent));
-  es.addEventListener("restore_done", logged(restoreEvent));
+  on("restore_step", logged(restoreEvent));
+  on("restore_done", logged(restoreEvent));
+  // A notification for the signed-in user, which only that user's
+  // streams get: a toast, not a line of the log (notify.js).
+  on("notification", (ev) => notifyToast(JSON.parse(ev.data).notification));
   // The log's other kinds (log.js LOG_KINDS): the server's own lines, a
   // Cube's address and its leaving the LAN, the changes, for the log
   // alone.
   const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
     "connected", "disconnected", "config", "cube_found", "restore_step", "restore_done"]);
-  for (const kind of LOG_KINDS) if (!handled.has(kind)) es.addEventListener(kind, logged(() => {}));
+  for (const kind of LOG_KINDS) if (!handled.has(kind)) on(kind, logged(() => {}));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -1158,6 +1182,8 @@ function applyLanguage() {
   renderLog();
   if (updState.info) renderUpdate(updState.info);
   if (infoState.store || infoState.config) renderServerInfo();
+  if (isShown("notify")) renderNotify(); // notify.js
+  tellWorkerLanguage();
 }
 
 // init starts the page once English and the chosen language are loaded.
@@ -1183,6 +1209,7 @@ async function init() {
   await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
   initTiles();
   initLog();
+  initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;
   showAddress(); // log.js: the page the address names, the log with its choices
   refresh().then(() => {

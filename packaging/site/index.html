@@ -5,22 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Massimo</title>
 <meta name="description" content="Open-source successor software for eQ-3 MAX! heating systems: a server with a web UI, an API and a proxy, on your own hardware.">
-<!-- The project's site (packaging/README.md, "The apt repository"):
-     packaging/apt/publish.sh copies this page to the site's root and
+<!-- The project's site (packaging/README.md, "The site"):
+     packaging/site/build.sh copies this page to the site's root and
      puts the apt suites in place of the placeholder below. Links are
      absolute, so that they hold wherever a part of the page is shown. -->
-<style>
-:root { color-scheme: light dark; --text: #1f2328; --muted: #59636e; --back: #ffffff; --code: #f0f2f4; --link: #0b62c4; }
-@media (prefers-color-scheme: dark) {
-  :root { --text: #e6edf3; --muted: #9198a1; --back: #0d1117; --code: #1c2128; --link: #58a6ff; }
-}
-body { max-width: 46rem; margin: 0 auto; padding: 0 1rem 1rem; font: 1rem/1.5 system-ui, sans-serif; color: var(--text); background: var(--back); }
-a { color: var(--link); }
-pre { overflow-x: auto; padding: .75rem; border-radius: 6px; background: var(--code); font-size: .875rem; line-height: 1.4; }
-code { font-family: ui-monospace, Menlo, Consolas, monospace; }
-p code, li code { overflow-wrap: anywhere; }
-footer { margin-top: 2rem; color: var(--muted); font-size: .875rem; }
-</style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
 <header>
@@ -111,13 +100,15 @@ Raspberry Pi OS, <code>make windows</code> for Windows,
 and <code>make cross</code> every release binary, all into <code>dist/</code>.
 The binary goes in as a release's does,
 <code>sudo ./massimo install -dry-run -settings .env</code>, then without <code>-dry-run</code>.
-It follows the tag's update channel,
+It follows the tag's flavour, <code>alpha</code> for an <code>-alpha.N</code> tag,
 so the web UI and <code>massimo update</code> say when a release is out,
 and they install the project's binary, checked against its signed manifest;
 to stay on your own builds, build the next tag and run <code>install</code> again,
 which replaces the binary and keeps the settings.
 A tag up to v0.12.0-alpha.1 follows <code>HEAD</code> instead, which has no releases,
-unless built with <code>make CHANNEL=alpha</code>.</p>
+unless built with <code>make CHANNEL=alpha</code>;
+a build of anything but a release tag is <code>devel</code>,
+and follows the <code>devel</code> builds.</p>
 <!-- END GENERATED PARTIAL docs/fragments/_build.md -->
 
 <h2 id="settings">The first settings</h2>
@@ -140,10 +131,11 @@ MASSIMO_API_TOKEN=choose-a-long-random-string
 </code></pre>
 <!-- END GENERATED PARTIAL docs/fragments/_first-settings.md -->
 <p>A Cube takes one client at a time: close the original MAX! software first; from then on that software connects to the server's proxy.</p>
-<p>The Debian package leaves a new box stopped, since until it has an owner every device on the local network may use it. Create the owner on the box with <code>sudo -u massimo massimo -data /var/lib/massimo user add &lt;name&gt; -role owner</code>, or put the token into <code>/etc/massimo/env</code>, or create the owner in the web UI once the service runs; <code>sudo systemctl start massimo</code> starts it, and from then on every upgrade restarts it. <code>massimo install -settings .env</code> starts the service with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
+<p>The Debian package leaves a new box stopped, since until it has an owner every device on the local network may use it. Create the owner on the box with <code>sudo -u _massimo /usr/bin/massimo user add &lt;name&gt; -role owner</code>, or put the token into <code>/etc/massimo/env</code>, or create the owner in the web UI once the service runs; <code>sudo systemctl start massimo</code> starts it, and from then on every upgrade restarts it. <code>massimo install -settings .env</code> starts the service with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
 
 <h2>Documentation</h2>
 <ul>
+<li><a href="https://massimo.metaworx.ch/docs/">The documentation</a>, every document as a page, for each update channel</li>
 <li><a href="https://github.com/metaworx/massimo#readme">README</a>: the features, installing, the server, the command line</li>
 <li><a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md">packaging/README.md</a>: the service on Linux, Windows and macOS, the Debian package, the apt repository, Homebrew, updating</li>
 <li><a href="https://github.com/metaworx/massimo/blob/main/docs/ui.md">docs/ui.md</a>: the web UI</li>

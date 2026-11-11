@@ -18,7 +18,7 @@ class @CLASS@ < Formula
   depends_on "go" => :build
 
   def install
-    system "go", "build", *std_go_args(output: bin/"massimo", ldflags: "-s -w -X main.version=v#{version} -X main.channel=@CHANNEL@"), "./cmd/massimo"
+    system "go", "build", *std_go_args(output: bin/"massimo", ldflags: "-s -w -X main.version=v#{version} -X main.flavour=@CHANNEL@"), "./cmd/massimo"
     # The marker internal/install.Packaged reads: brew owns this binary, so
     # massimo update leaves the install to it, and the web UI's Update
     # runs brew upgrade.

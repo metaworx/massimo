@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}} · Massimo</title>
+<!-- A documentation page of the project's site, made by
+     packaging/site/site.py from the document named in the footer
+     (packaging/README.md, "The site"). -->
+<link rel="stylesheet" href="/site.css">
+<script src="/docs.js" defer></script>
+</head>
+<body>
+<header class="doc-header">
+<a href="/">Massimo</a>
+<a href="{{INDEX}}">Documentation</a>
+<label class="channel">Channel
+<select id="channel" data-channel="{{CHANNEL}}" data-page="{{PAGE}}">
+<option selected>{{CHANNEL}}</option>
+</select>
+</label>
+</header>
+<main>
+{{BODY}}
+</main>
+<footer>
+<p>The channel {{CHANNEL}}, {{VERSION}}: <a href="{{SOURCE}}">{{SOURCE_NAME}} on GitHub</a>.{{AHEAD}}</p>
+</footer>
+</body>
+</html>

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -214,5 +215,128 @@ func TestBackupsMigration(t *testing.T) {
 	if _, err := s.db.Exec(`INSERT INTO backups (uuid, cube_id, taken_at, reason, format, size, sha256, body) VALUES (?, ?, ?, 'daily', 'json', 1, '', x'00')`,
 		newUUID(), c.ID, s.nowText()); err == nil {
 		t.Fatal("the reason daily taken after 0005")
+	}
+}
+
+// A backup's id is never given out again (migration 0013): not after the
+// prune removed the newest backup past backups.keep_newest, nor after it
+// purged the tombstone of a deleted newest one.
+func TestBackupIDsNotReused(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	day := 24 * time.Hour
+	add := func(t *testing.T, s *Store, cube int64, reason string, at time.Time) int64 {
+		t.Helper()
+		b, err := s.AddBackup(ctx, Backup{CubeID: cube, Reason: reason, Format: "json", TakenAt: at}, []byte(`{"version":1}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b.ID
+	}
+	t.Run("pruned", func(t *testing.T) {
+		s := open(t, t.TempDir())
+		c, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+		s.SetSetting(ctx, BackupsKeepNewestKey, 0)
+		add(t, s, c.ID, ReasonManual, now.Add(-200*day))         // kept: manual, 365 days
+		newest := add(t, s, c.ID, ReasonAuto, now.Add(-100*day)) // pruned: auto, 90 days
+		if n, err := s.PruneBackups(ctx, now); err != nil || n != 1 {
+			t.Fatalf("pruned %d, %v; want the auto", n, err)
+		}
+		if next := add(t, s, c.ID, ReasonAuto, now); next <= newest {
+			t.Fatalf("the next backup is %d, the pruned newest was %d", next, newest)
+		}
+	})
+	t.Run("tombstone", func(t *testing.T) {
+		s := open(t, t.TempDir())
+		c, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+		add(t, s, c.ID, ReasonManual, now.Add(-time.Hour))
+		newest := add(t, s, c.ID, ReasonManual, now)
+		if ok, err := s.DeleteBackup(ctx, c.ID, newest); !ok || err != nil {
+			t.Fatalf("delete: %v %v", ok, err)
+		}
+		// Past backups.keep_days_manual (365) the tombstone goes, and the
+		// older backup stays as one of the newest backups.keep_newest.
+		if n, err := s.PruneBackups(ctx, now.Add(400*day)); err != nil || n != 1 {
+			t.Fatalf("pruned %d, %v; want the tombstone", n, err)
+		}
+		if next := add(t, s, c.ID, ReasonAuto, now.Add(time.Minute)); next <= newest {
+			t.Fatalf("the next backup is %d, the purged tombstone was %d", next, newest)
+		}
+	})
+}
+
+// Migration 0013 copies every backup with its id, uuid, body and sync
+// columns, tombstones too, and starts sqlite_sequence at the highest id,
+// so that a tombstone purged after it leaves its id unused.
+func TestBackupsAutoincrementMigration(t *testing.T) {
+	dir := t.TempDir()
+	before := fstest.MapFS{}
+	entries, err := fs.ReadDir(embedded, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "0013") {
+			break
+		}
+		data, _ := embedded.ReadFile("migrations/" + e.Name())
+		before[e.Name()] = &fstest.MapFile{Data: data}
+	}
+	old, err := Open(dir, Options{Logger: quiet(), migrations: before, readerVersion: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	c, _ := old.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+	now := time.Now().UTC().Truncate(time.Second)
+	kept, err := old.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonManual, Format: "yaml", Note: "kept", TakenAt: now.Add(-time.Hour)}, []byte("version: 1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, err := old.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonAuto, Format: "json", TakenAt: now}, []byte(`{"version":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.DeleteBackup(ctx, c.ID, gone.ID)
+	type row struct {
+		ID                         int64
+		UUID, Deleted, Origin, Sum string
+		Version, Body              int64
+	}
+	rows := func(s *Store) []row {
+		t.Helper()
+		r, err := s.db.Query(`SELECT id, uuid, coalesce(deleted_at, ''), origin, sha256, version, length(body) FROM backups ORDER BY id`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		var out []row
+		for r.Next() {
+			var x row
+			r.Scan(&x.ID, &x.UUID, &x.Deleted, &x.Origin, &x.Sum, &x.Version, &x.Body)
+			out = append(out, x)
+		}
+		return out
+	}
+	want := rows(old)
+	old.Close()
+
+	s := open(t, dir)
+	if got := rows(s); fmt.Sprint(got) != fmt.Sprint(want) || len(got) != 2 || got[1].Deleted == "" {
+		t.Fatalf("copied %+v, want %+v", got, want)
+	}
+	if body, ok, err := s.BackupBody(ctx, c.ID, kept.ID); err != nil || !ok || string(body) != "version: 1\n" {
+		t.Fatalf("the kept body: %q %v %v", body, ok, err)
+	}
+	var seq int64
+	if err := s.db.QueryRow(`SELECT seq FROM sqlite_sequence WHERE name = 'backups'`).Scan(&seq); err != nil || seq != gone.ID {
+		t.Fatalf("sqlite_sequence %d, %v; want %d", seq, err, gone.ID)
+	}
+	if n, err := s.PruneBackups(ctx, now.Add(400*24*time.Hour)); err != nil || n != 1 {
+		t.Fatalf("pruned %d, %v; want the tombstone", n, err)
+	}
+	next, err := s.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonAuto, Format: "json"}, []byte(`{"version":1}`))
+	if err != nil || next.ID <= gone.ID {
+		t.Fatalf("the next backup is %d (%v), the purged tombstone was %d", next.ID, err, gone.ID)
 	}
 }

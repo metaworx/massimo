@@ -1,17 +1,24 @@
 name: CI
 
 # Once per commit: a push to main, or a pull request (each push to its
-# branch), never both. Formatting, vet, the tests, a cross build of every
-# release binary (so that a tag finds nothing new to fail on),
-# govulncheck, the Debian package in a container, and the Windows service
-# on a Windows runner. A pull request runs the web UI's suite only when
-# it changes the UI, the suite or this file, and on two of its four cases;
-# a push to main runs all of it. A push to a release branch (alpha) runs
-# nothing: it is a fast-forward of a commit main has tested; the tag runs
-# release.yml.
+# branch), never both; and a release tag. Formatting, vet, the tests, a
+# cross build of every release binary, govulncheck, the Debian package in
+# a container, and the Windows service on a Windows runner. A pull
+# request runs the web UI's suite only when it changes the UI, the suite
+# or this file, and on two of its four cases, and the mDNS test against
+# avahi only when it changes the announcement, discovery, the test or
+# this file; a push to main or of a tag runs all of it, but for a push
+# to main of a release commit, which its tag's run tests (What to test).
+# A push builds the release beside the tests (build.yml), and once every
+# test job has passed ("All tests passed") calls release.yml, which signs
+# and publishes a tag as its release, and a push to main as the devel
+# build. The nightly build is nightly.yml's. A push to a release branch
+# (release/alpha) runs nothing: the release moved it to a commit this
+# workflow had tested.
 on:
   push:
     branches: [ main ]
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*' ]
   pull_request:
 
 # A new push to a pull request cancels the run it supersedes; runs of
@@ -32,8 +39,134 @@ env:
   GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
+  # What the run tests, the one job every test job waits for
+  # (GUIDELINES/project/CI.md, section 2). suite is false for a push to
+  # main of a release commit (its role, by commit_title.py, is release):
+  # make release-alpha pushes main and the tag at once, and the tag's run
+  # tests the same commit, so main's run skips every job and makes no
+  # devel build. code is false where fingerprint.sh finds the same code as
+  # the base (a pull request's) or as the commit main was at (a push's):
+  # documents alone, as config.ini's [ci] untested names them; every job
+  # but Guidelines is skipped, and main makes no devel build. A tag is
+  # always tested whole, and fingerprint.sh's exit 2, an unknown commit
+  # included, counts as code. tested is true where the Tested status on
+  # the commit tested before holds this code's fingerprint: what passed
+  # for it is skipped, and Fuzz, Screenshots and LAN run where they did
+  # not pass yet (All tests passed writes the status). ui and lan, for the
+  # Screenshots and LAN jobs, are true for
+  # a push; for a pull request, ui is true when it touches the web UI, its
+  # suite or this file, lan when it touches the announcement, discovery,
+  # the proxy, the LAN test or this file. The run checks out the pull
+  # request's merge commit, whose first parent is the base branch. The
+  # list is taken before it is matched, so that grep -q ending the pipe
+  # early cannot fail the step under pipefail. Only an answer of false
+  # skips a job: a step that fails anyway leaves every answer empty, so
+  # every job runs, and All tests passed counts this job's failure.
+  # Every job's condition names its status function for that reason.
+  changes:
+    name: What to test
+    runs-on: ubuntu-latest
+    # statuses: the Tested status of the commit tested before.
+    permissions:
+      contents: read
+      statuses: read
+    outputs:
+      suite: ${{ steps.what.outputs.suite }}
+      code: ${{ steps.what.outputs.code }}
+      tested: ${{ steps.what.outputs.tested }}
+      fp: ${{ steps.what.outputs.fp }}
+      ui: ${{ steps.what.outputs.ui }}
+      lan: ${{ steps.what.outputs.lan }}
+      ui_done: ${{ steps.what.outputs.ui_done }}
+      lan_done: ${{ steps.what.outputs.lan_done }}
+      fuzz_done: ${{ steps.what.outputs.fuzz_done }}
+    steps:
+      # A pull request's merge commit, its parents and its head's parent;
+      # a push's whole history, for the range from the commit main was at
+      # before. The guidelines for fingerprint.sh and commit_title.py.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 3 || 0 }}
+          submodules: true
+
+      - name: What to test
+        id: what
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          suite=true code=true tested=false fp="" ui=true lan=true
+          ui_done=false lan_done=false fuzz_done=false
+          fpsh=GUIDELINES/shared/tools/fingerprint.sh
+          base="" prev=""
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+          pull_request:*)
+            base=HEAD^1
+            prev="$(git rev-parse --verify --quiet "${HEAD_SHA}^1" || true)"
+            ;;
+          push:refs/heads/main)
+            # commit_title.py prints role|type|component|breaking|headline
+            # for any summary config.ini allows, chore(release:x) included.
+            role="$(python3 GUIDELINES/shared/tools/commit_title.py --root GUIDELINES parse "${MESSAGE%%$'\n'*}" 2>/dev/null | cut -d'|' -f1 || true)"
+            if [ "$role" = release ]; then
+              echo "a release commit: its tag's run tests it."
+              suite=false
+            else
+              base="$BEFORE"
+              prev="$(git rev-parse --verify --quiet HEAD^2 || true)"
+            fi
+            ;;
+          esac
+          # Documents alone (GUIDELINES/config.ini, [ci] untested): the
+          # same code as the base; exit 2, an unknown base included, tests.
+          if [ -n "$base" ] && same="$("$fpsh" -q same "$base" HEAD)" && [ "$same" = true ]; then
+            echo "documents alone since ${base}: no test reads them."
+            code=false
+          fi
+          # The code that ran, and whether an earlier run passed for it:
+          # the Tested status on the commit the run before tested (a pull
+          # request's head's parent; a merge's second parent, the pull
+          # request's head), green and written by this workflow.
+          if [ "$suite" = true ] && [ "$code" = true ] && fp="$("$fpsh" -q fingerprint HEAD)" && [ -n "$prev" ]; then
+            desc="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${prev}/statuses?per_page=100" \
+              --jq '[.[] | select(.context == "Tested")][0] | select(.state == "success" and .creator.login == "github-actions[bot]") | .description' 2>/dev/null || true)"
+            read -r -a words <<<"$desc"
+            if [ "${words[0]:-}" = "$fp" ]; then
+              echo "${fp} passed at ${prev}: ${desc}"
+              tested=true
+              for w in "${words[@]:1}"; do
+                case "$w" in
+                ui=true) ui_done=true ;;
+                lan=true) lan_done=true ;;
+                fuzz=true) fuzz_done=true ;;
+                esac
+              done
+            fi
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
+            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
+          fi
+          echo "suite=${suite} code=${code} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
+          {
+            echo "suite=${suite}"
+            echo "code=${code}"
+            echo "tested=${tested}"
+            echo "fp=${fp}"
+            echo "ui=${ui}"
+            echo "lan=${lan}"
+            echo "ui_done=${ui_done}"
+            echo "lan_done=${lan_done}"
+            echo "fuzz_done=${fuzz_done}"
+          } >> "$GITHUB_OUTPUT"
+
   test:
     name: Vet and test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,6 +196,12 @@ jobs:
       - name: go test
         run: go test ./...
 
+      # The store's benchmarks once each, with -short, to see that they
+      # still run (docs/store.md section 5, "Measuring on a box"); no
+      # time is compared.
+      - name: Benchmarks, once
+        run: go test -run '^$' -bench . -benchtime 1x -short ./internal/store
+
       - name: Cross build
         run: make cross
 
@@ -71,6 +210,8 @@ jobs:
   # it, so that neither waits for the other.
   race:
     name: Race
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -83,13 +224,39 @@ jobs:
       - name: make race
         run: make race
 
+  # Every package's tests on 32-bit ARM (make test-armv6,
+  # GUIDELINES/project/CI.md, section 2): the armv6 binary the armhf
+  # package ships, run with -short by Ubuntu's qemu-user as the Raspberry
+  # Pi 1's core, beside Vet and test; make cross only builds it.
+  armv6:
+    name: Test (armv6, QEMU)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: qemu-user
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends qemu-user
+
+      - name: make test-armv6
+        run: make test-armv6
+
   # The fuzz targets (make fuzz, GUIDELINES/project/CI.md, section 2), on
   # a push to main only, 10 s a target: a pull request runs their seeds
   # in Vet and test. A crash's input is kept as the artifact fuzz-crash,
   # to be committed as a seed with its fix.
   fuzz:
     name: Fuzz
-    if: github.event_name == 'push'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.fuzz_done != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,34 +277,6 @@ jobs:
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
 
-  # What a pull request changes, for the Screenshots job: ui is true when
-  # it touches the web UI, its suite or this file (GUIDELINES/project/CI.md,
-  # section 2). The run checks out the pull request's merge commit, whose
-  # first parent is the base branch. The list is taken before it is
-  # matched, so that grep -q ending the pipe early cannot fail the step
-  # under pipefail; a step that fails anyway leaves ui empty, and the
-  # Screenshots job then runs. A push to main skips this job.
-  changes:
-    name: Changed paths
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      ui: ${{ steps.paths.outputs.ui }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2 # the merge commit and its parents
-
-      - name: Paths
-        id: paths
-        run: |
-          changed="$(git diff --name-only HEAD^1 HEAD)"
-          if grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
-            echo "ui=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ui=false" >> "$GITHUB_OUTPUT"
-          fi
-
   # The web UI in Chromium against the fake Cube: the pytest suite, then
   # the screenshot set, uploaded as the artifact ui-screenshots
   # (tools/ui-test/README.md). Nothing is compared with the committed
@@ -152,12 +291,12 @@ jobs:
   # section 3). The image has no make: the steps run what the make
   # targets run. The slideshow is built and committed with the set, not
   # here. It runs for every push to main and for a pull request whose
-  # changes job did not answer false; skipped by this condition, the
+  # What to test answered ui=true; skipped by this condition, the
   # required check counts as passed.
   screenshots:
     name: Screenshots
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.ui != 'false') }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' && needs.changes.outputs.ui_done != 'true' }}
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
@@ -206,10 +345,38 @@ jobs:
           path: tools/ui-test/results/
           if-no-files-found: ignore
 
+  # Discovery, serve's mDNS announcement and massimo discover on a LAN in
+  # Docker, against avahi (tools/lan-test/README.md): a second serve's
+  # searches finding a fake Cube, losing it with its cable pulled and
+  # finding it again, then from the box's proxy too; serve sharing UDP
+  # 5353 with avahi-daemon, avahi-browse resolving it on the box and on a
+  # client, discover listing it and marking the proxy, and its goodbye.
+  # The runner has Docker and Compose v2; the hosts' image is built from
+  # debian:trixie-slim at each run. It runs for every push to main and for
+  # a pull request whose What to test answered lan=true, as Screenshots
+  # does; skipped by this condition, the check counts as passed.
+  lan:
+    name: LAN against avahi
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.lan != 'false' && needs.changes.outputs.lan_done != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: LAN test
+        run: make lan-test
+
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.
   govulncheck:
     name: govulncheck (${{ matrix.goos }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -234,10 +401,15 @@ jobs:
   # one installed, checked and purged in a Debian container
   # (packaging/deb/test.sh), on trixie and on bookworm, which the
   # Raspberry Pi OS Legacy images run, and installed again from an apt
-  # repository built with a throwaway key (packaging/apt/test.sh). A
-  # container has no systemd, so the start on a real box is not covered.
+  # repository built with a throwaway key (packaging/apt/test.sh). That
+  # container has no systemd; the cases that need one run each in a
+  # container of its own with systemd as its first process
+  # (packaging/deb/systemd-test.sh): the first start, the restart, and the
+  # upgrade from v0.12.0-alpha.1 with the service running.
   deb:
     name: Debian package (${{ matrix.image }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -258,6 +430,13 @@ jobs:
 
       - name: Install, check and purge in a container
         run: make deb-test DEB_IMAGE=${{ matrix.image }}
+
+      # v0.12.0-alpha.1's package, the last whose account was massimo,
+      # comes from its release through gh, with the job's token.
+      - name: Under systemd, the upgrade from v0.12.0-alpha.1 included
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make deb-systemd-test DEB_IMAGE=${{ matrix.image }}
 
       # The apt repository (packaging/README.md, "The apt repository")
       # built from the packages with a throwaway key, verified, and
@@ -280,6 +459,8 @@ jobs:
   # that one cannot run as a service), and removal.
   windows:
     name: Windows service
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -289,11 +470,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
+      # Discovery's tests as well: Windows binds UDP ports otherwise than
+      # Linux, a wildcard beside an address's own port (CI.md, section 3).
       - name: Unit tests
         shell: bash
         run: |
-          go test ./internal/update/... ./internal/install/... ./cmd/...
-          go test -run Update ./internal/server/
+          go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/...
+          go test -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
 
       # The service against the fake Cube, with the update from the web
       # UI's request (docs/update-windows.md, section 6): the server
@@ -342,7 +525,7 @@ jobs:
             st=""
             for i in $(seq 90); do
               st="$(cat "$data/update-status.json" 2>/dev/null || true)"
-              echo "$st" | grep -Eq '"state": "(done|rolled-back|failed|up-to-date)"' && break
+              echo "$st" | grep -E '"state": "(done|rolled-back|failed|up-to-date)"' >/dev/null && break
               sleep 2
             done
             echo "$st"
@@ -351,7 +534,7 @@ jobs:
           }
           EOF
           . ./ci-lib.sh
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo.exe ./cmd/massimo
           ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
@@ -361,7 +544,7 @@ jobs:
           sc.exe qc massimo | tee qc.txt
           grep -q -- '-update-request C:\\ProgramData\\Massimo\\update-request -update-status C:\\ProgramData\\Massimo\\update-status.json' qc.txt
           up
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
 
           # Installing again keeps the address and restarts the service.
           ./massimo.exe install
@@ -379,16 +562,16 @@ jobs:
           . ./ci-lib.sh
           post_update
           now="$(curl -fsS "$health")"
-          if echo "$st" | grep -q '"state": "done"'; then
-            echo "$now" | grep -vq 'v0.0.0-ci.1'
+          if echo "$st" | grep '"state": "done"' >/dev/null; then
+            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
             test -f "$bin.prev"
             # Back by hand, with the binary that is installed.
             "$bin" update -rollback -restart massimo
             up
-            curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+            curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
           else
-            echo "$st" | grep -q '"state": "rolled-back"'
-            echo "$now" | grep -q 'v0.0.0-ci.1'
+            echo "$st" | grep '"state": "rolled-back"' >/dev/null
+            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null
             test -f "$bin.failed"
           fi
           test ! -e "$data/update-request"
@@ -410,9 +593,9 @@ jobs:
           now="$(curl -fsS "$health")"
           echo "update exit $status, server: $now"
           if [ "$status" = 0 ]; then
-            echo "$now" | grep -vq 'v0.0.0-ci.1'
+            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
           else
-            echo "$now" | grep -q 'v0.0.0-ci.1'   # rolled back
+            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null   # rolled back
             test -f "$bin.failed"
           fi
 
@@ -502,13 +685,13 @@ jobs:
           # On the channel ci, which the stub's tags name, as release.yml's
           # do theirs (internal/update, hintedChannel).
           asset=massimo-windows-amd64.exe
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=ci" -o ci1.exe ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=ci" -o ci1.exe ./cmd/massimo
           mkdir -p ci-stub/dl/v0.0.0-ci.2 ci-stub/dl/v0.0.0-ci.3
-          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.channel=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.flavour=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
           cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
           for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
             d="ci-stub/dl/$tag"
-            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -channel ci -dir "$d" "$asset" > "$d/massimo-release.json"
+            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -flavour ci -dir "$d" "$asset" > "$d/massimo-release.json"
             ci-tools/sign.exe sign ci-tools/ci-key "$d/massimo-release.json" > "$d/massimo-release.json.sig"
           done
           # The release list in GitHub's shape, one release at a time.
@@ -526,13 +709,13 @@ jobs:
           printf 'MASSIMO_UPDATE_API=http://127.0.0.1:8123\n' >> "$data/env"
           ./ci1.exe install
           up
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.1'
+          curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
           # A failure kept from earlier goes with the next successful update.
           echo stale > "$bin.failed"
 
           post_update
-          echo "$st" | grep -q '"state": "done"'
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.2'
+          echo "$st" | grep '"state": "done"' >/dev/null
+          curl -fsS "$health" | grep 'v0.0.0-ci.2' >/dev/null
           test -f "$bin.prev"
           test ! -e "$bin.failed"
 
@@ -540,8 +723,8 @@ jobs:
           start=$(date +%s)
           post_update
           echo "rolled back after $(( $(date +%s) - start )) s"
-          echo "$st" | grep -q '"state": "rolled-back"'
-          curl -fsS "$health" | grep -q 'v0.0.0-ci.2'
+          echo "$st" | grep '"state": "rolled-back"' >/dev/null
+          curl -fsS "$health" | grep 'v0.0.0-ci.2' >/dev/null
           cmp "$bin.failed" "ci-stub/dl/v0.0.0-ci.3/$asset"
           powershell -NoProfile -Command "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 20 | Where-Object { \$_.Id -in 7000,7009,7031,7034 } | Format-List TimeCreated,Id,Message" | tee events.txt
           grep -Eq 'Id +: (7000|7009|7034)' events.txt
@@ -554,6 +737,32 @@ jobs:
           if sc.exe query massimo; then echo "::error::service still there"; exit 1; fi
           test ! -e "C:/Program Files/Massimo"
           test ! -e "C:/ProgramData/Massimo" # the settings, the logs, update.log, update-status.json and update-request
+
+      # The announcement beside Windows' own mDNS (the DNS client service
+      # holds UDP 5353): a second serve on every address, with a store of
+      # its own, announces itself without a warning, and massimo discover
+      # finds it by multicast. Windows has no dns-sd of its own, so the
+      # browser is ours; tools/lan-test/README.md for avahi.
+      - name: mDNS beside Windows' mDNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -o mdns.exe ./cmd/massimo
+          : > mdns.env
+          mkdir -p mdns-data
+          ./mdns.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
+          MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./mdns.exe -env mdns.env -data mdns-data serve -listen 0.0.0.0:18097 -announce -proxy off -discover-interval 0 > mdns-serve.log 2>&1 &
+          serve=$!
+          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
+          cat mdns-serve.log
+          grep -q 'msg="announced on the LAN"' mdns-serve.log
+          if grep -q 'not announced' mdns-serve.log; then echo "::error::serve did not announce itself beside Windows' mDNS"; exit 1; fi
+          if grep -q 'cube proxy listening' mdns-serve.log; then echo "::error::serve's flags after -announce were not read"; exit 1; fi
+          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
+          ./mdns.exe -env mdns.env discover -json -wait 4s > mdns-discover.json
+          cat mdns-discover.json
+          grep -q "\"node\": *\"$node\"" mdns-discover.json
+          kill "$serve"
 
       - name: Logs
         if: always()
@@ -581,6 +790,8 @@ jobs:
 
   macos:
     name: macOS LaunchDaemon
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -591,7 +802,19 @@ jobs:
           check-latest: true
 
       - name: Unit tests
-        run: go test ./internal/update/... ./internal/install/... ./cmd/...
+        run: go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/safefile/...
+
+      # install on the template's settings, as a new Mac gets it
+      # (packaging/launchd/template-test.sh): left for its owner with the
+      # message, whose owner line, run as printed from a directory the
+      # service user cannot enter, creates the owner; install again
+      # restarting a loaded job and leaving a booted-out one; the web UI's
+      # way; and a removal that leaves nothing, which the install below
+      # needs.
+      - name: Install on the template's settings
+        run: |
+          go build -o massimo ./cmd/massimo
+          bash packaging/launchd/template-test.sh ./massimo
 
       # The whole path as on a Mac: install against the fake Cube with a
       # self-signed certificate (so the health check and the API go over
@@ -611,7 +834,7 @@ jobs:
           MASSIMO_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.channel=alpha" -o massimo ./cmd/massimo
+          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo ./cmd/massimo
           ./massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
@@ -619,15 +842,15 @@ jobs:
           up() { for i in $(seq 30); do curl -fsSk "$health" && return; sleep 2; done; return 1; }
 
           sudo ./massimo install -settings ci.env -listen 127.0.0.1:18099 -tls self-signed
-          sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | head -3
+          sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | sed -n 1,3p
           up
-          curl -fsSk "$health" | grep -q 'v0.0.0-ci.1'
-          curl -fsSk "$health" | grep -Eq '"self_signed": ?true'
-          curl -fsSkI "$health" | grep -qi 'strict-transport-security: max-age=31536000'
+          curl -fsSk "$health" | grep 'v0.0.0-ci.1' >/dev/null
+          curl -fsSk "$health" | grep -E '"self_signed": ?true' >/dev/null
+          curl -fsSkI "$health" | grep -i 'strict-transport-security: max-age=31536000' >/dev/null
           test "$(sudo stat -f %Su:%Lp /var/lib/massimo/tls/self-signed.key)" = _massimo:600
           sudo grep -q 'MASSIMO_TLS=self-signed' /etc/massimo/env
           sudo grep -q '<string>https://127.0.0.1:18099/healthz</string>' /Library/LaunchDaemons/ch.metaworx.massimo-update.plist
-          sudo -u _massimo ./massimo -data /var/lib/massimo -env /etc/massimo/env tls show | grep -q 'SHA256:'
+          sudo -u _massimo ./massimo -data /var/lib/massimo -env /etc/massimo/env tls show | grep 'SHA256:' >/dev/null
           test "$(sudo stat -f %Su:%Lp /etc/massimo/env)" = _massimo:600
           if cat /etc/massimo/env 2>/dev/null; then echo "::error::settings readable"; exit 1; fi
           dscl . -read /Users/_massimo IsHidden UserShell
@@ -656,21 +879,21 @@ jobs:
           fi
           for i in $(seq 90); do
             st="$(cat /var/lib/massimo-update/status.json 2>/dev/null || true)"
-            echo "$st" | grep -Eq '"state": "(done|rolled-back|failed)"' && break
+            echo "$st" | grep -E '"state": "(done|rolled-back|failed)"' >/dev/null && break
             sleep 2
           done
           echo "$st"
           up
           now="$(curl -fsSk "$health")"
-          if echo "$st" | grep -q '"state": "done"'; then
-            echo "$now" | grep -vq 'v0.0.0-ci.1'
+          if echo "$st" | grep '"state": "done"' >/dev/null; then
+            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
             # Back by hand, with the binary that knows launchd.
             sudo ./massimo update -rollback -binary /usr/local/bin/massimo -restart ch.metaworx.massimo
             sleep 3; up
-            curl -fsSk "$health" | grep -q 'v0.0.0-ci.1'
+            curl -fsSk "$health" | grep 'v0.0.0-ci.1' >/dev/null
           else
-            echo "$st" | grep -q '"state": "rolled-back"'
-            echo "$now" | grep -q 'v0.0.0-ci.1'
+            echo "$st" | grep '"state": "rolled-back"' >/dev/null
+            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null
             test -f /usr/local/bin/massimo.failed
           fi
 
@@ -727,9 +950,91 @@ jobs:
           cat "$RUNNER_TEMP/update-status.json"
           test "$(basename "$(readlink "$(brew --prefix)/opt/massimo-ci")")" = 0.0.0-ci.2
           grep -q '"state": "done"' "$RUNNER_TEMP/update-status.json"
-          "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep -q 'v0.0.0-ci.2'
+          "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep 'v0.0.0-ci.2' >/dev/null
           brew uninstall --force massimo-ci
           rm -rf "$tap"
+
+      # The announcement beside Apple's mDNSResponder, which holds UDP 5353
+      # on every Mac: a second serve, on every address and with a store of
+      # its own, runs as a launchd daemon in the system domain, as massimo
+      # install runs the service, and dns-sd must find and resolve it
+      # through mDNSResponder (-Z lists the PTR, SRV and TXT records);
+      # tools/lan-test/README.md for avahi. A daemon, because macOS's local
+      # network privacy refuses the runner's own processes every multicast
+      # send ("no route to host"), and spares launchd daemons; for the same
+      # reason massimo discover, a runner's process, is not asked here.
+      # dns-sd only talks to mDNSResponder, and is read through a
+      # pseudo-terminal of Python's, so that what it printed is kept when it
+      # is stopped. -announce is a switch: written alone, as "-announce on"
+      # would end the flags at "on".
+      - name: mDNS beside mDNSResponder
+        run: |
+          set -uo pipefail
+          go build -o massimo-mdns ./cmd/massimo || exit 1
+          d="$(mktemp -d)"
+          ./massimo-mdns fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
+          label=ch.metaworx.massimo.mdns-ci
+          plist="/Library/LaunchDaemons/$label.plist"
+          log="$PWD/mdns-serve.log"
+          cat > "$RUNNER_TEMP/$label.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Label</key><string>$label</string>
+            <key>ProgramArguments</key><array>
+              <string>$PWD/massimo-mdns</string><string>-data</string><string>$d</string><string>serve</string>
+              <string>-listen</string><string>0.0.0.0:18097</string><string>-announce</string>
+              <string>-proxy</string><string>off</string><string>-discover-interval</string><string>0</string>
+              <string>-log-level</string><string>debug</string>
+            </array>
+            <key>EnvironmentVariables</key><dict>
+              <key>MASSIMO_ENV_FILE</key><string>/dev/null</string>
+              <key>MASSIMO_CUBE_KEQ0000100_ADDRESS</key><string>127.0.0.1:62998</string>
+            </dict>
+            <key>StandardOutPath</key><string>$log</string>
+            <key>StandardErrorPath</key><string>$log</string>
+            <key>RunAtLoad</key><true/>
+          </dict></plist>
+          EOF
+          sudo install -o root -g wheel -m 644 "$RUNNER_TEMP/$label.plist" "$plist"
+          sudo launchctl bootstrap system "$plist"
+          stop() { sudo launchctl bootout "system/$label" 2>/dev/null || true; sudo rm -f "$plist"; }
+          trap stop EXIT
+          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' "$log" 2>/dev/null && break; sleep 1; done
+          sleep 3
+          ok=0
+          if ! grep -q 'msg="announced on the LAN"' "$log" || grep -q 'not announced' "$log"; then echo "::error::the daemon did not announce itself beside mDNSResponder"; ok=1; fi
+          if grep -q 'mdns: not sent' "$log"; then echo "::error::the daemon's announcements were not sent: local network privacy refuses a launchd daemon too"; ok=1; fi
+          if grep -q 'cube proxy listening' "$log"; then echo "::error::serve's flags after -announce were not read"; ok=1; fi
+          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' "$log" | head -n1)"
+          # dns-sd for six seconds in a pseudo-terminal, what it printed on stdout
+          pty_run() {
+            python3 -I - "$@" <<'PY'
+          import os, pty, select, signal, sys, time
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execvp(sys.argv[1], sys.argv[1:])
+          out, end = b"", time.time() + 6
+          while time.time() < end:
+              if select.select([fd], [], [], 0.2)[0]:
+                  try:
+                      data = os.read(fd, 4096)
+                  except OSError:
+                      break
+                  if not data:
+                      break
+                  out += data
+          os.kill(pid, signal.SIGTERM)
+          sys.stdout.write(out.decode(errors="replace"))
+          PY
+          }
+          echo "--- dns-sd: the service types mDNSResponder sees"
+          pty_run dns-sd -B _services._dns-sd._udp local. | tee mdns-types.txt
+          echo "--- dns-sd: _massimo._tcp"
+          pty_run dns-sd -Z _massimo._tcp local. | tee mdns-zone.txt
+          echo "--- the daemon's log"; grep -vE 'device state|schema migrated|greeting: ' "$log"
+          if ! grep -q 'SRV.* 18097 ' mdns-zone.txt || ! grep -q "node=$node" mdns-zone.txt; then echo "::error::dns-sd does not resolve the server through mDNSResponder"; ok=1; fi
+          exit "$ok"
 
       - name: Logs
         if: always()
@@ -748,6 +1053,8 @@ jobs:
   # messages of the pull request's commits.
   guidelines:
     name: Guidelines
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -758,6 +1065,15 @@ jobs:
           fetch-depth: 0
       - name: Tags
         run: git fetch --quiet --force --tags origin
+      # The check for serials, MACs and radio addresses (tools/identifiers)
+      # reads the project's documents and changelog too, which a change to
+      # documents alone does not run Vet and test for (What to test).
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: Identifiers
+        run: MASSIMO_ENV_FILE=/dev/null go test ./tools/identifiers
       # HEAD..HEAD, an empty range, reads no commit message: a push to main,
       # and a pull request of Dependabot's, whose messages cannot take the
       # project's form (GUIDELINES/project/CI.md, "Dependabot"); every other
@@ -773,3 +1089,118 @@ jobs:
       - name: Checks, with the pull request's commit messages
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: GUIDELINES/shared/tools/check --commit-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  # The site's pages and the docs of the commit (packaging/site/build.sh;
+  # packaging/README.md, "The site"), without the apt repository and never
+  # deployed: it fails on a document under docs/ missing from
+  # docs/fragments/_documents.md, on a link to a file the commit does not
+  # have, and on one to a page or heading that is not there. The deploy is
+  # site.yml's, which release.yml calls.
+  site:
+    name: Site
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      - name: Build the pages and the docs of the commit
+        run: packaging/site/build.sh --out site --no-apt --ref main=HEAD
+
+  # One job that stands for all of the above: it fails unless none of
+  # them failed or was cancelled (a pull request skips some). The release
+  # waits for it, and the nightly build looks for it among a commit's runs
+  # (release.yml).
+  # The release's build (build.yml), beside the test jobs, so that its
+  # files are ready when they have passed: for a push of main or of a
+  # tag, unless What to test answered suite=false. It holds no secret,
+  # and nothing is signed until All tests passed; a build whose tests fail
+  # is thrown away with the run. actions: What to release reads runs for
+  # the nightly build; id-token and attestations: the build's provenance.
+  build:
+    name: Build
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build.yml
+
+  # One check for the whole suite, which the release waits for. It counts
+  # What to test with the others, so that a gate that failed fails it,
+  # although every job ran; for a release commit pushed to main,
+  # which What to test leaves untested, it is skipped, and so is Release.
+  # Once it has passed, it writes the Tested status (GUIDELINES/project/CI.md,
+  # section 2) on the commit the run tested, a pull request's head or the
+  # commit pushed to main: the fingerprint of the code that ran and whether
+  # Screenshots, LAN and Fuzz passed for it, in this run or the one it
+  # carries on. What to test reads it to skip what passed. Not for a run
+  # that tested documents alone, nor for a tag; a fork's pull request has
+  # a read-only token, and the step's failure fails nothing.
+  tests:
+    name: All tests passed
+    needs: [ changes, test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Every test job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: ${RESULTS}"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done
+
+      - name: Write the Tested status
+        if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FP: ${{ needs.changes.outputs.fp }}
+          UI: ${{ needs.changes.outputs.ui_done == 'true' || needs.screenshots.result == 'success' }}
+          LAN: ${{ needs.changes.outputs.lan_done == 'true' || needs.lan.result == 'success' }}
+          FUZZ: ${{ needs.changes.outputs.fuzz_done == 'true' || needs.fuzz.result == 'success' }}
+        run: |
+          desc="${FP} ui=${UI} lan=${LAN} fuzz=${FUZZ}"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state=success -f context=Tested -f description="$desc" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+          echo "Tested on ${SHA}: ${desc}"
+
+  # The release of a pushed commit (release.yml), once All tests passed
+  # and the build is done, with build.yml's answers as inputs and the
+  # permissions its jobs need: contents to publish, pages and id-token to
+  # deploy the site.
+  # The condition names its status function: without one GitHub adds
+  # success(), which is false while any job up the chain was skipped, as
+  # Fuzz is on a pull request and Changed paths, now What to test, was on
+  # a push (2026-11-10: the first devel build was skipped so).
+  # actions: release.yml's apt-build and homebrew read the run's jobs
+  # while they wait for Sign and publish.
+  release:
+    name: Release
+    needs: [ tests, build ]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.tests.result == 'success' && needs.build.result == 'success' }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+      actions: read
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      kind: ${{ needs.build.outputs.kind }}
+      tag: ${{ needs.build.outputs.tag }}
+      sha: ${{ needs.build.outputs.sha }}
+      version: ${{ needs.build.outputs.version }}
+      flavour: ${{ needs.build.outputs.flavour }}
+      release: ${{ needs.build.outputs.release }}
+      prerelease: ${{ needs.build.outputs.prerelease }}

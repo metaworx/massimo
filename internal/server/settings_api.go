@@ -11,6 +11,7 @@ package server
 // changed.
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/update"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -160,6 +162,12 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
+	ch, err := st.SettingString(r.Context(), store.UpdateChannelKey)
+	if err != nil {
+		return nil, fail(http.StatusInternalServerError, "%v", err)
+	}
+	flavour := s.opts.Update.Flavour
+	out[store.UpdateChannelKey] = settingView{Value: cmp.Or(ch, flavour), Default: flavour, Set: ch != "", InEffect: s.updateChannel(r.Context()), Applies: "now"}
 	out[store.NodeIDKey] = settingView{Value: st.NodeID(), Set: true, ReadOnly: true}
 	out[store.TenantIDKey] = settingView{Value: tenant, Set: true, ReadOnly: true}
 	return out, nil
@@ -197,6 +205,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		duration *time.Duration // a duration setting
 		number   *int           // a whole-number setting
 		on       *bool          // a switch
+		name     *string        // a name of a few: the update channel
 		clear    bool
 	}
 	var writes []write
@@ -211,6 +220,18 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		raw := req[k]
 		isNull := len(raw) == 0 || string(raw) == "null"
+		if k == store.UpdateChannelKey {
+			if isNull {
+				writes = append(writes, write{key: k, clear: true})
+				continue
+			}
+			var name string
+			if json.Unmarshal(raw, &name) != nil || !slices.Contains(update.Flavours, name) {
+				return fail(http.StatusBadRequest, "%s: want one of %s, or null for the build's flavour", k, strings.Join(update.Flavours, ", "))
+			}
+			writes = append(writes, write{key: k, name: &name})
+			continue
+		}
 		var d *durationSetting
 		for i := range durationSettings {
 			if durationSettings[i].key == k {
@@ -290,6 +311,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			err = st.SetSetting(r.Context(), wr.key, fmtDuration(*wr.duration))
 		case wr.on != nil:
 			err = st.SetSetting(r.Context(), wr.key, *wr.on)
+		case wr.name != nil:
+			err = st.SetSetting(r.Context(), wr.key, *wr.name)
 		default:
 			err = st.SetSetting(r.Context(), wr.key, *wr.number)
 		}
@@ -318,6 +341,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			value = strconv.Itoa(*wr.number)
 		case wr.on != nil:
 			value = strconv.FormatBool(*wr.on)
+		case wr.name != nil:
+			value = *wr.name
 		}
 		s.log.Info("setting changed", "key", wr.key, "value", value, "remote", s.clientIP(r))
 		var to any
@@ -328,6 +353,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			to = *wr.number
 		case wr.on != nil:
 			to = *wr.on
+		case wr.name != nil:
+			to = *wr.name
 		}
 		auditChange(r, wr.key, from, to) // nil: the default
 	}

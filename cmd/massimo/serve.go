@@ -73,9 +73,9 @@ func runServe(args []string) error {
 	sighupMode := fs.String("sighup", os.Getenv(sighupVar), "what SIGHUP does on Unix: reload reads the settings file again, applying MASSIMO_API_TOKEN at once, and checkpoints the store; stop stops as SIGTERM does; auto reloads under a service manager and where SIGHUP was ignored at the start (nohup), and stops in a terminal, where SIGHUP means it closed (default "+sighupVar+", else auto)")
 	restartMode := fs.String("restart", os.Getenv(restartVar), "what a restart from the API and the web UI does: auto offers it under a service manager that starts the server again (systemd, launchd, Homebrew, the Windows service); exit stops and exits with status 75 for whatever runs serve, such as Docker's --restart; off never offers it (default "+restartVar+", else auto)")
 	allowReboot, rebootErr := newSwitchFlag("allow-reboot", rebootVar, os.Getenv(rebootVar))
-	fs.Var(allowReboot, "allow-reboot", "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", "+switchHelp+"; else off)")
+	fs.Var(allowReboot, "allow-reboot", "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", "+switchHelp("allow-reboot")+"; else off)")
 	announceOn, announceErr := newSwitchFlag("announce", env.Announce, os.Getenv(env.Announce))
-	fs.Var(announceOn, "announce", "announce the server on the LAN by mDNS as "+announce.ServiceType+", with its node, version and certificate, for massimo discover and the apps (default "+env.Announce+", "+switchHelp+"; else on when -listen is reachable from the LAN, off on a loopback address)")
+	fs.Var(announceOn, "announce", "announce the server on the LAN by mDNS as "+announce.ServiceType+", with its node, version and certificate, for massimo discover and the apps (default "+env.Announce+", "+switchHelp("announce")+"; else on when -listen is reachable from the LAN, off on a loopback address)")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
@@ -84,6 +84,12 @@ func runServe(args []string) error {
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// An argument the flags leave over is a mistake, which serve would
+	// otherwise run past with the flags after it unread: "-announce off"
+	// announced, and "-allow-reboot off" allowed a reboot.
+	if fs.NArg() > 0 {
+		return fmt.Errorf("serve: unexpected argument %q%s", fs.Arg(0), strayHint(fs, args, fs.Arg(0)))
 	}
 	var logOut io.Writer = os.Stderr
 	if *logPath != "" {
@@ -164,7 +170,7 @@ func runServe(args []string) error {
 		}
 	}
 	reboot := serveReboot(logger, allowReboot.on)
-	upd := server.UpdateOptions{Version: version, Channel: updateChannel(), Request: *updateRequest, Status: *updateStatus}
+	upd := server.UpdateOptions{Version: version, Flavour: flavour, Channel: os.Getenv("MASSIMO_UPDATE_CHANNEL"), Request: *updateRequest, Status: *updateStatus}
 	if m, ok := install.Packaged(""); ok {
 		packagedUpdate(&upd, m, "", os.Getenv)
 		if m.Name == "brew" {

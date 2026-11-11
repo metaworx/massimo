@@ -6,10 +6,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -95,7 +97,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	for k := range cubes[1] {
 		switch k {
-		case "serial", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "found_at", "last_seen":
+		case "serial", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
 		default:
 			t.Errorf("unexpected field %q in a found cube", k)
 		}
@@ -412,5 +414,124 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
 	if len(cubes) != 1 {
 		t.Fatalf("a configured cube also listed as found: %s", cubes)
+	}
+}
+
+// homes starts a fake Cube's TCP side on 127.0.0.2 and 127.0.0.3, one
+// port, and a discovery responder on each address; the one on 127.0.0.3
+// answers as a massimo proxy, the identify request alone. The loopback
+// has no ARP entries, so mac gives the MACs the search sees.
+func homes(t *testing.T) (port int, cubeTCP, proxyTCP *fakecube.Server, atCube, atProxy *fakecube.DiscoveryResponder) {
+	t.Helper()
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cubeTCP = &fakecube.Server{Greeting: greeting}
+	addr, err := cubeTCP.Start("127.0.0.2:0")
+	if err != nil {
+		t.Skipf("cannot listen on 127.0.0.2: %v", err)
+	}
+	t.Cleanup(func() { cubeTCP.Close() })
+	_, portStr, _ := net.SplitHostPort(addr)
+	port, _ = strconv.Atoi(portStr)
+	proxyTCP = &fakecube.Server{Greeting: greeting}
+	if _, err := proxyTCP.Start("127.0.0.3:" + portStr); err != nil {
+		t.Skipf("cannot listen on 127.0.0.3: %v", err)
+	}
+	t.Cleanup(func() { proxyTCP.Close() })
+	if atCube, err = fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107); err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { atCube.Close() })
+	if atProxy, err = fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107); err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { atProxy.Close() })
+	atProxy.SetIdentifyOnly(true)
+	return port, cubeTCP, proxyTCP, atCube, atProxy
+}
+
+// A Cube heard from its own address and from a proxy is one found Cube,
+// at its own address; configured by serial, it follows the proxy, whose
+// serve holds the Cube's one LAN slot, and stays there run after run.
+func TestOneSerialFromACubeAndAProxy(t *testing.T) {
+	port, cubeTCP, proxyTCP, atCube, atProxy := homes(t)
+	mac := func(ip net.IP) string {
+		switch ip.String() {
+		case "127.0.0.2":
+			return "00:1a:22:00:00:02"
+		case "127.0.0.3":
+			return "02:00:00:00:00:03"
+		}
+		return ""
+	}
+	var log syncBuffer
+	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port, LookupMAC: mac,
+		Logger:        slog.New(slog.NewTextHandler(&log, nil)),
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
+	proxyAddr := "127.0.0.3:" + strconv.Itoa(port)
+	eventually(t, "the cube through the proxy", func() bool {
+		var cubes []map[string]any
+		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+		return len(cubes) == 1 && cubes[0]["connected"] == true && cubes[0]["address"] == proxyAddr
+	})
+	for i := 0; i < 2; i++ {
+		code, body := postDiscovery(t, ts)
+		found, _ := body["found"].([]any)
+		if code != http.StatusOK || len(found) != 1 {
+			t.Fatalf("run %d: %d %v", i, code, body)
+		}
+		if f := found[0].(map[string]any); f["address"] != "127.0.0.2" || f["mac"] != "00:1a:22:00:00:02" || f["dhcp"] != true {
+			t.Fatalf("run %d: the found cube %v", i, f)
+		}
+		// Its proxies, and the addresses it uses from its answer to N:
+		// the fake's lease, a /24 with the gateway at .1.
+		f := found[0].(map[string]any)
+		if p, _ := f["proxies"].([]any); len(p) != 1 || p[0] != "127.0.0.3" || f["gateway"] != "127.0.0.1" || f["netmask"] != "255.255.255.0" {
+			t.Fatalf("run %d: proxies and addresses %v", i, f)
+		}
+	}
+	var cubes []map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+	if len(cubes) != 1 || cubes[0]["address"] != proxyAddr || cubes[0]["connected"] != true {
+		t.Fatalf("cubes %v", cubes)
+	}
+	if n := strings.Count(log.String(), `msg="cube address from discovery"`); n != 1 {
+		t.Errorf("%d address changes in three runs, want 1:\n%s", n, log.String())
+	}
+	if cubeTCP.Connections() != 0 || proxyTCP.Connections() != 1 {
+		t.Errorf("connections: %d to the Cube, %d to the proxy", cubeTCP.Connections(), proxyTCP.Connections())
+	}
+}
+
+// An answer the search cannot tell, a proxy's without a MAC, is not
+// followed away from the address a Cube has, even when the Cube's own
+// answer is missing.
+func TestAnUnknownAnswerIsNotFollowed(t *testing.T) {
+	port, cubeTCP, proxyTCP, atCube, atProxy := homes(t)
+	atProxy.SetSilent(true)
+	var log syncBuffer
+	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port,
+		Logger:        slog.New(slog.NewTextHandler(&log, nil)),
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
+	cubeAddr := "127.0.0.2:" + strconv.Itoa(port)
+	address := func() any {
+		var cubes []map[string]any
+		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+		if len(cubes) != 1 || cubes[0]["connected"] != true {
+			return nil
+		}
+		return cubes[0]["address"]
+	}
+	eventually(t, "the cube at its own address", func() bool { return address() == cubeAddr })
+	atCube.SetSilent(true)
+	atProxy.SetSilent(false)
+	postDiscovery(t, ts)
+	if a := address(); a != cubeAddr {
+		t.Fatalf("followed an unknown answer: %v", a)
+	}
+	if n := strings.Count(log.String(), `msg="cube address from discovery"`); n != 1 || proxyTCP.Connections() != 0 || cubeTCP.Connections() != 1 {
+		t.Errorf("%d address changes, %d connections to the proxy, %d to the Cube", n, proxyTCP.Connections(), cubeTCP.Connections())
 	}
 }

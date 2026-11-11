@@ -94,9 +94,9 @@ linux/arm64, darwin/arm64 and windows/amd64 without any C toolchain.
   The server writes a few thousand rows a day and reads a page of the log now and then;
   on the Pi 1 that is nothing.
   Measured on 2026-11-09 (section 5, `events`):
-  the writer's batch of 100 events takes 0.15 s on the Pi 1,
-  but a page of warnings that read all of 90,000 events took 11 s,
-  a walk that migration 0011's index of the warnings ends.
+  the writer's batch of 100 events takes 0.15 s on the Pi 1;
+  a page of errors, which read all of 90,000 events, took 5 to 16 s there,
+  and since migration 0011's index of the warnings 1.7 s.
 - Queries: real SQL, so the log can be paged and filtered by time,
   kind and device, the audit by user, the backups listed and pruned by age,
   all in the engine with indexes; retention is one `DELETE`.
@@ -170,7 +170,9 @@ the server runs;
 they belong to the database and are copied with it or not at all (a copy of the
 `.db` alone while the server runs can miss the last transactions;
 `massimo store backup <file>`, stage (a),
-uses SQLite's online backup to write a consistent copy).
+writes a consistent copy with SQLite's `VACUUM INTO`,
+to a temporary file renamed into place once complete,
+so that a crash leaves the file empty, never a partial database).
 A clean stop of `serve` brings the WAL into `massimo.db` before it closes the
 store (`PRAGMA wal_checkpoint(TRUNCATE)`, which also runs while another program
 has the file open, where SQLite's own checkpoint at the last close does not)
@@ -184,9 +186,10 @@ with until its first clean stop.
 
 | Where | Data directory | Who | Mode |
 |---|---|---|---|
-| Linux service (`massimo install`) | `/var/lib/massimo` | user `massimo` | directory 0750 (`StateDirectory=massimo`), file 0600 |
+| Linux service (`massimo install`) | `/var/lib/massimo` | user `_massimo` | directory 0750 (`StateDirectory=massimo`, `StateDirectoryMode=0750`), file 0600 |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` | directory 0750 (`install.StateDir`), file 0600 |
 | Windows service | `C:\ProgramData\Massimo` | LocalSystem | the directory's ACL: SYSTEM and Administrators only (`winSettings`) |
+| A command as `_massimo` (Linux, macOS) | `/var/lib/massimo`, unless `-env`, `-data` or `MASSIMO_DATA` | user `_massimo` | as the services' |
 | Terminal run | the current directory, or `-data <dir>` | the user | file 0600 |
 
 These are the directories the installers create today (`internal/install`:
@@ -197,7 +200,9 @@ the update request already lives there on Linux and macOS.
 so no unit change is needed for the file to be created.
 
 The data directory is a global option like `-env`: `massimo -data
-<dir> serve …`, default `MASSIMO_DATA`, else the current directory. The
+<dir> serve …`, default `MASSIMO_DATA`, else the current directory;
+for the service user, the owner of `/etc/massimo/env`, without `-env`,
+`/var/lib/massimo` and that settings file alone (`useServiceDefaults`). The
 installers pass it explicitly in the unit,
 the plist and the Windows service arguments (`ServiceArgs`),
 so nothing depends on the working directory;
@@ -315,7 +320,8 @@ Times are `TEXT` in RFC 3339 with the `Z` suffix (sortable,
 no time zone surprises on the Pi); JSON documents are `TEXT`;
 booleans are `INTEGER` 0 or 1; identifiers are the rowid.
 The dialect stays in the subset PostgreSQL takes with mechanical changes
-(`INTEGER PRIMARY KEY` to identity columns, `TEXT` times to `timestamptz`,
+(`INTEGER PRIMARY KEY`, with `AUTOINCREMENT` or without, to identity columns,
+`TEXT` times to `timestamptz`,
 JSON `TEXT` to `jsonb`), so the server mode is a second migration directory,
 not a second schema.
 There is no `tenant_id` and no `tenants` table (decided 2026-11-06,
@@ -482,7 +488,7 @@ CREATE INDEX audit_time ON audit (time);
 CREATE INDEX audit_user ON audit (user_id, time);
 
 CREATE TABLE backups (
-    id         INTEGER PRIMARY KEY,
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,  -- migration 0013
     cube_id    INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
     taken_at   TEXT    NOT NULL,
     reason     TEXT    NOT NULL CHECK (reason IN ('auto', 'manual', 'before_restore', 'upload')),  -- migration 0005
@@ -541,7 +547,10 @@ Notes on the tables:
   and cannot tell that of a bound value.
   Such a page reads those rows only, under 2 ms on a PC at 90,000 events
   where it took 90 to 120 ms (`TestEventsPageQuery`);
-  a page of errors reads at most the warnings.
+  a page of errors reads at most the warnings:
+  1.7 s on the Pi 1 at 90,000 events, a third of which are warnings there.
+  The server writes no line at `error`, and the UI offers no such choice,
+  so only `GET …/log?level=error` meets that walk.
   With a kind, a source, a device or a user as well,
   the page reads that term's index and checks the level on its rows.
   A batch of 100 events with a third warnings took 2 to 3 ms on the PC
@@ -575,7 +584,16 @@ Notes on the tables:
     The same walk takes 11 s on the Pi 1
     (a page of errors, of which it has none),
     5 to 16 s from one page to the next.
-    Migration 0011's index ends that walk; the Pis have not timed it yet.
+  - Measured again on 2026-11-09 on new copies of both stores,
+    with a test binary at schema 10 and one at 11, at 90,000 events:
+    migration 0011 takes a page of 200 warnings from 58 ms to 1.9 ms on the Pi 5,
+    and from 99 ms to 75 ms on the Pi 1, whose walk was short already;
+    a page of errors, of which neither has any,
+    from 153 ms to 2.0 ms on the Pi 5,
+    and from 5.6 s to 1.7 s on the Pi 1, where it reads every warning.
+    The writer's batch of 100 events took 146 ms at 10 and 145 ms at 11 on the Pi 1,
+    3.3 ms and 3.4 ms on the Pi 5:
+    the index costs the insert nothing to measure.
 - `audit` makes durable what today only the log has:
   which client sent which write.
   The `api()` wrapper in `server.go` is the one place every handler passes through,
@@ -596,6 +614,9 @@ Notes on the tables:
   Retention per Cube: the newest `backups.keep_newest` whatever their age,
   of the others `auto` for `backups.keep_days_auto` days and the rest for
   `backups.keep_days_manual` (open decision 5's 90 and 365).
+  The prune deletes the rows, so the id is `AUTOINCREMENT` (migration 0013):
+  SQLite never gives a deleted backup's id to a later one,
+  and an id the API named before a prune names no other backup.
 - `auth_failures` is the `authLimiter` of #7 keyed by address,
   plus a key per user name so that password guessing from many addresses behind
   a reverse proxy locks the name rather than the proxy.
@@ -664,6 +685,39 @@ Notes on the tables:
   which is nothing at this scale.
   The columns are declared `TEXT`, not `DATETIME`, on purpose.
 
+### Measuring on a box
+
+The store's benchmarks (`internal/store/events_bench_test.go`)
+time the writer's batch of 100 events, `BenchmarkWriteEvents`,
+and pages of 200 of the busiest Cube, `BenchmarkEventsPage`:
+all of its events, its warnings, its errors, and with the server's rows.
+They share one store a run, made by their first call:
+a copy of a box's store when `MASSIMO_STORE_BENCH_COPY` names one,
+grown to `MASSIMO_STORE_BENCH_ROWS` events (90,000)
+with the newest 1000 events of its busiest Cube, cycled;
+else rows of their own, as `TestEventsPageQuery` fills them,
+3000 under `-short`.
+No writer runs, so nothing is pruned,
+and each batch adds its rows to the store the pages read.
+CI runs each once, to see that it still runs, and compares no time.
+
+On one of the owner's boxes, only with the owner's go:
+
+1. `make store-bench` builds `dist/store-bench-linux-arm64` for a Pi 5 and
+   `dist/store-bench-linux-armv6` for a Pi 1;
+   built from two commits, they compare a change.
+2. The owner copies the store as the service's user,
+   `sudo -u massimo massimo -env /dev/null -data /var/lib/massimo store backup /var/tmp/massimo-copy.db`,
+   and gives the copy to the user who runs the benchmarks.
+3. Each binary runs on the copy, one after the other,
+   its own store on the SD card (`TMPDIR=/var/tmp`, since `/tmp` is a tmpfs):
+   `TMPDIR=/var/tmp MASSIMO_STORE_BENCH_COPY=/var/tmp/massimo-copy.db ./store-bench-linux-armv6 -test.run '^$' -test.bench . -test.benchtime 30x -test.count 5`.
+   Its first line names the store, its events and their levels;
+   each benchmark's line gives the time a batch or a page took (`ns/op`)
+   and the events a page held.
+4. The copy and the binaries are deleted;
+   only the times leave the box, and the service and its file stay untouched.
+
 ### Migrations
 
 `internal/store/migrations/NNNN_<name>.sql`, embedded with `go:embed`,
@@ -700,6 +754,15 @@ the writer of a binary of version 9 fills those (`source` empty) at its start
 an index of the log's warnings and errors alone (section 5, `events`),
 additively: a binary of before writes and reads as it did,
 and SQLite keeps the index for its rows too.
+`0013_backups_autoincrement.sql` (AP BackupIds v1.0) makes `backups` again
+with `AUTOINCREMENT`, as 0005 made it:
+without it SQLite gives a new row the highest id plus one,
+so a prune that removed the newest backup handed its id to the next.
+The copy starts `sqlite_sequence` at the highest id left,
+and the rename carries it to the new table;
+an id pruned before the upgrade can still be given out once more.
+It keeps `min_reader` 1: the columns and their meaning stay,
+and a binary of before chooses a new id by the table's schema as well.
 Rules:
 
 - A migration is additive when it only adds tables,
@@ -719,9 +782,25 @@ Rules:
 - The store refuses a file it did not create (no `schema_version`
   table) rather than migrating a stranger's database.
 - Tests: migrating an empty file to the latest version,
-  migrating a file at every earlier version (the test keeps a fixture database
-  per released version),
+  migrating a file at every earlier version,
   and opening a newer additive version with an older reader.
+- The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
+  is the text dump of the store a release's `serve` wrote against the fake Cube,
+  one for each release since the store came (v0.7.0-alpha.1),
+  made by `tools/store-fixture/make.sh <tag>`.
+  The script builds the tag and sends every release the same requests:
+  the settings, setpoints, a room renamed, a user and a key,
+  a backup by hand, each where the release takes it.
+  Then it dumps the release's own `store backup` with `sqlite3 .dump`.
+  A dump is text, so a review reads it and `tools/identifiers` checks it;
+  only placeholders reach it.
+  `TestMigratesReleasedStores` loads each as its release left it and opens it,
+  which migrates it:
+  the file stays sound, no table loses a row, `events` keeps exactly its own,
+  every event has its source, and the log, the users and the backups read.
+  A pull request that adds a migration adds the dump of the newest release
+  when it is missing,
+  so that each release's file is migrated by every later binary.
 - `store.sql`, beside the migrations, is the schema they make of an empty file,
   generated, never edited by hand:
   every table as SQLite keeps its statement (an added column at its end),
@@ -803,7 +882,7 @@ The default roles, as seeded.
 | `preferences` | ✓ | ✓ | | ✓ | |
 | `setpoint` | ✓ | ✓ | ✓ | | ✓ |
 | `lock` | ✓ | ✓ | | | ✓ |
-| `configure` | ✓ | ✓ | ✓ | | |
+| `configure` | ✓ | ✓ | ✓ | | ✓ |
 | `rename` | ✓ | | | | |
 | `structure` | ✓ | | | | |
 | `pair` | ✓ | | | | |
@@ -823,7 +902,11 @@ rebooting a computer that may run other services too;
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;
-`integration` is what a home automation needs and nothing it does not.
+`integration` is what a home automation needs and nothing it does not:
+it reads, sets, locks and configures, so that Home Assistant writes
+week programmes as the web UI does (migration 0012, 2026-11-09,
+where the role still held exactly read, setpoint and lock:
+an owner who had changed it keeps the set chosen).
 Moves and deletions (`structure`) go with the names to `manager`,
 because a move changes the house as a name does; if `operator` should keep them,
 that is one row of the seed.
@@ -1006,8 +1089,9 @@ who cannot sign in once it is off until a password is set for them.
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
-they take `-data` like `serve` and run as the service user
-(`sudo -u massimo massimo -data /var/lib/massimo user add anna`),
+they take `-data` like `serve` and run as the service user,
+which reads the service's settings and store from any directory
+(`sudo -u _massimo massimo user add anna`),
 beside a running server thanks to WAL.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,
@@ -1024,6 +1108,8 @@ The audit records them with `user_id` NULL and `remote` `cli`.
 `authLimiter` keeps its behaviour, backed by `auth_failures` (section 5):
 a failed token, ticket or password check counts against the address and,
 for a login, against the user name;
+a request that offers no token and no ticket is refused uncounted
+(`docs/api-v1.md`, "Authentication");
 ten in a minute lock for five minutes with `429` and `Retry-After`.
 The counters survive a restart,
 which closes the loophole where a restart cleared them.
@@ -1311,7 +1397,7 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
 
 - Files: `internal/store/backups.go` (add, list, read,
   delete as a tombstone without the file, the prune),
-  migration 0005 (the four reasons);
+  migrations 0005 (the four reasons) and 0013 (an id never given out twice);
   `internal/server/backups.go` (the automatic backup) and `backups_api.go` (the
   routes); `backup.ConfigHash` and `cubelan.SnapshotOf` (the comparison);
   `backup.js` with its partials (the Settings panel).
@@ -1343,11 +1429,14 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   restore and delete, a restore from a file; a restore shows its plan first,
   then each step as the Cube took it.
 - Tests: the store's round trip,
-  the prune by reason and age and the migration's copy; the hash;
+  the prune by reason and age and the migration's copy;
+  no id given out again after a prune or a purged tombstone,
+  and 0013's copy with its sequence; the hash;
   the first backup, none without a change,
   one after a quiet window and one at `auto_max`;
   the change against the one before after deleting the newest,
-  and one at once after deleting all or pruning the only one;
+  and one at once, with an id of its own,
+  after deleting all or pruning the only one;
   the routes and the settings' check;
   a restore keeping `before_restore` and `upload`, by id, and clean after;
   the diff of a backup against itself and an edited copy;

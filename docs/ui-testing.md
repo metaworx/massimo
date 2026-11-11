@@ -339,7 +339,7 @@ That is a change to `massimo fakecube`, open question 3.
 
 ### The work ahead
 
-The UI work in docs/roadmap.md and docs/handover-session.md adds,
+The UI work in docs/roadmap.md and GUIDELINES/wip/HANDOVER.md adds,
 in the order given there:
 the pairing panel (a `paired` event and `…/pairing` routes),
 backup and restore (an upload, a plan with its cost, a run with progress),

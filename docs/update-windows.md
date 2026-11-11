@@ -30,7 +30,7 @@ Written on 2026-11-06 from the code on `main` after v0.5.0-alpha.1 (internal/upd
 internal/install, cmd/massimo, internal/server/update_api.go,
 internal/server/ui/update.js,
 .github/workflows/ci.yml) and from the test of the Windows service on a real PC
-(docs/windows-test-2026-11-05.md).
+(docs/reports/windows-test-2026-11-05.md).
 Read packaging/README.md ("Updating", "From the web UI", "Windows") first;
 this document does not repeat what is there.
 
@@ -91,7 +91,7 @@ updates are not installed automatically on Windows yet."
 (the `update.blocked` text in i18n.js), and `POST /api/v1/update` answers 403.
 `TestUpdateEndpoints` skips on Windows for the same reason.
 
-The reason behind the refusal: on Linux the server runs as the user `massimo`,
+The reason behind the refusal: on Linux the server runs as the user `_massimo`,
 cannot write `/usr/local/bin`,
 and asks a root helper by writing `/var/lib/massimo/update-request`;
 `massimo-update.path` (`PathExists=`) starts `massimo-update.service`,
@@ -684,7 +684,7 @@ Both reports are referenced from the plan.
 **.github/workflows/ci.yml.**
 The Windows job as in section 6.
 
-**docs/roadmap.md, docs/handover-session.md.**
+**docs/roadmap.md, GUIDELINES/wip/HANDOVER.md.**
 Not touched by this pull request;
 the implementing session updates item 8 and 15 and the follow-up list.
 
@@ -766,7 +766,7 @@ so a stub needs no second variable), and in the job:
    The list holds one of them at a time:
    the file is rewritten between the two runs.
 3. `install` again from the test-key `v0.0.0-ci.1` binary,
-   built with `-X main.channel=ci` as the stub's `v0.0.0-ci.2` is,
+   built with `-X main.flavour=ci` as the stub's `v0.0.0-ci.2` is,
    since a check leaves out unfetched a release whose tag names another channel,
    with `MASSIMO_UPDATE_API=http://127.0.0.1:8123` in `ci.env`;
    then the block of stage 1 twice:

@@ -10,7 +10,7 @@ on a Mac LaunchDaemons (see "macOS").
 
 - `systemd/massimo.service`:
   the unit.
-  Runs as the user `massimo`, reads its settings from `/etc/massimo/env`,
+  Runs as the user `_massimo`, reads its settings from `/etc/massimo/env`,
   listens on port 8099 on every interface (API and web UI;
   `install -listen` changes it),
   logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure
@@ -63,8 +63,10 @@ afterwards, clients connect to the server's proxy instead of the Cube.
 ## Download or build
 
 Every release on <https://github.com/metaworx/massimo/releases> has the binaries below,
-`SHA256SUMS` and a signed manifest;
-`sha256sum -c SHA256SUMS --ignore-missing` checks a download.
+`SHA256SUMS`, a signed manifest and the build record, `massimo-build.txt`;
+`sha256sum -c SHA256SUMS --ignore-missing` checks a download,
+and `gh attestation verify <file> -R metaworx/massimo` that the project's
+release workflow built it (README.md, "Installing").
 To build instead, pick the target for the board (all need a 32-bit or 64-bit
 Linux to match):
 
@@ -123,11 +125,18 @@ sudo ./massimo-linux-armv6 install
 (`releases/latest` skips pre-releases; while there are only alphas,
 take the URL from the releases page.)
 It installs the binary as `/usr/local/bin/massimo`,
-creates the system user `massimo`, its state directory `/var/lib/massimo`
+creates the system user `_massimo`, its state directory `/var/lib/massimo`
 and `/etc/massimo/env` (the commented template,
 or a copy of `-settings <.env>`), writes `massimo.service`,
 the update helper `massimo-update.path` and `.service` and the log rotation,
 and enables them.
+An account `massimo` that an older release made, with the home
+`/var/lib/massimo`, is renamed `_massimo` in place:
+it keeps its ID, so its files and a running service follow.
+Any other `massimo` is a person's, and is left alone, also by `-remove -purge`.
+Where an older release ran the service as such a person's account,
+its files are still that person's, which `_massimo` cannot read:
+`install` says so and names the `chown -R` that hands them to the service.
 It starts the service when the settings set more than the template does
 (its comments and blank lines aside),
 and restarts it when it runs;
@@ -141,13 +150,16 @@ Nothing needs to go into `/etc/massimo/env` for the first start.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
 or start it and create the owner in the web UI from the local network,
 which until then may use it unasked;
 the Cubes are added there too (System settings → Cubes, "Found on the LAN").
+The binary's full path and `-env` let the first line run from any
+directory, a home directory the service user may not enter included,
+and through a sudo whose PATH lacks `/usr/local/bin`, as on macOS.
 
 Running `install` again, from a newer binary,
 replaces the binary and the units and restarts the service by the same rule;
@@ -169,7 +181,7 @@ or `192.168.1.200:80` for one address only).
 It writes two drop-ins that later installs keep:
 `massimo.service.d/listen.conf` sets `MASSIMO_LISTEN` and, below port 1024,
 grants the service `CAP_NET_BIND_SERVICE`,
-since the user `massimo` cannot bind such a port otherwise;
+since the user `_massimo` cannot bind such a port otherwise;
 `massimo-update.service.d/listen.conf` sets `MASSIMO_HEALTH`,
 where the update helper checks the restarted server.
 Deleting both files (and `systemctl daemon-reload`,
@@ -177,13 +189,13 @@ Deleting both files (and `systemctl daemon-reload`,
 
 `-tls-cert <pem> -tls-key <pem>` makes the service serve `https://`:
 the files are copied to `/etc/massimo/cert.pem` and `key.pem`,
-owned by `massimo` and mode 0600, and `MASSIMO_TLS=files`,
+owned by `_massimo` and mode 0600, and `MASSIMO_TLS=files`,
 `MASSIMO_TLS_CERT` and `MASSIMO_TLS_KEY` are set in `/etc/massimo/env`,
 which later installs keep.
 The server re-reads the files when they change, so a renewal needs no restart:
 certbot keeps its files under `/etc/letsencrypt/live/<name>/`,
 readable by root only, so a deploy hook copies them over
-(`--deploy-hook 'cp "$RENEWED_LINEAGE"/fullchain.pem /etc/massimo/cert.pem; cp "$RENEWED_LINEAGE"/privkey.pem /etc/massimo/key.pem; chown massimo:massimo /etc/massimo/*.pem'`).
+(`--deploy-hook 'cp "$RENEWED_LINEAGE"/fullchain.pem /etc/massimo/cert.pem; cp "$RENEWED_LINEAGE"/privkey.pem /etc/massimo/key.pem; chown _massimo:_massimo /etc/massimo/*.pem'`).
 The update helper then checks `https://127.0.0.1:8099/healthz`
 (`massimo-update.service.d/listen.conf`),
 without verifying the certificate of a loopback address,
@@ -193,10 +205,11 @@ which a connection to never leaves the box.
 the server makes a certificate for the box's names at its first start into
 `/var/lib/massimo/tls/`, renews it 30 days before it expires,
 and logs its fingerprint,
-which `massimo tls show` prints too (as the user `massimo`,
-with `-data /var/lib/massimo`); browsers warn once per device.
+which `massimo tls show` prints too (as the user `_massimo`,
+which reads the service's settings and data directory from any directory);
+browsers warn once per device.
 After a move to another address,
-`sudo -u massimo massimo -data /var/lib/massimo tls self-signed` makes a new one,
+`sudo -u _massimo massimo tls self-signed` makes a new one,
 served at the next connection.
 `-tls acme -tls-names <name> [-acme-email <address>] [-acme-directory <url>] [-tls-http :80]` sets
 `MASSIMO_TLS=acme` with the name, the contact,
@@ -211,7 +224,7 @@ The name must resolve to the box's public address and the router forward
 port 443 to the service's port (`-listen :443` with the capability,
 or the forward to `:8099`);
 with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
-`massimo tls show` (as `massimo`) prints what was issued.
+`massimo tls show` (as `_massimo`) prints what was issued.
 `-acme-dns-hook <script>` with `-tls acme -tls-names …` takes the DNS-01
 challenge instead of a port: the server runs
 `<script> set _acme-challenge.<name> <value>` before the validation and
@@ -219,7 +232,7 @@ challenge instead of a port: the server runs
 and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
 The name may point at the box's LAN address,
 and wildcards work (`-tls-names '*.example.net,example.net'`).
-The script runs as `massimo` with the server's environment less the `MASSIMO_` variables,
+The script runs as `_massimo` with the server's environment less the `MASSIMO_` variables,
 so its own secret comes from a file;
 a run ends after two minutes, with every process it started.
 `packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
@@ -227,7 +240,7 @@ Infomaniak (its name servers, not merely registered there):
 it needs `curl` and `jq` (`sudo apt install curl jq`;
 it names the one that is missing),
 and a token with the DNS scope from the API section of the Infomaniak
-manager in `/etc/massimo/infomaniak.token` (owned by `massimo`, mode 0600).
+manager in `/etc/massimo/infomaniak.token` (owned by `_massimo`, mode 0600).
 It hands the token to `curl` on its standard input, never on its command line,
 which every local user can read,
 and gives each call 30 seconds.
@@ -235,8 +248,8 @@ It ran against the real API on 2026-11-08;
 the test runs it against a fake one.
 
 ```bash
-sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/infomaniak.sh /usr/local/lib/massimo/infomaniak.sh
-sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
+sudo install -D -o _massimo -g _massimo -m 0755 packaging/acme-dns-hooks/infomaniak.sh /usr/local/lib/massimo/infomaniak.sh
+sudo install -o _massimo -g _massimo -m 0600 /dev/stdin /etc/massimo/infomaniak.token <<< "$INFOMANIAK_TOKEN"
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/infomaniak.sh
 ```
 
@@ -244,7 +257,7 @@ sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /us
 with the same needs and the same care for its token:
 an API token with the permission Zone → DNS → Edit on the zone,
 made from the template "Edit zone DNS" under My Profile → API Tokens,
-in `/etc/massimo/cloudflare.token` (owned by `massimo`, mode 0600).
+in `/etc/massimo/cloudflare.token` (owned by `_massimo`, mode 0600).
 It finds the zone by name;
 where the token may not list it,
 a line `CLOUDFLARE_ZONE_ID=<id>` in `/etc/massimo/env` names it
@@ -253,8 +266,8 @@ the script gets every variable of the settings file but the `MASSIMO_` ones.
 The test runs it against a fake of Cloudflare's API.
 
 ```bash
-sudo install -D -o massimo -g massimo -m 0755 packaging/acme-dns-hooks/cloudflare.sh /usr/local/lib/massimo/cloudflare.sh
-sudo install -o massimo -g massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.token <<< "$CLOUDFLARE_TOKEN"
+sudo install -D -o _massimo -g _massimo -m 0755 packaging/acme-dns-hooks/cloudflare.sh /usr/local/lib/massimo/cloudflare.sh
+sudo install -o _massimo -g _massimo -m 0600 /dev/stdin /etc/massimo/cloudflare.token <<< "$CLOUDFLARE_TOKEN"
 sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /usr/local/lib/massimo/cloudflare.sh
 ```
 
@@ -314,8 +327,15 @@ the logs and the user.
 ## Debian package
 
 Every release also carries a Debian package per architecture,
-`massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`,
-the release's version written as dpkg sorts it (`0.7.0~alpha.1` for `v0.7.0-alpha.1`).
+`massimo_<version>_amd64.deb`, `_arm64.deb` and `_armhf.deb`.
+The package's version is the release's written as dpkg sorts it
+(`0.7.0~alpha.1` for `v0.7.0-alpha.1`).
+A package built between releases,
+such as a rolling build's or one of `make packages`,
+carries what `git describe` adds behind a `+` (`0.7.0~alpha.1+3.gabc1234`),
+so that dpkg sorts it after the release it follows and before the next one.
+The file name writes the `~` and the `+` as dots
+(`massimo_0.7.0.alpha.1_arm64.deb`), as GitHub names the asset.
 The armhf one holds the armv6 binary and runs on every 32-bit Raspberry Pi OS,
 the Pi 1 and the Zero included (Debian's own armhf needs a Pi 2 or later).
 On a Debian, Ubuntu, Raspberry Pi OS or LoxBerry box:
@@ -335,9 +355,18 @@ the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudfla
 (see `-acme-dns-hook` above; it suggests their `curl` and `jq`),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
-its scripts create the user `massimo`, `/etc/massimo/env` from the template
+its scripts create the user `_massimo`, `/etc/massimo/env` from the template
 and the state directory `/var/lib/massimo` when they are missing,
 and enable the service.
+The account `massimo` of an older package is renamed `_massimo` in place,
+keeping its ID, so its files and a running service follow;
+a person's `massimo` is left alone, also by a purge.
+Where an older package ran the service as a person's `massimo`,
+the files are still that person's, and the service cannot read them;
+the package says so and names
+`sudo chown -R _massimo:_massimo /etc/massimo /var/lib/massimo /var/log/massimo`.
+A script of your own that names `massimo`, such as a certbot deploy hook,
+needs the new name.
 They start it only when the settings set more than the template does
 (its comments and blank lines aside),
 because a server without users answers every device on the local network,
@@ -347,7 +376,7 @@ Nothing needs to go into `/etc/massimo/env` for that.
 Either create the owner first and then start the service:
 
 ```bash
-sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner
+sudo -u _massimo /usr/bin/massimo user add <name> -role owner
 sudo systemctl start massimo
 ```
 
@@ -437,7 +466,15 @@ through `go run`) from `nfpm.yaml`,
 the scripts in `deb/` and the unit `deb/unit.sh` derives;
 `make deb-test` installs,
 checks and purges it in a Debian container (`deb/test.sh`),
-as CI does on trixie and on bookworm. lintian reports two errors by design,
+as CI does on trixie and on bookworm.
+That container has no systemd;
+`make deb-systemd-test` runs the cases that need one (`deb/systemd-test.sh`),
+each in a container of its own with systemd as its first process:
+the first start left to the owner and the owner line as printed,
+the restart of a running service, the upgrade from v0.12.0-alpha.1
+with the service running, a person called massimo, a box an older release
+took over, and `massimo install` over v0.12.0-alpha.1's hand install.
+lintian reports two errors by design,
 the statically linked binary and the missing Debian-format changelog (the
 changelog is `CHANGELOG.md` on GitHub).
 
@@ -484,19 +521,25 @@ A new key would reach the boxes only through a keyring package carrying both
 keys on a site the old key still signs, which `publish.sh` does not make:
 it signs with one key.
 
-The site is built by `packaging/apt/publish.sh` in the release workflow (the
-pool from GitHub's releases, `apt-ftparchive`, `InRelease` signed by gpg,
-the keyring package by nfpm,
-and at the site's root the pages of `site/`:
-`index.html`, the home with the install routes, its suites filled in,
-and `privacy.html`, the privacy policy of the project and its apps,
-which the app stores' listings link)
-and deployed to the project's GitHub Pages with `actions/deploy-pages`;
+The repository is built by `packaging/apt/publish.sh` in the release
+workflow (the pool from GitHub's releases, `apt-ftparchive`, `InRelease`
+signed by gpg, the keyring package by nfpm) and put on the site with the
+pages and the docs (see "The site");
 it has no state of its own,
-so a release that is deleted on GitHub leaves the pool at the next release,
-and a change to the pages is online with the next release.
+so a release that is deleted on GitHub leaves the pool at the next release.
+Each release also carries the signed index as `massimo-apt-index.tar.gz`,
+so that the site can be rebuilt from `main` without the key,
+which only the release tags reach:
+`apt/dists/` as signed, `apt/massimo.asc`, `apt/massimo.sources`,
+`apt/massimo-archive-keyring.deb`, and `apt/pool.tsv`,
+one line per package of the pool, tab-separated:
+its path under `apt/`, its SHA-256,
+and the download URL of the release file it is,
+or `included` for a package in the tarball itself (the keyring package);
+`publish.sh --index-asset <file>` writes it.
 `packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease` and the pages,
+verifies `InRelease` and the index asset,
+builds the site from the repository and again from the index asset alone,
 and installs from it in a container as the snippet above does,
 then upgrades to a newer package through the update helper while another
 process holds apt's lock,
@@ -516,8 +559,9 @@ The owner's steps, once:
 - Then Environments → `github-pages` → Deployment branches and tags:
   add a rule for the tags `v*`.
   The environment GitHub makes for Pages deploys from the default branch only,
-  and the deploy runs for a release's tag,
-  so without the rule every deploy is refused.
+  and a release's deploy runs for its tag,
+  so without the rule a release's deploy is refused;
+  a push to `main` deploys under the default rule.
 - The domain (the CNAME, the custom domain and HTTPS set on 2026-11-09):
   verify `metaworx.ch` for the account under its settings → Pages,
   with the TXT record GitHub names, so that no other account can claim it;
@@ -553,6 +597,50 @@ sudo sed -i 's#https://metaworx.github.io/massimo/apt#https://massimo.metaworx.c
 
 The file keeps its name, and the keyring package and the key stay as they are.
 
+## The site
+
+The project's site, <https://massimo.metaworx.ch>, is built by
+`packaging/site/build.sh`, without a key, and deployed to GitHub Pages by
+`.github/workflows/site.yml`, which the release workflow calls at every run:
+a release, a push to `main` (the devel build) and the nightly build.
+It holds:
+
+- `apt/`, the apt repository: the one a release's run has just signed, or,
+  in every other run, the newest release's `massimo-apt-index.tar.gz`, its
+  pool downloaded by `pool.tsv` and every package checked by its sum.
+  No release carries one before the first release made after 2026-11-10;
+  until then only a release with the key deploys,
+  since a deploy replaces the whole site and one without `apt/` would take
+  the repository offline (`build.sh` exits 3, and the job ends green).
+- At the root, the pages of `site/`:
+  `index.html`, the home with the install routes, its suites filled in,
+  `privacy.html`, the privacy policy of the project and its apps,
+  which the app stores' listings link,
+  and `site.css`, the stylesheet of every page.
+- Under `docs/<channel>/`, the documentation of each channel,
+  built from its newest build, `release/<channel>`
+  (a branch for `alpha`, `beta` and `stable`,
+  a tag for `devel` and `nightly`), and under `docs/main/` from `main`.
+  The documents are those `docs/fragments/_documents.md` lists,
+  the list in README.md's "Documentation" too;
+  each is converted by the guidelines' `md_html.py`,
+  with the heading ids GitHub gives, links between the documents to their
+  pages, and every other link to GitHub at that commit, or to the guidelines
+  at its pin, by `packaging/site/site.py` into `doc.html.in`.
+  `docs/channels.json` names the channels built,
+  a selector on every page (`docs.js`) changes to the same page of another,
+  and `docs/` sends a reader to the most stable one.
+  A build without the list (every build before 2026-11-10) gets no docs:
+  its `docs/` still held the working documents.
+
+The build fails on a document under `docs/` missing from the list
+(for `main`), on a link to a file the commit does not have,
+and on a link to a page or a heading that is not there.
+CI's `Site` job builds the pages and the docs of every pull request that way,
+and `make site` those of the checkout into `dist/site`;
+the links are root-relative, so read it served,
+`python3 -m http.server -d dist/site`.
+
 ## Install by hand
 
 From the build machine (here for a Pi 1 at `pi.local`, user `pi`):
@@ -567,8 +655,8 @@ On the Pi:
 ```bash
 sudo install -m 0755 massimo-linux-armv6 /usr/local/bin/massimo
 massimo version
-sudo useradd --system --home-dir /var/lib/massimo --no-create-home --shell /usr/sbin/nologin massimo
-sudo install -d -m 0750 -o massimo -g massimo /etc/massimo
+sudo useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell /usr/sbin/nologin _massimo
+sudo install -d -m 0750 -o _massimo -g _massimo /etc/massimo
 sudo install -m 0644 massimo.service /etc/systemd/system/massimo.service
 sudo install -m 0644 massimo /etc/logrotate.d/massimo
 ```
@@ -577,7 +665,7 @@ Then write `/etc/massimo/env` (same format as the `.env` described in the
 main README) and make it readable only by the service:
 
 ```bash
-sudo install -m 0600 -o massimo -g massimo /dev/null /etc/massimo/env
+sudo install -m 0600 -o _massimo -g _massimo /dev/null /etc/massimo/env
 sudoedit /etc/massimo/env
 ```
 
@@ -604,14 +692,15 @@ What to set there:
   serial other than the Cube's.
 - `MASSIMO_API_TOKEN` to require a Bearer token on the API.
 - `MASSIMO_LOG=/var/log/massimo/serve.log`, so that `massimo` commands run
-  with `-env /etc/massimo/env` agree with the unit (which passes `-log`).
+  as `_massimo`, which read `/etc/massimo/env`, agree with the unit
+  (which passes `-log`).
 
 Check the settings and that the Pi reaches a Cube before enabling the
 service (with no other server connected to that Cube):
 
 ```bash
-sudo -u massimo massimo -env /etc/massimo/env config
-sudo -u massimo massimo -env /etc/massimo/env status -sn <serial>
+sudo -u _massimo massimo config
+sudo -u _massimo massimo status -sn <serial>
 ```
 
 Start it and follow the log:
@@ -639,9 +728,10 @@ installer passes with `-data`:
 
 | Where | Data directory | Who |
 |---|---|---|
-| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, 0750) | user `massimo` |
+| Linux service | `/var/lib/massimo` (`StateDirectory=massimo`, `StateDirectoryMode=0750`) | user `_massimo` |
 | macOS LaunchDaemon | `/var/lib/massimo` | user `_massimo` |
 | Windows service | `C:\ProgramData\Massimo` (SYSTEM and Administrators only) | LocalSystem |
+| A command as `_massimo` (Linux, macOS) | `/var/lib/massimo`, unless `-env`, `-data` or `MASSIMO_DATA` | user `_massimo` |
 | Terminal run | the current directory, or `-data <dir>` / `MASSIMO_DATA` | you |
 
 Next to `massimo.db` (mode 0600) live `massimo.db-wal` and `massimo.db-shm`
@@ -651,7 +741,7 @@ without which no password of `auth_version` 2 signs in;
 a copy of the database belongs with all of them,
 or is made with `massimo store backup <file>`,
 which is consistent while the server runs.
-`sudo -u massimo massimo -data /var/lib/massimo store info` shows the schema version,
+`sudo -u _massimo massimo store info` shows the schema version,
 the node and the row counts; `massimo config` shows, per Cube,
 which values the store has and which line of `/etc/massimo/env` differs.
 The Cubes' events, the log the web UI shows, are in `massimo.db` too,
@@ -725,22 +815,40 @@ it then names the copy `massimo.db.before-<version>` it made before.
 ## Updating
 
 Development happens on `main`;
-`make release-alpha` promotes it to the release branch `alpha` and tags it,
-and `.github/workflows/release.yml` builds, signs and publishes the release.
-Each release belongs to an **update channel**, its release branch:
-`alpha` for the `v0.1.0-alpha.N` releases,
-later `beta` and a stable one the same way.
-A release binary follows its channel;
-a binary built from another branch follows that branch, which has no releases,
-unless `MASSIMO_UPDATE_CHANNEL=alpha` is set (`massimo update -check` shows the channel).
+`make release-alpha` tags it, CI tests the tag while `.github/workflows/build.yml`
+builds it, and `.github/workflows/release.yml` signs and publishes the release,
+then fast-forwards the release branch `release/alpha` to it.
+Each release has a **flavour**, from the least stable to the most:
+`devel`, every commit of `main` whose tests passed;
+`nightly`, once a day the newest of those;
+`alpha`, the `vX.Y.Z-alpha.N` releases;
+later `beta` (`-beta.N`) and `stable` (a plain `vX.Y.Z`).
+`devel` and `nightly` are one GitHub release each, `release/devel` and
+`release/nightly`, replaced in place by the next build;
+the others are a release per tag.
+A box follows an **update channel**, one of those names,
+and takes the newest release of its channel's flavour or a more stable one:
+a box on `alpha` takes a beta or stable release too,
+one on `devel` everything.
+The channel is `MASSIMO_UPDATE_CHANNEL` where set,
+else the setting `update.channel` (`PUT /api/v1/settings`,
+`{"update.channel": "devel"}`; the web UI's selector is still to come),
+else the flavour of the running binary;
+`massimo update -channel <name>` uses another for one run,
+and `massimo update -check` shows the channel and where it came from.
+Before the web UI's Update installs a release of another flavour,
+the server stores its channel as `update.channel` where nothing names one,
+so that a box on `beta` stays on `beta` after a stable release;
+`massimo update` by hand cannot write the server's store, and says so instead.
+A build of anything but a release tag is of the flavour `devel`.
 A release is installed only when it is newer than the running version,
 so switching the channel never goes back in version;
-`-version <tag>` installs a given release,
+`-version <tag>` installs a given release (`release/devel` the devel build),
 older ones too.
-A check fetches the signed manifests of its channel's releases alone,
-known by the tag's label (`-alpha.N` is on `alpha`),
-or, for a tag without one, by the release's target,
-which release.yml sets to the channel.
+A check fetches the signed manifests of the releases its channel takes alone,
+known by the tag's label (`-alpha.N` is `alpha`, a plain tag `stable`)
+or the rolling build's tag;
+neither is signed, the manifest decides.
 v0.1.0-alpha.10 and .11 were made before the branch was renamed
 and are signed for `phase-0` under alpha's label,
 so a check on `phase-0` finds no release;
@@ -790,13 +898,13 @@ that is still decided by the signature.
 
 ### From the web UI
 
-The service runs as `massimo` and cannot write `/usr/local/bin`,
+The service runs as `_massimo` and cannot write `/usr/local/bin`,
 so the web UI only asks:
 `POST /api/v1/update` writes `/var/lib/massimo/update-request`,
 and the path unit starts the helper as root,
 which does exactly the update above.
 The request carries nothing but the channel name,
-the helper reads nothing else the `massimo` user can write (in particular
+the helper reads nothing else the `_massimo` user can write (in particular
 not `/etc/massimo/env`),
 and the release must verify against the compiled-in key,
 so a compromised server can at most install the newest signed release.
@@ -818,8 +926,24 @@ on Windows the server starts the helper itself (see "Windows");
 the Debian package's own helper runs apt (see "Debian package").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`,
-a secret of the repository's `signing` environment that only `v*` tags can use;
+a secret of the repository's `signing` environment that only `v*` tags can use,
+and where each run waits for the owner's approval;
 its public half is `internal/update/release-key.pem`.
+The rolling key signs the `devel` and `nightly` builds:
+`MASSIMO_ROLLING_KEY`, a secret of the `signing-rolling` environment,
+which only `main` can use;
+its public half is `internal/update/rolling-key.pem`,
+and a binary accepts it for those two flavours alone,
+so that a key `main` can reach signs nothing a box on `alpha` or above takes.
+`RELEASE_BRANCH_DEPLOY_KEY`, in `signing` too, is the private half of a deploy key
+with write access, with which the release fast-forwards `release/<flavour>`;
+`ROLLING_TAG_DEPLOY_KEY`, in `signing-rolling`, that of another,
+with which the rolling builds move `release/devel` and `release/nightly`.
+`HOMEBREW_TAP_DEPLOY_KEY` and the apt key are in `signing` as well (see "Homebrew"),
+and one approval lets every job holding one of them run.
+The repository's rulesets keep the `v*` tags from being moved or deleted
+and let the `release/*` branches only fast-forward
+(GUIDELINES/project/CI.md, section 6).
 A new key needs a release built with the new public key before releases signed
 with it are accepted.
 
@@ -1002,7 +1126,7 @@ and in the update helper are the same everywhere:
   mode 0600, owned by `_massimo`;
   the service starts by the rule of "Install with `massimo install`",
   the owner made first with
-  `sudo -u _massimo massimo -data /var/lib/massimo user add <name> -role owner`;
+  `sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner`;
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
 - the log `/var/log/massimo/serve.log`:
@@ -1128,10 +1252,15 @@ The owner's steps, once:
   the workflow writes `Formula/<name>.rb`.
 - Make a deploy key, `ssh-keygen -t ed25519 -f tap-deploy-key -N ''`:
   the public half as a deploy key of the tap with write access,
-  the private half as the repository secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository
-  (GUIDELINES/project/CI.md, section 5).
+  the private half as the secret `HOMEBREW_TAP_DEPLOY_KEY` of this repository's
+  `signing` environment (GUIDELINES/project/CI.md, section 5),
+  `gh secret set HOMEBREW_TAP_DEPLOY_KEY --env signing < tap-deploy-key`.
+  A repository secret of that name, where it was kept until 2026-11-11,
+  is deleted once the environment holds it:
+  any run on any branch can read a repository secret.
 - For the newest release, published before the tap existed:
-  `gh workflow run publish.yml -f tag=<tag>`;
+  `gh workflow run publish.yml --ref <tag> -f tag=<tag>`,
+  approved as a release is;
   every later release pushes its formula itself.
 
 ## Resource use

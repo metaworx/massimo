@@ -248,6 +248,81 @@ func TestProxyDiscovery(t *testing.T) {
 	}
 }
 
+// While serve has lost its Cube, the proxy answers no discovery, so that
+// the LAN sees the Cube go; once the Cube is back, it answers again.
+func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fc.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	c := cubelan.New(cubelan.Options{Addr: addr, Backoff: 10 * time.Millisecond})
+	go c.Run(ctx)
+	select {
+	case <-c.Ready():
+	case <-time.After(5 * time.Second):
+		t.Fatal("client not ready")
+	}
+	p := New(Options{Client: c})
+	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := NewResponder(nil)
+	if err := resp.Add(p, nil); err != nil {
+		t.Fatal(err)
+	}
+	go resp.Serve(ctx, pc)
+	client, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	answered := func(wait time.Duration) bool {
+		t.Helper()
+		if _, err := client.WriteTo(append([]byte("eQ3Max*\x00**********"), 'I'), pc.LocalAddr()); err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, 256)
+		client.SetReadDeadline(time.Now().Add(wait))
+		n, _, err := client.ReadFrom(buf)
+		return err == nil && n > 0
+	}
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+
+	if !answered(5 * time.Second) {
+		t.Fatal("not answered while the cube is connected")
+	}
+	fc.Close()
+	waitFor("the loss", c.Lost)
+	if answered(300 * time.Millisecond) {
+		t.Fatal("answered while the cube is lost")
+	}
+	fc2 := &fakecube.Server{Greeting: greeting}
+	if _, err := fc2.Start(addr); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fc2.Close() })
+	waitFor("the greeting after the loss", c.Connected)
+	if !answered(5 * time.Second) {
+		t.Fatal("not answered once the cube is back")
+	}
+}
+
 func TestProxyHidesHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
 	hidden := cube.RFAddress(0x0a010d) // in room 6 of the fixture

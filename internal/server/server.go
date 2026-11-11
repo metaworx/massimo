@@ -80,6 +80,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"regexp"
@@ -199,6 +200,10 @@ type Options struct {
 	DiscoveryWait    time.Duration
 	DiscoveryAddr    string
 	DiscoveryTargets []string
+	// LookupMAC gives the MAC of an address that answered discovery
+	// (default cubelan.LookupMAC, the ARP cache), for tests: the loopback
+	// has no ARP entries.
+	LookupMAC func(net.IP) string
 	// CubePort is the TCP port of a Cube whose address comes from
 	// discovery (default 62910), for tests.
 	CubePort int
@@ -359,8 +364,13 @@ type runtime struct {
 	// the changes of the next one; only the pump uses it.
 	last map[cube.RFAddress]*view.State
 
-	subs   map[chan event]int64 // the stream subscribers, with their user's id (0 for none)
+	subs   map[chan event]*subscriber // the stream subscribers (resume.go)
 	subsMu sync.Mutex
+	// epoch, seq and replay number the stream's events and keep the last
+	// of them for a reconnecting client, under subsMu (resume.go).
+	epoch  string
+	seq    uint64
+	replay []published
 	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
 	logMu  sync.Mutex
 	events []event // the last logSize events, for GET …/log
@@ -461,6 +471,9 @@ type event struct {
 	By *eventUser `json:"by,omitempty"`
 	// userID is By's row in the store, kept in events.user_id.
 	userID int64
+	// seq is the event's number on the Cube's stream, its id there
+	// (resume.go); 0 for an event the stream did not publish.
+	seq uint64
 }
 
 // eventUser names the user an event says started it.
@@ -525,30 +538,13 @@ func (rt *runtime) emit(ev event) {
 
 // send hands an event to the Cube's stream subscribers.
 func (rt *runtime) send(ev event) {
-	rt.subsMu.Lock()
-	for ch := range rt.subs {
-		select {
-		case ch <- ev:
-		default: // slow subscriber: drop
-		}
-	}
-	rt.subsMu.Unlock()
+	rt.publish(ev, 0)
 }
 
 // sendUser hands an event to the Cube's stream subscribers that are the
 // user's: a notification is for its user alone.
 func (rt *runtime) sendUser(userID int64, ev event) {
-	rt.subsMu.Lock()
-	for ch, u := range rt.subs {
-		if u != userID {
-			continue
-		}
-		select {
-		case ch <- ev:
-		default: // slow subscriber: drop
-		}
-	}
-	rt.subsMu.Unlock()
+	rt.publish(ev, userID)
 }
 
 // logServer keeps an event of the server's, no Cube's: once in the
@@ -839,12 +835,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			rt.remember(ev)
 			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()
-			for ch := range rt.subs {
-				select {
-				case ch <- ev:
-				default: // slow subscriber: drop
-				}
-			}
+			rt.publishLocked(ev, 0)
 			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventForgotten {
 				for ch := range rt.push {
 					select {
@@ -1643,8 +1634,20 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	}
 	ch := make(chan event, 64)
 	p := principalOf(r)
+	sub := &subscriber{user: p.userID(), gone: make(chan struct{})}
+	// The last id the client read: the browser's own retry sends the
+	// header, a client that opens a new stream (the web UI, with a fresh
+	// ticket) the parameter; the header is the newer of the two.
+	last := r.Header.Get("Last-Event-ID")
+	if last == "" {
+		last = r.URL.Query().Get("last_event_id")
+	}
+	// The replay and the subscription under one lock, so that no event
+	// falls between them; head is the id of the newest event so far.
 	rt.subsMu.Lock()
-	rt.subs[ch] = p.userID()
+	replay, resumed := rt.since(last, sub.user)
+	head := rt.streamID(rt.seq)
+	rt.subs[ch] = sub
 	rt.subsMu.Unlock()
 	defer func() {
 		rt.subsMu.Lock()
@@ -1657,9 +1660,26 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	// header switches that off, and Caddy streams on its own.
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	// Current state first, so a client needs no separate fetch.
-	for _, d := range s.devices(rt) {
-		writeEvent(w, event{Kind: "state", Device: d.RFAddress, State: d, Time: time.Now()})
+	if resumed {
+		for _, ev := range replay {
+			writeEvent(w, ev, rt.streamID(ev.seq))
+		}
+	} else {
+		if last != "" {
+			// Too old, from before a restart, or not ours: what came
+			// since is lost, so the client starts over.
+			writeEvent(w, event{Kind: "resync", Source: "system", Level: "info", Time: time.Now()}, "")
+		}
+		// Current state first, so a client needs no separate fetch; the
+		// last of it carries the newest id, where a reconnection resumes.
+		devs := s.devices(rt)
+		for i, d := range devs {
+			id := ""
+			if i == len(devs)-1 {
+				id = head
+			}
+			writeEvent(w, event{Kind: "state", Device: d.RFAddress, State: d, Time: time.Now()}, id)
+		}
 	}
 	fl.Flush()
 	keep := time.NewTicker(time.Duration(s.streamKeepAlive.Load()))
@@ -1674,8 +1694,23 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 		case <-stopped:
 			return nil
 		case ev := <-ch:
-			writeEvent(w, ev)
+			writeEvent(w, ev, rt.streamID(ev.seq))
 			fl.Flush()
+		case <-sub.gone:
+			// Fell behind: the events still queued go out, then the
+			// stream ends, and the client's reconnection resumes.
+			for {
+				select {
+				case ev := <-ch:
+					writeEvent(w, ev, rt.streamID(ev.seq))
+					continue
+				default:
+				}
+				break
+			}
+			fl.Flush()
+			s.log.Info("event stream ended: its client fell behind", "cube", rt.cubeSerial(), "remote", s.clientIP(r))
+			return nil
 		case <-keep.C:
 			// The caller asked again: a stream outlives neither a key
 			// revoked nor the first user of an open server (auth.go).
@@ -1689,7 +1724,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
-func writeEvent(w http.ResponseWriter, ev event) {
+// writeEvent writes an event to a stream, with its id where it has one.
+func writeEvent(w http.ResponseWriter, ev event, id string) {
 	data, _ := json.Marshal(ev)
+	if id != "" {
+		fmt.Fprintf(w, "id: %s\n", id)
+	}
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Kind, data)
 }

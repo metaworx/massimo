@@ -188,10 +188,11 @@ func TestBackupPruneNewest(t *testing.T) {
 	if _, ok, err := st.StoredBackup(ctx, s.cubes["keq0000100"].storeID.Load(), first.ID); ok || err != nil {
 		t.Fatalf("the first backup is not pruned (%v)", err)
 	}
-	// The prune removes the row, so the next may get its id: the time tells them apart.
+	// The prune removes the row, and the next takes a new id all the same
+	// (migration 0013), so that an id read before names no other backup.
 	if !within(time.Second, func() bool {
 		_, l = historyOf(t, ts.URL)
-		return reasons(l) == "auto" && l.Backups[0].TakenAt.After(first.TakenAt)
+		return reasons(l) == "auto" && l.Backups[0].ID > first.ID
 	}) {
 		t.Fatalf("after pruning the only backup: %q, changed %v", reasons(l), l.Changed)
 	}
@@ -311,6 +312,36 @@ func TestRestoreKeepsBackups(t *testing.T) {
 		if code, _ := postBackup(t, ts, restoreBase+"/plan"+bad, "", nil); code != 404 && code != 400 {
 			t.Fatalf("plan%s: %d", bad, code)
 		}
+	}
+}
+
+// A restore reads done only once the file it restored is the backup
+// reference: a backup check right after it compares the Cube with the
+// file, not with the before_restore backup of the state before it, which
+// took an automatic backup of the state just restored (AP RestoreRace).
+func TestRestoreDoneAfterItsReference(t *testing.T) {
+	_, ts, s, _ := startStored(t, Options{})
+	rt := s.cubes["keq0000100"]
+	f := withRoomName(backupOf(t, ts), "Restored")
+	want := backup.ConfigHash(f)
+	hash := plan(t, ts, "", f)["plan"].(string)
+	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 202 {
+		t.Fatalf("restore: %d %v", code, out)
+	}
+	// Without HTTP in between, so that a window after done is not missed.
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		if run, _ := rt.restoreStatus(); run.State == "done" {
+			break
+		} else if run.State == "failed" || time.Now().After(deadline) {
+			t.Fatalf("the restore: %+v", run)
+		}
+		time.Sleep(50 * time.Microsecond)
+	}
+	rt.bk.mu.Lock()
+	ref := rt.bk.ref
+	rt.bk.mu.Unlock()
+	if ref != want {
+		t.Fatalf("at done, the reference is %q, not the file's %q", ref, want)
 	}
 }
 

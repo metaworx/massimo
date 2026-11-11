@@ -7,7 +7,8 @@
 // the proxy instead: reads are answered from the server's snapshot of
 // the Cube, writes go through the command queue to the real Cube and the
 // Cube's own answers are relayed. The proxy also answers the UDP
-// discovery request, so clients find it like a Cube.
+// discovery request while the server has the Cube, so clients find it
+// like a Cube, and see it go with the Cube.
 package proxy
 
 import (
@@ -539,7 +540,10 @@ func (p *Proxy) hiddenRooms(md *cube.Metadata) map[uint8]bool {
 
 // discoveryReply builds the reply to a discovery request for the
 // serial it names ("" for any), or returns false when the request is
-// not for this proxy's Cube.
+// not for this proxy's Cube, or while the server has lost the Cube
+// (cubelan.Client.Lost): a discovery answer says that a Cube is there,
+// and other servers and the original software are to see it go. The
+// TCP side still serves the last snapshot meanwhile.
 func (p *Proxy) discoveryReply(serial string, op byte) ([]byte, bool) {
 	h := p.opts.Client.Snapshot().Hello()
 	if h == nil {
@@ -554,6 +558,10 @@ func (p *Proxy) discoveryReply(serial string, op byte) ([]byte, bool) {
 	}
 	if op != cubelan.UDPIdentify {
 		p.log.Debug("proxy: discovery request not answered", "op", string(op), "serial", mine)
+		return nil, false
+	}
+	if p.opts.Client.Lost() {
+		p.log.Debug("proxy: discovery request not answered, the cube is lost", "serial", mine)
 		return nil, false
 	}
 	fw, _ := strconv.ParseUint(h.Firmware, 16, 16)
@@ -576,7 +584,7 @@ type Responder struct {
 
 	pc         net.PacketConn
 	serving    chan struct{} // closed once Serve has its socket
-	collectors map[chan discoveryAnswer]struct{}
+	collectors map[chan cubelan.Packet]struct{}
 }
 
 type responderMember struct {
@@ -589,47 +597,20 @@ func NewResponder(log *slog.Logger) *Responder {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Responder{log: log, serving: make(chan struct{}), collectors: map[chan discoveryAnswer]struct{}{}}
+	return &Responder{log: log, serving: make(chan struct{}), collectors: map[chan cubelan.Packet]struct{}{}}
 }
 
-// discoveryAnswer is one answer the responder's socket read for a
-// running Discover: an identify reply, or the reply to a c request.
-type discoveryAnswer struct {
-	cube   cubelan.Discovered // for an identify reply
-	from   *net.UDPAddr
-	config bool // a c reply: only cube.Serial and cube.DHCP are set
-}
-
-// parseDiscoveryAnswer decodes an identify or c reply from from.
-func parseDiscoveryAnswer(b []byte, from *net.UDPAddr) (discoveryAnswer, bool) {
-	if d, ok := cubelan.ParseIdentifyReply(b, from.IP); ok {
-		return discoveryAnswer{cube: d, from: from}, true
-	}
-	if serial, dhcp, ok := cubelan.ParseConfigReply(b); ok {
-		return discoveryAnswer{cube: cubelan.Discovered{Serial: serial, DHCP: &dhcp}, from: from, config: true}, true
-	}
-	return discoveryAnswer{}, false
-}
-
-// configWait is how long Discover waits past its wait for the c reply
-// of a Cube that answered late.
-const configWait = time.Second
-
-// Discover sends a discovery request from the responder's socket to each
-// target and returns the answers that arrive within wait, one per serial
-// and address, in the order they came. Each Cube that answers is asked
-// for its network configuration (c) at once, from the same socket, and
-// its DHCP flag is filled in when it answers in time; a Cube that
-// answered late gets configWait for that. Answers of this host's own
-// proxies are among them, without the flag; the caller tells them apart.
-// It waits for Serve to have its socket.
-func (r *Responder) Discover(ctx context.Context, targets []*net.UDPAddr, wait time.Duration) ([]cubelan.Discovered, error) {
+// Discover runs a search (cubelan.Search) from the responder's socket,
+// handed what Serve reads that is no request, and returns its answers.
+// Answers of this host's own proxies are among them; the caller tells
+// them apart. It waits for Serve to have its socket.
+func (r *Responder) Discover(ctx context.Context, o cubelan.SearchOptions) ([]cubelan.Discovered, error) {
 	select {
 	case <-r.serving:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	ch := make(chan discoveryAnswer, 64)
+	ch := make(chan cubelan.Packet, 64)
 	r.mu.Lock()
 	pc := r.pc
 	r.collectors[ch] = struct{}{}
@@ -639,55 +620,8 @@ func (r *Responder) Discover(ctx context.Context, targets []*net.UDPAddr, wait t
 		delete(r.collectors, ch)
 		r.mu.Unlock()
 	}()
-	req := cubelan.IdentifyRequest()
-	for i := 0; i < 2; i++ {
-		for _, t := range targets {
-			pc.WriteTo(req, t)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	index := map[string]int{}       // serial@ip to its place in out
-	asked := map[string]time.Time{} // serial@ip to when c went out
-	var out []cubelan.Discovered
-	for {
-		select {
-		case <-ctx.Done():
-			return out, ctx.Err()
-		case <-timer.C:
-			// A Cube asked shortly before the end gets configWait for its
-			// c reply; the others are done.
-			var last time.Time
-			for key, at := range asked {
-				if out[index[key]].DHCP == nil && at.After(last) {
-					last = at
-				}
-			}
-			if more := time.Until(last.Add(configWait)); more > 0 {
-				timer.Reset(more)
-				continue
-			}
-			return out, nil
-		case a := <-ch:
-			key := a.cube.Serial + "@" + a.from.IP.String()
-			i, seen := index[key]
-			if a.config {
-				if seen && out[i].DHCP == nil {
-					out[i].DHCP = a.cube.DHCP
-				}
-				continue
-			}
-			if seen {
-				continue
-			}
-			index[key] = len(out)
-			out = append(out, a.cube)
-			// The Cube answers from the port it takes requests on.
-			pc.WriteTo(cubelan.ConfigRequest(a.cube.Serial), a.from)
-			asked[key] = time.Now()
-		}
-	}
+	o.Packets = ch
+	return cubelan.Search(ctx, pc, o)
 }
 
 // Add registers a proxy. With ip set, replies for it are sent from a
@@ -724,8 +658,8 @@ func (r *Responder) Remove(p *Proxy) {
 	r.members = kept
 }
 
-// Serve answers requests on pc until ctx ends, and hands the Cubes'
-// answers to a running Discover.
+// Serve answers requests on pc until ctx ends, and hands every other
+// datagram to the running searches (Discover).
 func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 	r.mu.Lock()
 	r.pc = pc
@@ -758,16 +692,15 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 		serial, op, ok := cubelan.ParseUDPRequest(buf[:n])
 		if !ok {
 			if u != nil {
-				if a, ok := parseDiscoveryAnswer(buf[:n], u); ok {
-					r.mu.Lock()
-					for ch := range r.collectors {
-						select {
-						case ch <- a:
-						default:
-						}
+				pkt := cubelan.Packet{Data: append([]byte(nil), buf[:n]...), From: u}
+				r.mu.Lock()
+				for ch := range r.collectors {
+					select {
+					case ch <- pkt:
+					default:
 					}
-					r.mu.Unlock()
 				}
+				r.mu.Unlock()
 			}
 			continue
 		}

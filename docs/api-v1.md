@@ -239,7 +239,7 @@ The default roles and their sets are those of docs/store.md section 6:
 restore and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
-`viewer` reads, `integration` reads, sets and locks.
+`viewer` reads, `integration` reads, sets, locks and configures.
 A role's set can be changed, a role renamed, created and disabled,
 and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
@@ -249,7 +249,13 @@ own name are open to it for its display name and its password.
 Ten failed token checks from one address within a minute lock that
 address out for five minutes: every `/api` request from it is then
 answered `429` with a `Retry-After` header, the right token included.
-A wrong ticket counts as a failed check,
+A failed check is a wrong token, an empty `Bearer` header among them,
+or a wrong ticket;
+a request that offers neither (no `Authorization: Bearer`,
+no `ticket` or `token` on the stream) is answered `401` and counts as none,
+since it guesses nothing:
+a page before its sign-in, or a scanner behind a proxy not in
+`-trusted-proxies`, does not lock the address out.
 and a failed login counts against the address and against the user name,
 so that password guessing from many addresses locks the name.
 With a store the counters survive a restart.
@@ -294,7 +300,7 @@ and it will be removed in a later release.
 
 Errors are `{"error": "<message>"}` with a matching status: `400` bad input,
 `401` missing or wrong token, `403` a user who may not do this,
-`429` locked out after repeated wrong tokens,
+`429` locked out after repeated wrong tokens, tickets or passwords,
 `404` unknown Cube, device or room,
 `409` the command was replaced by a newer one for the same target before it was sent (or,
 for a restore, a guard rail: see POST /restore),
@@ -948,6 +954,10 @@ then every Cube discovery found on the LAN that is not configured:
     "rf_address": "0a0b0c",
     "firmware": "1.1.3",
     "dhcp": true,
+    "gateway": "192.168.1.1",
+    "netmask": "255.255.255.0",
+    "dns": ["192.168.1.1"],
+    "proxies": ["192.168.1.40"],
     "found_at": "2026-11-04T14:30:01+01:00",
     "last_seen": "2026-11-04T15:00:02+01:00"
   }
@@ -958,8 +968,13 @@ then every Cube discovery found on the LAN that is not configured:
 A configured Cube has the fields below;
 `mac` and `last_seen` (when it last answered discovery) only once discovery has seen it.
 A found Cube has only the fields shown: `address` is the IP it answered from,
+its own where a massimo proxy answers for it too (docs/proxy.md),
+and `proxies` the other addresses that answered for its serial in the latest run;
 `found_at` when the server first saw it, `last_seen` its latest answer;
 `mac` comes from the host's ARP cache and may be missing.
+`gateway`, `netmask` and `dns` are the addresses the Cube uses,
+from its answer to the `N` request of this server run's latest discovery that had one,
+kept in memory only as `dhcp` is.
 `dhcp` says whether the Cube takes its address by DHCP (`true`) or has a static
 one (`false`):
 discovery asks each Cube that answers for its network configuration (the `c` request,
@@ -1080,6 +1095,7 @@ The server's settings in the store:
   "poll_interval":     {"value": "1m",  "default": "1m",  "set": false, "in_effect": "1m",  "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
+  "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
 }
@@ -1114,11 +1130,15 @@ and the users sign in by OPAQUE alone, so that no password crosses;
 the API keys are not touched.
 A user still of `auth_version` 1 cannot sign in then,
 until someone with `users` sets a password for it.
+`update.channel` is the update channel (see `GET /api/v1/update`),
+one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
+the build's flavour by default, and applies at once;
+`MASSIMO_UPDATE_CHANNEL`, where set, is used instead, as `in_effect` shows.
 `PUT` takes an object of keys and durations,
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
-and `auth.password_login` `true` or `false`.
+`auth.password_login` `true` or `false`, and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.
@@ -1127,7 +1147,8 @@ The answer is that of `GET`.
 ### POST /api/v1/cubes/discover
 
 Looks for Cubes on the LAN now (UDP discovery, about three seconds) and
-answers with every Cube that answered, configured or not, as the
+answers with every Cube that answered, configured or not, once each,
+at its own address where a proxy answered for it too, as the
 objects of the found Cubes above:
 
 ```json
@@ -1165,8 +1186,15 @@ and serve's log says "cube gone from the LAN";
 the stream sends nothing for it.
 
 A configured Cube that answers from another address than configured is logged;
-one configured by serial only, without an address,
-is connected at the address it answers from and reconnected when that changes.
+one configured by serial only, without an address, follows discovery:
+it keeps its address while that answers,
+else takes the address of a proxy that answers for it
+(a proxy answers only while its serve holds the Cube,
+whose one LAN connection is then taken),
+else the Cube's own, and reconnects when that changes, at most once a run.
+An answer that is neither a Cube's nor a proxy's for sure
+(no answer to `N` or `c` and no MAC, README.md "Command line")
+is taken only by a Cube without an address yet.
 
 ### GET /api/v1/cubes/{sn}
 
@@ -1625,6 +1653,8 @@ when it last changed and when the automatic backup follows:
 
 `size` is the file's, before the store compresses it; `user` is absent for the
 server's own backups.
+`id` names one backup for good:
+the store never gives it to another, also once the backup is deleted or pruned.
 Capability `backup`.
 
 #### POST /api/v1/cubes/{sn}/backups
@@ -1955,6 +1985,36 @@ A failure the server reports, such as a reboot the helper did not start,
 is its kind's line at `warn` with the `error`.
 A comment line is sent every 30 seconds to keep the connection alive.
 
+**Ids and resume.**
+Every event the stream sends carries an `id:` line,
+`<epoch>-<number>`: the number counts the Cube's events up,
+the epoch changes when the server or the Cube's connection to it starts anew.
+The connection's state events carry none,
+but the last of them carries the newest id, where a reconnection resumes:
+```
+id: mh8k2q3x-41
+event: state
+data: {"kind":"state","device":"0a0102",…}
+```
+A client that reconnects names the last id it read,
+in the header `Last-Event-ID` (the browser's own retry sends it)
+or the parameter `last_event_id` (a client that opens a new stream, such as
+one with a fresh ticket); the header wins where both are given.
+The stream then sends the events since that id that the caller may see,
+oldest first, and no state burst.
+The server keeps a Cube's last 1024 events for that;
+an id it no longer holds, one from before a restart, or one it never issued
+gets a `resync` event first, then the state burst of a first connection:
+what happened in between is lost, and the client reads what it needs again.
+```
+event: resync
+data: {"kind":"resync","source":"system","level":"info","time":"…"}
+```
+A client that falls behind, its events piling up at the server,
+gets what is queued for it and then the end of the stream,
+rather than a stream with a gap it cannot see:
+its reconnection resumes.
+
 An event of a device carries its radio address as `device` and its serial number
 as `serial`, also before the device has a state and after it is gone.
 Every event says its `source` (`device`, `cube` for the Cube's own, its
@@ -2048,14 +2108,19 @@ but the route answers all the same.
 
 ### GET /api/v1/update?refresh=1
 
-Whether a newer signed release is out on the server's update channel (the branch
-it was built from, or `MASSIMO_UPDATE_CHANNEL`;
-on a box the Debian package installed, the suite of its apt source).
+Whether a newer signed release is out on the server's update channel:
+`MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
+else the build's `flavour`, what it was released as;
+on a box the Debian package installed, the suite of its apt source.
+A channel takes the releases of its own flavour and of every more stable one,
+in the order `devel`, `nightly`, `alpha`, `beta`, `stable`
+([README.md](../README.md), "Versions").
 The server asks GitHub at most every ten minutes; `refresh` asks now.
 
 ```json
 {
   "current": "v0.1.0-alpha.9",
+  "flavour": "alpha",
   "channel": "alpha",
   "latest": "v0.1.0-alpha.10",
   "release_url": "https://github.com/metaworx/massimo/releases/tag/v0.1.0-alpha.10",
@@ -2086,6 +2151,9 @@ with `message` on failure.
 
 Asks the update helper to install the newest release on the channel:
 the server writes the channel into its request file,
+having stored it as `update.channel` first where the release is of another
+flavour and neither the variable nor the setting names a channel,
+so that a box on `beta` stays on it after installing a stable release;
 and the helper (started by `massimo-update.path` as root on Linux,
 by launchd's `ch.metaworx.massimo-update` on macOS,
 by the server itself as a detached process on Windows;

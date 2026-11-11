@@ -1077,6 +1077,9 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .config-tabs .tab.close { margin-left: auto; font-weight: 400; }
 .config-body h4 { margin: 12px 0 6px; font-size: 0.95rem; }
 .cfg-form { display: flex; flex-direction: column; gap: 8px; }
+/* The week editor (week-program.js) lays its parts out in the form, as if
+   they were the form's own. */
+massimo-week-program { display: contents; }
 /* a row of a label and its control (components.js fieldRow, and the
    rows of the settings): the label at the left, the control at the
    right on the same line, wrapping under the label where there is no
@@ -1272,7 +1275,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
    device", each row's line running through it; no column where the
    settings do not follow the user (no-sync). My settings and My profile
    keep a reading width. */
-.settings.prefs-page, .settings.profile-page { max-width: 640px; }
+.settings.prefs-page, .settings.profile-page, .settings.notify-page { max-width: 640px; }
 .settings.prefs-page:has(.scheme-editor:not(.hidden)) { max-width: 760px; }
 .dev-head, .dev-row, .dev-group { display: grid; grid-template-columns: minmax(0, 1fr) 76px; column-gap: 12px; }
 .no-sync .dev-row, .no-sync .dev-group { grid-template-columns: minmax(0, 1fr); }
@@ -1322,3 +1325,35 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 .fp-row { display: flex; flex-direction: column; gap: 2px; margin: 0 0 10px; }
 .fp-row .tls-fp { word-break: normal; }
 #fp-dialog.fp-changed #fp-title { color: var(--bad); }
+
+/* 👤 → Notifications (notify.js): its groups as My settings' (.dev-group),
+   a row per kind, and a row per device of the user */
+.notify-group { margin: 0; padding: 12px 0 2px; border-top: 1px solid var(--line); color: var(--muted); font-size: 1rem; font-weight: 600; }
+.notify-group:first-child { border-top: 0; padding-top: 0; }
+.notify-state { margin: 6px 0 10px; }
+.notify-row { border-top: 1px solid var(--line); padding: 10px 0 2px; }
+.settings .notify-row > .field { margin-bottom: 8px; }
+.notify-device { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; border-top: 1px solid var(--line); padding: 10px 0; }
+.notify-device-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.notify-device > p { flex: 1 1 100%; margin: 0; }
+
+/* A notification while the page is open, at its foot (notify.js) */
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - 32px));
+  padding: 10px 8px 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+.toast-text { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.toast-title { display: block; }

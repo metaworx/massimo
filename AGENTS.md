@@ -1,10 +1,10 @@
 <!-- GENERATED FILE - DO NOT EDIT.
      Source: shared/_AGENTS.md + project/_CONTRACT.md
      Regenerate: GUIDELINES/shared/tools/sync-docs.sh
-     Contract version: v3.26.0 -->
+     Contract version: v3.29.0 -->
 
 
-# AI Agent Guidelines (v3.26.0)
+# AI Agent Guidelines (v3.29.0)
 
 Core behavioral rules for AI agents working on this codebase.  
 All agents MUST comply.
@@ -14,7 +14,7 @@ refer to linked documents for extended guidance.
 ## Contents
 
 <!-- BEGIN GENERATED CONTENTS - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
-- AI Agent Guidelines (v3.26.0)
+- AI Agent Guidelines (v3.29.0)
   1. Critical Behavioral Rules (STRICT)
     - 1.1 Gate Message Mechanism
     - 1.2 Action Plan (AP) Requirement
@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.3.3)
+- Massimo — Project Contract (v1.8.0)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -122,7 +122,8 @@ refer to linked documents for extended guidance.
 - Writing a *new* [UAMF](#4-user-accessible-message-files-uamf),
   or scratch to `GUIDELINES/temp/` (§1.5),
   does NOT constitute a source-file edit, and is ALLOWED under every signal.
-- In `GUIDELINES/wip/`, any signal MAY add a NOTE or an analysis;
+- In `GUIDELINES/wip/`, any signal MAY add a NOTE or an analysis,
+  or rewrite a standing document (§4);
   all else there is for `PLAN+`, `PLAN++` and the `EXEC` family (§5.1).
 
 ### 2.1 Rule Map & Canonical Owners (STRICT)
@@ -210,13 +211,14 @@ that follows strict rules:
 - **An Action Plan is not a UAMF** - it is revised in place,
   its history git's (§5.1).
   Files in `messages/`, and NOTEs and analyses in `wip/`, are UAMFs.
+- **Nor is a standing document** in `wip/`, below.
 
 Where a file is written depends on what it is and how long it needs to live:
 
 | Directory | Tracked | For |
 |-----------|---------|-----|
 | `GUIDELINES/messages/` | no  | the default: analyses and findings written for the user |
-| `GUIDELINES/wip/`      | yes | each open Action Plan (§5), its NOTEs (§5.4), and any analysis it rests on |
+| `GUIDELINES/wip/`      | yes | each open Action Plan (§5), its NOTEs (§5.4), any analysis it rests on, and the project's standing documents |
 | `GUIDELINES/temp/`     | no  | scratch that is not a UAMF at all |
 
 **An analysis in `wip/`** is named `YYYY-MM-DD_HH-NN_ANALYSIS_<Name>_<slug>.md`,
@@ -225,6 +227,24 @@ One in `messages/` that a plan comes to rest on is copied there,
 keeping its timestamp; the original stays.
 Its fate at retirement is `GUIDELINES/shared/COMMIT.md` §6;
 one kept for another plan keeps its name.
+
+**A standing document in `wip/`** is kept current rather than dated,
+such as the handover a new session reads first.
+
+- It is named without a timestamp, such as `HANDOVER.md`,
+  and any undated `*.md` in `wip/` is one.
+- It is rewritten in place, its history git's, and is not a UAMF.
+- It is written under any signal (§2),
+  and committed as any tracked file is, through the commit gate:
+  alone, as `[UPDATE] wip: <name> <what>` (`GUIDELINES/shared/COMMIT.md` §6),
+  or with the work it describes.
+- It is no plan's, and no plan's retirement takes it.
+  It retires at its owner's word, once no tracked document names it
+  (`GUIDELINES/shared/COMMIT.md` §6).
+- Another document names it by its path:
+  `wip/<name>.md` from inside `wip/`,
+  `GUIDELINES/wip/<name>.md` from anywhere else,
+  so that `GUIDELINES/shared/tools/check-citations.sh` finds a name left behind.
 
 In an overlay - a guidelines root that is a repository of its own,
 in a project that does not carry the guidelines -
@@ -243,6 +263,10 @@ Citation rules follow from that, and they are absolute:
 - **Nothing that outlives the change may cite either.**
   If a conclusion is worth citing from a contract,
   a shared document or a README, it belongs *in* that document.
+- **A standing document is the exception.**
+  A tracked document anywhere MAY name one by its path:
+  its name carries no date, so the name holds as long as the file does.
+  Every such name is removed before it retires.
 
 ## 5. Action Plan (AP)
 
@@ -407,7 +431,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.3.3)
+# Massimo — Project Contract (v1.8.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -432,8 +456,8 @@ so that the two cannot drift apart.
 | Language(s)           | declared as `project.languages` in `GUIDELINES/config.ini`, kept honest by `GUIDELINES/shared/tools/detect-languages.sh --check` |
 | Source directories    | `cmd/massimo/` (the command line and `serve`), `internal/` (the packages: `protocol/cube`, `cubelan`, `engine`, `server` with the web UI in `server/ui/`, `proxy`, `backup`, `store`, `update`, `install`, …), `packaging/` (unit files, plists, the installers' assets), `tools/ui-test/` (the Playwright smoke test), `docs/` (the protocol findings, the API, the designs, the handovers) |
 | Shipped-code paths    | declared as `project.shipped` in `GUIDELINES/config.ini` and listed below; kept honest by `GUIDELINES/shared/tools/changelog.sh check` (rule: `GUIDELINES/shared/COMMIT.md` §5) |
-| Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature, `DRY=1` to see it first) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main`, `alpha` and the tag are pushed atomically; `README.md`, "Versions" |
-| Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`, is recommended, and CI's Race job runs it), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`) |
+| Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature, `DRY=1` to see it first) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main` and the tag are pushed atomically; CI tests the tag, releases it and then fast-forwards `release/alpha` to it; `README.md`, "Versions" |
+| Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`, is recommended, and CI's Race job runs it), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`), and `make lan-test` for a change to discovery, the mDNS announcement (`internal/announce`), `discover` or the proxy's discovery answers (Docker with Compose v2, `tools/lan-test/README.md`) |
 | Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `GUIDELINES/shared/lang/go/LINTING.md` requires per platform; `govulncheck ./...` runs in CI for linux and windows; no other linter |
 | Commit summary        | declared as `[commit]` in `GUIDELINES/config.ini` and shown below; held to it by `GUIDELINES/shared/tools/commit-msg.sh` (rule: `GUIDELINES/shared/COMMIT.md` §3.1) |
 
@@ -461,6 +485,23 @@ not this block:
 - `:!LICENSE`
 <!-- END GENERATED SHIPPED-PATHS -->
 
+A change touching only the paths listed below may skip the test suite:
+no test reads them, and `GUIDELINES/shared/tools/fingerprint.sh` leaves them out
+of the code fingerprint a CI gate compares.
+None of them is shipped.
+The list is generated from `[ci] untested` - edit the config, not this block,
+and delete both where the project declares no such list:
+
+<!-- BEGIN GENERATED UNTESTED-PATHS - do not edit; run "GUIDELINES/shared/tools/fingerprint.sh update-contract" -->
+- `GUIDELINES/wip/**`
+- `GUIDELINES/project/**`
+- `AGENTS.md`
+- `GUIDELINES/README.md`
+- `CHANGELOG.md`
+- `CHANGELOG.d/**`
+- `LICENSE`
+<!-- END GENERATED UNTESTED-PATHS -->
+
 The commit form is generated from `[commit]` in `GUIDELINES/config.ini` -
 edit the config, not this block:
 
@@ -472,7 +513,7 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 - **Component:** required, but of a release and a merge: a name of letters, digits, `.`, `_`, `/` and `-`; behind a role's token, after a colon: `fix(security:api): Close a hole`.
 - **An incompatible change:** `feat(api)!: Remove a call`, or a `BREAKING CHANGE:` trailer.
 - **A plan's own commit:** `chore(aps): +Name v1.0` (COMMIT.md §6).
-- **An agent's commit:** ends with `Assisted-by: AGENT_NAME:MODEL_VERSION` - the tool or harness, then the exact model id, e.g. `Assisted-by: ClaudeCode:claude-opus-5-5` (COMMIT.md §3.3).
+- **An agent's commit:** ends with `Assisted-by: AGENT_NAME:MODEL_VERSION` - the tool or harness, then the exact model id, e.g. `Assisted-by: claude-code:claude-opus-5-5` (COMMIT.md §3.3).
 
 | Role | Opens with | For |
 |------|------------|-----|
@@ -480,7 +521,7 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 | fix | `fix:` | bug fixes |
 | security | `fix(security):` | security fixes and hardening |
 | cleanup | `style:` | formatting and layout only, no functional change |
-| wip | `style(wip):` for a rename, `chore(wip):` otherwise | an intermediate state; a non-wip commit follows |
+| wip | `wip:` | an intermediate state; a non-wip commit follows |
 | update | `chore:` | environment, dependency or test-config updates, plans |
 | release | `chore(release):` | the version bump, made by changelog.sh cut |
 | merge | `merge:` | a commit with more than one parent |
@@ -498,9 +539,8 @@ Every commit summary opens as `config.ini`'s `[commit]` keys ask (COMMIT.md §3.
 
 ## 3. Project-Specific Conventions
 
-The coding standard at the end of `docs/review-2026-11-05.md` and the
-"Conventions" of `docs/handover-session.md` are the rules; the ones an
-agent trips over most:
+The rules of the code and of the work on it;
+the ones an agent trips over most come first:
 
 - **Secrets and identities.**
   No keys, IVs, tokens, real device names or real Cube serials in code,
@@ -508,6 +548,8 @@ agent trips over most:
   and for a radio address `0a0101`:
   `tools/identifiers` fails `go test` on a serial, a MAC or a radio address
   that is not one, unless its `allowed.txt` names it with a reason.
+  Keys, IVs and tokens are redacted in every printout, a log's included;
+  real room and device names appear only in the owner's pastes.
   `.env`, backups and logs are gitignored.
   The checkout's `.env` points at real hardware,
   so tests and manual runs use `MASSIMO_ENV_FILE=/dev/null` or the fake Cube
@@ -518,17 +560,39 @@ agent trips over most:
   a command the hardware has not confirmed says so in its comment and in
   `docs/portal-protocol.md`.
   Hardware findings go into `docs/portal-protocol.md` the day they are made,
-  with the date and the Cube firmware.
+  with the date and the Cube firmware;
+  the lessons of the hardware days are there ("Lessons from the hardware days")
+  and in `packaging/README.md` ("Learnings").
   A Cube serves one LAN client at a time:
   commands go through the proxy of a running `serve`,
-  never to a Cube another program holds;
+  never to a Cube another program holds (`-no-direct` refuses the direct
+  fallback, `-direct` forces it);
   a radio write costs duty cycle (about 1.25 % each, 36 s of air time an hour),
   so nothing is sent to a real Cube without the owner's go.
+- **Go code.**
+  The Go of `go.mod`, the standard library first.
+  `gofmt` and `go vet` clean, and no `//nolint` outside `third_party/`.
+  Every file opens with the SPDX line `AGPL-3.0-or-later` and the copyright
+  line; JavaScript and CSS carry a one-line licence comment.
+  A package comment says what the package is for;
+  every exported symbol has a comment that is a sentence,
+  an unexported helper one where its name does not say it.
+  Errors are wrapped with context (`fmt.Errorf("serve: %w", err)`),
+  a sentinel error lives in the package that defines the condition
+  (`cubelan.ErrNotConnected`), an HTTP error goes through `fail(status, …)`;
+  input never panics.
+  Logging is `slog` key-value pairs: Info for an event a user wants in the log,
+  Warn for anything the Cube refused, Error for what failed on our side,
+  Debug for per-line traffic.
 - **Tests** run against the fake Cube with the recorded greeting;
   none needs hardware or the network.
   A new API route gets a test that checks the exact line sent to the fake Cube,
   and `TestOpenAPICoversRoutes` fails when `docs/api-v1-openapi.yaml` and the
   routes differ.
+- **The API.**
+  A client needs a token: `MASSIMO_API_TOKEN` is the owner's key,
+  every other user has one of their own (`docs/api-v1.md`, "Authentication");
+  without one the API answers 401.
 - **The web UI** is plain HTML, CSS and JavaScript under `internal/server/ui/`,
   embedded with `go:embed`: no build step, no framework, no inline handlers,
   no `innerHTML`, API text only through `textContent`.
@@ -538,6 +602,7 @@ agent trips over most:
   Shared elements come from `components.js`,
   and a label with its control is the one row style, `.field`,
   or `.field.wide` for a control on a line of its own.
+  Every icon-only control is labelled, and every control keyboard operable.
   Every text goes through `t()` or `data-i18n`, its key in all six
   `ui/i18n/<lang>.json` (FR/IT/NL/PL machine-translated and marked);
   CSS variables for light and dark, phone width first (390 px),
@@ -547,12 +612,16 @@ agent trips over most:
   `docs/api-v1.md` and the OpenAPI file for every route,
   `packaging/` and `docs/update-windows.md` for the installers,
   `docs/ui.md` for the UI,
-  `docs/roadmap.md` and `docs/handover-session.md` at the end of a session by
-  the coordinating session only.
+  `docs/roadmap.md` and the session handover, `GUIDELINES/wip/HANDOVER.md`
+  (a standing document: rewritten in place, never dated),
+  at the end of a session by the coordinating session only,
+  but for a plan's items on the roadmap:
+  the session whose plan retires prunes them itself, at the retirement.
 - **Branches and pull requests**:
   develop on `main` through pull requests the owner merges;
-  `alpha` is the release branch,
-  only ever fast-forwarded by `make release-alpha`.
+  `release/alpha` is the release branch, only ever fast-forwarded,
+  by the release once it is out (`GUIDELINES/project/CI.md`, "Releases");
+  `release/devel` and `release/nightly` are tags, moved by CI.
   A branch merges `origin/main` before its pull request (merge,
   never rebase a stack).
   Commits are signed (SSH, the repository's git config);
@@ -564,6 +633,8 @@ agent trips over most:
   hardware work goes through the Raspberry Pi's `serve` or the Windows side.
   Windows executables run from WSL through interop and use Windows networking;
   elevation needs `gsudo` and the owner's UAC confirmation.
+  The owner's Windows service, the Pi and the Mac are touched only on the
+  owner's word in the session.
 
 ## 4. Document Governance
 

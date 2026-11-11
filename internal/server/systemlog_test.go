@@ -185,7 +185,7 @@ func TestAddressChangedLogged(t *testing.T) {
 	rt.cfg.FollowDiscovery = true
 	rt.cfgMu.Unlock()
 	// 127.0.0.2 is the loopback, where nothing answers: no packet leaves.
-	s.note(context.Background(), cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("127.0.0.2")}, time.Now())
+	s.note(context.Background(), cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("127.0.0.2"), Kind: cubelan.KindCube}, time.Now())
 	var evs []event
 	eventually(t, "address_changed", func() bool {
 		_, evs = logOf(t, ts, "?kind=address_changed")

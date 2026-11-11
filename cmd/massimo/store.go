@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,7 +18,8 @@ import (
 // runStore handles massimo store backup|migrate|info, the commands that
 // open serve's store directly (docs/store.md section 7). They take
 // -data like serve and run as the service user, beside a running
-// server.
+// server. Each checks its arguments before it opens the store, which
+// migrate creates, so that its help and a mistake leave nothing behind.
 func runStore(args []string) error {
 	usage := func() {
 		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store backup <file> | migrate | info
@@ -26,20 +28,31 @@ func runStore(args []string) error {
   migrate        create massimo.db or apply its pending migrations, without starting serve
   info           the file's schema version, node and row counts
 
-The data directory is -data, else MASSIMO_DATA, else the current directory;
-for the service run it as its user, for example
-  sudo -u massimo massimo -data /var/lib/massimo store info
-`)
+`+dataDirUsage("store", "info"))
 	}
 	if len(args) == 0 {
 		usage()
 		return errors.New("store: which command?")
 	}
+	// parse answers -h with the usage and refuses a flag: the commands
+	// take none.
+	parse := func() ([]string, error) {
+		set := flag.NewFlagSet("store "+args[0], flag.ContinueOnError)
+		set.Usage = usage
+		if err := set.Parse(args[1:]); err != nil {
+			return nil, err
+		}
+		return set.Args(), nil
+	}
 	ctx := context.Background()
 	dir := dataDir()
 	switch args[0] {
 	case "backup":
-		if len(args) != 2 {
+		rest, err := parse()
+		if err != nil {
+			return err
+		}
+		if len(rest) != 1 {
 			usage()
 			return errors.New("store backup: give the file to write")
 		}
@@ -48,11 +61,19 @@ for the service run it as its user, for example
 			return storeError(dir, err)
 		}
 		defer st.Close()
-		if err := st.Backup(ctx, args[1]); err != nil {
+		if err := st.Backup(ctx, rest[0]); err != nil {
 			return err
 		}
-		fmt.Printf("wrote %s\n", args[1])
+		fmt.Printf("wrote %s\n", rest[0])
 	case "migrate":
+		rest, err := parse()
+		if err != nil {
+			return err
+		}
+		if len(rest) > 0 {
+			usage()
+			return errors.New("store migrate takes no argument")
+		}
 		logger, err := newLogger(os.Stderr)
 		if err != nil {
 			return err
@@ -65,6 +86,14 @@ for the service run it as its user, for example
 		v, mr := st.SchemaVersion()
 		fmt.Printf("%s: schema version %d (min_reader %d)\n", st.File(), v, mr)
 	case "info":
+		rest, err := parse()
+		if err != nil {
+			return err
+		}
+		if len(rest) > 0 {
+			usage()
+			return errors.New("store info takes no argument")
+		}
 		st, err := store.OpenReadOnly(dir, store.Options{})
 		if err != nil {
 			return storeError(dir, err)
@@ -86,6 +115,8 @@ for the service run it as its user, for example
 		for _, t := range tables {
 			fmt.Printf("  %-13s %d\n", t, in.Counts[t])
 		}
+	case "help", "-h", "--help":
+		usage()
 	default:
 		usage()
 		return fmt.Errorf("store: unknown command %q", args[0])

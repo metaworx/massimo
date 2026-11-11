@@ -51,10 +51,32 @@ the web UI in any current browser, on a phone or a desktop.
 
 ## Documentation
 
+<!-- BEGIN GENERATED PARTIAL docs/fragments/_documents.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
+Every document of the project, in the README and on the site's docs index
+(`packaging/site/build.sh` builds a page of each one listed here, and fails
+on a document under `docs/` that is not).
+
+### Using it
+
+- [README.md](README.md): what Massimo is, installing it, the server,
+  the command line, the versions and channels
+- [packaging/README.md](packaging/README.md): the packages and services,
+  the apt repository, Homebrew, updates
+- [docs/ui.md](docs/ui.md): using the web UI
+- [docs/app.md](docs/app.md): the apps for Android and iOS
+- [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
+- [docs/homeassistant.md](docs/homeassistant.md): Home Assistant,
+  through the proxy today and with an integration of its own later
+- [docs/reverse-proxy.md](docs/reverse-proxy.md):
+  `massimo serve` behind a reverse proxy
+
+### The API
+
 - [docs/api-v1.md](docs/api-v1.md),
   [docs/api-v1-openapi.yaml](docs/api-v1-openapi.yaml): the HTTP API
-- [docs/ui.md](docs/ui.md): using the web UI
-- [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients
+
+### How it works
+
 - [docs/portal-protocol.md](docs/portal-protocol.md):
   everything learned about the Cube, the portal and the radio commands
 - [docs/firmware-extraction.md](docs/firmware-extraction.md):
@@ -63,38 +85,42 @@ the web UI in any current browser, on a phone or a desktop.
   licence reasoning, routes to a public server, sources
 - [docs/design.md](docs/design.md): the design proposal, target environments,
   phases and their status
-- [docs/roadmap.md](docs/roadmap.md): what comes next, in order
 - [docs/store.md](docs/store.md): the design of the server's persistent storage:
   engine, schema, users and roles, migration of installed boxes
 - [docs/server.md](docs/server.md): the server mode: encryption at rest,
   the public server, sync, and what the store prepares for them
-- [docs/handover-write-test.md](docs/handover-write-test.md):
-  the test plan for the configuration writes on real hardware,
-  [docs/write-test-2026-11-05.md](docs/write-test-2026-11-05.md) its results
-- [docs/testing-windows.md](docs/testing-windows.md):
-  the test plan for the Windows service on a real PC,
-  [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md) its results
 - [docs/update-windows.md](docs/update-windows.md):
   the design for updates from the web UI on Windows: the options,
   the recommendation, the changes per file, the CI and real-PC tests
-- [docs/handover-session.md](docs/handover-session.md):
-  the context a session needs: how the project moves, where things run,
-  the conventions, the checkout
-- [docs/review-2026-11-05.md](docs/review-2026-11-05.md):
-  code review with findings, extraction proposals and the coding standard
+
+### Contributing
+
+- [GUIDELINES/README.md](GUIDELINES/README.md): how the project is worked on:
+  the guidelines, the project's contract and its coding standard
+- [docs/roadmap.md](docs/roadmap.md): what comes next, in order
+- [docs/testing-writes.md](docs/testing-writes.md):
+  the test plan for the configuration writes on real hardware,
+  [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md)
+  its results
+- [docs/testing-windows.md](docs/testing-windows.md):
+  the test plan for the Windows service on a real PC,
+  [docs/reports/windows-test-2026-11-05.md](docs/reports/windows-test-2026-11-05.md) its
+  results
 - [tools/ui-test/README.md](tools/ui-test/README.md): `make ui-test`,
   the web UI smoke test with Playwright, and its setup
 - [docs/ui-testing.md](docs/ui-testing.md): testing the web UI:
   the smoke test, Cypress and Playwright compared, screenshots,
   the recommendation
+<!-- END GENERATED PARTIAL docs/fragments/_documents.md -->
 
 ## Installing
 
 Massimo is one binary per platform with the web UI inside;
 there is nothing else to install.
 Every [release](https://github.com/metaworx/massimo/releases) carries the binaries below,
-`SHA256SUMS` and the signed manifest that `massimo update` verifies.
-Every release so far is a pre-release on the update channel `alpha` (see
+`SHA256SUMS`, the signed manifest that `massimo update` verifies,
+and the build record, `massimo-build.txt`.
+Every release so far is a pre-release of the flavour `alpha` (see
 [Versions](#versions)), which `releases/latest` skips,
 so take the newest release from the page and put its tag in place of `<tag>` below.
 
@@ -127,6 +153,21 @@ so what is left to trust is the first install.
 To trust no build but your own, build it from the signed source:
 [From source](https://github.com/metaworx/massimo#from-source).
 <!-- END GENERATED PARTIAL docs/fragments/_trust.md -->
+
+The build record says how a release was built:
+the runner,
+the Go version and every library of each binary with its checksum (`go version -m`,
+which also reads a downloaded binary),
+and the build's whole log;
+`SHA256SUMS` and the signed manifest list it.
+GitHub's build provenance says who built each file,
+the record and `SHA256SUMS` included:
+the project's release workflow, at which commit, on a GitHub runner,
+signed through Sigstore rather than with the project's keys:
+
+```bash
+gh attestation verify massimo-linux-amd64 -R metaworx/massimo
+```
 
 `serve` reads its settings from the environment or from a `.env` in the
 directory it is started from (see [Cube variables](#cube-variables)).
@@ -200,7 +241,7 @@ sudo ./massimo-linux-arm64 install -settings .env
 ```
 
 installs the binary as `/usr/local/bin/massimo`,
-creates the system user `massimo`,
+creates the system user `_massimo`,
 copies the `.env` to `/etc/massimo/env` (without `-settings` the commented template,
 which is all a first start needs),
 writes `massimo.service`,
@@ -210,7 +251,7 @@ which listens on `:8099` on every interface.
 On the template's settings it only restarts a service that runs:
 a server without users answers every device on the local network (see "Server"),
 so the first start is the owner's,
-after `sudo -u massimo massimo -data /var/lib/massimo user add <name> -role owner`
+after `sudo -u _massimo /usr/local/bin/massimo user add <name> -role owner`
 or followed by the first-owner form of the web UI.
 It warns when `MASSIMO_API_TOKEN` is missing.
 `-listen :80` moves the API and web UI to another address (kept by later installs),
@@ -232,7 +273,8 @@ sudo massimo update -restart massimo.service -health http://127.0.0.1:8099/healt
 sudo massimo install -remove              # -purge: the settings, state, logs and user too
 ```
 
-`update` installs the newest signed release of the channel and puts the old
+`update` installs the newest signed release the box's update channel takes
+([Versions](#versions)) and puts the old
 binary back when the restarted server does not report the new version
 (`-rollback` goes back by hand);
 the button under System settings → Software in the web UI asks the helper to do the same,
@@ -255,7 +297,7 @@ the web UI's Update has the package's helper run apt for the project's source,
 `apt purge massimo` removes everything.
 The project's apt repository, <https://massimo.metaworx.ch/apt/>,
 makes that an `apt upgrade`:
-one suite per update channel, the snippet in
+one suite per flavour, the snippet in
 [The apt repository](packaging/README.md#the-apt-repository).
 Details: [Debian package](packaging/README.md#debian-package).
 
@@ -282,7 +324,7 @@ PC" dialog with "Unknown publisher"
 ([screenshot](docs/images/windows-smartscreen-unknown-publisher.png)):
 "Run anyway" runs it, and starting it from a console shows no dialog at all.
 The installed service and `massimo update` are not affected ([the test
-report](docs/windows-test-2026-11-05.md), observation 8).
+report](docs/reports/windows-test-2026-11-05.md), observation 8).
 For the proxy and discovery,
 Windows Defender Firewall must let the program receive on TCP 62910, UDP
 23272 and UDP 5353 on the private network (the installed service gets a rule for that,
@@ -321,7 +363,7 @@ Get-Content C:\ProgramData\Massimo\serve.log -Tail 20
 ```
 
 Details: [Windows](packaging/README.md#windows), and the test on a real
-PC in [docs/windows-test-2026-11-05.md](docs/windows-test-2026-11-05.md).
+PC in [docs/reports/windows-test-2026-11-05.md](docs/reports/windows-test-2026-11-05.md).
 
 **Update.**
 An installed service is updated with the installed binary,
@@ -477,24 +519,27 @@ Raspberry Pi OS, `make windows` for Windows,
 and `make cross` every release binary, all into `dist/`.
 The binary goes in as a release's does,
 `sudo ./massimo install -dry-run -settings .env`, then without `-dry-run`.
-It follows the tag's update channel,
+It follows the tag's flavour, `alpha` for an `-alpha.N` tag,
 so the web UI and `massimo update` say when a release is out,
 and they install the project's binary, checked against its signed manifest;
 to stay on your own builds, build the next tag and run `install` again,
 which replaces the binary and keeps the settings.
 A tag up to v0.12.0-alpha.1 follows `HEAD` instead, which has no releases,
-unless built with `make CHANNEL=alpha`.
+unless built with `make CHANNEL=alpha`;
+a build of anything but a release tag is `devel`,
+and follows the `devel` builds.
 <!-- END GENERATED PARTIAL docs/fragments/_build.md -->
 
 The other targets:
 `make linux`, `make linux-armv7` and `make darwin` (both Mac architectures)
 build one more release binary each;
-`make release` adds `SHA256SUMS` and the release manifest;
+`make release` adds the build record, `SHA256SUMS` and the release manifest;
 `make vet`, `make test` and `make clean` do what they say;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
-A build from `main` follows the channel `main`, which has no releases,
-unless `MASSIMO_UPDATE_CHANNEL=alpha` is set,
+A build from `main`, or any other branch, is of the flavour `devel`
+and follows the `devel` builds,
+unless `MASSIMO_UPDATE_CHANNEL` or the setting `update.channel` names another channel,
 see [packaging/README.md](packaging/README.md#updating).
 
 ## Server
@@ -641,7 +686,8 @@ which stops and starts the service through the service manager.
 such as Docker's `--restart`;
 `off` never.
 `sudo massimo restart` restarts the installed server from a prompt as well.
-`-allow-reboot` (or `MASSIMO_REBOOT=on`) lets the owner reboot the computer
+`-allow-reboot` (or `MASSIMO_REBOOT=on`; `-allow-reboot=off` to say no)
+lets the owner reboot the computer
 `serve` runs on from the API and the web UI (`POST /api/v1/reboot`,
 for the capability `reboot`, which only `owner` has),
 60 seconds after the request or after the delay it names, 0 to 3600:
@@ -685,6 +731,15 @@ Writes that a client of the proxy (below) sends,
 such as the original software's, are followed up the same way.
 The log lists every wakeup and every radio command the Cube accepted,
 with its duty cycle and free slots.
+`serve` asks each Cube for its device list every minute (`-poll`),
+and between these polls the connection's TCP keepalive probes the Cube.
+A Cube that stops answering, as one whose network cable is out, is lost
+about 30 seconds after the last traffic,
+or once it leaves two polls in a row unanswered,
+within two polls and ten seconds:
+`serve` logs `cube connection lost`,
+its proxy stops answering discovery for it ([docs/proxy.md](docs/proxy.md)),
+and it tries again, at most a minute apart, until the Cube answers.
 
 The Cube serves only one LAN client at a time,
 so `serve` is itself a Cube for everyone else:
@@ -713,6 +768,9 @@ It is on by default where `-listen` is reachable from the LAN,
 and off on a loopback address;
 `-announce` (or `MASSIMO_ANNOUNCE`) switches it,
 taking the same values as `MASSIMO_REBOOT`, and `-addr` announces nothing.
+A switch alone is on, and its value goes after `=`, as `-announce=off`:
+`serve` refuses `-announce off`, which would set it on and leave `off` and the
+flags after it unread.
 It shares port 5353 with the system's own responder (avahi, mDNSResponder,
 Windows' mDNS);
 where multicast is missing, as in a container without it,
@@ -801,10 +859,11 @@ one `name=text` per line with `\r\n` escapes and the placeholders `{i}`, `{s}`,
 `{shex}`, `{r}`, `{serial}`, `{rf}`, `{fw}`.
 
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address, firmware,
-and whether the Cube takes its address by DHCP or has a static one) via the UDP
-broadcast the original software uses,
-marking `proxy` a massimo serve that answers as a Cube (its MAC is not eQ-3's `00:1a:22`,
-or its address is an announced server's),
+the gateway it uses, and whether the Cube takes its address by DHCP or has a
+static one) via the UDP broadcast the original software uses,
+marking `proxy` a massimo serve that answers as a Cube:
+it answers neither `N` nor `c`, and its MAC is not eQ-3's `00:1a:22`
+or its address is an announced server's,
 and then the massimo servers that announce themselves by mDNS (name, address,
 TLS, version, node; `-json` prints both lists);
 it needs UDP port 23272 and a real LAN interface (not WSL 2).
@@ -840,15 +899,20 @@ a Cube that moved networks may need a power cycle.
 
 The Cubes are configured in the environment or in `.env` in the current
 directory (`KEY=VALUE` lines,
-`-env <file>` or `MASSIMO_ENV_FILE` for another file;
+`-env <file>` or `MASSIMO_ENV_FILE` for another file,
+`-no-env` for none;
 the environment wins over the file).
+On Linux and macOS the service user, the owner of `/etc/massimo/env`,
+reads that file alone and keeps its data in `/var/lib/massimo`,
+from any directory, as `sudo sshd` reads sshd's own configuration;
+`-env`, `-no-env` or `MASSIMO_ENV_FILE` turns both off.
 Keep the file out of git; `massimo config` shows what is in effect,
 secrets redacted.
 
 `serve` keeps the Cubes in its own store instead,
 `massimo.db` in the data directory (`-data <dir>` before the command name,
 or `MASSIMO_DATA`; else the current directory,
-so a terminal run puts it next to `.env`;
+so a terminal run puts it next to `.env`, or the service user's;
 the installed services pass the state directory,
 see [packaging/README.md](packaging/README.md#the-store)).
 At every start `serve` adds to the store each Cube of the file it does not know yet,
@@ -885,8 +949,8 @@ The copy holds the database alone:
 `opaque.key` and `node.key` beside it are kept with it,
 since without `opaque.key` no password of `auth_version` 2 signs in (packaging/README.md,
 "The store").
-For the service run them as its user,
-for example `sudo -u massimo massimo -data /var/lib/massimo store info`.
+Run as the service user they act on the service's store from any directory,
+for example `sudo -u _massimo massimo store info`.
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):
@@ -904,8 +968,8 @@ with the browser's key stretching, so the web UI signs in with it and the
 server keeps no hash (docs/store.md section 6).
 A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
-for the service run it as its user,
-for example `sudo -u massimo massimo -data /var/lib/massimo user add anna -role operator`.
+run as the service user it acts on the service's,
+for example `sudo -u _massimo massimo user add anna -role operator`.
 The audit records what it did with the remote `cli`,
 and the log a change line of each, by the command line (docs/ui.md, "Log").
 With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
@@ -927,7 +991,7 @@ the plain form applies to any Cube unless the table says otherwise.
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
 | `MASSIMO_CUBE_<SERIAL>_NAME` | A user-friendly name the API and the UI show next to the serial. The plain form only with a single Cube. |
 | `MASSIMO_CUBE_SN` | The Cube to use when no `-sn` is given. |
-| `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory. |
+| `MASSIMO_DATA` | The data directory, where `serve` keeps `massimo.db` (also `-data <dir>` before the command name); default the current directory, `/var/lib/massimo` for the service user. |
 
 `-sn <serial>` selects a Cube:
 every command then reads that Cube's variables and, without an address,
@@ -999,8 +1063,9 @@ in its Cube list pick the entry with the serve host's address (started with
 ## Versions
 
 Development happens on `main`.
-`make release-alpha` promotes `main` to the branch `alpha` and tags it as the
-next pre-release, which the release workflow builds, signs and publishes.
+`make release-alpha` tags `main` as the next pre-release,
+which CI tests, builds, signs and publishes,
+and then fast-forwards the branch `release/alpha` to it.
 Everything below `v1.0.0`, and every version with a suffix (`-alpha.N`,
 `-beta.N`, …), is a pre-release;
 only a plain `vX.Y.Z` from `v1.0.0` on is stable.
@@ -1008,8 +1073,8 @@ Below `v1.0.0` a minor release may break things.
 A new feature or breaking change starts the next minor
 (`make release-alpha BUMP=minor` gives `v0.2.0-alpha.1`),
 a fix or another round counts the suffix up (`v0.2.0-alpha.2`);
-the suffix names the channel,
-so promoting to a later `beta` branch tags `-beta.N`.
+the suffix names the flavour,
+so a later beta release tags `-beta.N`, and its branch is `release/beta`.
 
 A release is made on `main`, checked out, clean and equal to `origin/main`.
 `make release-alpha` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
@@ -1017,17 +1082,38 @@ section with `GUIDELINES/shared/tools/changelog.sh`,
 commits it on `main` as `chore(release): vX.Y.Z-alpha.N`, and tags that commit,
 signed, with the section as the tag's message,
 so the tag carries the release notes, and the GitHub release shows them.
-It then pushes `main`, `alpha` and the tag together or not at all.
-It refuses when `alpha` has commits `main` lacks,
-when `main`'s head is released already,
+It then pushes `main` and the tag together or not at all;
+CI's run of the tag waits for the whole suite before it releases
+(`GUIDELINES/project/CI.md`, "Releases"),
+and moves `release/alpha` once the release is out,
+so that the branch names what the alpha boxes are offered.
+It refuses when `main`'s head is released already,
 when `changelog.sh check` finds something,
 and when `[Unreleased]` holds no bullet.
 `make release-alpha DRY=1` shows what it would cut, tag and push,
 and does none of it;
 `ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
 
-Boxes following the update channel `alpha` get each release from `massimo
-update` or the web UI (see [packaging/README.md](packaging/README.md#updating)).
+Every release has a flavour, from the least stable to the most:
+`devel`, every commit of `main` whose tests passed;
+`nightly`, once a day the newest of those;
+`alpha`, the `-alpha.N` tags;
+later `beta`, the `-beta.N` tags, and `stable`, a plain `vX.Y.Z`.
+`devel` and `nightly` are one GitHub release each,
+`release/devel` and `release/nightly`, replaced in place,
+signed with a key of their own that boxes accept for those two alone.
+A box follows an update channel, one of those names,
+and takes its channel's releases and every more stable flavour's:
+a box on `alpha` takes a later beta or stable release too.
+Its channel is `MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
+else its build's flavour;
+every channel's newest build is at `release/<channel>`,
+a branch for the numbered flavours, a tag for the rolling ones.
+The documentation of each channel's newest build is on the site,
+<https://massimo.metaworx.ch/docs/>, with `main`'s beside it
+(see [packaging/README.md](packaging/README.md#the-site)).
+Boxes get each release from `massimo update` or the web UI
+(see [packaging/README.md](packaging/README.md#updating)).
 `make` builds carry the version from `git describe`, `go run` builds
 report the commit only with `go run -buildvcs=true`.
 

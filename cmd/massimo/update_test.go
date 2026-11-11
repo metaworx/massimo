@@ -6,6 +6,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -142,5 +145,39 @@ func TestHealthClientOwnAddresses(t *testing.T) {
 		if got := tr != nil && tr.TLSClientConfig != nil && tr.TLSClientConfig.InsecureSkipVerify; got != skip {
 			t.Errorf("%s: unverified %v, want %v", u, got, skip)
 		}
+	}
+}
+
+// The command line follows serve's channel: MASSIMO_UPDATE_CHANNEL, else
+// the store's update.channel, else the build's flavour; the helper, which
+// reads nothing the server's user can write, skips the store.
+func TestUpdateChannelSources(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv(env.DataVar, data)
+	t.Setenv("MASSIMO_UPDATE_CHANNEL", "")
+	old := flavour
+	flavour = "beta"
+	t.Cleanup(func() { flavour = old })
+
+	if c, from := updateChannel(true); c != "beta" || from != fromFlavour {
+		t.Fatalf("no store: %s from %s", c, from)
+	}
+	st, err := store.Open(data, store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSetting(context.Background(), store.UpdateChannelKey, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	if c, from := updateChannel(true); c != "alpha" || from != fromSetting {
+		t.Fatalf("the setting: %s from %s", c, from)
+	}
+	if c, from := updateChannel(false); c != "beta" || from != fromFlavour {
+		t.Fatalf("the helper: %s from %s", c, from)
+	}
+	t.Setenv("MASSIMO_UPDATE_CHANNEL", "devel")
+	if c, from := updateChannel(true); c != "devel" || from != fromVariable {
+		t.Fatalf("the variable: %s from %s", c, from)
 	}
 }
