@@ -82,6 +82,10 @@ fresh)
 	check "started as $(procuser)" [ "$(state)" = active -a "$(procuser)" = _massimo ]
 	check "the API asks for a sign-in ($(code "$api/cubes"))" [ "$(code "$api/cubes")" = 401 ]
 	check "/var/lib/massimo after the start: $(mode /var/lib/massimo)" [ "$(mode /var/lib/massimo)" = "750 _massimo:_massimo" ]
+	# The log: the admin group's to read, in JSON.
+	check "/var/log/massimo after the start: $(mode /var/log/massimo)" [ "$(mode /var/log/massimo)" = "2750 _massimo:adm" ]
+	check "serve.log is $(mode /var/log/massimo/serve.log)" [ "$(mode /var/log/massimo/serve.log)" = "640 _massimo:adm" ]
+	check "serve.log is JSON" sh -c 'head -n 1 /var/log/massimo/serve.log | grep -q "^{"'
 	p1=$(pid)
 	inst --reinstall "$new"
 	up

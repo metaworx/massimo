@@ -13,11 +13,16 @@ on a Mac LaunchDaemons (see "macOS").
   Runs as the user `_massimo`, reads its settings from `/etc/massimo/env`,
   listens on port 8099 on every interface (API and web UI;
   `install -listen` changes it),
-  logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure
-  and after a restart from the API,
+  logs to `/var/log/massimo/serve.log` (JSON, 0640) and the journal (plain),
+  and restarts on failure and after a restart from the API,
   which exits with 75 (`RestartForceExitStatus`, not counted as a failure).
   `systemctl reload massimo` sends SIGHUP (`ExecReload`):
   the settings file read again and the store checkpointed.
+  `/var/log/massimo` is `_massimo:adm` 2750, made by the postinst and by
+  `massimo install` rather than by `LogsDirectory=`,
+  which would give it back to the service's group at every start:
+  the files serve makes there take the group `adm`, whose members read them
+  (the service's own group where there is no `adm`).
 - `systemd/massimo-update.path` and `systemd/massimo-update.service`:
   the update helper,
   which installs a new release when the web UI or the API asks for one (see Updating).
@@ -632,6 +637,7 @@ sudo install -m 0755 massimo-linux-armv6 /usr/local/bin/massimo
 massimo version
 sudo useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell /usr/sbin/nologin _massimo
 sudo install -d -m 0750 -o _massimo -g _massimo /etc/massimo
+sudo install -d -o _massimo -g adm /var/log/massimo && sudo chmod 2750 /var/log/massimo
 sudo install -m 0644 massimo.service /etc/systemd/system/massimo.service
 sudo install -m 0644 massimo /etc/logrotate.d/massimo
 ```

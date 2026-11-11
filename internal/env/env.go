@@ -52,6 +52,12 @@ const (
 	// LogLevel is the level every command logs at: debug, info, warn or
 	// error; default info.
 	LogLevel = "MASSIMO_LOG_LEVEL"
+	// LogFormat is serve's log format, json or plain, on stderr and in
+	// its log file alike; LogFileFormat and LogProcessFormat win over it
+	// for the file and for stderr.
+	LogFormat        = "MASSIMO_LOG_FORMAT"
+	LogFileFormat    = "MASSIMO_LOG_FILE_FORMAT"
+	LogProcessFormat = "MASSIMO_LOG_PROCESS_FORMAT"
 )
 
 // The TLS of massimo serve (internal/certs) and its HSTS days, the
@@ -167,6 +173,7 @@ func Serials(name string) (serials []string, values map[string]string) {
 func Known(k string) bool {
 	switch k {
 	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
+		LogFormat, LogFileFormat, LogProcessFormat,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", "MASSIMO_REBOOT",
 		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies, Announce,
 		// massimo update: the release channel, the API (update.APIVar)

@@ -5,10 +5,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -157,5 +159,162 @@ func TestReloadListsTheLogLevel(t *testing.T) {
 	}
 	if got := fixed.pending(); len(got) != 0 {
 		t.Errorf("with -log-level, pending %v", got)
+	}
+}
+
+func TestParseLogFormat(t *testing.T) {
+	for in, want := range map[string]logFormat{"": "", "json": formatJSON, " JSON ": formatJSON, "plain": formatPlain, "Plain": formatPlain} {
+		if got, err := parseLogFormat(in, false); err != nil || got != want {
+			t.Errorf("parseLogFormat(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if got, err := parseLogFormat("none", true); err != nil || got != formatNone {
+		t.Errorf("none where it may be: %q, %v", got, err)
+	}
+	for _, in := range []string{"none", "text", "logfmt"} {
+		if _, err := parseLogFormat(in, false); err == nil || !strings.Contains(err.Error(), logFormatNames) {
+			t.Errorf("parseLogFormat(%q): %v, want an error naming the formats", in, err)
+		}
+	}
+	if _, err := parseLogFormat("text", true); err == nil || !strings.Contains(err.Error(), "none") {
+		t.Errorf("stderr's unknown format: %v, want an error naming none too", err)
+	}
+}
+
+// The more specific setting wins over -log-format, and that over the
+// default: JSON in the file, plain on stderr.
+func TestLogFormatPrecedence(t *testing.T) {
+	for _, c := range []struct {
+		given         logFormatFlags
+		file, process logFormat
+	}{
+		{logFormatFlags{}, formatJSON, formatPlain},
+		{logFormatFlags{general: "plain"}, formatPlain, formatPlain},
+		{logFormatFlags{general: "json"}, formatJSON, formatJSON},
+		{logFormatFlags{general: "plain", file: "json"}, formatJSON, formatPlain},
+		{logFormatFlags{general: "json", process: "plain"}, formatJSON, formatPlain},
+		{logFormatFlags{file: "plain", process: "json"}, formatPlain, formatJSON},
+		{logFormatFlags{general: "plain", process: "none"}, formatPlain, formatNone},
+	} {
+		file, process, err := c.given.formats()
+		if err != nil || file != c.file || process != c.process {
+			t.Errorf("%+v: file %q, stderr %q, %v; want %q, %q", c.given, file, process, err, c.file, c.process)
+		}
+	}
+	for given, names := range map[logFormatFlags]string{
+		{general: "none"}: "-log-format or " + env.LogFormat,
+		{file: "none"}:    "-log-file-format or " + env.LogFileFormat,
+		{process: "xml"}:  "-log-process-format or " + env.LogProcessFormat,
+	} {
+		if _, _, err := given.formats(); err == nil || !strings.Contains(err.Error(), names) {
+			t.Errorf("%+v: %v, want an error naming %s", given, err, names)
+		}
+	}
+}
+
+// One record goes to stderr and to the file, each in its format, at the
+// one level; none writes nothing on stderr.
+func TestServeLoggerFormats(t *testing.T) {
+	resetLogLevel(t)
+	var stderr, file bytes.Buffer
+	log, err := newServeLogger(&stderr, &file, formatJSON, formatPlain, "info", "level")
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Debug("hidden")
+	log.Info("cube connected", "serial", "KEQ0000000")
+	if got := stderr.String(); !strings.HasPrefix(got, "time=") || !strings.Contains(got, `msg="cube connected" serial=KEQ0000000`) || strings.Contains(got, "hidden") {
+		t.Errorf("stderr:\n%s", got)
+	}
+	var line map[string]any
+	if err := json.Unmarshal(file.Bytes(), &line); err != nil {
+		t.Fatalf("file: %v\n%s", err, file.String())
+	}
+	if line["msg"] != "cube connected" || line["serial"] != "KEQ0000000" || line["level"] != "INFO" {
+		t.Errorf("file: %v", line)
+	}
+
+	stderr.Reset()
+	log, err = newServeLogger(&stderr, nil, formatJSON, formatNone, "info", "level")
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Error("lost")
+	if stderr.Len() != 0 {
+		t.Errorf("none on stderr wrote:\n%s", stderr.String())
+	}
+	if _, err := newServeLogger(&stderr, nil, formatJSON, formatPlain, "loud", "-log-level"); err == nil || !strings.Contains(err.Error(), "-log-level") {
+		t.Errorf("unknown level: %v", err)
+	}
+}
+
+// The log file is made 0640, and one others may read more widely is
+// narrowed to it; a narrower one stays as it is.
+func TestOpenLogFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps the file's ACLs")
+	}
+	dir := t.TempDir()
+	modeOf := func(p string) os.FileMode {
+		t.Helper()
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fi.Mode().Perm()
+	}
+	for _, c := range []struct {
+		name       string
+		before     os.FileMode // 0: no file yet
+		want, mask os.FileMode
+	}{
+		{"new.log", 0, 0o640, 0o640},
+		{"wide.log", 0o644, 0o640, 0o777},
+		{"open.log", 0o666, 0o640, 0o777},
+		{"narrow.log", 0o600, 0o600, 0o777},
+	} {
+		p := filepath.Join(dir, c.name)
+		if c.before != 0 {
+			if err := os.WriteFile(p, []byte("time=x\n"), c.before); err != nil {
+				t.Fatal(err)
+			}
+			os.Chmod(p, c.before) // past the umask
+		}
+		f, narrowErr, err := openLogFile(p)
+		if err != nil || narrowErr != nil {
+			t.Fatalf("%s: %v, %v", c.name, err, narrowErr)
+		}
+		f.Close()
+		// A new file's mode is 0640 less the umask.
+		if got := modeOf(p); got&^c.mask != 0 || (c.before != 0 && got != c.want) || got&0o600 != 0o600 {
+			t.Errorf("%s: mode %#o, want %#o", c.name, got, c.want)
+		}
+	}
+}
+
+// serve writes plain lines on stderr and JSON ones into its -log file,
+// made 0640.
+func TestServeLogFileIsJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serve.log")
+	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off")
+	s.waitFor(t, "api listening")
+	s.stop(t)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		var line map[string]any
+		if err := json.Unmarshal([]byte(l), &line); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, l)
+		}
+		found = found || line["msg"] == "api listening"
+	}
+	if !found {
+		t.Errorf("no api listening in the file:\n%s", b)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm()&^0o640 != 0 {
+		t.Errorf("mode %v, %v; want 0640 at most", fi.Mode(), err)
 	}
 }

@@ -6,6 +6,7 @@ package install
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -108,6 +109,47 @@ func TestInstallFresh(t *testing.T) {
 	}
 	if !rec.has("chown _massimo:_massimo " + filepath.Join(root, StateDir)) {
 		t.Errorf("no state directory: %q", rec.cmds)
+	}
+	// No group adm here: the log directory is the service's group's.
+	if !rec.has("chown _massimo:_massimo "+filepath.Join(root, LogDir)) || !rec.has("chmod 2750 "+filepath.Join(root, LogDir)) {
+		t.Errorf("no log directory: %q", rec.cmds)
+	}
+	if strings.Contains(unit, "\nLogsDirectory=") || !strings.Contains(unit, "\nReadWritePaths=-/var/log/massimo\n") {
+		t.Error("massimo.service gives the log directory back to the service's group, or cannot write it")
+	}
+}
+
+// The log directory is the admin group's where there is one, set-group-id,
+// and an older release's logs there are narrowed to 0640 in that group;
+// a link among them is left alone.
+func TestInstallLogDirAdmin(t *testing.T) {
+	root, bin := setup(t)
+	dir := filepath.Join(root, LogDir)
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "serve.log"), nil, 0o644)
+	os.WriteFile(filepath.Join(dir, "serve.log.2.gz"), nil, 0o644)
+	os.Symlink("/etc/passwd", filepath.Join(dir, "serve.log.9"))
+	rec := &recorder{}
+	adm := func(name string, args ...string) ([]byte, error) {
+		if name == "getent" && len(args) == 2 && args[0] == "group" && args[1] == "adm" {
+			return []byte("adm:x:4:\n"), nil
+		}
+		return nil, nil
+	}
+	if err := Install(Options{Root: root, Binary: bin, Out: io.Discard, Run: rec.run, Output: adm}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{
+		"chown _massimo:adm " + dir, "chmod 2750 " + dir,
+		"chown -h _massimo:adm " + filepath.Join(dir, "serve.log"), "chmod 0640 " + filepath.Join(dir, "serve.log"),
+		"chown -h _massimo:adm " + filepath.Join(dir, "serve.log.2.gz"), "chmod 0640 " + filepath.Join(dir, "serve.log.2.gz"),
+	} {
+		if !rec.has(c) {
+			t.Errorf("no %q in %q", c, rec.cmds)
+		}
+	}
+	if rec.has("chmod 0640 " + filepath.Join(dir, "serve.log.9")) {
+		t.Errorf("the link was followed: %q", rec.cmds)
 	}
 }
 

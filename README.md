@@ -262,7 +262,8 @@ With several Cubes each needs its own `MASSIMO_CUBE_<SERIAL>_PROXY` address on t
 see [Install by hand](packaging/README.md#install-by-hand).
 Afterwards the settings are in `/etc/massimo/env` (readable by `massimo` only),
 the state in `/var/lib/massimo`,
-the log in `/var/log/massimo/serve.log` (rotated weekly) and in the journal:
+the log in `/var/log/massimo/serve.log` (JSON, rotated weekly,
+readable by the group `adm`) and in the journal:
 
 ```bash
 sudo systemctl start massimo
@@ -665,7 +666,13 @@ so the lockout and the first-owner form see the real client,
 and the page works under a path prefix such as `/massimo/`
 ([docs/reverse-proxy.md](docs/reverse-proxy.md), with nginx and Caddy samples).
 `-log <file>` (or `MASSIMO_LOG`) appends the log,
-including every device state change, to a file as well.
+including every device state change, to a file as well,
+one JSON object a line, made 0640;
+stderr, and so the journal, stays plain `key=value`.
+`-log-format json|plain` (or `MASSIMO_LOG_FORMAT`) sets both,
+and `-log-file-format` and `-log-process-format` (`MASSIMO_LOG_FILE_FORMAT`,
+`MASSIMO_LOG_PROCESS_FORMAT`) win over it for the file and for stderr;
+`-log-process-format none` writes nothing on stderr.
 `-log-level debug` (or `MASSIMO_LOG_LEVEL`; `info`, the default,
 `warn` and `error`) adds the Debug lines,
 such as every failed attempt to reach a lost Cube
@@ -930,7 +937,7 @@ and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
 The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
-`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`,
+`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`, `MASSIMO_LOG_FORMAT` and its two,
 the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;

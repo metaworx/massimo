@@ -240,6 +240,9 @@ func Install(o Options) error {
 	if err := in.stateDir(); err != nil {
 		return err
 	}
+	if err := in.logDir(); err != nil {
+		return err
+	}
 	startable, err := in.settings()
 	if err != nil {
 		return err
@@ -591,6 +594,40 @@ func (in *installer) stateDir() error {
 		return nil
 	}
 	return in.dir(StateDir, in.svcUser+":"+in.svcUser, "0750")
+}
+
+// logGroup is the group that reads the log: the admin group, else the
+// service user's own.
+const logGroup = "adm"
+
+// logDir makes LogDir the service user's, of the admin group and
+// set-group-id (2750), so that the files serve makes there (0640) are the
+// admin group's to read and nobody else's; the service user's own group
+// where there is no adm. The unit does not make it: LogsDirectory= would
+// give it back to the service's group at every start. An older release's
+// serve.log files are narrowed to 0640 in that group, as the package's
+// postinst does.
+func (in *installer) logDir() error {
+	group := in.svcUser
+	if in.group(logGroup) {
+		group = logGroup
+	}
+	if err := in.dir(LogDir, in.svcUser+":"+group, "2750"); err != nil {
+		return err
+	}
+	logs, _ := filepath.Glob(filepath.Join(in.path(LogDir), "serve.log*"))
+	for _, p := range logs {
+		if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
+			continue
+		}
+		if err := in.run("chown", "-h", in.svcUser+":"+group, p); err != nil {
+			return err
+		}
+		if err := in.run("chmod", "0640", p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // settings makes EnvDir and EnvPath; it reports whether the file holds

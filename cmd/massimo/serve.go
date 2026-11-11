@@ -48,8 +48,12 @@ func runServe(args []string) error {
 	})
 	discoverListen := fs.String("discover-listen", "", "the local address of the discovery socket, for the searches and the proxy's answers, instead of :23272, the only port the Cubes answer to and the original software asks; for tests, with -discover-target (a fake Cube's -discovery answers to any port)")
 	token := fs.String("token", os.Getenv("MASSIMO_API_TOKEN"), "API token required as Bearer token (default MASSIMO_API_TOKEN; empty = no authentication)")
-	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr (default MASSIMO_LOG)")
+	logPath := fs.String("log", os.Getenv("MASSIMO_LOG"), "append the log (connections, commands, device state changes) to this file as well as stderr, made 0640 (default MASSIMO_LOG)")
 	logLevelFlag := fs.String("log-level", os.Getenv(env.LogLevel), "log at this level and above: "+logLevelNames+" (default "+env.LogLevel+", else info)")
+	var logFormats logFormatFlags
+	fs.StringVar(&logFormats.general, "log-format", os.Getenv(env.LogFormat), "the log's format on stderr and in the -log file alike: "+logFormatNames+"; -log-file-format and -log-process-format win over it (default "+env.LogFormat+", else plain on stderr and json in the file)")
+	fs.StringVar(&logFormats.file, "log-file-format", os.Getenv(env.LogFileFormat), "the -log file's format, over -log-format: "+logFormatNames+" (default "+env.LogFileFormat+")")
+	fs.StringVar(&logFormats.process, "log-process-format", os.Getenv(env.LogProcessFormat), "stderr's format, over -log-format: json, plain, or none for nothing on stderr (default "+env.LogProcessFormat+")")
 	var proxies []string
 	fs.Func("proxy", "answer as a Cube on this address, for this run (repeatable; default the store's proxy address per Cube, else :62910 with a single Cube; \"off\" disables; with several Cubes give <serial>=<addr>)", func(v string) error {
 		proxies = append(proxies, v)
@@ -79,7 +83,7 @@ func runServe(args []string) error {
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-log-level debug] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nOn an address the LAN reaches, the server announces itself by mDNS as\n_massimo._tcp (-announce), so that massimo discover and the apps find it.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo [-data <dir>] serve [-listen 127.0.0.1:8099] [-addr <ip>] [-proxy <addr>[:<port>]] [-log <file>] [-log-level debug] [-log-format json|plain] [-tls files -tls-cert <pem> -tls-key <pem> | -tls self-signed | -tls acme -tls-names <name> [-tls-http :80 | -acme-dns-hook <script>]]\n\nKeep every configured Cube connected, serve the JSON API (see internal/server\nfor the routes) and answer as a Cube on the LAN (port 62910 and UDP\ndiscovery), so that other programs and the original software connect to the\nserver instead of the Cube, which serves only one client at a time.\n\nOn an address the LAN reaches, the server announces itself by mDNS as\n_massimo._tcp (-announce), so that massimo discover and the apps find it.\n\nThe Cubes and the server's settings are kept in massimo.db in the data\ndirectory (-data, MASSIMO_DATA, else the current directory). At every start\na Cube of the settings file (MASSIMO_CUBE_<SN>_ADDRESS, _NAME, _PROXY) that\nthe store does not know is added to it; afterwards the store wins, and a\nline of the file that differs is logged.\n\nWith -tls files the API and the web UI are served over TLS from the\ncertificate and key files, re-read when they change, so a renewal needs no\nrestart; with -tls self-signed from a certificate the server makes at its\nfirst start for the box's names (and -tls-names), which browsers warn about\nonce per device: compare the fingerprint the log shows; with -tls acme from\nLet's Encrypt for a DNS name that resolves to this box, validated on port\n443 (TLS-ALPN-01), or on port 80 too with -tls-http :80 (HTTP-01), or with\n-acme-dns-hook through a script that sets the DNS record (DNS-01: no port,\nwildcards), kept and renewed in the data directory's tls/acme/. Browsers are then told to use\nhttps:// for a year (-hsts). Without -tls the listener is plain HTTP, for\nlocalhost or behind a reverse proxy.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -91,18 +95,26 @@ func runServe(args []string) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("serve: unexpected argument %q%s", fs.Arg(0), strayHint(fs, args, fs.Arg(0)))
 	}
-	var logOut io.Writer = os.Stderr
+	fileFormat, processFormat, err := logFormats.formats()
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	var logFile io.Writer
+	var narrowErr error
 	if *logPath != "" {
-		f, err := os.OpenFile(*logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		f, nerr, err := openLogFile(*logPath)
 		if err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
 		defer f.Close()
-		logOut = io.MultiWriter(os.Stderr, f)
+		logFile, narrowErr = f, nerr
 	}
-	logger, err := newLoggerAt(logOut, *logLevelFlag, "-log-level or "+env.LogLevel)
+	logger, err := newServeLogger(os.Stderr, logFile, fileFormat, processFormat, *logLevelFlag, "-log-level or "+env.LogLevel)
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
+	}
+	if narrowErr != nil {
+		logger.Warn("log file not narrowed: others may read it", "path", *logPath, "mode", fmt.Sprintf("%#o", logFileMode), "error", narrowErr)
 	}
 	hsts, err := hstsDays(*hstsFlag)
 	if err != nil {
