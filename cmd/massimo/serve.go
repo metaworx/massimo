@@ -21,6 +21,7 @@ import (
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/logfile"
 	"go.metaworx.ch/massimo/internal/serve"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/update"
@@ -53,6 +54,10 @@ func runServe(args []string) error {
 	var logFormats logFormatFlags
 	fs.StringVar(&logFormats.general, "log-format", os.Getenv(env.LogFormat), "the log's format on stderr and in the -log file alike: "+logFormatNames+"; -log-file-format and -log-process-format win over it (default "+env.LogFormat+", else plain on stderr and json in the file)")
 	fs.StringVar(&logFormats.file, "log-file-format", os.Getenv(env.LogFileFormat), "the -log file's format, over -log-format: "+logFormatNames+" (default "+env.LogFileFormat+")")
+	var logRotate logRotation
+	fs.StringVar(&logRotate.size, "log-rotate-size", os.Getenv(env.LogRotateSize), "rotate the -log file once it would grow past this size, such as 10M; 0 rotates it only on a format change, SIGHUP and a reload from the API (default "+env.LogRotateSize+", else 10M)")
+	fs.StringVar(&logRotate.keep, "log-keep", os.Getenv(env.LogKeep), "keep at least this many rotated -log files, serve.log.1 and the older ones gzipped (default "+env.LogKeep+", else 8)")
+	fs.StringVar(&logRotate.keepMin, "log-keep-min", os.Getenv(env.LogKeepMin), "delete the oldest rotated file only while the others still cover this much, such as 5M, so that many small files stay (default "+env.LogKeepMin+", else 5M)")
 	fs.StringVar(&logFormats.process, "log-process-format", os.Getenv(env.LogProcessFormat), "stderr's format, over -log-format: json, plain, or none for nothing on stderr (default "+env.LogProcessFormat+")")
 	var proxies []string
 	fs.Func("proxy", "answer as a Cube on this address, for this run (repeatable; default the store's proxy address per Cube, else :62910 with a single Cube; \"off\" disables; with several Cubes give <serial>=<addr>)", func(v string) error {
@@ -99,22 +104,39 @@ func runServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
-	var logFile io.Writer
+	rotateSize, keep, keepMin, err := logRotate.options()
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	// The log file rotates itself (internal/logfile): at its size, at a
+	// change of its format, on SIGHUP and a reload from the API.
+	var logFile *logfile.File
+	var fileOut io.Writer
 	var narrowErr error
 	if *logPath != "" {
-		f, nerr, err := openLogFile(*logPath)
+		logFile, narrowErr, err = logfile.Open(logfile.Options{Path: *logPath, Format: logfile.Format(fileFormat), Size: rotateSize, Keep: keep, KeepMin: keepMin})
 		if err != nil {
 			return fmt.Errorf("serve: %w", err)
 		}
-		defer f.Close()
-		logFile, narrowErr = f, nerr
+		defer logFile.Close()
+		fileOut = logFile
 	}
-	logger, err := newServeLogger(os.Stderr, logFile, fileFormat, processFormat, *logLevelFlag, "-log-level or "+env.LogLevel)
+	logger, err := newServeLogger(os.Stderr, fileOut, fileFormat, processFormat, *logLevelFlag, "-log-level or "+env.LogLevel)
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
 	if narrowErr != nil {
-		logger.Warn("log file not narrowed: others may read it", "path", *logPath, "mode", fmt.Sprintf("%#o", logFileMode), "error", narrowErr)
+		logger.Warn("log file not narrowed: others may read it", "path", *logPath, "mode", fmt.Sprintf("%#o", logfile.Mode), "error", narrowErr)
+	}
+	// A rotation is the new file's first line, which the file writes
+	// itself, stderr's, and the log's log_rotated once the server runs.
+	rotations := &rotationSink{}
+	if logFile != nil {
+		stderrLog := newStderrLogger(os.Stderr, processFormat)
+		logFile.Notify(func(r logfile.Rotation) {
+			logRotated(stderrLog, r)
+			rotations.add(r)
+		})
 	}
 	hsts, err := hstsDays(*hstsFlag)
 	if err != nil {
@@ -215,6 +237,7 @@ func runServe(args []string) error {
 		return err
 	}
 	srv := inst.Server()
+	rotations.set(srv)
 	// The settings file while the server runs (reload.go): looked at every
 	// few seconds, and read again on SIGHUP where that is a reload, which
 	// also checkpoints the store.
@@ -226,6 +249,9 @@ func runServe(args []string) error {
 		changed, pending, err := reloader.reload(rctx, "the API")
 		if err != nil {
 			return server.ReloadResult{}, err
+		}
+		if logFile != nil {
+			logFile.Rotate("reload")
 		}
 		checkpointStore(rctx, inst.Store(), logger)
 		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), ReadAt: time.Now()}, nil
@@ -244,6 +270,9 @@ func runServe(args []string) error {
 					return
 				case <-hups:
 					reloader.reload(ctx, "SIGHUP")
+					if logFile != nil {
+						logFile.Rotate("sighup")
+					}
 					checkpointStore(ctx, inst.Store(), logger)
 				}
 			}

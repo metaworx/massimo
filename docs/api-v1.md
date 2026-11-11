@@ -1964,6 +1964,10 @@ variables `changed` and of those waiting `at_next_start`, never their values),
 `state`, `from`, `to`; a failure at `warn` with its `error`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
 `backup_deleted` (`id`), `backups_pruned` and `log_pruned` (`removed`),
+`log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
+or `reload`; `previous`, the name the old file has now; `kept` and `removed`,
+the rotated files kept and those deleted; at `warn` with its `error` where a
+step failed),
 `restore_started` (`id`, `steps`, `radio_commands`).
 A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
 and `cube_gone` (with `cube`, a Cube found before that no longer answers).

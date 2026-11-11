@@ -5,14 +5,18 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/logfile"
+	"go.metaworx.ch/massimo/internal/server"
 )
 
 // logLevel is the level of every logger newLogger makes, one for the
@@ -157,28 +161,99 @@ func newServeLogger(stderr, file io.Writer, fileFormat, processFormat logFormat,
 	return slog.New(slog.NewMultiHandler(hs...)), nil
 }
 
-// logFileMode is the log file's mode: its owner writes it, the admin
-// group (the directory's, set-group-id, massimo install) reads it.
-const logFileMode = 0o640
+// parseLogSize reads a size of -log-rotate-size and -log-keep-min: bytes,
+// or with k, M or G (powers of 1024, with or without a trailing B or
+// iB); empty is def.
+func parseLogSize(s string, def int64) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return def, nil
+	}
+	l := strings.TrimSuffix(strings.TrimSuffix(strings.ToLower(s), "b"), "i")
+	mult := int64(1)
+	if i := len(l) - 1; i >= 0 {
+		if m, ok := map[byte]int64{'k': 1 << 10, 'm': 1 << 20, 'g': 1 << 30}[l[i]]; ok {
+			mult, l = m, l[:i]
+		}
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(l), 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("unknown size %q, want bytes or a number with k, M or G", s)
+	}
+	return n * mult, nil
+}
 
-// openLogFile opens the log file for appending, made logFileMode, and
-// narrows one that others may read more widely to logFileMode; the
-// narrowing's error, as for a file of another user's, is returned beside
-// the file, which is open all the same. Windows keeps its ACLs.
-func openLogFile(path string) (f *os.File, narrowErr error, err error) {
-	f, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
-	if err != nil {
-		return nil, nil, err
+// logRotation is how serve rotates its log file: the flags as given, each
+// by its flag or else its variable.
+type logRotation struct {
+	size, keep, keepMin string
+}
+
+// options returns the rotation's logfile options; an unknown value is an
+// error naming its flag and variable.
+func (g logRotation) options() (size int64, keep int, keepMin int64, err error) {
+	if size, err = parseLogSize(g.size, logfile.DefaultSize); err != nil {
+		return 0, 0, 0, fmt.Errorf("-log-rotate-size or %s: %w", env.LogRotateSize, err)
 	}
-	if runtime.GOOS == "windows" {
-		return f, nil, nil
+	keep = logfile.DefaultKeep
+	if v := strings.TrimSpace(g.keep); v != "" {
+		if keep, err = strconv.Atoi(v); err != nil || keep < 0 {
+			return 0, 0, 0, fmt.Errorf("-log-keep or %s: %q is no number of files", env.LogKeep, g.keep)
+		}
 	}
-	fi, err := f.Stat()
-	if err != nil {
-		return f, err, nil
+	if keepMin, err = parseLogSize(g.keepMin, logfile.DefaultKeepMin); err != nil {
+		return 0, 0, 0, fmt.Errorf("-log-keep-min or %s: %w", env.LogKeepMin, err)
 	}
-	if perm := fi.Mode().Perm(); perm&^logFileMode != 0 {
-		narrowErr = f.Chmod(perm & logFileMode)
+	return size, keep, keepMin, nil
+}
+
+// logRotated writes a rotation of the log file on stderr, as the new
+// file's first line, which the file wrote itself, says it; at warn where
+// a step failed.
+func logRotated(stderr *slog.Logger, r logfile.Rotation) {
+	level := slog.LevelInfo
+	if r.Err != nil {
+		level = slog.LevelWarn
 	}
-	return f, narrowErr, nil
+	stderr.LogAttrs(context.Background(), level, "log rotated", r.Attrs()...)
+}
+
+// newStderrLogger is serve's logger without the file, for the lines the
+// file writes itself: stderr in its format, at the shared level.
+func newStderrLogger(stderr io.Writer, processFormat logFormat) *slog.Logger {
+	if processFormat == formatNone {
+		return slog.New(slog.DiscardHandler)
+	}
+	return slog.New(logHandler(stderr, processFormat))
+}
+
+// rotationSink hands the log file's rotations to the server's log, those
+// before the server runs kept until it does.
+type rotationSink struct {
+	mu      sync.Mutex
+	srv     *server.Server
+	pending []logfile.Rotation
+}
+
+func (k *rotationSink) add(r logfile.Rotation) {
+	k.mu.Lock()
+	srv := k.srv
+	if srv == nil {
+		k.pending = append(k.pending, r)
+	}
+	k.mu.Unlock()
+	if srv != nil {
+		srv.LogRotated(r.Reason, r.Previous, r.Kept, r.Removed, r.Err)
+	}
+}
+
+func (k *rotationSink) set(srv *server.Server) {
+	k.mu.Lock()
+	k.srv = srv
+	pending := k.pending
+	k.pending = nil
+	k.mu.Unlock()
+	for _, r := range pending {
+		srv.LogRotated(r.Reason, r.Previous, r.Kept, r.Removed, r.Err)
+	}
 }

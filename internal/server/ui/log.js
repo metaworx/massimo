@@ -21,7 +21,7 @@ const LOG_PAGE = 200;
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
-  "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "restore_started",
+  "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
   "change"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -289,6 +289,8 @@ function logSummaryText(kind, s) {
       return t("log.sum.backupsPruned", { n: s.removed });
     case "log_pruned":
       return t("log.sum.logPruned", { n: s.removed, days: s.keep_days });
+    case "log_rotated":
+      return t("log.sum.logRotated", { why: logWord("log.rotateWhy.", s.why), kept: num(s.kept) });
     case "restore_started":
       return t("log.sum.restoreStarted", { steps: num(s.steps) });
     case "address_changed":

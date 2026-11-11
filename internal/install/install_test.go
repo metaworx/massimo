@@ -89,10 +89,14 @@ func TestInstallFresh(t *testing.T) {
 	if !strings.Contains(unit, "\nUser=_massimo\nGroup=_massimo\n") {
 		t.Fatal("massimo.service does not run as _massimo")
 	}
-	for _, f := range []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service", LogrotateDir + "/massimo"} {
+	for _, f := range []string{UnitDir + "/massimo-update.path", UnitDir + "/massimo-update.service"} {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
 			t.Error(err)
 		}
+	}
+	// serve rotates its log itself: no file for logrotate.
+	if _, err := os.Stat(filepath.Join(root, LogrotateDir, "massimo")); err == nil {
+		t.Error("a logrotate file written")
 	}
 	for _, c := range []string{"useradd --system", "chown -h _massimo:_massimo " + filepath.Join(root, EnvPath), "systemctl daemon-reload", "systemctl enable massimo.service", "systemctl enable --now massimo-update.path"} {
 		if !rec.has(c) {
@@ -126,6 +130,8 @@ func TestInstallLogDirAdmin(t *testing.T) {
 	root, bin := setup(t)
 	dir := filepath.Join(root, LogDir)
 	os.MkdirAll(dir, 0o755)
+	old := filepath.Join(root, LogrotateDir, "massimo")
+	os.WriteFile(old, []byte("/var/log/massimo/serve.log {\n\tweekly\n}\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "serve.log"), nil, 0o644)
 	os.WriteFile(filepath.Join(dir, "serve.log.2.gz"), nil, 0o644)
 	os.Symlink("/etc/passwd", filepath.Join(dir, "serve.log.9"))
@@ -150,6 +156,9 @@ func TestInstallLogDirAdmin(t *testing.T) {
 	}
 	if rec.has("chmod 0640 " + filepath.Join(dir, "serve.log.9")) {
 		t.Errorf("the link was followed: %q", rec.cmds)
+	}
+	if _, err := os.Stat(old); err == nil {
+		t.Error("an older install's logrotate file is left")
 	}
 }
 

@@ -10,12 +10,14 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,6 +120,36 @@ func TestSettingsReadNamesOnly(t *testing.T) {
 	pending, _ := sum["at_next_start"].([]any)
 	if sum["why"] != "the API" || len(changed) != 1 || changed[0] != "MASSIMO_LOG_LEVEL" || len(pending) != 1 || len(sum) != 3 {
 		t.Fatalf("the summary: %v", sum)
+	}
+}
+
+// A rotation of serve's log file is a line of the server's, with why,
+// the old file's name and the files kept and deleted; a failed step at
+// warn with its error.
+func TestLogRotatedLine(t *testing.T) {
+	_, ts, s, st := startStored(t, Options{})
+	token := userToken(t, st, "anna", store.RoleOwner)
+	s.LogRotated("size", "serve.log.1", 8, []string{"serve.log.9.gz"}, nil)
+	s.LogRotated("sighup", "serve.log.1", 3, nil, errors.New("log not rotated: permission denied"))
+	var evs []event
+	for end := time.Now().Add(5 * time.Second); len(evs) < 2 && time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		evs = nil
+		getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/log?kind=log_rotated", &evs)
+	}
+	if len(evs) != 2 {
+		t.Fatalf("%d lines: %+v", len(evs), evs)
+	}
+	done, failed := evs[0], evs[1]
+	if done.Summary["why"] != "size" {
+		done, failed = failed, done
+	}
+	removed, _ := done.Summary["removed"].([]any)
+	if done.Source != "system" || done.Level != "info" || done.Summary["why"] != "size" || done.Summary["previous"] != "serve.log.1" ||
+		done.Summary["kept"] != float64(8) || len(removed) != 1 || removed[0] != "serve.log.9.gz" {
+		t.Errorf("the rotation: %+v", done)
+	}
+	if failed.Level != "warn" || !strings.Contains(failed.Error, "permission denied") || failed.Summary["why"] != "sighup" {
+		t.Errorf("the failed rotation: %+v", failed)
 	}
 }
 

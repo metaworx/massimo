@@ -359,8 +359,8 @@ and a new `update helper started pid=…` line, plus the new server's start;
 `running`;
 the System event log for the service manager (events 7036 "entered the
 stopped/running state", 7009 and 7000 on a failed start).
-`update.log` is never rotated, like `serve.log` on Windows;
-a run adds a dozen lines, so that is years of updates.
+`update.log` is never rotated, unlike `serve.log`, which `serve` rotates
+itself; a run adds a dozen lines, so that is years of updates.
 
 **Defender and SmartScreen.**
 Go's HTTP client writes no Mark-of-the-Web,
@@ -937,7 +937,7 @@ the implementation follows them.
    not need them.
 3. The helper's log is its own file, `C:\ProgramData\Massimo\update.log`,
    not `service.log`, which observation 2 already finds too full;
-   it is not rotated, like the other Windows logs.
+   it is not rotated, unlike `serve.log`, which `serve` rotates itself.
 4. The health URL is derived by `serve` from `-listen` with the drop-ins' rule
    rather than passed as a further flag; `sc.exe qc` then does not show it.
    A `-update-health` flag on `serve` would.

@@ -26,8 +26,6 @@ on a Mac LaunchDaemons (see "macOS").
 - `systemd/massimo-update.path` and `systemd/massimo-update.service`:
   the update helper,
   which installs a new release when the web UI or the API asks for one (see Updating).
-- `logrotate/massimo`:
-  weekly rotation of that log.
 - `launchd/ch.metaworx.massimo.plist` and `launchd/ch.metaworx.massimo-update.plist`:
   the service and the update helper on macOS (see "macOS").
 - `env.template`:
@@ -627,7 +625,7 @@ From the build machine (here for a Pi 1 at `pi.local`, user `pi`):
 
 ```bash
 make linux-armv6
-scp dist/massimo-linux-armv6 packaging/systemd/massimo.service packaging/logrotate/massimo pi@pi.local:
+scp dist/massimo-linux-armv6 packaging/systemd/massimo.service pi@pi.local:
 ```
 
 On the Pi:
@@ -639,7 +637,6 @@ sudo useradd --system --user-group --home-dir /var/lib/massimo --no-create-home 
 sudo install -d -m 0750 -o _massimo -g _massimo /etc/massimo
 sudo install -d -o _massimo -g adm /var/log/massimo && sudo chmod 2750 /var/log/massimo
 sudo install -m 0644 massimo.service /etc/systemd/system/massimo.service
-sudo install -m 0644 massimo /etc/logrotate.d/massimo
 ```
 
 Then write `/etc/massimo/env` (same format as the `.env` described in the
@@ -1109,11 +1106,13 @@ and in the update helper are the same everywhere:
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
 - the log `/var/log/massimo/serve.log`:
-  launchd appends the server's output to it,
-  so there is no `-log` and no `MASSIMO_LOG` (install warns if the settings set one,
-  as every line would come twice). macOS has no `copytruncate` for a log a
-  process keeps open, so it is not rotated;
-  it grows by about what the Linux one does per week.
+  the plist passes `-log`, so `serve` writes and rotates it as on Linux,
+  in `/var/log/massimo`, `_massimo:admin` 0750
+  (install warns of a `MASSIMO_LOG` in the settings, which the flag overrides);
+  `-log-process-format none` keeps it off stderr, which launchd appends to
+  `/var/log/massimo-serve.stderr.log`, root's in `/var/log`,
+  so that the file cannot be swapped for a link,
+  and which holds only what the Go runtime prints itself, such as a panic.
 - the LaunchDaemon `ch.metaworx.massimo` in `/Library/LaunchDaemons`:
   started at boot without anyone logging in, restarted 10 s after it fails,
   running

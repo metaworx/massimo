@@ -1862,7 +1862,7 @@ paths:
         alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
         reboot_cancelled, update, update_result, backup, backup_deleted,
-        backups_pruned, log_pruned, restore_started; a Cube's own:
+        backups_pruned, log_pruned, log_rotated, restore_started; a Cube's own:
         address_changed, cube_gone; a change made through the API, source
         config: change, with the action, target, set, changes and subject in
         "summary" and who in "by". A state

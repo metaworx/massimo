@@ -262,8 +262,8 @@ With several Cubes each needs its own `MASSIMO_CUBE_<SERIAL>_PROXY` address on t
 see [Install by hand](packaging/README.md#install-by-hand).
 Afterwards the settings are in `/etc/massimo/env` (readable by `massimo` only),
 the state in `/var/lib/massimo`,
-the log in `/var/log/massimo/serve.log` (JSON, rotated weekly,
-readable by the group `adm`) and in the journal:
+the log in `/var/log/massimo/serve.log`
+(JSON, rotated by `serve` itself, readable by the group `adm`) and in the journal:
 
 ```bash
 sudo systemctl start massimo
@@ -456,7 +456,8 @@ the hidden user `_massimo`,
 the settings `/etc/massimo/env` (without `-settings` the template,
 and the first start is then the owner's, as on Linux),
 the state `/var/lib/massimo`,
-the log `/var/log/massimo/serve.log` (launchd appends to it; it is not rotated),
+the log `/var/log/massimo/serve.log` (JSON, rotated by `serve`,
+readable by the group `admin`),
 and in `/Library/LaunchDaemons` the daemon `ch.metaworx.massimo` (started at
 boot without a login, restarted 10 s after a failure, listening on `:8099`;
 `-listen` changes that and later installs keep it) and the update helper
@@ -673,6 +674,16 @@ stderr, and so the journal, stays plain `key=value`.
 and `-log-file-format` and `-log-process-format` (`MASSIMO_LOG_FILE_FORMAT`,
 `MASSIMO_LOG_PROCESS_FORMAT`) win over it for the file and for stderr;
 `-log-process-format none` writes nothing on stderr.
+`serve` rotates the file itself, on every platform:
+once it would grow past `-log-rotate-size` (10M),
+at once when its last line is in another format,
+and on SIGHUP and a reload from the API.
+`serve.log.1` is the newest rotated file, the older ones are gzipped,
+and the oldest is deleted only while more than `-log-keep` (8) are kept and
+the others still cover `-log-keep-min` (5M), so that many small files stay
+(`MASSIMO_LOG_ROTATE_SIZE`, `MASSIMO_LOG_KEEP`, `MASSIMO_LOG_KEEP_MIN`).
+The old file's last line says so, and the new file's first,
+which is a line `log_rotated` in the web UI's log too.
 `-log-level debug` (or `MASSIMO_LOG_LEVEL`; `info`, the default,
 `warn` and `error`) adds the Debug lines,
 such as every failed attempt to reach a lost Cube
@@ -937,7 +948,7 @@ and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
 The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
-`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`, `MASSIMO_LOG_FORMAT` and its two,
+`MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`, `MASSIMO_LOG_FORMAT` and the other `MASSIMO_LOG_…`,
 the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
 `-addr` and `-sn` still pick a Cube for one run and write nothing for it;

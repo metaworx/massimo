@@ -606,7 +606,7 @@ const logGroup = "adm"
 // where there is no adm. The unit does not make it: LogsDirectory= would
 // give it back to the service's group at every start. An older release's
 // serve.log files are narrowed to 0640 in that group, as the package's
-// postinst does.
+// postinst does, and its logrotate file removed.
 func (in *installer) logDir() error {
 	group := in.svcUser
 	if in.group(logGroup) {
@@ -615,6 +615,9 @@ func (in *installer) logDir() error {
 	if err := in.dir(LogDir, in.svcUser+":"+group, "2750"); err != nil {
 		return err
 	}
+	// serve rotates its log itself: the file an older install wrote for
+	// logrotate goes (remove does nothing where there is none).
+	in.remove(LogrotateDir+"/massimo", false)
 	logs, _ := filepath.Glob(filepath.Join(in.path(LogDir), "serve.log*"))
 	for _, p := range logs {
 		if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
@@ -782,9 +785,6 @@ func (in *installer) unitFiles() [][2]string {
 		files = append(files,
 			[2]string{"systemd/" + rebootPath, UnitDir + "/" + rebootPath},
 			[2]string{"systemd/massimo-reboot.service", UnitDir + "/massimo-reboot.service"})
-	}
-	if fi, err := os.Stat(in.path(LogrotateDir)); err == nil && fi.IsDir() {
-		files = append(files, [2]string{"logrotate/massimo", LogrotateDir + "/massimo"})
 	}
 	return files
 }

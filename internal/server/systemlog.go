@@ -132,6 +132,18 @@ func (s *Server) LogSettingsRead(ctx context.Context, why string, changed, pendi
 	s.logServer(systemEvent("settings_read", userIDOfContext(ctx), map[string]any{"why": why, "changed": c, "at_next_start": p}))
 }
 
+// LogRotated writes log_rotated: serve's log file rotated (internal/
+// logfile), why (size, format, sighup, reload), the name the old file has
+// now, the rotated files kept and the names of those deleted; at warn,
+// with the error, where a step failed.
+func (s *Server) LogRotated(why, previous string, kept int, removed []string, err error) {
+	ev := systemEvent("log_rotated", 0, map[string]any{"why": why, "previous": previous, "kept": kept, "removed": append([]string{}, removed...)})
+	if err != nil {
+		ev.Level, ev.Error = "warn", err.Error()
+	}
+	s.logServer(ev)
+}
+
 // jsonString is a setting's JSON string, "" for anything else.
 func jsonString(raw []byte) string {
 	if len(raw) < 2 || raw[0] != '"' {

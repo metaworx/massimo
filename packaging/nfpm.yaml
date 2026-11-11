@@ -24,8 +24,6 @@ description: |
 depends:
   - adduser
   - init-system-helpers (>= 1.52)
-recommends:
-  - logrotate
 contents:
   - src: ${BINARY}
     dst: /usr/bin/massimo
@@ -45,9 +43,6 @@ contents:
     dst: /usr/lib/systemd/system/massimo-reboot.path
   - src: packaging/systemd/massimo-reboot.service
     dst: /usr/lib/systemd/system/massimo-reboot.service
-  - src: packaging/logrotate/massimo
-    dst: /etc/logrotate.d/massimo
-    type: config
   - src: packaging/deb/packaged
     dst: /usr/share/massimo/packaged
   - src: packaging/env.template

@@ -46,6 +46,11 @@ const (
 	HelperLog      = "/var/log/massimo-update.log"
 	RebootLog      = "/var/log/massimo-reboot.log"
 	DarwinLog      = LogDir + "/serve.log"
+	// DarwinStderrLog is launchd's file of serve's stderr, which holds
+	// only what the Go runtime prints itself: serve writes DarwinLog.
+	DarwinStderrLog = "/var/log/massimo-serve.stderr.log"
+	// darwinLogGroup reads the log, as adm does on Linux.
+	darwinLogGroup = "admin"
 
 	launchctl      = "/bin/launchctl"
 	dscl           = "/usr/bin/dscl"
@@ -185,16 +190,17 @@ func InstallDarwin(o Options) error {
 	owner := DarwinUser + ":" + DarwinUser
 	for _, d := range []struct{ path, owner, mode string }{
 		{StateDir, owner, "0750"},
-		// launchd writes the log, not serve: root's directory, so that
-		// the file cannot be swapped for a link elsewhere.
-		{LogDir, "root:wheel", "0755"},
+		// serve writes and rotates the log: the service user's directory,
+		// the admin group's to read; a new file takes the directory's
+		// group on macOS.
+		{LogDir, DarwinUser + ":" + darwinLogGroup, "0750"},
 		{HelperStateDir, "root:wheel", "0755"},
 	} {
 		if err := in.dir(d.path, d.owner, d.mode); err != nil {
 			return err
 		}
 	}
-	if err := in.logFile(owner); err != nil {
+	if err := in.logFiles(); err != nil {
 		return err
 	}
 
@@ -269,40 +275,52 @@ func (in *installer) checkDarwinListen(listen string) {
 	fmt.Fprintf(in.Out, "warning: on macOS only root may listen on a port below 1024 on a single address; %s cannot listen on %s, use :%s\n", DarwinUser, listen, port)
 }
 
-// darwinEnvTemplate is envTemplate without MASSIMO_LOG: launchd writes
-// serve's stderr to the log.
+// darwinEnvTemplate is envTemplate without MASSIMO_LOG: the plist passes
+// -log.
 func darwinEnvTemplate() string {
 	return strings.Replace(envTemplate(), "MASSIMO_LOG=/var/log/massimo/serve.log\n",
-		"# The log is "+DarwinLog+", written by launchd; no MASSIMO_LOG here.\n", 1)
+		"# The log is "+DarwinLog+", which the plist passes as -log; no MASSIMO_LOG here.\n", 1)
 }
 
-// checkDarwinSettings warns about MASSIMO_LOG, which on macOS writes
-// every line twice: launchd already appends serve's stderr to the log.
+// checkDarwinSettings warns about MASSIMO_LOG, which the plist's -log
+// overrides on macOS.
 func (in *installer) checkDarwinSettings() {
 	env := in.path(EnvPath)
 	if _, err := os.Stat(env); err != nil {
 		env = in.Settings
 	}
 	if vars, err := readEnv(env); err == nil && vars["MASSIMO_LOG"] != "" {
-		fmt.Fprintf(in.Out, "warning: MASSIMO_LOG in %s: launchd writes the log to %s already; remove it, or every line comes twice\n", EnvPath, DarwinLog)
+		fmt.Fprintf(in.Out, "warning: MASSIMO_LOG in %s is not read: the plist passes -log %s\n", EnvPath, DarwinLog)
 	}
 }
 
-// logFile makes the log, which launchd opens, as the service user's.
-func (in *installer) logFile(owner string) error {
-	p := in.path(DarwinLog)
-	if _, err := os.Lstat(p); err == nil {
-		return nil
-	}
-	in.say("make %s", DarwinLog)
-	if !in.DryRun {
-		f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
-		if err != nil {
+// logFiles hands an older release's log, which launchd wrote, to the
+// admin group, 0640, as serve makes the files it rotates; and makes
+// launchd's file of serve's stderr root's, the admin group's to read.
+func (in *installer) logFiles() error {
+	if fi, err := os.Lstat(in.path(DarwinLog)); err == nil && fi.Mode().IsRegular() {
+		if err := in.run("chown", "-h", DarwinUser+":"+darwinLogGroup, in.path(DarwinLog)); err != nil {
 			return err
 		}
-		f.Close()
+		if err := in.run("chmod", "0640", in.path(DarwinLog)); err != nil {
+			return err
+		}
 	}
-	return in.run("chown", "-h", owner, p)
+	p := in.path(DarwinStderrLog)
+	if _, err := os.Lstat(p); errors.Is(err, os.ErrNotExist) {
+		in.say("make %s", DarwinStderrLog)
+		if !in.DryRun {
+			f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
+			if err != nil {
+				return err
+			}
+			f.Close()
+		}
+	}
+	if err := in.run("chown", "-h", "root:"+darwinLogGroup, p); err != nil {
+		return err
+	}
+	return in.run("chmod", "0640", p)
 }
 
 // darwinUser makes the hidden system user and group _massimo, with the
@@ -500,7 +518,7 @@ func RemoveDarwin(o Options, purge bool) error {
 		fmt.Fprintf(in.Out, "kept %s, %s, %s and the user %s (remove them with -purge)\n", EnvDir, StateDir, LogDir, DarwinUser)
 		return nil
 	}
-	for _, p := range []string{EnvDir, StateDir, HelperStateDir, LogDir, HelperLog, RebootLog} {
+	for _, p := range []string{EnvDir, StateDir, HelperStateDir, LogDir, DarwinStderrLog, HelperLog, RebootLog} {
 		in.remove(p, true)
 	}
 	if in.Root == "" && in.Run(dscl, ".", "-read", "/Users/"+DarwinUser) != nil {

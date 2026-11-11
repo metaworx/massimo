@@ -49,6 +49,7 @@ grep -q '^ExecStart=/usr/bin/massimo ' "$unit" || fail "the unit does not run /u
 grep -q '^StateDirectoryMode=0750$' "$unit" || fail "the unit leaves the state directory to systemd's 0755"
 grep -q '^ReadWritePaths=-/var/log/massimo$' "$unit" || fail "the unit cannot write the log"
 if grep -q '^LogsDirectory=' "$unit"; then fail "the unit gives the log directory back to the service's group"; fi
+[ ! -e /etc/logrotate.d/massimo ] || fail "a logrotate file: serve rotates its log itself"
 grep '^ExecStart=' "$unit" | grep -q -- ' -update-request /var/lib/massimo/update-request' ||
 	fail "the unit lacks -update-request for the update helper"
 [ -L /etc/systemd/system/multi-user.target.wants/massimo.service ] || fail "the unit is not enabled"

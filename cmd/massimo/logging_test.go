@@ -5,13 +5,16 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -248,71 +251,106 @@ func TestServeLoggerFormats(t *testing.T) {
 	}
 }
 
-// The log file is made 0640, and one others may read more widely is
-// narrowed to it; a narrower one stays as it is.
-func TestOpenLogFileMode(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows keeps the file's ACLs")
+func TestParseLogSize(t *testing.T) {
+	for in, want := range map[string]int64{"": 7, "0": 0, "1234": 1234, "10M": 10 << 20, "10MB": 10 << 20, "10MiB": 10 << 20, "5m": 5 << 20,
+		"500k": 500 << 10, "500KB": 500 << 10, "1G": 1 << 30, " 2M ": 2 << 20, "12b": 12} {
+		if got, err := parseLogSize(in, 7); err != nil || got != want {
+			t.Errorf("parseLogSize(%q) = %d, %v; want %d", in, got, err, want)
+		}
 	}
-	dir := t.TempDir()
-	modeOf := func(p string) os.FileMode {
-		t.Helper()
-		fi, err := os.Stat(p)
-		if err != nil {
-			t.Fatal(err)
+	for _, in := range []string{"ten", "-1", "10T", "M", "1.5M"} {
+		if _, err := parseLogSize(in, 7); err == nil {
+			t.Errorf("parseLogSize(%q): no error", in)
 		}
-		return fi.Mode().Perm()
 	}
-	for _, c := range []struct {
-		name       string
-		before     os.FileMode // 0: no file yet
-		want, mask os.FileMode
-	}{
-		{"new.log", 0, 0o640, 0o640},
-		{"wide.log", 0o644, 0o640, 0o777},
-		{"open.log", 0o666, 0o640, 0o777},
-		{"narrow.log", 0o600, 0o600, 0o777},
-	} {
-		p := filepath.Join(dir, c.name)
-		if c.before != 0 {
-			if err := os.WriteFile(p, []byte("time=x\n"), c.before); err != nil {
-				t.Fatal(err)
-			}
-			os.Chmod(p, c.before) // past the umask
-		}
-		f, narrowErr, err := openLogFile(p)
-		if err != nil || narrowErr != nil {
-			t.Fatalf("%s: %v, %v", c.name, err, narrowErr)
-		}
-		f.Close()
-		// A new file's mode is 0640 less the umask.
-		if got := modeOf(p); got&^c.mask != 0 || (c.before != 0 && got != c.want) || got&0o600 != 0o600 {
-			t.Errorf("%s: mode %#o, want %#o", c.name, got, c.want)
-		}
+	if _, _, _, err := (logRotation{keep: "many"}).options(); err == nil || !strings.Contains(err.Error(), "-log-keep or "+env.LogKeep) {
+		t.Errorf("-log-keep many: %v", err)
+	}
+	if _, _, _, err := (logRotation{size: "big"}).options(); err == nil || !strings.Contains(err.Error(), "-log-rotate-size or "+env.LogRotateSize) {
+		t.Errorf("-log-rotate-size big: %v", err)
+	}
+	size, keep, keepMin, err := logRotation{}.options()
+	if err != nil || size != 10<<20 || keep != 8 || keepMin != 5<<20 {
+		t.Errorf("the defaults: %d, %d, %d, %v", size, keep, keepMin, err)
 	}
 }
 
+// countLines waits until serve has logged msg n times.
+func (s *builtServe) countLines(t *testing.T, msg string, n int) {
+	t.Helper()
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		c := 0
+		for _, l := range s.log() {
+			if strings.Contains(l, `msg="`+msg+`"`) {
+				c++
+			}
+		}
+		if c >= n {
+			return
+		}
+	}
+	t.Fatalf("serve did not log %q %d times", msg, n)
+}
+
 // serve writes plain lines on stderr and JSON ones into its -log file,
-// made 0640.
-func TestServeLogFileIsJSON(t *testing.T) {
+// made 0640. A plain file it finds is rotated at the start, and the log
+// on SIGHUP: each old file ends with the rotation in its own format, and
+// the new one starts with it, as stderr says it too.
+func TestServeLogFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "serve.log")
-	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off")
-	s.waitFor(t, "api listening")
+	os.WriteFile(path, []byte("time=2026-11-10T10:00:00Z level=INFO msg=\"api listening\"\n"), 0o644)
+	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off", "-sighup", "reload")
+	if a := s.waitFor(t, "log rotated"); a["reason"] != "format" || a["previous"] != "serve.log.1" {
+		t.Errorf("the start's rotation: %v", a)
+	}
+	if err := s.cmd.Process.Signal(syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+	s.countLines(t, "log rotated", 2)
 	s.stop(t)
-	b, err := os.ReadFile(path)
+
+	lines := func(p string) []string {
+		t.Helper()
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Split(strings.TrimSpace(string(b)), "\n")
+	}
+	jsonLines := func(p string) []map[string]any {
+		t.Helper()
+		var out []map[string]any
+		for _, l := range lines(p) {
+			var line map[string]any
+			if err := json.Unmarshal([]byte(l), &line); err != nil {
+				t.Fatalf("%s: not JSON: %v\n%s", p, err, l)
+			}
+			out = append(out, line)
+		}
+		return out
+	}
+	now, before := jsonLines(path), jsonLines(path+".1")
+	if now[0]["msg"] != "log rotated" || now[0]["reason"] != "sighup" {
+		t.Errorf("serve.log's first line: %v", now[0])
+	}
+	if first, last := before[0], before[len(before)-1]; first["msg"] != "log rotated" || first["reason"] != "format" ||
+		last["msg"] != "log rotated" || last["reason"] != "sighup" || last["next"] != "serve.log" {
+		t.Errorf("serve.log.1: first %v, last %v", first, last)
+	}
+	if !slices.ContainsFunc(before, func(l map[string]any) bool { return l["msg"] == "api listening" }) {
+		t.Error("no api listening in serve.log.1")
+	}
+	gz, err := os.ReadFile(path + ".2.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
-		var line map[string]any
-		if err := json.Unmarshal([]byte(l), &line); err != nil {
-			t.Fatalf("not JSON: %v\n%s", err, l)
-		}
-		found = found || line["msg"] == "api listening"
+	zr, err := gzip.NewReader(bytes.NewReader(gz))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !found {
-		t.Errorf("no api listening in the file:\n%s", b)
+	plain, _ := io.ReadAll(zr)
+	if !strings.HasSuffix(string(plain), "msg=\"log rotated\" source=system reason=format next=serve.log\n") {
+		t.Errorf("serve.log.2.gz:\n%s", plain)
 	}
 	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm()&^0o640 != 0 {
 		t.Errorf("mode %v, %v; want 0640 at most", fi.Mode(), err)
