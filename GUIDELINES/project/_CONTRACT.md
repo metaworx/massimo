@@ -58,6 +58,23 @@ not this block:
 - `:!LICENSE`
 <!-- END GENERATED SHIPPED-PATHS -->
 
+A change touching only the paths listed below may skip the test suite:
+no test reads them, and `{{shared_root}}/tools/fingerprint.sh` leaves them out
+of the code fingerprint a CI gate compares.
+None of them is shipped.
+The list is generated from `[ci] untested` - edit the config, not this block,
+and delete both where the project declares no such list:
+
+<!-- BEGIN GENERATED UNTESTED-PATHS - do not edit; run "{{shared_root}}/tools/fingerprint.sh update-contract" -->
+- `GUIDELINES/wip/**`
+- `GUIDELINES/project/**`
+- `AGENTS.md`
+- `GUIDELINES/README.md`
+- `CHANGELOG.md`
+- `CHANGELOG.d/**`
+- `LICENSE`
+<!-- END GENERATED UNTESTED-PATHS -->
+
 The commit form is generated from `[commit]` in `{{guidelines_root}}/config.ini` -
 edit the config, not this block:
 

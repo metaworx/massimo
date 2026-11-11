@@ -39,16 +39,20 @@ env:
   GOVULNCHECK_VERSION: v1.9.0
 
 jobs:
-  # What the run tests, the one job every test job waits for. suite is
-  # false for a push to main of a release commit (its summary opens with
-  # "chore(release): "): make release-alpha pushes main and the tag at
-  # once, and the tag's run tests the same commit, so main's run skips
-  # every job and makes no devel build (GUIDELINES/project/CI.md,
-  # section 2). code is false for a pull request or a push to main that
-  # changes only documents no test reads, and no path of project.shipped:
-  # every job but Guidelines is skipped, and All tests passed, and main
-  # makes no devel build; a tag is always tested whole, and a push whose
-  # earlier commit is not known counts as code. ui and lan, for the
+  # What the run tests, the one job every test job waits for
+  # (GUIDELINES/project/CI.md, section 2). suite is false for a push to
+  # main of a release commit (its role, by commit_title.py, is release):
+  # make release-alpha pushes main and the tag at once, and the tag's run
+  # tests the same commit, so main's run skips every job and makes no
+  # devel build. code is false where fingerprint.sh finds the same code as
+  # the base (a pull request's) or as the commit main was at (a push's):
+  # documents alone, as config.ini's [ci] untested names them; every job
+  # but Guidelines is skipped, and main makes no devel build. A tag is
+  # always tested whole, and fingerprint.sh's exit 2, an unknown commit
+  # included, counts as code. tested is true where the Tested status on
+  # the commit tested before holds this code's fingerprint: what passed
+  # for it is skipped, and Fuzz, Screenshots and LAN run where they did
+  # not pass yet (All tests passed writes the status). ui and lan, for the
   # Screenshots and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
@@ -62,47 +66,83 @@ jobs:
   changes:
     name: What to test
     runs-on: ubuntu-latest
+    # statuses: the Tested status of the commit tested before.
+    permissions:
+      contents: read
+      statuses: read
     outputs:
       suite: ${{ steps.what.outputs.suite }}
       code: ${{ steps.what.outputs.code }}
+      tested: ${{ steps.what.outputs.tested }}
+      fp: ${{ steps.what.outputs.fp }}
       ui: ${{ steps.what.outputs.ui }}
       lan: ${{ steps.what.outputs.lan }}
+      ui_done: ${{ steps.what.outputs.ui_done }}
+      lan_done: ${{ steps.what.outputs.lan_done }}
+      fuzz_done: ${{ steps.what.outputs.fuzz_done }}
     steps:
-      # A pull request's merge commit and its parents; a push's whole
-      # history, for the range from the commit main was at before.
+      # A pull request's merge commit, its parents and its head's parent;
+      # a push's whole history, for the range from the commit main was at
+      # before. The guidelines for fingerprint.sh and commit_title.py.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          fetch-depth: ${{ github.event_name == 'pull_request' && 3 || 0 }}
+          submodules: true
 
       - name: What to test
         id: what
         env:
           MESSAGE: ${{ github.event.head_commit.message }}
           BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          suite=true code=true ui=true lan=true
-          range=""
+          suite=true code=true tested=false fp="" ui=true lan=true
+          ui_done=false lan_done=false fuzz_done=false
+          fpsh=GUIDELINES/shared/tools/fingerprint.sh
+          base="" prev=""
           case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
-          pull_request:*) range=HEAD^1..HEAD ;;
+          pull_request:*)
+            base=HEAD^1
+            prev="$(git rev-parse --verify --quiet "${HEAD_SHA}^1" || true)"
+            ;;
           push:refs/heads/main)
-            if [[ "$MESSAGE" == "chore(release): "* ]]; then
+            # commit_title.py prints role|type|component|breaking|headline
+            # for any summary config.ini allows, chore(release:x) included.
+            role="$(python3 GUIDELINES/shared/tools/commit_title.py --root GUIDELINES parse "${MESSAGE%%$'\n'*}" 2>/dev/null | cut -d'|' -f1 || true)"
+            if [ "$role" = release ]; then
               echo "a release commit: its tag's run tests it."
               suite=false
-            elif [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-              range="${BEFORE}..HEAD"
+            else
+              base="$BEFORE"
+              prev="$(git rev-parse --verify --quiet HEAD^2 || true)"
             fi
             ;;
           esac
-          # Documents no test reads (GUIDELINES/project/CI.md, section 2):
-          # a change to these alone runs the Guidelines job and no other;
-          # a path of project.shipped never counts as one.
-          if [ -n "$range" ]; then
-            mapfile -t shipped < <(git config -f GUIDELINES/config.ini --get-all project.shipped)
-            if git diff --quiet "$range" -- . ':!GUIDELINES/wip/**' ':!GUIDELINES/project/**' \
-              ':!AGENTS.md' ':!GUIDELINES/README.md' ':!CHANGELOG.md' ':!CHANGELOG.d/**' ':!LICENSE' &&
-              [ "${#shipped[@]}" -gt 0 ] && git diff --quiet "$range" -- "${shipped[@]}"; then
-              echo "${range}: documents alone; no test reads them."
-              code=false
+          # Documents alone (GUIDELINES/config.ini, [ci] untested): the
+          # same code as the base; exit 2, an unknown base included, tests.
+          if [ -n "$base" ] && same="$("$fpsh" -q same "$base" HEAD)" && [ "$same" = true ]; then
+            echo "documents alone since ${base}: no test reads them."
+            code=false
+          fi
+          # The code that ran, and whether an earlier run passed for it:
+          # the Tested status on the commit the run before tested (a pull
+          # request's head's parent; a merge's second parent, the pull
+          # request's head), green and written by this workflow.
+          if [ "$suite" = true ] && [ "$code" = true ] && fp="$("$fpsh" -q fingerprint HEAD)" && [ -n "$prev" ]; then
+            desc="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${prev}/statuses?per_page=100" \
+              --jq '[.[] | select(.context == "Tested")][0] | select(.state == "success" and .creator.login == "github-actions[bot]") | .description' 2>/dev/null || true)"
+            read -r -a words <<<"$desc"
+            if [ "${words[0]:-}" = "$fp" ]; then
+              echo "${fp} passed at ${prev}: ${desc}"
+              tested=true
+              for w in "${words[@]:1}"; do
+                case "$w" in
+                ui=true) ui_done=true ;;
+                lan=true) lan_done=true ;;
+                fuzz=true) fuzz_done=true ;;
+                esac
+              done
             fi
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
@@ -110,18 +150,23 @@ jobs:
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
             grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
-          echo "suite=${suite} code=${code} ui=${ui} lan=${lan}"
+          echo "suite=${suite} code=${code} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
           {
             echo "suite=${suite}"
             echo "code=${code}"
+            echo "tested=${tested}"
+            echo "fp=${fp}"
             echo "ui=${ui}"
             echo "lan=${lan}"
+            echo "ui_done=${ui_done}"
+            echo "lan_done=${lan_done}"
+            echo "fuzz_done=${fuzz_done}"
           } >> "$GITHUB_OUTPUT"
 
   test:
     name: Vet and test
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -166,7 +211,7 @@ jobs:
   race:
     name: Race
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -186,7 +231,7 @@ jobs:
   armv6:
     name: Test (armv6, QEMU)
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -211,7 +256,7 @@ jobs:
   fuzz:
     name: Fuzz
     needs: changes
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.fuzz_done != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -251,7 +296,7 @@ jobs:
   screenshots:
     name: Screenshots
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' && needs.changes.outputs.ui_done != 'true' }}
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
@@ -313,7 +358,7 @@ jobs:
   lan:
     name: LAN against avahi
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.lan != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.lan != 'false' && needs.changes.outputs.lan_done != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -331,7 +376,7 @@ jobs:
   govulncheck:
     name: govulncheck (${{ matrix.goos }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -364,7 +409,7 @@ jobs:
   deb:
     name: Debian package (${{ matrix.image }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -415,7 +460,7 @@ jobs:
   windows:
     name: Windows service
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -746,7 +791,7 @@ jobs:
   macos:
     name: macOS LaunchDaemon
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1054,7 +1099,7 @@ jobs:
   site:
     name: Site
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1089,11 +1134,20 @@ jobs:
   # What to test with the others, so that a gate that failed fails it,
   # although every job ran; for a release commit pushed to main,
   # which What to test leaves untested, it is skipped, and so is Release.
+  # Once it has passed, it writes the Tested status (GUIDELINES/project/CI.md,
+  # section 2) on the commit the run tested, a pull request's head or the
+  # commit pushed to main: the fingerprint of the code that ran and whether
+  # Screenshots, LAN and Fuzz passed for it, in this run or the one it
+  # carries on. What to test reads it to skip what passed. Not for a run
+  # that tested documents alone, nor for a tag; a fork's pull request has
+  # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
     needs: [ changes, test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
+    permissions:
+      statuses: write
     steps:
       - name: Every test job passed or was skipped
         env:
@@ -1103,6 +1157,23 @@ jobs:
           for r in $RESULTS; do
             case "$r" in success|skipped) ;; *) exit 1 ;; esac
           done
+
+      - name: Write the Tested status
+        if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FP: ${{ needs.changes.outputs.fp }}
+          UI: ${{ needs.changes.outputs.ui_done == 'true' || needs.screenshots.result == 'success' }}
+          LAN: ${{ needs.changes.outputs.lan_done == 'true' || needs.lan.result == 'success' }}
+          FUZZ: ${{ needs.changes.outputs.fuzz_done == 'true' || needs.fuzz.result == 'success' }}
+        run: |
+          desc="${FP} ui=${UI} lan=${LAN} fuzz=${FUZZ}"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state=success -f context=Tested -f description="$desc" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+          echo "Tested on ${SHA}: ${desc}"
 
   # The release of a pushed commit (release.yml), once All tests passed
   # and the build is done, with build.yml's answers as inputs and the
