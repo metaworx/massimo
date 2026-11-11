@@ -26,6 +26,8 @@ CREATE TABLE audit (
     result    TEXT    NOT NULL DEFAULT 'ok' CHECK (result IN ('ok', 'refused', 'failed'))
 , command_id INTEGER REFERENCES commands (id) ON DELETE SET NULL);
 
+CREATE INDEX audit_command ON audit (command_id) WHERE command_id IS NOT NULL;
+
 CREATE INDEX audit_time ON audit (time);
 
 CREATE INDEX audit_user ON audit (user_id, time);

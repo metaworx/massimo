@@ -156,9 +156,26 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 		bound = formatTime(before)
 	}
 	user = NormalName(user)
+	return s.auditRows(ctx, `(? = '' OR a.time < ?) AND (? = '' OR u.name = ?)`, bound, bound, user, user, limit)
+}
+
+// AuditOfCommand returns the audit's row of a command, the request that
+// is the command; false for none (a proxy client's, or one pruned).
+func (s *Store) AuditOfCommand(ctx context.Context, commandID int64) (AuditEntry, bool, error) {
+	rows, err := s.auditRows(ctx, `a.command_id = ?`, commandID, 1)
+	if err != nil || len(rows) == 0 {
+		return AuditEntry{}, false, err
+	}
+	return rows[0], true, nil
+}
+
+// auditRows reads the audit's rows of a WHERE, with the user's name and
+// the Cube's serial joined in, newest first; args end with the limit.
+func (s *Store) auditRows(ctx context.Context, where string, args ...any) ([]AuditEntry, error) {
+	// where is the callers' own text, never input.
 	rows, err := s.db.QueryContext(ctx, `SELECT a.id, a.uuid, a.time, a.user_id, coalesce(u.name, ''), a.token_id, a.remote, a.action, a.cube_id, coalesce(c.serial, ''), a.target, a.detail, a.result, a.command_id
 		FROM audit a LEFT JOIN users u ON u.id = a.user_id LEFT JOIN cubes c ON c.id = a.cube_id
-		WHERE (? = '' OR a.time < ?) AND (? = '' OR u.name = ?) ORDER BY a.id DESC LIMIT ?`, bound, bound, user, user, limit)
+		WHERE `+where+` ORDER BY a.id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: audit: %w", err)
 	}

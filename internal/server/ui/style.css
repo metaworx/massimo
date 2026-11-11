@@ -1200,6 +1200,16 @@ massimo-week-program { display: contents; }
 .log-line.kind-connected .log-kind { color: var(--ok); }
 .log-device { font-weight: 600; }
 .log-text { color: var(--muted); }
+.log-cmd { padding: 0 8px; font-size: 0.85rem; }
+.log-cmd-detail {
+  flex-basis: 100%;
+  margin: 2px 0 4px;
+  padding: 4px 10px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.log-cmd-detail p, .log-cmd-detail ol { margin: 2px 0; }
+.log-cmd-head { color: var(--fg); }
 
 /* copy tab */
 .copy-section { display: flex; flex-direction: column; gap: 6px; }

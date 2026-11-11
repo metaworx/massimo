@@ -493,6 +493,8 @@ CREATE TABLE audit (
 );
 CREATE INDEX audit_time ON audit (time);
 CREATE INDEX audit_user ON audit (user_id, time);
+-- migration 0014: a command's audit row, and the SET NULL of a pruned command
+CREATE INDEX audit_command ON audit (command_id) WHERE command_id IS NOT NULL;
 
 CREATE TABLE backups (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,  -- migration 0013

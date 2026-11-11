@@ -452,6 +452,9 @@ type commandView struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 	FinishedAt *time.Time      `json:"finished_at,omitempty"`
 	Steps      []stepView      `json:"steps"`
+	// Audit is the request's audit row, for a caller with audit; absent
+	// for a proxy client's command, which has none.
+	Audit *auditView `json:"audit,omitempty"`
 }
 
 // stepView is one engine command of a command.
@@ -466,7 +469,9 @@ type stepView struct {
 }
 
 // getCommand handles GET /api/v1/commands/{id}: a command by its id,
-// with its steps; a user without audit sees its own commands only.
+// or by its number as the log names it, with its steps, and its audit
+// row for a caller with audit; a user without audit sees its own
+// commands only.
 func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -474,7 +479,13 @@ func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	id := r.PathValue("id")
-	c, ok, err := st.CommandByUUID(ctx, id)
+	var c store.Command
+	var ok bool
+	if n, perr := strconv.ParseInt(id, 10, 64); perr == nil && n > 0 {
+		c, ok, err = st.Command(ctx, n)
+	} else {
+		c, ok, err = st.CommandByUUID(ctx, id)
+	}
 	if err != nil {
 		return userFail(err)
 	}
@@ -500,6 +511,12 @@ func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	}
 	for _, st := range c.Steps {
 		v.Steps = append(v.Steps, stepView{ID: st.UUID, Target: st.Target, State: st.State, Request: st.Request, Result: st.Result, CreatedAt: st.CreatedAt, FinishedAt: optTime(st.FinishedAt)})
+	}
+	if p.has("audit") {
+		if e, found, err := st.AuditOfCommand(ctx, c.ID); err == nil && found {
+			v.Audit = &auditView{ID: e.ID, Time: e.Time, User: e.User, TokenID: e.TokenID, Remote: e.Remote, Action: e.Action, Cube: e.Cube, Target: e.Target,
+				Detail: e.Detail, Result: e.Result, CommandID: e.CommandID}
+		}
 	}
 	writeJSON(w, http.StatusOK, v)
 	return nil

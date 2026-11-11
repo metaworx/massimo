@@ -262,6 +262,20 @@ of its own, with who made it: "Cube changed KEQ0000000: name – → Upstairs, b
 Anna", "setpoint Window: mode manual, temperature 21.5, by Anna",
 "user added Zed, by the command line"; a change of a device shows under the
 device too, and the Cube's answer follows as its own line.
+A command's steps on the radio are lines of the queue
+("command acknowledged by the Cube; duty cycle 3 %, 49 free memory slots"),
+queued and sent at debug, a discard, a retry and a failure as warnings,
+and so are the queue's holds for the duty cycle and the memory slots.
+The LAN proxy's clients have lines of their own: a client connected or gone,
+turned away, its deletes, a pairing for it and the proxy's warnings;
+a line a client passes on to the Cube is a command like the web UI's.
+The sign-ins, failed ones and lockouts are lines for those who may see the
+audit alone.
+A line of a command has a button, **command 42**, which opens the command
+under the line: what was asked and its state, by whom, its steps with what
+the Cube made of them, and for those who may see the audit its audit row;
+the button says whether it is open and closes it again.
+A device's state line that follows a command sent to it names that command too.
 The level choice "debug and above" also shows the debug lines, such as the
 greeting's hello, room and device list and configurations, each with its
 summary, which the log leaves out at "info and above", the default;
@@ -298,8 +312,9 @@ for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
 The choices in the head show one kind of event (all kinds by default,
 grouped by their source), one source or one device (all by default:
-System, Configuration, the Cube, Devices, then each device by name and
-serial number), the level and above (info by default) and, for those who
+System, Configuration, the Cube, Devices, the queue, the server, the proxy,
+then each device by name and serial number),
+the level and above (info by default) and, for those who
 may see the users, who made a change (everyone by default);
 the server answers what matches,
 and the new lines follow the choices too.
@@ -310,7 +325,8 @@ it is off while none of them is set.
 The choices are in the address after `#log`,
 each left out at its default:
 `range=` one of `10m`, `1h`, `today`, `week`, `month` and `all`,
-`kind=` an event's kind, `source=` one of `system`, `config`, `cube` and `device`,
+`kind=` an event's kind, `source=` one of `system`, `config`, `cube`, `device`,
+`queue`, `server` and `proxy`,
 `device=` a device's serial number
 (a link's radio address takes the serial once the devices are loaded),
 `level=` `debug` or `warn`, and `user=` a login name,

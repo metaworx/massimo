@@ -19,7 +19,8 @@
 -- another command (as 0013 for the backups). The table is made again as
 -- it stands: every row copied with its id, parent_id and the rest,
 -- the indexes made; the copy starts the sequence at the highest id left,
--- and the rename carries it.
+-- and the rename carries it. The audit gains an index of its rows'
+-- commands.
 --
 -- log: the events table made again under its new name, as 0009 made it,
 -- every row copied with its id, with two columns: command_id, the
@@ -69,6 +70,10 @@ CREATE INDEX commands_cube_time ON commands (cube_id, created_at);
 CREATE INDEX commands_key ON commands (user_id, idempotency_key);
 CREATE INDEX commands_parent ON commands (parent_id);
 CREATE INDEX commands_pending ON commands (state, created_at) WHERE state IN ('queued', 'sent');
+-- The audit's rows of a command: the row a command's page shows, and
+-- the SET NULL of a pruned command's rows, which read the audit whole
+-- without it.
+CREATE INDEX audit_command ON audit (command_id) WHERE command_id IS NOT NULL;
 
 CREATE TABLE log (
     id         INTEGER PRIMARY KEY,

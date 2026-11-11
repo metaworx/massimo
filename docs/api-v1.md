@@ -875,7 +875,10 @@ An update's `202` hands the work to the helper,
 which reports in `GET /api/v1/update`:
 its command is `acknowledged` with the answer.
 
-`GET /api/v1/commands/{id}` is one command with its steps;
+`GET /api/v1/commands/{id}` is one command with its steps,
+by its id or by its number, as the log's `command` and the audit's
+`command_id` name it, and for a caller with `audit` with its audit row
+under `audit`;
 the command names a device by its serial number, as the audit does,
 and a step by its radio address, the radio command's:
 

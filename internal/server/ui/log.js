@@ -50,6 +50,8 @@ const logState = {
   source: "", // the source chosen, one of LOG_SOURCES, "" for all
   user: "", // the user chosen by login name, "" for everyone
   users: null, // the users of the who choice, loaded once the log opens (logLoadUsers)
+  openCommands: new Set(), // the commands whose detail is open, by number
+  commands: new Map(), // a command's detail as GET /api/v1/commands/{id} answered it, or {error}, by number
 };
 
 // LOG_SOURCES are the sources of an event, as the server names them, in
@@ -423,6 +425,7 @@ function logLine(ev) {
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" || ev.kind === "cube_gone" ? ev.cube : null,
     by: ev.by || null,
+    command: ev.command || 0,
     error: ev.error || "",
     text: ev.error || "",
   };
@@ -528,7 +531,68 @@ function renderLogLine(line) {
     rf.remove();
   }
   row.querySelector(".log-text").textContent = logText(line);
+  if (line.command) {
+    const open = logState.openCommands.has(line.command);
+    const b = button(t("log.cmd.open", { id: line.command }), { cls: "subtle log-cmd", title: t("log.cmd.title") }, () => toggleLogCommand(line.command));
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+    row.appendChild(b);
+    if (open) row.appendChild(renderLogCommand(line.command));
+  }
   return row;
+}
+
+// toggleLogCommand opens or closes the detail of a command under each
+// of its lines, loading it the first time.
+async function toggleLogCommand(id) {
+  if (logState.openCommands.has(id)) {
+    logState.openCommands.delete(id);
+    renderLog();
+    return;
+  }
+  logState.openCommands.add(id);
+  renderLog();
+  if (logState.commands.has(id)) return;
+  let view;
+  try {
+    view = await api("GET", "api/v1/commands/" + id);
+  } catch (e) {
+    view = { error: e.status === 404 ? t("log.cmd.missing") : e.message };
+  }
+  logState.commands.set(id, view);
+  if (logState.openCommands.has(id)) renderLog();
+}
+
+// renderLogCommand is a command's detail: its action, target, state and
+// who asked, its steps, and its audit row for a user with audit.
+function renderLogCommand(id) {
+  const box = elem("div", "log-cmd-detail");
+  const c = logState.commands.get(id);
+  if (!c) {
+    box.appendChild(textEl("p", t("log.cmd.loading")));
+    return box;
+  }
+  if (c.error) {
+    box.appendChild(textEl("p", c.error));
+    return box;
+  }
+  const state = logWord("log.cmdState.", c.state);
+  let head = t("log.cmd.head", { action: c.action, target: c.target || "–", state });
+  if (c.user) head = t("log.by", { text: head, name: c.user });
+  box.appendChild(textEl("p", head, "log-cmd-head"));
+  const steps = elem("ol", "log-cmd-steps");
+  for (const st of c.steps || []) {
+    const r = st.result || {};
+    let text = t("log.cmd.step", { state: logWord("log.cmdState.", st.state), target: st.target || "–" });
+    if (r.discarded) text += "; " + t("log.cmd.discarded");
+    if (r.error) text += "; " + r.error;
+    steps.appendChild(textEl("li", text));
+  }
+  if (steps.childElementCount) box.appendChild(steps);
+  if (c.audit) {
+    const a = c.audit;
+    box.appendChild(textEl("p", t("log.cmd.audit", { action: a.action, user: a.user || "–", remote: a.remote || "–", result: logWord("log.auditResult.", a.result) }), "log-cmd-audit"));
+  }
+  return box;
 }
 
 // renderLog draws the lines that match, newest first.
