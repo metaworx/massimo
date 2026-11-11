@@ -14,8 +14,8 @@ import (
 )
 
 // renameHeldWait is how long renameOver retries a rename over a file
-// another process holds; a variable for the tests.
-var renameHeldWait = 5 * time.Second
+// another process holds, where Options.HeldWait gives no time.
+const renameHeldWait = 5 * time.Second
 
 // trustedLink reports whether a link may be followed: on Windows always,
 // where making one takes a privilege or developer mode.
@@ -74,9 +74,13 @@ func (m meta) apply(_ *os.File, tmp string, keep *bool) error {
 // renameOver renames tmp over path. Windows refuses that while another
 // process holds path: a reader in the same moment (Go opens files without
 // FILE_SHARE_DELETE), the image of a process that is still exiting, or a
-// scanner's look; such a refusal is retried for renameHeldWait.
-func renameOver(tmp, path string) error {
-	deadline := time.Now().Add(renameHeldWait)
+// scanner's look; such a refusal is retried for wait, renameHeldWait if
+// 0.
+func renameOver(tmp, path string, wait time.Duration) error {
+	if wait <= 0 {
+		wait = renameHeldWait
+	}
+	deadline := time.Now().Add(wait)
 	for {
 		err := os.Rename(tmp, path)
 		if err == nil || !renameHeld(err) || time.Now().After(deadline) {

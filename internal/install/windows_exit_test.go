@@ -76,6 +76,14 @@ func startChild(t *testing.T, life time.Duration) (*exec.Cmd, string) {
 	return cmd, exe
 }
 
+// renameHeld reports whether a rename failed because another process
+// holds a file: the image of a running process refuses a rename over it
+// with access denied, a file open without delete sharing with a sharing
+// violation.
+func renameHeld(err error) bool {
+	return errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION)
+}
+
 // refusedWhileRunning checks the condition the tests rest on: a plain
 // rename over the running child's image is refused.
 func refusedWhileRunning(t *testing.T, exe string) {
@@ -120,9 +128,8 @@ func TestWriteAtomicGivesUpOnAHeldImage(t *testing.T) {
 	if b, err := os.ReadFile(exe); err != nil || !strings.HasPrefix(string(b), "MZ") {
 		t.Errorf("the image changed: %.8q, %v", b, err)
 	}
-	tmp := filepath.Join(filepath.Dir(exe), "."+filepath.Base(exe)+".tmp")
-	if _, err := os.Stat(tmp); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the temp file is left: %v", err)
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(exe), "."+filepath.Base(exe)+".*.tmp")); len(left) != 0 {
+		t.Errorf("the temp file is left: %v", left)
 	}
 }
 

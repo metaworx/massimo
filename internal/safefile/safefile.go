@@ -66,6 +66,9 @@ type Options struct {
 	// Logger takes the Warn line of a write in place; nil is
 	// slog.Default().
 	Logger *slog.Logger
+	// HeldWait is how long, on Windows, a rename over a file another
+	// process holds is retried; 0 is five seconds.
+	HeldWait time.Duration
 }
 
 // staleAge is how old a temporary file of this package's must be before
@@ -176,7 +179,7 @@ func commit(path string, o Options, data []byte, fill func(*os.File) (*os.File, 
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("safefile: %w", err)
 	}
-	if err := renameOver(tmp, dst); err != nil {
+	if err := renameOver(tmp, dst, o.HeldWait); err != nil {
 		return fmt.Errorf("safefile: %w", err)
 	}
 	done = true

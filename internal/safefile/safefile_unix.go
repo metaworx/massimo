@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -121,8 +122,9 @@ func xattrValue(path, name string) ([]byte, error) {
 	return buf[:n], nil
 }
 
-// renameOver renames tmp over path.
-func renameOver(tmp, path string) error { return os.Rename(tmp, path) }
+// renameOver renames tmp over path; only Windows refuses that while
+// another process holds path.
+func renameOver(tmp, path string, _ time.Duration) error { return os.Rename(tmp, path) }
 
 // syncDir syncs the directory, so that the rename survives a power cut;
 // a file system that cannot is left as it is.
