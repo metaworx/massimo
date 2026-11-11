@@ -615,6 +615,8 @@
   "log.sum.lockedOut": "{remote} locked out for {for} after failed {after}",
   "log.lockedAfter.logins": "sign-ins",
   "log.lockedAfter.tokens": "token checks",
+  "log.kind.audit_pruned": "audit pruned",
+  "log.sum.auditPruned": "{n} audit rows older than {days} days removed",
   "log.kind.proxy_connected": "proxy client connected",
   "log.kind.proxy_disconnected": "proxy client gone",
   "log.kind.proxy_refused": "proxy client refused",

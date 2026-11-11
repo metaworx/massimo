@@ -615,6 +615,8 @@
   "log.sum.lockedOut": "{remote} für {for} gesperrt nach fehlgeschlagenen {after}",
   "log.lockedAfter.logins": "Anmeldungen",
   "log.lockedAfter.tokens": "Token-Prüfungen",
+  "log.kind.audit_pruned": "Audit bereinigt",
+  "log.sum.auditPruned": "{n} Audit-Einträge älter als {days} Tage entfernt",
   "log.kind.proxy_connected": "Proxy-Client verbunden",
   "log.kind.proxy_disconnected": "Proxy-Client gegangen",
   "log.kind.proxy_refused": "Proxy-Client abgewiesen",

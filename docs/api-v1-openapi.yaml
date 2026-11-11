@@ -1864,7 +1864,7 @@ paths:
         alone); the server's own, source system:
         server_started, server_stopping, settings_read, restart, reboot,
         reboot_cancelled, update, update_result, backup, backup_deleted,
-        backups_pruned, log_pruned, log_rotated, restore_started; a Cube's own:
+        backups_pruned, log_pruned, audit_pruned, log_rotated, restore_started; a Cube's own:
         address_changed, cube_gone; a change made through the API, source
         config: change, with the action, target, set, changes and subject in
         "summary" and who in "by"; the queue's, source queue: command (a
@@ -1954,6 +1954,7 @@ paths:
                 stale_after: {value: 24h, default: 24h, set: false, in_effect: 24h, applies: now}
                 commands.keep_days: {value: "0", default: "0", set: false, in_effect: "0", applies: now}
                 log.keep_days: {value: "30", default: "30", set: false, in_effect: "30", applies: now}
+                audit.keep_days: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.auto_min: {value: "60", default: "60", set: false, in_effect: "60", applies: now}
                 backups.auto_max: {value: "120", default: "120", set: false, in_effect: "120", applies: now}
                 backups.keep_days_auto: {value: "90", default: "90", set: false, in_effect: "90", applies: now}

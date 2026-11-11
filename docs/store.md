@@ -616,6 +616,11 @@ Notes on the tables:
   Login attempts and user changes are recorded as well.
   Nothing in `detail` is a secret:
   passwords and tokens are removed before the row is written.
+  Retention: the events' writer prunes the rows older than `audit.keep_days`
+  beside the log, daily and when the setting changes, in chunks by
+  `audit_time` (365 by default, 0 keeping everything; AP OneLog v1.1, Block 8),
+  and says so in an `audit_pruned` line.
+  Until then nothing pruned the audit, though this section said so.
 - `backups.body` holds the file itself, gzip-compressed,
   because a backup of a Cube with thirty devices is tens of kilobytes,
   about 11 KB compressed (the six-device fixture: 24 KB of JSON, 2.2 KB gzip),

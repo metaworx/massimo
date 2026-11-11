@@ -617,6 +617,8 @@
   "log.sum.lockedOut": "{remote} bloqué pendant {for} après des {after} échouées",
   "log.lockedAfter.logins": "connexions",
   "log.lockedAfter.tokens": "vérifications de jeton",
+  "log.kind.audit_pruned": "audit purgé",
+  "log.sum.auditPruned": "{n} lignes d'audit de plus de {days} jours supprimées",
   "log.kind.proxy_connected": "client du proxy connecté",
   "log.kind.proxy_disconnected": "client du proxy parti",
   "log.kind.proxy_refused": "client du proxy refusé",

@@ -1116,7 +1116,10 @@ and applies at once; the intervals apply at the next start.
 a number, 0 for ever, and applies at once;
 `log.keep_days` how many days the Cubes' events are kept (see `GET …/log`),
 30 by default, 0 for ever, at most 3650, and applies at once:
-a lower value removes the older events within moments.
+a lower value removes the older events within moments;
+`audit.keep_days` how many days the audit's rows are kept (see
+`GET /api/v1/audit`), 365 by default, 0 for ever, at most 3650, at once too,
+an `audit_pruned` line in the log saying how many went.
 The backups' settings are whole numbers that apply at once (see Backups):
 `backups.auto_min`,
 the minutes without a change before the automatic backup (60, 1 to 10080),
@@ -1978,7 +1981,7 @@ variables `changed` and of those waiting `at_next_start`, never their values),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
-`backup_deleted` (`id`), `backups_pruned` and `log_pruned` (`removed`),
+`backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
 `log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
 or `reload`; `previous`, the name the old file has now; `kept` and `removed`,
 the rotated files kept and those deleted; at `warn` with its `error` where a

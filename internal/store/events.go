@@ -12,11 +12,11 @@ package store
 // events or a second after the first, before every read of the log
 // (FlushEvents) and at its stop, so that a burst after a reconnect is
 // one write to the SD card rather than hundreds. The same goroutine
-// prunes the events older than log.keep_days, at its start, daily and
-// when the setting changes, in chunks, so that the one connection is
-// never held for long. The server never runs VACUUM: the pages freed
-// are reused by the next days' events, and store backup writes a
-// compact copy.
+// prunes the events older than log.keep_days, and the audit's rows
+// older than audit.keep_days, at its start, daily and when a setting
+// changes, in chunks, so that the one connection is never held for
+// long. The server never runs VACUUM: the pages freed are reused by the
+// next days' events, and store backup writes a compact copy.
 
 import (
 	"context"
@@ -285,6 +285,12 @@ func (s *Store) RunEvents(ctx context.Context) {
 	prune := func() {
 		if _, err := s.pruneEvents(context.WithoutCancel(ctx), s.now(), between); err != nil && s.warn("prune") {
 			s.log.Error("store: events not pruned", "error", err)
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if _, err := s.pruneAudit(context.WithoutCancel(ctx), s.now(), between); err != nil && s.warn("prune audit") {
+			s.log.Error("store: audit not pruned", "error", err)
 		}
 	}
 	if err := s.fillSources(ctx); err != nil {

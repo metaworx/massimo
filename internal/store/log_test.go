@@ -247,3 +247,36 @@ func TestMigrationForeignKeysOff(t *testing.T) {
 		t.Fatalf("version %d, foreign_keys %d, %d audit rows", v, fk, audit)
 	}
 }
+
+// The audit keeps a year by default: the prune removes the rows older
+// than audit.keep_days and writes audit_pruned; 0 keeps every row.
+func TestAuditPruned(t *testing.T) {
+	ctx := context.Background()
+	s := open(t, t.TempDir())
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, age := range []time.Duration{400 * 24 * time.Hour, 100 * 24 * time.Hour, time.Hour} {
+		if _, err := s.Audit(ctx, AuditEntry{Time: now.Add(-age), Action: "setpoint"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func() int {
+		var n int
+		s.db.QueryRow(`SELECT count(*) FROM audit`).Scan(&n)
+		return n
+	}
+	if n, err := s.PruneAudit(ctx, now); err != nil || n != 1 || count() != 2 {
+		t.Fatalf("the default year: removed %d, %v, %d left", n, err, count())
+	}
+	if err := s.SetSetting(ctx, AuditKeepDaysKey, 0); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.PruneAudit(ctx, now.Add(1000*24*time.Hour)); err != nil || n != 0 || count() != 2 {
+		t.Fatalf("0 keeps: removed %d, %v, %d left", n, err, count())
+	}
+	if err := s.SetSetting(ctx, AuditKeepDaysKey, 30); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.PruneAudit(ctx, now); err != nil || n != 1 || count() != 1 {
+		t.Fatalf("30 days: removed %d, %v, %d left", n, err, count())
+	}
+}

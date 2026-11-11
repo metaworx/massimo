@@ -56,6 +56,9 @@ var intSettings = []intSetting{
 	{key: store.CommandsKeepDaysKey, def: 0, min: 0, max: 3650},
 	// The Cubes' events are kept this many days; 0 keeps them (log.go).
 	{key: store.LogKeepDaysKey, def: store.DefaultLogKeepDays, min: 0, max: 3650},
+	// The audit's rows are kept this many days; 0 keeps them (store
+	// audit.go).
+	{key: store.AuditKeepDaysKey, def: store.DefaultAuditKeepDays, min: 0, max: 3650},
 	// The backups (backups.go): the automatic backup's quiet window and
 	// its latest, in minutes, auto_min not above auto_max; the days an
 	// automatic backup and the others are kept, 0 keeping them; how many
@@ -319,7 +322,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return fail(http.StatusInternalServerError, "%v", err)
 		}
-		if wr.key == store.LogKeepDaysKey {
+		if wr.key == store.LogKeepDaysKey || wr.key == store.AuditKeepDaysKey {
 			st.PruneEventsSoon() // the retention applies now
 		}
 		switch wr.key {

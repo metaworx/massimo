@@ -22,7 +22,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "login", "login_failed", "locked_out",
+  "change", "command", "hold", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -294,6 +294,8 @@ function logSummaryText(kind, s) {
       return t("log.sum.backupsPruned", { n: s.removed });
     case "log_pruned":
       return t("log.sum.logPruned", { n: s.removed, days: s.keep_days });
+    case "audit_pruned":
+      return t("log.sum.auditPruned", { n: s.removed, days: s.keep_days });
     case "log_rotated":
       return t("log.sum.logRotated", { why: logWord("log.rotateWhy.", s.why), kept: num(s.kept) });
     case "restore_started":

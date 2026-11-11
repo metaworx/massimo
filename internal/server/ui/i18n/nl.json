@@ -616,6 +616,8 @@
   "log.sum.lockedOut": "{remote} geblokkeerd voor {for} na mislukte {after}",
   "log.lockedAfter.logins": "aanmeldingen",
   "log.lockedAfter.tokens": "tokencontroles",
+  "log.kind.audit_pruned": "audit opgeschoond",
+  "log.sum.auditPruned": "{n} auditregels ouder dan {days} dagen verwijderd",
   "log.kind.proxy_connected": "proxyclient verbonden",
   "log.kind.proxy_disconnected": "proxyclient vertrokken",
   "log.kind.proxy_refused": "proxyclient geweigerd",
