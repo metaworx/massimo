@@ -116,6 +116,9 @@ recording every call in `window.__fakeBridge.calls`.
 
 `helpers.py` holds the texts the tests expect in both languages,
 the stubbed answers, `wait_until`, `named_buttons` and `found_text`,
+`scroll_settled`, which waits for a smooth scroll to end
+before a test scrolls on its own
+(Chromium's compositor can undo an instant scroll sent during it),
 `open_user_menu` and `sign_out` for the header's 👤 menu,
 and `show_view`, which opens a page as a user does:
 Rooms, the log and System settings with their header button,
