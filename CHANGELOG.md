@@ -8,11 +8,75 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.14.0-alpha.1] - 2026-11-11
+
+### Added
+
+- A found Cube lists the proxies that answer for it and the addresses it
+  uses, gateway, netmask and DNS; the web UI shows "via proxy at …"
+  (`docs/api-v1.md`, "GET /api/v1/cubes").
+
+- The files massimo writes go through `internal/safefile`: whole, synced
+  and renamed into place, keeping the replaced file's link, owner, mode
+  and attributes, or in place where only the file is writable.
+
 ### Changed
 
 - CI builds a release beside the tests and signs it once they have
   passed, about five minutes sooner; the nightly build has a workflow of
   its own (`GUIDELINES/project/CI.md`, section 2).
+
+- A request to the API without a token, ticket or `?token=` is still
+  refused with 401 but no longer counts toward the address's lockout:
+  only wrong tokens, tickets and passwords do (`docs/api-v1.md`).
+
+- serve's search asks each Cube for the addresses it uses as well, and
+  massimo discover asks all Cubes at once; a proxy is told by its MAC or
+  by its silence to N and c (`README.md`, "Command line").
+
+- A change to the plans, the guidelines' documents or the changelog
+  alone runs the Guidelines checks and no tests, and makes no devel
+  build (`GUIDELINES/project/CI.md`, section 2).
+
+- CI does not test again code that has passed: a branch's retirement
+  after its green run, and its merge into `main`, run only what had not
+  run (`GUIDELINES/project/CI.md`, section 2).
+
+### Fixed
+
+- A package built between two releases sorts after the one it follows,
+  `0.13.0~alpha.2+3.gabc1234`, so that apt no longer takes it back to
+  that release (`packaging/README.md`, "Debian package").
+
+- The Debian packages are named as GitHub names their assets, the `~`
+  and `+` of the version written as dots: `sha256sum -c SHA256SUMS`
+  checks them, and the `devel` and `nightly` builds keep theirs.
+
+- A release fails where GitHub renames a file it uploads, before a
+  `devel` or `nightly` build moves its tag and deletes the files it does
+  not name (`packaging/release-assets.sh`).
+
+- A Cube heard from its own address and from a proxy is one found Cube,
+  and serve following it by discovery stays at one of them: it moved to
+  each answer in turn, every run (`docs/api-v1.md`).
+
+- The settings file watch's test writes each content whole, renamed into
+  place: a busy runner paused between truncating the file and writing it,
+  and the watch saw two changes where the test made one.
+
+- A `massimo backup` file and a store copy cut short by a kill or a full
+  disk no longer replace a good backup or leave a partial database under
+  the copy's name (`docs/store.md`).
+
+- A pruned backup's id is never given to a later backup, so a list
+  loaded before the prune can no longer delete or download another
+  backup by its id (migration 0013; `docs/store.md` section 9).
+
+### Security
+
+- `massimo install` hands the files it wrote to the service user with
+  `chown -h`: a link the service put in their place no longer has root
+  give it the link's target.
 
 ## [0.13.0-alpha.2] - 2026-11-10
 
