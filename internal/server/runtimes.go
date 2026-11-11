@@ -82,9 +82,14 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	rt := &runtime{cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(), push: map[chan struct{}]struct{}{},
 		structure: make(chan struct{}, 1),
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
-	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: opts.Logger})
+	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: s.partLog("cube", rt.serial)})
 	qopts := opts.Queue
 	qopts.Observer = s.newObserver()
+	// The queue's lines went to slog.Default() before: serve gave it no
+	// logger of its own.
+	if qopts.Logger == nil {
+		qopts.Logger = s.partLog("queue", rt.serial)
+	}
 	rt.queue = engine.NewQueue(rt.client, qopts)
 	rt.store = opts.Store
 	if opts.Store != nil {
@@ -200,7 +205,7 @@ func (s *Server) ensureResponder() *proxy.Responder {
 		s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
 		return nil
 	}
-	r := proxy.NewResponder(s.log)
+	r := proxy.NewResponder(s.partLog("proxy", ""))
 	s.responder = r
 	ctx := s.trackLocked()
 	go func() { defer s.wg.Done(); r.Serve(ctx, pc) }()
@@ -228,7 +233,7 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 		return false
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
-		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.log})
+		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial())})
 	var r *proxy.Responder
 	if pl.Discovery {
 		if r = s.ensureResponder(); r != nil {

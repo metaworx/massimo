@@ -121,10 +121,13 @@ func runServe(args []string) error {
 		defer logFile.Close()
 		fileOut = logFile
 	}
-	logger, err := newServeLogger(os.Stderr, fileOut, fileFormat, processFormat, *logLevelFlag, "-log-level or "+env.LogLevel)
+	root, err := newServeLogger(os.Stderr, fileOut, fileFormat, processFormat, *logLevelFlag, "-log-level or "+env.LogLevel)
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
+	// Every line says whose it is: serve's own are the system's, and the
+	// parts get root, each with its source (internal/serve).
+	logger := root.With("source", "system")
 	if narrowErr != nil {
 		logger.Warn("log file not narrowed: others may read it", "path", *logPath, "mode", fmt.Sprintf("%#o", logfile.Mode), "error", narrowErr)
 	}
@@ -220,7 +223,7 @@ func runServe(args []string) error {
 	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), Serial: selectedSN, SerialGiven: snExplicit,
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot,
-		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: logger,
+		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: root,
 		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}}
 	// The flags given win for this run; otherwise the store's settings.
 	for _, d := range []struct {

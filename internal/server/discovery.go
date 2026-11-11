@@ -232,7 +232,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		}
 		rctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		r = proxy.NewResponder(s.log)
+		r = proxy.NewResponder(s.partLog("proxy", ""))
 		go r.Serve(rctx, pc)
 	}
 	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})

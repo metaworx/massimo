@@ -113,7 +113,7 @@ func TestOpenRunsAgainstFakeCube(t *testing.T) {
 	if err := stop(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`msg="serving cube" serial=KEQ0000100`, `msg="api listening" addr=` + inst.Addr() + ` auth=open restart=none reboot=none tls=off data=` + data, `msg="store closed"`} {
+	for _, want := range []string{`msg="serving cube" source=system serial=KEQ0000100`, `msg="api listening" source=system addr=` + inst.Addr() + ` auth=open restart=none reboot=none tls=off data=` + data, `msg="store closed"`} {
 		if !strings.Contains(log.String(), want) {
 			t.Errorf("the log lacks %q:\n%s", want, log.String())
 		}
@@ -253,7 +253,7 @@ func TestRunAnnounces(t *testing.T) {
 	default:
 		t.Fatal("Run returned before the announcement stopped")
 	}
-	if !strings.Contains(log.String(), `msg="announced on the LAN" service=_massimo._tcp name=box port=`+port) {
+	if !strings.Contains(log.String(), `msg="announced on the LAN" source=system service=_massimo._tcp name=box port=`+port) {
 		t.Fatalf("log:\n%s", log.String())
 	}
 }
@@ -276,7 +276,7 @@ func TestRunUnannouncedWarns(t *testing.T) {
 	if err := stop(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(log.String(), `level=WARN msg="not announced on the LAN" error="no interface joined the mDNS group"`) {
+	if !strings.Contains(log.String(), `level=WARN msg="not announced on the LAN" source=system error="no interface joined the mDNS group"`) {
 		t.Fatalf("log:\n%s", log.String())
 	}
 
@@ -294,7 +294,7 @@ func TestRunUnannouncedWarns(t *testing.T) {
 		t.Fatalf("announced without a store: %+v", svc)
 	default:
 	}
-	if !strings.Contains(log.String(), `msg="not announced on the LAN" reason="no store (-addr), so no node"`) {
+	if !strings.Contains(log.String(), `msg="not announced on the LAN" source=system reason="no store (-addr), so no node"`) {
 		t.Fatalf("log:\n%s", log.String())
 	}
 }

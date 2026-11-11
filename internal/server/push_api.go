@@ -248,7 +248,7 @@ func (s *Server) deletePush(w http.ResponseWriter, r *http.Request) error {
 
 // newNotify makes the rules of a server with a store.
 func (s *Server) newNotify() *notify.Sink {
-	return notify.New(notify.Options{Users: s.notifyUsers, Deliver: s.deliverNotification, Devices: s.notifyDevices, Clock: s.opts.notifyClock, Logger: s.log})
+	return notify.New(notify.Options{Users: s.notifyUsers, Deliver: s.deliverNotification, Devices: s.notifyDevices, Clock: s.opts.notifyClock, Logger: s.partLog("push", "")})
 }
 
 // refreshNotify tells the rules that a subscription or a notify
@@ -350,7 +350,7 @@ func (s *Server) notifyDevices() []notify.Device {
 
 // newWebPush makes the Web Push deliverer of a server with a store.
 func (s *Server) newWebPush() *push.WebPush {
-	return &push.WebPush{Store: s.opts.Store, VAPID: s.vapid, Client: s.opts.pushClient, Retry: s.opts.pushRetry, Removed: s.refreshNotify, Logger: s.log}
+	return &push.WebPush{Store: s.opts.Store, VAPID: s.vapid, Client: s.opts.pushClient, Retry: s.opts.pushRetry, Removed: s.refreshNotify, Logger: s.partLog("push", "")}
 }
 
 // vapid is how the server identifies itself to a push service: its

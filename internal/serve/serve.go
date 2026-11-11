@@ -141,7 +141,8 @@ var startAnnounce = func(ctx context.Context, svc announce.Service, log *slog.Lo
 // Instance is a server opened and not yet stopped.
 type Instance struct {
 	cfg   Config
-	log   *slog.Logger
+	log   *slog.Logger // serve's own lines, source system
+	root  *slog.Logger // the logger the parts get, each with its source
 	src   certs.Source // nil without TLS
 	st    *store.Store // nil with Config.Addr
 	srv   *server.Server
@@ -160,23 +161,27 @@ func Open(ctx context.Context, cfg Config) (*Instance, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	src, err := tlsSource(cfg.TLS, cfg.Listen, cfg.DataDir, log)
+	// Every line says whose it is (AP OneLog, Block 3): serve's own are
+	// the system's, and each part gets the logger with its source.
+	src, err := tlsSource(cfg.TLS, cfg.Listen, cfg.DataDir, log.With("source", "tls"))
 	if err != nil {
 		return nil, err
 	}
-	st, err := openStore(cfg, log)
+	stLog := log.With("source", "store")
+	st, err := openStore(cfg, stLog)
 	if err != nil {
 		return nil, err
 	}
 	inst, err := open(ctx, cfg, log, src, st)
 	if err != nil && st != nil {
-		closeStore(st, log)
+		closeStore(st, stLog)
 	}
 	return inst, err
 }
 
 // open is Open once the store is open.
-func open(ctx context.Context, cfg Config, log *slog.Logger, src certs.Source, st *store.Store) (*Instance, error) {
+func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, st *store.Store) (*Instance, error) {
+	log := root.With("source", "system")
 	// The values given win for this run; otherwise the store's settings.
 	poll, refresh, discover := server.DefaultPollInterval, server.DefaultRefreshInterval, server.DefaultDiscoverInterval
 	var staleAfter time.Duration
@@ -203,14 +208,14 @@ func open(ctx context.Context, cfg Config, log *slog.Logger, src certs.Source, s
 	if err != nil {
 		return nil, err
 	}
-	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: log, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
+	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Deliverers: cfg.Deliverers})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return nil, err
 	}
-	return &Instance{cfg: cfg, log: log, src: src, st: st, srv: srv, ln: ln, cubes: su.cubes}, nil
+	return &Instance{cfg: cfg, log: log, root: root, src: src, st: st, srv: srv, ln: ln, cubes: su.cubes}, nil
 }
 
 // Addr is the address the API listens on, its port the one taken where
@@ -232,7 +237,7 @@ func (i *Instance) Run(ctx context.Context) error {
 	defer cancel()
 	defer i.Close()
 	for _, c := range i.cubes {
-		i.log.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "source", c.Source)
+		i.log.Info("serving cube", "serial", c.Serial, "addr", c.Addr, "from", c.Source)
 	}
 	auth := any(i.cfg.Token != "")
 	if i.st != nil {
@@ -314,7 +319,7 @@ func (i *Instance) announce(ctx context.Context) (wait func()) {
 	if src := i.src; src != nil {
 		svc.Fingerprint = func() string { return src.Status().Fingerprint }
 	}
-	stop, err := startAnnounce(ctx, svc, i.log)
+	stop, err := startAnnounce(ctx, svc, i.root.With("source", "announce"))
 	if err != nil {
 		i.log.Warn("not announced on the LAN", "error", err)
 		return func() {}
@@ -332,7 +337,7 @@ func (i *Instance) Close() error {
 			err = nil // closed by the shutdown already
 		}
 		if i.st != nil {
-			closeStore(i.st, i.log)
+			closeStore(i.st, i.root.With("source", "store"))
 		}
 	})
 	return err

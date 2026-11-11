@@ -290,7 +290,7 @@ func (s *Store) copyTo(ctx context.Context, dst string) error {
 			return err
 		}
 	}
-	err = safefile.Replace(dst, safefile.Options{Mode: 0o600}, func(tmp string) error {
+	err = safefile.Replace(dst, safefile.Options{Mode: 0o600, Logger: s.log}, func(tmp string) error {
 		_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, tmp)
 		return err
 	})

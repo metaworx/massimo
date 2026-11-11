@@ -293,7 +293,7 @@ func (s *builtServe) countLines(t *testing.T, msg string, n int) {
 }
 
 // serve writes plain lines on stderr and JSON ones into its -log file,
-// made 0640. A plain file it finds is rotated at the start, and the log
+// made 0640, each with its source. A plain file it finds is rotated at the start, and the log
 // on SIGHUP: each old file ends with the rotation in its own format, and
 // the new one starts with it, as stderr says it too.
 func TestServeLogFile(t *testing.T) {
@@ -330,6 +330,12 @@ func TestServeLogFile(t *testing.T) {
 		return out
 	}
 	now, before := jsonLines(path), jsonLines(path+".1")
+	// Every line says whose it is (Block 3).
+	for _, l := range append(slices.Clone(now), before...) {
+		if src, _ := l["source"].(string); src == "" {
+			t.Errorf("a line without its source: %v", l)
+		}
+	}
 	if now[0]["msg"] != "log rotated" || now[0]["reason"] != "sighup" {
 		t.Errorf("serve.log's first line: %v", now[0])
 	}

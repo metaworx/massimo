@@ -586,6 +586,16 @@ func (rt *runtime) recent(n int) []event {
 	return append([]event(nil), rt.events[len(rt.events)-n:]...)
 }
 
+// partLog is the logger of a part the server starts: its source, and the
+// Cube it serves where it serves one.
+func (s *Server) partLog(source, serial string) *slog.Logger {
+	l := s.opts.Logger.With("source", source)
+	if serial != "" {
+		l = l.With("cube", serial)
+	}
+	return l
+}
+
 // New creates a server; Run starts the Cube connections.
 func New(opts Options) *Server {
 	if opts.Logger == nil {
@@ -594,8 +604,10 @@ func New(opts Options) *Server {
 	if opts.PollInterval == 0 {
 		opts.PollInterval = time.Minute
 	}
-	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{}, token: opts.Token,
-		limiter: newLimiter(opts, opts.Logger), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
+	// The server's own lines are source server; the parts it starts get
+	// the logger with their own (cube, queue, proxy, push).
+	s := &Server{opts: opts, log: opts.Logger.With("source", "server"), started: time.Now(), cubes: map[string]*runtime{}, token: opts.Token,
+		limiter: newLimiter(opts, opts.Logger.With("source", "server")), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
 	if s.authLockout <= 0 {
 		s.authLockout = DefaultAuthLockout
