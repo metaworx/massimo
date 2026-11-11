@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -55,6 +56,19 @@ var (
 // eventMessage is an event's line's message: its kind's own, else the
 // kind's words.
 func eventMessage(ev event) string {
+	switch ev.Kind {
+	case "command":
+		if state, ok := ev.Summary["state"].(string); ok {
+			return "command " + state
+		}
+	case "hold":
+		switch ev.Summary["reason"] {
+		case engine.HoldDutyCycle:
+			return "radio duty cycle exhausted, waiting for the hourly reset"
+		case engine.HoldMemorySlots:
+			return "few free memory slots on the cube, holding radio commands"
+		}
+	}
 	if ev.Error != "" {
 		if m, ok := failedMessages[ev.Kind]; ok {
 			return m

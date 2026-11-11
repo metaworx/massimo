@@ -395,7 +395,7 @@ func (s *Server) logChange(a *auditInfo) {
 	if a.subject != nil {
 		summary["subject"] = a.subject
 	}
-	ev := event{Kind: "change", Source: "config", Time: a.started, Summary: summary}
+	ev := event{Kind: "change", Source: "config", Time: a.started, Summary: summary, Command: a.commandID}
 	if a.p.named() {
 		ev.userID = a.p.user.ID
 	}

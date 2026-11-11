@@ -84,7 +84,8 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
 	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: s.partLog("cube", rt.serial), EventLines: true})
 	qopts := opts.Queue
-	qopts.Observer = s.newObserver()
+	qopts.Observer = s.newObserver(rt)
+	qopts.OnHold = rt.held
 	// The queue's lines went to slog.Default() before: serve gave it no
 	// logger of its own.
 	if qopts.Logger == nil {

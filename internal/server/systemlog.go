@@ -144,6 +144,25 @@ func (s *Server) LogRotated(why, previous string, kept int, removed []string, er
 	s.logServer(ev)
 }
 
+// logSignIn writes a sign-in (login), or a failed one (login_failed, at
+// warn), as a line of the server's that only a user with audit sees: the
+// login name, the user where known, and the address it came from.
+func (s *Server) logSignIn(kind, name string, userID int64, remote string) {
+	ev := event{Kind: kind, Source: "server", Time: time.Now(), userID: userID, audit: true, Summary: map[string]any{"user": name, "remote": remote}}
+	if kind == "login_failed" {
+		ev.Level = "warn"
+	}
+	s.logServer(ev)
+}
+
+// logLockout writes locked_out at warn, as a line only a user with audit
+// sees: an address locked out after too many failed logins or token
+// checks (after), and for how long.
+func (s *Server) logLockout(remote, after string) {
+	s.logServer(event{Kind: "locked_out", Source: "server", Level: "warn", Time: time.Now(), audit: true,
+		Summary: map[string]any{"remote": remote, "after": after, "for": s.authLockout.String()}})
+}
+
 // jsonString is a setting's JSON string, "" for anything else.
 func jsonString(raw []byte) string {
 	if len(raw) < 2 || raw[0] != '"' {

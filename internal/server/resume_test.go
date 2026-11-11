@@ -217,7 +217,7 @@ func TestStreamReplayKeepsUsersApart(t *testing.T) {
 	rt.subsMu.Lock()
 	defer rt.subsMu.Unlock()
 	for user, want := range map[int64]int{7: 2, 8: 1} {
-		evs, ok := rt.since(from, user)
+		evs, ok := rt.since(from, &subscriber{user: user})
 		if !ok || len(evs) != want {
 			t.Fatalf("user %d: %d events (%v), want %d", user, len(evs), ok, want)
 		}

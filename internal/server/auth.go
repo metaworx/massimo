@@ -840,7 +840,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			writeError(w, http.StatusInternalServerError, "authentication failed; see the log")
 		default:
 			if offered && s.limiter.fail(ctx, key) {
-				s.log.Warn("api: address locked out after failed token checks", "remote", ip, "for", s.authLockout)
+				s.logLockout(ip, "tokens")
 			}
 			writeError(w, http.StatusUnauthorized, errBadToken.Error())
 		}

@@ -35,7 +35,7 @@ var eventKinds = []string{
 	"device_forgotten", "cube_found", "restore_step", "restore_done",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
 	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-	"change",
+	"change", "command", "hold", "login", "login_failed", "locked_out",
 }
 
 // Limits of a page of the log.
@@ -80,7 +80,7 @@ func (s *Server) learnStoreID(ctx context.Context, rt *runtime) {
 }
 
 // logSources are the sources an event comes from (event.settle).
-var logSources = []string{"device", "cube", "system", "config"}
+var logSources = []string{"device", "cube", "system", "config", "queue", "server"}
 
 // logQuery is a request's page of the log.
 type logQuery struct {

@@ -1655,7 +1655,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	}
 	ch := make(chan event, 64)
 	p := principalOf(r)
-	sub := &subscriber{user: p.userID(), gone: make(chan struct{})}
+	sub := &subscriber{user: p.userID(), audit: p.has("audit"), gone: make(chan struct{})}
 	// The last id the client read: the browser's own retry sends the
 	// header, a client that opens a new stream (the web UI, with a fresh
 	// ticket) the parameter; the header is the newer of the two.
@@ -1666,7 +1666,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	// The replay and the subscription under one lock, so that no event
 	// falls between them; head is the id of the newest event so far.
 	rt.subsMu.Lock()
-	replay, resumed := rt.since(last, sub.user)
+	replay, resumed := rt.since(last, sub)
 	head := rt.streamID(rt.seq)
 	rt.subs[ch] = sub
 	rt.subsMu.Unlock()

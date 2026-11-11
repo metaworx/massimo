@@ -367,3 +367,83 @@ func TestLogByCommandAndVisibility(t *testing.T) {
 		}
 	}
 }
+
+// A setpoint's lines are found by its command: the step queued and sent
+// at debug, acknowledged at info, and its change line, each naming the
+// command.
+func TestSetpointLinesByCommand(t *testing.T) {
+	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`); code != 200 {
+		t.Fatalf("setpoint: %d %s", code, text)
+	}
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if len(rows) != 1 || rows[0].CommandID == 0 {
+		t.Fatalf("audit row %+v", rows)
+	}
+	id := strconv.FormatInt(rows[0].CommandID, 10)
+	want := []string{"command:queued:debug", "command:sent:debug", "command:acknowledged:info", "change::info"}
+	var got []string
+	eventually(t, "the setpoint's lines", func() bool {
+		var evs []event
+		getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+id, &evs)
+		got = got[:0]
+		for _, e := range evs {
+			state, _ := e.Summary["state"].(string)
+			got = append(got, e.Kind+":"+state+":"+e.Level)
+			if e.Command != rows[0].CommandID {
+				t.Fatalf("a line of another command: %+v", e)
+			}
+		}
+		return len(got) == len(want)
+	})
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("the setpoint's lines %v, want %v", got, want)
+		}
+	}
+}
+
+// A sign-in, a failed one and a lockout are the server's lines, which a
+// user with audit sees and a viewer does not, on the log and the stream.
+func TestSignInLinesForAuditorsAlone(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	viewer := userToken(t, s.opts.Store, "anna", store.RoleViewer)
+	s.logSignIn("login", "anna", 0, "192.0.2.1")
+	s.logSignIn("login_failed", "bob", 0, "192.0.2.2")
+	s.logLockout("192.0.2.2", "logins")
+	kinds := func(token string) map[string]string {
+		t.Helper()
+		var page []event
+		getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/log?limit=1000&source=server", &page)
+		seen := map[string]string{}
+		for _, e := range page {
+			seen[e.Kind] = e.Level
+		}
+		return seen
+	}
+	eventually(t, "the owner's sign-in lines", func() bool { return len(kinds("secret")) == 3 })
+	if seen := kinds("secret"); seen["login"] != "info" || seen["login_failed"] != "warn" || seen["locked_out"] != "warn" {
+		t.Errorf("the owner's lines: %v", seen)
+	}
+	if seen := kinds(viewer); len(seen) != 0 {
+		t.Errorf("a viewer's lines: %v", seen)
+	}
+	rt := s.runtimes()[0]
+	sees := func(sub *subscriber) int {
+		rt.subsMu.Lock()
+		defer rt.subsMu.Unlock()
+		n := 0
+		for _, p := range rt.replay {
+			if p.ev.audit && sub.sees(p.ev, p.user) {
+				n++
+			}
+		}
+		return n
+	}
+	if n := sees(&subscriber{user: 2}); n != 0 {
+		t.Errorf("a viewer's stream sees %d sign-in lines", n)
+	}
+	if n := sees(&subscriber{audit: true}); n != 3 {
+		t.Errorf("an auditor's stream sees %d sign-in lines, want 3", n)
+	}
+}

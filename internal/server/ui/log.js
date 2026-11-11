@@ -22,7 +22,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change"];
+  "change", "command", "hold", "login", "login_failed", "locked_out"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
 // LOG_COUNT events, the last 10 minutes, the last hour, today, this week
@@ -53,7 +53,7 @@ const logState = {
 
 // LOG_SOURCES are the sources of an event, as the server names them, in
 // the order of the source choice.
-const LOG_SOURCES = ["system", "config", "cube", "device"];
+const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server"];
 
 // LOG_KIND_SOURCE groups the kinds by the source they come from, for the
 // kind choice; a kind of more than one (config) goes with the devices.
@@ -62,6 +62,8 @@ const LOG_KIND_SOURCE = {
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
   change: "config",
+  command: "queue", hold: "queue",
+  login: "server", login_failed: "server", locked_out: "server",
 };
 
 // LOG_LEVELS are the levels of an event, lowest first, as the server
@@ -297,6 +299,20 @@ function logSummaryText(kind, s) {
       return t("log.sum.addressChanged", { from: s.from || "–", to: s.to || "–" });
     case "change":
       return logChangeText(s);
+    case "command": {
+      const state = logWord("log.cmdState.", s.state);
+      if (s.duty_pct === undefined) return t("log.sum.command", { state });
+      return t("log.sum.commandBudget", { state, duty: num(s.duty_pct), slots: num(s.free_slots) });
+    }
+    case "hold":
+      if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtLogTime(new Date(s.until)) : "–" });
+      return t("log.sum.holdSlots", { slots: num(s.free_slots), wait: num(s.wait_s) });
+    case "login":
+      return t("log.sum.login", { user: s.user || "–", remote: s.remote || "–" });
+    case "login_failed":
+      return t("log.sum.loginFailed", { user: s.user || "–", remote: s.remote || "–" });
+    case "locked_out":
+      return t("log.sum.lockedOut", { remote: s.remote || "–", for: s.for || "–", after: logWord("log.lockedAfter.", s.after) });
   }
   return "";
 }

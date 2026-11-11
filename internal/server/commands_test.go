@@ -305,7 +305,7 @@ func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
 	if _, err := conn.ExecContext(t.Context(), "BEGIN IMMEDIATE"); err != nil {
 		t.Fatal(err)
 	}
-	o := s.newObserver()
+	o := s.newObserver(s.runtimes()[0])
 	cmd := engine.Command{ID: parent.UUID, Seq: 1, Lines: []cube.Message{{Type: 's', Data: "AARAAAAACgENBms="}}}
 	start := time.Now()
 	o.Enqueued(cmd)

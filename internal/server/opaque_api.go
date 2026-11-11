@@ -223,7 +223,7 @@ func (s *Server) loginStart(w http.ResponseWriter, r *http.Request) error {
 	}
 	if s.limiter.fail(ctx, addrKey) {
 		locked = append(locked, addrKey)
-		s.log.Warn("api: address locked out after failed logins", "remote", ip, "for", s.authLockout)
+		s.logLockout(ip, "logins")
 	}
 	now := time.Now()
 	end := now.Add(loginTTL)
@@ -279,7 +279,7 @@ func (s *Server) loginFinish(w http.ResponseWriter, r *http.Request) error {
 	}
 	if errors.Is(err, store.ErrBadPassword) {
 		auditAction(r, "login.failed")
-		s.log.Warn("api: login failed", "user", p.name, "remote", p.ip)
+		s.logSignIn("login_failed", p.name, 0, p.ip)
 		return fail(http.StatusUnauthorized, "wrong user or password")
 	}
 	if err != nil {

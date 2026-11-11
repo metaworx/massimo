@@ -103,8 +103,11 @@ type Mover interface {
 // Result is the outcome of a Command.
 type Result struct {
 	Discarded bool // the Cube rejected a radio command (budget exhausted)
-	Budget    cubelan.Budget
-	Err       error
+	// Retried says the Cube discarded a radio command to a device in
+	// error state, and the queue reset the state and sent it again.
+	Retried bool
+	Budget  cubelan.Budget
+	Err     error
 	// Replies holds the Cube's answer to each of the command's Lines, in
 	// order, up to the first failure. Radio replies are S lines.
 	Replies []cube.Message
@@ -154,8 +157,40 @@ type Options struct {
 	// cycle next resets (default: the next full hour plus a margin).
 	Now     func() time.Time
 	ResetAt func(now time.Time) time.Time
-	// Observer, when set, is told of every command with an ID.
+	// Observer, when set, is told of every command with an ID; the
+	// queue's own lines of such a command's outcome go to debug then,
+	// since the observer records it.
 	Observer Observer
+	// OnHold, when set, is told of each time radio commands wait for the
+	// duty cycle or for free memory slots, and the queue's own warning of
+	// it goes to debug.
+	OnHold func(Hold)
+}
+
+// Hold is a wait of the radio commands: Reason HoldDutyCycle until
+// Until, with the duty cycle at DutyPct, or HoldMemorySlots for Wait,
+// with FreeSlots free.
+type Hold struct {
+	Reason    string
+	DutyPct   int
+	FreeSlots int
+	Until     time.Time
+	Wait      time.Duration
+}
+
+// The reasons of a Hold.
+const (
+	HoldDutyCycle   = "duty_cycle"
+	HoldMemorySlots = "memory_slots"
+)
+
+// stepLevel is the level of the queue's line of a command's outcome:
+// debug where an observer records the command.
+func (q *Queue) stepLevel(cmd Command, level slog.Level) slog.Level {
+	if cmd.ID != "" && q.opts.Observer != nil {
+		return slog.LevelDebug
+	}
+	return level
 }
 
 func (o *Options) defaults() {
@@ -415,8 +450,9 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		if r.Discarded && cmd.Target != 0 {
 			// Observed on hardware: a command to a device in error state is
 			// discarded unless r: was sent first. Reset once and retry.
-			q.opts.Logger.Info("command discarded, resetting error state and retrying", "target", cmd.Target, "command", l.String(),
+			q.opts.Logger.Log(ctx, q.stepLevel(cmd, slog.LevelInfo), "command discarded, resetting error state and retrying", "target", cmd.Target, "command", l.String(),
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
+			res.Retried = true
 			if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(cmd.Target)); err != nil {
 				res.Err = err
 				break
@@ -429,11 +465,12 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		}
 		res.Replies = append(res.Replies, sendResultLine(r))
 		if !r.Discarded {
-			q.opts.Logger.Info("command accepted by the cube", "target", cmd.Target, "command", l.String(),
+			q.opts.Logger.Log(ctx, q.stepLevel(cmd, slog.LevelInfo), "command accepted by the cube", "target", cmd.Target, "command", l.String(),
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 		}
 		if r.Discarded {
-			q.opts.Logger.Warn("command discarded by the cube", "target", cmd.Target, "command", l.String(), "duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
+			q.opts.Logger.Log(ctx, q.stepLevel(cmd, slog.LevelWarn), "command discarded by the cube", "target", cmd.Target, "command", l.String(),
+				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			res.Discarded = true
 			res.Err = ErrDiscarded
 			break
@@ -457,12 +494,24 @@ func (q *Queue) deviceInError(rf cube.RFAddress) bool {
 	return ok && (st.Error || st.LinkError)
 }
 
+// hold says that the radio commands wait: to OnHold, and in the queue's
+// own line, a warning without OnHold.
+func (q *Queue) hold(ctx context.Context, msg string, h Hold, attrs ...any) {
+	level := slog.LevelWarn
+	if q.opts.OnHold != nil {
+		q.opts.OnHold(h)
+		level = slog.LevelDebug
+	}
+	q.opts.Logger.Log(ctx, level, msg, attrs...)
+}
+
 // waitForBudget blocks while the duty cycle or free slots are exhausted.
 func (q *Queue) waitForBudget(ctx context.Context) error {
 	b := q.gw.Budget()
 	if b.DutyCyclePct >= q.opts.MaxDutyPct {
 		until := q.opts.ResetAt(q.opts.Now())
-		q.opts.Logger.Warn("radio duty cycle exhausted, waiting for the hourly reset", "duty_pct", b.DutyCyclePct, "until", until)
+		q.hold(ctx, "radio duty cycle exhausted, waiting for the hourly reset", Hold{Reason: HoldDutyCycle, DutyPct: b.DutyCyclePct, Until: until},
+			"duty_pct", b.DutyCyclePct, "until", until)
 		q.sleep(ctx, until.Sub(q.opts.Now()))
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -472,7 +521,8 @@ func (q *Queue) waitForBudget(ctx context.Context) error {
 		return nil // nothing known yet; the first command tells us
 	}
 	if b.FreeMemorySlots < q.opts.MinFreeSlots {
-		q.opts.Logger.Warn("few free memory slots on the cube, holding radio commands", "free", b.FreeMemorySlots, "wait", q.opts.SlotWait)
+		q.hold(ctx, "few free memory slots on the cube, holding radio commands", Hold{Reason: HoldMemorySlots, FreeSlots: b.FreeMemorySlots, Wait: q.opts.SlotWait},
+			"free", b.FreeMemorySlots, "wait", q.opts.SlotWait)
 		q.sleep(ctx, q.opts.SlotWait)
 		return ctx.Err()
 	}

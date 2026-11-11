@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -112,5 +113,23 @@ func TestEventLinesMatchTheRows(t *testing.T) {
 			t.Errorf("no line for the row %+v; lines %v", k, lines)
 		}
 		lines[k]--
+	}
+}
+
+// A step's line says its state, a hold's what the radio waits for.
+func TestEventMessages(t *testing.T) {
+	for _, c := range []struct {
+		ev   event
+		want string
+	}{
+		{event{Kind: "command", Summary: map[string]any{"state": "acknowledged"}}, "command acknowledged"},
+		{event{Kind: "hold", Summary: map[string]any{"reason": engine.HoldDutyCycle}}, "radio duty cycle exhausted, waiting for the hourly reset"},
+		{event{Kind: "hold", Summary: map[string]any{"reason": engine.HoldMemorySlots}}, "few free memory slots on the cube, holding radio commands"},
+		{event{Kind: "login_failed"}, "login failed"},
+		{event{Kind: "restart", Error: "no"}, "restart not started"},
+	} {
+		if got := eventMessage(c.ev); got != c.want {
+			t.Errorf("%s: %q, want %q", c.ev.Kind, got, c.want)
+		}
 	}
 }

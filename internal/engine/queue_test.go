@@ -161,7 +161,9 @@ func TestQueueCoalescesByKey(t *testing.T) {
 func TestQueueWaitsForDutyCycleReset(t *testing.T) {
 	// Pretend the duty cycle is exhausted; the reset is 100 ms away.
 	resetAt := func(now time.Time) time.Time { return now.Add(100 * time.Millisecond) }
-	srv, q, _ := setup(t, Options{ResetAt: resetAt})
+	var holds []Hold
+	var mu sync.Mutex
+	srv, q, _ := setup(t, Options{ResetAt: resetAt, OnHold: func(h Hold) { mu.Lock(); holds = append(holds, h); mu.Unlock() }})
 	srv.Duty = 0x64 // 100 %
 	// First radio command learns the budget (100 %), second one must wait.
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
@@ -175,6 +177,11 @@ func TestQueueWaitsForDutyCycleReset(t *testing.T) {
 	if d := time.Since(start); d < 90*time.Millisecond {
 		t.Fatalf("did not wait for the reset: %s", d)
 	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(holds) != 1 || holds[0].Reason != HoldDutyCycle || holds[0].DutyPct != 100 || holds[0].Until.IsZero() {
+		t.Fatalf("holds %+v, want the duty cycle's", holds)
+	}
 }
 
 func TestQueueRetriesAfterDiscard(t *testing.T) {
@@ -182,7 +189,7 @@ func TestQueueRetriesAfterDiscard(t *testing.T) {
 	srv.Discard = true
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
 	res := q.Enqueue(Command{Target: 0x0a0108, Lines: []cube.Message{m}}).Wait(context.Background())
-	if res.Err != ErrDiscarded || !res.Discarded {
+	if res.Err != ErrDiscarded || !res.Discarded || !res.Retried {
 		t.Fatalf("result %+v", res)
 	}
 	// s: discarded, then r: and a second s:, discarded again.

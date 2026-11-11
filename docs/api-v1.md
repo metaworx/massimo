@@ -1888,7 +1888,9 @@ with `before` as the cursor within it;
 also one the Cube no longer has.
 `source` keeps one source: `device` (a device's), `cube` (the Cube's own:
 its connection, configuration, rooms, pairing, a Cube found on the LAN),
-`system` (the server's own jobs) or `config` (a change of the configuration).
+`system` (the server's own jobs), `config` (a change of the configuration),
+`queue` (a command's steps on the radio, its holds) or `server` (the
+sign-ins).
 `level` keeps that level and above, `debug`, `info`, `warn` or `error`;
 `info` by default, so that a client asks for `level=debug` to see the
 debug lines (the Cube's `hello`).
@@ -1987,7 +1989,19 @@ secrets removed), what `changes` from and to where the server knows both
 `display_name` and `role`; a role's `id`, `key` and `name`; a key's `id`,
 `uuid`, `name` and its user).
 A change of a Cube is that Cube's line, one of a device carries its
-`serial`, every other is the server's.
+`serial`, every other is the server's; it names its request's `command`.
+The queue's, source `queue`:
+`command`, a step of a command on the Cube's radio, with `command` naming the
+request (`GET /api/v1/commands/{id}`) and its `summary` the `step`'s id, its
+`key` and its `state`: `queued` and `sent` at `debug`, `acknowledged` at `info`
+with the budget (`duty_pct`, `free_slots`), and at `warn` `retried` (the Cube
+discarded it, the device's error state was reset and it was sent again),
+`dropped` and `failed` with their `error`;
+`hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
+`duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
+The server's sign-ins, source `server`, only on the pages and streams of a
+user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
+and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).
 Setpoints are changes too; a sign-in, a preference, a search, a restore's
 plan and the requests whose own line is the server's (a backup, a restore,
 a restart, …) write none.
