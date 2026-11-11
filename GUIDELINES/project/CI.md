@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.38.0)
+# Massimo — CI Conventions (v1.39.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -145,8 +145,14 @@ The nightly build may take a commit of documents alone;
 its code is that of the commit before it, which was tested.
 Only an answer of `false` skips a job:
 a gate that fails leaves its answers empty, so every job runs,
-and All tests passed fails on the gate's result,
-since the required checks, which a skipped job passes, do not include it.
+and All tests passed fails on the gate's result.
+The ruleset on `main` requires All tests passed and Guidelines alone,
+since 2026-11-11 (owner, D54-A):
+a matrix job skipped as a whole reports once, under its unexpanded name
+(`govulncheck (${{ matrix.goos }})`),
+so a required `govulncheck (linux)` waited forever on pull request #177;
+All tests passed counts every job, a skipped one as passed,
+and a new job needs only to be among its `needs`.
 A pipe into `grep` in a step reads to the end (`grep … >/dev/null`,
 not `grep -q`):
 under `pipefail` a `grep -q` that exits at its match kills a writer still writing,
@@ -199,9 +205,9 @@ so that a case it would have left out does not fail first on `main`.
 The job What to test answers that from the pull request's merge commit,
 whose first parent is the base branch.
 The condition sits on the job, not on the workflow's trigger:
-"Screenshots" is a required check on `main`,
-and a job skipped by its `if:` counts as passed,
-while a workflow that a path filter never starts leaves the check waiting.
+All tests passed, the check `main` requires,
+counts a job skipped by its `if:` as passed,
+while a workflow that a path filter never starts would leave it waiting.
 Only an answer of `false` skips the job,
 so a What to test job that fails runs it rather than letting the pull request
 through untested.
