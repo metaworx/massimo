@@ -106,8 +106,8 @@ so that `chore(release:<component>)` is one too.
 
 A green run is carried to later commits with the same code (owner, 2026-11-11,
 AP TestedTree).
-The job Tested writes a commit status, context `Tested`,
-on the commit a run tested once All tests passed:
+All tests passed, once it has, writes a commit status, context `Tested`,
+on the commit the run tested:
 a pull request's head, or the commit pushed to `main`.
 It holds `fingerprint.sh fingerprint` of the tree that ran,
 a pull request's merge commit in its run,
@@ -127,7 +127,7 @@ So a branch's retirement after its green run tests nothing again,
 nor does its merge into `main`, where `main` moved by documents alone meanwhile;
 where `main` moved by code, the merge's fingerprint is new and everything runs.
 A fork's pull request has a read-only token and writes no status,
-and Tested's failure fails nothing.
+and the step's failure fails nothing.
 The same code is not the same environment: a Go patch or a runner image
 can change in between, as between two runs of one commit,
 and a flaky test that passed is not retried.

@@ -52,7 +52,7 @@ jobs:
   # included, counts as code. tested is true where the Tested status on
   # the commit tested before holds this code's fingerprint: what passed
   # for it is skipped, and Fuzz, Screenshots and LAN run where they did
-  # not pass yet (the job Tested writes the status). ui and lan, for the
+  # not pass yet (All tests passed writes the status). ui and lan, for the
   # Screenshots and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
@@ -1134,11 +1134,20 @@ jobs:
   # What to test with the others, so that a gate that failed fails it,
   # although every job ran; for a release commit pushed to main,
   # which What to test leaves untested, it is skipped, and so is Release.
+  # Once it has passed, it writes the Tested status (GUIDELINES/project/CI.md,
+  # section 2) on the commit the run tested, a pull request's head or the
+  # commit pushed to main: the fingerprint of the code that ran and whether
+  # Screenshots, LAN and Fuzz passed for it, in this run or the one it
+  # carries on. What to test reads it to skip what passed. Not for a run
+  # that tested documents alone, nor for a tag; a fork's pull request has
+  # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
     needs: [ changes, test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
+    permissions:
+      statuses: write
     steps:
       - name: Every test job passed or was skipped
         env:
@@ -1149,25 +1158,9 @@ jobs:
             case "$r" in success|skipped) ;; *) exit 1 ;; esac
           done
 
-  # The Tested status (GUIDELINES/project/CI.md, section 2): on the commit
-  # a run tested, a pull request's head or the commit pushed to main, once
-  # All tests passed, the fingerprint of the code that ran and whether
-  # Screenshots, LAN and Fuzz passed for it, in this run or the one it
-  # carries on. What to test reads it to skip what passed. Not for a run
-  # that tested documents alone, nor for a tag; a fork's pull request has
-  # a read-only token, and the job's failure fails nothing.
-  tested:
-    name: Tested
-    needs: [ changes, tests, screenshots, lan, fuzz ]
-    if: >-
-      ${{ !cancelled() && needs.tests.result == 'success' && needs.changes.outputs.fp != ''
-      && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    permissions:
-      statuses: write
-    steps:
       - name: Write the Tested status
+        if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
