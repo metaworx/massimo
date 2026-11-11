@@ -42,6 +42,30 @@ def wait_until(page, expr, seconds):
     return False
 
 
+def scroll_settled(page, seconds=3):
+    """Waits until the page has not scrolled for ten animation frames;
+    false if it is still scrolling after so many seconds. Chromium runs a
+    smooth scroll on the compositor, and an instant scroll sent while it
+    ends can be undone by it: the page back where the smooth scroll was
+    going. Frames, not polls from here: two equal readings 200 ms apart
+    can be one pause of a starved renderer."""
+    return page.evaluate("""(ms) => new Promise((done) => {
+        const end = performance.now() + ms;
+        let last = window.scrollY, still = 0;
+        const frame = () => {
+            if (window.scrollY !== last) {
+                last = window.scrollY;
+                still = 0;
+            } else if (++still >= 10) {
+                return done(true);
+            }
+            if (performance.now() > end) return done(false);
+            requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+    })""", seconds * 1000)
+
+
 def scroll_width(page):
     """The page's width with what sticks out of it; more than the
     viewport's width is a horizontal scroll."""
