@@ -327,7 +327,7 @@ func listedFound(t *testing.T, ts *httptest.Server, serial string) int {
 // Cube's address is fixed, so nothing is sent there.
 func TestRemovedCubeIsListedAsFound(t *testing.T) {
 	ctx := context.Background()
-	lan := cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("192.0.2.10"), RFAddress: 0x0a0b0c, Firmware: "1.1.3"}
+	lan := cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("192.0.2.10"), RFAddress: 0x0a0b0c, Firmware: "1.1.3", Kind: cubelan.KindCube}
 
 	t.Run("discovery list", func(t *testing.T) {
 		disc, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0b0c)

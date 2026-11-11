@@ -858,10 +858,11 @@ one `name=text` per line with `\r\n` escapes and the placeholders `{i}`, `{s}`,
 `{shex}`, `{r}`, `{serial}`, `{rf}`, `{fw}`.
 
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address, firmware,
-and whether the Cube takes its address by DHCP or has a static one) via the UDP
-broadcast the original software uses,
-marking `proxy` a massimo serve that answers as a Cube (its MAC is not eQ-3's `00:1a:22`,
-or its address is an announced server's),
+the gateway it uses, and whether the Cube takes its address by DHCP or has a
+static one) via the UDP broadcast the original software uses,
+marking `proxy` a massimo serve that answers as a Cube:
+it answers neither `N` nor `c`, and its MAC is not eQ-3's `00:1a:22`
+or its address is an announced server's,
 and then the massimo servers that announce themselves by mDNS (name, address,
 TLS, version, node; `-json` prints both lists);
 it needs UDP port 23272 and a real LAN interface (not WSL 2).

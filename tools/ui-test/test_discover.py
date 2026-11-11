@@ -9,6 +9,9 @@ import time
 
 from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, scroll_width, show_view, wait_until
 
+GATEWAY = {"en": "gateway", "de": "Gateway"}
+VIA_PROXY = {"en": "via proxy at {address}", "de": "über Proxy {address}"}
+
 
 def test_search_held_then_answered(page, case):
     """The search shows "searching" while the request is held, then the
@@ -38,6 +41,11 @@ def test_search_held_then_answered(page, case):
     assert "MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1" in page.locator("#cube-found .env-lines").inner_text(), "env lines for the found Cube"
     facts = page.locator("#cube-found [data-serial='KEQ0000000'] .found-facts")
     assert facts.count() == 1 and " · DHCP · " in facts.inner_text(), "the found Cube's DHCP flag"
+    # The gateway it uses, from its answer to N, the fake's lease: its
+    # own address's /24 with the gateway at .1. In the expert line,
+    # hidden here: its text is there all the same.
+    extra = page.locator("#cube-found [data-serial='KEQ0000000'] .found-extra")
+    assert GATEWAY[case.lang] + " 127.0.0.1" in extra.text_content(), "the found Cube's gateway"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes"
     # A Cube is announced once per server: where an earlier test on this
     # server found it, its cube_found is older than the log's last 20
@@ -50,11 +58,16 @@ def test_search_held_then_answered(page, case):
 
 
 def test_cube_found_live(page, case):
-    """A cube_found event adds another found Cube live."""
+    """A cube_found event adds another found Cube live, with the massimo
+    proxy that answers for it."""
     before = page.evaluate("state.found.length")
+    cube = dict(FOUND2, proxies=["192.0.2.7"])
     page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
-                  "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", FOUND2)
+                  "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", cube)
     assert cube_item(page, "found:LEQ0000506").count() == 1, "cube_found adds a Cube live"
+    facts = page.locator("#cube-found [data-serial='LEQ0000506'] .found-facts")
+    # text_content: the found Cubes may be folded here, inner_text is "" then.
+    assert facts.count() == 1 and VIA_PROXY[case.lang].format(address="192.0.2.7") in facts.text_content(), "the proxy that answers for it"
     assert page.locator("#cube-found summary").inner_text() == found_text(case.lang, before + 1), "found Cubes counted"
 
 

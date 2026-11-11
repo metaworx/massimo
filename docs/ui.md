@@ -563,7 +563,8 @@ to the top of the page.
   **Remove** stops serving the Cube;
   it keeps its settings and history in the store and is listed under **Found on
   the LAN** while discovery hears it, with its address,
-  DHCP flag and firmware and **Add**,
+  DHCP flag and firmware, "via proxy at …" where a massimo proxy answers for it,
+  in expert mode its radio and MAC address and the gateway it uses, and **Add**,
   which serves a found Cube at once (also in the list of found Cubes under the header).
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 

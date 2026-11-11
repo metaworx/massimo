@@ -68,6 +68,16 @@ type foundCube struct {
 	// answer to c in this process's latest discovery that had one; nil
 	// until then. It is kept in memory only, not in the store.
 	DHCP *bool `json:"dhcp,omitempty"`
+	// Gateway, Netmask and DNS are the addresses the Cube uses, from its
+	// answer to N in this process's latest discovery that had one; kept
+	// in memory only, as DHCP.
+	Gateway string   `json:"gateway,omitempty"`
+	Netmask string   `json:"netmask,omitempty"`
+	DNS     []string `json:"dns,omitempty"`
+	// Proxies are the other addresses that answered for the Cube's
+	// serial in the latest run, massimo proxies (docs/proxy.md); in
+	// memory only.
+	Proxies []string `json:"proxies,omitempty"`
 	// Configured says whether the server serves the Cube when the copy
 	// is handed out. It is set on the copies only, never kept on the
 	// entry, since a Cube is added and removed without discovery
@@ -225,19 +235,31 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		r = proxy.NewResponder(s.log)
 		go r.Serve(rctx, pc)
 	}
-	answers, err := r.Discover(ctx, s.discoveryTargets(), wait)
+	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
 	if err != nil && len(answers) == 0 {
 		return nil, err
 	}
 	local := localIPs()
 	now := time.Now()
-	var out []foundCube
-	answered := map[string]bool{}
+	// A serial can come from several addresses, the Cube's own and a
+	// proxy's: the run's answers are taken per serial, in the order the
+	// serials came.
+	groups := map[string][]cubelan.Discovered{}
+	var serials []string
 	for _, d := range answers {
 		if s.ownAnswer(d, local) {
 			continue
 		}
-		f := s.note(ctx, d, now)
+		serial := strings.ToUpper(strings.TrimSpace(d.Serial))
+		if _, ok := groups[serial]; !ok {
+			serials = append(serials, serial)
+		}
+		groups[serial] = append(groups[serial], d)
+	}
+	var out []foundCube
+	answered := map[string]bool{}
+	for _, serial := range serials {
+		f := s.noteSerial(ctx, groups[serial], now)
 		answered[f.Serial] = true
 		out = append(out, f)
 	}
@@ -249,11 +271,20 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 	return out, nil
 }
 
-// note records one answer: a Cube new to the server, or back after a
-// run it did not answer, is found (cubeFound); a configured one follows
-// its address when it was configured by serial only. A found Cube at a
-// new address is the change of f.Address here.
+// note records one answer, as noteSerial does a run's answers of one
+// serial.
 func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) foundCube {
+	return s.noteSerial(ctx, []cubelan.Discovered{d}, now)
+}
+
+// noteSerial records a run's answers of one serial, in the order they
+// came: a Cube new to the server, or back after a run it did not answer,
+// is found (cubeFound); the entry and the store's row take the Cube's own
+// answer (ownOf); a configured Cube follows its address when it was
+// configured by serial only, at most one move a run (followAddress). A
+// found Cube at a new address is the change of f.Address here.
+func (s *Server) noteSerial(ctx context.Context, answers []cubelan.Discovered, now time.Time) foundCube {
+	d := ownOf(answers)
 	serial := strings.ToUpper(strings.TrimSpace(d.Serial))
 	rt := s.configured(serial)
 	s.foundMu.Lock()
@@ -265,12 +296,24 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	arrived := !known || f.state == foundGone
 	f.state = foundPresent
 	f.Address, f.RFAddress, f.Firmware, f.LastSeen = d.IP.String(), d.RFAddress.String(), d.Firmware, now
-	if mac := cubelan.LookupMAC(d.IP); mac != "" {
-		f.MAC = mac
+	if d.MAC != "" {
+		f.MAC = d.MAC
 	}
 	if d.DHCP != nil {
 		dhcp := *d.DHCP
 		f.DHCP = &dhcp
+	}
+	if d.Gateway != nil || d.Netmask != nil {
+		f.Gateway, f.Netmask, f.DNS = ipString(d.Gateway), ipString(d.Netmask), nil
+		for _, ip := range d.DNS {
+			f.DNS = append(f.DNS, ip.String())
+		}
+	}
+	f.Proxies = nil
+	for _, a := range answers {
+		if a.IP.String() != f.Address {
+			f.Proxies = append(f.Proxies, a.IP.String())
+		}
 	}
 	cp := *f
 	cp.Configured = rt != nil
@@ -288,13 +331,14 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 		return cp
 	}
 	host, _, _ := net.SplitHostPort(rt.client.Address())
-	if host == cp.Address {
-		return cp
-	}
 	if cfg := rt.config(); cfg.Addr != "" && !cfg.FollowDiscovery {
-		if ip := net.ParseIP(host); ip != nil {
+		if ip := net.ParseIP(host); ip != nil && !answeredFrom(answers, host) {
 			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", cfg.Addr, "found", cp.Address)
 		}
+		return cp
+	}
+	to := followAddress(host, answers)
+	if to == "" || to == host {
 		return cp
 	}
 	had := host != ""
@@ -302,15 +346,71 @@ func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) 
 	if s.opts.CubePort != 0 {
 		port = s.opts.CubePort
 	}
-	if rt.client.SetAddress(net.JoinHostPort(cp.Address, strconv.Itoa(port))) {
-		s.log.Info("cube address from discovery", "serial", serial, "ip", cp.Address, "was", host)
-		rt.emit(event{Kind: "address_changed", Source: "cube", Serial: serial, Time: now, Summary: map[string]any{"from": host, "to": cp.Address}})
+	if rt.client.SetAddress(net.JoinHostPort(to, strconv.Itoa(port))) {
+		s.log.Info("cube address from discovery", "serial", serial, "ip", to, "was", host)
+		rt.emit(event{Kind: "address_changed", Source: "cube", Serial: serial, Time: now, Summary: map[string]any{"from": host, "to": to}})
 		if had {
 			// Connected, or trying, to the old address: reconnect now.
 			go rt.queue.Enqueue(engine.Command{Key: "refresh", Priority: engine.PriorityNormal, Reconnect: true, Moved: true}).Wait(ctx)
 		}
 	}
 	return cp
+}
+
+// ownOf picks the Cube's own answer among a serial's: the first the
+// search took for a Cube's, else the first it could not tell, else the
+// first, a proxy's.
+func ownOf(answers []cubelan.Discovered) cubelan.Discovered {
+	for _, kind := range []cubelan.Kind{cubelan.KindCube, cubelan.KindUnknown} {
+		for _, d := range answers {
+			if d.Kind == kind {
+				return d
+			}
+		}
+	}
+	return answers[0]
+}
+
+// ipString is ip's text, "" for none.
+func ipString(ip net.IP) string {
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
+}
+
+// answeredFrom reports whether one of answers came from host.
+func answeredFrom(answers []cubelan.Discovered, host string) bool {
+	for _, d := range answers {
+		if d.IP.String() == host {
+			return true
+		}
+	}
+	return false
+}
+
+// followAddress is where a Cube followed by discovery goes, given the
+// run's answers of its serial and the address it has, "" for none yet:
+// that address while it is among them, else the first proxy's, since a
+// proxy answers only while its serve holds the Cube and the Cube's one
+// LAN slot is then taken, else the Cube's own. An answer the search
+// could not tell is taken only by a Cube without an address; "" keeps
+// what it has.
+func followAddress(current string, answers []cubelan.Discovered) string {
+	if current != "" && answeredFrom(answers, current) {
+		return current
+	}
+	for _, kind := range []cubelan.Kind{cubelan.KindProxy, cubelan.KindCube} {
+		for _, d := range answers {
+			if d.Kind == kind {
+				return d.IP.String()
+			}
+		}
+	}
+	if current == "" {
+		return answers[0].IP.String()
+	}
+	return ""
 }
 
 // settle ends a complete run, answered holding the serials that

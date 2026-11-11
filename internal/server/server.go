@@ -80,6 +80,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"regexp"
@@ -199,6 +200,10 @@ type Options struct {
 	DiscoveryWait    time.Duration
 	DiscoveryAddr    string
 	DiscoveryTargets []string
+	// LookupMAC gives the MAC of an address that answered discovery
+	// (default cubelan.LookupMAC, the ARP cache), for tests: the loopback
+	// has no ARP entries.
+	LookupMAC func(net.IP) string
 	// CubePort is the TCP port of a Cube whose address comes from
 	// discovery (default 62910), for tests.
 	CubePort int
