@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+
+	"go.metaworx.ch/massimo/internal/safefile"
 )
 
 //go:embed migrations/[0-9]*.sql
@@ -272,7 +274,10 @@ func (s *Store) copyBefore(ctx context.Context, version, cur int) (string, error
 // copyTo writes a consistent copy of the database to dst, which must
 // not exist, with mode 0600: the WAL is checkpointed and VACUUM INTO
 // writes the copy in one read transaction, so a running server's last
-// writes are in it.
+// writes are in it. dst is taken first, empty, so that nobody else does;
+// the copy goes to a temporary file beside it and is renamed over it once
+// complete (internal/safefile), so that a crash or a full disk leaves dst
+// empty, never a partial database.
 func (s *Store) copyTo(ctx context.Context, dst string) error {
 	f, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -285,7 +290,11 @@ func (s *Store) copyTo(ctx context.Context, dst string) error {
 			return err
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, dst); err != nil {
+	err = safefile.Replace(dst, safefile.Options{Mode: 0o600}, func(tmp string) error {
+		_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, tmp)
+		return err
+	})
+	if err != nil {
 		os.Remove(dst)
 		return err
 	}

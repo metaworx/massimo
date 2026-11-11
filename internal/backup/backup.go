@@ -26,6 +26,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/safefile"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -291,13 +292,16 @@ func Unmarshal(data []byte, yamlFormat bool) (*File, error) {
 	return f, nil
 }
 
-// Save writes the file; the format follows the extension (.yaml/.yml or JSON).
+// Save writes the file, whole (internal/safefile): a backup cut short by
+// a kill or a full disk never replaces a good one. A new file gets mode
+// 0600, an existing one keeps its own. The format follows the extension
+// (.yaml/.yml or JSON).
 func (f *File) Save(path string) error {
 	data, err := f.Marshal(IsYAML(path))
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return safefile.Write(path, data, safefile.Options{})
 }
 
 // Load reads a backup; the format follows the extension.

@@ -436,6 +436,37 @@ func TestBackupAndInfo(t *testing.T) {
 	}
 }
 
+// A copy that fails leaves nothing under its name and nothing beside
+// it: the copy goes to a temporary file, renamed into place once
+// complete. A read-only store skips the checkpoint, so the cancelled
+// context fails the VACUUM INTO itself.
+func TestBackupWholeOrAbsent(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	s.Close()
+	ro, err := OpenReadOnly(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ro.Close()
+	out := t.TempDir()
+	dst := filepath.Join(out, "copy.db")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ro.Backup(ctx, dst); err == nil {
+		t.Fatal("a backup with a cancelled context")
+	}
+	if entries, _ := os.ReadDir(out); len(entries) != 0 {
+		t.Fatalf("left after the failed copy: %v", entries)
+	}
+	if err := ro.Backup(context.Background(), dst); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(dst); err != nil || fi.Size() == 0 {
+		t.Fatalf("the copy: %v %v", fi, err)
+	}
+}
+
 // copyAlone copies massimo.db of dir, without its -wal file, into a
 // directory of its own, and opens the copy read-only: what a copy of the
 // file alone holds.
