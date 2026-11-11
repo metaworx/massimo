@@ -151,7 +151,7 @@ func TestInstallPackagedConfiguresOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	certDst := filepath.Join(root, EnvDir, certName)
-	if read(t, certDst) != "CERT" || !rec.has("chown _massimo:_massimo "+certDst) || strings.Count(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") != 1 {
+	if read(t, certDst) != "CERT" || !rec.has("chown -h _massimo:_massimo "+certDst) || strings.Count(read(t, filepath.Join(root, EnvPath)), "MASSIMO_TLS=files\n") != 1 {
 		t.Fatalf("TLS files on a packaged box: %v", rec.cmds)
 	}
 

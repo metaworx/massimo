@@ -419,7 +419,7 @@ func (in *installer) packagedSettings() (bool, error) {
 			return false, err
 		}
 	}
-	return true, in.run("chown", in.svcUser+":"+in.svcUser, env)
+	return true, in.run("chown", "-h", in.svcUser+":"+in.svcUser, env)
 }
 
 func (in *installer) binary() error {
@@ -639,7 +639,7 @@ func (in *installer) settings() (bool, error) {
 			return false, err
 		}
 	}
-	return startable, in.run("chown", in.svcUser+":"+in.svcUser, env)
+	return startable, in.run("chown", "-h", in.svcUser+":"+in.svcUser, env)
 }
 
 // checkSettings warns about settings the service will trip over. A proxy
