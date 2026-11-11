@@ -1653,6 +1653,8 @@ when it last changed and when the automatic backup follows:
 
 `size` is the file's, before the store compresses it; `user` is absent for the
 server's own backups.
+`id` names one backup for good:
+the store never gives it to another, also once the backup is deleted or pruned.
 Capability `backup`.
 
 #### POST /api/v1/cubes/{sn}/backups

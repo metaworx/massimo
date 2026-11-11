@@ -19,7 +19,8 @@ import (
 // came, v0.7.0-alpha.1. Each is loaded into a file as the release left
 // it and opened, which migrates it to this binary's version: the file
 // stays sound, every table keeps its rows, the log's exactly, every event
-// has its source, and the log, the users and the backups read.
+// has its source, the log, the users and the backups read, and the
+// backups' sequence starts at their highest id (migration 0013).
 func TestMigratesReleasedStores(t *testing.T) {
 	dumps, err := filepath.Glob(filepath.Join("testdata", "releases", "v*.sql"))
 	if err != nil || len(dumps) < 6 {
@@ -77,6 +78,10 @@ func TestMigratesReleasedStores(t *testing.T) {
 			}
 			if b, err := s.Backups(ctx, cubes[0].ID); err != nil || len(b) != after["backups"] {
 				t.Errorf("backups: %d of %d, %v", len(b), after["backups"], err)
+			}
+			var top, seq int64
+			if err := s.db.QueryRowContext(ctx, `SELECT coalesce(max(id), 0), coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'backups'), 0) FROM backups`).Scan(&top, &seq); err != nil || seq != top {
+				t.Errorf("backups: sqlite_sequence at %d, the highest id %d, %v", seq, top, err)
 			}
 			if _, err := s.Settings(ctx); err != nil {
 				t.Errorf("settings: %v", err)
