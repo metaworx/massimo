@@ -51,7 +51,20 @@ func TestSighupAction(t *testing.T) {
 // once; a missing file and an unchanged one ask for nothing.
 func TestWatchSettings(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "env")
-	os.WriteFile(p, []byte("MASSIMO_LOG=a\n"), 0o600)
+	// put writes the file whole, renamed into place: os.WriteFile
+	// truncates first and writes after, and a busy machine that pauses
+	// between the two for two of the test's 20 ms looks shows the watch
+	// an empty file that held still, then the content, two reloads.
+	put := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(p+".new", []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(p+".new", p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("MASSIMO_LOG=a\n")
 	calls := make(chan struct{}, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -65,7 +78,7 @@ func TestWatchSettings(t *testing.T) {
 		}
 	}
 	quiet("an unchanged file")
-	os.WriteFile(p, []byte("MASSIMO_LOG=bb\n"), 0o600)
+	put("MASSIMO_LOG=bb\n")
 	select {
 	case <-calls:
 	case <-time.After(2 * time.Second):
@@ -74,7 +87,7 @@ func TestWatchSettings(t *testing.T) {
 	quiet("after the reload")
 	os.Remove(p)
 	quiet("a missing file")
-	os.WriteFile(p, []byte("MASSIMO_LOG=ccc\n"), 0o600)
+	put("MASSIMO_LOG=ccc\n")
 	select {
 	case <-calls:
 	case <-time.After(2 * time.Second):
