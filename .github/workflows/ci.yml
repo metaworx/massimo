@@ -402,7 +402,7 @@ jobs:
       - name: Unit tests
         shell: bash
         run: |
-          go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/...
+          go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/...
           go test -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
 
       # The service against the fake Cube, with the update from the web
@@ -729,7 +729,7 @@ jobs:
           check-latest: true
 
       - name: Unit tests
-        run: go test ./internal/update/... ./internal/install/... ./cmd/...
+        run: go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/safefile/...
 
       # install on the template's settings, as a new Mac gets it
       # (packaging/launchd/template-test.sh): left for its owner with the
