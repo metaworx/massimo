@@ -378,7 +378,7 @@ func TestEventsPageQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec(`UPDATE log SET command_id = ? WHERE cube_id = ? AND id % 3001 = 0`, cmd.ID, a.ID); err != nil {
+	if _, err := s.db.Exec(`UPDATE log SET command_id = ? WHERE cube_id = ? AND id % 301 = 0`, cmd.ID, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	info, warn, errs := LevelInfo, LevelWarn, LevelError
