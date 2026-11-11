@@ -1110,9 +1110,10 @@ and in the update helper are the same everywhere:
   in `/var/log/massimo`, `_massimo:admin` 0750
   (install warns of a `MASSIMO_LOG` in the settings, which the flag overrides);
   `-log-process-format none` keeps it off stderr, which launchd appends to
-  `/var/log/massimo-serve.stderr.log`, root's in `/var/log`,
-  so that the file cannot be swapped for a link,
-  and which holds only what the Go runtime prints itself, such as a panic.
+  `/var/log/massimo-serve.stderr.log`, `_massimo`'s (launchd opens it as the
+  job's user) in root's `/var/log`, so that it cannot be swapped for a link,
+  and which holds only what serve prints before its log
+  and what the Go runtime prints itself, such as a panic.
 - the LaunchDaemon `ch.metaworx.massimo` in `/Library/LaunchDaemons`:
   started at boot without anyone logging in, restarted 10 s after it fails,
   running

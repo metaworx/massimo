@@ -109,11 +109,12 @@ func TestInstallDarwinNoHelperAndTemplate(t *testing.T) {
 		t.Errorf("env template: %s", env)
 	}
 	// serve writes the log in the service user's directory, the admin
-	// group's to read; launchd's file of its stderr is root's.
+	// group's to read; launchd's file of its stderr is the service user's,
+	// in root's /var/log.
 	if !rec.has("chown _massimo:admin "+filepath.Join(root, LogDir)) || !rec.has("chmod 0750 "+filepath.Join(root, LogDir)) {
 		t.Errorf("log directory: %q", rec.cmds)
 	}
-	if _, err := os.Stat(filepath.Join(root, DarwinStderrLog)); err != nil || !rec.has("chown -h root:admin "+filepath.Join(root, DarwinStderrLog)) {
+	if _, err := os.Stat(filepath.Join(root, DarwinStderrLog)); err != nil || !rec.has("chown -h _massimo:admin "+filepath.Join(root, DarwinStderrLog)) {
 		t.Errorf("stderr file: %v", err)
 	}
 	plist := read(t, filepath.Join(root, PlistPath(Label)))

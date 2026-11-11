@@ -177,8 +177,13 @@ func TestRotateAtFormatChange(t *testing.T) {
 	if s := read(t, p); !strings.HasPrefix(s, "{") || strings.Contains(s, "time=") {
 		t.Errorf("serve.log:\n%s", s)
 	}
-	// Now JSON: a JSON writer leaves it, a plain one rotates it.
-	for format, want := range map[Format]int{JSON: 0, Plain: 1} {
+	// Now JSON: a JSON writer leaves it, a plain one rotates it, in this
+	// order (the plain writer's new file is plain).
+	for _, c := range []struct {
+		format Format
+		want   int
+	}{{JSON, 0}, {Plain, 1}} {
+		format, want := c.format, c.want
 		var n []Rotation
 		f, _, err := Open(Options{Path: p, Format: format, Keep: 8})
 		if err != nil {

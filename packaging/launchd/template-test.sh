@@ -101,11 +101,11 @@ check "loaded" loaded "$label"
 up
 check "the API asks for a sign-in ($(code "$api/cubes"))" [ "$(code "$api/cubes")" = 401 ]
 # serve writes the log itself, JSON, the admin group's to read; launchd's
-# file of its stderr stays root's.
+# file of its stderr is _massimo's too, in root's /var/log.
 check "/var/log/massimo is $(mode /var/log/massimo)" [ "$(mode /var/log/massimo)" = "750 _massimo:admin" ]
 check "serve.log is $(sudo stat -f '%Lp %Su:%Sg' /var/log/massimo/serve.log)" [ "$(sudo stat -f '%Lp %Su:%Sg' /var/log/massimo/serve.log)" = "640 _massimo:admin" ]
 check "serve.log is JSON" sh -c 'sudo head -n 1 /var/log/massimo/serve.log | grep -q "^{"'
-check "the stderr file is $(mode /var/log/massimo-serve.stderr.log)" [ "$(mode /var/log/massimo-serve.stderr.log)" = "640 root:admin" ]
+check "the stderr file is $(mode /var/log/massimo-serve.stderr.log)" [ "$(mode /var/log/massimo-serve.stderr.log)" = "640 _massimo:admin" ]
 
 echo "3. Loaded on the template: install again restarts it"
 p1=$(pid)
@@ -166,6 +166,7 @@ check "nothing answers on 8099" down
 if [ "$failn" -gt 0 ]; then
 	echo "template test: $failn check(s) failed" >&2
 	sudo tail -20 /var/log/massimo/serve.log 2>/dev/null
+	sudo tail -20 /var/log/massimo-serve.stderr.log 2>/dev/null
 	exit 1
 fi
 echo "template test: ok"

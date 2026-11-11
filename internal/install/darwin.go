@@ -296,7 +296,9 @@ func (in *installer) checkDarwinSettings() {
 
 // logFiles hands an older release's log, which launchd wrote, to the
 // admin group, 0640, as serve makes the files it rotates; and makes
-// launchd's file of serve's stderr root's, the admin group's to read.
+// launchd's file of serve's stderr the service user's, which launchd
+// opens as that user, the admin group's to read. It lies in /var/log,
+// which only root may write, so it cannot be swapped for a link.
 func (in *installer) logFiles() error {
 	if fi, err := os.Lstat(in.path(DarwinLog)); err == nil && fi.Mode().IsRegular() {
 		if err := in.run("chown", "-h", DarwinUser+":"+darwinLogGroup, in.path(DarwinLog)); err != nil {
@@ -317,7 +319,7 @@ func (in *installer) logFiles() error {
 			f.Close()
 		}
 	}
-	if err := in.run("chown", "-h", "root:"+darwinLogGroup, p); err != nil {
+	if err := in.run("chown", "-h", DarwinUser+":"+darwinLogGroup, p); err != nil {
 		return err
 	}
 	return in.run("chmod", "0640", p)

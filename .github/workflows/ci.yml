@@ -575,7 +575,9 @@ jobs:
             test -f "$bin.failed"
           fi
           test ! -e "$data/update-request"
-          grep -q 'update helper started' "$data/serve.log"
+          # The release and the rollback each start a binary of another log
+          # format, which rotates serve.log: the line is in one of the two.
+          grep -qs 'update helper started' "$data/serve.log" "$data/serve.log.1"
           test "$(tasklist //FI "IMAGENAME eq massimo.exe" //NH | grep -c '^massimo.exe')" -le 2 # the service and the fake Cube
 
       # The update by hand from an administrator prompt, with the real key

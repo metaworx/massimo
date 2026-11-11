@@ -53,10 +53,11 @@
 	<!--
 	  The log: serve writes /var/log/massimo/serve.log itself (-log) and
 	  rotates it, in a directory of _massimo and the group admin; nothing
-	  on stderr (-log-process-format none). launchd, as root, appends
-	  stderr to this file, which then holds only what the Go runtime
-	  prints itself, such as a panic: in /var/log, where only root may
-	  write, so that the file cannot be swapped for a link elsewhere.
+	  on stderr (-log-process-format none). launchd appends stderr to this
+	  file, which then holds only what serve prints before its log and
+	  what the Go runtime prints itself, such as a panic; install makes
+	  it _massimo's, as launchd opens it as the job's user, in /var/log,
+	  where only root may write, so that it cannot be swapped for a link.
 	-->
 	<key>StandardErrorPath</key>
 	<string>/var/log/massimo-serve.stderr.log</string>
