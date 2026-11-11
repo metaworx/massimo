@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.36.0)
+# Massimo — CI Conventions (v1.37.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -85,6 +85,32 @@ running the suite on `main` as well tested it twice
 and made a `devel` build under the release's own version (owner, 2026-11-10,
 as file_checksum_search keeps one run per release).
 The nightly build still finds the commit, through its tag's run.
+A change to documents no test reads answers `code=false`:
+every job but Guidelines is skipped, All tests passed passes,
+and `main` makes no devel build,
+its binaries being those of the commit before (owner, 2026-11-11, AP DocOnly).
+Those documents are `GUIDELINES/wip/**`, `GUIDELINES/project/**`,
+the generated `AGENTS.md` and `GUIDELINES/README.md`,
+`CHANGELOG.md`, `CHANGELOG.d/**` and `LICENSE`,
+written in What to test as git pathspecs,
+and a changed path of `project.shipped` (`GUIDELINES/config.ini`)
+counts as code whatever the list says.
+The range is a pull request's merge commit against its base,
+or a push's commits since `github.event.before`;
+a tag is always tested whole,
+and a push whose earlier commit the checkout does not hold counts as code.
+Other paths stay out of the list because something tests them:
+`docs/**` (`TestOpenAPICoversRoutes` reads the OpenAPI file,
+`docs/fragments/` feeds README's generated parts, Site builds the docs),
+`README.md` and `CONTRIBUTING.md` (generated parts, Site, identifiers),
+`GUIDELINES/shared` (Site renders with its `md_html.py`,
+the rolling notes use its `changelog.sh`),
+`.gitattributes` and `.gitignore` (line endings, what `make` counts as dirty),
+and `tools/**`.
+The Guidelines job runs `tools/identifiers` itself,
+since that check reads the project's documents and changelog too.
+The nightly build may take a commit of documents alone;
+its code is that of the commit before it, which was tested.
 Only an answer of `false` skips a job:
 a gate that fails leaves its answers empty, so every job runs,
 and All tests passed fails on the gate's result,

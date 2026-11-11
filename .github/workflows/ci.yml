@@ -44,7 +44,12 @@ jobs:
   # "chore(release): "): make release-alpha pushes main and the tag at
   # once, and the tag's run tests the same commit, so main's run skips
   # every job and makes no devel build (GUIDELINES/project/CI.md,
-  # section 2). ui and lan, for the Screenshots and LAN jobs, are true for
+  # section 2). code is false for a pull request or a push to main that
+  # changes only documents no test reads, and no path of project.shipped:
+  # every job but Guidelines is skipped, and All tests passed, and main
+  # makes no devel build; a tag is always tested whole, and a push whose
+  # earlier commit is not known counts as code. ui and lan, for the
+  # Screenshots and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
   # the proxy, the LAN test or this file. The run checks out the pull
@@ -59,33 +64,56 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       suite: ${{ steps.what.outputs.suite }}
+      code: ${{ steps.what.outputs.code }}
       ui: ${{ steps.what.outputs.ui }}
       lan: ${{ steps.what.outputs.lan }}
     steps:
+      # A pull request's merge commit and its parents; a push's whole
+      # history, for the range from the commit main was at before.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: github.event_name == 'pull_request'
         with:
-          fetch-depth: 2 # the merge commit and its parents
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
 
       - name: What to test
         id: what
         env:
           MESSAGE: ${{ github.event.head_commit.message }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          suite=true ui=true lan=true
-          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] &&
-            [[ "$MESSAGE" == "chore(release): "* ]]; then
-            echo "a release commit: its tag's run tests it."
-            suite=false
+          suite=true code=true ui=true lan=true
+          range=""
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+          pull_request:*) range=HEAD^1..HEAD ;;
+          push:refs/heads/main)
+            if [[ "$MESSAGE" == "chore(release): "* ]]; then
+              echo "a release commit: its tag's run tests it."
+              suite=false
+            elif [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              range="${BEFORE}..HEAD"
+            fi
+            ;;
+          esac
+          # Documents no test reads (GUIDELINES/project/CI.md, section 2):
+          # a change to these alone runs the Guidelines job and no other;
+          # a path of project.shipped never counts as one.
+          if [ -n "$range" ]; then
+            mapfile -t shipped < <(git config -f GUIDELINES/config.ini --get-all project.shipped)
+            if git diff --quiet "$range" -- . ':!GUIDELINES/wip/**' ':!GUIDELINES/project/**' \
+              ':!AGENTS.md' ':!GUIDELINES/README.md' ':!CHANGELOG.md' ':!CHANGELOG.d/**' ':!LICENSE' &&
+              [ "${#shipped[@]}" -gt 0 ] && git diff --quiet "$range" -- "${shipped[@]}"; then
+              echo "${range}: documents alone; no test reads them."
+              code=false
+            fi
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
             grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
-          echo "suite=${suite} ui=${ui} lan=${lan}"
+          echo "suite=${suite} code=${code} ui=${ui} lan=${lan}"
           {
             echo "suite=${suite}"
+            echo "code=${code}"
             echo "ui=${ui}"
             echo "lan=${lan}"
           } >> "$GITHUB_OUTPUT"
@@ -93,7 +121,7 @@ jobs:
   test:
     name: Vet and test
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -138,7 +166,7 @@ jobs:
   race:
     name: Race
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,7 +186,7 @@ jobs:
   armv6:
     name: Test (armv6, QEMU)
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -183,7 +211,7 @@ jobs:
   fuzz:
     name: Fuzz
     needs: changes
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -223,7 +251,7 @@ jobs:
   screenshots:
     name: Screenshots
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.ui != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' }}
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
@@ -285,7 +313,7 @@ jobs:
   lan:
     name: LAN against avahi
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.lan != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.lan != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -303,7 +331,7 @@ jobs:
   govulncheck:
     name: govulncheck (${{ matrix.goos }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -336,7 +364,7 @@ jobs:
   deb:
     name: Debian package (${{ matrix.image }})
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -387,7 +415,7 @@ jobs:
   windows:
     name: Windows service
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -718,7 +746,7 @@ jobs:
   macos:
     name: macOS LaunchDaemon
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -992,6 +1020,15 @@ jobs:
           fetch-depth: 0
       - name: Tags
         run: git fetch --quiet --force --tags origin
+      # The check for serials, MACs and radio addresses (tools/identifiers)
+      # reads the project's documents and changelog too, which a change to
+      # documents alone does not run Vet and test for (What to test).
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: Identifiers
+        run: MASSIMO_ENV_FILE=/dev/null go test ./tools/identifiers
       # HEAD..HEAD, an empty range, reads no commit message: a push to main,
       # and a pull request of Dependabot's, whose messages cannot take the
       # project's form (GUIDELINES/project/CI.md, "Dependabot"); every other
@@ -1017,7 +1054,7 @@ jobs:
   site:
     name: Site
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1040,7 +1077,7 @@ jobs:
   build:
     name: Build
     needs: changes
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     permissions:
       contents: read
       actions: read
