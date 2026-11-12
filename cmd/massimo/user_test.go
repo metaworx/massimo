@@ -10,6 +10,8 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -312,5 +314,81 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		if len(left) > 0 {
 			t.Fatalf("%s left %s in the directory", c.args, left[0].Name())
 		}
+	}
+}
+
+// massimo user and store migrate create no store in a directory nobody
+// named: the current directory without massimo.db. They name the
+// service's command where the service is installed, -data where not;
+// a change says which store it was written to, and a store other than
+// the service's draws a warning. The service's directory is the test's
+// (serviceFiles), which Windows does not use.
+func TestUserStoreDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the service's store is under %ProgramData% on Windows")
+	}
+	clearCubeEnv(t)
+	_, stateDir := serviceFiles(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	var errOut bytes.Buffer
+	stderr = &errOut
+	t.Cleanup(func() { stderr = os.Stderr })
+	empty := func(what string) {
+		t.Helper()
+		if left, _ := os.ReadDir(cwd); len(left) > 0 {
+			t.Fatalf("%s left %s in the current directory", what, left[0].Name())
+		}
+	}
+
+	_, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin")
+	if err == nil || !strings.Contains(err.Error(), "user add: no massimo.db in the current directory") ||
+		!strings.Contains(err.Error(), stateDir) || !strings.Contains(err.Error(), "sudo -u _massimo") {
+		t.Fatalf("add with the service installed: %v", err)
+	}
+	empty("add")
+	if err := runStore([]string{"migrate"}); err == nil || !strings.Contains(err.Error(), "store migrate: no massimo.db") {
+		t.Fatalf("migrate: %v", err)
+	}
+	empty("migrate")
+	if err := os.Remove(stateDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runUserWith(t, "", "list"); err == nil || !strings.Contains(err.Error(), "give -data") {
+		t.Fatalf("list without a service: %v", err)
+	}
+	empty("list")
+	if err := os.Mkdir(stateDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	other := t.TempDir()
+	t.Setenv(env.DataVar, other)
+	out, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin")
+	if want := "(store " + filepath.Join(other, store.FileName) + ")"; err != nil || !strings.Contains(out, want) {
+		t.Fatalf("add with MASSIMO_DATA: %q %v, want %q", out, err, want)
+	}
+	if w := errOut.String(); !strings.Contains(w, "warning: "+filepath.Join(other, store.FileName)+" is not the service's store, which is in "+stateDir) {
+		t.Fatalf("the warning: %q", w)
+	}
+	errOut.Reset()
+	if _, err := runUserWith(t, "", "token", "anna", "-label", "x"); err != nil || !strings.Contains(errOut.String(), "API key 1 of anna (store ") {
+		t.Fatalf("token: %v %q", err, errOut.String())
+	}
+
+	// A store already in the current directory is used, as a
+	// developer's checkout has one; the service's own draws no warning.
+	t.Setenv(env.DataVar, cwd)
+	if _, err := runUserWith(t, "", "add", "bob", "-no-password"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(env.DataVar, "")
+	if out, err := runUserWith(t, "", "disable", "bob"); err != nil || !strings.Contains(out, string(filepath.Separator)+store.FileName+")") {
+		t.Fatalf("disable in the current directory's store: %q %v", out, err)
+	}
+	t.Setenv(env.DataVar, stateDir)
+	errOut.Reset()
+	if _, err := runUserWith(t, "", "add", "carl", "-no-password"); err != nil || errOut.Len() > 0 {
+		t.Fatalf("the service's store: %v %q", err, errOut.String())
 	}
 }

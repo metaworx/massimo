@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"go.metaworx.ch/massimo/internal/store"
@@ -25,7 +26,8 @@ func runStore(args []string) error {
 		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store backup <file> | migrate | info
 
   backup <file>  write a consistent copy of massimo.db, also while serve runs
-  migrate        create massimo.db or apply its pending migrations, without starting serve
+  migrate        create massimo.db or apply its pending migrations, without starting serve;
+                 a new one only where -data or MASSIMO_DATA names the directory
   info           the file's schema version, node and row counts
 
 `+dataDirUsage("store", "info"))
@@ -74,6 +76,9 @@ func runStore(args []string) error {
 			usage()
 			return errors.New("store migrate takes no argument")
 		}
+		if err := checkStoreDir("store", "migrate"); err != nil {
+			return fmt.Errorf("store migrate: %w", err)
+		}
 		logger, err := newLogger(os.Stderr)
 		if err != nil {
 			return err
@@ -83,6 +88,9 @@ func runStore(args []string) error {
 			return err
 		}
 		defer st.Close()
+		if f, err := filepath.Abs(st.File()); err == nil {
+			warnOtherStore(os.Stderr, f, "store", "migrate")
+		}
 		v, mr := st.SchemaVersion()
 		fmt.Printf("%s: schema version %d (min_reader %d)\n", st.File(), v, mr)
 	case "info":

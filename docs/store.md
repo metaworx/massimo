@@ -1130,6 +1130,16 @@ they take `-data` like `serve` and run as the service user,
 which reads the service's settings and store from any directory
 (`sudo -u _massimo massimo user add anna`),
 beside a running server thanks to WAL.
+Run by anyone else, the data directory is `-data`, else `MASSIMO_DATA`,
+else the current directory, where they create no store:
+without `massimo.db` there they refuse,
+naming the service's command where the service is installed,
+so that a password or a key never goes to a store the server does not read
+(the owner's commands on the breno box did, on 2026-11-12, without `sudo`).
+`store migrate` creates a store only in a directory named so.
+Each change names the store it wrote,
+and a store other than the service's, where the service is installed,
+draws a warning.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,
 with the server's keys from the data directory,

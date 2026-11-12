@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -28,10 +29,12 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// stdin and stdout are the command's streams, replaced by the tests.
+// stdin, stdout and stderr are the command's streams, replaced by the
+// tests.
 var (
 	stdin  io.Reader = os.Stdin
 	stdout io.Writer = os.Stdout
+	stderr io.Writer = os.Stderr
 )
 
 func userUsage() {
@@ -65,7 +68,7 @@ func runUser(args []string) error {
 		userUsage()
 		return errors.New("user: which command?")
 	}
-	u := &userCmd{ctx: context.Background()}
+	u := &userCmd{ctx: context.Background(), args: append([]string{"user"}, args...)}
 	defer u.close()
 	switch args[0] {
 	case "add":
@@ -91,20 +94,39 @@ func runUser(args []string) error {
 }
 
 type userCmd struct {
-	ctx context.Context
-	st  *store.Store // nil until open
+	ctx  context.Context
+	args []string     // the command line from "user" on, for the hints
+	st   *store.Store // nil until open
 }
 
 // open opens the store in the data directory, once the command's
-// arguments are good.
+// arguments are good: never a new one in a directory nobody named
+// (checkStoreDir), and with a warning where it is not the service's.
 func (u *userCmd) open() error {
+	if err := checkStoreDir(u.args...); err != nil {
+		return fmt.Errorf("%s: %w", strings.Join(u.args[:min(2, len(u.args))], " "), err)
+	}
 	logger, err := newLogger(os.Stderr)
 	if err != nil {
 		return err
 	}
-	u.st, err = store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger})
-	return err
+	if u.st, err = store.Open(dataDir(), store.Options{Version: versionString(), Logger: logger}); err != nil {
+		return err
+	}
+	warnOtherStore(stderr, u.file(), u.args...)
+	return nil
 }
+
+// file is the store's file as an absolute path.
+func (u *userCmd) file() string {
+	if f, err := filepath.Abs(u.st.File()); err == nil {
+		return f
+	}
+	return u.st.File()
+}
+
+// where ends a change's line with the store it was written to.
+func (u *userCmd) where() string { return " (store " + u.file() + ")" }
 
 // close closes the store if the command opened it.
 func (u *userCmd) close() {
@@ -250,7 +272,7 @@ func (u *userCmd) add(args []string) error {
 	if err != nil {
 		return fmt.Errorf("user add: %w", err)
 	}
-	fmt.Fprintf(stdout, "user %s added with the role %s\n", created.Name, created.Role)
+	fmt.Fprintf(stdout, "user %s added with the role %s%s\n", created.Name, created.Role, u.where())
 	return nil
 }
 
@@ -333,7 +355,7 @@ func (u *userCmd) passwd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("user passwd: %w", err)
 	}
-	fmt.Fprintf(stdout, "password of %s set; its sessions are ended\n", us.Name)
+	fmt.Fprintf(stdout, "password of %s set; its sessions are ended%s\n", us.Name, u.where())
 	return nil
 }
 
@@ -358,7 +380,7 @@ func (u *userCmd) setDisabled(args []string, disabled bool) error {
 	if err != nil {
 		return fmt.Errorf("user %s: %w", verb, err)
 	}
-	fmt.Fprintf(stdout, "user %s %sd\n", us.Name, verb)
+	fmt.Fprintf(stdout, "user %s %sd%s\n", us.Name, verb, u.where())
 	return nil
 }
 
@@ -392,7 +414,7 @@ func (u *userCmd) token(args []string) error {
 	if err != nil {
 		return fmt.Errorf("user token: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "API key %d of %s, shown once; send it as \"Authorization: Bearer <key>\":\n", tok.ID, us.Name)
+	fmt.Fprintf(stderr, "API key %d of %s%s, shown once; send it as \"Authorization: Bearer <key>\":\n", tok.ID, us.Name, u.where())
 	fmt.Fprintln(stdout, secret)
 	return nil
 }
@@ -486,6 +508,6 @@ func (u *userCmd) revoke(args []string) error {
 			return fmt.Errorf("user revoke: %w", err)
 		}
 	}
-	fmt.Fprintf(stdout, "%d token(s) of %s revoked\n", len(tokens), us.Name)
+	fmt.Fprintf(stdout, "%d token(s) of %s revoked%s\n", len(tokens), us.Name, u.where())
 	return nil
 }
