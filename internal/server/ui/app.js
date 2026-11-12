@@ -1148,8 +1148,7 @@ function initSettings() {
 function renderLangSelect() {
   const options = [["auto", t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")"]];
   for (const l of languages()) options.push([l, LANGUAGE_NAMES[l] || l]);
-  const sel = fillOptions($("lang-select"), options);
-  sel.value = i18n.setting;
+  for (const id of ["lang-select", "login-lang"]) fillOptions($(id), options).value = i18n.setting; // My settings, the sign-in's menu
   const note = $("lang-note");
   const texts = machineNote();
   clear(note);

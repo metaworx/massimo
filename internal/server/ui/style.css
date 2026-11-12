@@ -1054,7 +1054,12 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 /* The sign-in, open without a modal (login.js askLogin): a card in the
    signed-out page's flow, under the header. */
 #login-dialog[open] { position: static; margin: 8px auto 24px; }
-.login-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.login-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+/* its ☰, the language and the mode: drawn as the header's, dropping
+   down from the card's right edge */
+.menu.nav-menu.login-menu { position: relative; flex: none; }
+.login-menu .menu-items { gap: 10px; padding: 10px; width: min(300px, calc(100vw - 64px)); }
+.login-menu label { margin-bottom: 0; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 

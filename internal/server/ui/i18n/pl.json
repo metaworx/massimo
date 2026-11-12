@@ -872,6 +872,8 @@
   "copy.programDiscarded": "program odrzucony",
 
   "login.title": "Logowanie",
+
+  "login.menu": "Język i wygląd",
   "login.text": "Ten serwer pyta, kim jesteś.",
   "login.user": "Nazwa",
   "login.password": "Hasło",

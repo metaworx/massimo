@@ -574,6 +574,13 @@ async function createOwner(ev) {
 let checkOwnerName = () => true;
 
 function initLogin() {
+  // the sign-in's menu: the language and the mode, as My settings sets them
+  dropdown($("login-menu")); // components.js
+  $("login-lang").addEventListener("change", (ev) => {
+    setSetting("lang", validSetting("lang", ev.target.value) || "auto");
+    changeLanguage(state.settings.lang).then(applyLanguage);
+  });
+  $("login-mode").addEventListener("change", (ev) => chooseMode(ev.target.value)); // theme.js
   window.addEventListener("pagehide", flushPreferences);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPreferences();

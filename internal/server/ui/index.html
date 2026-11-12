@@ -317,6 +317,24 @@
        password form holds the one password field, the API key a form of its own -->
   <div class="login-head">
     <h3 data-i18n="login.title">Sign in</h3>
+    <!-- the language and the mode before anyone signs in, the settings of My settings -->
+    <details id="login-menu" class="menu nav-menu login-menu">
+      <summary class="nav-btn" aria-label="Language and appearance" title="Language and appearance" data-i18n-attr="aria-label:login.menu title:login.menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+      <div class="menu-items">
+        <div class="field wide">
+          <label for="login-lang" data-i18n="settings.language">Language</label>
+          <select id="login-lang" class="field-control"></select>
+        </div>
+        <div class="field wide">
+          <label for="login-mode" data-i18n="appearance.mode">Mode</label>
+          <select id="login-mode" class="field-control">
+            <option value="system" data-i18n="appearance.modeSystem">as the system</option>
+            <option value="light" data-i18n="appearance.modeLight">light</option>
+            <option value="dark" data-i18n="appearance.modeDark">dark</option>
+          </select>
+        </div>
+      </div>
+    </details>
   </div>
   <form id="login-form" method="post">
     <p class="muted" data-i18n="login.text">This server asks who you are.</p>

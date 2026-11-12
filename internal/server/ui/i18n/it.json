@@ -851,6 +851,8 @@
   "copy.programDiscarded": "programma scartato",
 
   "login.title": "Accedi",
+
+  "login.menu": "Lingua e aspetto",
   "login.text": "Questo server chiede chi sei.",
   "login.user": "Nome",
   "login.password": "Password",

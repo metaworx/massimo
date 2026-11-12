@@ -851,6 +851,8 @@
   "copy.programDiscarded": "programme rejeté",
 
   "login.title": "Connexion",
+
+  "login.menu": "Langue et apparence",
   "login.text": "Ce serveur demande qui vous êtes.",
   "login.user": "Nom",
   "login.password": "Mot de passe",

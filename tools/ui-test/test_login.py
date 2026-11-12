@@ -154,3 +154,37 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
         "Sign in stops turning once the answer is in"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+TITLE = {"en": "Sign in", "de": "Anmelden"}
+
+
+def test_sign_in_menu(new_context, case, watch, guard):
+    """Signed out, the sign-in card's ☰ sets the language and the mode:
+    the card speaks the language chosen, and My settings' choices show
+    both, kept in this browser."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in card"
+    menu = page.locator("#login-menu")
+    assert menu.locator("summary").get_attribute("aria-label"), "the ☰ is labelled"
+    menu.locator("summary").click()
+    assert page.locator("#login-lang").is_visible() and page.locator("#login-mode").is_visible(), "the menu shows both choices"
+    named_buttons(page, "the sign-in's menu")
+    other = "de" if case.lang == "en" else "en"
+    page.locator("#login-lang").select_option(other)
+    assert wait_until(page, f"document.querySelector('.login-head h3').textContent === {TITLE[other]!r}", 5), "the card speaks the language chosen"
+    assert page.evaluate("[document.getElementById('lang-select').value, localStorage.getItem('massimo.lang')]") == [other, other], \
+        "My settings' language is the one chosen"
+    page.locator("#login-mode").select_option("dark")
+    assert page.evaluate("[state.settings.theme, document.getElementById('theme-select').value]") == ["dark", "dark"], \
+        "My settings' mode is the one chosen"
+    box = page.locator("#login-menu .menu-items").bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= page.viewport_size["width"], "the menu fits the page"
+    page.keyboard.press("Escape")
+    assert menu.get_attribute("open") is None, "Escape closes the menu"
+    ctx.close()
