@@ -823,6 +823,196 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/identities:
+    get:
+      summary: A user's identities at the OpenID Connect providers
+      x-capability: users
+      description: |
+        Each an e-mail at a provider, waiting for its first sign-in or
+        bound to the provider's subject, which is not answered. A guests
+        holder reaches a guest's only; a user does not reach its own.
+      parameters:
+        - {$ref: "#/components/parameters/name"}
+      responses:
+        "200":
+          description: The identities, by provider
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Identity"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NoUser"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Assign an e-mail at a provider to a user
+      x-capability: users
+      description: |
+        A pre-link: the first sign-in through the provider with the
+        e-mail, which the provider says it verified, binds the provider's
+        subject to the user, and the subject alone finds it from then on.
+        An e-mail waits once per provider (409).
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IdentityAdd"}
+      responses:
+        "201":
+          description: Assigned
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Identity"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user or provider
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The e-mail already waits at the provider
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/identities/{id}:
+    delete:
+      summary: Remove one of a user's identities
+      x-capability: users
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The identity's id from the list, schema: {type: integer}}
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  id: {type: integer}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such identity of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/providers:
+    get:
+      summary: The OpenID Connect providers
+      x-capability: auth
+      description: |
+        Every provider, by key, its client secret never answered:
+        has_secret says whether it has one. callback is the redirect URI's
+        path under the page's address, to register at the provider.
+      responses:
+        "200":
+          description: The providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Provider"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Add an OpenID Connect provider
+      x-capability: auth
+      description: |
+        key, issuer and client_id are needed; the issuer is an https URL
+        (http only on loopback) whose discovery document is under
+        /.well-known/openid-configuration. Enabled unless enabled is false.
+        auto_role, the role of the users a sign-in creates where
+        auto_create is true, may not be owner nor hold an administrative
+        capability (guests, users, passwords, roles, roles.disable,
+        capabilities, cubes, settings, update, restart, reboot, audit,
+        auth); viewer where absent.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderWrite"}
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Provider"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: A provider with the key exists
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/providers/{key}:
+    put:
+      summary: Change an OpenID Connect provider
+      x-capability: auth
+      description: |
+        The fields given, as in POST; a field left out stays, the client
+        secret too, and "" clears it. The key cannot be changed.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {name: key, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderWrite"}
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Provider"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Remove an OpenID Connect provider
+      x-capability: auth
+      description: The provider and every identity at it; no user signs in through it any more.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {name: key, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  key: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/roles:
     get:
       summary: The roles with their sets, and every capability
@@ -2835,6 +3025,53 @@ components:
         login: {type: string}
         ke3: {type: string, description: "The client's KE3, 64 bytes, base64url without padding"}
         label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+    Provider:
+      type: object
+      properties:
+        key: {type: string}
+        name: {type: string, description: On the sign-in button; the key shows where empty}
+        issuer: {type: string, example: "https://cloud.example.com"}
+        client_id: {type: string}
+        has_secret: {type: boolean, description: The client secret is set; it is never answered}
+        scopes: {type: string, example: openid email profile}
+        auto_create: {type: boolean, description: A sign-in without an identity creates the user}
+        auto_role: {type: string, description: The role of a user created so, viewer by default}
+        auto_domains: {type: array, items: {type: string}, description: The e-mail domains it creates users for; none for any}
+        enabled: {type: boolean}
+        callback: {type: string, description: "The redirect URI's path under the page's address", example: api/v1/login/oidc/callback}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProviderWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        key: {type: string, description: "In POST: 1 to 32 of lower-case letters, digits, _ and -, starting with a letter"}
+        name: {type: string, maxLength: 64}
+        issuer: {type: string}
+        client_id: {type: string}
+        client_secret: {type: string, description: Written only; "" clears it}
+        scopes: {type: string, description: "Space-separated, openid among them; openid email profile by default"}
+        auto_create: {type: boolean}
+        auto_role: {type: string}
+        auto_domains: {type: array, items: {type: string}}
+        enabled: {type: boolean}
+    Identity:
+      type: object
+      properties:
+        id: {type: integer}
+        provider: {type: string, description: The provider's key}
+        email: {type: string, description: Lower case}
+        bound: {type: boolean, description: The first sign-in bound the provider's subject}
+        created_at: {type: string, format: date-time}
+        bound_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+    IdentityAdd:
+      type: object
+      required: [provider, email]
+      additionalProperties: false
+      properties:
+        provider: {type: string}
+        email: {type: string}
     LoginProvider:
       type: object
       properties:

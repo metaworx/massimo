@@ -944,6 +944,7 @@ The capabilities, what each allows, and the routes it guards:
 | `update` | start a software update | `POST /api/v1/update` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
+| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 
 The default roles, as seeded.
 `owner` has every capability.
@@ -964,7 +965,7 @@ The default roles, as seeded.
 | `guests` | ✓ | | | | |
 | `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | |
-| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `reboot`, `audit` | | | | | |
+| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `reboot`, `audit`, `auth` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07)
