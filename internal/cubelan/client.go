@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/slogx"
 )
 
 // Options configure a Client.
@@ -44,9 +45,13 @@ type Options struct {
 
 // Client is a persistent, reconnecting connection to one Cube.
 type Client struct {
-	opts  Options
-	snap  *Snapshot
-	log   *slog.Logger
+	opts Options
+	snap *Snapshot
+	log  *slog.Logger
+	// evlog writes the client's lines of its events: log, or log at
+	// debug where the caller writes each event's own line
+	// (Options.EventLines).
+	evlog *slog.Logger
 	evs   chan Event
 	ready chan struct{} // closed when the first greeting is complete
 	once  sync.Once
@@ -140,7 +145,11 @@ func New(opts Options) *Client {
 		d := &net.Dialer{Timeout: 10 * time.Second, KeepAliveConfig: keepAlive}
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
-	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
+	evlog := opts.Logger
+	if opts.EventLines {
+		evlog = slogx.AtDebug(opts.Logger)
+	}
+	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evlog: evlog, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
 		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1)}
 	if opts.Addr != "" {
 		c.SetAddress(opts.Addr)
@@ -210,15 +219,6 @@ func (c *Client) Connected() bool { return c.online.Load() }
 // connects again on purpose (Reconnect), and while it has not tried yet.
 func (c *Client) Lost() bool { return c.lost.Load() }
 
-// eventLevel is the level of the client's line of an event: debug where
-// the caller writes the event's own line (Options.EventLines).
-func (c *Client) eventLevel(level slog.Level) slog.Level {
-	if c.opts.EventLines {
-		return slog.LevelDebug
-	}
-	return level
-}
-
 // Ready is closed after the first complete greeting.
 func (c *Client) Ready() <-chan struct{} { return c.ready }
 
@@ -259,7 +259,7 @@ func (c *Client) Run(ctx context.Context) error {
 			// The warning first, then Lost, then the event: whoever sees
 			// Lost sees the warning, and whoever reads the event sees Lost.
 			lost, warned = now, now
-			c.log.Log(context.Background(), c.eventLevel(slog.LevelWarn), "cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
+			c.evlog.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 			c.lost.Store(true)
 			c.emit(Event{Kind: EventDisconnected, Err: err})
 		case now.Sub(warned) >= c.opts.RemindEvery:
@@ -347,9 +347,9 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 				// The line before the event, as for a loss: whoever reads
 				// the event sees the connection's line.
 				if lost.IsZero() {
-					c.log.Log(context.Background(), c.eventLevel(slog.LevelInfo), "cube connected", "addr", c.Address())
+					c.evlog.Info("cube connected", "addr", c.Address())
 				} else {
-					c.log.Log(context.Background(), c.eventLevel(slog.LevelInfo), "cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
+					c.evlog.Info("cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
 				}
 				c.emit(ev)
 			}
@@ -658,7 +658,7 @@ func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
 func (c *Client) ForgetDevice(rf cube.RFAddress) {
 	if gone, ok := c.snap.Forget(rf); ok {
 		c.emit(Event{Kind: EventForgotten, Device: rf, Gone: &gone})
-		c.log.Log(context.Background(), c.eventLevel(slog.LevelInfo), "device forgotten", "addr", c.Address(), "device", rf, "serial", gone.Serial)
+		c.evlog.Info("device forgotten", "addr", c.Address(), "device", rf, "serial", gone.Serial)
 	}
 }
 

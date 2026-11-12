@@ -29,6 +29,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/slogx"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -108,18 +109,30 @@ const (
 // note tells OnEvent of an event and writes the proxy's line of it, at
 // debug where OnEvent takes it.
 func (p *Proxy) note(ev Event, msg string, attrs ...any) {
-	level := ev.Level
+	log := p.log
 	if p.opts.OnEvent != nil {
 		p.opts.OnEvent(ev)
-		level = slog.LevelDebug
+		log = p.quiet
 	}
-	p.log.Log(context.Background(), level, msg, attrs...)
+	log.Log(context.Background(), ev.Level, msg, attrs...)
+}
+
+// cmdLog takes the proxy's line of a client's command: at debug where the
+// server keeps the command's row, which says it.
+func (p *Proxy) cmdLog(cmd engine.Command) *slog.Logger {
+	if cmd.ID != "" {
+		return p.quiet
+	}
+	return p.log
 }
 
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
 type Proxy struct {
 	opts Options
 	log  *slog.Logger
+	// quiet is log at debug, for the lines the server records as well
+	// (OnEvent, Command).
+	quiet *slog.Logger
 
 	mu    sync.Mutex
 	conns map[*session]struct{}
@@ -155,7 +168,7 @@ func New(opts Options) *Proxy {
 	if opts.ReplyTimeout == 0 {
 		opts.ReplyTimeout = time.Minute
 	}
-	return &Proxy{opts: opts, log: opts.Logger, conns: map[*session]struct{}{}}
+	return &Proxy{opts: opts, log: opts.Logger, quiet: slogx.AtDebug(opts.Logger), conns: map[*session]struct{}{}}
 }
 
 // Run listens on tcpAddr for Cube-protocol clients until ctx ends or
@@ -409,12 +422,7 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		done(res)
 	}
 	if res.Err != nil {
-		// The command's row says so where the server keeps one.
-		level := slog.LevelWarn
-		if cmd.ID != "" {
-			level = slog.LevelDebug
-		}
-		p.log.Log(ctx, level, "proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
+		p.cmdLog(cmd).Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
 	}
 	if m.Type == 's' && !res.Discarded && p.opts.OnWrite != nil {
