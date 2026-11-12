@@ -426,7 +426,7 @@ a `-listen` address is set again afterwards with `sudo massimo install -listen <
 The package's update helper is the one of "From the web UI" below,
 started by the same request file,
 but with apt as the owner it installs no release itself:
-it takes the request, whose channel it ignores,
+it takes the request, whose channel names the suite apt is to follow,
 and runs apt for the massimo source of "The apt repository" alone,
 
 ```bash
@@ -438,12 +438,32 @@ apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confdef \
 
 so it follows that source's suite and does what `apt upgrade` does for massimo,
 the other sources' lists left as they are.
+Where the request names another update channel than the source's suite,
+chosen in the web UI (the setting `update.channel`),
+the helper first points the source at that channel's suite:
+the `Suites:` line, and `Signed-By:` to the rolling key's file
+for `devel` and `nightly` or back to the other,
+every other line kept, written whole;
+where `apt-get update` then fails, it puts the old file back.
+`--only-upgrade` downgrades nothing,
+so a box that moves to a more stable channel keeps its version
+until that channel has a newer one.
+It changes only a source as "The apt repository" sets it up:
+one entry, one suite, the project's repository or a local `file:` one,
+and `Signed-By:` a file of `massimo-archive-keyring`;
+any other is left to its owner,
+and the helper's last run names the line to edit.
+A rolling suite needs the keyring package's rolling key,
+which a box has once it has upgraded `massimo-archive-keyring`
+to a version that carries both keys.
 While another apt run holds apt's lock (`unattended-upgrades` among them)
 it waits up to two minutes for each command,
 since `apt-get update` does not wait itself,
 then reports apt as busy.
 The server follows the source's suite for its check as well,
-`Suites:` of `/etc/apt/sources.list.d/massimo.sources`:
+`Suites:` of `/etc/apt/sources.list.d/massimo.sources`, read at each check,
+unless the setting `update.channel` names another channel,
+which the next update switches to:
 the web UI says "Installed by apt" with that channel,
 and refuses an update while `MASSIMO_UPDATE_CHANNEL` names another one,
 while the source is missing (a package installed from its file alone),

@@ -48,6 +48,17 @@ func TestPackagedUpdate(t *testing.T) {
 	if upd.Managed != "" || upd.Manager != "apt" || upd.Channel != "alpha" || upd.Helper == nil {
 		t.Fatalf("apt: %+v", upd)
 	}
+	// Without the variable the channel is the suite, read at each check:
+	// the update helper switches it.
+	upd = server.UpdateOptions{}
+	packagedUpdate(&upd, apt, root, env(nil))
+	if upd.Managed != "" || upd.Channel != "" || upd.Suite == nil || upd.Suite() != "alpha" {
+		t.Fatalf("apt without the variable: %+v", upd)
+	}
+	os.WriteFile(source, []byte("Types: deb\nURIs: https://massimo.example.invalid/apt\nSuites: devel\nComponents: main\n"), 0o644)
+	if s := upd.Suite(); s != "devel" {
+		t.Fatalf("the suite after a switch: %q", s)
+	}
 	if why := upd.Helper(); !strings.Contains(why, "the update helper is off") {
 		t.Fatalf("helper off: %q", why)
 	}

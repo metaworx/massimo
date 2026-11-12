@@ -360,3 +360,53 @@ docker run --rm -v "$work/site/apt:/site1:ro" -v "$work/upgrade/apt:/site2:ro" -
 	[ ! -e /var/lib/massimo/update-request ] || fail "the request was not taken"
 	echo "apt update helper test: ok"
 '
+
+# The helper switches apt's suite to the request's channel (packaging/
+# README.md, "Debian package"): a repository with alpha, holding the
+# older package, and devel, the newer one, signed with the rolling key. A
+# box on alpha asks for devel: the source names devel and the rolling
+# keyring, and apt installs the newer package; back to alpha, the source
+# goes back and nothing is downgraded; a channel without a suite here
+# (nightly) fails apt-get update, and the source is put back.
+mkdir -p "$work/sw-alpha" "$work/sw-devel"
+cp "${debs[0]}" "$work/sw-alpha/"
+cp "$work/from/massimo_${new}_amd64.deb" "$work/sw-devel/"
+publish --out "$work/switch" --key "$key" --from "$work/sw-alpha" --channel alpha >/dev/null
+publish --out "$work/switch-devel" --key "$rolling_key" --from "$work/sw-devel" --channel devel >/dev/null
+cp -R "$work/switch-devel/apt/dists/devel" "$work/switch/apt/dists/"
+cp -R "$work/switch-devel/apt/pool/devel" "$work/switch/apt/pool/"
+chmod -R a+rX "$work/switch"
+docker run --rm -v "$work/switch/apt:/repo:ro" -e OLD="$old" -e NEW="$new" "$image" bash -euo pipefail -c '
+	fail() { echo "FAIL: $*" >&2; exit 1; }
+	version() { dpkg-query -W --showformat="\${Version}" massimo; }
+	source=/etc/apt/sources.list.d/massimo.sources
+	suite() { sed -n "s/^Suites: *//p" "$source"; }
+	signed() { sed -n "s/^Signed-By: *//p" "$source"; }
+	st() { cat /var/lib/massimo-update/status.json; }
+	export DEBIAN_FRONTEND=noninteractive
+	apt-get -qq install -y /repo/massimo-archive-keyring.deb >/dev/null
+	sed "s#^URIs: .*#URIs: file:///repo#" /repo/massimo.sources >"$source"
+	apt-get -qq update
+	apt-get -qq install -y massimo >/dev/null
+	[ "$(version)" = "$OLD" ] || fail "installed $(version), not $OLD"
+	helper=$(sed -n "s/^ExecStart=//p" /usr/lib/systemd/system/massimo-update.service | sed "s/ -health .*//")
+	mkdir -p /var/lib/massimo
+	ask() { echo "$1" >/var/lib/massimo/update-request; $helper >/tmp/out 2>&1 || true; }
+
+	ask devel
+	[ "$(suite)" = devel ] || fail "the source names $(suite), not devel: $(st)"
+	[ "$(signed)" = /usr/share/keyrings/massimo-rolling-archive-keyring.gpg ] || fail "devel signed by $(signed)"
+	[ "$(version)" = "$NEW" ] || fail "on devel the helper left $(version), not $NEW: $(st)"
+	grep -q "\"state\": \"done\"" /var/lib/massimo-update/status.json || fail "devel: $(st)"
+
+	ask nightly
+	[ "$(suite)" = devel ] || fail "after a failed fetch the source names $(suite), not devel"
+	grep -q "back on the suite devel" /var/lib/massimo-update/status.json || fail "nightly: $(st)"
+
+	ask alpha
+	[ "$(suite)" = alpha ] || fail "the source names $(suite), not alpha: $(st)"
+	[ "$(signed)" = /usr/share/keyrings/massimo-archive-keyring.gpg ] || fail "alpha signed by $(signed)"
+	[ "$(version)" = "$NEW" ] || fail "back on alpha the helper left $(version), not $NEW: nothing is downgraded"
+	grep -q "follows the suite alpha now" /var/lib/massimo-update/status.json || fail "alpha: $(st)"
+	echo "apt suite switch test: ok"
+'

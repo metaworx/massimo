@@ -93,15 +93,25 @@ async function loadUpdate(refresh) {
 }
 
 // channelFixed says why the channel cannot be chosen here, "" where it
-// can: apt's suite or brew's formula decides it, or MASSIMO_UPDATE_CHANNEL
-// overrides the setting, which then differs from the channel in effect.
+// can: brew's formula decides it, or MASSIMO_UPDATE_CHANNEL overrides the
+// setting, so that the channel in effect is neither the setting's nor,
+// without one, apt's suite or the build's flavour.
 function channelFixed(u, setting) {
-  if (u.manager === "apt") return t("update.channelApt", { channel: u.channel });
   if (u.manager === "brew") {
     return t("update.channelBrew", { channel: u.channel, formula: u.channel === "stable" ? "massimo" : "massimo-" + u.channel });
   }
-  if (setting.in_effect !== setting.value) return t("update.channelVariable", { channel: setting.in_effect });
+  const chosen = setting.set ? setting.value : u.suite || u.flavour;
+  if (setting.in_effect !== chosen) return t("update.channelVariable", { channel: setting.in_effect });
   return "";
+}
+
+// channelNote is what the choice does where it can be made: on a box apt
+// updates, the update helper switches apt's suite at the next update;
+// elsewhere the hint on the channels' order.
+function channelNote(u) {
+  if (u.manager !== "apt" || !u.suite) return t("update.channelHint");
+  if (u.channel !== u.suite) return t("update.channelAptSwitch", { suite: u.suite, channel: u.channel });
+  return t("update.channelApt", { channel: u.suite });
 }
 
 // renderChannel shows the channel's choice to a holder of settings, who
@@ -114,7 +124,11 @@ function renderChannel() {
   $("update-channel-field").classList.toggle("hidden", !show);
   if (!show) return;
   const sel = $("update-channel");
-  const own = [["", u.flavour ? t("update.channelFlavour", { flavour: u.flavour }) : t("update.channelNone")]];
+  // Without a choice of its own the box follows apt's suite, or else its
+  // build's flavour.
+  let none = u.flavour ? t("update.channelFlavour", { flavour: u.flavour }) : t("update.channelNone");
+  if (u.manager === "apt" && u.suite) none = t("update.channelSuite", { suite: u.suite });
+  const own = [["", none]];
   sel.replaceChildren(...own.concat(UPDATE_FLAVOURS.map((f) => [f, t("update.flavour." + f)])).map(([value, label]) => {
     const o = document.createElement("option");
     o.value = value;
@@ -124,7 +138,7 @@ function renderChannel() {
   const fixed = channelFixed(u, setting);
   sel.disabled = !!fixed;
   sel.value = fixed ? setting.in_effect : setting.set ? setting.value : "";
-  $("update-channel-note").textContent = fixed || t("update.channelHint");
+  $("update-channel-note").textContent = fixed || channelNote(u);
 }
 
 // loadChannel reads the setting update.channel, for a holder of settings.

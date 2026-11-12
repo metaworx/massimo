@@ -33,9 +33,13 @@ type UpdateOptions struct {
 	// update.channel says otherwise.
 	Flavour string
 	// Channel, where set, is the channel whatever the store says:
-	// MASSIMO_UPDATE_CHANNEL, or the suite or formula a package manager
-	// follows.
+	// MASSIMO_UPDATE_CHANNEL, or the formula brew follows.
 	Channel string
+	// Suite, where set, reads the suite apt follows (the massimo source),
+	// at each check, since the update helper switches it: the channel
+	// where the store names none. A stored channel that differs is the one
+	// the next update asks the helper to switch apt to.
+	Suite func() string
 	// Request is the file that asks the root helper for an update; empty
 	// means no helper is installed and updates cannot be started here.
 	Request string
@@ -81,7 +85,8 @@ type updateCheck struct {
 }
 
 // updateChannel is the channel updates come from: Channel where set,
-// else the store's update.channel, else the build's flavour.
+// else the store's update.channel, else apt's suite, else the build's
+// flavour.
 func (s *Server) updateChannel(ctx context.Context) string {
 	if c := s.opts.Update.Channel; c != "" {
 		return c
@@ -89,7 +94,18 @@ func (s *Server) updateChannel(ctx context.Context) string {
 	if c := s.storedChannel(ctx); c != "" {
 		return c
 	}
+	if c := s.aptSuite(); c != "" {
+		return c
+	}
 	return s.opts.Update.Flavour
+}
+
+// aptSuite is the suite apt follows, "" where apt does not own massimo.
+func (s *Server) aptSuite() string {
+	if s.opts.Update.Suite == nil {
+		return ""
+	}
+	return s.opts.Update.Suite()
 }
 
 // storedChannel is the store's update.channel, "" where unset or there
@@ -112,7 +128,7 @@ func (s *Server) storedChannel(ctx context.Context) string {
 // box on beta that installs a stable release would follow stable from
 // then on.
 func (s *Server) keepChannel(ctx context.Context, channel string, rel *update.Release) {
-	if s.opts.Update.Channel != "" || s.opts.Store == nil || rel == nil || rel.Flavour == s.opts.Update.Flavour || s.storedChannel(ctx) != "" {
+	if s.opts.Update.Channel != "" || s.opts.Update.Suite != nil || s.opts.Store == nil || rel == nil || rel.Flavour == s.opts.Update.Flavour || s.storedChannel(ctx) != "" {
 		return
 	}
 	if err := s.opts.Store.SetSetting(ctx, store.UpdateChannelKey, channel); err != nil {
@@ -172,6 +188,7 @@ type updateView struct {
 	Current    string         `json:"current"`
 	Flavour    string         `json:"flavour,omitempty"`
 	Channel    string         `json:"channel"`
+	Suite      string         `json:"suite,omitempty"`
 	Manager    string         `json:"manager,omitempty"`
 	Latest     string         `json:"latest,omitempty"`
 	ReleaseURL string         `json:"release_url,omitempty"`
@@ -191,7 +208,7 @@ func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 // updateRelease is updateState with the release it found, if any.
 func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *update.Release) {
 	u := s.opts.Update
-	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
+	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Suite: s.aptSuite(), Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
 	var found *update.Release
 	if update.ValidChannel(v.Channel) {
 		rel, at, err := s.latest(ctx, v.Channel, refresh)

@@ -2166,10 +2166,13 @@ but the route answers all the same.
 
 Whether a newer signed release is out on the server's update channel:
 `MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
-else the build's `flavour`, what it was released as;
-on a box the Debian package installed, the suite of its apt source.
+else, on a box the Debian package installed, the suite of its apt source,
+else the build's `flavour`, what it was released as.
+`suite` is that apt source's suite, read at each check;
+where `channel` differs from it,
+the next update switches the source to the channel's suite.
 A channel takes the releases of its own flavour and of every more stable one,
-in the order `devel`, `nightly`, `alpha`, `beta`, `stable`
+in the order `devel`, `nightly`, `alpha`, `beta`, `rc`, `stable`
 ([README.md](../README.md), "Versions").
 The server asks GitHub at most every ten minutes; `refresh` asks now.
 
@@ -2217,7 +2220,8 @@ see [packaging/README.md](../packaging/README.md)) downloads and verifies the re
 test-runs it, replaces the binary,
 restarts the server and rolls back if the new version does not answer `/healthz`.
 Where `manager` is `apt`, the Debian package's helper runs apt for the massimo
-source instead, the package restarts the server,
+source instead, having pointed the source at the channel's suite where it names another
+(and back where apt cannot fetch that suite), the package restarts the server,
 and nothing is rolled back: the helper's last run names the way back
 (packaging/README.md, "Debian package").
 Where it is `brew`, the server starts a helper as its own user that runs

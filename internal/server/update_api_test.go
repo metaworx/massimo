@@ -380,3 +380,55 @@ func TestUpdateChannelFromTheStore(t *testing.T) {
 		t.Fatalf("the variable's channel: %v, asked %q", out, f.channel)
 	}
 }
+
+// On a box apt owns massimo on, the channel is the suite apt follows,
+// read at each check; a stored channel is the one the next update asks
+// the helper to switch apt to, and nothing is stored for it.
+func TestUpdateChannelFromAptSuite(t *testing.T) {
+	dir := t.TempDir()
+	f := &fakeFinder{tag: "v0.2.0-beta.2"}
+	suite := "alpha"
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Update = UpdateOptions{Version: "v0.2.0-alpha.1", Flavour: "alpha", Manager: "apt", Suite: func() string { return suite },
+		Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"), Finder: f}
+	_, ts, s := startWith(t, opts)
+	get := func() map[string]any {
+		t.Helper()
+		resp, text := callWith(t, ts, "GET", "/api/v1/update", "secret", "", nil)
+		var out map[string]any
+		if resp.StatusCode != 200 || json.Unmarshal([]byte(text), &out) != nil {
+			t.Fatalf("GET: %d %s", resp.StatusCode, text)
+		}
+		return out
+	}
+	if out := get(); out["channel"] != "alpha" || out["suite"] != "alpha" || f.channel != "alpha" {
+		t.Fatalf("the suite's channel: %v, asked %q", out, f.channel)
+	}
+	suite = "devel"
+	if out := get(); out["channel"] != "devel" || out["suite"] != "devel" {
+		t.Fatalf("the suite read again: %v", out)
+	}
+	if resp, text := callWith(t, ts, "PUT", "/api/v1/settings", "secret", `{"update.channel": "beta"}`, nil); resp.StatusCode != 200 {
+		t.Fatalf("PUT beta: %d %s", resp.StatusCode, text)
+	}
+	if out := get(); out["channel"] != "beta" || out["suite"] != "devel" || f.channel != "beta" {
+		t.Fatalf("the stored channel beside the suite: %v, asked %q", out, f.channel)
+	}
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", nil); resp.StatusCode != 202 {
+		t.Fatalf("POST: %d %s", resp.StatusCode, text)
+	}
+	if c, ok, err := update.TakeRequest(opts.Update.Request); err != nil || !ok || c != "beta" {
+		t.Fatalf("the request: %q %v %v", c, ok, err)
+	}
+	// A release of another flavour stores nothing: apt's suite decides.
+	if resp, text := callWith(t, ts, "PUT", "/api/v1/settings", "secret", `{"update.channel": null}`, nil); resp.StatusCode != 200 {
+		t.Fatalf("PUT null: %d %s", resp.StatusCode, text)
+	}
+	suite = "alpha"
+	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", nil); resp.StatusCode != 202 {
+		t.Fatalf("POST on alpha: %d %s", resp.StatusCode, text)
+	}
+	if c, _ := s.opts.Store.SettingString(context.Background(), store.UpdateChannelKey); c != "" {
+		t.Fatalf("stored %q on a box apt owns", c)
+	}
+}
