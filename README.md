@@ -69,6 +69,8 @@ on a document under `docs/` that is not).
   through the proxy today and with an integration of its own later
 - [docs/reverse-proxy.md](docs/reverse-proxy.md):
   `massimo serve` behind a reverse proxy
+- [docs/oidc.md](docs/oidc.md): signing in through an OpenID Connect
+  provider such as Nextcloud, Google or Microsoft
 
 ### The API
 
