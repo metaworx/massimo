@@ -1,2 +1,2 @@
-- The sign-in card's ☰ menu sets the language and the light or dark
-  mode before anyone signs in.
+- The sign-in card's ☰ menu sets the language and the appearance (light,
+  dark or as the system) before anyone signs in.

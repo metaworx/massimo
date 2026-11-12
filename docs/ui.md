@@ -15,7 +15,7 @@ The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
 👤 → Sign out ends it.
-The card's ☰ sets the language and the mode (light, dark, as the system)
+The card's ☰ sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
 While it asks, the page shows its name, its version and the sign-in,
