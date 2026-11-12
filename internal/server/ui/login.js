@@ -198,12 +198,15 @@ async function loadMeAndPreferences() {
 }
 
 // askLogin opens the sign-in dialog and resolves true once a session or
-// a key is in, false when the dialog was dismissed.
+// a key is in, false when the dialog was dismissed. While it is open the
+// page is signed out: the body's class signed-out hides all of it but
+// the name, the version and the dialog.
 function askLogin() {
   if (loginPromise) return loginPromise;
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
     const form = $("login-form");
+    const keyForm = $("login-key-form");
     const error = $("login-error");
     $("login-user").value = "";
     $("login-password").value = "";
@@ -213,20 +216,23 @@ function askLogin() {
     const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {
       form.onsubmit = null;
+      keyForm.onsubmit = null;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
+      document.body.classList.remove("signed-out");
       loginPromise = null;
       resolve(ok);
     };
-    form.onsubmit = async (ev) => {
+    keyForm.onsubmit = (ev) => {
       ev.preventDefault();
       const key = $("login-token").value.trim();
-      if (key) {
-        setToken(key);
-        done(true);
-        if (!startWaits) afterLogin();
-        return;
-      }
+      if (!key) return;
+      setToken(key);
+      done(true);
+      if (!startWaits) afterLogin();
+    };
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
       if (isBusy(submit)) return; // a second Enter while it signs in
       const user = $("login-user").value.trim();
       const password = $("login-password").value;
@@ -248,7 +254,11 @@ function askLogin() {
       if (!startWaits) afterLogin();
     };
     dlg.onclose = () => done(false);
-    dlg.showModal();
+    document.body.classList.add("signed-out");
+    // Not modal: the page behind is empty, and a modal dialog makes the
+    // rest of the document inert, where a password manager draws its
+    // choices, which then take no click.
+    dlg.show();
     $("login-user").focus();
   });
   return loginPromise;
@@ -370,8 +380,8 @@ function afterLogin() {
     });
 }
 
-// logout ends the session (an API key is only forgotten) and asks who
-// is there again. The settings that followed the user go with it: a
+// logout ends the session (an API key is only forgotten), clears what
+// the page loaded of the Cubes and asks who is there again. The settings that followed the user go with it: a
 // change still waiting is sent under the user's token first, then the
 // browser forgets the user's values and schemes and keeps what is kept
 // for this device only, so that the next to sign in neither sees them
@@ -394,8 +404,10 @@ async function logout() {
   state.me = null;
   if (synced) await forgetUserSettings(); // app.js
   closeEvents();
+  clearCubeData(); // app.js: nothing of this session behind the sign-in
   showView("tiles", "replace");
   await loadMeAndPreferences();
+  startPolling();
   refresh().then(connectEvents);
 }
 
@@ -562,6 +574,13 @@ async function createOwner(ev) {
 let checkOwnerName = () => true;
 
 function initLogin() {
+  // the sign-in's menu: the language and the mode, as My settings sets them
+  dropdown($("login-menu")); // components.js
+  $("login-lang").addEventListener("change", (ev) => {
+    setSetting("lang", validSetting("lang", ev.target.value) || "auto");
+    changeLanguage(state.settings.lang).then(applyLanguage);
+  });
+  $("login-mode").addEventListener("change", (ev) => chooseMode(ev.target.value)); // theme.js
   window.addEventListener("pagehide", flushPreferences);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPreferences();

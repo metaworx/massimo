@@ -148,7 +148,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
             "what is kept for this device stays"
         page.locator("details.login-token summary").click()
         page.locator("#login-token").fill(TOKEN)
-        page.locator("#login-form button[type=submit]").click()
+        page.locator("#login-key-form button[type=submit]").click()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "!document.body.classList.contains('no-sync')", 5), "the owner's settings follow it"
         page.wait_for_timeout(2000)  # the page's writes, a second after a change

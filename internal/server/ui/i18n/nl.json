@@ -863,6 +863,8 @@
   "copy.programDiscarded": "programma verworpen",
 
   "login.title": "Aanmelden",
+
+  "login.menu": "Taal en weergave",
   "login.text": "Deze server vraagt wie je bent.",
   "login.user": "Naam",
   "login.password": "Wachtwoord",

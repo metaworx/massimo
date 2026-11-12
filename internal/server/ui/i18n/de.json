@@ -862,6 +862,8 @@
   "copy.programDiscarded": "Programm verworfen",
 
   "login.title": "Anmelden",
+
+  "login.menu": "Sprache und Darstellung",
   "login.text": "Dieser Server fragt, wer du bist.",
   "login.user": "Name",
   "login.password": "Passwort",
