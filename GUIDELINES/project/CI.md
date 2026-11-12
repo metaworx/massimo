@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.41.0)
+# Massimo — CI Conventions (v1.42.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client, in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client, in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
@@ -241,6 +241,22 @@ or `.github/workflows/ci.yml`,
 as the job What to test answers, and a push to `main` always,
 as the Screenshots job does.
 
+The actionlint job runs `make actionlint`,
+the tool pinned by the `tool` line of `tools/actionlint/go.mod`,
+a module of its own (section 8, `tools/actionlint/README.md`),
+which `go tool -modfile=…` builds into setup-go's cache,
+keyed by that module's `go.sum`.
+actionlint checks the workflows' syntax, expressions and job graph,
+and hands each `run:` script to the shellcheck it finds on the `PATH`,
+the one of GitHub's Ubuntu image;
+without one it checks the scripts by nothing,
+so a machine without shellcheck passes what CI fails.
+A finding that is wrong about the code carries
+`# shellcheck disable=SC<n>` with its reason on the line above
+(`GUIDELINES/shared/lang/shell/LINTING.md`).
+The job runs where Vet and test runs and is among All tests passed's needs,
+so the required check covers it (owner, 2026-11-12, AP ActionLint, D61-A).
+
 Hardware is never touched by CI;
 the Windows and macOS jobs run against the fake Cube.
 
@@ -248,7 +264,7 @@ the Windows and macOS jobs run against the fake Cube.
 
 CI runs the commands of the contract's facts table (`GUIDELINES/project/_CONTRACT.md`):
 `gofmt -l .`, `go vet ./...` for linux, windows and darwin,
-`go test ./...` and `make cross`.
+`go test ./...`, `make cross` and `make actionlint`.
 `go test` includes `tools/identifiers`,
 which fails on a serial, a MAC or a radio address in the tree that is not a
 placeholder (the contract, "Secrets and identities").
@@ -637,8 +653,8 @@ since a site without `apt/` would take the repository offline.
 
 `.github/dependabot.yml` has Dependabot propose,
 once a month and in one pull request each,
-the updates of the Go modules the code imports directly and of the actions
-the workflows use.
+the updates of the Go modules the code imports directly,
+of the actions the workflows use and of actionlint.
 Its pull requests differ from the project's in two ways, both on purpose:
 
 - Their commit messages, `build(deps): bump …`, carry no `Key changes:` list
@@ -660,6 +676,19 @@ its tag's commit from `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`
 (an annotated tag points at a tag object; its `object.sha` is the commit).
 `github.com/bytemare/ksf` is indirect and replaced by `third_party/bytemare-ksf`,
 so Dependabot leaves it alone until a release has the fix.
+
+actionlint is pinned by the `tool` line of `tools/actionlint/go.mod`,
+a module of its own rather than a `tool` line in massimo's `go.mod`,
+so that its modules stay out of the product's module graph,
+its `go-modules` group and govulncheck's scan (owner, 2026-11-12, D61-A).
+Its Dependabot entry, for `/tools/actionlint`, allows
+`github.com/rhysd/actionlint` by name:
+the `go.mod` marks a tool's module `// indirect`,
+which `dependency-type: direct` would skip.
+Its pull request changes `tools/**` alone, which is not shipped,
+so it needs no `CHANGELOG.md` bullet.
+By hand, the update is `go get -tool github.com/rhysd/actionlint/cmd/actionlint@vX.Y.Z`
+and `go mod tidy` in that directory.
 
 The repository's own security settings are the owner's,
 in its Settings, and need no file here:

@@ -6,6 +6,10 @@
 # into one CHANGELOG bullet when they are merged.
 # github.com/bytemare/ksf, replaced by third_party/bytemare-ksf until a
 # release builds for 32-bit targets, is indirect and so left alone.
+# actionlint, pinned by the tool line of tools/actionlint/go.mod (make
+# actionlint), has an entry of its own, so that its modules stay out of
+# the product's group; the tool's module is marked indirect there, so
+# the entry allows it by name, and its own dependencies follow it.
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -28,6 +32,16 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: gomod
+    directory: /tools/actionlint
+    schedule:
+      interval: monthly
+    allow:
+      - dependency-name: github.com/rhysd/actionlint
     commit-message:
       prefix: build
       include: scope

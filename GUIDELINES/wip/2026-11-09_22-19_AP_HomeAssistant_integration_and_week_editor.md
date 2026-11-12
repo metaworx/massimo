@@ -1,23 +1,24 @@
-# AP HomeAssistant v1.0: Home Assistant integration and week editor
+# AP HomeAssistant v1.1: Home Assistant integration and week editor
 
 ## TL;DR
 
 Massimo gets what a Home Assistant integration needs,
-then the integration itself in a repository of its own:
-rooms as `climate` entities, sensors, services and a week-programme card
-that uses Massimo's own editor.
+and the integration starts in a repository of its own;
+the integration's further blocks move to that repository's own plan.
 
 - event stream → no ids, events dropped for a slow client → `id:` per event,
   `Last-Event-ID` or `last_event_id` replays, `resync` when too old,
-  a slow client's stream ended (D2-A)
+  a slow client's stream ended (D2-A) — done, #154
 - role `integration` → read, setpoint, lock → also `configure`,
-  existing stores where the role is still the seed's (D3-B)
+  existing stores where the role is still the seed's (D3-B) — done, #154
 - week editor → functions in `config.js` → `<massimo-week-program>`,
-  a plain-JS element, the web UI's and the card's (D5-A)
+  a plain-JS element, the web UI's and the card's (D5-A) — done, #154
 - the integration → `metaworx/massimo-homeassistant`,
-  one repository with its card (D1-A), a `climate` per room (D4-A),
-  Apache-2.0 (D6-A)
-- this plan's `PLAN++` → Blocks 1 to 4, in this repository
+  public (D7-A), one repository with its card (D1-A), Apache-2.0 (D6-A);
+  its setup and event stream done (Block 5)
+- Blocks 6 to 10 → carried over to the integration's own plan,
+  in its repository, which works under the shared guidelines too (D8-A, D9-A,
+  D10-A); this plan then retires on the owner's word
 
 ### Blocks
 
@@ -33,13 +34,11 @@ that uses Massimo's own editor.
    the roadmap's item
 5. Repository: `metaworx/massimo-homeassistant`, manifest, config flow
    (mDNS `_massimo._tcp` and a URL), CI against `serve` and `fakecube`
-6. Entities: rooms, device sensors, the Cube's diagnostics,
-   pending and availability
-7. Services: `set_program`, `copy_program`, `lock`
-8. Card: the week programme on `<massimo-week-program>`,
-   served by the integration
-9. Release: tag, the Marketplace / HACS listing, README, licence
-10. Breno: the integration installed, the `maxcube` stopgap removed
+6. Entities: carried over to the integration's plan
+7. Services: carried over to the integration's plan
+8. Card: carried over to the integration's plan
+9. Release: carried over to the integration's plan
+10. Breno: carried over to the integration's plan
 
 ## Discussion
 
@@ -101,10 +100,35 @@ its queue and its radio budget, as the web UI's do.
   which leaves a later move into core open.
   It talks to Massimo over HTTP and is a work of its own.
 
-**Not decided by this plan:**
-the new repository and its listing are steps on GitHub the owner takes or
-authorises at Block 5's gate;
-Blocks 5 to 10 are a later signal's.
+**Decided at Block 5's gate** (`EXEC 5`, 2026-11-09):
+
+- **D7-A.**
+  The repository is public: HACS and the Marketplace install from public
+  repositories only.
+
+**Decided after Block 5** (2026-11-12),
+on the owner's question whether the integration's work should be done
+from this repository or from sessions in the new one:
+
+- **D8-A.**
+  Blocks 6 to 10 run in sessions rooted in the integration's repository:
+  its pull requests bind there, its files and its memory are its own,
+  and a session does not reach across two repositories at every step.
+- **D9-A.**
+  The integration's repository carries the shared guidelines, tracked,
+  at the version Massimo pins, with a contract of its own:
+  its sessions know the gates, the plans and the commit form,
+  and the same tools check its commits.
+  B, an overlay, keeps them off the public repository but leaves CI without
+  them; C, a short `AGENTS.md`, gives no tools.
+- **D10-A.**
+  Blocks 6 to 10 are carried over to a plan of the integration's repository,
+  which restates them; this plan retires once that is so,
+  on the owner's word.
+  B, one plan in Massimo cited across repositories,
+  cannot be committed or retired by the sessions that carry it out,
+  and the integration's `commit-msg.sh` refuses a plan its repository does
+  not hold.
 
 **Names chosen here**, routine:
 the blocks Resume, IntegrationConfigure, WeekElement and HaDocs;
@@ -277,9 +301,13 @@ a coordinator on the event stream with resume, CI with hassfest, the HACS
 check and pytest against `massimo serve` with `fakecube`.
 Its own gate: the repository is created on the owner's word.
 
+Done in `metaworx/massimo-homeassistant` (NOTE HomeAssistant v1.0:
+block 5 repository).
+
 ### Block 6: Entities
 
-A `climate` per room (setpoint 4.5 to 30.5 °C in 0.5 steps; `auto`,
+Carried over to the integration's own plan (D10-A), which restates it:
+a `climate` per room (setpoint 4.5 to 30.5 °C in 0.5 steps; `auto`,
 `heat` for manual, presets eco and comfort from the room's temperatures,
 away for vacation), sensors per device (valve, battery, link, window),
 the Cube's diagnostics (connected, duty cycle, free slots, queued),
@@ -287,41 +315,49 @@ pending while radiograms wait, unavailable when stale.
 
 ### Block 7: Services
 
+Carried over to the integration's own plan:
 `massimo.set_program`, `massimo.copy_program`, `massimo.lock`;
 the programme as a room's attribute.
 
 ### Block 8: Card
 
-The week-programme card on a pinned copy of `week-program.js`,
+Carried over to the integration's own plan:
+the week-programme card on a pinned copy of `week-program.js`,
 the integration serving and registering it.
 
 ### Block 9: Release
 
-Tag, the listing, the README, the licence.
+Carried over to the integration's own plan:
+tag, the listing, the README, the licence.
 
 ### Block 10: Breno
 
-The integration installed on the breno Pi, `maxcube` removed,
+Carried over to the integration's own plan:
+the integration installed on the breno Pi, `maxcube` removed,
 the box's documentation updated.
+Like every touch of the Pi, on the owner's word in that session.
 
 ## Proposed commit message
 
-For this registration:
+For this revision:
 
 ```
-chore(aps): +HomeAssistant v1.0
+chore(aps): +HomeAssistant v1.1
 
-The plan for Massimo's Home Assistant integration: event ids and resume,
-configure for the integration role, the week editor as an element, the
-documents, then the integration in a repository of its own.
+Blocks 1 to 5 are done; Blocks 6 to 10 are carried over to the
+integration's own plan in its repository (D8-A, D9-A, D10-A), and the
+plan retires once that plan restates them.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_22-19_AP_HomeAssistant_integration_and_week_editor.md::v1.0::2026-11-09::All::the plan, D1-A, D2-A, D3-B, D4-A, D5-A, D6-A at its gates
+File-revision-v1: GUIDELINES/wip/2026-11-09_22-19_AP_HomeAssistant_integration_and_week_editor.md::v1.1::2026-11-12::TL;DR, Discussion, Implementation Plan, Proposed commit message, Change History::Blocks 6 to 10 carried over; D7-A, D8-A, D9-A, D10-A
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
-Each block's own commit cites `AP HomeAssistant v1.0, Block <n>`.
+Each block's own commit cited `AP HomeAssistant v1.0, Block <n>`.
 
 ## Change History
 
 - v1.0 (2026-11-09): the plan, from the TL;DR gate and its EVAL;
   D1-A, D2-A, D3-B, D4-A, D5-A, D6-A.
+- v1.1 (2026-11-12): Blocks 1 to 5 done, Blocks 6 to 10 carried over to the
+  integration's own plan in its repository; D7-A at Block 5's gate,
+  D8-A, D9-A, D10-A after it.
