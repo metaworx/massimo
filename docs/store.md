@@ -1121,8 +1121,10 @@ who cannot sign in once it is off until a password is set for them.
 
 `massimo user add <name> -role owner|operator|viewer|integration`
 (asks for the password twice, or `-no-password` for a key-only user),
-`user list`, `user passwd <name>`, `user disable <name>`, `user enable
-<name>`, `user token <name> -label <text>` (prints a new API key once),
+`user list`, `user passwd <name>`,
+`user rename <name> <new name>` (asks for the password again, or `-no-password`),
+`user disable <name>`, `user enable <name>`,
+`user token <name> -label <text>` (prints a new API key once),
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
@@ -1148,6 +1150,15 @@ with `opaque-ke`'s salt of 16 zero bytes and output of 64,
 which RFC 9807 leaves open,
 so that the record opens in the browser;
 `tools/ui-test` checks that with a user the command added.
+The record holds the name it was registered under,
+the credential identifier from which the server derives the user's OPRF key,
+so `user rename` registers the password again under the new name
+and ends the user's sessions; its keys, preferences and audit stay with the row.
+A removed user's row is renamed `<name>-del-YYYYMMDD-HHNN`,
+the removal's time in UTC, `-<id>` added where that is taken,
+so that the name is free and a user added under it is a row of its own
+(migration 0015 renamed the rows removed before it;
+until then a new user took the removed one's row over, with its history).
 The audit records them with `user_id` NULL and `remote` `cli`.
 
 ### The lockout

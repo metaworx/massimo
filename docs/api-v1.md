@@ -484,10 +484,9 @@ A `guests` holder creates guests only (`403` otherwise).
 The answer is `201` with the user; a name in use is `409`, a bad name,
 an unknown role or an unknown field `400`,
 too many password checks at once `503` with `Retry-After`, as for the login.
-The name of a removed user can be used again;
-the new user takes over the old one's row,
-so the audit's history of the name reads on,
-and starts without the old one's preferences.
+The name of a removed user can be used again,
+for a new user in a row of its own,
+which starts without the old one's preferences or history.
 
 On a server without users, `POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range, link-local),
@@ -528,7 +527,9 @@ or given an end date (`409`): an owner with one does not count.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
-and its row stays for the audit; `{"ok": true, "name": "anna"}`.
+and its row stays for the audit under the name `<name>-del-YYYYMMDD-HHNN`
+of the removal in UTC (`-<id>` added where that is taken),
+which frees the name; `{"ok": true, "name": "anna"}`.
 The last enabled owner without an end date stays (`409`);
 a user cannot remove itself.
 
@@ -1906,7 +1907,8 @@ sign-ins) or `proxy` (the LAN proxy's clients).
 `level` keeps that level and above, `debug`, `info`, `warn` or `error`;
 `info` by default, so that a client asks for `level=debug` to see the
 debug lines (the Cube's `hello`).
-`user` keeps the events a user started, by the login name, a removed user's too;
+`user` keeps the events a user started, by the login name,
+a removed user's too, under the name its removal gave it;
 a name the server does not know answers an empty page.
 `command` keeps the events of one command, by its id
 (`GET /api/v1/commands/{id}`):

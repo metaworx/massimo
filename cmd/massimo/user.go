@@ -45,6 +45,9 @@ func userUsage() {
   list               every user with its role, state, password and tokens
   passwd <name> [-password-stdin]
                      set a user's password, which ends its sessions
+  rename <name> <new name> [-no-password | -password-stdin]
+                     rename a user; the password, which goes with the name,
+                     is asked again, and the sessions end; API keys stay
   disable <name>     refuse the user everything, keeping its rows
   enable <name>
   token <name> -label <text>
@@ -77,6 +80,8 @@ func runUser(args []string) error {
 		return u.list(args[1:])
 	case "passwd":
 		return u.passwd(args[1:])
+	case "rename":
+		return u.rename(args[1:])
 	case "disable", "enable":
 		return u.setDisabled(args[1:], args[0] == "disable")
 	case "token":
@@ -356,6 +361,65 @@ func (u *userCmd) passwd(args []string) error {
 		return fmt.Errorf("user passwd: %w", err)
 	}
 	fmt.Fprintf(stdout, "password of %s set; its sessions are ended%s\n", us.Name, u.where())
+	return nil
+}
+
+// rename gives a user a new login name. The password is set again under
+// it, asked as add asks it: a record of version 2 holds the name it was
+// registered under, so the old one would not open under the new name.
+// -no-password leaves the user with its API keys only.
+func (u *userCmd) rename(args []string) error {
+	fs := flag.NewFlagSet("user rename", flag.ContinueOnError)
+	noPassword := fs.Bool("no-password", false, "leave the user with API keys only")
+	fromStdin := fs.Bool("password-stdin", false, "read the new password from standard input")
+	names, err := u.flags("rename", args, fs)
+	if err != nil {
+		return err
+	}
+	if len(names) != 2 {
+		userUsage()
+		return errors.New("user rename: give the name and the new name")
+	}
+	if *noPassword && *fromStdin {
+		return errors.New("user rename: -no-password and -password-stdin exclude each other")
+	}
+	if err := u.open(); err != nil {
+		return err
+	}
+	us, ok, err := u.st.User(u.ctx, names[0])
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("user rename: no user %q", names[0])
+	}
+	// The name checked before the password is asked; RenameUser checks
+	// it again.
+	if _, taken, err := u.st.UserIDByName(u.ctx, names[1]); err != nil {
+		return err
+	} else if taken {
+		return fmt.Errorf("user rename: %w: %s", store.ErrUserExists, store.NormalName(names[1]))
+	}
+	password := ""
+	if !*noPassword {
+		if password, err = readPassword(*fromStdin); err != nil {
+			return fmt.Errorf("user rename: %w", err)
+		}
+	}
+	renamed, err := u.st.RenameUser(u.ctx, us.Name, names[1], password, 0)
+	if err == nil {
+		err = u.st.RevokeSessions(u.ctx, us.ID)
+	}
+	target := "user:" + us.Name
+	if err == nil {
+		target = "user:" + renamed.Name
+	}
+	// user.update, as a rename through PUT /api/v1/users/{name} would be.
+	u.audit("user.update", target, map[string]any{"from": us.Name, "name": store.NormalName(names[1]), "password": password != ""}, err)
+	if err != nil {
+		return fmt.Errorf("user rename: %w", err)
+	}
+	fmt.Fprintf(stdout, "user %s renamed to %s; its sessions are ended, its API keys kept%s\n", us.Name, renamed.Name, u.where())
 	return nil
 }
 

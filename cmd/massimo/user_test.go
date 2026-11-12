@@ -288,14 +288,15 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		{true, "user -h"}, {true, "user help"}, {true, "user --help"},
 		{true, "user add -h"}, {true, "user add anna -h"}, {true, "user list -h"},
 		{true, "user passwd -h"}, {true, "user disable -h"}, {true, "user enable -h"},
-		{true, "user token -h"}, {true, "user tokens -h"}, {true, "user revoke -h"},
+		{true, "user token -h"}, {true, "user tokens -h"}, {true, "user revoke -h"}, {true, "user rename -h"},
 		{true, "store -h"}, {true, "store help"}, {true, "store backup -h"},
 		{true, "store migrate -h"}, {true, "store info -h"},
 		{false, "user"}, {false, "user bogus"}, {false, "user add"},
 		{false, "user add -x anna"}, {false, "user add anna -no-password -expires tomorrow"},
 		{false, "user list extra"}, {false, "user passwd"}, {false, "user disable"},
 		{false, "user enable anna bob"}, {false, "user token anna"}, {false, "user tokens"},
-		{false, "user revoke"}, {false, "user revoke anna x"},
+		{false, "user revoke"}, {false, "user revoke anna x"}, {false, "user rename anna"},
+		{false, "user rename anna bob -no-password -password-stdin"},
 		{false, "store"}, {false, "store bogus"}, {false, "store backup"},
 		{false, "store migrate extra"}, {false, "store info extra"},
 	} {
@@ -390,5 +391,64 @@ func TestUserStoreDir(t *testing.T) {
 	errOut.Reset()
 	if _, err := runUserWith(t, "", "add", "carl", "-no-password"); err != nil || errOut.Len() > 0 {
 		t.Fatalf("the service's store: %v %q", err, errOut.String())
+	}
+}
+
+// user rename moves the user and its password to the new name, ends its
+// sessions and keeps its keys; it asks for the password unless
+// -no-password, and refuses a taken name before asking.
+func TestUserRename(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	ctx := context.Background()
+	if _, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin"); err != nil {
+		t.Fatal(err)
+	}
+	runUserWith(t, "", "add", "bob", "-no-password")
+	key, _ := runUserWith(t, "", "token", "anna", "-label", "k")
+	for _, c := range []struct{ in, args, want string }{
+		{"x\n", "rename anna bob -password-stdin", "exists"},
+		{"x\n", "rename nobody carl -password-stdin", "no user"},
+		{"", "rename anna carl", "no terminal"},
+		{"", "rename anna carl -no-password -password-stdin", "exclude each other"},
+		{"", "rename anna", "give the name and the new name"},
+		{"x\n", "rename anna bad! -password-stdin", "bad user name"},
+	} {
+		if _, err := runUserWith(t, c.in, strings.Fields(c.args)...); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", c.args, err, c.want)
+		}
+	}
+	st, _ := store.Open(dir, store.Options{})
+	anna, _, _ := st.User(ctx, "anna")
+	st.AddToken(ctx, anna.ID, store.TokenSession, "browser", time.Now().Add(time.Hour))
+	st.Close()
+	out, err := runUserWith(t, "new-pw\n", "rename", "anna", "Annabel", "-password-stdin")
+	if err != nil || !strings.Contains(out, "user anna renamed to annabel; its sessions are ended, its API keys kept (store ") {
+		t.Fatalf("rename: %q %v", out, err)
+	}
+	st, err = store.OpenReadOnly(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, ok, _ := st.User(ctx, "annabel")
+	if !ok || got.ID != anna.ID || !signsIn(t, st, "annabel", "new-pw") || signsIn(t, st, "anna", "pw") {
+		t.Fatalf("annabel %+v %v", got, ok)
+	}
+	toks, _ := st.Tokens(ctx, anna.ID)
+	if len(toks) != 1 || toks[0].Kind != store.TokenAPI {
+		t.Fatalf("the tokens left: %+v", toks)
+	}
+	if tok, ok, _ := st.TokenByHash(ctx, store.HashToken(strings.TrimSpace(key))); !ok || tok.UserID != anna.ID {
+		t.Fatalf("the key: %+v %v", tok, ok)
+	}
+	rows, _ := st.AuditList(ctx, time.Time{}, 50, "")
+	found := false
+	for _, r := range rows {
+		found = found || r.Action == "user.update" && r.Target == "user:annabel" && strings.Contains(string(r.Detail), `"from":"anna"`)
+	}
+	if !found {
+		t.Fatalf("no audit row of the rename: %+v", rows)
 	}
 }

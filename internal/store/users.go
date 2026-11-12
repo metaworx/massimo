@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -141,7 +142,7 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, bool, error) {
 }
 
 // UserIDByName returns the row identifier of a login name, a removed
-// user's too: the name stays the user's (UNIQUE (name)).
+// user's too, under the name its removal gave it (removedName).
 func (s *Store) UserIDByName(ctx context.Context, name string) (int64, bool, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ?`, NormalName(name)).Scan(&id)
@@ -211,9 +212,9 @@ func (s *Store) newUser(u User) (User, error) {
 
 // AddUser adds a user with u's Name, DisplayName, Role (a key),
 // Disabled and ExpiresAt, and the password (none when empty), created
-// by the user by (0: nobody, the command line). A removed user of the
-// name is taken over: its row gets the new values and keeps its
-// identifier, and starts without preferences.
+// by the user by (0: nobody, the command line). A removed user gave its
+// name up at the removal (removedName), so a user added under it is a
+// row of its own.
 func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) (User, error) {
 	u, err := s.newUser(u)
 	if err != nil {
@@ -239,12 +240,18 @@ func (s *Store) addable(ctx context.Context, u User) error {
 	if _, err := s.roleID(ctx, s.db, u.Role); err != nil {
 		return err
 	}
-	var deleted sql.NullString
-	switch err := s.db.QueryRowContext(ctx, `SELECT deleted_at FROM users WHERE name = ?`, u.Name).Scan(&deleted); {
-	case err == nil && !deleted.Valid:
-		return fmt.Errorf("%w: %s", ErrUserExists, u.Name)
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return fmt.Errorf("store: add user %s: %w", u.Name, err)
+	return s.nameFree(ctx, s.db, u.Name)
+}
+
+// nameFree reports ErrUserExists where a row has the name: a user's, or
+// a removed one's under the name its removal gave it.
+func (s *Store) nameFree(ctx context.Context, q queryer, name string) error {
+	var n int
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ?`, name).Scan(&n); err != nil {
+		return fmt.Errorf("store: user %s: %w", name, err)
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: %s", ErrUserExists, name)
 	}
 	return nil
 }
@@ -312,31 +319,13 @@ func (s *Store) addUser(ctx context.Context, u User, c credential, by int64) (Us
 	if err != nil {
 		return User{}, err
 	}
-	var id int64
-	var deleted sql.NullString
-	now := s.nowText()
-	switch err := tx.QueryRowContext(ctx, `SELECT id, deleted_at FROM users WHERE name = ?`, u.Name).Scan(&id, &deleted); {
-	case errors.Is(err, sql.ErrNoRows):
-		_, err = tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, password_hash, opaque_record, opaque_ksf, auth_version, role_id, disabled, expires_at, invited_by, created_at, updated_at, updated_by, origin)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), u.Name, u.DisplayName, c.hash, c.record, c.ksf, c.authVersion(), role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, now, nullID(by), s.nodeID)
-	case err != nil:
-		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
-	case !deleted.Valid:
-		return User{}, fmt.Errorf("%w: %s", ErrUserExists, u.Name)
-	default:
-		_, err = tx.ExecContext(ctx, `UPDATE users SET display_name = ?, password_hash = ?, opaque_record = ?, opaque_ksf = ?, role_id = ?, disabled = ?, expires_at = ?, invited_by = ?, last_login_at = NULL,
-			auth_version = ?, deleted_at = NULL, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-			u.DisplayName, c.hash, c.record, c.ksf, role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), c.authVersion(), now, nullID(by), s.nodeID, id)
-		if err == nil {
-			// Another person under the name: none of the removed user's
-			// settings, also of a removal that left them live.
-			err = s.removePreferences(ctx, tx, id, now)
-		}
-		if err == nil {
-			err = removePushSubscriptions(ctx, tx, id, 0)
-		}
+	if err := s.nameFree(ctx, tx, u.Name); err != nil {
+		return User{}, err
 	}
+	now := s.nowText()
+	_, err = tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, password_hash, opaque_record, opaque_ksf, auth_version, role_id, disabled, expires_at, invited_by, created_at, updated_at, updated_by, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), u.Name, u.DisplayName, c.hash, c.record, c.ksf, c.authVersion(), role, u.Disabled, nullTime(u.ExpiresAt), nullID(by), now, now, nullID(by), s.nodeID)
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 	}
@@ -503,10 +492,11 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 	return nil
 }
 
-// DeleteUser removes a user: a tombstone, with every token of the user
-// revoked and every preference a tombstone too, so that a user added
-// later under the name inherits none. The last owner without an end
-// date is ErrLastOwner.
+// DeleteUser removes a user: a tombstone under a name of its own
+// (removedName), with every token of the user revoked and every
+// preference a tombstone too. The name is free again, and a user added
+// under it later is a row of its own, with none of the removed one's
+// history. The last owner without an end date is ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -530,8 +520,13 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 			return ErrLastOwner
 		}
 	}
-	now := s.nowText()
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`, now, now, nullID(by), s.nodeID, u.ID); err != nil {
+	at := s.now()
+	now := formatTime(at)
+	gone := removedName(u.Name, at)
+	if s.nameFree(ctx, tx, gone) != nil {
+		gone += "-" + strconv.FormatInt(u.ID, 10)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET name = ?, deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`, gone, now, now, nullID(by), s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, version = version + 1 WHERE user_id = ? AND revoked_at IS NULL`, now, u.ID); err != nil {
@@ -547,4 +542,70 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	return nil
+}
+
+// removedName is the name a user's row takes at its removal at, so that
+// the name is free for another: <name>-del-YYYYMMDD-HHNN in UTC, as the
+// store keeps its times; DeleteUser adds -<id> where that is taken, and
+// migration 0015 named the rows removed before it the same way.
+func removedName(name string, at time.Time) string {
+	return name + "-del-" + at.UTC().Format("20060102-1504")
+}
+
+// RenameUser gives a user the login name to, with the password password
+// under it, or none when empty. The password goes with the name: a
+// record of version 2 holds the name it was registered under (the
+// credential identifier, credentialID), so it is registered here again,
+// both halves, as AddUserOpaque does. Sessions are the caller's to
+// revoke, as with SetPassword; keys, preferences and push subscriptions
+// stay with the row. A name taken by a user, or by a removed one, is
+// ErrUserExists.
+func (s *Store) RenameUser(ctx context.Context, from, to, password string, by int64) (User, error) {
+	if err := s.writable(); err != nil {
+		return User{}, err
+	}
+	to = NormalName(to)
+	if !userName.MatchString(to) {
+		return User{}, fmt.Errorf("%w: %q", ErrBadName, to)
+	}
+	if _, ok, err := s.User(ctx, from); err != nil {
+		return User{}, err
+	} else if !ok {
+		return User{}, fmt.Errorf("%w: %s", ErrNoUser, NormalName(from))
+	}
+	if err := s.nameFree(ctx, s.db, to); err != nil {
+		return User{}, err
+	}
+	c := credential{}
+	if password != "" {
+		record, err := s.opaqueRecordFor(ctx, to, password)
+		if err != nil {
+			return User{}, err
+		}
+		c = credential{record: record, ksf: OpaqueKSF}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, fmt.Errorf("store: rename user %s: %w", from, err)
+	}
+	defer tx.Rollback()
+	u, ok, err := s.user(ctx, tx, from)
+	if err != nil {
+		return User{}, err
+	}
+	if !ok {
+		return User{}, fmt.Errorf("%w: %s", ErrNoUser, NormalName(from))
+	}
+	if err := s.nameFree(ctx, tx, to); err != nil {
+		return User{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET name = ?, password_hash = '', opaque_record = ?, opaque_ksf = ?, auth_version = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		to, c.record, c.ksf, c.authVersion(), s.nowText(), nullID(by), s.nodeID, u.ID); err != nil {
+		return User{}, fmt.Errorf("store: rename user %s: %w", u.Name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return User{}, fmt.Errorf("store: rename user %s: %w", u.Name, err)
+	}
+	out, _, err := s.User(ctx, to)
+	return out, err
 }

@@ -981,6 +981,9 @@ for example `sudo -u _massimo massimo store info`.
 a user with keys only,
 `-password-stdin` to read it from standard input for scripts,
 `-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
+`user rename <name> <new name>`,
+which asks for the password again since it goes with the name
+(`-no-password` to leave the user with its keys),
 `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
