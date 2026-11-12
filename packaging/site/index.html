@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Massimo</title>
 <meta name="description" content="Open-source successor software for eQ-3 MAX! heating systems: a server with a web UI, an API and a proxy, on your own hardware.">
-<!-- The project's site (packaging/README.md, "The site"):
-     packaging/site/build.sh copies this page to the site's root and
-     puts the apt suites in place of the placeholder below. Links are
+<!-- The project's site (packaging/README.md, "The site"): the home of a
+     build. packaging/site/site.py puts the inside of its header, main and
+     footer on that build's channel's landing page, /docs/<channel>/, the
+     apt suites in place of the placeholder below and its list of documents
+     after it; the most stable channel's is the site's root. Links are
      absolute, so that they hold wherever a part of the page is shown. -->
 <link rel="stylesheet" href="/site.css">
 </head>
@@ -133,18 +135,9 @@ MASSIMO_API_TOKEN=choose-a-long-random-string
 <p>A Cube takes one client at a time: close the original MAX! software first; from then on that software connects to the server's proxy.</p>
 <p>The Debian package leaves a new box stopped, since until it has an owner every device on the local network may use it. Create the owner on the box with <code>sudo -u _massimo /usr/bin/massimo user add &lt;name&gt; -role owner</code>, or put the token into <code>/etc/massimo/env</code>, or create the owner in the web UI once the service runs; <code>sudo systemctl start massimo</code> starts it, and from then on every upgrade restarts it. <code>massimo install -settings .env</code> starts the service with that file, an empty one too. Details: <a href="https://github.com/metaworx/massimo#server">Server</a>.</p>
 
-<h2>Documentation</h2>
-<ul>
-<li><a href="https://massimo.metaworx.ch/docs/">The documentation</a>, every document as a page, for each update channel</li>
-<li><a href="https://github.com/metaworx/massimo#readme">README</a>: the features, installing, the server, the command line</li>
-<li><a href="https://github.com/metaworx/massimo/blob/main/packaging/README.md">packaging/README.md</a>: the service on Linux, Windows and macOS, the Debian package, the apt repository, Homebrew, updating</li>
-<li><a href="https://github.com/metaworx/massimo/blob/main/docs/ui.md">docs/ui.md</a>: the web UI</li>
-<li><a href="https://github.com/metaworx/massimo/blob/main/docs/api-v1.md">docs/api-v1.md</a>: the HTTP API</li>
-<li><a href="https://github.com/metaworx/massimo/issues">Issues</a>: questions and bugs</li>
-</ul>
 </main>
 <footer>
-<p><a href="https://massimo.metaworx.ch/privacy.html">Privacy policy</a> · <a href="https://github.com/metaworx/massimo">Source on GitHub</a> · Free software under the <a href="https://github.com/metaworx/massimo/blob/main/LICENSE">AGPL-3.0-or-later</a></p>
+<p><a href="https://massimo.metaworx.ch/privacy.html">Privacy policy</a> · <a href="https://github.com/metaworx/massimo">Source on GitHub</a> · <a href="https://github.com/metaworx/massimo/issues">Questions and bugs</a> · Free software under the <a href="https://github.com/metaworx/massimo/blob/main/LICENSE">AGPL-3.0-or-later</a></p>
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_trademark.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 <p>&quot;MAX!&quot; and &quot;eQ-3&quot; are trademarks of eQ-3 AG.
 This project is not affiliated with or endorsed by eQ-3.</p>

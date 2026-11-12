@@ -24,7 +24,7 @@
 {{BODY}}
 </main>
 <footer>
-<p>The channel {{CHANNEL}}, {{VERSION}}: <a href="{{SOURCE}}">{{SOURCE_NAME}} on GitHub</a>.{{AHEAD}}</p>
+{{FOOTER}}<p>The channel {{CHANNEL}}, {{VERSION}}: <a href="{{SOURCE}}">{{SOURCE_NAME}} on GitHub</a>.{{AHEAD}}</p>
 </footer>
 </body>
 </html>

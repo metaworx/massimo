@@ -4,21 +4,25 @@
 """The site's documentation pages, for packaging/site/build.sh.
 
   site.py docs  --tree DIR --out DIR --channel NAME --commit SHA --version V
-                --pin SHA --repo OWNER/NAME --md-html PATH [--strict]
+                --pin SHA --repo OWNER/NAME --md-html PATH [--suites LIST] [--strict]
   site.py index --out DIR
   site.py check --out DIR
 
 docs: the documents docs/fragments/_documents.md lists, in the tree of one
 channel's commit (DIR, as git archive wrote it), each converted by md_html.py
 and put in doc.html.in at the same path under OUT/docs/<channel>/, .md
-become .html; the list itself becomes that channel's index.html, and
+become .html. That channel's index.html is its landing page: the home of
+the same commit's packaging/site/index.html, the suites (LIST) in place of
+its placeholder, then the list of documents; and
 docs/images/ and docs/screenshots/ are copied as they are. A link to any
 other file of the repository goes to GitHub at that commit; one to a file
 the commit does not have fails. --strict fails where a document under
 docs/ is not in the list; without it, that is a warning.
 
-index: OUT/docs/channels.json from the channels docs wrote, and
-OUT/docs/index.html, which sends a reader to the most stable of them.
+index: OUT/docs/channels.json from the channels docs wrote,
+OUT/docs/index.html, which sends a reader to the most stable of them, and
+OUT/index.html, the site's root: that channel's landing page, its relative
+links and images pointing into docs/<channel>/.
 
 check: every relative or root-relative link and image of every page under
 OUT resolves to a file written, and an anchor on a page to an id on it.
@@ -105,6 +109,30 @@ def title_of(text, fallback):
     return fallback
 
 
+SECTION = re.compile(r'<(header|main|footer)>(.*?)</\1>', re.S)
+SITE_ANCHOR = 'href="https://massimo.metaworx.ch/#'
+
+
+def home_of(tree, suites):
+    """The home of a build's packaging/site/index.html: the inside of its
+    header, main and footer, the suites filled in, the site's own anchors
+    on the page itself, and its own list of documents dropped (the page
+    lists them after it); None where the build has no home."""
+    try:
+        with open(os.path.join(tree, 'packaging/site/index.html'), encoding='utf-8') as f:
+            text = f.read()
+    except FileNotFoundError:
+        return None
+    parts = {name: body for name, body in SECTION.findall(text)}
+    if 'main' not in parts:
+        return None
+    main = re.sub(r'<h2>Documentation</h2>.*?(?=<h2|\Z)', '', parts['main'], flags=re.S)
+    home = {'header': parts.get('header', ''), 'main': main, 'footer': parts.get('footer', '')}
+    for k in home:
+        home[k] = home[k].replace('{{SUITES}}', html.escape(suites)).replace(SITE_ANCHOR, 'href="#')
+    return home
+
+
 def fill(template, values):
     for key, value in values.items():
         template = template.replace('{{%s}}' % key, value)
@@ -153,23 +181,26 @@ def docs(a):
     with open(os.path.join(HERE, 'doc.html.in'), encoding='utf-8') as f:
         template = f.read()
     base = os.path.join(a.out, 'docs', a.channel)
+    home = home_of(a.tree, a.suites)
+    # The header's link to the documents: the list, on the landing page.
+    anchor = '' if home is None else '#documentation'
     ahead = ''
     if a.channel == 'main':
         ahead = ' What is merged into main and not yet released, so ahead of every channel.'
 
-    def write(rel_html, source_md, title, body):
+    def write(rel_html, source_md, title, body, footer=''):
         depth = rel_html.count('/')
         values = {
             'TITLE': html.escape(title),
             'CHANNEL': html.escape(a.channel),
             'PAGE': html.escape(rel_html),
-            'INDEX': '../' * depth + 'index.html',
+            'INDEX': '../' * depth + 'index.html' + anchor,
             'VERSION': html.escape(a.version),
             'SOURCE': html.escape('https://github.com/%s/blob/%s/%s' % (a.repo, a.commit, source_md)),
             'SOURCE_NAME': html.escape(source_md),
             'AHEAD': ahead,
         }
-        page = fill(template, values).replace('{{BODY}}', body)
+        page = fill(template, values).replace('{{FOOTER}}', footer).replace('{{BODY}}', body)
         target = os.path.join(base, rel_html)
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, 'w', encoding='utf-8') as f:
@@ -190,11 +221,20 @@ def docs(a):
         body = convert(a.md_html, p, text, pages, a.pin, a.repo, a.commit)
         write(p[:-3] + '.html', p, title_of(text, p), body)
 
-    # The index: the list without its banner, from the root, where its
-    # links start.
+    # The index: the build's home, then the list without its banner, from
+    # the root, where its links start, its title the section's heading and
+    # its headings one level down.
     text = without_comments('\n'.join(l for l in lst.splitlines() if not l.startswith('> **Fragment**')) + '\n')
     body = convert(a.md_html, 'index.md', text, pages, a.pin, a.repo, a.commit)
-    write('index.html', LIST, 'Documentation (%s)' % a.channel, body)
+    if home is None:
+        write('index.html', LIST, 'Documentation (%s)' % a.channel, body)
+    else:
+        body = re.sub(r'<h1[^>]*>.*?</h1>\s*', '', body, count=1, flags=re.S)
+        body = re.sub(r'<(/?)h([2-5])\b', lambda m: '<%sh%d' % (m.group(1), int(m.group(2)) + 1), body)
+        body = (home['header'].strip() + '\n' + home['main'].strip() + '\n'
+                + '<h2 id="documentation">Documentation</h2>\n' + body)
+        write('index.html', 'packaging/site/index.html', 'The channel %s' % a.channel, body,
+              footer=home['footer'].strip() + '\n')
 
     for d in ('docs/images', 'docs/screenshots'):
         if os.path.isdir(os.path.join(a.tree, d)):
@@ -231,7 +271,21 @@ def index(a):
                 '<link rel="stylesheet" href="/site.css">\n</head>\n<body>\n'
                 '<p>The documentation of the channel %s: <a href="%s">%s</a>.</p>\n'
                 '</body>\n</html>\n' % (target, html.escape(first), target, target))
-    print('site.py: docs/ sends a reader to %s; channels %s'
+    # The root: the first channel's landing page, its relative links and
+    # images pointing into its directory.
+    with open(os.path.join(root, first, 'index.html'), encoding='utf-8') as f:
+        page = f.read()
+
+    def into(m):
+        link = m.group(2)
+        if link.startswith(('#', '/')) or re.match(r'^[a-z][a-z0-9+.-]*:', link):
+            return m.group(0)
+        return '%s="docs/%s/%s"' % (m.group(1), first, link)
+
+    page = re.sub(r'\b(href|src)="([^"]*)"', into, page)
+    with open(os.path.join(a.out, 'index.html'), 'w', encoding='utf-8') as f:
+        f.write(page)
+    print('site.py: docs/ and the root send a reader to %s; channels %s'
           % (first, ', '.join(c['channel'] for c in built)))
     return 0
 
@@ -293,6 +347,7 @@ def main():
     d = sub.add_parser('docs')
     for opt in ('tree', 'out', 'channel', 'commit', 'version', 'date', 'pin', 'repo', 'md_html'):
         d.add_argument('--' + opt.replace('_', '-'), required=opt != 'date', default='')
+    d.add_argument('--suites', default='none')
     d.add_argument('--strict', action='store_true')
     for name in ('index', 'check'):
         sub.add_parser(name).add_argument('--out', required=True)
