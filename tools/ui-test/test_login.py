@@ -24,6 +24,15 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens without a token"
     named_buttons(page, "the sign-in dialog")
+    # A card in the page, not a modal dialog, whose form a password
+    # manager fills: one password field, the fields named.
+    assert not page.evaluate("document.getElementById('login-dialog').matches(':modal')"), "the sign-in is not modal"
+    assert page.evaluate("document.querySelectorAll('#login-form input[type=password]').length") == 1, "one password field in the form"
+    assert page.evaluate("[document.getElementById('login-user').name, document.getElementById('login-password').name]") == ["username", "password"], \
+        "the fields are named"
+    box = page.locator("#login-dialog").bounding_box()
+    vw = page.viewport_size["width"]
+    assert box["x"] >= 0 and box["x"] + box["width"] <= vw, "the card fits the page's width"
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("wrong")
     page.locator("#login-form button[type=submit]").click()

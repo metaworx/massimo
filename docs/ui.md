@@ -6,11 +6,14 @@ on the address its `-listen` names.
 The page works on a phone as well as on a desktop,
 and follows the system's light or dark mode.
 
-The page asks who you are: a name and a password,
-or an API key pasted into the second field,
+The page asks who you are on a card in the page, not over it:
+a name and a password,
+or an API key pasted into the field under "Or an API key", a form of its own,
 which is open from the start once the page has seen the server ask for no key
-(the owner made from `MASSIMO_API_TOKEN` has no password),
-and keeps the session in the browser for 30 days from its last use;
+(the owner made from `MASSIMO_API_TOKEN` has no password).
+The password form holds the one password field, its fields named,
+so that a password manager such as KeePassXC fills it.
+The page keeps the session in the browser for 30 days from its last use;
 👤 → Sign out ends it.
 While it asks, the page shows its name, its version and the sign-in,
 nothing else:

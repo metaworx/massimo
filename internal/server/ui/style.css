@@ -1051,6 +1051,10 @@ dialog {
   width: min(92vw, 380px);
 }
 dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+/* The sign-in, open without a modal (login.js askLogin): a card in the
+   signed-out page's flow, under the header. */
+#login-dialog[open] { position: static; margin: 8px auto 24px; }
+.login-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 

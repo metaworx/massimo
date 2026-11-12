@@ -206,6 +206,7 @@ function askLogin() {
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
     const form = $("login-form");
+    const keyForm = $("login-key-form");
     const error = $("login-error");
     $("login-user").value = "";
     $("login-password").value = "";
@@ -215,21 +216,23 @@ function askLogin() {
     const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {
       form.onsubmit = null;
+      keyForm.onsubmit = null;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
       document.body.classList.remove("signed-out");
       loginPromise = null;
       resolve(ok);
     };
-    form.onsubmit = async (ev) => {
+    keyForm.onsubmit = (ev) => {
       ev.preventDefault();
       const key = $("login-token").value.trim();
-      if (key) {
-        setToken(key);
-        done(true);
-        if (!startWaits) afterLogin();
-        return;
-      }
+      if (!key) return;
+      setToken(key);
+      done(true);
+      if (!startWaits) afterLogin();
+    };
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
       if (isBusy(submit)) return; // a second Enter while it signs in
       const user = $("login-user").value.trim();
       const password = $("login-password").value;
@@ -252,7 +255,10 @@ function askLogin() {
     };
     dlg.onclose = () => done(false);
     document.body.classList.add("signed-out");
-    dlg.showModal();
+    // Not modal: the page behind is empty, and a modal dialog makes the
+    // rest of the document inert, where a password manager draws its
+    // choices, which then take no click.
+    dlg.show();
     $("login-user").focus();
   });
   return loginPromise;
