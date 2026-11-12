@@ -180,11 +180,6 @@ func (s *Server) startRestart(w http.ResponseWriter, r *http.Request) error {
 	case !s.restartGate.asked.CompareAndSwap(false, true):
 		return fail(http.StatusConflict, "a restart is under way")
 	}
-	attrs := []any{"by", v.By, "remote", s.clientIP(r)}
-	if p := principalOf(r); p.named() {
-		attrs = append(attrs, "user", p.user.Name)
-	}
-	s.log.Info("restart requested", attrs...)
 	s.noteStop("restart")
 	s.logServer(systemEvent("restart", userIDOf(r), map[string]any{"by": v.By}))
 	// The stop waits for this request, its answer and its audit row
@@ -193,9 +188,8 @@ func (s *Server) startRestart(w http.ResponseWriter, r *http.Request) error {
 	if err := s.opts.Restart.Restart(); err != nil {
 		s.restartGate.asked.Store(false)
 		s.noteStop("")
-		s.log.Error("restart not started", "error", err)
 		failed := systemEvent("restart", userIDOf(r), map[string]any{"by": v.By})
-		failed.Level, failed.Error = "warn", err.Error()
+		failed.Level, failed.Error = "error", err.Error()
 		s.logServer(failed)
 		return fail(http.StatusInternalServerError, "starting the restart: %v", err)
 	}

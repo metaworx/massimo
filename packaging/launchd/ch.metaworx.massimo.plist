@@ -27,6 +27,10 @@
 		<string>serve</string>
 		<string>-listen</string>
 		<string>@LISTEN@</string>
+		<string>-log</string>
+		<string>/var/log/massimo/serve.log</string>
+		<string>-log-process-format</string>
+		<string>none</string>
 		<string>-update-request</string>
 		<string>/var/lib/massimo/update-request</string>
 	</array>
@@ -47,11 +51,15 @@
 	<key>ThrottleInterval</key>
 	<integer>10</integer>
 	<!--
-	  The log: serve writes it to stderr, which launchd appends to this
-	  file (install makes it, owned by _massimo, in a directory only root
-	  may write). No -log and no MASSIMO_LOG, or every line comes twice.
+	  The log: serve writes /var/log/massimo/serve.log itself (-log) and
+	  rotates it, in a directory of _massimo and the group admin; nothing
+	  on stderr (-log-process-format none). launchd appends stderr to this
+	  file, which then holds only what serve prints before its log and
+	  what the Go runtime prints itself, such as a panic; install makes
+	  it _massimo's, the group admin's to read, as launchd opens it as
+	  the job's user.
 	-->
 	<key>StandardErrorPath</key>
-	<string>/var/log/massimo/serve.log</string>
+	<string>/var/log/massimo/serve.stderr.log</string>
 </dict>
 </plist>

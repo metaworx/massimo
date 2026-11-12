@@ -76,7 +76,7 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 		}
 	}
 	// Every table of docs/store.md section 5 exists.
-	for _, table := range []string{"schema_version", "roles", "role_capabilities", "capabilities_disabled", "users", "tokens", "settings", "cubes", "preferences", "events", "audit", "backups", "auth_failures"} {
+	for _, table := range []string{"schema_version", "roles", "role_capabilities", "capabilities_disabled", "users", "tokens", "settings", "cubes", "preferences", "log", "audit", "backups", "auth_failures", "commands"} {
 		var n int
 		if err := s.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&n); err != nil || n != 1 {
 			t.Errorf("table %s: %d %v", table, n, err)

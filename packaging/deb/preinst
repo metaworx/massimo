@@ -6,6 +6,12 @@
 # and the user (packaging/README.md, "Debian package").
 set -e
 
+# logrotate's file of the releases before 0.14.0~alpha.2: serve rotates its
+# log itself now, so the conffile goes, unless the owner changed it
+# (dpkg-maintscript-helper(1), rm_conffile; the same line in the preinst,
+# the postinst and the postrm).
+dpkg-maintscript-helper rm_conffile /etc/logrotate.d/massimo 0.14.0~alpha.2~ -- "$@"
+
 case "$1" in
 install)
 	if [ -e /etc/systemd/system/massimo.service ]; then

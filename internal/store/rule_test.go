@@ -23,7 +23,7 @@ import (
 )
 
 // contentColumns are the content columns per table: names, addresses,
-// hidden, settings.value, preferences.value, events.data, audit.detail,
+// hidden, settings.value, preferences.value, log.data, audit.detail,
 // backups.body and note.
 var contentColumns = map[string][]string{
 	"cubes":       {"name", "address", "proxy_address", "discovered_address", "mac", "hidden"},
@@ -32,7 +32,7 @@ var contentColumns = map[string][]string{
 	"tokens":      {"label", "last_used_from"},
 	"settings":    {"value"},
 	"preferences": {"value"},
-	"events":      {"data"},
+	"log":         {"data"},
 	"audit":       {"detail", "remote"},
 	"backups":     {"body", "note"},
 	"commands":    {"request", "result"},

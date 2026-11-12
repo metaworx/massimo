@@ -193,7 +193,7 @@ func startServe(t *testing.T, settingsFile, data string, args ...string) (*exec.
 			mu.Lock()
 			log.WriteString(sc.Text() + "\n")
 			mu.Unlock()
-			if m := regexp.MustCompile(`msg="api listening" addr=(\S+)`).FindStringSubmatch(sc.Text()); m != nil {
+			if m := regexp.MustCompile(`msg="api listening" source=system addr=(\S+)`).FindStringSubmatch(sc.Text()); m != nil {
 				addr <- m[1]
 			}
 		}
@@ -262,7 +262,7 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 		t.Fatalf("serve ended with %v", err)
 	}
 	<-scanned
-	for _, want := range []string{`msg="settings file read again" why=SIGHUP changed=`, `msg="api token applied" owner_created=true`, `msg="store checkpointed"`} {
+	for _, want := range []string{`msg="settings file read again" source=system why=SIGHUP changed=`, `msg="api token applied" source=server owner_created=true`, `msg="store checkpointed"`} {
 		if !strings.Contains(log(), want) {
 			t.Errorf("the log lacks %s:\n%s", want, log())
 		}

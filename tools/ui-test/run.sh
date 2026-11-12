@@ -162,8 +162,8 @@ ready_set() {
 	api="127.0.0.1:$((api_port + 2 * $1))"
 	listening "$d/fakecube.log" "fake cube listening on 127.0.0.1:$((cube_port + $1)) " "the fake Cube of set $1"
 	listening "$d/fakecube.log" "answering discovery on 127.0.0.1:$((discovery_port + $1)) " "the fake Cube's discovery of set $1"
-	listening "$d/serve.log" "msg=\"api listening\" addr=$api " "the server of set $1"
-	listening "$d/serve-down.log" "msg=\"api listening\" addr=127.0.0.1:$((down_port + 2 * $1)) " "the second server of set $1"
+	listening "$d/serve.log" "msg=\"api listening\" source=system addr=$api " "the server of set $1"
+	listening "$d/serve-down.log" "msg=\"api listening\" source=system addr=127.0.0.1:$((down_port + 2 * $1)) " "the second server of set $1"
 	i=0
 	until curl -sf -H "Authorization: Bearer $token" "http://$api/api/v1/cubes" 2>/dev/null | grep -q '"connected": *true'; do
 		i=$((i + 1))

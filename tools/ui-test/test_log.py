@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
+from conftest import api_call
 from helpers import CHANGES, named_buttons, show_view, wait_until
 
 OLDER = {"en": "Older events", "de": "Ältere Ereignisse"}
@@ -633,4 +634,34 @@ def test_log_address_with_unknown_values(page, case):
     while not (asked and "device=" not in asked[-1]) and time.time() < end:
         page.wait_for_timeout(100)
     assert asked and "device=" not in asked[-1] and "kind=" not in asked[-1], f"the log asked for every device: {asked}"
+    show_view(page, "tiles")
+
+
+CMD_SAYS = {"en": {"open": "command ", "head": "setpoint"}, "de": {"open": "Befehl ", "head": "setpoint"}}
+
+
+def test_log_command_detail(page, case):
+    """A line of a command opens the command under it: what was asked,
+    its state, its steps and, for the owner, its audit row; the button
+    says whether it is open, and closes it again."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    serial = page.evaluate("state.serial")
+    room = page.evaluate("state.rooms[0].id")
+    api_call("PUT", f"api/v1/cubes/{serial}/rooms/{room}/setpoint", {"mode": "auto"})
+    btn = page.locator("#log-lines .log-line.kind-command .log-cmd").first
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-command .log-cmd').length > 0", 10), "a line of the command"
+    assert btn.inner_text().startswith(CMD_SAYS[case.lang]["open"]), f"the button: {btn.inner_text()}"
+    assert btn.get_attribute("aria-expanded") == "false", "closed at first"
+    btn.click()
+    assert wait_until(page, "!!document.querySelector('#log-lines .log-cmd-detail .log-cmd-head')", 10), "the command's detail"
+    detail = page.locator("#log-lines .log-cmd-detail").first
+    assert CMD_SAYS[case.lang]["head"] in detail.locator(".log-cmd-head").inner_text(), "what was asked"
+    assert detail.locator(".log-cmd-steps li").count() >= 1, "its steps"
+    assert detail.locator(".log-cmd-audit").count() == 1, "the owner sees its audit row"
+    btn = page.locator("#log-lines .log-line.kind-command .log-cmd").first
+    assert btn.get_attribute("aria-expanded") == "true", "the button says it is open"
+    assert page.evaluate("document.documentElement.scrollWidth") <= case.width, "no horizontal scroll with the detail open"
+    btn.click()
+    assert wait_until(page, "!document.querySelector('#log-lines .log-cmd-detail')", 5), "closed again"
     show_view(page, "tiles")

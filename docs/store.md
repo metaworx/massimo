@@ -449,28 +449,35 @@ CREATE TABLE push_subscriptions (            -- migration 0010
     failures   INTEGER NOT NULL DEFAULT 0    -- failed deliveries since then
 );
 
-CREATE TABLE events (                        -- made again by migration 0009
-    id        INTEGER PRIMARY KEY,
-    cube_id   INTEGER REFERENCES cubes (id) ON DELETE CASCADE,  -- NULL: the server's
-    time      TEXT    NOT NULL,
-    kind      TEXT    NOT NULL,                  -- connected, state, paired, cube_found, … as the stream names them
-    source    TEXT    NOT NULL DEFAULT '',       -- device, cube, system, config; '' a row of a binary before 0009
-    level     INTEGER NOT NULL DEFAULT 0,        -- slog's: -4 debug, 0 info, 4 warn, 8 error
-    device    TEXT    NOT NULL DEFAULT '',       -- radio address, '' when none
-    serial    TEXT    NOT NULL DEFAULT '',       -- the device's serial number, or the Cube's for its own lines
-    user_id   INTEGER REFERENCES users (id),     -- who started it; NULL: the Cube, the server's own jobs, a server without users
-    data      TEXT    NOT NULL                   -- JSON: the event object as GET …/log returns it today
+CREATE TABLE log (                           -- events until migration 0014, made again by 0009 and 0014
+    id         INTEGER PRIMARY KEY,
+    cube_id    INTEGER REFERENCES cubes (id) ON DELETE CASCADE,  -- NULL: the server's
+    time       TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,                  -- connected, state, paired, cube_found, … as the stream names them
+    source     TEXT    NOT NULL DEFAULT '',       -- device, cube, system, config, …; '' a row of a binary before 0009
+    level      INTEGER NOT NULL DEFAULT 0,        -- slog's: -4 debug, 0 info, 4 warn, 8 error
+    device     TEXT    NOT NULL DEFAULT '',       -- radio address, '' when none
+    serial     TEXT    NOT NULL DEFAULT '',       -- the device's serial number, or the Cube's for its own lines
+    user_id    INTEGER REFERENCES users (id),     -- who started it; NULL: the Cube, the server's own jobs, a server without users
+    data       TEXT    NOT NULL,                  -- JSON: the event object as GET …/log returns it today
+    command_id INTEGER REFERENCES commands (id) ON DELETE SET NULL,  -- migration 0014: the command the row belongs to
+    visibility TEXT    NOT NULL DEFAULT 'read' CHECK (visibility IN ('read', 'audit'))  -- 0014: audit for an auditor's eyes alone
 );
-CREATE INDEX events_cube_time ON events (cube_id, time);
+CREATE INDEX log_cube_time ON log (cube_id, time);
 -- migrations 0004 and 0009: each in id order within its terms,
 -- since SQLite keeps the rowid last in an index
-CREATE INDEX events_cube ON events (cube_id);
-CREATE INDEX events_cube_kind ON events (cube_id, kind);
-CREATE INDEX events_cube_source ON events (cube_id, source);
-CREATE INDEX events_cube_serial ON events (cube_id, serial);
-CREATE INDEX events_user ON events (user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX log_cube ON log (cube_id);
+CREATE INDEX log_cube_kind ON log (cube_id, kind);
+CREATE INDEX log_cube_source ON log (cube_id, source);
+CREATE INDEX log_cube_serial ON log (cube_id, serial);
+CREATE INDEX log_user ON log (user_id) WHERE user_id IS NOT NULL;
 -- migration 0011: the warnings and errors alone, each Cube's in id order
-CREATE INDEX events_cube_warn ON events (cube_id) WHERE level >= 4;
+CREATE INDEX log_cube_warn ON log (cube_id) WHERE level >= 4;
+-- migration 0014: a command's rows
+CREATE INDEX log_command ON log (command_id) WHERE command_id IS NOT NULL;
+-- migration 0014: the log as the binaries before it knew it, with
+-- INSTEAD OF triggers for their insert, update and delete
+CREATE VIEW events AS SELECT id, uuid, cube_id, time, kind, source, level, device, serial, user_id, data FROM log;
 
 CREATE TABLE audit (
     id        INTEGER PRIMARY KEY,
@@ -486,6 +493,8 @@ CREATE TABLE audit (
 );
 CREATE INDEX audit_time ON audit (time);
 CREATE INDEX audit_user ON audit (user_id, time);
+-- migration 0014: a command's audit row, and the SET NULL of a pruned command
+CREATE INDEX audit_command ON audit (command_id) WHERE command_id IS NOT NULL;
 
 CREATE TABLE backups (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,  -- migration 0013
@@ -518,7 +527,8 @@ Notes on the tables:
   A Cube row is never deleted by the server;
   "Remove" sets `configured = 0` and keeps the events,
   the audit and the backups of the Cube.
-- `events.data` is the event JSON as the stream and `GET …/log` send it,
+- `log.data` (`events.data` before migration 0014) is the event JSON as the
+  stream and `GET …/log` send it,
   so the UI's log view keeps its format,
   less a `state` event's `state.received`,
   the per-value times the tiles' ages read and the log does not;
@@ -540,7 +550,8 @@ Notes on the tables:
   with fewer than a page of them, read them all:
   140 ms on a PC, 154 ms on a Raspberry Pi 5,
   and 11 s on a Raspberry Pi 1, the store's one connection held all the while.
-  0011's partial index `events_cube_warn` holds the warnings and errors alone,
+  0011's partial index `events_cube_warn` (`log_cube_warn` since 0014)
+  holds the warnings and errors alone,
   each Cube's in id order, the server's under `cube_id IS NULL`.
   A page at `warn` or above carries the literal term `level >= 4` beside the bound level,
   since SQLite takes a partial index only for terms that imply its `WHERE`,
@@ -556,6 +567,11 @@ Notes on the tables:
   A batch of 100 events with a third warnings took 2 to 3 ms on the PC
   with the index as without it,
   the spread between runs larger than any difference.
+  Migration 0014 (AP OneLog v1.1, Block 4) names a row's command,
+  `command_id`, which the command's prune sets to NULL,
+  and its `visibility`: `read` for what a user with `read` sees,
+  `audit` for the rows only a user with `audit` sees (sign-ins, lockouts);
+  a page by command reads `log_command`.
   Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days`,
   per Cube and then for the server's rows,
   30 days by default as decision 5 took it, 0 keeping everything.
@@ -602,6 +618,11 @@ Notes on the tables:
   Login attempts and user changes are recorded as well.
   Nothing in `detail` is a secret:
   passwords and tokens are removed before the row is written.
+  Retention: the events' writer prunes the rows older than `audit.keep_days`
+  beside the log, daily and when the setting changes, in chunks by
+  `audit_time` (365 by default, 0 keeping everything; AP OneLog v1.1, Block 8),
+  and says so in an `audit_pruned` line.
+  Until then nothing pruned the audit, though this section said so.
 - `backups.body` holds the file itself, gzip-compressed,
   because a backup of a Cube with thirty devices is tens of kilobytes,
   about 11 KB compressed (the six-device fixture: 24 KB of JSON, 2.2 KB gzip),
@@ -625,7 +646,7 @@ Notes on the tables:
   which keeps it bounded as `maxTracked` does today.
 - Identifiers: the rowid stays the internal key,
   and every row that will be replicated or exported (`users`, `tokens`, `cubes`,
-  `preferences`, `events`, `audit`, `backups`,
+  `preferences`, `log`, `audit`, `backups`,
   later `commands`) also carries `uuid TEXT NOT NULL UNIQUE`,
   a UUIDv7 (decision 7, taken 2026-11-06; docs/server.md says why).
   The owned tables (`users`, `tokens`, `cubes`, `settings`, `preferences`,
@@ -754,6 +775,22 @@ the writer of a binary of version 9 fills those (`source` empty) at its start
 an index of the log's warnings and errors alone (section 5, `events`),
 additively: a binary of before writes and reads as it did,
 and SQLite keeps the index for its rows too.
+`0014_log.sql` (AP OneLog v1.1, Block 4) makes `commands` again with
+`AUTOINCREMENT`, for the reason 0013 gave the backups,
+and `events` again as `log`, with `command_id` and `visibility`;
+it declares `-- foreign_keys: off`, so the runner applies it with the
+foreign keys off, set outside its transaction,
+since `DROP TABLE` with them on deletes the rows first,
+which would set every `audit.command_id` to NULL and delete the steps;
+it runs `PRAGMA foreign_key_check` before the commit.
+It keeps `min_reader` 1 by a view: `events` shows the log's columns as the
+binaries before it knew them,
+and its `INSTEAD OF` triggers turn their insert, update and delete into the
+log's.
+SQLite counts no rows changed through a view,
+so the prune of such a binary removes one chunk per Cube a pass;
+the next pass goes on (`TestEventsViewForOlderBinaries`).
+The view goes in a migration that raises `min_reader` anyway.
 `0013_backups_autoincrement.sql` (AP BackupIds v1.0) makes `backups` again
 with `AUTOINCREMENT`, as 0005 made it:
 without it SQLite gives a new row the highest id plus one,

@@ -13,16 +13,19 @@ on a Mac LaunchDaemons (see "macOS").
   Runs as the user `_massimo`, reads its settings from `/etc/massimo/env`,
   listens on port 8099 on every interface (API and web UI;
   `install -listen` changes it),
-  logs to `/var/log/massimo/serve.log` and the journal, and restarts on failure
-  and after a restart from the API,
+  logs to `/var/log/massimo/serve.log` (JSON, 0640) and the journal (plain),
+  and restarts on failure and after a restart from the API,
   which exits with 75 (`RestartForceExitStatus`, not counted as a failure).
   `systemctl reload massimo` sends SIGHUP (`ExecReload`):
   the settings file read again and the store checkpointed.
+  `/var/log/massimo` is `_massimo:adm` 2750, made by the postinst and by
+  `massimo install` rather than by `LogsDirectory=`,
+  which would give it back to the service's group at every start:
+  the files serve makes there take the group `adm`, whose members read them
+  (the service's own group where there is no `adm`).
 - `systemd/massimo-update.path` and `systemd/massimo-update.service`:
   the update helper,
   which installs a new release when the web UI or the API asks for one (see Updating).
-- `logrotate/massimo`:
-  weekly rotation of that log.
 - `launchd/ch.metaworx.massimo.plist` and `launchd/ch.metaworx.massimo-update.plist`:
   the service and the update helper on macOS (see "macOS").
 - `env.template`:
@@ -661,7 +664,7 @@ From the build machine (here for a Pi 1 at `pi.local`, user `pi`):
 
 ```bash
 make linux-armv6
-scp dist/massimo-linux-armv6 packaging/systemd/massimo.service packaging/logrotate/massimo pi@pi.local:
+scp dist/massimo-linux-armv6 packaging/systemd/massimo.service pi@pi.local:
 ```
 
 On the Pi:
@@ -671,8 +674,8 @@ sudo install -m 0755 massimo-linux-armv6 /usr/local/bin/massimo
 massimo version
 sudo useradd --system --user-group --home-dir /var/lib/massimo --no-create-home --shell /usr/sbin/nologin _massimo
 sudo install -d -m 0750 -o _massimo -g _massimo /etc/massimo
+sudo install -d -o _massimo -g adm /var/log/massimo && sudo chmod 2750 /var/log/massimo
 sudo install -m 0644 massimo.service /etc/systemd/system/massimo.service
-sudo install -m 0644 massimo /etc/logrotate.d/massimo
 ```
 
 Then write `/etc/massimo/env` (same format as the `.env` described in the
@@ -1144,11 +1147,14 @@ and in the update helper are the same everywhere:
 - the state `/var/lib/massimo` and the helper's status
   `/var/lib/massimo-update/status.json`;
 - the log `/var/log/massimo/serve.log`:
-  launchd appends the server's output to it,
-  so there is no `-log` and no `MASSIMO_LOG` (install warns if the settings set one,
-  as every line would come twice). macOS has no `copytruncate` for a log a
-  process keeps open, so it is not rotated;
-  it grows by about what the Linux one does per week.
+  the plist passes `-log`, so `serve` writes and rotates it as on Linux,
+  in `/var/log/massimo`, `_massimo:admin` 0750
+  (install warns of a `MASSIMO_LOG` in the settings, which the flag overrides);
+  `-log-process-format none` keeps it off stderr, which launchd appends to
+  `/var/log/massimo/serve.stderr.log`, `_massimo:admin` 0640
+  (launchd opens it as the job's user),
+  and which holds only what serve prints before its log
+  and what the Go runtime prints itself, such as a panic.
 - the LaunchDaemon `ch.metaworx.massimo` in `/Library/LaunchDaemons`:
   started at boot without anyone logging in, restarted 10 s after it fails,
   running
@@ -1208,7 +1214,9 @@ brew services start massimo-alpha
 The formula builds `bin/massimo` with Go,
 writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
 keeps the store in `$(brew --prefix)/var/massimo` and the log in
-`$(brew --prefix)/var/log/massimo.log`,
+`$(brew --prefix)/var/log/massimo/serve.log`,
+which serve writes and rotates itself (`-log`, `-log-process-format none`;
+`var/log/massimo.log` takes only what it prints before the log),
 and its service runs `massimo serve -listen :8099` as you while you are logged in;
 `sudo brew services start massimo-alpha` installs a LaunchDaemon that runs as
 root at boot instead.

@@ -387,6 +387,13 @@ type runtime struct {
 	// structure is the lock of a change of rooms, devices and their
 	// metadata, see lockStructure.
 	structure chan struct{}
+
+	// evlog takes the events' lines (eventline.go): the server's root
+	// logger, each line saying its own source.
+	evlog *slog.Logger
+	// sentTo names, per device, the command last sent to it, for the
+	// device's next state line (proxylog.go).
+	sentTo stateCommands
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -469,8 +476,15 @@ type event struct {
 	// them now; absent for the Cube, the server's own jobs and a server
 	// without users (the bootstrap token is a key of the first owner).
 	By *eventUser `json:"by,omitempty"`
-	// userID is By's row in the store, kept in events.user_id.
+	// Command is the command the event belongs to (its attempt, a
+	// discard and a retry, its outcome), GET /api/v1/commands/{id}; 0
+	// for none, and once the command is pruned.
+	Command int64 `json:"command,omitempty"`
+	// userID is By's row in the store, kept in log.user_id.
 	userID int64
+	// audit marks an event only a user with audit sees (the log's
+	// visibility audit).
+	audit bool
 	// seq is the event's number on the Cube's stream, its id there
 	// (resume.go); 0 for an event the stream did not publish.
 	seq uint64
@@ -532,6 +546,7 @@ func (rt *runtime) remember(ev event) {
 // for the log, settled.
 func (rt *runtime) emit(ev event) {
 	ev.settle()
+	rt.line(ev)
 	rt.remember(ev)
 	rt.send(ev)
 }
@@ -554,6 +569,7 @@ func (rt *runtime) sendUser(userID int64, ev event) {
 func (s *Server) logServer(ev event) {
 	ev.settle()
 	s.nameUser(context.Background(), &ev)
+	eventLine(s.opts.Logger, "", ev)
 	if st := s.opts.Store; st != nil {
 		st.AddEvent(storedEvent(0, ev))
 	}
@@ -586,6 +602,16 @@ func (rt *runtime) recent(n int) []event {
 	return append([]event(nil), rt.events[len(rt.events)-n:]...)
 }
 
+// partLog is the logger of a part the server starts: its source, and the
+// Cube it serves where it serves one.
+func (s *Server) partLog(source, serial string) *slog.Logger {
+	l := s.opts.Logger.With("source", source)
+	if serial != "" {
+		l = l.With("cube", serial)
+	}
+	return l
+}
+
 // New creates a server; Run starts the Cube connections.
 func New(opts Options) *Server {
 	if opts.Logger == nil {
@@ -594,8 +620,10 @@ func New(opts Options) *Server {
 	if opts.PollInterval == 0 {
 		opts.PollInterval = time.Minute
 	}
-	s := &Server{opts: opts, log: opts.Logger, started: time.Now(), cubes: map[string]*runtime{}, token: opts.Token,
-		limiter: newLimiter(opts, opts.Logger), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
+	// The server's own lines are source server; the parts it starts get
+	// the logger with their own (cube, queue, proxy, push).
+	s := &Server{opts: opts, log: opts.Logger.With("source", "server"), started: time.Now(), cubes: map[string]*runtime{}, token: opts.Token,
+		limiter: newLimiter(opts, opts.Logger.With("source", "server")), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
 	if s.authLockout <= 0 {
 		s.authLockout = DefaultAuthLockout
@@ -809,11 +837,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 							ev.Changes = view.Changes(prev, dv.State)
 						}
 						rt.last[e.Device] = dv.State
-						attrs := stateAttrs(rt.cubeSerial(), dv)
-						if len(ev.Changes) > 0 {
-							attrs = append(attrs, "changed", changedNames(ev.Changes))
-						}
-						s.log.Info("device state", attrs...)
+						ev.Command = rt.sentTo.take(e.Device)
 					}
 				}
 			}
@@ -832,6 +856,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			after := s.detail(ctx, rt, e, &ev)
 			ev.settle()
+			rt.line(ev)
 			rt.remember(ev)
 			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()
@@ -1634,7 +1659,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	}
 	ch := make(chan event, 64)
 	p := principalOf(r)
-	sub := &subscriber{user: p.userID(), gone: make(chan struct{})}
+	sub := &subscriber{user: p.userID(), audit: p.has("audit"), gone: make(chan struct{})}
 	// The last id the client read: the browser's own retry sends the
 	// header, a client that opens a new stream (the web UI, with a fresh
 	// ticket) the parameter; the header is the newer of the two.
@@ -1645,7 +1670,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	// The replay and the subscription under one lock, so that no event
 	// falls between them; head is the id of the newest event so far.
 	rt.subsMu.Lock()
-	replay, resumed := rt.since(last, sub.user)
+	replay, resumed := rt.since(last, sub)
 	head := rt.streamID(rt.seq)
 	rt.subs[ch] = sub
 	rt.subsMu.Unlock()

@@ -10,13 +10,17 @@ package store
 // migration that keeps the previous min_reader is additive; one that
 // raises it changes a meaning, and the store copies the file to
 // massimo.db.before-<version> before applying it, so that an older
-// binary has a file it can open after a rollback. Only the numbered
+// binary has a file it can open after a rollback. A file with the line
+// "-- foreign_keys: off" runs with foreign keys off, for one that makes a
+// referenced table again, and has them checked before its commit. Only
+// the numbered
 // files are embedded: migrations/store.sql beside them is the schema
 // they make, generated for reading (migrate_test.go, TestStoreSQL).
 
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"errors"
 	"fmt"
@@ -38,11 +42,16 @@ type migration struct {
 	minReader int
 	name      string
 	sql       string
+	// foreignKeysOff runs the migration with foreign keys off: DROP
+	// TABLE with them on deletes the rows first, with the actions of
+	// the keys that reference them.
+	foreignKeysOff bool
 }
 
 var (
-	migrationName = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
-	minReaderLine = regexp.MustCompile(`(?m)^--\s*min_reader:\s*(\d+)\s*$`)
+	migrationName      = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
+	minReaderLine      = regexp.MustCompile(`(?m)^--\s*min_reader:\s*(\d+)\s*$`)
+	foreignKeysOffLine = regexp.MustCompile(`(?m)^--\s*foreign_keys:\s*off\s*$`)
 )
 
 // embeddedMigrations is the migration directory compiled in.
@@ -88,7 +97,7 @@ func loadMigrations(fsys fs.FS) ([]migration, error) {
 			return nil, fmt.Errorf("store: migration %s declares no min_reader", e.Name())
 		}
 		r, _ := strconv.Atoi(mr[1])
-		out = append(out, migration{version: v, minReader: r, name: e.Name(), sql: string(b)})
+		out = append(out, migration{version: v, minReader: r, name: e.Name(), sql: string(b), foreignKeysOff: foreignKeysOffLine.Match(b)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	prev := 0
@@ -215,15 +224,39 @@ func (s *Store) migrate(ctx context.Context, fsys fs.FS, reader int) error {
 	return nil
 }
 
-// apply runs one migration and records it, in one transaction.
+// apply runs one migration and records it, in one transaction; on the
+// one connection, whose foreign keys a migration may turn off around its
+// transaction, since SQLite ignores the pragma inside one.
 func (s *Store) apply(ctx context.Context, m migration) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("store: migration %s: %w", m.name, err)
+	}
+	defer conn.Close()
+	if m.foreignKeysOff {
+		if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		}
+		defer func() {
+			if _, err := conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`); err != nil {
+				// The connection would go on without its keys: drop it.
+				conn.Raw(func(any) error { return driver.ErrBadConn })
+				s.log.Error("store: foreign keys not turned on again", "migration", m.name, "error", err)
+			}
+		}()
+	}
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: migration %s: %w", m.name, err)
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 		return fmt.Errorf("store: migration %s: %w", m.name, err)
+	}
+	if m.foreignKeysOff {
+		if err := foreignKeyCheck(ctx, tx); err != nil {
+			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		}
 	}
 	if hook := afterMigration[m.version]; hook != nil {
 		if err := hook(ctx, s, tx); err != nil {
@@ -238,6 +271,26 @@ func (s *Store) apply(ctx context.Context, m migration) error {
 		return fmt.Errorf("store: migration %s: %w", m.name, err)
 	}
 	return nil
+}
+
+// foreignKeyCheck fails on the first row whose foreign key names no row,
+// as PRAGMA foreign_key_check reports it.
+func foreignKeyCheck(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table, parent string
+		var rowid sql.NullInt64
+		var fk int
+		if err := rows.Scan(&table, &rowid, &parent, &fk); err != nil {
+			return err
+		}
+		return fmt.Errorf("a row of %s (rowid %d) names no row of %s", table, rowid.Int64, parent)
+	}
+	return rows.Err()
 }
 
 // afterMigration holds what a migration needs beyond SQL, run in its
@@ -290,7 +343,7 @@ func (s *Store) copyTo(ctx context.Context, dst string) error {
 			return err
 		}
 	}
-	err = safefile.Replace(dst, safefile.Options{Mode: 0o600}, func(tmp string) error {
+	err = safefile.Replace(dst, safefile.Options{Mode: 0o600, Logger: s.log}, func(tmp string) error {
 		_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, tmp)
 		return err
 	})

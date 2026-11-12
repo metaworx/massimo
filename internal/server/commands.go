@@ -64,24 +64,48 @@ func (rt *runtime) writerOf(ctx context.Context) cubeio.Writer {
 	return w
 }
 
-// stepObserver writes the step rows of a Cube's queue. The queue calls
-// it under its lock and from its Run (engine.Observer), so every call
-// only hands its write to the server's one ordered worker (s.steps),
-// which writes them in the order the queue reported them: a command's
-// row exists for its Started and Finished, and no radio command waits
-// on the store's one connection.
+// stepObserver writes the step rows of a Cube's queue, and a line of
+// the Cube's log for each step, with its command (AP OneLog v1.1,
+// Block 6): queued and sent at debug, acknowledged at info, a discard
+// and retry, a drop and a failure at warn. The queue calls it under its
+// lock and from its Run (engine.Observer), so every call only hands its
+// write to the server's one ordered worker (s.steps), which writes them
+// in the order the queue reported them: a command's row exists for its
+// Started and Finished, and no radio command waits on the store's one
+// connection.
 type stepObserver struct {
 	s       *Server
+	rt      *runtime
 	mu      sync.Mutex
 	parents map[string]int64 // parent row id by uuid
 	steps   map[uint64]int64 // step row id by the queue's Seq; only the worker uses it
+	of      map[uint64]int64 // the step's parent row id by the queue's Seq; only the worker uses it
 }
 
-func (s *Server) newObserver() engine.Observer {
+func (s *Server) newObserver(rt *runtime) engine.Observer {
 	if s.opts.Store == nil {
 		return nil
 	}
-	return &stepObserver{s: s, parents: map[string]int64{}, steps: map[uint64]int64{}}
+	return &stepObserver{s: s, rt: rt, parents: map[string]int64{}, steps: map[uint64]int64{}, of: map[uint64]int64{}}
+}
+
+// stepEvent is the log's line of a step of the command parent, in a
+// state: the device it is for, the step's row and what it says.
+func (o *stepObserver) stepEvent(cmd engine.Command, parent, step int64, state, level string, summary map[string]any) {
+	if summary == nil {
+		summary = map[string]any{}
+	}
+	summary["state"], summary["step"], summary["key"] = state, step, cmd.Key
+	ev := event{Kind: "command", Source: "queue", Level: level, Time: time.Now(), Command: parent, Summary: summary}
+	if e, ok := summary["error"].(string); ok {
+		ev.Error = e
+		delete(summary, "error")
+	}
+	if cmd.Target != 0 {
+		ev.Device = cmd.Target.String()
+		ev.Serial = o.rt.client.Snapshot().Serial(cmd.Target)
+	}
+	o.rt.emit(ev)
 }
 
 // parentOf finds the parent row of a uuid, cached.
@@ -133,7 +157,8 @@ func (o *stepObserver) enqueued(cmd engine.Command) {
 		o.s.log.Error("commands: step not written", "command", cmd.ID, "error", err)
 		return
 	}
-	o.steps[cmd.Seq] = step.ID
+	o.steps[cmd.Seq], o.of[cmd.Seq] = step.ID, parent
+	o.stepEvent(cmd, parent, step.ID, store.StateQueued, "debug", map[string]any{"radio": radioLines(cmd), "lines": len(cmd.Lines)})
 }
 
 func (o *stepObserver) started(cmd engine.Command) {
@@ -144,11 +169,17 @@ func (o *stepObserver) started(cmd engine.Command) {
 	if err := o.s.opts.Store.SetCommandState(context.Background(), id, store.StateSent, 0, nil); err != nil {
 		o.s.log.Error("commands: step not marked sent", "step", id, "error", err)
 	}
+	o.stepEvent(cmd, o.of[cmd.Seq], id, store.StateSent, "debug", nil)
+	if cmd.Target != 0 && radioLines(cmd) > 0 {
+		o.rt.sentTo.sent(cmd.Target, o.of[cmd.Seq])
+	}
 }
 
 func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 	id, ok := o.steps[cmd.Seq]
+	parent := o.of[cmd.Seq]
 	delete(o.steps, cmd.Seq)
+	delete(o.of, cmd.Seq)
 	if !ok {
 		return
 	}
@@ -165,6 +196,37 @@ func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 	if err := o.s.opts.Store.SetCommandState(context.Background(), id, state, 0, raw); err != nil {
 		o.s.log.Error("commands: step not finished", "step", id, "error", err)
 	}
+	budget := func() map[string]any {
+		return map[string]any{"duty_pct": res.Budget.DutyCyclePct, "free_slots": res.Budget.FreeMemorySlots}
+	}
+	if res.Retried {
+		o.stepEvent(cmd, parent, id, "retried", "warn", budget())
+	}
+	level, summary := "info", budget()
+	if res.Discarded {
+		summary["discarded"] = true
+	}
+	if state != store.StateAcknowledged {
+		level, summary["error"] = "warn", result["error"]
+		if cmd.Target != 0 {
+			o.rt.sentTo.forget(cmd.Target, parent)
+		}
+	}
+	o.stepEvent(cmd, parent, id, state, level, summary)
+}
+
+// held is the queue's hold of its radio commands as a warning of the
+// Cube's log: the duty cycle exhausted until its reset, or too few free
+// memory slots for a while.
+func (rt *runtime) held(h engine.Hold) {
+	summary := map[string]any{"reason": h.Reason}
+	switch h.Reason {
+	case engine.HoldDutyCycle:
+		summary["duty_pct"], summary["until"] = h.DutyPct, h.Until.UTC().Format(time.RFC3339)
+	case engine.HoldMemorySlots:
+		summary["free_slots"], summary["wait_s"] = h.FreeSlots, int(h.Wait.Seconds())
+	}
+	rt.emit(event{Kind: "hold", Source: "queue", Level: "warn", Time: time.Now(), Summary: summary})
 }
 
 // serialWorker runs functions one at a time in the order they were
@@ -390,6 +452,9 @@ type commandView struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 	FinishedAt *time.Time      `json:"finished_at,omitempty"`
 	Steps      []stepView      `json:"steps"`
+	// Audit is the request's audit row, for a caller with audit; absent
+	// for a proxy client's command, which has none.
+	Audit *auditView `json:"audit,omitempty"`
 }
 
 // stepView is one engine command of a command.
@@ -404,7 +469,9 @@ type stepView struct {
 }
 
 // getCommand handles GET /api/v1/commands/{id}: a command by its id,
-// with its steps; a user without audit sees its own commands only.
+// or by its number as the log names it, with its steps, and its audit
+// row for a caller with audit; a user without audit sees its own
+// commands only.
 func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -412,7 +479,13 @@ func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	id := r.PathValue("id")
-	c, ok, err := st.CommandByUUID(ctx, id)
+	var c store.Command
+	var ok bool
+	if n, perr := strconv.ParseInt(id, 10, 64); perr == nil && n > 0 {
+		c, ok, err = st.Command(ctx, n)
+	} else {
+		c, ok, err = st.CommandByUUID(ctx, id)
+	}
 	if err != nil {
 		return userFail(err)
 	}
@@ -438,6 +511,12 @@ func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	}
 	for _, st := range c.Steps {
 		v.Steps = append(v.Steps, stepView{ID: st.UUID, Target: st.Target, State: st.State, Request: st.Request, Result: st.Result, CreatedAt: st.CreatedAt, FinishedAt: optTime(st.FinishedAt)})
+	}
+	if p.has("audit") {
+		if e, found, err := st.AuditOfCommand(ctx, c.ID); err == nil && found {
+			v.Audit = &auditView{ID: e.ID, Time: e.Time, User: e.User, TokenID: e.TokenID, Remote: e.Remote, Action: e.Action, Cube: e.Cube, Target: e.Target,
+				Detail: e.Detail, Result: e.Result, CommandID: e.CommandID}
+		}
 	}
 	writeJSON(w, http.StatusOK, v)
 	return nil

@@ -8,6 +8,12 @@
 # left for the owner to start.
 set -e
 
+# logrotate's file of the releases before 0.14.0~alpha.2: serve rotates its
+# log itself now, so the conffile goes, unless the owner changed it
+# (dpkg-maintscript-helper(1), rm_conffile; the same line in the preinst,
+# the postinst and the postrm).
+dpkg-maintscript-helper rm_conffile /etc/logrotate.d/massimo 0.14.0~alpha.2~ -- "$@"
+
 # settings prints the lines of a settings file that set something, without
 # the comments and blank lines: a release that changes the template's
 # comments does not make an untouched file look filled in.
@@ -58,6 +64,25 @@ configure)
 	if [ ! -d /var/lib/massimo ]; then
 		install -d -m 0750 -o _massimo -g _massimo /var/lib/massimo
 	fi
+	# The log: a set-group-id directory of the admin group, so that the
+	# files serve makes there (0640) are the admin group's to read and
+	# nobody else's; the service's own group where there is no adm. The
+	# unit no longer makes it (LogsDirectory= would give it back to the
+	# service's group at every start). An older release's files are
+	# narrowed to 0640 in that group.
+	loggroup=_massimo
+	if getent group adm >/dev/null; then
+		loggroup=adm
+	fi
+	mkdir -p /var/log/massimo
+	chown _massimo:"$loggroup" /var/log/massimo
+	chmod 2750 /var/log/massimo
+	for f in /var/log/massimo/serve.log*; do
+		if [ -f "$f" ] && [ ! -L "$f" ]; then
+			chown -h _massimo:"$loggroup" "$f"
+			chmod 0640 "$f"
+		fi
+	done
 	# An older package or `massimo install` that found a person's account
 	# massimo ran the service as that person, whose files these still are,
 	# and _massimo cannot read them. Ours is _massimo by now, renamed or

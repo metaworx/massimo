@@ -159,7 +159,7 @@ func TestServeRestartsThroughTheAPI(t *testing.T) {
 			logMu.Lock()
 			log.WriteString(sc.Text() + "\n")
 			logMu.Unlock()
-			if m := regexp.MustCompile(`msg="api listening" addr=(\S+) .*restart=exit`).FindStringSubmatch(sc.Text()); m != nil {
+			if m := regexp.MustCompile(`msg="api listening" source=system addr=(\S+) .*restart=exit`).FindStringSubmatch(sc.Text()); m != nil {
 				addr <- m[1]
 			}
 		}

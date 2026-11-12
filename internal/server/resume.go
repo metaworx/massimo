@@ -30,7 +30,16 @@ const replaySize = 1024
 // must end.
 type subscriber struct {
 	user int64
-	gone chan struct{}
+	// audit says the subscriber may see the events only a user with
+	// audit sees (sign-ins, lockouts).
+	audit bool
+	gone  chan struct{}
+}
+
+// sees reports whether the subscriber gets an event published for user
+// (0 for every subscriber).
+func (sub *subscriber) sees(ev event, user int64) bool {
+	return (user == 0 || sub.user == user) && (!ev.audit || sub.audit)
 }
 
 // published is an event in the replay ring, with the user it is for (0
@@ -70,7 +79,7 @@ func (rt *runtime) publishLocked(ev event, user int64) {
 		rt.replay = rt.replay[len(rt.replay)-replaySize:]
 	}
 	for ch, sub := range rt.subs {
-		if user != 0 && sub.user != user {
+		if !sub.sees(ev, user) {
 			continue
 		}
 		select {
@@ -82,11 +91,11 @@ func (rt *runtime) publishLocked(ev event, user int64) {
 	}
 }
 
-// since returns the events after the stream id last that user may see,
+// since returns the events after the stream id last that sub may see,
 // oldest first, and whether the ring still holds all of them: false for
 // an id of another epoch, one not issued yet, a malformed one, or one
 // whose successors the ring has dropped. subsMu must be held.
-func (rt *runtime) since(last string, user int64) ([]event, bool) {
+func (rt *runtime) since(last string, sub *subscriber) ([]event, bool) {
 	epoch, num, ok := strings.Cut(last, "-")
 	if !ok || epoch != rt.epoch {
 		return nil, false
@@ -101,7 +110,7 @@ func (rt *runtime) since(last string, user int64) ([]event, bool) {
 	}
 	var out []event
 	for _, p := range rt.replay {
-		if p.ev.seq <= seq || (p.user != 0 && p.user != user) {
+		if p.ev.seq <= seq || !sub.sees(p.ev, p.user) {
 			continue
 		}
 		out = append(out, p.ev)

@@ -41,8 +41,10 @@ func TestInstallDarwin(t *testing.T) {
 	if !strings.Contains(out.String(), "warning: MASSIMO_LOG") {
 		t.Error("no warning about MASSIMO_LOG")
 	}
-	if strings.Contains(read(t, filepath.Join(root, PlistPath(Label))), "<string>-log</string>") {
-		t.Error("-log in the service plist")
+	// The plist passes -log, which the settings file's MASSIMO_LOG cannot
+	// change.
+	if !strings.Contains(out.String(), "warning: MASSIMO_LOG in /etc/massimo/env is not read: the plist passes -log /var/log/massimo/serve.log") {
+		t.Errorf("the warning about MASSIMO_LOG: %s", out.String())
 	}
 	serve := read(t, filepath.Join(root, PlistPath(Label)))
 	for _, want := range []string{"<string>-listen</string>\n\t\t<string>:8099</string>", "<string>-update-request</string>", "<string>_massimo</string>", "<string>-data</string>\n\t\t<string>/var/lib/massimo</string>"} {
@@ -106,8 +108,21 @@ func TestInstallDarwinNoHelperAndTemplate(t *testing.T) {
 	if env := read(t, filepath.Join(root, EnvPath)); !strings.Contains(env, "by the user _massimo.") || strings.Contains(env, "\nMASSIMO_LOG=") {
 		t.Errorf("env template: %s", env)
 	}
-	if _, err := os.Stat(filepath.Join(root, DarwinLog)); err != nil || !rec.has("chown -h _massimo:_massimo "+filepath.Join(root, DarwinLog)) {
-		t.Errorf("log file: %v", err)
+	// serve writes the log in the service user's directory, the admin
+	// group's to read; launchd's file of its stderr beside it is the
+	// service user's.
+	if !rec.has("chown _massimo:admin "+filepath.Join(root, LogDir)) || !rec.has("chmod 0750 "+filepath.Join(root, LogDir)) {
+		t.Errorf("log directory: %q", rec.cmds)
+	}
+	if _, err := os.Stat(filepath.Join(root, DarwinStderrLog)); err != nil || !rec.has("chown -h _massimo:admin "+filepath.Join(root, DarwinStderrLog)) {
+		t.Errorf("stderr file: %v", err)
+	}
+	plist := read(t, filepath.Join(root, PlistPath(Label)))
+	for _, want := range []string{"<string>-log</string>\n\t\t<string>/var/log/massimo/serve.log</string>", "<string>-log-process-format</string>\n\t\t<string>none</string>",
+		"<key>StandardErrorPath</key>\n\t<string>" + DarwinStderrLog + "</string>"} {
+		if !strings.Contains(plist, want) {
+			t.Errorf("service plist lacks %q", want)
+		}
 	}
 	// Only the template: not started, and the way to the owner said.
 	if rec.has(launchctl+" bootstrap system "+PlistPath(Label)) || !strings.Contains(out.String(), "not started") {
@@ -149,7 +164,7 @@ func TestRemoveDarwin(t *testing.T) {
 	if err := RemoveDarwin(o, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{BinPath, BinPath + ".prev", PlistPath(Label), PlistPath(HelperLabel), EnvDir, StateDir, LogDir, HelperStateDir} {
+	for _, p := range []string{BinPath, BinPath + ".prev", PlistPath(Label), PlistPath(HelperLabel), EnvDir, StateDir, LogDir, DarwinStderrLog, HelperStateDir} {
 		if _, err := os.Lstat(filepath.Join(root, p)); err == nil {
 			t.Errorf("%s left", p)
 		}

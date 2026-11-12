@@ -34,8 +34,9 @@ var eventKinds = []string{
 	"connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
 	"device_forgotten", "cube_found", "restore_step", "restore_done",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
-	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "restore_started",
-	"change",
+	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
+	"change", "command", "hold", "login", "login_failed", "locked_out", "audit_pruned",
+	"proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning",
 }
 
 // Limits of a page of the log.
@@ -56,7 +57,12 @@ func storedEvent(cubeID int64, ev event) store.Event {
 	userID := ev.userID
 	ev.By = nil // the row keeps the user's id, the page names them
 	data, _ := json.Marshal(ev)
-	return store.Event{CubeID: cubeID, Time: ev.Time, Kind: ev.Kind, Source: ev.Source, Level: level, Device: ev.Device, Serial: ev.Serial, UserID: userID, Data: data}
+	vis := store.VisibilityRead
+	if ev.audit {
+		vis = store.VisibilityAudit
+	}
+	return store.Event{CubeID: cubeID, Time: ev.Time, Kind: ev.Kind, Source: ev.Source, Level: level, Device: ev.Device, Serial: ev.Serial, UserID: userID, Data: data,
+		CommandID: ev.Command, Visibility: vis}
 }
 
 // learnStoreID finds the row of a runtime that has none yet, at its
@@ -75,7 +81,7 @@ func (s *Server) learnStoreID(ctx context.Context, rt *runtime) {
 }
 
 // logSources are the sources an event comes from (event.settle).
-var logSources = []string{"device", "cube", "system", "config"}
+var logSources = []string{"device", "cube", "system", "config", "queue", "server", "proxy"}
 
 // logQuery is a request's page of the log.
 type logQuery struct {
@@ -88,6 +94,8 @@ type logQuery struct {
 	serial   string // a serial number
 	user     string // a login name
 	userID   int64  // its row, once resolved
+	command  int64  // a command's id
+	audit    bool   // the rows of the audit visibility too: the caller holds audit
 	minLevel int
 	limit    int
 }
@@ -96,7 +104,8 @@ type logQuery struct {
 // (an RFC 3339 time, not after a before time), limit (1 to 1000, 200 by
 // default), kind, source (device, cube, system or config), level (debug,
 // info, warn or error: that level and above, info by default), device
-// (a serial number or a radio address) and user (a login name).
+// (a serial number or a radio address), user (a login name) and command
+// (a command's id).
 func parseLogQuery(r *http.Request) (logQuery, error) {
 	q := r.URL.Query()
 	lq := logQuery{limit: defaultLogPage, kind: q.Get("kind"), minLevel: store.LevelInfo, user: q.Get("user")}
@@ -142,6 +151,13 @@ func parseLogQuery(r *http.Request) (logQuery, error) {
 		}
 		lq.minLevel = l
 	}
+	if v := q.Get("command"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id < 1 {
+			return lq, fail(http.StatusBadRequest, "bad command %q: a command's id", v)
+		}
+		lq.command = id
+	}
 	if v := q.Get("device"); v != "" {
 		if deviceSerial.MatchString(v) {
 			lq.serial = strings.ToUpper(v)
@@ -172,10 +188,12 @@ func (lq *logQuery) resolveDevice(rt *runtime) {
 
 // getLog handles GET /cubes/{sn}/log: the page of the Cube's events and
 // the server's, before the cursor and since a time, of a kind, a source,
-// a device (by its serial number or its radio address) and a user, at a
-// level and above, at most limit, oldest first, the same objects the
-// event stream sends; from the store, with each event's id, or from the
-// ring. A user the store does not know has none.
+// a device (by its serial number or its radio address), a user and a
+// command, at a level and above, at most limit, oldest first, the same
+// objects the event stream sends; from the store, with each event's id,
+// or from the ring. A user the store does not know has none. The rows
+// of the audit visibility (sign-ins, lockouts) are only for a caller
+// with audit.
 func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -186,6 +204,7 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	lq.resolveDevice(rt)
+	lq.audit = principalOf(r).has("audit")
 	if lq.user != "" {
 		id, ok := int64(0), false
 		if st := s.opts.Store; st != nil {
@@ -221,7 +240,8 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 	}
 	minLevel := lq.minLevel
 	rows, err := st.Events(ctx, store.EventQuery{CubeID: cubeID, Server: true, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since,
-		Kind: lq.kind, Source: lq.source, Device: lq.device, Serial: lq.serial, UserID: lq.userID, MinLevel: &minLevel, Limit: lq.limit})
+		Kind: lq.kind, Source: lq.source, Device: lq.device, Serial: lq.serial, UserID: lq.userID, CommandID: lq.command, MinLevel: &minLevel,
+		Audit: lq.audit, Limit: lq.limit})
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -234,6 +254,7 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 			continue
 		}
 		ev.ID, ev.Source, ev.Level, ev.By = rows[i].ID, rows[i].Source, store.LevelName(rows[i].Level), nil
+		ev.Command = rows[i].CommandID
 		if ev.Serial == "" {
 			ev.Serial = rows[i].Serial
 		}
@@ -252,9 +273,10 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 }
 
 // filterEvents is a page of the ring, oldest first: the events before the
-// time and not before since, of the kind, the source, the device and the
-// user, at the level and above, the last limit of them. The ring's
-// events have no id, so none lies before one.
+// time and not before since, of the kind, the source, the device, the
+// user and the command, at the level and above, the audit's only for an
+// auditor, the last limit of them. The ring's events have no id, so none
+// lies before one.
 func filterEvents(all []event, lq logQuery) []event {
 	out := []event{}
 	if lq.beforeID != 0 {
@@ -265,7 +287,8 @@ func filterEvents(all []event, lq logQuery) []event {
 		if !lq.before.IsZero() && !ev.Time.Before(lq.before) || !lq.since.IsZero() && ev.Time.Before(lq.since) ||
 			lq.kind != "" && ev.Kind != lq.kind || lq.source != "" && ev.Source != lq.source ||
 			lq.serial != "" && ev.Serial != lq.serial || lq.device != "" && ev.Device != lq.device ||
-			lq.userID != 0 && ev.userID != lq.userID || level < lq.minLevel {
+			lq.userID != 0 && ev.userID != lq.userID || lq.command != 0 && ev.Command != lq.command ||
+			ev.audit && !lq.audit || level < lq.minLevel {
 			continue
 		}
 		out = append(out, ev)

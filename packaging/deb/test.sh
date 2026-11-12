@@ -35,9 +35,24 @@ if getent passwd massimo >/dev/null; then fail "a user massimo beside _massimo";
 [ "$(stat -c %a:%U:%G /etc/massimo/env)" = 600:_massimo:_massimo ] || fail "/etc/massimo/env is $(stat -c %a:%U:%G /etc/massimo/env)"
 cmp -s /etc/massimo/env /usr/share/massimo/env.template || fail "/etc/massimo/env is not the template"
 [ "$(stat -c %a:%U:%G /var/lib/massimo)" = 750:_massimo:_massimo ] || fail "/var/lib/massimo is $(stat -c %a:%U:%G /var/lib/massimo)"
+[ "$(stat -c %a:%U:%G /var/log/massimo)" = 2750:_massimo:adm ] || fail "/var/log/massimo is $(stat -c %a:%U:%G /var/log/massimo)"
+# An older release's log, 0644 in the service's group in a directory of
+# that group: the upgrade hands both to the admin group, the file 0640.
+chgrp _massimo /var/log/massimo && chmod 0755 /var/log/massimo
+install -m 0644 -o _massimo -g _massimo /dev/null /var/log/massimo/serve.log
+install -m 0644 -o _massimo -g _massimo /dev/null /var/log/massimo/serve.log.2.gz
+apt-get -qq install -y --reinstall "$deb" >/dev/null
+[ "$(stat -c %a:%U:%G /var/log/massimo)" = 2750:_massimo:adm ] || fail "/var/log/massimo after the upgrade is $(stat -c %a:%U:%G /var/log/massimo)"
+for f in /var/log/massimo/serve.log /var/log/massimo/serve.log.2.gz; do
+	[ "$(stat -c %a:%U:%G "$f")" = 640:_massimo:adm ] || fail "$f after the upgrade is $(stat -c %a:%U:%G "$f")"
+done
+rm /var/log/massimo/serve.log /var/log/massimo/serve.log.2.gz
 unit=/usr/lib/systemd/system/massimo.service
 grep -q '^ExecStart=/usr/bin/massimo ' "$unit" || fail "the unit does not run /usr/bin/massimo"
 grep -q '^StateDirectoryMode=0750$' "$unit" || fail "the unit leaves the state directory to systemd's 0755"
+grep -q '^ReadWritePaths=-/var/log/massimo$' "$unit" || fail "the unit cannot write the log"
+if grep -q '^LogsDirectory=' "$unit"; then fail "the unit gives the log directory back to the service's group"; fi
+[ ! -e /etc/logrotate.d/massimo ] || fail "a logrotate file: serve rotates its log itself"
 grep '^ExecStart=' "$unit" | grep -q -- ' -update-request /var/lib/massimo/update-request' ||
 	fail "the unit lacks -update-request for the update helper"
 [ -L /etc/systemd/system/multi-user.target.wants/massimo.service ] || fail "the unit is not enabled"

@@ -230,11 +230,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		if started == nil {
 			s.limiter.fail(ctx, userKey)
 			if s.limiter.fail(ctx, addrKey) {
-				s.log.Warn("api: address locked out after failed logins", "remote", ip, "for", s.authLockout)
+				s.logLockout(ip, "logins")
 			}
 		}
 		auditAction(r, "login.failed")
-		s.log.Warn("api: login failed", "user", name, "remote", ip)
+		s.logSignIn("login_failed", name, 0, ip)
 		return fail(http.StatusUnauthorized, "wrong user or password")
 	}
 	u, ok, err := st.User(ctx, name)
@@ -293,7 +293,7 @@ func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.Use
 	for _, k := range keys {
 		s.limiter.succeed(ctx, k)
 	}
-	s.log.Info("api: login", "user", u.Name, "remote", ip)
+	s.logSignIn("login", u.Name, u.ID, ip)
 	me, err := s.meOf(r, &principal{mode: modeUsers, user: u, token: tok})
 	if err != nil {
 		return err

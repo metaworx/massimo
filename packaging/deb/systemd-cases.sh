@@ -82,6 +82,10 @@ fresh)
 	check "started as $(procuser)" [ "$(state)" = active -a "$(procuser)" = _massimo ]
 	check "the API asks for a sign-in ($(code "$api/cubes"))" [ "$(code "$api/cubes")" = 401 ]
 	check "/var/lib/massimo after the start: $(mode /var/lib/massimo)" [ "$(mode /var/lib/massimo)" = "750 _massimo:_massimo" ]
+	# The log: the admin group's to read, in JSON.
+	check "/var/log/massimo after the start: $(mode /var/log/massimo)" [ "$(mode /var/log/massimo)" = "2750 _massimo:adm" ]
+	check "serve.log is $(mode /var/log/massimo/serve.log)" [ "$(mode /var/log/massimo/serve.log)" = "640 _massimo:adm" ]
+	check "serve.log is JSON" sh -c 'head -n 1 /var/log/massimo/serve.log | grep -q "^{"'
 	p1=$(pid)
 	inst --reinstall "$new"
 	up
@@ -96,6 +100,7 @@ fresh)
 upgrade)
 	inst "$old"
 	uid=$(id -u massimo)
+	check "v0.12.0-alpha.1 has its logrotate file" [ -f /etc/logrotate.d/massimo ]
 	systemctl start massimo.service
 	up
 	check "v0.12.0-alpha.1 runs as $(procuser), the owner made ($(first_owner))" [ "$(procuser)" = massimo ]
@@ -110,6 +115,9 @@ upgrade)
 	check "the store and the settings are _massimo's" [ "$(stat -c %U /var/lib/massimo/massimo.db)" = _massimo -a "$(stat -c %U /etc/massimo/env)" = _massimo ]
 	check "the owner signs in ($(login)), the API closed otherwise" [ "$(login)" = 200 -a "$(code "$api/cubes")" = 401 ]
 	check "/var/lib/massimo is $(mode /var/lib/massimo)" [ "$(mode /var/lib/massimo)" = "750 _massimo:_massimo" ]
+	check "the logrotate file is gone: serve rotates its log" [ ! -e /etc/logrotate.d/massimo -a ! -e /etc/logrotate.d/massimo.dpkg-remove ]
+	check "/var/log/massimo after the upgrade: $(mode /var/log/massimo)" [ "$(mode /var/log/massimo)" = "2750 _massimo:adm" ]
+	check "the old plain serve.log rotated at the start: $(ls /var/log/massimo | tr '\n' ' ')" sh -c 'head -n 1 /var/log/massimo/serve.log | grep -q "\"reason\":\"format\"" && tail -n 1 /var/log/massimo/serve.log.1 | grep -q "reason=format"'
 	;;
 person)
 	person

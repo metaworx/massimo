@@ -29,6 +29,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/slogx"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -70,13 +71,68 @@ type Options struct {
 	// header, so that the server can follow the write up as it does
 	// its own.
 	OnWrite func(cube.RadioCommand)
+	// OnEvent, when set, is told of what the proxy's clients do and of
+	// its warnings (Event), so that the server keeps them in its log;
+	// the proxy's own lines of them go to debug then.
+	OnEvent func(Event)
+	// Command, when set, is asked for the command a client's line
+	// passed on to the Cube is (the server's commands row), before it is
+	// queued: it returns the command's id, which the queue's steps
+	// carry, and done, which takes the outcome.
+	Command func(remote string, m cube.Message, target cube.RFAddress) (id string, done func(engine.Result))
 	Logger  *slog.Logger
+}
+
+// Event is something a proxy's client did, or a warning of the proxy's:
+// a Kind (the Event… constants), its level, the client's address and
+// what it says in short.
+type Event struct {
+	Kind    string
+	Level   slog.Level
+	Remote  string
+	Summary map[string]any
+	Err     error
+}
+
+// The kinds of an Event.
+const (
+	EventConnected     = "proxy_connected"      // a client connected
+	EventDisconnected  = "proxy_disconnected"   // a client went
+	EventRefused       = "proxy_refused"        // a client turned away: the Cube is not connected
+	EventDiscarded     = "proxy_discarded"      // a client's radio command answered as discarded, not sent: the duty cycle
+	EventDeleted       = "proxy_deleted"        // devices a client deleted
+	EventDeleteRefused = "proxy_delete_refused" // a client's delete of hidden devices refused
+	EventPairing       = "proxy_pairing"        // pairing for a client, or a client joining it
+	EventWarning       = "proxy_warning"        // a warning of the proxy's: a pairing not started, a metadata write passed unchanged
+)
+
+// note tells OnEvent of an event and writes the proxy's line of it, at
+// debug where OnEvent takes it.
+func (p *Proxy) note(ev Event, msg string, attrs ...any) {
+	log := p.log
+	if p.opts.OnEvent != nil {
+		p.opts.OnEvent(ev)
+		log = p.quiet
+	}
+	log.Log(context.Background(), ev.Level, msg, attrs...)
+}
+
+// cmdLog takes the proxy's line of a client's command: at debug where the
+// server keeps the command's row, which says it.
+func (p *Proxy) cmdLog(cmd engine.Command) *slog.Logger {
+	if cmd.ID != "" {
+		return p.quiet
+	}
+	return p.log
 }
 
 // Proxy serves Cube-protocol clients over TCP and discovery over UDP.
 type Proxy struct {
 	opts Options
 	log  *slog.Logger
+	// quiet is log at debug, for the lines the server records as well
+	// (OnEvent, Command).
+	quiet *slog.Logger
 
 	mu    sync.Mutex
 	conns map[*session]struct{}
@@ -112,7 +168,7 @@ func New(opts Options) *Proxy {
 	if opts.ReplyTimeout == 0 {
 		opts.ReplyTimeout = time.Minute
 	}
-	return &Proxy{opts: opts, log: opts.Logger, conns: map[*session]struct{}{}}
+	return &Proxy{opts: opts, log: opts.Logger, quiet: slogx.AtDebug(opts.Logger), conns: map[*session]struct{}{}}
 }
 
 // Run listens on tcpAddr for Cube-protocol clients until ctx ends or
@@ -199,7 +255,7 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 		p.mu.Lock()
 		delete(p.conns, s)
 		p.mu.Unlock()
-		p.log.Info("proxy: client disconnected", "remote", remote)
+		p.note(Event{Kind: EventDisconnected, Level: slog.LevelInfo, Remote: remote}, "proxy: client disconnected", "remote", remote)
 	}()
 	// The greeting needs the Cube's data; wait a little for the first one.
 	select {
@@ -207,10 +263,11 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 	case <-ctx.Done():
 		return
 	case <-time.After(15 * time.Second):
-		p.log.Warn("proxy: cube not connected, refusing client", "remote", remote)
+		p.note(Event{Kind: EventRefused, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"why": "cube not connected"}},
+			"proxy: cube not connected, refusing client", "remote", remote)
 		return
 	}
-	p.log.Info("proxy: client connected", "remote", remote)
+	p.note(Event{Kind: EventConnected, Level: slog.LevelInfo, Remote: remote}, "proxy: client connected", "remote", remote)
 	for _, m := range p.greeting() {
 		if err := s.write(m); err != nil {
 			return
@@ -324,7 +381,8 @@ func (p *Proxy) local(m cube.Message) (cube.Message, bool) {
 func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) []cube.Message {
 	if m.Type == 's' || m.Type == 'r' {
 		if b := p.opts.Client.Budget(); !b.UpdatedAt.IsZero() && b.DutyCyclePct >= p.opts.MaxDutyPct {
-			p.log.Warn("proxy: duty cycle exhausted, answering client with a discard", "remote", remote, "command", m.String(), "duty_pct", b.DutyCyclePct)
+			p.note(Event{Kind: EventDiscarded, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"line": string(m.Type), "duty_pct": b.DutyCyclePct}},
+				"proxy: duty cycle exhausted, answering client with a discard", "remote", remote, "command", m.String(), "duty_pct", b.DutyCyclePct)
 			return []cube.Message{{Type: 'S', Data: fmt.Sprintf("%02x,1,%02x", b.DutyCyclePct, b.FreeMemorySlots)}}
 		}
 	}
@@ -348,9 +406,23 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 	// A metadata write is mirrored into the snapshot, which the Cube
 	// does not echo it to.
 	w := cubeio.Writer{Client: p.opts.Client, Queue: p.opts.Queue}
-	res := w.Do(wctx, engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: lines})
+	cmd := engine.Command{Priority: engine.PriorityNormal, Passthrough: true, Lines: lines}
+	if m.Type == 's' {
+		// The device the line is for: the step's, and its new state's.
+		if rc, err := cube.ParseRadioCommand(m.Data); err == nil {
+			cmd.Target = rc.Target.RFAddress
+		}
+	}
+	var done func(engine.Result)
+	if p.opts.Command != nil {
+		cmd.ID, done = p.opts.Command(remote, m, cmd.Target)
+	}
+	res := w.Do(wctx, cmd)
+	if done != nil {
+		done(res)
+	}
 	if res.Err != nil {
-		p.log.Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
+		p.cmdLog(cmd).Warn("proxy: command failed", "remote", remote, "command", m.String(), "error", res.Err)
 		return res.Replies
 	}
 	if m.Type == 's' && !res.Discarded && p.opts.OnWrite != nil {
@@ -367,7 +439,8 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 			for _, rf := range addrs {
 				p.opts.Client.ForgetDevice(rf)
 			}
-			p.log.Info("proxy: devices deleted by a client", "remote", remote, "devices", len(addrs))
+			p.note(Event{Kind: EventDeleted, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"devices": rfList(addrs)}},
+				"proxy: devices deleted by a client", "remote", remote, "devices", len(addrs))
 		}
 	}
 	if m.Type == 'c' {
@@ -388,6 +461,15 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		return res.Replies[len(res.Replies)-1:]
 	}
 	return res.Replies
+}
+
+// rfList is a list of radio addresses as text.
+func rfList(addrs []cube.RFAddress) []string {
+	out := make([]string, len(addrs))
+	for i, rf := range addrs {
+		out[i] = rf.String()
+	}
+	return out
 }
 
 // deleteAnswer is the Cube's answer to a client's t:, an empty A line
@@ -417,7 +499,8 @@ func (p *Proxy) pairing(ctx context.Context, s *session, m cube.Message, remote 
 	defer cancel()
 	if m.Type == 'x' {
 		if err := w.StopPairing(wctx); err != nil {
-			p.log.Warn("proxy: stopping pairing failed", "remote", remote, "error", err)
+			p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"what": "pairing_not_stopped"}, Err: err},
+				"proxy: stopping pairing failed", "remote", remote, "error", err)
 		}
 		return
 	}
@@ -430,13 +513,15 @@ func (p *Proxy) pairing(ctx context.Context, s *session, m cube.Message, remote 
 	if errors.Is(err, cubelan.ErrInclusionActive) {
 		lines, stop = p.opts.Client.WatchInclusion()
 		err = nil
-		p.log.Info("proxy: client joins the running pairing", "remote", remote)
+		p.note(Event{Kind: EventPairing, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"joined": true}}, "proxy: client joins the running pairing", "remote", remote)
 	}
 	if err != nil {
-		p.log.Warn("proxy: pairing not started", "remote", remote, "error", err)
+		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"what": "pairing_not_started"}, Err: err},
+			"proxy: pairing not started", "remote", remote, "error", err)
 		return
 	}
-	p.log.Info("proxy: pairing for a client", "remote", remote, "seconds", int(timeout.Seconds()))
+	p.note(Event{Kind: EventPairing, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"seconds": int(timeout.Seconds())}},
+		"proxy: pairing for a client", "remote", remote, "seconds", int(timeout.Seconds()))
 	s.watchPairing(stop)
 	go func() {
 		for l := range lines {
@@ -456,7 +541,8 @@ func (p *Proxy) pairing(ctx context.Context, s *session, m cube.Message, remote 
 func (p *Proxy) withoutHidden(m cube.Message, remote string) (cube.Message, bool) {
 	force, addrs, err := cube.ParseDeleteDevices(m.Data)
 	if err != nil {
-		p.log.Warn("proxy: delete command not understood, refused", "remote", remote, "command", m.String(), "error", err)
+		p.note(Event{Kind: EventDeleteRefused, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"why": "not_understood"}, Err: err},
+			"proxy: delete command not understood, refused", "remote", remote, "command", m.String(), "error", err)
 		return cube.Message{}, false
 	}
 	hidden := p.hidden(p.opts.Client.Snapshot().Metadata())
@@ -472,7 +558,8 @@ func (p *Proxy) withoutHidden(m cube.Message, remote string) (cube.Message, bool
 	if len(refused) == 0 {
 		return m, true
 	}
-	p.log.Warn("proxy: refused to delete hidden devices", "remote", remote, "devices", strings.Join(refused, ","), "passed_on", len(kept))
+	p.note(Event{Kind: EventDeleteRefused, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"why": "hidden", "devices": refused, "passed_on": len(kept)}},
+		"proxy: refused to delete hidden devices", "remote", remote, "devices", strings.Join(refused, ","), "passed_on", len(kept))
 	if len(kept) == 0 {
 		return cube.Message{}, false
 	}
@@ -485,7 +572,8 @@ func (p *Proxy) withoutHidden(m cube.Message, remote string) (cube.Message, bool
 func (p *Proxy) withHidden(m cube.Message) ([]cube.Message, bool) {
 	idx, data, ok := strings.Cut(m.Data, ",")
 	if !ok || idx != "00" {
-		p.log.Warn("proxy: multi-part metadata write passed through unchanged; hidden devices may be lost", "index", idx)
+		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Summary: map[string]any{"what": "metadata_multipart"}},
+			"proxy: multi-part metadata write passed through unchanged; hidden devices may be lost", "index", idx)
 		return nil, false
 	}
 	raw, err := base64.StdEncoding.DecodeString(data)
@@ -494,7 +582,8 @@ func (p *Proxy) withHidden(m cube.Message) ([]cube.Message, bool) {
 	}
 	md, err := cube.DecodeMetadata(raw)
 	if err != nil {
-		p.log.Warn("proxy: metadata write not understood, passed through unchanged", "error", err)
+		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Summary: map[string]any{"what": "metadata_not_understood"}, Err: err},
+			"proxy: metadata write not understood, passed through unchanged", "error", err)
 		return nil, false
 	}
 	cur := p.opts.Client.Snapshot().Metadata()
@@ -507,7 +596,8 @@ func (p *Proxy) withHidden(m cube.Message) ([]cube.Message, bool) {
 	}
 	cmds, err := cube.WriteMetadataCommands(md)
 	if err != nil {
-		p.log.Warn("proxy: metadata write with hidden devices could not be encoded, passed through unchanged", "error", err)
+		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Summary: map[string]any{"what": "metadata_not_encoded"}, Err: err},
+			"proxy: metadata write with hidden devices could not be encoded, passed through unchanged", "error", err)
 		return nil, false
 	}
 	p.log.Info("proxy: hidden devices put back into a client's metadata write", "devices", added)

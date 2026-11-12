@@ -37,7 +37,11 @@ WorkingDirectory=/var/lib/massimo
 # systemd's default is 0755.
 StateDirectory=massimo
 StateDirectoryMode=0750
-LogsDirectory=massimo
+# The log: /var/log/massimo, _massimo:adm 2750 from the package's postinst
+# or massimo install, so that the files serve makes there (0640) are the
+# admin group's to read. Not LogsDirectory=, which would give the
+# directory back to the service's own group at every start.
+ReadWritePaths=-/var/log/massimo
 
 NoNewPrivileges=yes
 ProtectSystem=strict

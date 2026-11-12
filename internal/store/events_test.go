@@ -327,7 +327,7 @@ const stateData = `{"kind":"state","device":"0abc01","time":"2026-11-06T10:00:00
 func fill(t testing.TB, s *Store, cube int64, n int, start time.Time, step time.Duration) {
 	t.Helper()
 	_, err := s.db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ? - 1)
-		INSERT INTO events (uuid, cube_id, time, kind, source, level, device, serial, data)
+		INSERT INTO log (uuid, cube_id, time, kind, source, level, device, serial, data)
 		SELECT printf('fill-%d-%d-%d', ?, ?, i), ?, strftime('%Y-%m-%dT%H:%M:%fZ', ? + i * ?, 'unixepoch'),
 			CASE WHEN i % 500 = 0 THEN 'connected' WHEN i % 97 = 0 THEN 'config' ELSE 'state' END,
 			CASE WHEN i % 500 = 0 THEN 'cube' ELSE 'device' END,
@@ -368,10 +368,17 @@ func TestEventsPageQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec(`UPDATE events SET user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, a.ID); err != nil {
+	if _, err := s.db.Exec(`UPDATE log SET user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec(`UPDATE events SET level = 8 WHERE level = 0 AND id % 997 = 0`); err != nil {
+	if _, err := s.db.Exec(`UPDATE log SET level = 8 WHERE level = 0 AND id % 997 = 0`); err != nil {
+		t.Fatal(err)
+	}
+	cmd, err := s.AddCommand(ctx, Command{CubeID: a.ID, Action: "setpoint"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE log SET command_id = ? WHERE cube_id = ? AND id % 301 = 0`, cmd.ID, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	info, warn, errs := LevelInfo, LevelWarn, LevelError
@@ -398,6 +405,8 @@ func TestEventsPageQuery(t *testing.T) {
 		{"the server's warnings", EventQuery{CubeID: 0, MinLevel: &warn}},
 		{"warnings of a kind", EventQuery{CubeID: a.ID, Kind: "connected", MinLevel: &warn}},
 		{"a user", EventQuery{CubeID: a.ID, UserID: anna.ID}},
+		{"a command", EventQuery{CubeID: a.ID, CommandID: cmd.ID}},
+		{"a command, with the server's and the audit's", EventQuery{CubeID: a.ID, Server: true, CommandID: cmd.ID, Audit: true}},
 		{"with the server's", EventQuery{CubeID: a.ID, Server: true}},
 		{"with the server's, by time", EventQuery{CubeID: a.ID, Server: true, Before: mid, MinLevel: &info}},
 		{"with the server's, a source", EventQuery{CubeID: a.ID, Server: true, Source: "cube"}},
@@ -433,11 +442,11 @@ func TestEventsPageQuery(t *testing.T) {
 			rows.Close()
 		}
 		joined := strings.Join(plan, "; ")
-		if strings.Contains(joined, "TEMP B-TREE") || strings.Contains(joined, "SCAN events") {
+		if strings.Contains(joined, "TEMP B-TREE") || strings.Contains(joined, "SCAN log") {
 			t.Errorf("%s: %s", sh.name, joined)
 		}
-		if warnIndex[sh.name] && strings.Count(joined, "USING INDEX events_cube_warn (") != len(walks) {
-			t.Errorf("%s: not every walk reads events_cube_warn: %s", sh.name, joined)
+		if warnIndex[sh.name] && strings.Count(joined, "USING INDEX log_cube_warn (") != len(walks) {
+			t.Errorf("%s: not every walk reads log_cube_warn: %s", sh.name, joined)
 		}
 		q := sh.q
 		q.Limit = 200
@@ -462,7 +471,7 @@ func TestEventsPageQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM events WHERE cube_id = ? AND time < ? ORDER BY id DESC LIMIT 5`, a.ID, formatTime(mid))
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM log WHERE cube_id = ? AND time < ? ORDER BY id DESC LIMIT 5`, a.ID, formatTime(mid))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +566,7 @@ func TestEventsPruneStops(t *testing.T) {
 	}
 	var left int
 	// The prune's own line is the server's (logPruned), not one of the 500.
-	if err := s.db.QueryRow(`SELECT count(*) FROM events WHERE kind NOT IN ('hello', 'log_pruned')`).Scan(&left); err != nil || left != 480 {
+	if err := s.db.QueryRow(`SELECT count(*) FROM log WHERE kind NOT IN ('hello', 'log_pruned')`).Scan(&left); err != nil || left != 480 {
 		t.Fatalf("%d left after two chunks (%d steps), %v", left, steps.Load(), err)
 	}
 	if page, _ := s.Events(context.Background(), EventQuery{CubeID: a.ID, Kind: "hello"}); len(page) != 1 {

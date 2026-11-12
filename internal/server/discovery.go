@@ -232,7 +232,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		}
 		rctx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		r = proxy.NewResponder(s.log)
+		r = proxy.NewResponder(s.partLog("proxy", ""))
 		go r.Serve(rctx, pc)
 	}
 	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
@@ -347,7 +347,6 @@ func (s *Server) noteSerial(ctx context.Context, answers []cubelan.Discovered, n
 		port = s.opts.CubePort
 	}
 	if rt.client.SetAddress(net.JoinHostPort(to, strconv.Itoa(port))) {
-		s.log.Info("cube address from discovery", "serial", serial, "ip", to, "was", host)
 		rt.emit(event{Kind: "address_changed", Source: "cube", Serial: serial, Time: now, Summary: map[string]any{"from": host, "to": to}})
 		if had {
 			// Connected, or trying, to the old address: reconnect now.
@@ -447,7 +446,6 @@ func (s *Server) cubeFound(f foundCube) {
 	if f.Configured {
 		return
 	}
-	s.log.Info("cube found on the LAN, not configured", "serial", f.Serial, "ip", f.Address, "mac", f.MAC)
 	s.logServer(event{Kind: "cube_found", Source: "cube", Serial: f.Serial, Cube: &f, Time: f.LastSeen})
 	s.pushNotify(notify.Event{Kind: "cube_found", Cube: f.Serial, Values: map[string]any{"address": f.Address}, Time: f.LastSeen})
 }
@@ -460,7 +458,6 @@ func (s *Server) cubeGone(f foundCube) {
 	if f.Configured {
 		return
 	}
-	s.log.Info("cube gone from the LAN, not configured", "serial", f.Serial, "ip", f.Address, "mac", f.MAC)
 	s.logServer(event{Kind: "cube_gone", Source: "cube", Serial: f.Serial, Cube: &f, Time: time.Now()})
 }
 

@@ -201,8 +201,7 @@ func (s *Server) backupCheck(ctx context.Context, rt *runtime, now time.Time) {
 		w.retryAt = now.Add(backupRetry * minute)
 		w.mu.Unlock()
 		if ctx.Err() == nil {
-			s.log.Warn("automatic backup failed", "cube", rt.serial, "error", err, "retry_in", backupRetry*minute)
-			failed := systemEvent("backup", 0, map[string]any{"reason": store.ReasonAuto})
+			failed := systemEvent("backup", 0, map[string]any{"reason": store.ReasonAuto, "retry_in": (backupRetry * minute).String()})
 			failed.Level, failed.Error = "warn", err.Error()
 			rt.emit(failed)
 		}
@@ -262,7 +261,6 @@ func (s *Server) takeBackup(ctx context.Context, rt *runtime, reason string, use
 	if err != nil {
 		return store.Backup{}, nil, fail(http.StatusInternalServerError, "%v", err)
 	}
-	s.log.Info("backup taken", "cube", rt.serial, "id", b.ID, "reason", reason, "bytes", b.Size)
 	s.emitBy(rt, systemEvent("backup", userID, map[string]any{"reason": reason, "id": b.ID, "bytes": b.Size}))
 	s.pruneBackups(ctx, st, time.Now())
 	return b, f, nil

@@ -850,6 +850,12 @@ the action and the target as the audit names them, the request, and a state;
 and every protocol command the request puts on the Cube's queue is a **step** beneath it,
 written by the queue as it goes.
 The audit row of the request names the command in `command_id`.
+A line a client of the LAN proxy passes on to the Cube is a command as well,
+with no user and no audit row: its `action` is `proxy.radio` (an `s:`),
+`proxy.delete` (a `t:`), `proxy.metadata` (an `m:`), … and its `request` the
+client's address (`remote`) and the line's letter; it is `dropped` where the
+Cube discarded it.
+The log's lines of a command name it (`GET …/log?command=`).
 
 The states are those of docs/design.md section 5:
 `queued` while the request runs and nothing has gone to the Cube,
@@ -869,7 +875,10 @@ An update's `202` hands the work to the helper,
 which reports in `GET /api/v1/update`:
 its command is `acknowledged` with the answer.
 
-`GET /api/v1/commands/{id}` is one command with its steps;
+`GET /api/v1/commands/{id}` is one command with its steps,
+by its id or by its number, as the log's `command` and the audit's
+`command_id` name it, and for a caller with `audit` with its audit row
+under `audit`;
 the command names a device by its serial number, as the audit does,
 and a step by its radio address, the radio command's:
 
@@ -1110,7 +1119,10 @@ and applies at once; the intervals apply at the next start.
 a number, 0 for ever, and applies at once;
 `log.keep_days` how many days the Cubes' events are kept (see `GET …/log`),
 30 by default, 0 for ever, at most 3650, and applies at once:
-a lower value removes the older events within moments.
+a lower value removes the older events within moments;
+`audit.keep_days` how many days the audit's rows are kept (see
+`GET /api/v1/audit`), 365 by default, 0 for ever, at most 3650, at once too,
+an `audit_pruned` line in the log saying how many went.
 The backups' settings are whole numbers that apply at once (see Backups):
 `backups.auto_min`,
 the minutes without a change before the automatic backup (60, 1 to 10080),
@@ -1856,7 +1868,7 @@ also as the event's `error`.
 `error`.
 Both are in `GET …/log`.
 
-### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=
+### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=&command=
 
 A page of the Cube's events, oldest first,
 the same objects the event stream sends (`kind`, `device`, `state`, `error`,
@@ -1888,12 +1900,21 @@ with `before` as the cursor within it;
 also one the Cube no longer has.
 `source` keeps one source: `device` (a device's), `cube` (the Cube's own:
 its connection, configuration, rooms, pairing, a Cube found on the LAN),
-`system` (the server's own jobs) or `config` (a change of the configuration).
+`system` (the server's own jobs), `config` (a change of the configuration),
+`queue` (a command's steps on the radio, its holds), `server` (the
+sign-ins) or `proxy` (the LAN proxy's clients).
 `level` keeps that level and above, `debug`, `info`, `warn` or `error`;
 `info` by default, so that a client asks for `level=debug` to see the
 debug lines (the Cube's `hello`).
 `user` keeps the events a user started, by the login name, a removed user's too;
 a name the server does not know answers an empty page.
+`command` keeps the events of one command, by its id
+(`GET /api/v1/commands/{id}`):
+its attempt, a discard and a retry, its outcome.
+An event of a command names it in `command`,
+until `commands.keep_days` prunes the command.
+The events only a user with `audit` sees (sign-ins, lockouts)
+are on such a user's pages alone.
 The page holds the server's own events too, kept once with no Cube,
 in every Cube's log.
 Each event says its `source` and its `level`,
@@ -1919,7 +1940,7 @@ A device hidden later keeps its events in the log until `log.keep_days` removes 
 A page before a time first looks up the newest event before it,
 which reads the Cube's times up to there: an `id` is the quicker cursor.
 A page since a time looks up the oldest event at or after it the same way.
-`400` for a bad `before`, `limit`, `source`, `level` or `device`.
+`400` for a bad `before`, `limit`, `source`, `level`, `device` or `command`.
 
 ### GET /api/v1/cubes/{sn}/events
 
@@ -1963,7 +1984,11 @@ variables `changed` and of those waiting `at_next_start`, never their values),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
 `backup` (`reason`, `id`, `bytes`; an automatic one that failed at `warn`),
-`backup_deleted` (`id`), `backups_pruned` and `log_pruned` (`removed`),
+`backup_deleted` (`id`), `backups_pruned`, `log_pruned` and `audit_pruned` (`removed`),
+`log_rotated` (serve's `-log` file rotated: `why`, `size`, `format`, `sighup`
+or `reload`; `previous`, the name the old file has now; `kept` and `removed`,
+the rotated files kept and those deleted; at `warn` with its `error` where a
+step failed),
 `restore_started` (`id`, `steps`, `radio_commands`).
 A Cube's own: `address_changed` (`from`, `to`, for a Cube that follows discovery)
 and `cube_gone` (with `cube`, a Cube found before that no longer answers).
@@ -1976,7 +2001,36 @@ secrets removed), what `changes` from and to where the server knows both
 `display_name` and `role`; a role's `id`, `key` and `name`; a key's `id`,
 `uuid`, `name` and its user).
 A change of a Cube is that Cube's line, one of a device carries its
-`serial`, every other is the server's.
+`serial`, every other is the server's; it names its request's `command`.
+The queue's, source `queue`:
+`command`, a step of a command on the Cube's radio, with `command` naming the
+request (`GET /api/v1/commands/{id}`) and its `summary` the `step`'s id, its
+`key` and its `state`: `queued` and `sent` at `debug`, `acknowledged` at `info`
+with the budget (`duty_pct`, `free_slots`), and at `warn` `retried` (the Cube
+discarded it, the device's error state was reset and it was sent again),
+`dropped` and `failed` with their `error`;
+`hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
+`duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
+The server's sign-ins, source `server`, only on the pages and streams of a
+user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
+and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).
+The LAN proxy's, source `proxy`, with the client's `remote`:
+`proxy_connected`, `proxy_disconnected`,
+`proxy_refused` at `warn` (the Cube is not connected),
+`proxy_discarded` at `warn` (a radio command answered as discarded and not
+sent, the duty cycle at `duty_pct`),
+`proxy_deleted` (the `devices` a client deleted),
+`proxy_delete_refused` at `warn` (`why`: `hidden`, with the `devices`, or
+`not_understood`), `proxy_pairing` (`seconds`, or `joined`)
+and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
+`pairing_not_stopped`, `metadata_multipart`, `metadata_not_understood` or
+`metadata_not_encoded`).
+A line a proxy client passes on to the Cube is a command
+(`GET /api/v1/commands/{id}`) with no user, its `action` `proxy.radio`,
+`proxy.delete`, `proxy.metadata`, … and its `request` the client's `remote`
+and the line's letter; its step's lines name it.
+A device's next `state` line after a command was sent to it, within two
+minutes, names that command too.
 Setpoints are changes too; a sign-in, a preference, a search, a restore's
 plan and the requests whose own line is the server's (a backup, a restore,
 a restart, …) write none.

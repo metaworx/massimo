@@ -179,6 +179,6 @@ func (c *Client) handleNewDevice(m cube.Message) {
 	if nd == nil {
 		return
 	}
-	c.log.Info("device paired", "addr", c.Address(), "device", nd.RFAddress, "type", nd.Type, "serial", nd.Serial)
+	c.evlog.Info("device paired", "addr", c.Address(), "device", nd.RFAddress, "type", nd.Type, "serial", nd.Serial)
 	c.emit(Event{Kind: EventPaired, Device: nd.RFAddress, New: nd})
 }
