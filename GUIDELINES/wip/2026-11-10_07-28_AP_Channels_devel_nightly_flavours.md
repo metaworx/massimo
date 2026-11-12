@@ -1,4 +1,4 @@
-# AP Channels v1.1: Rolling channels and flavours
+# AP Channels v1.2: Rolling channels and flavours
 
 ## TL;DR
 
@@ -6,7 +6,8 @@ Every channel, end to end. Blocks 1 to 9, done (pull request #159),
 gave `devel` and `nightly` as rolling releases and made the channel a
 box's own setting. Blocks 10 to 16 add the rest, roadmap item 19:
 apt and Homebrew for the rolling channels, `beta`, `rc` and `stable`,
-and the channel chosen in the web UI.
+and the channel chosen in the web UI; Block 17, first, matches version
+tags strictly.
 
 - `devel` < `nightly` < `alpha` < `beta` < **`rc`** < `stable`;
   a box, suite or formula takes its channel and every more stable flavour
@@ -18,8 +19,9 @@ and the channel chosen in the web UI.
   `build.sh` assembles them
 - Homebrew `massimo-devel`, `massimo-nightly` → the tap
   `metaworx/homebrew-massimo-rolling`, its key in `signing-rolling`
-- `make release-alpha` → `make release-cut FLAVOUR=…`;
-  `release/beta`, `release/rc`, `release/stable`
+- `make release-alpha` → `make release <flavour>`, the build →
+  `make build-release`; `release/beta`, `release/rc`, `release/stable`
+- version tags → only the full shape, `v[0-9]*.[0-9]*.[0-9]*`, never `v*`
 - each channel's landing page names its own suite
 
 ### Blocks
@@ -38,10 +40,11 @@ and the channel chosen in the web UI.
 11. Rolling apt suites: the rolling apt key, both keys in the keyring
     package, each suite's index on its own release
 12. Suites and formulae that take every more stable flavour
-13. `beta`, `rc` and `stable`: the flavour `rc`, `make release-cut`
+13. `beta`, `rc` and `stable`: the flavour `rc`, `make release <flavour>`
 14. The apt helper switches the suite
 15. Rolling Homebrew formulae in their own tap
 16. Documents, each landing page's suite, the roadmap
+17. Version tags matched strictly (runs first)
 
 ## Discussion
 
@@ -130,7 +133,7 @@ The decision numbers go on from the NOTEs', which end at D32.
   so that key signs nothing an `alpha` box accepts.
   Not B, no rolling suites.
 - **D35-A:** each suite's signed index is an asset of its own release:
-  the `v*` releases carry the numbered suites', `release/devel` and
+  the version tags' releases carry the numbered suites', `release/devel` and
   `release/nightly` their own, and `build.sh` assembles them.
   No key leaves the run that signs. Not B, one index that needs both keys
   in one run.
@@ -146,11 +149,10 @@ The decision numbers go on from the NOTEs', which end at D32.
   `beta` and `stable`, with a branch `release/rc`.
   Not B, `rc` tags under the flavour `beta`: the flavour is the tag's label.
 - **D38-A:** one target taking the flavour, `make release-alpha` kept as a
-  name for it. The gate called it `make release FLAVOUR=…`;
-  `make release` is the build `build.yml` runs, so the target is
-  `make release-cut FLAVOUR=…`, with `release-alpha`, `release-beta`,
-  `release-rc` and `release-stable` as its names per flavour.
-  Not B, a target of its own per flavour.
+  name for it. Not B, a target of its own per flavour.
+  The gate called it `make release FLAVOUR=…`; `make release` was the build
+  `build.yml` runs, so v1.1 named it `make release-cut`; D42-A (v1.2)
+  gives the cut the name `make release` after all.
 - **D39-A:** `site.py` writes the channel's suite into the `Suites:` line
   of that channel's landing page; the fragment stays plain text that GitHub
   shows as it is. Not B, a placeholder the README would show raw.
@@ -186,6 +188,28 @@ The decision numbers go on from the NOTEs', which end at D32.
   so `release/beta`, `release/rc` and `release/stable` too,
   and `signing`'s tag rule `v[0-9]*.[0-9]*.[0-9]*` admits `-beta.N` and
   `-rc.N` tags.
+
+### The names of the cut, and version tags, 2026-11-12 (v1.2)
+
+Asked before v1.1 was pushed; the owner answered `PLAN+ as recommended`.
+
+- **D42-A:** `make release` cuts a release and `make build-release` is the
+  build, the rename a commit of its own before the cut;
+  `make release` with no flavour, or with the build's `VERSION` or
+  `RELEASE`, stops and names `make build-release`, so that a stale
+  "`make release` locally" fails without publishing.
+  Not B, `make release-cut` as v1.1 had it; not C, a release's time of
+  `make release` still building with a warning.
+- **D43-A:** version tags are matched by their full shape only, never by
+  `v*`, as the `signing` environment matches them, so that a tag like
+  `verification-test` never counts as a release (the owner: "we should
+  NEVER just match a tag with `v*`"). A block of its own, Block 17,
+  run before the others: it fixes the pipeline as it is, and touches the
+  Makefile lines Block 13 rewrites.
+  Not B, a pull request outside the plan.
+- **D44-A:** the flavour as a word, `make release beta`, documented first,
+  or as `FLAVOUR=beta`; a word that is no flavour, or a word and a
+  `FLAVOUR=` that differ, stop it. Not B, `FLAVOUR=` alone.
 
 ## Analysis
 
@@ -355,6 +379,8 @@ What the code does on 2026-11-12, after pull request #182:
 - **`packaging/site/build.sh`** takes one apt directory or one index.
 - **`make release` is the build of a release** (`build.yml`);
   `make release-alpha` is the only cut.
+- **Several version-tag matches are loose**, `v*` or `^v[0-9]`
+  (below, "Version tags matched strictly").
 
 ### Two apt keys, two signers
 
@@ -380,14 +406,14 @@ Each suite is signed by the one run that may:
 
 ### Each suite's index on its own release
 
-- The tag's run attaches `massimo-apt-index.tar.gz` to its `v*` release,
+- The tag's run attaches `massimo-apt-index.tar.gz` to its version tag's release,
   holding the numbered suites, as now.
 - The rolling run attaches one to `release/<flavour>`, replaced in place
   with the release's other files, holding its one suite:
   `dists/<flavour>`, the keyring package, and `pool.tsv` with the URLs
   of the debs it indexes.
-- `build.sh` assembles them: `--apt-index newest` takes the newest `v*`
-  release's index and each rolling release's; `--apt <dir>` (a tag's run)
+- `build.sh` assembles them: `--apt-index newest` takes the newest
+  version tag's index and each rolling release's; `--apt <dir>` (a tag's run)
   takes the directory and adds the rolling releases' indexes.
   Every `pool.tsv` is fetched and checked by its sums, as now.
   A rolling release without an index leaves its suite out with a warning:
@@ -419,8 +445,9 @@ A box that installs its packages through `massimo update` is not held up:
 - **`update.Flavours`** becomes `devel`, `nightly`, `alpha`, `beta`, `rc`,
   `stable`. A binary already out does not know `rc` and matches it only on
   that name; no box follows `beta` yet, so none misses an `rc`.
-- **`make release-cut FLAVOUR=alpha|beta|rc|stable`**, with
-  `make release-alpha` and its siblings as its names per flavour:
+- **`make release <flavour>`** or **`make release FLAVOUR=<flavour>`**
+  (D42-A, D44-A), the flavour one of `alpha`, `beta`, `rc`, `stable`;
+  `make release-alpha` and its siblings stay as its names per flavour:
   - `alpha`: as now, the next `-alpha.N`, `BUMP=minor` for the next minor;
   - `beta`, `rc`: the next `-beta.N`, `-rc.N` of the minor of the newest
     numbered release;
@@ -430,6 +457,23 @@ A box that installs its packages through `massimo update` is not held up:
   The checks of `release-alpha` (clean `main` equal to `origin/main`,
   not yet released, `changelog.sh check`) stay, as do `DRY=1` and the
   atomic push.
+- **The build becomes `make build-release`** (D42-A): `build.yml`, the
+  build record's `command:` line (`packaging/build-record.sh`),
+  `README.md`, `GUIDELINES/project/CI.md` and the comments that name it.
+  A tag's run uses its own `build.yml`, so an older tag still builds.
+- **The swap is guarded:** today `make release` only builds into `dist/`;
+  after it, it cuts a release, a `v` tag that the ruleset keeps forever.
+  The open plans ParallelBuild and BuildRecord still say
+  "`make release` locally". So `make release` stops, naming
+  `make build-release`, when it is given no flavour, or the build's
+  `VERSION` or `RELEASE`.
+- **The flavour comes from the command line alone:** `FLAVOUR` has a
+  default, the build's flavour (`devel` on an untagged `main`), so the cut
+  accepts it only where `$(origin FLAVOUR)` is `command line`.
+  `make release beta` reads the word after `release` from
+  `MAKECMDGOALS` and makes it a target that does nothing, only where
+  `release` is the first goal. A word that is not a flavour, or a word and a
+  `FLAVOUR=` that differ, stop it.
 - **`sign` already pushes `release/<flavour>`** for the tag's flavour,
   so `release/beta`, `release/rc` and `release/stable` follow without a
   change there; the ruleset covers them.
@@ -485,6 +529,42 @@ D39-A: it puts the channel's suite into the page's `Suites:` line, and for
 `devel` and `nightly` the rolling file into `Signed-By:`; the root keeps
 the most stable channel's. `README.md` and the fragment stay on `alpha`.
 
+### Version tags matched strictly
+
+The shape, in each syntax:
+
+| Where | Pattern |
+|---|---|
+| a glob: `git describe --match`, `git tag --list`, a shell `case`, an environment's or a ruleset's rule | `v[0-9]*.[0-9]*.[0-9]*` |
+| a regular expression: jq `test`, Go, `sed`, `grep -E` | `^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$` |
+| a workflow's `on.push.tags` | `v[0-9]+.[0-9]+.[0-9]+` and `v[0-9]+.[0-9]+.[0-9]+-*` |
+| prose | "version tags", with the pattern where it matters |
+
+Strict already: `ci.yml`'s trigger, the `signing` environment's rule and
+`github-pages`'. Loose, on 2026-11-12:
+
+- **the ruleset "v* tags: never moved or deleted"**, `refs/tags/v*`:
+  a `verification-test` tag could never be deleted. The owner's step,
+  to `refs/tags/v[0-9]*.[0-9]*.[0-9]*`, renamed "Version tags: never moved
+  or deleted";
+- **`git describe --match 'v[0-9]*'`**: the Makefile's `VERSION`,
+  `FLAVOUR` and `release-alpha`, `build.yml`'s `meta` (twice),
+  `packaging/site/build.sh`; and `git tag --list 'v[0-9]*'` in `build.yml`;
+- **`case push:refs/tags/v*)`** in `build.yml`'s `meta`;
+- **jq `test("^v[0-9]")`**: `packaging/site/build.sh` (the newest release
+  with an index) and `packaging/apt/publish.sh` (the releases of the pool);
+- **the label's regular expression `^v[0-9][0-9.]*-…`**: the Makefile,
+  `build.yml`, `release.yml`, `publish.sh`, `packaging/homebrew/render.sh`
+  and `labelRe` in `internal/update`, which takes `v1..2-alpha.1`;
+- **prose**: `packaging/README.md` ("add a rule for the tags `v*`", the
+  `signing` environment, the rulesets), the comments of `release.yml`,
+  `publish.yml`, `build.yml` and `site.yml`, `GUIDELINES/project/CI.md`.
+
+**The one exception is a fetch refspec:** git allows a single `*` and no
+character class there, so `make release-alpha`'s
+`refs/tags/v*:refs/tags/v*` cannot be narrowed. It only fetches; every
+step after it matches strictly, and its comment says so.
+
 ### Tests for Blocks 10 to 16
 
 - `make ui-test`: the selector, at 1100 and 390 px, light and dark;
@@ -499,8 +579,13 @@ the most stable channel's. `README.md` and the fragment stay on `alpha`.
 - `cmd/massimo`: the apt helper's switch (a source it wrote, one it did not,
   a failed `apt-get update` putting the old file back, an unknown channel);
   `AptSuite` read again at each check.
-- `make release-cut FLAVOUR=… DRY=1` for each flavour against a copy
-  of the tags.
+- `make release <flavour> DRY=1` and `make release FLAVOUR=<flavour> DRY=1`
+  for each flavour against a copy of the tags; `make release` alone, with
+  `VERSION=`, with an unknown word, and with a word and a `FLAVOUR=` that
+  differ, each stopping; `make build-release` building as before.
+- Block 17: a tag `verification-test` and a `v1.2` beside the real ones,
+  in `packaging/apt/test.sh` and the Makefile's checks, matched by none;
+  Go's `labelRe` and `plainRe` refusing `v1..2-alpha.1`.
 - `packaging/homebrew/render.sh` for a rolling build, and brew's ordering of
   its version, where brew is at hand (the Mac, on the owner's word).
 
@@ -640,7 +725,8 @@ of each, `make ui-test` where `internal/server/ui/` changes and
 `make apt-test` where `packaging/apt/` or `packaging/site/` does.
 Each commit cites `AP Channels v1.1, Block <n>` and carries its
 `CHANGELOG.d/` fragment. A branch per pull request, the owner merging:
-Block 10 first, since it needs no key; then 11 and 12; 13; 14; 15 and 16.
+Block 17 first (v1.2), then Block 10, since it needs no key; then 11 and
+12; 13; 14; 15 and 16.
 Block 14 needs 11 and 13, so that every suite it may switch to exists.
 Nothing goes to a real box without the owner's word;
 the checks on GitHub follow each merge.
@@ -699,13 +785,20 @@ site's `dists/devel/InRelease` verifies with the rolling key.
 
 1. `internal/update`: `rc` in `Flavours`; the tests of the rank;
    `mkmanifest`.
-2. `Makefile`: `release-cut` with `FLAVOUR` and `BUMP` as in the Analysis;
-   `release-alpha`, `release-beta`, `release-rc`, `release-stable` as its
-   names.
-3. `README.md`, "Versions"; `GUIDELINES/project/CI.md`, the releases;
-   the `CHANGELOG.d/Added/` fragment.
+2. A commit of its own first: `make release` → `make build-release`,
+   with `build.yml`, `packaging/build-record.sh`, `README.md`,
+   `GUIDELINES/project/CI.md` and the comments; `make release` stops,
+   naming `make build-release`. The `CHANGELOG.d/Changed/` fragment.
+3. `Makefile`: `release` cuts, with the flavour as a word or as
+   `FLAVOUR=` and `BUMP`, as in the Analysis; `release-alpha`,
+   `release-beta`, `release-rc`, `release-stable` as its names.
+4. `README.md`, "Versions"; `GUIDELINES/project/CI.md`, the releases;
+   the contract's Project Facts, "Version manifest"
+   (`GUIDELINES/project/_CONTRACT.md`, then `sync-docs.sh` from the main
+   checkout); the `CHANGELOG.d/Added/` fragment.
 
-**Verification:** the test gate; `make release-cut FLAVOUR=<each> DRY=1`.
+**Verification:** the test gate; the checks of the Analysis' Tests for
+`make release` and `make build-release`.
 
 ### Block 14: The apt helper switches the suite
 
@@ -747,20 +840,38 @@ tap. On the Mac, on the owner's word: `brew install` from it and
 **Verification:** `make site`, the links checked; the guidelines'
 `tools/check`.
 
+### Block 17: Version tags matched strictly (v1.2)
+
+1. Every loose match of the Analysis, "Version tags matched strictly",
+   to the shape of its syntax: the Makefile, `build.yml`, `release.yml`,
+   `packaging/site/build.sh`, `packaging/apt/publish.sh`,
+   `packaging/homebrew/render.sh`, `internal/update`'s `labelRe` with its
+   tests; the fetch refspec's comment.
+2. The prose: `packaging/README.md`, the workflows' comments,
+   `GUIDELINES/project/CI.md`.
+3. `packaging/apt/test.sh` and the Makefile's checks against a
+   `verification-test` and a `v1.2` tag; the `CHANGELOG.d/Fixed/` fragment.
+4. The owner's step, the ruleset, in the gate before the merge:
+   `refs/tags/v[0-9]*.[0-9]*.[0-9]*`.
+
+**Verification:** the test gate; `make apt-test`; a search for `v\*` and
+`\^v\[0-9\]` over the tree finding the refspec alone.
+
 ## Proposed commit message
 
-The revision, a commit of its own on `main` before the first project
-write of Blocks 10 to 16:
+The revision, a commit of its own on `main` after v1.1's
+("chore(aps): +Channels v1.1", committed and not pushed),
+both before the first project write of Blocks 10 to 17:
 
 ```
-chore(aps): +Channels v1.1
+chore(aps): +Channels v1.2
 
-The owner asked for roadmap item 19 to be planned as part of AP Channels: apt suites and Homebrew formulae for devel and nightly, beta, rc and stable releases, suites and formulae that take every more stable flavour, and the channel chosen in the web UI.
+The owner asked for the cut to be make release, the build make build-release, and for version tags never to be matched by a loose v*.
 
 Key changes:
-- GUIDELINES/wip/2026-11-10_07-28_AP_Channels_devel_nightly_flavours.md: Blocks 10 to 16; D33 to D41 as recommended, D36 one rolling tap with one key and D38 named release-cut; what item 19 had already and the owner's steps of 2026-11-12; the TL;DR for the plan as it stands
+- GUIDELINES/wip/2026-11-10_07-28_AP_Channels_devel_nightly_flavours.md: D42 to D44 as recommended; Block 13 with the rename and the guarded make release <flavour>; Block 17, version tags matched strictly, run first
 
-File-revision-v1: GUIDELINES/wip/2026-11-10_07-28_AP_Channels_devel_nightly_flavours.md::v1.1::2026-11-12::TL;DR, Discussion, Analysis, Blocks 10 to 16::roadmap item 19, by PLAN++
+File-revision-v1: GUIDELINES/wip/2026-11-10_07-28_AP_Channels_devel_nightly_flavours.md::v1.2::2026-11-12::TL;DR, Discussion, Analysis, Blocks 13 and 17::the cut's name and strict version tags, by PLAN+
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
@@ -780,10 +891,12 @@ being the release role's) and as proposed for Blocks 10 to 16:
 10. `feat(ui): The update channel is chosen under System settings, Software`
 11. `feat(apt): The rolling builds have apt suites of their own, with their own key`
 12. `feat(apt): A suite and a formula take every more stable flavour`
-13. `feat(pipeline): beta, rc and stable are cut as alpha is`
+13. `build(make): make build-release builds a release`, then
+    `feat(pipeline): beta, rc and stable are cut as alpha is, by make release <flavour>`
 14. `feat(update): The apt helper switches the suite to the chosen channel`
 15. `feat(homebrew): The rolling builds have formulae of their own`
 16. `feat(site): Each channel's landing page names its suite`
+17. `fix(pipeline): Only a full version tag counts as a release`
 
 ## Change History
 
@@ -794,3 +907,7 @@ being the release role's) and as proposed for Blocks 10 to 16:
   `PLAN++ as recommended`; D33 to D41 (asked as D1 to D9 by the
   "Website build strategy" session), D36-A as revised for the two rolling
   flavours, D38-A named `release-cut` since `make release` is the build.
+- v1.2 (2026-11-12): the owner's `PLAN+ as recommended`, before v1.1 was
+  pushed: D42-A, `make release` the cut and `make build-release` the
+  build; D43-A, Block 17, version tags matched by their full shape only;
+  D44-A, the flavour as a word or as `FLAVOUR=`.
