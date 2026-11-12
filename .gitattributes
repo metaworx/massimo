@@ -22,3 +22,9 @@ internal/protocol/cube/testdata/cube-fw0113-greeting.txt -text
 # Images: the screenshot set under docs/screenshots/ and its slideshow.
 *.png                         binary
 *.gif                         binary
+
+# The changelog merges by section with changelog.sh merge-driver
+# (GUIDELINES/shared/COMMIT.md 5.5), registered in each clone by the
+# guidelines' install.sh or changelog.sh install-merge-driver; a clone
+# without it merges the file as text.
+/CHANGELOG.md                 merge=keepachangelog
