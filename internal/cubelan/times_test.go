@@ -55,15 +55,15 @@ func TestStateTimes(t *testing.T) {
 		t.Fatalf("repeated entry %+v", tm)
 	}
 	// The valve moves and the temperature is not reported: only the
-	// valve is new, the measured temperature disappears.
+	// valve is new; the measured temperature stays, with its time.
 	t3 := t2.Add(time.Hour)
 	s.Apply(entry(21, 50, 0), t3)
 	tm, _ = s.Times(0x0a010d)
 	if tm.Changed != t3 || tm.Fields["valve_pct"] != t3 || tm.Fields["setpoint"] != t1 || tm.Fields["mode"] != t1 {
 		t.Fatalf("valve change %+v", tm)
 	}
-	if _, ok := tm.Fields["actual_temp"]; ok {
-		t.Fatal("actual_temp kept although the entry has none")
+	if st, _ := s.State(0x0a010d); st.ActualTemp == nil || *st.ActualTemp != 20.5 || tm.Fields["actual_temp"] != t1 {
+		t.Fatalf("the last temperature is not kept: %+v at %v", st.ActualTemp, tm.Fields["actual_temp"])
 	}
 	// A reconnect keeps the times of unchanged values.
 	s.beginGreeting()
@@ -135,5 +135,52 @@ func TestFirstDeviceListCarriesObservedSince(t *testing.T) {
 	s.Apply(entry(21, 50, 205), t1)
 	if tm, _ := s.Times(0x0a010d); tm.Changed != t1 || tm.Fields["valve_pct"] != t1 || tm.Fields["setpoint"] != t0 {
 		t.Fatalf("later device list %+v", tm)
+	}
+}
+
+// A thermostat keeps its last measured temperature and its time while its
+// entries report none, on vacation too, until a new one comes; a device
+// forgotten forgets it.
+func TestLastTemperatureKept(t *testing.T) {
+	t0 := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
+	s := newSnapshot()
+	lines, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range lines {
+		s.Apply(m, t0)
+	}
+	actual := func() (*float64, time.Time) {
+		st, _ := s.State(0x0a010d)
+		tm, _ := s.Times(0x0a010d)
+		return st.ActualTemp, tm.Fields["actual_temp"]
+	}
+	t1 := t0.Add(time.Hour)
+	s.Apply(entry(21, 30, 0), t1)
+	if v, _ := actual(); v != nil {
+		t.Fatalf("a temperature before any was reported: %v", *v)
+	}
+	t2 := t1.Add(time.Hour)
+	s.Apply(entry(21, 30, 198), t2)
+	// Vacation: the bytes carry the end date, 2027-01-06 10:00.
+	vac := []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x02, 30, 30, 0x06, 0x1b, 20}
+	s.Apply(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(vac)}, t2.Add(time.Hour))
+	st, _ := s.State(0x0a010d)
+	if v, at := actual(); v == nil || *v != 19.8 || at != t2 || st.Mode != cube.ModeVacation || st.Until == nil {
+		t.Fatalf("on vacation: %v at %v, %+v", v, at, st)
+	}
+	t4 := t2.Add(3 * time.Hour)
+	s.Apply(entry(21, 30, 211), t4)
+	if v, at := actual(); v == nil || *v != 21.1 || at != t4 {
+		t.Fatalf("a new value: %v at %v", v, at)
+	}
+	s.Apply(entry(21, 40, 0), t4.Add(time.Hour))
+	if v, at := actual(); v == nil || *v != 21.1 || at != t4 {
+		t.Fatalf("kept after the new value: %v at %v", v, at)
+	}
+	s.Forget(0x0a010d)
+	if _, ok := s.lastTemp[0x0a010d]; ok {
+		t.Fatal("a forgotten device's temperature is kept")
 	}
 }

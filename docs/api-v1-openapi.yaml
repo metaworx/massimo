@@ -3481,7 +3481,7 @@ components:
         mode: {$ref: "#/components/schemas/Mode"}
         setpoint: {type: number}
         until: {type: string, description: "Vacation end, YYYY-MM-DD HH:MM"}
-        actual_temp: {type: number}
+        actual_temp: {type: number, description: "The last measured temperature the device reported, kept while its entries carry none; received.actual_temp says when it appeared"}
         valve_pct: {type: integer}
         window_open: {type: boolean}
         battery_low: {type: boolean}

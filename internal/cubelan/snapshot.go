@@ -21,6 +21,9 @@ type Snapshot struct {
 	configs  map[cube.RFAddress]*cube.DeviceConfig
 	states   map[cube.RFAddress]cube.DeviceState
 	times    map[cube.RFAddress]*StateTimes
+	// lastTemp is each thermostat's last measured temperature and when it
+	// appeared, kept while its entries report none (keptTemp).
+	lastTemp map[cube.RFAddress]keptTemp
 	since    time.Time        // first message from the Cube
 	listed   bool             // an L line has been applied
 	order    []cube.RFAddress // devices in the order the Cube first reported them
@@ -42,9 +45,10 @@ type Snapshot struct {
 
 func newSnapshot() *Snapshot {
 	return &Snapshot{
-		configs: map[cube.RFAddress]*cube.DeviceConfig{},
-		states:  map[cube.RFAddress]cube.DeviceState{},
-		times:   map[cube.RFAddress]*StateTimes{},
+		configs:  map[cube.RFAddress]*cube.DeviceConfig{},
+		states:   map[cube.RFAddress]cube.DeviceState{},
+		times:    map[cube.RFAddress]*StateTimes{},
+		lastTemp: map[cube.RFAddress]keptTemp{},
 	}
 }
 
@@ -166,6 +170,7 @@ func (s *Snapshot) endGreetingLocked(listed map[cube.RFAddress]bool) {
 		if !listed[rf] {
 			delete(s.states, rf)
 			delete(s.times, rf)
+			delete(s.lastTemp, rf)
 		}
 	}
 	kept := s.order[:0]
@@ -251,7 +256,9 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 			listed[st.RFAddress] = true
 			s.noteLocked(st.RFAddress)
 			old, had := s.states[st.RFAddress]
+			kept := s.keepTempLocked(&st)
 			s.noteTimesLocked(old, had, st, at)
+			s.noteTempLocked(st, kept)
 			if !had || !sameState(old, st) {
 				evs = append(evs, Event{Kind: EventState, Device: st.RFAddress})
 			}
@@ -434,6 +441,7 @@ func (s *Snapshot) Forget(rf cube.RFAddress) (Gone, bool) {
 	delete(s.configs, rf)
 	delete(s.states, rf)
 	delete(s.times, rf)
+	delete(s.lastTemp, rf)
 	if s.fresh != nil {
 		delete(s.fresh, rf)
 	}

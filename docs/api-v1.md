@@ -1354,7 +1354,8 @@ and `state` is then absent.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
 Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
-`actual_temp` when the device reported one,
+`actual_temp` once the device reported one (the last it reported, kept while
+its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
 `error` is the Cube's transmit error flag,
@@ -1386,7 +1387,9 @@ Values that were already there when the server first connected carry that time,
 the Cube's `observed_since`, and may be older;
 a reconnect keeps the times of values that did not change.
 Radiator thermostats report the measured temperature only now and then
-(after the valve moved), which is what `received.actual_temp` is for.
+(after the valve moved), and not at all on vacation, when those bytes carry the end:
+the server keeps the last one until a new one comes,
+and `received.actual_temp` says how old it is.
 `stale` is a hint: a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.

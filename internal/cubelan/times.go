@@ -115,3 +115,42 @@ func (s *Snapshot) Since() time.Time {
 	defer s.mu.RUnlock()
 	return s.since
 }
+
+// keptTemp is a thermostat's last measured temperature and when it
+// appeared.
+type keptTemp struct {
+	value float64
+	at    time.Time
+}
+
+// keepTempLocked gives a thermostat's entry that reports no measured
+// temperature its last one, and reports whether it did. A radiator
+// thermostat sends its temperature only now and then, and its entry
+// carries 0 in between; on vacation those bytes hold the end date. The
+// last value stays, with the time it appeared, until a new one comes:
+// its age says how old it is.
+func (s *Snapshot) keepTempLocked(st *cube.DeviceState) bool {
+	if !st.Valid || st.ActualTemp != nil || !st.Type.IsThermostat() {
+		return false
+	}
+	k, ok := s.lastTemp[st.RFAddress]
+	if !ok {
+		return false
+	}
+	v := k.value
+	st.ActualTemp = &v
+	return true
+}
+
+// noteTempLocked records a thermostat's measured temperature after its
+// times were noted: a kept one keeps the time it first appeared, a
+// reported one becomes the one to keep.
+func (s *Snapshot) noteTempLocked(st cube.DeviceState, kept bool) {
+	t := s.times[st.RFAddress]
+	switch {
+	case kept && t != nil:
+		t.Fields["actual_temp"] = s.lastTemp[st.RFAddress].at
+	case st.ActualTemp != nil && t != nil:
+		s.lastTemp[st.RFAddress] = keptTemp{value: *st.ActualTemp, at: t.Fields["actual_temp"]}
+	}
+}
