@@ -1010,6 +1010,12 @@ With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user
 without it, the first owner is created with `user add <name> -role owner`
 or with the form the web UI offers on the local network while there are no users.
 
+Users may also sign in through an OpenID Connect provider beside their password,
+such as Nextcloud, Google or Microsoft:
+the owner adds the provider in System settings → Sign-in providers
+and assigns users their e-mail in System settings → Users;
+what to register at the provider is in docs/oidc.md.
+
 Every variable has a per-Cube form with the serial in it,
 `MASSIMO_CUBE_<SERIAL>_KEY` for `MASSIMO_CUBE_KEY`, which wins for that Cube;
 the plain form applies to any Cube unless the table says otherwise.
