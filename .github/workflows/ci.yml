@@ -419,7 +419,7 @@ jobs:
           GOOS=${{ matrix.goos }} "$(go env GOPATH)/bin/govulncheck" ./...
 
   # The Debian package (packaging/README.md, "Debian package"): built for
-  # the three architectures as `make release` builds it, then the amd64
+  # the three architectures as `make build-release` builds it, then the amd64
   # one installed, checked and purged in a Debian container
   # (packaging/deb/test.sh), on trixie and on bookworm, which the
   # Raspberry Pi OS Legacy images run, and installed again from an apt

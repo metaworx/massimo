@@ -18,7 +18,9 @@ name: Release
 # `rolling` does the same for a rolling build, devel or nightly, with the
 # rolling key, through the signing-rolling environment, which main may
 # use, and whose key boxes accept for the rolling flavours alone, as the
-# one release release/<flavour>, replaced in place. `homebrew` then pushes
+# one release release/<flavour>, replaced in place, and then signs the
+# flavour's apt suite with the rolling apt key, attaching its index to
+# that release. `homebrew` then pushes
 # the formula to the tap (publish.yml) with the tap's key, and
 # `apt-build` holds the apt repository's key, both through the signing
 # environment too, and rebuilds the repository from the releases
@@ -27,7 +29,8 @@ name: Release
 # three of them run (D57-A, 2026-11-11); `site`
 # (site.yml) builds the site around it, with the docs of every channel,
 # and puts it on GitHub Pages, also for a run that releases nothing, from
-# the newest release's signed index. The tag's message is the release's
+# the newest release's signed index, with each rolling release's index
+# beside it. The tag's message is the release's
 # CHANGELOG.md section, which is also the GitHub release's notes; the
 # tag message's channel: line no longer counts.
 on:
@@ -209,6 +212,7 @@ jobs:
       RELEASE: ${{ inputs.release }}
       VERSION: ${{ inputs.version }}
       SHA: ${{ inputs.sha }}
+      HAS_APT_KEY: ${{ secrets.MASSIMO_ROLLING_APT_KEY != '' }}
     steps:
       # The public key, CHANGELOG.md and changelog.sh for the notes, and
       # the history for the ancestry; nothing from here is built.
@@ -335,13 +339,50 @@ jobs:
             gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE}" -f sha="$SHA" -F force=true >/dev/null
           fi
           gh release edit "$RELEASE" --target "$SHA" --title "$title" --notes-file "$RUNNER_TEMP/notes.md" --prerelease --latest=false
-          keep="$(for f in "${files[@]}"; do basename "$f"; done)"
+          # The apt index stays until the next step replaces it.
+          keep="$(for f in "${files[@]}" massimo-apt-index.tar.gz; do basename "$f"; done)"
           gh release view "$RELEASE" --json assets --jq '.assets[].name' | while read -r name; do
             if ! printf '%s\n' "$keep" | grep -qxF "$name"; then
               gh release delete-asset "$RELEASE" "$name" --yes
             fi
           done
           echo "${RELEASE} moved from ${cur} to ${SHA}"
+
+      # The rolling suite of the apt repository (packaging/README.md, "The
+      # apt repository"): the build's packages as the release now has them,
+      # signed with the rolling apt key, which only this environment holds
+      # and boxes accept for the rolling suites alone; its index replaces
+      # the release's, and the site assembles it beside the numbered
+      # suites. Skipped without the key; the site then has no suite of
+      # this flavour. nfpm, for the keyring package, through go run at the
+      # Makefile's version; no cache in a job that holds the key.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: env.HAS_APT_KEY == 'true'
+        with:
+          go-version: '1.26'
+          check-latest: true
+          cache: false
+
+      - name: Build the rolling apt suite and attach its index
+        if: env.HAS_APT_KEY == 'true'
+        env:
+          APT_KEY: ${{ secrets.MASSIMO_ROLLING_APT_KEY }}
+          APT_KEY_PASSPHRASE: ${{ secrets.MASSIMO_ROLLING_APT_KEY_PASSPHRASE }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
+          printf '%s\n' "$APT_KEY" | gpg --batch --quiet --import
+          key="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')"
+          command -v apt-ftparchive >/dev/null || sudo apt-get -qq install -y apt-utils
+          packaging/apt/publish.sh --out "$RUNNER_TEMP/apt-site" --key "$key" --rolling "$FLAVOUR" \
+            --index-asset "$RUNNER_TEMP/massimo-apt-index.tar.gz"
+          gh release upload "$RELEASE" --clobber "$RUNNER_TEMP/massimo-apt-index.tar.gz"
+
+      - name: No rolling apt key
+        if: env.HAS_APT_KEY != 'true'
+        run: echo "::warning::MASSIMO_ROLLING_APT_KEY is not set in signing-rolling; the site has no apt suite ${FLAVOUR}."
 
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the

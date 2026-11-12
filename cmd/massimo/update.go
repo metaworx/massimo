@@ -74,7 +74,7 @@ func storedUpdateChannel() string {
 func runUpdate(args []string) (err error) {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	check := fs.Bool("check", false, "only show whether a newer release is out")
-	ch := fs.String("channel", "", "update channel: devel, nightly, alpha, beta or stable, which takes its own and every more stable flavour's releases (default MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the build's flavour)")
+	ch := fs.String("channel", "", "update channel: devel, nightly, alpha, beta, rc or stable, which takes its own and every more stable flavour's releases (default MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the build's flavour)")
 	want := fs.String("version", "", "install this release tag instead of the newest, even an older one")
 	rollback := fs.Bool("rollback", false, "go back to the binary before the last update (again: forward)")
 	binary := fs.String("binary", "", "the binary to replace (default: this one)")

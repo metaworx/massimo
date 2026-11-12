@@ -94,7 +94,7 @@ func RollingKey() ed25519.PublicKey {
 
 // Flavours are what a build is released as, from the least stable to the
 // most: a box following one takes it and every one after it (Accepts).
-var Flavours = []string{"devel", "nightly", "alpha", "beta", "stable"}
+var Flavours = []string{"devel", "nightly", "alpha", "beta", "rc", "stable"}
 
 // RollingPrefix begins the tag of a rolling build's GitHub release, the
 // flavour after it: release/devel. The release branches share it

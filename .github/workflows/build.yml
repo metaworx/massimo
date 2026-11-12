@@ -215,7 +215,7 @@ jobs:
       # record, massimo-build.txt, holds this step's log; SHA256SUMS and
       # the manifest list it (packaging/build-record.sh).
       - name: Build every binary and package, the build record, SHA256SUMS and the manifest
-        run: make release VERSION="${{ needs.meta.outputs.version }}" FLAVOUR="${{ needs.meta.outputs.flavour }}" RELEASE="${{ needs.meta.outputs.release }}"
+        run: make build-release VERSION="${{ needs.meta.outputs.version }}" FLAVOUR="${{ needs.meta.outputs.flavour }}" RELEASE="${{ needs.meta.outputs.release }}"
 
       # GitHub's build provenance of every file the release publishes but
       # the manifest's signature, which the signing job makes: the binaries,

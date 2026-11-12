@@ -20,7 +20,7 @@ OUT      = dist
 # Cross builds are static (no cgo) and do not record the build machine's paths.
 CROSS    = CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
-# Every release binary, as `make release` builds them and
+# Every release binary, as `make build-release` builds them and
 # internal/update.AssetName names them.
 BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-linux-armv6 \
            massimo-darwin-amd64 massimo-darwin-arm64 massimo-windows-amd64.exe
@@ -50,69 +50,104 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site release release-files clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
-# the release's flavour (internal/update): -alpha.N is alpha, and a beta
-# would tag -beta.N. Versions: below v1.0.0, and with any suffix, a
-# release is a pre-release; below v1.0.0 a minor may break things. A new
-# feature or breaking change starts the next minor (make release-alpha
-# BUMP=minor: v0.2.0-alpha.1), a fix or iteration counts the suffix up
-# (v0.2.0-alpha.2).
-# release-alpha runs on main, checked out, clean and equal to origin/main.
-# It fetches main and the version tags alone: CI moves the rolling tags
-# (release/devel, release/nightly) in place, and fetch --tags refuses to
-# move a checkout's older copy of one ("would clobber existing tag").
-# changelog.sh cuts CHANGELOG.md's [Unreleased] into the release's section,
-# makes the chore(release) commit on main and the signed tag at it with that
-# section as its message; main and the tag are then pushed atomically, all
-# or nothing, and CI tests the tag and releases it (ci.yml calling
-# release.yml), which then fast-forwards the branch release/alpha to it.
-# It refuses when main's head is released already, when changelog.sh
-# check finds something and when [Unreleased] holds no bullet. DRY=1 runs
-# every step as a dry run: changelog.sh says what it would cut and tag, and
-# the push is printed, not made. ASSISTED_BY=agent:model gives the release
-# commit an agent's Assisted-by trailer (COMMIT.md 3.3); the owner's own
-# release needs none.
+# the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
+# -rc.N rc, and a tag without one stable. Versions: below v1.0.0, and with
+# any suffix, a release is a pre-release; below v1.0.0 a minor may break
+# things. A new feature or breaking change starts the next minor (BUMP=minor:
+# v0.2.0-alpha.1), a fix or iteration counts the suffix up (v0.2.0-alpha.2),
+# and a fix of a stable release is the next patch (BUMP=patch).
+#
+# make release <flavour>, or make release FLAVOUR=<flavour>, cuts one: the
+# flavour alpha, beta, rc or stable, from the command line alone, since
+# FLAVOUR has the build's as its default; make release-alpha and its
+# siblings are names for it. The next tag is packaging/next-version.sh's:
+# the newest version any version tag has, or BUMP's next of it, with the
+# flavour's next number, or the version itself for stable. It runs on main,
+# checked out, clean and equal to origin/main. It fetches main and the
+# version tags alone: CI moves the rolling tags (release/devel,
+# release/nightly) in place, and fetch --tags refuses to move a checkout's
+# older copy of one ("would clobber existing tag"); a refspec allows one *
+# and no class, so the fetch takes refs/tags/v*, and every match after it
+# is strict. changelog.sh cuts CHANGELOG.md's [Unreleased] into the
+# release's section, makes the chore(release) commit on main and the signed
+# tag at it with that section as its message; main and the tag are then
+# pushed atomically, all or nothing, and CI tests the tag and releases it
+# (ci.yml calling release.yml), which then fast-forwards the branch
+# release/<flavour> to it. It refuses when main's head is released already,
+# when changelog.sh check finds something and when [Unreleased] holds no
+# bullet. DRY=1 runs every step as a dry run: changelog.sh says what it
+# would cut and tag, and the push is printed, not made.
+# ASSISTED_BY=agent:model gives the release commit an agent's Assisted-by
+# trailer (COMMIT.md 3.3); the owner's own release needs none.
+# make release was the build until 2026-11-12 (AP Channels, D42-A): with no
+# flavour, or with the build's VERSION or RELEASE, it stops and names
+# make build-release, so that a "make release" from before publishes
+# nothing.
 CHANGELOG_SH = GUIDELINES/shared/tools/changelog.sh
-# The fetch takes refs/tags/v*: a refspec allows one * and no class, so it
-# cannot name the version tags' shape; every match after it does.
-release-alpha:
-	@git fetch --quiet origin main 'refs/tags/v*:refs/tags/v*' || { \
-		echo "release-alpha: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
+CUT_FLAVOURS = alpha beta rc stable
+ifeq ($(firstword $(MAKECMDGOALS)),release)
+CUT_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+ifneq ($(filter $(CUT_FLAVOURS),$(CUT_WORDS)),)
+# make release beta: the word is a goal of its own, which does nothing;
+# release reads it.
+$(filter $(CUT_FLAVOURS),$(CUT_WORDS)):
+	@:
+endif
+endif
+release:
+	@if [ -n "$(filter command line,$(origin VERSION) $(origin RELEASE))" ]; then \
+		echo "release: VERSION and RELEASE are the build's; the build of a release is make build-release" >&2; exit 2; fi; \
+	words='$(CUT_WORDS)'; flag='$(if $(filter command line,$(origin FLAVOUR)),$(FLAVOUR))'; \
+	set -- $$words; \
+	if [ $$# -gt 1 ]; then echo "release: one flavour, not $$words" >&2; exit 2; fi; \
+	word=$${1:-}; \
+	if [ -n "$$word" ] && [ -n "$$flag" ] && [ "$$word" != "$$flag" ]; then \
+		echo "release: $$word or FLAVOUR=$$flag, not both" >&2; exit 2; fi; \
+	flavour=$${word:-$$flag}; \
+	case "$$flavour" in \
+		alpha | beta | rc | stable) ;; \
+		"") echo "release: make release <alpha|beta|rc|stable> cuts a release; the build of a release is make build-release" >&2; exit 2 ;; \
+		*) echo "release: $$flavour is not a flavour a release is cut as: alpha, beta, rc or stable" >&2; exit 2 ;; \
+	esac; \
+	git fetch --quiet origin main 'refs/tags/v*:refs/tags/v*' || { \
+		echo "release: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
 	sha=$$(git rev-parse origin/main) && \
 	if [ "$$(git symbolic-ref --quiet --short HEAD)" != main ]; then \
-		echo "release-alpha: check out main first; the release commit is made on it" >&2; exit 1; fi; \
+		echo "release: check out main first; the release commit is made on it" >&2; exit 1; fi; \
 	if [ -n "$$(git status --porcelain --untracked-files=no)" ]; then \
-		echo "release-alpha: main has uncommitted changes" >&2; exit 1; fi; \
+		echo "release: main has uncommitted changes" >&2; exit 1; fi; \
 	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
-		echo "release-alpha: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
+		echo "release: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
 	if done=$$(git describe --tags --exact-match --match 'v[0-9]*.[0-9]*.[0-9]*' $$sha 2>/dev/null); then \
-		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
-	last=$$(git tag -l 'v0.[0-9]*.[0-9]*-alpha.[0-9]*' | awk -F'[.-]' '{print $$2, $$NF, $$0}' | sort -k1,1n -k2,2n | tail -1); \
-	minor=$${last%% *}; n=$$(echo "$$last" | cut -d' ' -f2); \
-	case "$(BUMP)" in \
-		minor) next=v0.$$((minor+1)).0-alpha.1 ;; \
-		"") next=v0.$$minor.0-alpha.$$((n+1)) ;; \
-		*) echo "release-alpha: BUMP is minor or empty" >&2; exit 1 ;; \
-	esac; \
+		echo "release: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
+	next=$$(git tag -l | packaging/next-version.sh $$flavour $(BUMP)) || exit 1; \
 	cut="cut $${next#v} --commit --tag create$(if $(ASSISTED_BY), --assisted-by $(ASSISTED_BY))"; \
 	$(CHANGELOG_SH) -q check || { \
-		echo "release-alpha: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
+		echo "release: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
 	if [ -n "$(DRY)" ]; then \
 		$(CHANGELOG_SH) $$cut || exit 1; \
-		echo "release-alpha: would run: git push --atomic origin main refs/tags/$$next"; \
+		echo "release: would run: git push --atomic origin main refs/tags/$$next"; \
 		exit 0; fi; \
 	$(CHANGELOG_SH) -q $$cut || { \
-		echo "release-alpha: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
+		echo "release: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
 	$(CHANGELOG_SH) $$cut --force || { \
-		echo "release-alpha: the cut stopped half-way; nothing pushed, see git status and git log -1" >&2; exit 1; }; \
+		echo "release: the cut stopped half-way; nothing pushed, see git status and git log -1" >&2; exit 1; }; \
 	rel=$$(git rev-parse HEAD) && \
 	if [ "$$(git rev-parse $$rel^)" != "$$sha" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
-		echo "release-alpha: the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
+		echo "release: the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
 	git push --atomic origin main refs/tags/$$next || { \
-		echo "release-alpha: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
-	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/alpha: https://github.com/metaworx/massimo/actions"
+		echo "release: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
+	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/$$flavour: https://github.com/metaworx/massimo/actions"
+
+# make release-alpha, make release-beta, make release-rc and
+# make release-stable: make release with that flavour.
+release-alpha release-beta release-rc release-stable:
+	@f='$(@:release-%=%)'; flag='$(if $(filter command line,$(origin FLAVOUR)),$(FLAVOUR))'; \
+	if [ -n "$$flag" ] && [ "$$flag" != "$$f" ]; then echo "release: $$f or FLAVOUR=$$flag, not both" >&2; exit 2; fi; \
+	$(MAKE) --no-print-directory release FLAVOUR=$$f
 
 all: test build
 
@@ -264,7 +299,7 @@ site:
 	rm -rf $(OUT)/site
 	packaging/site/build.sh --out $(OUT)/site --no-apt --ref main=HEAD
 
-# release builds every binary and package and the files a GitHub release
+# build-release builds every binary and package and the files a GitHub release
 # carries besides them: the build record (packaging/build-record.sh), which
 # holds the build's log, SHA256SUMS for people, and the manifest the
 # release workflow signs and `massimo update` verifies; SHA256SUMS and the
@@ -278,9 +313,9 @@ RECORD = massimo-build.txt
 # target's output together, so that the record's log reads target by
 # target. A make without -O (macOS's 3.81) runs it with RELEASE_JOBS=.
 RELEASE_JOBS ?= -j4 -Otarget
-release: SHELL := bash
-release: .SHELLFLAGS := -eo pipefail -c
-release: clean
+build-release: SHELL := bash
+build-release: .SHELLFLAGS := -eo pipefail -c
+build-release: clean
 	mkdir -p $(OUT)
 	started=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
 	$(MAKE) --no-print-directory $(RELEASE_JOBS) release-files VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' 2>&1 | tee $(OUT)/build.log; \
@@ -292,7 +327,7 @@ release: clean
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
 		-flavour $(FLAVOUR) -release '$(RELEASE)' -dir $(OUT) $(BINARIES) $(PACKAGES) $(RECORD) > $(OUT)/massimo-release.json
 
-# The binaries and packages of a release, which `make release` logs.
+# The binaries and packages of a release, which `make build-release` logs.
 release-files: cross packages
 
 clean:

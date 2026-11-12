@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // Command mkmanifest writes the release manifest (internal/update) for a
-// set of built binaries to stdout: `make release` runs it, the release
+// set of built binaries to stdout: `make build-release` runs it, the release
 // workflow signs its output.
 package main
 
