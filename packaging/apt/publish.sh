@@ -8,11 +8,21 @@
 # project's site, https://massimo.metaworx.ch, with the pages and the
 # docs; the test feeds it a directory of packages and a throwaway key
 # instead.
+#
+# Two keys sign the suites, each in the one run that may use it: the
+# numbered suites (alpha and up) the apt key of the version tags' runs, a
+# rolling suite (devel, nightly) the rolling apt key of its own run on
+# main. Their public halves are committed, archive-key.asc and
+# rolling-archive-key.asc, and the keyring package carries both, one file
+# each; a box's source names the file of its kind of suite, so that the
+# rolling key signs nothing a box on alpha accepts. publish.sh refuses to
+# sign with a key that is not the committed one for the suites it signs.
 set -euo pipefail
 
 usage() {
 	cat >&2 <<'EOF'
 usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owner/name>] [--index-asset <file>]
+       publish.sh --out <dir> --key <fingerprint> --rolling <flavour> [--repo <owner/name>] [--index-asset <file>]
        publish.sh --out <dir> --key <fingerprint> --from <dir> --channel <name> [--index-asset <file>]
 
   --out <dir>        <dir>/apt holds the repository (packaging/site/build.sh --apt takes it)
@@ -20,11 +30,15 @@ usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owne
                      passphrase, if any, in APT_KEY_PASSPHRASE
   --releases <n>     the newest releases kept per channel (default 10)
   --repo <o/n>       the GitHub repository the releases come from (default metaworx/massimo)
+  --rolling <f>      the one rolling suite <f>, devel or nightly, from the release release/<f>
   --from <dir>       take every .deb in <dir> instead of GitHub's releases …
   --channel <name>   … as the one suite <name>
-  --base-url <url>   what the sources snippet names (default https://massimo.metaworx.ch/apt)
+  --archive-key <f>  the public key of the numbered suites (default packaging/apt/archive-key.asc)
+  --rolling-archive-key <f>
+                     that of the rolling suites (default packaging/apt/rolling-archive-key.asc)
+  --base-url <url>   what the sources snippets name (default https://massimo.metaworx.ch/apt)
   --index-asset <f>  also write the signed index as a tarball, for a site rebuilt without the key:
-                     apt/dists, massimo.asc, massimo.sources, the keyring package and apt/pool.tsv,
+                     apt/dists, the public keys, the snippet, the keyring package and apt/pool.tsv,
                      one line per package of the pool - its path under apt/, its SHA-256 and the
                      download URL of the release file it is, or "included" for one in the tarball
 
@@ -38,9 +52,12 @@ out=""
 key=""
 releases=10
 repo=metaworx/massimo
+rolling=""
 from=""
 channel=""
 index_asset=""
+archive_key=$root/packaging/apt/archive-key.asc
+rolling_archive_key=$root/packaging/apt/rolling-archive-key.asc
 base_url=https://massimo.metaworx.ch/apt
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -48,8 +65,11 @@ while [ $# -gt 0 ]; do
 	--key) key=$2; shift 2 ;;
 	--releases) releases=$2; shift 2 ;;
 	--repo) repo=$2; shift 2 ;;
+	--rolling) rolling=$2; shift 2 ;;
 	--from) from=$2; shift 2 ;;
 	--channel) channel=$2; shift 2 ;;
+	--archive-key) archive_key=$2; shift 2 ;;
+	--rolling-archive-key) rolling_archive_key=$2; shift 2 ;;
 	--base-url) base_url=$2; shift 2 ;;
 	--index-asset) index_asset=$2; shift 2 ;;
 	-h | --help) usage ;;
@@ -63,6 +83,44 @@ if [ -n "$from" ] && [ -z "$channel" ] || [ -z "$from" ] && [ -n "$channel" ]; t
 	echo "publish.sh: --from and --channel go together" >&2
 	usage
 fi
+if [ -n "$rolling" ] && [ -n "$from" ]; then
+	echo "publish.sh: --rolling or --from, not both" >&2
+	usage
+fi
+
+# The rolling flavours, built from main and signed by the rolling key;
+# every other channel is numbered.
+is_rolling() { # <channel>
+	case "$1" in devel | nightly) return 0 ;; *) return 1 ;; esac
+}
+if [ -n "$rolling" ] && ! is_rolling "$rolling"; then
+	echo "publish.sh: --rolling $rolling: devel or nightly" >&2
+	exit 2
+fi
+
+# The kind of suites this run signs, and the committed key it must sign
+# them with.
+kind=numbered
+if [ -n "$rolling" ] || { [ -n "$from" ] && is_rolling "$channel"; }; then
+	kind=rolling
+fi
+fpr_of_file() { # <armored public key>
+	gpg --show-keys --with-colons "$1" 2>/dev/null | awk -F: '/^fpr/ { print $10; exit }'
+}
+for f in "$archive_key" "$rolling_archive_key"; do
+	[ -n "$(fpr_of_file "$f")" ] || {
+		echo "publish.sh: $f holds no public key" >&2
+		exit 1
+	}
+done
+want=$archive_key
+[ "$kind" = numbered ] || want=$rolling_archive_key
+signer=$(gpg --list-keys --with-colons "$key" 2>/dev/null | awk -F: '/^fpr/ { print $10; exit }')
+if [ -z "$signer" ] || [ "$signer" != "$(fpr_of_file "$want")" ]; then
+	echo "publish.sh: the key ${signer:-$key} is not the $kind suites' key of $want ($(fpr_of_file "$want")); nothing signed" >&2
+	exit 1
+fi
+
 nfpm_version=$(sed -n 's/^NFPM_VERSION *= *//p' "$root/Makefile")
 NFPM=${NFPM:-go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$nfpm_version}
 
@@ -92,13 +150,36 @@ channel_of() { # <tag>
 	printf '%s\n' "${c:-stable}"
 }
 
-# 1. The pool: the packages per channel.
+# fetch puts the packages of a release into pool/<dir> and notes each
+# one's download URL, as GitHub gives it.
+fetch() { # <tag> <dir>
+	local tag=$1 dir=$2 assets name url
+	assets=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[] | select(.name | endswith(".deb")) | [.name, .url] | @tsv')
+	[ -n "$assets" ] || return 0
+	mkdir -p "$apt/pool/$dir"
+	gh release download "$tag" --repo "$repo" --pattern '*.deb' --dir "$apt/pool/$dir" --clobber
+	while IFS=$'\t' read -r name url; do
+		urls["pool/$dir/$name"]=$url
+	done <<<"$assets"
+}
+
+# 1. The pool: the packages per channel, and the suites.
+suites=""
 if [ -n "$from" ]; then
 	mkdir -p "$apt/pool/$channel"
 	cp "$from"/*.deb "$apt/pool/$channel/"
+	suites=$channel
+elif [ -n "$rolling" ]; then
+	# The rolling build's own packages, replaced in place at each build.
+	fetch "release/$rolling" "$rolling"
+	[ -d "$apt/pool/$rolling" ] || {
+		echo "publish.sh: release/$rolling has no packages" >&2
+		exit 1
+	}
+	suites=$rolling
 else
-	# The numbered releases alone: a rolling build's release (release/devel)
-	# gets no suite of its own until its packages' versions sort.
+	# The numbered releases alone: the rolling builds' releases
+	# (release/devel) are suites of their own, signed by their own runs.
 	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z][a-z0-9]*\\.[0-9]+)?$"))')
 	channels=""
 	while read -r tag; do
@@ -114,51 +195,55 @@ else
 				printf '%s\n' "$tag"
 			fi
 		done <<<"$tags" | sort -V | tail -n "$releases")
-		mkdir -p "$apt/pool/$ch"
 		while read -r tag; do
 			[ -n "$tag" ] || continue
-			debs=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name | select(endswith(".deb"))')
-			[ -n "$debs" ] || continue
-			gh release download "$tag" --repo "$repo" --pattern '*.deb' --dir "$apt/pool/$ch" --clobber
-			while read -r deb; do
-				urls["pool/$ch/$deb"]="https://github.com/$repo/releases/download/$tag/$deb"
-			done <<<"$debs"
+			fetch "$tag" "$ch"
 		done <<<"$newest"
+		[ ! -d "$apt/pool/$ch" ] || suites="$suites $ch"
 	done
+	suites=${suites# }
 fi
+[ -n "$suites" ] || {
+	echo "publish.sh: no packages, no suite" >&2
+	exit 1
+}
 
-# 2. The key, and the keyring package in every suite's pool: its version
-# is the time of this publish (UTC, to the second), which only goes up,
-# so that every publish, an extended key's or a new key's, is a newer
-# package. The key's own dates are not: a new key may expire sooner than
-# the old one, or never.
-gpg --armor --export "$key" >"$apt/massimo.asc"
-keyring=$(mktemp)
-trap 'rm -f "${keyring:?}"' EXIT
-gpg --export "$key" >"$keyring"
+# 2. The public keys, and the keyring package with both, in pool/keyring:
+# its version is the time of this publish (UTC, to the second), which only
+# goes up, so that every publish, an extended key's or a new key's, is a
+# newer package; both kinds of run make one, with the same files. The
+# keys' own dates are not: a new key may expire sooner than the old one,
+# or never.
+cp "$archive_key" "$apt/massimo.asc"
+cp "$rolling_archive_key" "$apt/massimo-rolling.asc"
+keys=$(mktemp -d)
+trap 'rm -rf "${keys:?}"' EXIT
+gpg --dearmor <"$archive_key" >"$keys/numbered.gpg"
+gpg --dearmor <"$rolling_archive_key" >"$keys/rolling.gpg"
 keyring_version="1.0.$(date -u +%Y%m%d%H%M%S)"
-for pool in "$apt"/pool/*/; do
-	VERSION=$keyring_version KEYRING=$keyring MAINTAINER=$(sed -n 's/^maintainer: *//p' "$root/packaging/nfpm.yaml") \
-		$NFPM package -f "$root/packaging/apt/keyring.nfpm.yaml" -p deb \
-		-t "$pool/massimo-archive-keyring_${keyring_version}_all.deb" >/dev/null
-done
+mkdir -p "$apt/pool/keyring"
+VERSION=$keyring_version KEYRING=$keys/numbered.gpg ROLLING_KEYRING=$keys/rolling.gpg \
+	MAINTAINER=$(sed -n 's/^maintainer: *//p' "$root/packaging/nfpm.yaml") \
+	$NFPM package -f "$root/packaging/apt/keyring.nfpm.yaml" -p deb \
+	-t "$apt/pool/keyring/massimo-archive-keyring_${keyring_version}_all.deb" >/dev/null
 # The same package under a name that does not change, for a box's first
 # install, before apt knows the repository (packaging/README.md).
-pools=("$apt"/pool/*/)
-cp "${pools[0]}massimo-archive-keyring_${keyring_version}_all.deb" "$apt/massimo-archive-keyring.deb"
+cp "$apt/pool/keyring/massimo-archive-keyring_${keyring_version}_all.deb" "$apt/massimo-archive-keyring.deb"
 
 # 3. The suites: Packages per architecture (a package for every
-# architecture is listed in each), Release, InRelease.
+# architecture is listed in each) from the suite's own pool and the
+# keyring's, Release, InRelease.
 archs="amd64 arm64 armhf"
-for pool in "$apt"/pool/*/; do
-	ch=$(basename "$pool")
+for ch in $suites; do
 	dist=$apt/dists/$ch
 	rm -rf "${dist:?}"
 	for a in $archs; do
 		mkdir -p "$dist/main/binary-$a"
 	done
 	# From the repository's root, so that Filename: is relative to it.
-	(cd "$apt" && apt-ftparchive packages "pool/$ch") >"$dist/all.packages"
+	for dir in "pool/$ch" pool/keyring; do
+		(cd "$apt" && apt-ftparchive packages "$dir")
+	done >"$dist/all.packages"
 	awk -v dist="$dist" -v archs="$archs" '
 		BEGIN { RS = ""; FS = "\n"; n = split(archs, as, " ") }
 		{
@@ -185,23 +270,33 @@ for pool in "$apt"/pool/*/; do
 	sign "$dist/Release" "$dist/Release.gpg" --detach-sign
 done
 
-# 4. The snippet. Signed-By names the keyring package's file, so that the
-# key apt verifies with is the one the newest keyring package carries; the
+# 4. The snippet: massimo.sources for the numbered suites, naming the
+# first of them; massimo-<flavour>.sources for a rolling one. Signed-By
+# names the keyring package's file of the suite's kind, so that the key
+# apt verifies with is the one the newest keyring package carries; the
 # box installs that package first. The pages beside the repository are
-# packaging/site/build.sh's, which takes this apt/ as it is.
-suites=$(for pool in "$apt"/pool/*/; do basename "$pool"; done | tr '\n' ' ')
-cat >"$apt/massimo.sources" <<EOF
+# packaging/site/build.sh's, which takes this apt/ as it is, or assembles
+# it from the runs' indexes.
+snippet() { # <file> <suite> <keyring file> <what the repository holds>
+	cat >"$1" <<EOF
 # The Massimo apt repository (https://massimo.metaworx.ch,
-# packaging/README.md, "The apt repository"): one suite per update
-# channel (${suites% }); the key comes with the package
-# massimo-archive-keyring, installed first from
+# packaging/README.md, "The apt repository"): $4; the key comes with the
+# package massimo-archive-keyring, installed first from
 # $base_url/massimo-archive-keyring.deb.
 Types: deb
 URIs: $base_url
-Suites: ${suites%% *}
+Suites: $2
 Components: main
-Signed-By: /usr/share/keyrings/massimo-archive-keyring.gpg
+Signed-By: /usr/share/keyrings/$3
 EOF
+}
+if [ "$kind" = numbered ]; then
+	sources=massimo.sources
+	snippet "$apt/$sources" "${suites%% *}" massimo-archive-keyring.gpg "one suite per update channel (${suites// /, })"
+else
+	sources=massimo-$suites.sources
+	snippet "$apt/$sources" "$suites" massimo-rolling-archive-keyring.gpg "the rolling suite $suites, signed with the rolling key"
+fi
 
 # 5. The signed index on its own (--index-asset): what a site rebuilt from
 # main needs to serve the repository without the key, the pool fetched
@@ -209,9 +304,10 @@ EOF
 # (the keyring package, a --from directory's) is in the tarball itself.
 if [ -n "$index_asset" ]; then
 	stage=$(mktemp -d)
-	trap 'rm -f "${keyring:?}"; rm -rf "${stage:?}"' EXIT
+	trap 'rm -rf "${keys:?}" "${stage:?}"' EXIT
 	mkdir -p "$stage/apt"
-	cp -R "$apt/dists" "$apt/massimo.asc" "$apt/massimo.sources" "$apt/massimo-archive-keyring.deb" "$stage/apt/"
+	cp -R "$apt/dists" "$apt/massimo.asc" "$apt/massimo-rolling.asc" "$apt/$sources" \
+		"$apt/massimo-archive-keyring.deb" "$stage/apt/"
 	: >"$stage/apt/pool.tsv"
 	for deb in "$apt"/pool/*/*.deb; do
 		rel=${deb#"$apt"/}
@@ -225,4 +321,4 @@ if [ -n "$index_asset" ]; then
 	tar -C "$stage" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - apt | gzip -9 -n >"$index_asset"
 	echo "publish.sh: $index_asset holds the signed index and pool.tsv"
 fi
-echo "publish.sh: $out holds the suites ${suites% }"
+echo "publish.sh: $out holds the suites ${suites// /, }"

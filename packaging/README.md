@@ -486,7 +486,7 @@ changelog is `CHANGELOG.md` on GitHub).
 The packages of the newest ten releases of every update channel are also in an
 apt repository on the project's site,
 <https://massimo.metaworx.ch/apt/>, one suite per channel (`alpha`;
-later `beta` and `stable`),
+later `beta` and `stable`; the rolling `devel` and `nightly` below),
 the same for every Debian and Ubuntu release since the binary is static,
 signed with the repository's own OpenPGP key (RSA 4096;
 not the Ed25519 release key of the manifest, which apt cannot use).
@@ -513,6 +513,7 @@ and `apt install massimo=0.6.0~alpha.1` goes back to one still in the pool.
 `"origin=Massimo";` in its `Unattended-Upgrade::Origins-Pattern` adds this repository.
 The package `massimo-archive-keyring` carries the key as
 `/usr/share/keyrings/massimo-archive-keyring.gpg`, the file `Signed-By:` names,
+and the rolling suites' key beside it (below),
 and is in the suite as well,
 so that apt verifies with the key of the newest keyring package,
 and an extended key arrives through apt.
@@ -521,8 +522,26 @@ The first download is the one trusted through HTTPS alone,
 as a downloaded key would be;
 the key itself is on the site too, as `massimo.asc`, for a check by hand.
 A new key would reach the boxes only through a keyring package carrying both
-keys on a site the old key still signs, which `publish.sh` does not make:
-it signs with one key.
+keys in one file on a site the old key still signs,
+which `publish.sh` does not make: it signs each kind of suite with one key.
+
+**The rolling suites** `devel` and `nightly` hold the rolling builds' packages,
+whose versions sort after their tag's (`0.14.0~alpha.1+43.g1608118`).
+They are signed with a second key, the rolling apt key,
+by the rolling build's own run on `main`,
+which never sees the numbered suites' key;
+its public half is the keyring package's second file,
+`/usr/share/keyrings/massimo-rolling-archive-keyring.gpg`,
+and `massimo-rolling.asc` on the site.
+A box follows one with its own snippet, `massimo-devel.sources` on the site:
+`Suites: devel` and `Signed-By:` that second file.
+A box on `alpha` names the first file alone,
+so a leaked rolling key reaches no box on a numbered suite.
+Both public halves are committed,
+`packaging/apt/archive-key.asc` and `packaging/apt/rolling-archive-key.asc`,
+so that either run makes the same keyring package,
+and `publish.sh` refuses to sign a suite with a key whose fingerprint is not
+the committed one for its kind.
 
 The repository is built by `packaging/apt/publish.sh` in the release
 workflow (the pool from GitHub's releases, `apt-ftparchive`, `InRelease`
@@ -533,17 +552,27 @@ so a release that is deleted on GitHub leaves the pool at the next release.
 Each release also carries the signed index as `massimo-apt-index.tar.gz`,
 so that the site can be rebuilt from `main` without the key,
 which only the release tags reach:
-`apt/dists/` as signed, `apt/massimo.asc`, `apt/massimo.sources`,
-`apt/massimo-archive-keyring.deb`, and `apt/pool.tsv`,
+`apt/dists/` as signed, `apt/massimo.asc` and `apt/massimo-rolling.asc`,
+the snippet, `apt/massimo-archive-keyring.deb`, and `apt/pool.tsv`,
 one line per package of the pool, tab-separated:
 its path under `apt/`, its SHA-256,
 and the download URL of the release file it is,
 or `included` for a package in the tarball itself (the keyring package);
 `publish.sh --index-asset <file>` writes it.
-`packaging/apt/test.sh` builds it from `dist/` with a throwaway key,
-verifies `InRelease` and the index asset,
-builds the site from the repository and again from the index asset alone,
-and installs from it in a container as the snippet above does,
+A rolling build's run writes the index of its one suite
+(`publish.sh --rolling <flavour>`) and attaches it to `release/<flavour>`,
+replacing the one before;
+`packaging/site/build.sh` adds each rolling index beside the numbered suites,
+and leaves out a suite whose index is missing or does not check out,
+with a warning, so that a failed rolling build takes no site offline.
+`packaging/apt/test.sh` builds it from `dist/` with two throwaway keys,
+checks that `publish.sh` refuses a key that is not the committed one,
+verifies `InRelease` and the index asset, the keyring package's two files,
+and a rolling suite that verifies with the rolling key alone,
+builds the site from the repository, from the index asset alone,
+and from it with the rolling index,
+and installs from that in a container as the snippet above does,
+the rolling suite beside it,
 then upgrades to a newer package through the update helper while another
 process holds apt's lock,
 as CI does on trixie and on bookworm (`make apt-test`).
@@ -577,6 +606,14 @@ The owner's steps, once:
 - Before the key expires,
   `gpg --quick-set-expire <fpr> 2y` and the secret again;
   the next release publishes the renewed key and a newer keyring package.
+- The rolling apt key (done on 2026-11-12):
+  `gpg --quick-gen-key "Massimo apt repository (rolling)" rsa4096 sign 2y`,
+  its secret key in `MASSIMO_ROLLING_APT_KEY` of the `signing-rolling` environment
+  and its passphrase in `MASSIMO_ROLLING_APT_KEY_PASSPHRASE`;
+  its public half committed as `packaging/apt/rolling-archive-key.asc`
+  (`gpg --armor --export "=Massimo apt repository (rolling)"`),
+  as the other key's is as `packaging/apt/archive-key.asc`.
+  A renewed or new key is committed again before the run that signs with it.
 
 ### Moving from the old address
 

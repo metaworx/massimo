@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.42.0)
+# Massimo — CI Conventions (v1.43.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -386,6 +386,7 @@ and on 2026-11-08 it read a Dependabot pull request's that way.
 | `RELEASE_BRANCH_DEPLOY_KEY` | the `signing` environment; its public half a deploy key with write access, "release branches (release.yml)" | release.yml's `sign`, to fast-forward `release/<flavour>` to the published release (section 6); without it the branch stays |
 | `HOMEBREW_TAP_DEPLOY_KEY` | the `signing` environment (packaging/README.md, "Homebrew"); a repository secret until 2026-11-11, which any run on any branch could read (D56-A) | publish.yml, called by release.yml's `homebrew` job, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
 | `MASSIMO_APT_KEY`, `MASSIMO_APT_KEY_PASSPHRASE` | the `signing` environment, once the owner has made the key (packaging/README.md, "The apt repository") | release.yml's `apt-build` job, to sign the apt suites; the site's `massimo.asc` is its public half; without them the apt jobs are skipped |
+| `MASSIMO_ROLLING_APT_KEY`, `MASSIMO_ROLLING_APT_KEY_PASSPHRASE` | the `signing-rolling` environment (packaging/README.md, "The apt repository") | release.yml's `rolling` job, to sign the apt suite `devel` or `nightly`; its public half is `packaging/apt/rolling-archive-key.asc`, the site's `massimo-rolling.asc`; without them the rolling suite is left off the site |
 | `GITHUB_TOKEN` | provided by GitHub | the release jobs to publish, the Windows and macOS jobs as `MASSIMO_GITHUB_TOKEN`, for the release checks against the API's rate limit and the release files through the API |
 
 Never echo any slice of a secret to the log.
