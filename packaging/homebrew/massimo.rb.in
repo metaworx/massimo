@@ -1,7 +1,8 @@
 # The Homebrew formula of Massimo for the update channel @CHANNEL@, rendered
 # from packaging/homebrew/massimo.rb.in by packaging/homebrew/render.sh at
-# each release and pushed to the tap metaworx/homebrew-massimo
-# (packaging/README.md, "Homebrew"). Built from source on the Mac, so
+# each release and pushed to the tap metaworx/homebrew-massimo, or for the
+# rolling channels devel and nightly at each of their builds to
+# metaworx/homebrew-massimo-rolling (packaging/README.md, "Homebrew"). Built from source on the Mac, so
 # nothing needs notarization and nothing is quarantined; brew then owns
 # the binary, which the marker under share/massimo tells massimo.
 class @CLASS@ < Formula

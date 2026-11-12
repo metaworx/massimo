@@ -1271,13 +1271,29 @@ and `-rollback` goes back.
 ## Homebrew
 
 On a Mac with Homebrew the tap `metaworx/massimo` carries a formula per update channel,
-`massimo-alpha` for `alpha` (and `massimo` once there is a stable channel),
+`massimo-alpha` for `alpha`, `massimo-beta`, `massimo-rc`,
+and `massimo` for `stable` once those are released,
 built from the release's source on the Mac, so that nothing needs notarization:
 
 ```sh
 brew install metaworx/massimo/massimo-alpha
 brew services start massimo-alpha
 ```
+
+The rolling channels have a tap of their own, `metaworx/massimo-rolling`,
+with `massimo-devel` and `massimo-nightly`
+(`brew install metaworx/massimo-rolling/massimo-devel`):
+each rolling build's run renders its formula from the build's commit,
+versioned as `git describe` names it (`0.14.0-alpha.1-94-g38cfa28`),
+which brew sorts after the tag it follows,
+or from the newest numbered release where that is newer,
+and pushes it with a deploy key that only `main`'s runs reach
+(`HOMEBREW_ROLLING_TAP_DEPLOY_KEY`, the `signing-rolling` environment),
+so that the numbered tap's key stays out of their reach.
+All the formulae install `bin/massimo`:
+one is installed at a time, and another channel's replaces it
+(`brew uninstall massimo-alpha && brew install metaworx/massimo-rolling/massimo-devel`,
+then `brew services start massimo-devel`).
 
 The formula builds `bin/massimo` with Go,
 writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
