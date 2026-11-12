@@ -88,12 +88,13 @@ def found_text(lang, n):
     return FOUND_N[lang].format(n=n, s="" if n == 1 else "s")
 
 
-def update_json(state, to, available, manager=None):
+def update_json(state, to, available, manager=None, channel="alpha"):
     """GET /api/v1/update's answer with the update helper in the given
-    state, and the package manager that owns the binary, if any."""
-    return ('{"current": "v0.0.0-test", "channel": "alpha", %s"latest": "%s", "available": %s, "can_update": %s, '
+    state, the package manager that owns the binary, if any, and the
+    channel in effect; the build's flavour is alpha."""
+    return ('{"current": "v0.0.0-test", "flavour": "alpha", "channel": "%s", %s"latest": "%s", "available": %s, "can_update": %s, '
             '"helper": {"state": "%s", "to": "%s", "time": "2026-01-01T00:00:00Z"}}'
-            % ('"manager": "%s", ' % manager if manager else "", to, "true" if available else "false",
+            % (channel, '"manager": "%s", ' % manager if manager else "", to, "true" if available else "false",
                "true" if available else "false", state, to))
 
 

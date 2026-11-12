@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""System settings → Software: the buttons while the update helper works, and
-Update asking in the page. GET /api/v1/update is stubbed; nothing is
-installed."""
+"""System settings → Software: the update channel, the buttons while the
+update helper works, and Update asking in the page. GET /api/v1/update is
+stubbed, and the setting update.channel where the channel is chosen;
+nothing is installed."""
+import json
+
 from helpers import show_view, update_json, wait_until
 
 
@@ -62,3 +65,86 @@ def test_update_through_apt(page):
         "Update asks about apt, not with the hand install's rollback"
     box.locator(".confirm-no").click()
     page.unroute("**/api/v1/update*")
+
+
+def channel_routes(page, manager=None, variable=None):
+    """Stubs GET /api/v1/update and the setting update.channel, the build's
+    flavour alpha and no channel stored; variable is the channel
+    MASSIMO_UPDATE_CHANNEL sets. Returns the bodies of the settings PUTs."""
+    state = {"stored": None}
+    puts = []
+
+    def effect():
+        return variable or state["stored"] or "alpha"
+
+    def update(route):
+        route.fulfill(status=200, content_type="application/json",
+                      body=update_json("up-to-date", "v0.0.1-test", False, manager, effect()))
+
+    def settings(route):
+        if route.request.method == "PUT":
+            body = json.loads(route.request.post_data)
+            puts.append(body)
+            state["stored"] = body.get("update.channel")
+            route.fulfill(status=200, content_type="application/json", body="{}")
+            return
+        view = {"value": state["stored"] or "alpha", "default": "alpha", "set": state["stored"] is not None,
+                "in_effect": effect(), "applies": "now"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"update.channel": view}))
+
+    page.route("**/api/v1/update*", update)
+    page.route("**/api/v1/settings", settings)
+    return puts
+
+
+def unroute_channel(page):
+    page.unroute("**/api/v1/update*")
+    page.unroute("**/api/v1/settings")
+
+
+def test_channel_is_chosen(page):
+    """A holder of settings chooses the update channel under Software: the
+    choice is stored as update.channel, the build's flavour as null, and
+    the release check asks again."""
+    puts = channel_routes(page)
+    show_view(page, "system")
+    sel = page.locator("#update-channel")
+    sel.wait_for(state="visible")
+    assert sel.is_enabled() and sel.input_value() == "", "the build's flavour is chosen, and can be changed"
+    assert sel.locator("option").count() == 6, "the build's flavour and five channels"
+    sel.select_option("beta")
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes('beta')", 5), \
+        "the release check follows beta"
+    assert puts == [{"update.channel": "beta"}], "beta is stored"
+    assert sel.input_value() == "beta" and sel.is_enabled(), "beta stays chosen"
+    sel.select_option("")
+    assert wait_until(page, "!document.getElementById('update-text').textContent.includes('beta')", 5), \
+        "the release check is back on the build's flavour"
+    assert puts[-1] == {"update.channel": None}, "the build's flavour is stored as null"
+    unroute_channel(page)
+
+
+def test_channel_fixed_by_apt(page):
+    """On a box apt updates the suite decides: the channel is shown, fixed,
+    with the line that changes it."""
+    channel_routes(page, manager="apt")
+    show_view(page, "system")
+    sel = page.locator("#update-channel")
+    sel.wait_for(state="visible")
+    note = page.evaluate("t('update.channelApt', {channel: 'alpha'})")
+    assert sel.is_disabled() and sel.input_value() == "alpha", "the suite's channel, fixed"
+    assert page.locator("#update-channel-note").inner_text() == note, "the note says how to change the suite"
+    unroute_channel(page)
+
+
+def test_channel_fixed_by_the_variable(page):
+    """MASSIMO_UPDATE_CHANNEL overrides the setting: the channel it sets is
+    shown, fixed, and the note names the variable."""
+    channel_routes(page, variable="nightly")
+    show_view(page, "system")
+    sel = page.locator("#update-channel")
+    sel.wait_for(state="visible")
+    assert wait_until(page, "document.getElementById('update-channel').disabled", 5), "the channel is fixed"
+    assert sel.input_value() == "nightly", "the variable's channel is shown"
+    assert "MASSIMO_UPDATE_CHANNEL" in page.locator("#update-channel-note").inner_text(), "the note names the variable"
+    unroute_channel(page)
