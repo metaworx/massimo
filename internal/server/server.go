@@ -284,6 +284,7 @@ type Server struct {
 	authLockout time.Duration // the lockout in effect, for the log
 	signIns     signIns       // the addresses with a login running
 	logins      opaqueLogins  // the sign-ins by OPAQUE started, and the proofs given
+	oidc        oidcFlows     // the sign-ins through a provider started, and their codes (oidc.go)
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).
@@ -1098,6 +1099,10 @@ func (s *Server) routes() {
 	api("POST /api/v1/login", "none", s.login)
 	api("POST /api/v1/login/start", "none", s.loginStart)
 	api("POST /api/v1/login/finish", "none", s.loginFinish)
+	api("GET /api/v1/login/providers", "none", s.loginProviders)
+	api("POST /api/v1/login/oidc/finish", "none", s.oidcFinish)
+	api("GET /api/v1/login/oidc/callback", "none", s.oidcCallback)
+	api("POST /api/v1/login/oidc/{key}", "none", s.oidcStartLogin)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)

@@ -177,6 +177,124 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "503": {$ref: "#/components/responses/Busy"}
+  /api/v1/login/providers:
+    get:
+      summary: The providers a user may sign in through
+      x-capability: none
+      description: |
+        The enabled OpenID Connect providers, by key, each with the name
+        its sign-in button shows; an empty list on a server without users.
+      security: []
+      responses:
+        "200":
+          description: The providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/LoginProvider"}
+  /api/v1/login/oidc/{key}:
+    post:
+      summary: Start a sign-in through an OpenID Connect provider
+      x-capability: none
+      description: |
+        The provider's authorization URL for a new sign-in (the
+        authorization code flow with PKCE S256, a state and a nonce),
+        which the page opens. redirect is the page's own address: the
+        redirect URI is it plus api/v1/login/oidc/callback, which must be
+        registered at the provider, and the callback sends the browser
+        back to it. The sign-in waits ten minutes. An address locked out
+        is refused as for a password.
+      security: []
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string}, description: The provider's key}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OIDCStart"}
+      responses:
+        "200":
+          description: The provider's page to open
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OIDCStarted"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The provider's discovery document could not be read, or does not do
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/Busy"}
+  /api/v1/login/oidc/callback:
+    get:
+      summary: The provider sends the browser back
+      x-capability: none
+      description: |
+        The redirect URI. The code is traded at the provider's token
+        endpoint, the id_token's iss, aud, exp and nonce are checked, and
+        the user is found: by the provider's subject; else by an e-mail
+        assigned to a user, verified by the provider, which binds the
+        subject; else, where the provider creates users, a new one. The
+        browser goes back to the page with #oidc=<code>, a one-time code
+        good for a minute from the same address, or with
+        #oidc-error=<reason>: denied (at the provider), failed (its answer
+        did not do), refused (no user here for the account) or disabled.
+        A refusal counts as a failed sign-in of the address.
+      security: []
+      parameters:
+        - {name: code, in: query, schema: {type: string}}
+        - {name: state, in: query, required: true, schema: {type: string}}
+        - {name: error, in: query, schema: {type: string}, description: The provider's refusal}
+      responses:
+        "303":
+          description: Back to the page, the code or the reason in the fragment
+          headers:
+            Location: {schema: {type: string}}
+        "400":
+          description: No sign-in started under the state, or it took too long
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/login/oidc/finish:
+    post:
+      summary: Finish a sign-in through an OpenID Connect provider
+      x-capability: none
+      description: |
+        The callback's one-time code traded for the session of POST
+        /api/v1/login, with the provider's key; from the address the
+        callback came from, once, within a minute.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OIDCFinish"}
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Session"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401":
+          description: No sign-in under the code, or it took too long, or the user is gone
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/logout:
     post:
       summary: End the session that makes the call
@@ -2717,6 +2835,27 @@ components:
         login: {type: string}
         ke3: {type: string, description: "The client's KE3, 64 bytes, base64url without padding"}
         label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
+    LoginProvider:
+      type: object
+      properties:
+        key: {type: string}
+        name: {type: string, description: On the sign-in button; the key where the provider has none}
+    OIDCStart:
+      type: object
+      required: [redirect]
+      properties:
+        redirect: {type: string, description: "The page's own address, http or https, without a query or fragment", example: "https://massimo.example.com/"}
+    OIDCStarted:
+      type: object
+      properties:
+        url: {type: string, description: The provider's authorization URL, to open in the browser}
+        expires_at: {type: string, format: date-time, description: Ten minutes from now}
+    OIDCFinish:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, description: "The callback's #oidc= code"}
+        label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
     Proof:
       type: object
       properties:
@@ -2748,6 +2887,7 @@ components:
           description: >-
             With login, for a user of auth_version 1: a proof, good once for five minutes, to set the user's own
             record with in PUT /api/v1/users/{name} without the password
+        provider: {type: string, description: "After a sign-in through an OpenID Connect provider: the provider's key"}
     User:
       type: object
       properties:

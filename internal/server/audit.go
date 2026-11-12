@@ -51,6 +51,8 @@ var actions = map[string]string{
 	"POST /api/v1/login":                           "login",
 	"POST /api/v1/login/start":                     "login.start",
 	"POST /api/v1/login/finish":                    "login",
+	"POST /api/v1/login/oidc/{key}":                "login.start",
+	"POST /api/v1/login/oidc/finish":               "login",
 	"POST /api/v1/logout":                          "logout",
 	"POST /api/v1/cubes":                           "cube.add",
 	"PUT /api/v1/cubes/{sn}":                       "cube.update",

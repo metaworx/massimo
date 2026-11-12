@@ -458,6 +458,59 @@ an unknown login, one finished already or one past its minute, `401` too.
 a proof of the password, good once for five minutes,
 for one's own password change.
 
+### Sign-in through OpenID Connect: /api/v1/login/providers, /api/v1/login/oidc/…
+
+A user may sign in through an OpenID Connect provider beside the password:
+Nextcloud, Google, Microsoft, Authentik, Keycloak,
+each found by its issuer's discovery document (docs/store.md section 6,
+"Sign-in through OpenID Connect").
+None of the four routes needs a token.
+
+`GET /api/v1/login/providers` lists the enabled providers for the sign-in's buttons,
+`[{"key": "cloud", "name": "Nextcloud"}]`, empty on a server without users.
+
+`POST /api/v1/login/oidc/{key}` with `{"redirect": "https://massimo.example.com/"}`,
+the page's own address, starts a sign-in:
+the authorization code flow with PKCE (S256), a `state` and a `nonce`,
+the server a confidential client.
+It answers `{"url": …, "expires_at": …}`, the provider's page,
+which the browser opens; the sign-in waits ten minutes.
+The redirect URI is the page's address plus `api/v1/login/oidc/callback`,
+which must be registered at the provider:
+behind a reverse proxy the server cannot know its own address, the page does,
+and a provider sends nobody to a redirect URI it does not know.
+An address locked out is `429`, as for a password;
+an unknown or disabled provider `404`,
+a discovery document that cannot be read or does not do `502`.
+
+`GET /api/v1/login/oidc/callback?code=…&state=…` is where the provider sends the browser.
+The server trades the code at the token endpoint (`client_secret_basic`,
+or `client_secret_post` where the provider names only that) and reads the `id_token`,
+which comes straight from the provider over TLS,
+so OpenID Connect Core 1.0, 3.1.3.7,
+lets that stand in for checking its signature;
+its `iss`, `aud` (and `azp`), `exp` and `nonce` are checked.
+The user is found by the provider's subject (`sub`);
+else by an e-mail an owner assigned to a user,
+which the provider says it verified (`email_verified`),
+and which binds the subject to the user from then on;
+else, where the provider creates users, a new user for an e-mail of its domains,
+with its role.
+The browser goes back to the page with `#oidc=<code>`,
+a one-time code good for a minute,
+or with `#oidc-error=<reason>`:
+`denied` (at the provider), `failed` (its answer did not do),
+`refused` (no user here for the account)
+or `disabled` (the user is disabled or has expired).
+A refusal but `denied` counts as a failed sign-in of the address,
+and is a `login_failed` line of the log.
+A state is good once.
+
+`POST /api/v1/login/oidc/finish` with `{"code": …}` trades the code for the session,
+as `POST /api/v1/login` answers it, with `"provider"` its key;
+from the address the callback came from, once.
+The session's token so never sits in a URL, a history or a proxy's log.
+
 ### Users: /api/v1/users and /api/v1/users/{name}
 
 `GET` and `POST /api/v1/users`; `GET`, `PUT` and `DELETE /api/v1/users/{name}`.
