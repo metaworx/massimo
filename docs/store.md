@@ -1121,8 +1121,10 @@ who cannot sign in once it is off until a password is set for them.
 
 `massimo user add <name> -role owner|operator|viewer|integration`
 (asks for the password twice, or `-no-password` for a key-only user),
-`user list`, `user passwd <name>`, `user disable <name>`, `user enable
-<name>`, `user token <name> -label <text>` (prints a new API key once),
+`user list`, `user passwd <name>`,
+`user rename <name> <new name>` (asks for the password again, or `-no-password`),
+`user disable <name>`, `user enable <name>`,
+`user token <name> -label <text>` (prints a new API key once),
 `user tokens <name>` (the sessions and keys with their ids),
 `user revoke <name> [<token id>]`.
 These are the only commands that open the store;
@@ -1130,6 +1132,16 @@ they take `-data` like `serve` and run as the service user,
 which reads the service's settings and store from any directory
 (`sudo -u _massimo massimo user add anna`),
 beside a running server thanks to WAL.
+Run by anyone else, the data directory is `-data`, else `MASSIMO_DATA`,
+else the current directory, where they create no store:
+without `massimo.db` there they refuse,
+naming the service's command where the service is installed,
+so that a password or a key never goes to a store the server does not read
+(the owner's commands on the breno box did, on 2026-11-12, without `sudo`).
+`store migrate` creates a store only in a directory named so.
+Each change names the store it wrote,
+and a store other than the service's, where the service is installed,
+draws a warning.
 `user add` and `user passwd` set a password of version 2:
 both halves of the registration run in the command,
 with the server's keys from the data directory,
@@ -1138,6 +1150,15 @@ with `opaque-ke`'s salt of 16 zero bytes and output of 64,
 which RFC 9807 leaves open,
 so that the record opens in the browser;
 `tools/ui-test` checks that with a user the command added.
+The record holds the name it was registered under,
+the credential identifier from which the server derives the user's OPRF key,
+so `user rename` registers the password again under the new name
+and ends the user's sessions; its keys, preferences and audit stay with the row.
+A removed user's row is renamed `<name>-del-YYYYMMDD-HHNN`,
+the removal's time in UTC, `-<id>` added where that is taken,
+so that the name is free and a user added under it is a row of its own
+(migration 0015 renamed the rows removed before it;
+until then a new user took the removed one's row over, with its history).
 The audit records them with `user_id` NULL and `remote` `cli`.
 
 ### The lockout

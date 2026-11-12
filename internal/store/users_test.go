@@ -5,7 +5,9 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -94,8 +96,8 @@ func TestUsers(t *testing.T) {
 		t.Fatal("login not noted")
 	}
 
-	// Removal tombstones the row and revokes its tokens; the name comes
-	// back over the same row.
+	// Removal tombstones the row under a name of its own and revokes its
+	// tokens; the name is free for a user of its own.
 	tok, _, err := s.AddToken(ctx, bob.ID, TokenAPI, "k", zeroTime)
 	if err != nil {
 		t.Fatal(err)
@@ -106,8 +108,9 @@ func TestUsers(t *testing.T) {
 	if _, ok, _ := s.User(ctx, "bob"); ok {
 		t.Fatal("removed user still found by name")
 	}
-	if gone, ok, _ := s.UserByID(ctx, bob.ID); !ok || gone.Name != "bob" {
-		t.Fatalf("removed user by id: %+v %v", gone, ok)
+	gone, ok, _ := s.UserByID(ctx, bob.ID)
+	if want := removedName("bob", gone.UpdatedAt); !ok || gone.Name != want || !strings.HasPrefix(want, "bob-del-") {
+		t.Fatalf("removed user by id: %+v %v, want the name %s", gone, ok, want)
 	}
 	if tk, _, _ := s.Token(ctx, tok.ID); tk.RevokedAt.IsZero() {
 		t.Fatal("token of a removed user not revoked")
@@ -116,8 +119,76 @@ func TestUsers(t *testing.T) {
 		t.Fatalf("remove twice: %v", err)
 	}
 	back, err := s.AddUser(ctx, User{Name: "bob", Role: RoleGuest}, "new", 0)
-	if err != nil || back.ID != bob.ID || back.UUID != bob.UUID || back.Role != RoleGuest || !back.HasPassword || back.Version <= bob.Version {
-		t.Fatalf("take over %+v %v (was %+v)", back, err, bob)
+	if err != nil || back.ID == bob.ID || back.UUID == bob.UUID || back.Role != RoleGuest || !back.HasPassword || back.Version != 1 {
+		t.Fatalf("a new bob %+v %v (was %+v)", back, err, bob)
+	}
+	if again, ok, _ := s.UserByID(ctx, bob.ID); !ok || again.Name != gone.Name {
+		t.Fatalf("the removed bob: %+v", again)
+	}
+	// Removed again within the minute: the id tells the two apart.
+	if err := s.DeleteUser(ctx, "bob", 0); err != nil {
+		t.Fatal(err)
+	}
+	if second, _, _ := s.UserByID(ctx, back.ID); second.Name != removedName("bob", second.UpdatedAt) && second.Name != gone.Name+"-"+strconv.FormatInt(back.ID, 10) {
+		t.Fatalf("the second removed bob: %q (the first %q)", second.Name, gone.Name)
+	}
+	if _, err := s.AddUser(ctx, User{Name: gone.Name}, "", 0); !errors.Is(err, ErrUserExists) {
+		t.Fatalf("a removed user's name: %v", err)
+	}
+}
+
+// A rename moves the user and its password to the new name: the record
+// is registered under it, the old name signs in no more; keys and
+// preferences stay with the row. A taken name, a removed user's among
+// them, a bad one and an unknown user are refused; no password leaves
+// none.
+func TestRenameUser(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	anna, err := s.AddUserOpaque(ctx, User{Name: "anna", Role: RoleOperator, DisplayName: "Anna"}, "pw", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "k", zeroTime)
+	s.SetPreference(ctx, anna.ID, "ui", json.RawMessage(`{"theme":"dark"}`))
+	s.AddUser(ctx, User{Name: "bob"}, "", 0)
+	g, _ := s.AddUser(ctx, User{Name: "gone"}, "", 0)
+	s.DeleteUser(ctx, "gone", 0)
+	removed, _, _ := s.UserByID(ctx, g.ID)
+
+	for _, c := range []struct {
+		from, to string
+		want     error
+	}{
+		{"anna", "bob", ErrUserExists}, {"anna", removed.Name, ErrUserExists},
+		{"anna", "Bad Name", ErrBadName}, {"nobody", "carl", ErrNoUser}, {"gone", "carl", ErrNoUser},
+	} {
+		if _, err := s.RenameUser(ctx, c.from, c.to, "x", 0); !errors.Is(err, c.want) {
+			t.Errorf("rename %s to %s: %v, want %v", c.from, c.to, err, c.want)
+		}
+	}
+	got, err := s.RenameUser(ctx, "Anna", "Annabel", "new-pw", anna.ID)
+	if err != nil || got.ID != anna.ID || got.Name != "annabel" || got.DisplayName != "Anna" || got.Role != RoleOperator || got.AuthVersion != 2 || got.Version <= anna.Version {
+		t.Fatalf("renamed: %+v %v", got, err)
+	}
+	if !opaqueSignsIn(t, s, "annabel", "new-pw") || opaqueSignsIn(t, s, "anna", "pw") || opaqueSignsIn(t, s, "annabel", "pw") {
+		t.Fatal("the password under the new name only")
+	}
+	if _, ok, _ := s.User(ctx, "anna"); ok {
+		t.Fatal("the old name still found")
+	}
+	if tk, ok, _ := s.Token(ctx, tok.ID); !ok || !tk.RevokedAt.IsZero() || tk.UserID != anna.ID {
+		t.Fatalf("the key: %+v", tk)
+	}
+	if list, _ := s.Preferences(ctx, anna.ID); len(list) != 1 {
+		t.Fatalf("the preferences: %+v", list)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "anna"}, "", 0); err != nil {
+		t.Fatalf("the old name is free: %v", err)
+	}
+	none, err := s.RenameUser(ctx, "annabel", "bel", "", 0)
+	if err != nil || none.HasPassword || none.AuthVersion != 1 || opaqueSignsIn(t, s, "bel", "new-pw") {
+		t.Fatalf("no password: %+v %v", none, err)
 	}
 }
 
@@ -205,5 +276,59 @@ func TestLastOwnerWithEndDate(t *testing.T) {
 	}
 	if err := s.DeleteUser(ctx, "o1", 0); err != nil {
 		t.Fatalf("remove an owner that ends: %v", err)
+	}
+}
+
+// opaqueSignsIn reports whether a sign-in by OPAQUE for the name with the
+// password goes through, as the browser's client runs it.
+func opaqueSignsIn(t *testing.T, s *Store, name, password string) bool {
+	t.Helper()
+	start, ke3 := newTestClient(t).login(s, name, password)
+	return ke3 != nil && s.FinishOpaque(start, ke3) == nil
+}
+
+// Migration 0015 renames the users removed before it as DeleteUser now
+// does, -<id> added where a user has that name already, and leaves the
+// live ones; the name is then free (AP UserCli v1.0, Block 2).
+func TestMigration15(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s14 := openAt(t, dir, 14)
+	for _, q := range []string{
+		`INSERT INTO users (uuid, name, role_id, created_at, updated_at, deleted_at) SELECT 'u1', 'anna', id, '2026-11-01T10:00:00.000Z', '2026-11-02T08:05:09.123Z', '2026-11-02T08:05:09.123Z' FROM roles WHERE key = 'viewer'`,
+		`INSERT INTO users (uuid, name, role_id, created_at, updated_at, deleted_at) SELECT 'u2', 'bob', id, '2026-11-01T10:00:00.000Z', '2026-11-03T23:59:00.000Z', '2026-11-03T23:59:00.000Z' FROM roles WHERE key = 'viewer'`,
+		`INSERT INTO users (uuid, name, role_id, created_at, updated_at) SELECT 'u3', 'bob-del-20261103-2359', id, '2026-11-04T10:00:00.000Z', '2026-11-04T10:00:00.000Z' FROM roles WHERE key = 'viewer'`,
+		`INSERT INTO users (uuid, name, role_id, created_at, updated_at) SELECT 'u4', 'carl', id, '2026-11-04T10:00:00.000Z', '2026-11-04T10:00:00.000Z' FROM roles WHERE key = 'viewer'`,
+	} {
+		if _, err := s14.db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s14.Close()
+	s := open(t, dir)
+	names := map[string]string{}
+	rows, err := s.db.QueryContext(ctx, `SELECT uuid, name, id FROM users WHERE uuid LIKE 'u_'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bobID int64
+	for rows.Next() {
+		var uuid, name string
+		var id int64
+		rows.Scan(&uuid, &name, &id)
+		names[uuid] = name
+		if uuid == "u2" {
+			bobID = id
+		}
+	}
+	rows.Close()
+	want := map[string]string{"u1": "anna-del-20261102-0805", "u2": "bob-del-20261103-2359-" + strconv.FormatInt(bobID, 10), "u3": "bob-del-20261103-2359", "u4": "carl"}
+	for k, v := range want {
+		if names[k] != v {
+			t.Errorf("%s: %q, want %q", k, names[k], v)
+		}
+	}
+	if _, err := s.AddUser(ctx, User{Name: "anna"}, "", 0); err != nil {
+		t.Fatalf("the name of a user removed before: %v", err)
 	}
 }

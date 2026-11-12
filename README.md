@@ -981,6 +981,9 @@ for example `sudo -u _massimo massimo store info`.
 a user with keys only,
 `-password-stdin` to read it from standard input for scripts,
 `-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
+`user rename <name> <new name>`,
+which asks for the password again since it goes with the name
+(`-no-password` to leave the user with its keys),
 `user disable <name>` and `user enable <name>`,
 `user token <name> -label Loxone` prints a new API key once,
 `user tokens <name>` lists the user's sessions and keys with their ids,
@@ -993,6 +996,13 @@ A script signs in with an API key, not a password.
 It opens the store beside a running `serve`;
 run as the service user it acts on the service's,
 for example `sudo -u _massimo massimo user add anna -role operator`.
+Run by anyone else without `-data` or `MASSIMO_DATA`,
+it uses a store in the current directory and creates none there:
+it refuses, and names the service's command where the service is installed,
+since a store of its own would be nobody's and `serve` would never see the change;
+`store migrate` refuses the same.
+Each change ends its line with the store it was written to,
+and a store other than the service's draws a warning on the box that runs the service.
 The audit records what it did with the remote `cli`,
 and the log a change line of each, by the command line (docs/ui.md, "Log").
 With `MASSIMO_API_TOKEN` set, the first start of `serve` creates the user

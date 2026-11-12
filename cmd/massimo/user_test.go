@@ -10,6 +10,8 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -286,14 +288,15 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		{true, "user -h"}, {true, "user help"}, {true, "user --help"},
 		{true, "user add -h"}, {true, "user add anna -h"}, {true, "user list -h"},
 		{true, "user passwd -h"}, {true, "user disable -h"}, {true, "user enable -h"},
-		{true, "user token -h"}, {true, "user tokens -h"}, {true, "user revoke -h"},
+		{true, "user token -h"}, {true, "user tokens -h"}, {true, "user revoke -h"}, {true, "user rename -h"},
 		{true, "store -h"}, {true, "store help"}, {true, "store backup -h"},
 		{true, "store migrate -h"}, {true, "store info -h"},
 		{false, "user"}, {false, "user bogus"}, {false, "user add"},
 		{false, "user add -x anna"}, {false, "user add anna -no-password -expires tomorrow"},
 		{false, "user list extra"}, {false, "user passwd"}, {false, "user disable"},
 		{false, "user enable anna bob"}, {false, "user token anna"}, {false, "user tokens"},
-		{false, "user revoke"}, {false, "user revoke anna x"},
+		{false, "user revoke"}, {false, "user revoke anna x"}, {false, "user rename anna"},
+		{false, "user rename anna bob -no-password -password-stdin"},
 		{false, "store"}, {false, "store bogus"}, {false, "store backup"},
 		{false, "store migrate extra"}, {false, "store info extra"},
 	} {
@@ -312,5 +315,140 @@ func TestHelpCreatesNoStore(t *testing.T) {
 		if len(left) > 0 {
 			t.Fatalf("%s left %s in the directory", c.args, left[0].Name())
 		}
+	}
+}
+
+// massimo user and store migrate create no store in a directory nobody
+// named: the current directory without massimo.db. They name the
+// service's command where the service is installed, -data where not;
+// a change says which store it was written to, and a store other than
+// the service's draws a warning. The service's directory is the test's
+// (serviceFiles), which Windows does not use.
+func TestUserStoreDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the service's store is under %ProgramData% on Windows")
+	}
+	clearCubeEnv(t)
+	_, stateDir := serviceFiles(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	var errOut bytes.Buffer
+	stderr = &errOut
+	t.Cleanup(func() { stderr = os.Stderr })
+	empty := func(what string) {
+		t.Helper()
+		if left, _ := os.ReadDir(cwd); len(left) > 0 {
+			t.Fatalf("%s left %s in the current directory", what, left[0].Name())
+		}
+	}
+
+	_, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin")
+	if err == nil || !strings.Contains(err.Error(), "user add: no massimo.db in the current directory") ||
+		!strings.Contains(err.Error(), stateDir) || !strings.Contains(err.Error(), "sudo -u _massimo") {
+		t.Fatalf("add with the service installed: %v", err)
+	}
+	empty("add")
+	if err := runStore([]string{"migrate"}); err == nil || !strings.Contains(err.Error(), "store migrate: no massimo.db") {
+		t.Fatalf("migrate: %v", err)
+	}
+	empty("migrate")
+	if err := os.Remove(stateDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runUserWith(t, "", "list"); err == nil || !strings.Contains(err.Error(), "give -data") {
+		t.Fatalf("list without a service: %v", err)
+	}
+	empty("list")
+	if err := os.Mkdir(stateDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	other := t.TempDir()
+	t.Setenv(env.DataVar, other)
+	out, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin")
+	if want := "(store " + filepath.Join(other, store.FileName) + ")"; err != nil || !strings.Contains(out, want) {
+		t.Fatalf("add with MASSIMO_DATA: %q %v, want %q", out, err, want)
+	}
+	if w := errOut.String(); !strings.Contains(w, "warning: "+filepath.Join(other, store.FileName)+" is not the service's store, which is in "+stateDir) {
+		t.Fatalf("the warning: %q", w)
+	}
+	errOut.Reset()
+	if _, err := runUserWith(t, "", "token", "anna", "-label", "x"); err != nil || !strings.Contains(errOut.String(), "API key 1 of anna (store ") {
+		t.Fatalf("token: %v %q", err, errOut.String())
+	}
+
+	// A store already in the current directory is used, as a
+	// developer's checkout has one; the service's own draws no warning.
+	t.Setenv(env.DataVar, cwd)
+	if _, err := runUserWith(t, "", "add", "bob", "-no-password"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(env.DataVar, "")
+	if out, err := runUserWith(t, "", "disable", "bob"); err != nil || !strings.Contains(out, string(filepath.Separator)+store.FileName+")") {
+		t.Fatalf("disable in the current directory's store: %q %v", out, err)
+	}
+	t.Setenv(env.DataVar, stateDir)
+	errOut.Reset()
+	if _, err := runUserWith(t, "", "add", "carl", "-no-password"); err != nil || errOut.Len() > 0 {
+		t.Fatalf("the service's store: %v %q", err, errOut.String())
+	}
+}
+
+// user rename moves the user and its password to the new name, ends its
+// sessions and keeps its keys; it asks for the password unless
+// -no-password, and refuses a taken name before asking.
+func TestUserRename(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	ctx := context.Background()
+	if _, err := runUserWith(t, "pw\n", "add", "anna", "-password-stdin"); err != nil {
+		t.Fatal(err)
+	}
+	runUserWith(t, "", "add", "bob", "-no-password")
+	key, _ := runUserWith(t, "", "token", "anna", "-label", "k")
+	for _, c := range []struct{ in, args, want string }{
+		{"x\n", "rename anna bob -password-stdin", "exists"},
+		{"x\n", "rename nobody carl -password-stdin", "no user"},
+		{"", "rename anna carl", "no terminal"},
+		{"", "rename anna carl -no-password -password-stdin", "exclude each other"},
+		{"", "rename anna", "give the name and the new name"},
+		{"x\n", "rename anna bad! -password-stdin", "bad user name"},
+	} {
+		if _, err := runUserWith(t, c.in, strings.Fields(c.args)...); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", c.args, err, c.want)
+		}
+	}
+	st, _ := store.Open(dir, store.Options{})
+	anna, _, _ := st.User(ctx, "anna")
+	st.AddToken(ctx, anna.ID, store.TokenSession, "browser", time.Now().Add(time.Hour))
+	st.Close()
+	out, err := runUserWith(t, "new-pw\n", "rename", "anna", "Annabel", "-password-stdin")
+	if err != nil || !strings.Contains(out, "user anna renamed to annabel; its sessions are ended, its API keys kept (store ") {
+		t.Fatalf("rename: %q %v", out, err)
+	}
+	st, err = store.OpenReadOnly(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, ok, _ := st.User(ctx, "annabel")
+	if !ok || got.ID != anna.ID || !signsIn(t, st, "annabel", "new-pw") || signsIn(t, st, "anna", "pw") {
+		t.Fatalf("annabel %+v %v", got, ok)
+	}
+	toks, _ := st.Tokens(ctx, anna.ID)
+	if len(toks) != 1 || toks[0].Kind != store.TokenAPI {
+		t.Fatalf("the tokens left: %+v", toks)
+	}
+	if tok, ok, _ := st.TokenByHash(ctx, store.HashToken(strings.TrimSpace(key))); !ok || tok.UserID != anna.ID {
+		t.Fatalf("the key: %+v %v", tok, ok)
+	}
+	rows, _ := st.AuditList(ctx, time.Time{}, 50, "")
+	found := false
+	for _, r := range rows {
+		found = found || r.Action == "user.update" && r.Target == "user:annabel" && strings.Contains(string(r.Detail), `"from":"anna"`)
+	}
+	if !found {
+		t.Fatalf("no audit row of the rename: %+v", rows)
 	}
 }
