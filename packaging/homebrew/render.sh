@@ -50,13 +50,15 @@ done
 if [ -z "$tag" ] || [ -z "$out" ]; then
 	usage
 fi
-case "$tag" in
-v[0-9]*) ;;
-*) echo "render.sh: $tag is not a version tag" >&2; exit 1 ;;
-esac
+# A version tag has the full shape, vX.Y.Z or vX.Y.Z-<label>.N: a label
+# names the channel, and only a tag without one is stable.
+if ! printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$'; then
+	echo "render.sh: $tag is not a version tag" >&2
+	exit 1
+fi
 
 if [ -z "$channel" ]; then
-	channel=$(printf '%s\n' "$tag" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')
+	channel=$(printf '%s\n' "$tag" | sed -nE 's/^v[0-9]+\.[0-9]+\.[0-9]+-([a-z][a-z0-9]*)\.[0-9]+$/\1/p')
 	channel=${channel:-stable}
 fi
 version=${tag#v}

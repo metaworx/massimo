@@ -20,7 +20,7 @@ usage: build.sh --out <dir> (--apt <dir> | --apt-index <file|newest> | --no-apt)
   --apt <dir>          the apt repository as publish.sh built it, copied as it is
   --apt-index <file>   the signed index of a release (massimo-apt-index.tar.gz),
                        its pool fetched by pool.tsv and every package checked by its sum;
-                       "newest" takes it from the newest v* release carrying one
+                       "newest" takes it from the newest version tag's release with one
   --no-apt             no apt repository: the pages and docs alone, never to be deployed
   --ref <ch>=<ref>     the docs of channel <ch> from <ref>, repeatable; default every
                        release/<channel> branch or tag of origin there is, and main=origin/main
@@ -81,7 +81,7 @@ if [ -n "$apt_dir" ]; then
 elif [ -n "$apt_index" ]; then
 	if [ "$apt_index" = newest ]; then
 		apt_index=""
-		for tag in $(gh release list --repo "$repo" --limit 100 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]"))'); do
+		for tag in $(gh release list --repo "$repo" --limit 100 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z][a-z0-9]*\\.[0-9]+)?$"))'); do
 			if gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | grep -qx massimo-apt-index.tar.gz; then
 				gh release download "$tag" --repo "$repo" --pattern massimo-apt-index.tar.gz --dir "$work"
 				apt_index=$work/massimo-apt-index.tar.gz
@@ -150,7 +150,7 @@ for spec in ${refs[@]+"${refs[@]}"}; do
 	esac
 	case "$ch" in *[!a-z0-9]*) echo "build.sh: --ref $spec: a channel is a lower-case name" >&2; exit 2 ;; esac
 	commit=$(git -C "$root" rev-parse --verify "$ref^{commit}")
-	version=$(git -C "$root" describe --tags --match 'v[0-9]*' "$commit" 2>/dev/null || git -C "$root" rev-parse --short "$commit")
+	version=$(git -C "$root" describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' "$commit" 2>/dev/null || git -C "$root" rev-parse --short "$commit")
 	date=$(git -C "$root" show -s --format=%cs "$commit")
 	pin=$(git -C "$root" rev-parse "$commit:GUIDELINES/shared")
 	tree=$work/tree-$ch

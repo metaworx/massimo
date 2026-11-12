@@ -105,6 +105,58 @@ grep -q '^Package: massimo-archive-keyring$' "$work/site/apt/dists/alpha/main/bi
 	exit 1
 }
 
+# Only a version tag of the full shape is a release: publish.sh's pool and
+# build.sh's newest index, from a gh that lists v0.1.0-alpha.1 and v1.2.3
+# among tags that only look like one, take those two alone. v1.2.3 comes
+# last, as an older release of another channel does.
+mkdir "$work/bin"
+cat >"$work/bin/gh" <<'GH'
+#!/usr/bin/env bash
+# gh for the version-tag checks: the releases of $STUB_TAGS, newest first,
+# each with one package ($STUB_DEB) and the index asset ($STUB_INDEX).
+set -euo pipefail
+printf '%s\n' "$*" >>"$STUB_LOG"
+cmd="$1 $2" tag=${3:-} jq="" dir="" pattern=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--jq) jq=$2 ;;
+	--dir) dir=$2 ;;
+	--pattern) pattern=$2 ;;
+	esac
+	shift
+done
+case "$cmd" in
+"release list") jq -nc '$ARGS.positional | map({tagName: .})' --args $STUB_TAGS | jq -r "$jq" ;;
+"release view") jq -nc --arg deb "$(basename "$STUB_DEB")" '{assets: [{name: $deb}, {name: "massimo-apt-index.tar.gz"}]}' | jq -r "$jq" ;;
+"release download")
+	case "$pattern" in
+	*.deb) cp "$STUB_DEB" "$dir/" ;;
+	massimo-apt-index.tar.gz) cp "$STUB_INDEX" "$dir/massimo-apt-index.tar.gz" ;;
+	esac
+	;;
+*) echo "gh stub: $cmd" >&2; exit 1 ;;
+esac
+GH
+chmod +x "$work/bin/gh"
+stub_deb=$(find "$root/dist" -maxdepth 1 -name 'massimo_*_amd64.deb' | head -1)
+export STUB_LOG=$work/gh.log STUB_DEB=$stub_deb STUB_INDEX=$work/index.tar.gz
+export STUB_TAGS='v1.2 verification-test v1..2-alpha.1 v1.2.3-rc release/devel v0.1.0-alpha.1 v1.2.3'
+PATH=$work/bin:$PATH "$root/packaging/apt/publish.sh" --out "$work/tags" --key "$key" >/dev/null || {
+	echo "FAIL: publish.sh stops on releases of several channels" >&2
+	exit 1
+}
+PATH=$work/bin:$PATH "$root/packaging/site/build.sh" --out "$work/pages-newest" --apt-index newest --no-docs >/dev/null
+suites=$(cd "$work/tags/apt/dists" && echo *)
+if [ "$suites" != "alpha stable" ]; then
+	echo "FAIL: publish.sh made the suites $suites, not alpha stable" >&2
+	exit 1
+fi
+if grep -E '^release (view|download) ' "$STUB_LOG" | grep -Ev '^release [a-z]+ (v0\.1\.0-alpha\.1|v1\.2\.3) '; then
+	echo "FAIL: publish.sh or build.sh took a release whose tag is no version" >&2
+	exit 1
+fi
+unset STUB_LOG STUB_DEB STUB_INDEX STUB_TAGS
+
 # A rotated key makes a newer keyring package, whatever its expiry: here
 # one without any, after the first that expires tomorrow.
 keyring_version() { # <site>

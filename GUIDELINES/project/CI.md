@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.40.0)
+# Massimo — CI Conventions (v1.41.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a tag `v*`, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
 
 There is no other platform.
 
@@ -38,7 +38,7 @@ There is no other platform.
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
-| tag `v*` | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
+| a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: build.yml, then release.yml, no tests: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
@@ -364,7 +364,7 @@ and on 2026-11-08 it read a Dependabot pull request's that way.
 
 | Name | Set where | Used by |
 |------|-----------|---------|
-| `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by `v*` tags only, each run approved by the owner | release.yml, to sign the release manifest; its public half is `internal/update/release-key.pem` |
+| `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by version tags only, each run approved by the owner | release.yml, to sign the release manifest; its public half is `internal/update/release-key.pem` |
 | `MASSIMO_ROLLING_KEY` | the `signing-rolling` environment, usable by `main` only | release.yml's `rolling`, to sign the manifest of a `devel` or `nightly` build; its public half is `internal/update/rolling-key.pem`, which boxes accept for those two flavours alone |
 | `ROLLING_TAG_DEPLOY_KEY` | the `signing-rolling` environment; its public half a deploy key with write access, "rolling tags (release.yml)" | release.yml's `rolling`, to move `release/devel` and `release/nightly` to the new build (section 6); without it the token tries |
 | `RELEASE_BRANCH_DEPLOY_KEY` | the `signing` environment; its public half a deploy key with write access, "release branches (release.yml)" | release.yml's `sign`, to fast-forward `release/<flavour>` to the published release (section 6); without it the branch stays |
@@ -496,15 +496,26 @@ waited for its approval, deployed the site with the index of the release before,
 and the release's own deploy of the commit reported success and changed nothing,
 so that apt did not offer the release until a nightly build of the next commit.
 The rolling builds' tags are no versions,
-so every `git describe` asks for the version tags alone (`--match 'v[0-9]*'`):
+so every `git describe` asks for the version tags alone
+(`--match 'v[0-9]*.[0-9]*.[0-9]*'`):
 the Makefile's `VERSION` and `FLAVOUR`, `make release-alpha`'s check,
 and `meta`'s.
 Without it, on 2026-11-10 every commit after the first `release/devel`
 described as `release/devel-1-g…`, which `make packages` could not name a package by.
+A version tag has the full shape, `vX.Y.Z` or `vX.Y.Z-<label>.N`,
+and is matched by it, never by `v*` (D43-A, 2026-11-12),
+so that a tag such as `verification-test` or `v1.2` is never a release:
+a glob, an environment's or a ruleset's rule as `v[0-9]*.[0-9]*.[0-9]*`,
+a regular expression as `^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$`,
+and ci.yml's trigger as `v[0-9]+.[0-9]+.[0-9]+` and `v[0-9]+.[0-9]+.[0-9]+-*`.
+A glob cannot refuse a label without its number (`v1.2.3-rc`);
+`meta` stops a push of one, since it names no flavour.
 A rolling tag moves, so nothing fetches it unforced:
 `git fetch --tags` refuses to move a checkout's older copy of one
 ("would clobber existing tag", 2026-11-10).
-`make release-alpha` fetches `main` and the version tags alone (`refs/tags/v*`),
+`make release-alpha` fetches `main` and the version tags alone (`refs/tags/v*`,
+the one loose pattern: a refspec allows a single `*` and no class,
+and every match after the fetch is strict),
 and `git fetch --force origin 'refs/tags/release/*:refs/tags/release/*'`
 brings a checkout's own copies up to date.
 `packaging/apt/publish.sh` leaves the rolling releases out:
@@ -523,7 +534,7 @@ and GitHub starts no workflow for an event that token causes
 until this was moved, the tap was never updated and nothing said so.
 A release published before the tap existed gets its formula by hand,
 `gh workflow run publish.yml --ref <tag> -f tag=<tag>`,
-on the tag since the `signing` environment admits `v*` tags alone,
+on the tag since the `signing` environment admits version tags alone,
 which renders the formula from the tag's own template
 and changes nothing when the tap holds it already.
 A release also carries a Debian package per architecture,
@@ -552,7 +563,8 @@ channel under `docs/`, and deploys it to the project's GitHub Pages,
 (a workflow's deployment needs no `CNAME` file),
 one deploy at a time (`concurrency: pages`), none cancelled.
 The Pages source must be set to GitHub Actions,
-and the `github-pages` environment must allow the tags `v*`:
+and the `github-pages` environment must allow the version tags,
+`v[0-9]*.[0-9]*.[0-9]*`:
 GitHub makes it allowing the default branch only,
 and a release's deploy runs for its tag;
 a box following a suite takes the release through `apt upgrade`.

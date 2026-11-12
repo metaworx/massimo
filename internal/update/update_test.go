@@ -1044,3 +1044,25 @@ func TestRetryable(t *testing.T) {
 		t.Error("a request is sent again after the context's end")
 	}
 }
+
+// TestHintedFlavour: only a tag of the full shape names a flavour, so that
+// a tag that merely starts like a version is fetched and decided by its
+// manifest, as any release without a hint.
+func TestHintedFlavour(t *testing.T) {
+	for tag, want := range map[string]string{
+		"v0.14.0-alpha.1":   "alpha",
+		"v1.2.3-rc.2":       "rc",
+		"v1.2.3":            "stable",
+		"release/nightly":   "nightly",
+		"v1..2-alpha.1":     "",
+		"v1.2-alpha.1":      "",
+		"v1.2":              "",
+		"v1.2.3-rc":         "",
+		"v1.2.3-Alpha.1":    "",
+		"verification-test": "",
+	} {
+		if got := hintedFlavour(ghRelease{TagName: tag}); got != want {
+			t.Errorf("hintedFlavour(%q) = %q, want %q", tag, got, want)
+		}
+	}
+}

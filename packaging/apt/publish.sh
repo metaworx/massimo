@@ -88,7 +88,7 @@ sign() { # <in> <out> <--clearsign|--detach-sign>
 # (v0.7.0-alpha.1 is on alpha), else stable.
 channel_of() { # <tag>
 	local c
-	c=$(printf '%s\n' "$1" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')
+	c=$(printf '%s\n' "$1" | sed -nE 's/^v[0-9]+\.[0-9]+\.[0-9]+-([a-z][a-z0-9]*)\.[0-9]+$/\1/p')
 	printf '%s\n' "${c:-stable}"
 }
 
@@ -99,7 +99,7 @@ if [ -n "$from" ]; then
 else
 	# The numbered releases alone: a rolling build's release (release/devel)
 	# gets no suite of its own until its packages' versions sort.
-	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]"))')
+	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z][a-z0-9]*\\.[0-9]+)?$"))')
 	channels=""
 	while read -r tag; do
 		[ -n "$tag" ] || continue
@@ -108,7 +108,11 @@ else
 	for ch in $(printf '%s\n' "$channels" | tr ' ' '\n' | sort -u); do
 		[ -n "$ch" ] || continue
 		newest=$(while read -r tag; do
-			[ "$(channel_of "$tag")" = "$ch" ] && printf '%s\n' "$tag"
+			# An if, not &&: a last tag of another channel would end the
+			# loop, and with pipefail the script, with that test's status.
+			if [ "$(channel_of "$tag")" = "$ch" ]; then
+				printf '%s\n' "$tag"
+			fi
 		done <<<"$tags" | sort -V | tail -n "$releases")
 		mkdir -p "$apt/pool/$ch"
 		while read -r tag; do

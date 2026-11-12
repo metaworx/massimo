@@ -3,14 +3,14 @@
 # flavour it is released as (see internal/update). Only the version tags
 # count: the rolling builds' tags (release/devel) are no version.
 
-VERSION ?= $(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo v0.0.0-dev)
+VERSION ?= $(shell git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --always --dirty 2>/dev/null || echo v0.0.0-dev)
 # The flavour of a release tag's commit is the tag's pre-release label
 # (alpha of v0.12.0-alpha.1), stable for a tag without one; any other
 # build is devel, the flavour of the builds of main. release.yml passes
 # FLAVOUR itself, and RELEASE, the GitHub release's tag, for a rolling
 # build (release/devel).
-FLAVOUR ?= $(shell t=$$(git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null); \
-	f=$$(printf '%s\n' "$$t" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$$/\1/p'); \
+FLAVOUR ?= $(shell t=$$(git describe --tags --exact-match --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null); \
+	f=$$(printf '%s\n' "$$t" | sed -nE 's/^v[0-9]+\.[0-9]+\.[0-9]+-([a-z][a-z0-9]*)\.[0-9]+$$/\1/p'); \
 	if [ -z "$$f" ] && printf '%s\n' "$$t" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then f=stable; fi; \
 	printf '%s' "$${f:-devel}")
 RELEASE  ?=
@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver deb-test deb-systemd-test apt-test site release release-files clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site release release-files clean release-alpha
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, and a beta
@@ -75,6 +75,8 @@ DEB_IMAGE ?= debian:trixie-slim
 # commit an agent's Assisted-by trailer (COMMIT.md 3.3); the owner's own
 # release needs none.
 CHANGELOG_SH = GUIDELINES/shared/tools/changelog.sh
+# The fetch takes refs/tags/v*: a refspec allows one * and no class, so it
+# cannot name the version tags' shape; every match after it does.
 release-alpha:
 	@git fetch --quiet origin main 'refs/tags/v*:refs/tags/v*' || { \
 		echo "release-alpha: git fetch origin main 'refs/tags/v*:refs/tags/v*' failed; run it to see why" >&2; exit 1; }; \
@@ -85,9 +87,9 @@ release-alpha:
 		echo "release-alpha: main has uncommitted changes" >&2; exit 1; fi; \
 	if [ "$$(git rev-parse HEAD)" != "$$sha" ]; then \
 		echo "release-alpha: main is not origin/main ($$sha); pull or push first" >&2; exit 1; fi; \
-	if done=$$(git describe --tags --exact-match --match 'v[0-9]*' $$sha 2>/dev/null); then \
+	if done=$$(git describe --tags --exact-match --match 'v[0-9]*.[0-9]*.[0-9]*' $$sha 2>/dev/null); then \
 		echo "release-alpha: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
-	last=$$(git tag -l 'v0.*.*-alpha.*' | awk -F'[.-]' '{print $$2, $$NF, $$0}' | sort -k1,1n -k2,2n | tail -1); \
+	last=$$(git tag -l 'v0.[0-9]*.[0-9]*-alpha.[0-9]*' | awk -F'[.-]' '{print $$2, $$NF, $$0}' | sort -k1,1n -k2,2n | tail -1); \
 	minor=$${last%% *}; n=$$(echo "$$last" | cut -d' ' -f2); \
 	case "$(BUMP)" in \
 		minor) next=v0.$$((minor+1)).0-alpha.1 ;; \
@@ -223,6 +225,11 @@ packages: linux linux-arm64 linux-armv6 deb-unit
 # The package version of VERSION, which TestDebVersion reads.
 debver:
 	@echo '$(DEBVER)'
+
+# VERSION and FLAVOUR of the commit checked out, which TestMakeVersionTags
+# reads in a repository of its own (make -f <this Makefile> version).
+version:
+	@echo '$(VERSION) $(FLAVOUR)'
 
 deb-test:
 	docker run --rm -v "$(CURDIR)/$(OUT):/dist:ro" -v "$(CURDIR)/packaging/deb/test.sh:/test.sh:ro" $(DEB_IMAGE) bash /test.sh

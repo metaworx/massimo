@@ -560,7 +560,7 @@ The owner's steps, once:
   (GUIDELINES/project/CI.md, section 5).
 - In the repository's settings, Pages → Source: GitHub Actions.
 - Then Environments → `github-pages` → Deployment branches and tags:
-  add a rule for the tags `v*`.
+  add a rule for the version tags, `v[0-9]*.[0-9]*.[0-9]*`.
   The environment GitHub makes for Pages deploys from the default branch only,
   and a release's deploy runs for its tag,
   so without the rule a release's deploy is refused;
@@ -950,7 +950,7 @@ on Windows the server starts the helper itself (see "Windows");
 the Debian package's own helper runs apt (see "Debian package").
 
 The release key: the workflow signs with `MASSIMO_RELEASE_KEY`,
-a secret of the repository's `signing` environment that only `v*` tags can use,
+a secret of the repository's `signing` environment that only version tags can use,
 and where each run waits for the owner's approval;
 its public half is `internal/update/release-key.pem`.
 The rolling key signs the `devel` and `nightly` builds:
@@ -965,7 +965,7 @@ with write access, with which the release fast-forwards `release/<flavour>`;
 with which the rolling builds move `release/devel` and `release/nightly`.
 `HOMEBREW_TAP_DEPLOY_KEY` and the apt key are in `signing` as well (see "Homebrew"),
 and one approval lets every job holding one of them run.
-The repository's rulesets keep the `v*` tags from being moved or deleted
+The repository's rulesets keep the version tags from being moved or deleted
 and let the `release/*` branches only fast-forward
 (GUIDELINES/project/CI.md, section 6).
 A new key needs a release built with the new public key before releases signed
