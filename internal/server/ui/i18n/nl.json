@@ -870,6 +870,68 @@
   "login.title": "Aanmelden",
 
   "login.menu": "Taal en weergave",
+
+  "login.with": "Aanmelden met {name}",
+
+  "login.oidcError.denied": "De provider heeft je niet aangemeld.",
+
+  "login.oidcError.failed": "Aanmelden via de provider is mislukt. Probeer het opnieuw, of meld je aan met naam en wachtwoord.",
+
+  "login.oidcError.refused": "Dit account is op deze server niet bekend. Vraag de eigenaar het aan je gebruiker toe te wijzen.",
+
+  "login.oidcError.disabled": "Je gebruiker is uitgeschakeld of verlopen.",
+
+  "providers.title": "Aanmeldproviders",
+
+  "providers.text": "Gebruikers melden zich naast hun wachtwoord aan via een OpenID Connect-provider zoals Nextcloud, Google of Microsoft. Registreer deze server daar als client, met de omleidings-URI hieronder.",
+
+  "providers.callback": "Te registreren omleidings-URI:",
+
+  "providers.none": "Nog geen provider.",
+
+  "providers.add": "Provider toevoegen",
+
+  "providers.key": "Sleutel",
+
+  "providers.name": "Naam op de knop",
+
+  "providers.issuer": "Uitgever (issuer)",
+
+  "providers.clientId": "Client-ID",
+
+  "providers.clientSecret": "Clientgeheim",
+
+  "providers.secretKept": "Ingesteld; leeg laten om het te behouden.",
+
+  "providers.secretNone": "Nog geen.",
+
+  "providers.scopes": "Scopes",
+
+  "providers.enabled": "Ingeschakeld",
+
+  "providers.autoCreate": "Gebruikers aanmaken die zich aanmelden",
+
+  "providers.autoRole": "Hun rol",
+
+  "providers.autoDomains": "Hun e-maildomeinen",
+
+  "providers.domainsHint": "Gescheiden door komma's; leeg: elk domein.",
+
+  "providers.remove": "Verwijderen",
+
+  "providers.removeConfirm": "De provider {name} verwijderen? Niemand meldt zich er nog via aan, en de identiteiten daar verdwijnen.",
+
+  "providers.removed": "Provider {name} verwijderd.",
+
+  "providers.saved": "Provider {name} opgeslagen.",
+
+  "providers.added": "Provider {name} toegevoegd.",
+
+  "providers.failed": "{name}: niet uitgevoerd: {error}",
+
+  "providers.off": "uitgeschakeld",
+
+  "providers.createsUsers": "maakt gebruikers aan",
   "login.text": "Deze server vraagt wie je bent.",
   "login.user": "Naam",
   "login.password": "Wachtwoord",
@@ -939,6 +1001,30 @@
   "users.unchanged": "Niets gewijzigd.",
   "users.tokens": "Sessies en sleutels",
   "users.tokensNone": "Geen.",
+
+  "users.identities": "Aanmelden via providers",
+
+  "users.identityProvider": "Provider",
+
+  "users.identityEmail": "E-mail bij de provider",
+
+  "users.identityAdd": "Toewijzen",
+
+  "users.identityRemove": "Verwijderen",
+
+  "users.identityRemoveLabel": "{email} bij {provider} verwijderen",
+
+  "users.identityBound": "gekoppeld",
+
+  "users.identityWaiting": "wacht op de eerste aanmelding",
+
+  "users.identitiesNone": "Geen.",
+
+  "users.identityAdded": "{email} toegewezen.",
+
+  "users.identityRemoved": "Identiteit verwijderd.",
+
+  "users.identityEmailNeeded": "Een e-mailadres is nodig.",
   "users.kind.session": "sessie",
   "users.kind.api": "API-sleutel",
   "users.lastUsed": "laatst gebruikt vanaf {from}",

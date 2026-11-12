@@ -1,0 +1,57 @@
+<!-- A provider's form in System settings → Sign-in providers (detailsPanel puts its head around it, or it stands alone to add one), providers.js. -->
+<template id="tpl-provider-form">
+  <form class="panel provider-form">
+    <div class="field wide provider-key">
+      <label data-i18n="providers.key">Key</label>
+      <input type="text" name="key" class="field-control" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="32" placeholder="nextcloud">
+    </div>
+    <div class="field wide">
+      <label data-i18n="providers.name">Name on the button</label>
+      <input type="text" name="name" class="field-control" autocomplete="off" maxlength="64" placeholder="Nextcloud">
+    </div>
+    <div class="field wide">
+      <label data-i18n="providers.issuer">Issuer</label>
+      <input type="url" name="issuer" class="field-control" autocomplete="off" spellcheck="false" placeholder="https://cloud.example.com">
+    </div>
+    <div class="field wide">
+      <label data-i18n="providers.clientId">Client ID</label>
+      <input type="text" name="client_id" class="field-control" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field wide">
+      <label data-i18n="providers.clientSecret">Client secret</label>
+      <input type="password" name="client_secret" class="field-control" autocomplete="off">
+      <p class="muted small field-hint secret-hint"></p>
+    </div>
+    <div class="field wide">
+      <label data-i18n="providers.scopes">Scopes</label>
+      <input type="text" name="scopes" class="field-control" autocomplete="off" spellcheck="false" placeholder="openid email profile">
+    </div>
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" name="enabled">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="providers.enabled">Enabled</span>
+      </label>
+    </div>
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" name="auto_create">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="providers.autoCreate">Create users who sign in</span>
+      </label>
+    </div>
+    <div class="field wide auto-only">
+      <label data-i18n="providers.autoRole">Their role</label>
+      <select name="auto_role" class="field-control"></select>
+    </div>
+    <div class="field wide auto-only">
+      <label data-i18n="providers.autoDomains">Their e-mail domains</label>
+      <input type="text" name="auto_domains" class="field-control" autocomplete="off" spellcheck="false" placeholder="example.com, example.org">
+      <p class="muted small field-hint" data-i18n="providers.domainsHint">Comma-separated; empty: any domain.</p>
+    </div>
+    <div class="actions">
+      <span class="actions-left"><button type="button" class="remove-provider" data-i18n="providers.remove">Remove</button></span>
+      <span class="actions-right"><button type="button" class="cancel-provider" data-i18n="action.cancel">Cancel</button><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
+    </div>
+  </form>
+</template>

@@ -1273,7 +1273,7 @@ massimo-week-program { display: contents; }
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
-.no-settings .needs-settings, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
+.no-settings .needs-settings, .no-auth .needs-auth, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system,
 .no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
@@ -1291,6 +1291,16 @@ massimo-week-program { display: contents; }
 .user-tokens-box { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .user-tokens { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .user-tokens li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* a user's identities at the sign-in providers, as its sessions and keys */
+.user-identities-box { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.user-identities { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.user-identities li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.user-identities li .remove-identity { margin-left: auto; }
+/* System settings → Sign-in providers; the sign-in card's provider buttons */
+.provider-form { display: flex; flex-direction: column; gap: 6px; }
+.providers-callback .mono { overflow-wrap: anywhere; }
+.login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.login-providers button { width: 100%; }
 .user-tokens li .revoke-token { margin-left: auto; }
 .user-key { word-break: break-all; user-select: all; }
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }

@@ -85,6 +85,26 @@
   </div>
 </template>
 
+<template id="tpl-user-identities">
+  <div class="user-identities-box">
+    <span class="muted small" data-i18n="users.identities">Sign-in through providers</span>
+    <ul class="user-identities"></ul>
+    <div class="field wide">
+      <label data-i18n="users.identityProvider">Provider</label>
+      <select name="provider" class="field-control"></select>
+    </div>
+    <div class="field wide">
+      <label data-i18n="users.identityEmail">E-mail at the provider</label>
+      <input type="email" name="email" class="field-control" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="actions"><span class="actions-right"><button type="button" class="add-identity" data-i18n="users.identityAdd">Assign</button></span></div>
+  </div>
+</template>
+
+<template id="tpl-identity-row">
+  <li><span class="flag mode identity-provider"></span><span class="identity-email"></span><span class="muted small identity-state"></span><button type="button" class="remove-identity" data-i18n="users.identityRemove">Remove</button></li>
+</template>
+
 <template id="tpl-profile-form">
   <form class="profile-form">
     <div class="field wide">

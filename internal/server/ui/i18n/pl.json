@@ -892,6 +892,68 @@
   "login.title": "Logowanie",
 
   "login.menu": "Język i wygląd",
+
+  "login.with": "Zaloguj się przez {name}",
+
+  "login.oidcError.denied": "Dostawca nie zalogował cię.",
+
+  "login.oidcError.failed": "Logowanie przez dostawcę nie powiodło się. Spróbuj ponownie albo zaloguj się nazwą i hasłem.",
+
+  "login.oidcError.refused": "To konto nie jest znane na tym serwerze. Poproś właściciela, aby przypisał je do twojego użytkownika.",
+
+  "login.oidcError.disabled": "Twój użytkownik jest wyłączony lub wygasł.",
+
+  "providers.title": "Dostawcy logowania",
+
+  "providers.text": "Użytkownicy logują się oprócz hasła przez dostawcę OpenID Connect, takiego jak Nextcloud, Google lub Microsoft. Zarejestruj tam ten serwer jako klienta, z poniższym adresem URI przekierowania.",
+
+  "providers.callback": "URI przekierowania do zarejestrowania:",
+
+  "providers.none": "Jeszcze brak dostawcy.",
+
+  "providers.add": "Dodaj dostawcę",
+
+  "providers.key": "Klucz",
+
+  "providers.name": "Nazwa na przycisku",
+
+  "providers.issuer": "Wystawca (issuer)",
+
+  "providers.clientId": "ID klienta",
+
+  "providers.clientSecret": "Sekret klienta",
+
+  "providers.secretKept": "Ustawiony; zostaw puste, aby go zachować.",
+
+  "providers.secretNone": "Jeszcze brak.",
+
+  "providers.scopes": "Zakresy (scopes)",
+
+  "providers.enabled": "Włączony",
+
+  "providers.autoCreate": "Twórz użytkowników, którzy się logują",
+
+  "providers.autoRole": "Ich rola",
+
+  "providers.autoDomains": "Ich domeny e-mail",
+
+  "providers.domainsHint": "Oddzielone przecinkami; puste: każda domena.",
+
+  "providers.remove": "Usuń",
+
+  "providers.removeConfirm": "Usunąć dostawcę {name}? Nikt już się przez niego nie zaloguje, a tożsamości u niego znikną.",
+
+  "providers.removed": "Usunięto dostawcę {name}.",
+
+  "providers.saved": "Zapisano dostawcę {name}.",
+
+  "providers.added": "Dodano dostawcę {name}.",
+
+  "providers.failed": "{name}: nie wykonano: {error}",
+
+  "providers.off": "wyłączony",
+
+  "providers.createsUsers": "tworzy użytkowników",
   "login.text": "Ten serwer pyta, kim jesteś.",
   "login.user": "Nazwa",
   "login.password": "Hasło",
@@ -963,6 +1025,30 @@
   "users.unchanged": "Nic się nie zmieniło.",
   "users.tokens": "Sesje i klucze",
   "users.tokensNone": "Brak.",
+
+  "users.identities": "Logowanie przez dostawców",
+
+  "users.identityProvider": "Dostawca",
+
+  "users.identityEmail": "E-mail u dostawcy",
+
+  "users.identityAdd": "Przypisz",
+
+  "users.identityRemove": "Usuń",
+
+  "users.identityRemoveLabel": "Usuń {email} u {provider}",
+
+  "users.identityBound": "powiązana",
+
+  "users.identityWaiting": "czeka na pierwsze logowanie",
+
+  "users.identitiesNone": "Brak.",
+
+  "users.identityAdded": "Przypisano {email}.",
+
+  "users.identityRemoved": "Usunięto tożsamość.",
+
+  "users.identityEmailNeeded": "Potrzebny jest adres e-mail.",
   "users.kind.session": "sesja",
   "users.kind.api": "klucz API",
   "users.lastUsed": "ostatnio użyty z {from}",

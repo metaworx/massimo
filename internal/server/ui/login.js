@@ -43,7 +43,7 @@ function canManageUsers() {
 // of the capabilities of its panels, Cubes, backups, users, roles, and
 // the software's update, the server's restart and the computer's reboot.
 function hasSystem() {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
 }
 
 // hasProfile reports whether the page is signed in as a user, who has My
@@ -175,6 +175,67 @@ function renderMe() {
   document.querySelector("#me-password-form .me-current-field").classList.toggle("hidden", !hasPw);
 }
 
+// --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
+
+// pageBase is the page's own address, without its file, query or
+// fragment: the provider sends the browser back to it, and the redirect
+// URI is under it.
+function pageBase() {
+  return new URL(".", location.origin + location.pathname).href;
+}
+
+// oidcError is why a sign-in through a provider came back refused, for
+// the sign-in card to say; null for none.
+let oidcError = null;
+
+// oidcReturn reads the fragment a provider's sign-in comes back with,
+// before the page reads its own (log.js showAddress): #oidc=<code>,
+// traded for the session, or #oidc-error=<reason>; the fragment goes
+// from the address either way.
+async function oidcReturn() {
+  const m = /^#oidc(-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (m[1]) {
+    oidcError = m[2];
+    return;
+  }
+  try {
+    const session = await apiRequest("POST", "api/v1/login/oidc/finish", { code: m[2] }, { auth: false });
+    setToken(session.token);
+  } catch (e) {
+    oidcError = "failed";
+  }
+}
+
+// renderLoginProviders draws a button per enabled provider on the
+// sign-in card; none in the app, whose WebView the providers refuse.
+async function renderLoginProviders() {
+  const box = $("login-providers");
+  clear(box);
+  const list = appBridge() ? [] : await loadLoginProviders(); // providers.js
+  for (const p of list) {
+    const btn = textEl("button", t("login.with", { name: p.name }));
+    btn.type = "button";
+    btn.dataset.provider = p.key;
+    btn.addEventListener("click", () => startProvider(p.key, btn));
+    box.appendChild(btn);
+  }
+  box.classList.toggle("hidden", !list.length);
+}
+
+// startProvider starts a sign-in through a provider and opens its page.
+async function startProvider(key, btn) {
+  try {
+    await whileBusy(btn, async () => {
+      const started = await apiRequest("POST", "api/v1/login/oidc/" + encodeURIComponent(key), { redirect: pageBase() }, { auth: false });
+      location.assign(started.url);
+    });
+  } catch (e) {
+    showResult($("login-error"), t("login.failed", { error: e.message }), false);
+  }
+}
+
 // --- the sign-in dialog -----------------------------------------------
 
 let loginPromise = null;
@@ -213,6 +274,12 @@ function askLogin() {
     $("login-token").value = "";
     $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
+    if (oidcError) {
+      const key = "login.oidcError." + oidcError;
+      showResult(error, t(key) === key ? t("login.oidcError.failed") : t(key), false);
+      oidcError = null;
+    }
+    renderLoginProviders();
     const submit = form.querySelector("button[type=submit]");
     const done = (ok) => {
       form.onsubmit = null;

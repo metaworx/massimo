@@ -871,6 +871,68 @@
   "login.title": "Connexion",
 
   "login.menu": "Langue et apparence",
+
+  "login.with": "Se connecter avec {name}",
+
+  "login.oidcError.denied": "Le fournisseur ne vous a pas connecté.",
+
+  "login.oidcError.failed": "La connexion par le fournisseur a échoué. Réessayez, ou connectez-vous avec un nom et un mot de passe.",
+
+  "login.oidcError.refused": "Ce compte n'est pas connu sur ce serveur. Demandez à son propriétaire de l'attribuer à votre utilisateur.",
+
+  "login.oidcError.disabled": "Votre utilisateur est désactivé ou a expiré.",
+
+  "providers.title": "Fournisseurs de connexion",
+
+  "providers.text": "Les utilisateurs se connectent par un fournisseur OpenID Connect comme Nextcloud, Google ou Microsoft, en plus de leur mot de passe. Enregistrez ce serveur comme client chez lui, avec l'URI de redirection ci-dessous.",
+
+  "providers.callback": "URI de redirection à enregistrer :",
+
+  "providers.none": "Aucun fournisseur pour l'instant.",
+
+  "providers.add": "Ajouter un fournisseur",
+
+  "providers.key": "Clé",
+
+  "providers.name": "Nom sur le bouton",
+
+  "providers.issuer": "Émetteur (issuer)",
+
+  "providers.clientId": "ID client",
+
+  "providers.clientSecret": "Secret client",
+
+  "providers.secretKept": "Défini ; laisser vide pour le garder.",
+
+  "providers.secretNone": "Aucun pour l'instant.",
+
+  "providers.scopes": "Portées (scopes)",
+
+  "providers.enabled": "Activé",
+
+  "providers.autoCreate": "Créer les utilisateurs qui se connectent",
+
+  "providers.autoRole": "Leur rôle",
+
+  "providers.autoDomains": "Leurs domaines de messagerie",
+
+  "providers.domainsHint": "Séparés par des virgules ; vide : tout domaine.",
+
+  "providers.remove": "Supprimer",
+
+  "providers.removeConfirm": "Supprimer le fournisseur {name} ? Plus personne ne se connecte par lui, et les identités chez lui disparaissent.",
+
+  "providers.removed": "Fournisseur {name} supprimé.",
+
+  "providers.saved": "Fournisseur {name} enregistré.",
+
+  "providers.added": "Fournisseur {name} ajouté.",
+
+  "providers.failed": "{name} : non effectué : {error}",
+
+  "providers.off": "désactivé",
+
+  "providers.createsUsers": "crée des utilisateurs",
   "login.text": "Ce serveur demande qui vous êtes.",
   "login.user": "Nom",
   "login.password": "Mot de passe",
@@ -940,6 +1002,30 @@
   "users.unchanged": "Rien n'a changé.",
   "users.tokens": "Sessions et clés",
   "users.tokensNone": "Aucune.",
+
+  "users.identities": "Connexion par des fournisseurs",
+
+  "users.identityProvider": "Fournisseur",
+
+  "users.identityEmail": "E-mail chez le fournisseur",
+
+  "users.identityAdd": "Attribuer",
+
+  "users.identityRemove": "Supprimer",
+
+  "users.identityRemoveLabel": "Supprimer {email} chez {provider}",
+
+  "users.identityBound": "liée",
+
+  "users.identityWaiting": "attend sa première connexion",
+
+  "users.identitiesNone": "Aucune.",
+
+  "users.identityAdded": "{email} attribué.",
+
+  "users.identityRemoved": "Identité supprimée.",
+
+  "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
   "users.kind.session": "session",
   "users.kind.api": "clé API",
   "users.lastUsed": "dernière utilisation depuis {from}",
