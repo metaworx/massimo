@@ -557,8 +557,11 @@ which never sees the numbered suites' key;
 its public half is the keyring package's second file,
 `/usr/share/keyrings/massimo-rolling-archive-keyring.gpg`,
 and `massimo-rolling.asc` on the site.
-A box follows one with its own snippet, `massimo-devel.sources` on the site:
-`Suites: devel` and `Signed-By:` that second file.
+A box follows one with its own snippet, `massimo-devel.sources` on the site,
+installed as `/etc/apt/sources.list.d/massimo.sources`,
+the file the update helper reads:
+`Suites: devel` and `Signed-By:` that second file;
+the channel's page on the site shows it so.
 A box on `alpha` names the first file alone,
 so a leaked rolling key reaches no box on a numbered suite.
 Both public halves are committed,

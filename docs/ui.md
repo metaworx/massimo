@@ -533,7 +533,8 @@ to the top of the page.
   and another channel is the one the next update switches apt's source to:
   the note says so, and nothing is downgraded.
   Where something else decides the channel, it is shown fixed, with the reason:
-  brew's formula, which another channel's formula replaces;
+  brew's formula, which another channel's formula replaces
+  (the rolling ones from the tap `metaworx/massimo-rolling`);
   or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.

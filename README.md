@@ -300,8 +300,10 @@ the web UI's Update has the package's helper run apt for the project's source,
 `apt purge massimo` removes everything.
 The project's apt repository, <https://massimo.metaworx.ch/apt/>,
 makes that an `apt upgrade`:
-one suite per flavour, the snippet in
-[The apt repository](packaging/README.md#the-apt-repository).
+one suite per flavour, `devel` and `nightly` signed with a key of their own,
+the snippet in [The apt repository](packaging/README.md#the-apt-repository),
+and each channel's page on the site names its own suite.
+The update channel chosen in the web UI switches the suite at the next update.
 Details: [Debian package](packaging/README.md#debian-package).
 
 ### Windows
@@ -490,6 +492,8 @@ brew then owns the binary and `brew upgrade` updates it,
 which the web UI's Update runs as you under `brew services`
 (by hand, `brew services restart massimo-alpha` then runs the new one),
 while `massimo update` says when a release is out.
+The rolling channels' formulae are in a tap of their own,
+`brew install metaworx/massimo-rolling/massimo-devel` or `massimo-nightly`.
 Details: [Homebrew](packaging/README.md#homebrew).
 
 ### From source
@@ -1155,6 +1159,10 @@ Every release has a flavour, from the least stable to the most:
 `devel` and `nightly` are one GitHub release each,
 `release/devel` and `release/nightly`, replaced in place,
 signed with a key of their own that boxes accept for those two alone.
+Every flavour is also an apt suite and a Homebrew formula,
+`massimo-alpha` to `massimo` for stable,
+and `massimo-devel` and `massimo-nightly` in the tap `metaworx/massimo-rolling`,
+each holding its own releases and every more stable flavour's.
 A box follows an update channel, one of those names,
 and takes its channel's releases and every more stable flavour's:
 a box on `alpha` takes a later beta, rc or stable release too.
