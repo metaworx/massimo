@@ -18,7 +18,7 @@ const updState = { info: null, setting: null, timer: null, until: 0, grace: 0 };
 // UPDATE_FLAVOURS are the channels a box may follow, the most rolling
 // first, as update.Flavours has them: each takes its own releases and
 // those of every more stable one.
-const UPDATE_FLAVOURS = ["devel", "nightly", "alpha", "beta", "stable"];
+const UPDATE_FLAVOURS = ["devel", "nightly", "alpha", "beta", "rc", "stable"];
 
 // updateBusy reports whether the helper is working on an update.
 function updateBusy(h) {

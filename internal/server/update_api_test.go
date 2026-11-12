@@ -343,7 +343,7 @@ func TestUpdateChannelFromTheStore(t *testing.T) {
 		t.Fatalf("the stored channel: %v, asked %q", out, f.channel)
 	}
 	for _, bad := range []string{`{"update.channel": "main"}`, `{"update.channel": 3}`} {
-		if code, text := put(bad); code != 400 || !strings.Contains(text, "want one of devel, nightly, alpha, beta, stable") {
+		if code, text := put(bad); code != 400 || !strings.Contains(text, "want one of devel, nightly, alpha, beta, rc, stable") {
 			t.Fatalf("PUT %s: %d %s", bad, code, text)
 		}
 	}

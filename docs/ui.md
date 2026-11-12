@@ -515,7 +515,7 @@ to the top of the page.
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
-  the build's own flavour, or devel, nightly, alpha, beta or stable,
+  the build's own flavour, or devel, nightly, alpha, beta, rc or stable,
   each taking its own releases and those of every more stable one.
   The choice is the setting `update.channel`, none for the build's flavour
   (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),

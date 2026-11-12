@@ -1983,7 +1983,7 @@ paths:
         only on request), the intervals at the next start; the whole
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
-        alone); update.channel, devel, nightly, alpha, beta or stable,
+        alone); update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
         stable one's; the default is the build's flavour); null goes back
         to the default. Every value is checked before any is written. The
@@ -2930,7 +2930,7 @@ components:
       type: object
       properties:
         current: {type: string, description: The running version}
-        flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta or stable; absent for a build without the Makefile"}
+        flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta, rc or stable; absent for a build without the Makefile"}
         channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the flavour; the apt source's suite where apt owns the binary"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
         latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
