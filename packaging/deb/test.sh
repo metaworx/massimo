@@ -21,6 +21,9 @@ name=${name#massimo_}
 version=$(dpkg-deb -f "$deb" Version)
 [ "$(tr '~+' '..' <<<"$version")" = "${name%_amd64.deb}" ] ||
 	fail "$deb holds the version $version"
+# The DNS-01 hooks' tools, suggested and not installed.
+[ "$(dpkg-deb -f "$deb" Suggests)" = "curl, jq" ] ||
+	fail "$deb suggests $(dpkg-deb -f "$deb" Suggests)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
 apt-get -qq install -y "$deb" >/dev/null
@@ -69,6 +72,11 @@ for hook in infomaniak cloudflare; do
 	f=/usr/share/massimo/acme-dns-hooks/$hook.sh
 	[ "$(stat -c %a:%U:%G "$f")" = 755:root:root ] || fail "$f is $(stat -c %a:%U:%G "$f")"
 	sh -n "$f" || fail "$f does not parse"
+	# The slim images have neither curl nor jq: the hook names the first.
+	if ! command -v curl >/dev/null; then
+		out=$("$f" set _acme-challenge.massimo.example.net x 2>&1) && fail "$f ran without curl"
+		grep -q "$hook: curl is not installed" <<<"$out" || fail "$f without curl: $out"
+	fi
 done
 grep -q '^massimo ' <<<"$(massimo version)" || fail "massimo version"
 

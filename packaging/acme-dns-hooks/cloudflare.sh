@@ -13,12 +13,14 @@
 # /zones/<id>/dns_records, the full name) and removes the records of that
 # name and value (GET /zones/<id>/dns_records?type=TXT&name=<record>,
 # DELETE .../dns_records/<id>): the calls the Cloudflare plugins of
-# certbot and lego make. It needs curl and jq, and an API token with the
-# permission Zone - DNS - Edit on the zone in CLOUDFLARE_TOKEN_FILE
-# (/etc/massimo/cloudflare.token, owned by the service user, mode 0600);
-# where the token may not list the zone, CLOUDFLARE_ZONE_ID (the zone's
-# id, on its overview page) names it. CLOUDFLARE_ENDPOINT overrides the
-# API's address (the test's fake), CLOUDFLARE_TTL the record's TTL (120).
+# certbot and lego make. It needs curl and jq, which the Debian package
+# suggests and the script checks for before any call, and an API token
+# with the permission Zone - DNS - Edit on the zone in
+# CLOUDFLARE_TOKEN_FILE (/etc/massimo/cloudflare.token, owned by the
+# service user, mode 0600); where the token may not list the zone,
+# CLOUDFLARE_ZONE_ID (the zone's id, on its overview page) names it.
+# CLOUDFLARE_ENDPOINT overrides the API's address (the test's fake),
+# CLOUDFLARE_TTL the record's TTL (120).
 # The token reaches curl on its standard input (-K -), never on its
 # command line, which every local user can read; every call ends after
 # 30 seconds, within the server's two minutes for one run of the hook.
@@ -28,6 +30,14 @@ set -eu
 verb=${1:?usage: $0 set|clear <record> <value>}
 record=${2:?usage: $0 set|clear <record> <value>}
 value=${3:?usage: $0 set|clear <record> <value>}
+# curl and jq: without one, every call fails with an error that names
+# neither, so the missing one is named first.
+for tool in curl jq; do
+	if ! command -v "$tool" >/dev/null 2>&1; then
+		printf 'cloudflare: %s is not installed (on Debian: sudo apt install curl jq)\n' "$tool" >&2
+		exit 1
+	fi
+done
 endpoint=${CLOUDFLARE_ENDPOINT:-https://api.cloudflare.com/client/v4}
 token_file=${CLOUDFLARE_TOKEN_FILE:-/etc/massimo/cloudflare.token}
 ttl=${CLOUDFLARE_TTL:-120}

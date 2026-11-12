@@ -320,3 +320,36 @@ func TestCloudflareHook(t *testing.T) {
 		t.Fatalf("wrong token: %v %q", err, out)
 	}
 }
+
+// TestHooksNeedCurlAndJq: a hook on a box without curl or jq says which
+// one is missing and fails before any call, where it would otherwise
+// blame the zone or the API's answer.
+func TestHooksNeedCurlAndJq(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script")
+	}
+	if _, err := os.Stat("/bin/sh"); err != nil {
+		t.Skip("no /bin/sh")
+	}
+	// A PATH with nothing on it, and one with only a curl that notes that
+	// it ran (with the shell's own redirection, as nothing else is there).
+	none := t.TempDir()
+	onlyCurl := t.TempDir()
+	ran := filepath.Join(t.TempDir(), "ran")
+	os.WriteFile(filepath.Join(onlyCurl, "curl"), []byte("#!/bin/sh\n: > \""+ran+"\"\n"), 0o755)
+	for _, hook := range []string{"infomaniak", "cloudflare"} {
+		script, _ := filepath.Abs("../../packaging/acme-dns-hooks/" + hook + ".sh")
+		for _, c := range []struct{ path, missing string }{{none, "curl"}, {onlyCurl, "jq"}} {
+			cmd := exec.Command(script, "set", "_acme-challenge.massimo.example.net", "value")
+			cmd.Env = append(hookEnv(os.Environ()), "PATH="+c.path)
+			out, err := cmd.CombinedOutput()
+			want := hook + ": " + c.missing + " is not installed"
+			if err == nil || !strings.Contains(string(out), want) {
+				t.Errorf("%s without %s: %v %q, want %q", hook, c.missing, err, out, want)
+			}
+		}
+	}
+	if _, err := os.Stat(ran); err == nil {
+		t.Error("a hook called curl without jq")
+	}
+}

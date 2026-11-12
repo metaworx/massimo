@@ -24,6 +24,11 @@ description: |
 depends:
   - adduser
   - init-system-helpers (>= 1.52)
+# The tools of the DNS-01 hooks (packaging/acme-dns-hooks/), which most
+# boxes never run: apt installs a Recommends by default, a Suggests not.
+suggests:
+  - curl
+  - jq
 contents:
   - src: ${BINARY}
     dst: /usr/bin/massimo

@@ -12,10 +12,11 @@
 # adds the TXT record (POST /2/zones/<zone>/records, the source relative
 # to the zone) and removes the records of that name and value (GET
 # /2/zones/<zone>/records, DELETE .../records/<id>): the calls the certbot
-# plugin certbot-dns-infomaniak makes. It needs curl and jq, and a token
-# with the DNS scope from the API section of the Infomaniak manager in
-# INFOMANIAK_TOKEN_FILE (/etc/massimo/infomaniak.token, owned by the
-# service user, mode 0600). INFOMANIAK_ENDPOINT overrides the API's
+# plugin certbot-dns-infomaniak makes. It needs curl and jq, which the
+# Debian package suggests and the script checks for before any call, and
+# a token with the DNS scope from the API section of the Infomaniak
+# manager in INFOMANIAK_TOKEN_FILE (/etc/massimo/infomaniak.token, owned
+# by the service user, mode 0600). INFOMANIAK_ENDPOINT overrides the API's
 # address (the test's fake), INFOMANIAK_TTL the record's TTL (300).
 # The token reaches curl on its standard input (-K -), never on its
 # command line, which every local user can read; every call ends after
@@ -27,6 +28,14 @@ set -eu
 verb=${1:?usage: $0 set|clear <record> <value>}
 record=${2:?usage: $0 set|clear <record> <value>}
 value=${3:?usage: $0 set|clear <record> <value>}
+# curl and jq: without one, every call fails with an error that names
+# neither, so the missing one is named first.
+for tool in curl jq; do
+	if ! command -v "$tool" >/dev/null 2>&1; then
+		printf 'infomaniak: %s is not installed (on Debian: sudo apt install curl jq)\n' "$tool" >&2
+		exit 1
+	fi
+done
 endpoint=${INFOMANIAK_ENDPOINT:-https://api.infomaniak.com}
 token_file=${INFOMANIAK_TOKEN_FILE:-/etc/massimo/infomaniak.token}
 ttl=${INFOMANIAK_TTL:-300}
