@@ -157,7 +157,7 @@ for spec in ${refs[@]+"${refs[@]}"}; do
 	mkdir -p "$tree"
 	git -C "$root" archive "$commit" | tar -C "$tree" -xf -
 	args=(--tree "$tree" --out "$site" --channel "$ch" --commit "$commit" --version "$version"
-		--date "$date" --pin "$pin" --repo "$repo" --md-html "$md_html")
+		--date "$date" --pin "$pin" --repo "$repo" --md-html "$md_html" --suites "$suites")
 	[ "$ch" = "$strict" ] && args+=(--strict)
 	python3 "$root/packaging/site/site.py" docs "${args[@]}"
 	rm -rf "${tree:?}"

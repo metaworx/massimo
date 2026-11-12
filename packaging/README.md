@@ -629,8 +629,8 @@ It holds:
   A build that finds none deploys nothing,
   since a deploy replaces the whole site and one without `apt/` would take
   the repository offline (`build.sh` exits 3, and the job ends green).
-- At the root, the pages of `site/`:
-  `index.html`, the home with the install routes, its suites filled in,
+- At the root, `index.html`, the landing page of the most stable channel
+  (below), and the pages of `site/`:
   `privacy.html`, the privacy policy of the project and its apps,
   which the app stores' listings link,
   and `site.css`, the stylesheet of every page.
@@ -644,6 +644,13 @@ It holds:
   with the heading ids GitHub gives, links between the documents to their
   pages, and every other link to GitHub at that commit, or to the guidelines
   at its pin, by `packaging/site/site.py` into `doc.html.in`.
+  Each channel's `docs/<channel>/index.html` is its landing page:
+  the home of that build's own `site/index.html`, with the install routes as
+  that build has them and the suites filled in, then its list of documents;
+  so the install routes on the page are those of the release a reader of
+  that channel installs, not `main`'s.
+  The root is a copy of the most stable channel's landing page,
+  its links pointing into `docs/<channel>/`.
   `docs/channels.json` names the channels built,
   a selector on every page (`docs.js`) changes to the same page of another,
   and `docs/` sends a reader to the most stable one.
