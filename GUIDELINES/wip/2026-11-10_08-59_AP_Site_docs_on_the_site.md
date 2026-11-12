@@ -1,4 +1,4 @@
-# AP Site v1.1: docs on the site
+# AP Site v1.2: docs on the site
 
 ## TL;DR
 
@@ -19,6 +19,9 @@ carries the documentation, rendered per channel.
 - the list of documents → one fragment, in README.md and the docs index
   (D13-A); a document missing from it fails the build
 - CI → a `Site` job builds the docs of every pull request
+- v1.2: the landing page per channel (D14-A) → each channel's
+  `/docs/<channel>/index.html` = its build's home, then its documents;
+  `/` = the most stable channel's (D15-A); the selector on every page
 
 ### Blocks
 
@@ -27,6 +30,8 @@ carries the documentation, rendered per channel.
 3. The builder: `packaging/site/build.sh`, the page template, the selector
 4. The workflows: `site.yml`, `release.yml`'s apt jobs, CI's `Site` job
 5. The documents: the home's link, `packaging/README.md`, CI.md, CHANGELOG
+6. The landing pages: each channel's home with its documents, `/` the most
+   stable one's
 
 ## Discussion
 
@@ -45,6 +50,21 @@ carries the documentation, rendered per channel.
   `PLAN++`): one fragment, `docs/fragments/_documents.md`, is the grouped list;
   README.md includes it as a PARTIAL, the docs index is built from it, and
   a `docs/*.md` it does not list fails the build of `main`'s docs.
+
+**Decided by the owner, 2026-11-12** (asked as D1 and D2 at the gate,
+numbered on here):
+
+- **D14-A.** A landing page per channel: each channel's
+  `/docs/<channel>/index.html` is that build's home - the install routes of
+  its own `packaging/site/index.html` and fragments - followed by its list of
+  documents, and the selector is on every page. The install routes can
+  change between builds, so the root must not show `main`'s to a reader who
+  installs `alpha`.
+  B was `/` alone from the most stable channel; C `main`'s home with the
+  selector added; D `/` redirecting to `/docs/<channel>/`.
+- **D15-A.** `/` shows the most stable channel's landing page, `alpha`
+  today, as `/docs/` already does; not the newest, `main`, which documents
+  what no box runs yet.
 
 **Decided here** (none needs the owner; each the simpler of two):
 
@@ -139,6 +159,29 @@ than through `sed`.
   `build.sh --no-apt --ref main=HEAD --strict main`, among the needs of
   "All tests passed".
 
+### The landing pages (v1.2)
+
+On the site since the first deploys (NOTE Site v1.1, "first deploys"):
+`/` is `main`'s `packaging/site/index.html` with its fragments, and has no
+selector; each channel's `/docs/<channel>/index.html` is the list of
+documents alone.
+
+- **The home of a build** is the inside of `<header>`, `<main>` and
+  `<footer>` of its own `packaging/site/index.html`, the suites in place of
+  `{{SUITES}}`; every build since the site began has that shape, so
+  `release/alpha` today gives its own. Its "Documentation" section, where an
+  older build has one, goes: the list of documents follows on the page.
+- **The page** is `doc.html.in` again: the home, then the list (its
+  headings one level down, under "Documentation"), then the build's footer
+  above the template's.
+- **The root** is a copy of the most stable channel's page with every
+  relative link and image prefixed by `docs/<channel>/`, rather than a
+  `<base>`, under which the home's own `#settings` would leave the page.
+- **Without docs** (`build.sh --no-docs`, `packaging/apt/test.sh`) the root
+  is `main`'s `index.html` as before.
+- **Not now:** each channel's own apt suite in its snippet. Only `alpha` has
+  a suite, and the rolling ones are roadmap item 19 (AP Channels).
+
 ## Implementation Plan
 
 ### Block 1: Guidelines
@@ -200,6 +243,20 @@ pull request's own `Site` job; the deploy itself only after the merge
 **Verification:** `check --commit-range origin/main..HEAD`; `go test ./...`;
 `make site` once more.
 
+### Block 6: The landing pages
+
+- `packaging/site/site.py`: each channel's index from its build's home and
+  its list; the root from the most stable channel's; the selector there.
+- `packaging/site/build.sh`: the root from `site.py` where the docs are
+  built.
+- `packaging/site/index.html`: its "Documentation" section goes, the
+  issues link to the footer; its comment says how it is built.
+- `packaging/README.md` "The site"; a CHANGELOG fragment.
+
+**Verification:** `make site`; a build with `release/alpha` and `main`,
+the older build's home included; the link check; every page at 390 px;
+`make apt-test`, whose root is the one without docs.
+
 ## Proposed commit message
 
 One per block, in the project's form, each citing
@@ -211,3 +268,5 @@ One per block, in the project's form, each citing
   analysis, D2 as Channels D12-A, D13-A as recommended.
 - v1.1 (2026-11-10): the Analysis heading names the state of `main` by
   its pull request, the commit at the end (the owner's D1-A).
+- v1.2 (2026-11-12): Block 6, a landing page per channel and the most
+  stable one's at the root (the owner's D14-A, D15-A, asked as D1 and D2).
