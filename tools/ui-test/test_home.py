@@ -21,6 +21,13 @@ NO_DATA = {"en": "No data has come from it", "de": "keine Daten von ihm"}
 LAST_DATA = {"en": "Its last data came at", "de": "Seine letzten Daten kamen um"}
 
 NOTICE_SHOWN = "!document.getElementById('home-notice').classList.contains('hidden')"
+# the first room shown, and below the notice
+ROOMS_UNDER_NOTICE = """(() => {
+  const room = document.querySelector('#rooms .room');
+  const notice = document.getElementById('home-notice');
+  if (!room || !room.getClientRects().length) return false;
+  return room.getBoundingClientRect().top > notice.getBoundingClientRect().top;
+})()"""
 
 
 def notice_text(page, part):
@@ -86,9 +93,10 @@ def test_a_cube_that_dropped_keeps_its_rooms_under_the_notice(page, case):
         assert name in notice_text(page, "title"), "it names the Cube"
         assert "KEQ0000100" in notice_text(page, "title") + notice_text(page, "detail"), "with its serial"
         assert LAST_DATA[case.lang] in notice_text(page, "detail"), "with when its last data came"
-        notice = page.locator("#home-notice").bounding_box()
-        first = page.locator(".room").first
-        assert first.is_visible() and first.bounding_box()["y"] > notice["y"], "the rooms stay, under the notice"
+        # Measured in one evaluation: every load of the rooms renders them
+        # anew, and a room a locator found may be gone by the time it
+        # measures it (a bounding box of None).
+        assert wait_until(page, ROOMS_UNDER_NOTICE, 5), "the rooms stay, under the notice"
     finally:
         page.unroute("**/api/v1/cubes")
     page.evaluate("loadCubes()")
