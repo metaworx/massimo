@@ -75,7 +75,7 @@ jobs:
   # cancelled. Two settings of the owner's (packaging/README.md, "The
   # site"): the repository's Pages source is "GitHub Actions", and the
   # github-pages environment, which deploys from the default branch only,
-  # also allows the tags v*, since a release's run deploys for its tag.
+  # also allows the version tags, since a release's run deploys for its tag.
   deploy:
     name: Deploy the site
     needs: build

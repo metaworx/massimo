@@ -11,7 +11,7 @@ name: Publish
 # its own token starts no other workflow, so that event never came. By
 # hand, for a release already out (the tap set up after it), with
 # `gh workflow run publish.yml --ref <tag> -f tag=<tag>`: the signing
-# environment, which holds the tap's key, admits v* tags alone.
+# environment, which holds the tap's key, admits version tags alone.
 on:
   workflow_call:
     inputs:
@@ -38,7 +38,7 @@ permissions:
   contents: read
 
 jobs:
-  # In the signing environment, which admits v* tags alone and waits for
+  # In the signing environment, which admits version tags alone and waits for
   # the owner's approval, as the release's other keys are: the tap's key
   # lives there (D56-A, 2026-11-11), and the environment's secret is the
   # one used, not one release.yml hands over. actions: the wait.

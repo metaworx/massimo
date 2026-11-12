@@ -4,13 +4,13 @@ name: Release
 # ci.yml once every test job has passed and the build is done, and by
 # nightly.yml after its build, with build.yml's answers as inputs and its
 # files as the run's artifact `release`. Called, it runs with the
-# caller's ref, which the environments' rules are matched against: a v*
+# caller's ref, which the environments' rules are matched against: a version
 # tag, which the signing environment admits alone, or main, which
 # signing-rolling admits. A workflow started by workflow_run would carry
 # the default branch whatever started it.
 #
 # The jobs, a key in one each: `sign` holds the release key through the
-# `signing` environment, which only v* tags may use, runs nothing but
+# `signing` environment, which only version tags may use, runs nothing but
 # openssl and gh on what build.yml handed over, checks the signature
 # against the public key compiled into massimo and the flavour against
 # the tag before publishing, and publishes exactly what it signed as a
@@ -99,7 +99,11 @@ jobs:
       # another flavour is refused.
       - name: Check the manifest's tag and flavour
         run: |
-          flavour="$(printf '%s\n' "$TAG" | sed -n 's/^v[0-9][0-9.]*-\([a-z][a-z0-9]*\)\.[0-9][0-9]*$/\1/p')"
+          if ! printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$'; then
+            echo "::error::${TAG} is not a version tag, vX.Y.Z or vX.Y.Z-<label>.N."
+            exit 1
+          fi
+          flavour="$(printf '%s\n' "$TAG" | sed -nE 's/^v[0-9]+\.[0-9]+\.[0-9]+-([a-z][a-z0-9]*)\.[0-9]+$/\1/p')"
           flavour="${flavour:-stable}"
           echo "FLAVOUR=${flavour}" >> "$GITHUB_ENV"
           grep -q "\"tag\": \"${TAG}\"" dist/massimo-release.json || { echo "::error::the manifest is not ${TAG}'s"; exit 1; }

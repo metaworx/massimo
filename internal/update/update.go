@@ -579,8 +579,9 @@ func (c *Client) Latest(ctx context.Context, channel string) (*Release, error) {
 }
 
 // labelRe is release.yml's rule for the flavour a tag names: its
-// pre-release label, as alpha of v0.9.0-alpha.1.
-var labelRe = regexp.MustCompile(`^v[0-9][0-9.]*-([a-z][a-z0-9]*)\.[0-9]+$`)
+// pre-release label, as alpha of v0.9.0-alpha.1, in a tag of the full
+// shape vX.Y.Z-<label>.N.
+var labelRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+-([a-z][a-z0-9]*)\.[0-9]+$`)
 
 // plainRe is a tag without a label, which release.yml releases as stable.
 var plainRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)

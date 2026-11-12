@@ -288,6 +288,62 @@ func TestDebTag(t *testing.T) {
 	}
 }
 
+// TestMakeVersionTags: the Makefile's VERSION and FLAVOUR count a version
+// tag alone. A repository of its own carries v0.1.0-alpha.1 and, on later
+// commits, tags that only look like one. git describe takes a glob, which
+// cannot refuse a label without its number (v1.2.3-rc); a tag push of one
+// stops at build.yml's flavour check.
+func TestMakeVersionTags(t *testing.T) {
+	makeCmd, err := exec.LookPath("make")
+	if err != nil {
+		t.Skip("no make")
+	}
+	gitCmd, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git")
+	}
+	makefile, err := filepath.Abs(filepath.Join("..", "..", "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitCmd, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	version := func() string {
+		t.Helper()
+		out, err := exec.Command(makeCmd, "-s", "--no-print-directory", "-C", dir, "-f", makefile, "version").CombinedOutput()
+		if err != nil {
+			t.Fatalf("make version: %v: %s", err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "first")
+	git("tag", "v0.1.0-alpha.1")
+	if got := version(); got != "v0.1.0-alpha.1 alpha" {
+		t.Errorf("at v0.1.0-alpha.1: %q, want %q", got, "v0.1.0-alpha.1 alpha")
+	}
+	for _, tag := range []string{"v1.2", "verification-test"} {
+		git("commit", "-q", "--allow-empty", "-m", tag)
+		git("tag", tag)
+	}
+	head := git("rev-parse", "--short", "HEAD")
+	if want, got := "v0.1.0-alpha.1-2-g"+head+" devel", version(); got != want {
+		t.Errorf("after tags that are no version: %q, want %q", got, want)
+	}
+}
+
 // TestDebVersion: the Makefile's DEBVER for each form git describe gives,
 // which debTag reads back to the version the binary reports, and, where
 // dpkg is installed, the order apt sees: a build between tags after the
