@@ -237,7 +237,8 @@ so its own secret comes from a file;
 a run ends after two minutes, with every process it started.
 `packaging/acme-dns-hooks/infomaniak.sh` is the script for a zone hosted at
 Infomaniak (its name servers, not merely registered there):
-it needs `curl` and `jq`,
+it needs `curl` and `jq` (`sudo apt install curl jq`;
+it names the one that is missing),
 and a token with the DNS scope from the API section of the Infomaniak
 manager in `/etc/massimo/infomaniak.token` (owned by `_massimo`, mode 0600).
 It hands the token to `curl` on its standard input, never on its command line,
@@ -272,10 +273,32 @@ sudo massimo install -tls acme -tls-names massimo.example.net -acme-dns-hook /us
 
 A box with the Debian package has both scripts already,
 as `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`:
-there the token file and the `massimo install` line are all it takes,
+there `curl` and `jq`, which the package suggests without installing them,
+the token file and the `massimo install` line are all it takes,
 with `-acme-dns-hook /usr/share/massimo/acme-dns-hooks/<provider>.sh`.
 
-Without the hook, an external client into `-tls-cert` and `-tls-key` does the same:
+For a DNS provider without a script here,
+an ACME client that knows its API writes the files of `-tls-cert` and `-tls-key`,
+and the server takes up each renewal by itself:
+acme.sh has DNS API scripts for well over a hundred providers (`--dns dns_<provider>`,
+with the variables its wiki names for each),
+lego (`--dns <provider>`) about as many, certbot's DNS plugins the common ones.
+acme.sh is set up as in docs/reverse-proxy.md, step 3:
+its directories, the token kept for the renewals,
+and the timer Debian's package lacks.
+Its certificate then goes into Massimo's files instead of nginx's:
+
+```bash
+A="--home /etc/acme.sh --config-home /etc/acme.sh --cert-home /etc/acme.sh/certs"
+sudo acme.sh $A --install-cert -d massimo.example.net --ecc \
+    --fullchain-file /etc/massimo/cert.pem --key-file /etc/massimo/key.pem \
+    --reloadcmd "chown _massimo:_massimo /etc/massimo/cert.pem /etc/massimo/key.pem"
+sudo massimo install -tls-cert /etc/massimo/cert.pem -tls-key /etc/massimo/key.pem
+```
+
+`massimo install` reads the files before it writes them back as the service user's,
+and the `chown` keeps them so after each renewal.
+certbot does the same for Infomaniak:
 `certbot certonly --authenticator dns-infomaniak -d massimo.example.net` with
 the plugin `certbot-dns-infomaniak` (`pip install`) and its credentials file
 (`dns_infomaniak_token = …`, mode 0600, `--dns-infomaniak-credentials`),
@@ -283,7 +306,9 @@ plus the deploy hook above that copies the files;
 certbot's renewal service sees no shell environment,
 so the token goes into the credentials file or the unit's `Environment=`.
 `lego --dns infomaniak -d massimo.example.net run` with
-`INFOMANIAK_ACCESS_TOKEN` is the other way.
+`INFOMANIAK_ACCESS_TOKEN` is the other way,
+with a newer lego than Debian 13's 4.9.1, which fails with Infomaniak
+(docs/reverse-proxy.md, step 3).
 An install with another `-tls` mode removes the variables of the one before
 (`MASSIMO_TLS_CERT`, `MASSIMO_TLS_KEY`, `MASSIMO_TLS_NAMES`,
 `MASSIMO_ACME_EMAIL`, `MASSIMO_ACME_DIRECTORY`,
@@ -327,7 +352,7 @@ the update helper's `massimo-update.path` and the package's own `massimo-update.
 enabled (see "Updates through apt" below),
 the log rotation and the marker `/usr/share/massimo/packaged`,
 the DNS-01 hooks `/usr/share/massimo/acme-dns-hooks/infomaniak.sh` and `cloudflare.sh`
-(see `-acme-dns-hook` above),
+(see `-acme-dns-hook` above; it suggests their `curl` and `jq`),
 and the reboot helper's `massimo-reboot.path` and `.service`, disabled
 (see "Rebooting from the web UI");
 its scripts create the user `_massimo`, `/etc/massimo/env` from the template
