@@ -520,8 +520,10 @@ to the top of the page.
   The choice is the setting `update.channel`, none for the build's flavour
   (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),
   and the release check asks again at once.
+  On a box apt updates, the first choice is apt's suite,
+  and another channel is the one the next update switches apt's source to:
+  the note says so, and nothing is downgraded.
   Where something else decides the channel, it is shown fixed, with the reason:
-  apt's suite, with the line of the apt source that changes it;
   brew's formula, which another channel's formula replaces;
   or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
   On a box with the update helper installed (packaging/README.md, "Updating"),

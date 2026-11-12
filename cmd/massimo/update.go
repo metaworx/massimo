@@ -102,6 +102,7 @@ func runUpdate(args []string) (err error) {
 		}
 	}
 
+	asked := "" // the request's channel, which apt's suite follows
 	if *request != "" {
 		c, ok, terr := update.TakeRequest(*request)
 		if terr != nil {
@@ -114,6 +115,7 @@ func runUpdate(args []string) (err error) {
 		if c != "" && *ch == "" {
 			*ch = c
 		}
+		asked = c
 		*yes = true
 		// The request is taken: an error that returns without a status of
 		// its own (a development build, no channel, the binary not found)
@@ -139,7 +141,7 @@ func runUpdate(args []string) (err error) {
 	if !*check {
 		if m, ok := packaged(); ok {
 			if *request != "" && m.Name == "apt" {
-				return aptUpdate(ctx, status, *health, *healthWait)
+				return aptUpdate(ctx, status, asked, *health, *healthWait)
 			}
 			if *request != "" && m.Name == "brew" {
 				return brewUpdate(ctx, status, *restart, *health, *healthWait)

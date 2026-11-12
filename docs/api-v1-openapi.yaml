@@ -2931,7 +2931,8 @@ components:
       properties:
         current: {type: string, description: The running version}
         flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta, rc or stable; absent for a build without the Makefile"}
-        channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the flavour; the apt source's suite where apt owns the binary"}
+        channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the apt source's suite where apt owns the binary, else the flavour"}
+        suite: {type: string, description: "The suite of the apt source, where apt owns the binary; where it differs from channel, the next update switches the source to the channel's suite"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
         latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
         release_url: {type: string}

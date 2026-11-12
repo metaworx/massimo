@@ -393,3 +393,109 @@ func TestDebVersion(t *testing.T) {
 		}
 	}
 }
+
+// aptSnippet is the source packaging/apt/publish.sh writes for alpha.
+const aptSnippet = "# The Massimo apt repository\nTypes: deb\nURIs: https://massimo.metaworx.ch/apt\nSuites: alpha\nComponents: main\nSigned-By: /usr/share/keyrings/massimo-archive-keyring.gpg\n"
+
+// aptSwitchHelper is aptHelper with the source as publish.sh writes it,
+// a request for channel, and the rolling keyring there or not.
+func aptSwitchHelper(t *testing.T, f *fakeApt, source, channel string, rollingKey bool) (request, status string) {
+	t.Helper()
+	request, status = aptHelper(t, f)
+	oldKeyring := aptRollingKeyring
+	t.Cleanup(func() { aptRollingKeyring = oldKeyring })
+	aptRollingKeyring = filepath.Join(t.TempDir(), "massimo-rolling-archive-keyring.gpg")
+	if rollingKey {
+		if err := os.WriteFile(aptRollingKeyring, []byte("key"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(aptSourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := update.WriteRequest(request, channel); err != nil {
+		t.Fatal(err)
+	}
+	return request, status
+}
+
+func readSource(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(aptSourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestAptUpdateSwitchesTheSuite: a request for devel points the source at
+// the suite devel and the rolling keyring, then runs the same commands;
+// back to alpha, nothing newer is installed and nothing downgraded.
+func TestAptUpdateSwitchesTheSuite(t *testing.T) {
+	f := &fakeApt{before: "0.14.0~alpha.1", after: "0.14.0~alpha.1+5.gabc1234"}
+	req, status := aptSwitchHelper(t, f, aptSnippet, "devel", true)
+	if err := runUpdate([]string{"-request", req, "-status", status}); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.NewReplacer("Suites: alpha", "Suites: devel", install.AptKeyring, install.AptRollingKeyring).Replace(aptSnippet)
+	if got := readSource(t); got != want {
+		t.Fatalf("source\n%s\nwant\n%s", got, want)
+	}
+	if st := readStatus(t, status); st.State != "done" || st.Channel != "devel" {
+		t.Fatalf("status %+v", st)
+	}
+	if n := len(f.calls); n != 4 {
+		t.Fatalf("ran %v", f.calls)
+	}
+
+	f = &fakeApt{before: "0.14.0~alpha.1+5.gabc1234", after: "0.14.0~alpha.1+5.gabc1234"}
+	req, status = aptSwitchHelper(t, f, want, "alpha", true)
+	if err := runUpdate([]string{"-request", req, "-status", status}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSource(t); got != aptSnippet {
+		t.Fatalf("back to alpha:\n%s", got)
+	}
+	if st := readStatus(t, status); st.State != "up-to-date" || !strings.Contains(st.Message, "follows the suite alpha now") {
+		t.Fatalf("status %+v", st)
+	}
+	if !strings.Contains(strings.Join(f.calls, "\n"), "--only-upgrade") {
+		t.Fatalf("ran %v", f.calls)
+	}
+}
+
+// TestAptUpdateSwitchFailures: the source stays as it was where the switch
+// cannot be made, and goes back where apt cannot fetch the new suite.
+func TestAptUpdateSwitchFailures(t *testing.T) {
+	two := strings.Replace(aptSnippet, "Suites: alpha", "Suites: alpha beta", 1)
+	for _, c := range []struct {
+		name, source, channel string
+		rollingKey            bool
+		updates               []aptReply
+		want                  string
+		ran                   bool
+	}{
+		{"not the README's", two, "beta", true, nil, "set its Suites: line to beta by hand", false},
+		{"no rolling key", aptSnippet, "nightly", false, nil, "does not carry", false},
+		{"fetch fails", aptSnippet, "beta", true, []aptReply{{"E: The repository 'x beta InRelease' does not have a Release file.", errors.New("exit status 100")}},
+			"is back on the suite alpha", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := &fakeApt{before: "0.14.0~alpha.1", updates: c.updates}
+			req, status := aptSwitchHelper(t, f, c.source, c.channel, c.rollingKey)
+			err := runUpdate([]string{"-request", req, "-status", status})
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("got %v, want %q", err, c.want)
+			}
+			if got := readSource(t); got != c.source {
+				t.Fatalf("the source changed:\n%s", got)
+			}
+			if st := readStatus(t, status); st.State != "failed" || !strings.Contains(st.Message, c.want) {
+				t.Fatalf("status %+v", st)
+			}
+			if ran := strings.Contains(strings.Join(f.calls, "\n"), "apt-get update"); ran != c.ran {
+				t.Fatalf("apt-get update ran: %v, want %v (%v)", ran, c.ran, f.calls)
+			}
+		})
+	}
+}

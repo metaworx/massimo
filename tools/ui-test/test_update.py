@@ -67,19 +67,20 @@ def test_update_through_apt(page):
     page.unroute("**/api/v1/update*")
 
 
-def channel_routes(page, manager=None, variable=None):
+def channel_routes(page, manager=None, variable=None, suite=None):
     """Stubs GET /api/v1/update and the setting update.channel, the build's
     flavour alpha and no channel stored; variable is the channel
-    MASSIMO_UPDATE_CHANNEL sets. Returns the bodies of the settings PUTs."""
+    MASSIMO_UPDATE_CHANNEL sets, suite the one apt follows. Returns the
+    bodies of the settings PUTs."""
     state = {"stored": None}
     puts = []
 
     def effect():
-        return variable or state["stored"] or "alpha"
+        return variable or state["stored"] or suite or "alpha"
 
     def update(route):
         route.fulfill(status=200, content_type="application/json",
-                      body=update_json("up-to-date", "v0.0.1-test", False, manager, effect()))
+                      body=update_json("up-to-date", "v0.0.1-test", False, manager, effect(), suite))
 
     def settings(route):
         if route.request.method == "PUT":
@@ -124,16 +125,23 @@ def test_channel_is_chosen(page):
     unroute_channel(page)
 
 
-def test_channel_fixed_by_apt(page):
-    """On a box apt updates the suite decides: the channel is shown, fixed,
-    with the line that changes it."""
-    channel_routes(page, manager="apt")
+def test_channel_on_apt(page):
+    """On a box apt updates the box follows apt's suite until a channel is
+    chosen, which the next update switches apt to: the note says so."""
+    puts = channel_routes(page, manager="apt", suite="devel")
     show_view(page, "system")
     sel = page.locator("#update-channel")
     sel.wait_for(state="visible")
-    note = page.evaluate("t('update.channelApt', {channel: 'alpha'})")
-    assert sel.is_disabled() and sel.input_value() == "alpha", "the suite's channel, fixed"
-    assert page.locator("#update-channel-note").inner_text() == note, "the note says how to change the suite"
+    first = page.evaluate("t('update.channelSuite', {suite: 'devel'})")
+    note = page.locator("#update-channel-note")
+    assert sel.is_enabled() and sel.input_value() == "", "apt's suite is followed, and can be changed"
+    assert sel.locator("option").first.inner_text() == first, "the first choice names apt's suite"
+    assert note.inner_text() == page.evaluate("t('update.channelApt', {channel: 'devel'})"), "the note names the suite"
+    sel.select_option("beta")
+    switch = page.evaluate("t('update.channelAptSwitch', {suite: 'devel', channel: 'beta'})")
+    assert wait_until(page, "document.getElementById('update-channel-note').textContent === %s" % json.dumps(switch), 5), \
+        "the note says the next update switches apt to beta"
+    assert puts == [{"update.channel": "beta"}], "beta is stored"
     unroute_channel(page)
 
 
