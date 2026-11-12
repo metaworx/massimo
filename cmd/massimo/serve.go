@@ -38,6 +38,7 @@ func runServe(args []string) error {
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones, for this run and without the store: massimo.db is neither opened nor created, and nothing is written")
 	poll := fs.Duration("poll", server.DefaultPollInterval, "how often to poll the device list (default the store's poll_interval, else 1m)")
 	refresh := fs.Duration("refresh", server.DefaultRefreshInterval, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
+	staleAfter := fs.Duration("stale-after", 0, "mark a thermostat stale once its entry has not changed for this long (default the store's stale_after, else 24h); short values are for tests")
 	discoverEvery := fs.Duration("discover-interval", server.DefaultDiscoverInterval, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API; default the store's discover_interval, else 30m)")
 	var discoverTargets []string
 	fs.Func("discover-target", "send discovery requests to this host[:port] instead of broadcasting (repeatable; for another subnet, or a fake Cube's -discovery)", func(v string) error {
@@ -230,7 +231,7 @@ func runServe(args []string) error {
 		flag string
 		v    *time.Duration
 		to   **time.Duration
-	}{{"poll", poll, &cfg.PollInterval}, {"refresh", refresh, &cfg.RefreshInterval}, {"discover-interval", discoverEvery, &cfg.DiscoverInterval}} {
+	}{{"poll", poll, &cfg.PollInterval}, {"refresh", refresh, &cfg.RefreshInterval}, {"discover-interval", discoverEvery, &cfg.DiscoverInterval}, {"stale-after", staleAfter, &cfg.StaleAfter}} {
 		if given[d.flag] {
 			*d.to = d.v
 		}

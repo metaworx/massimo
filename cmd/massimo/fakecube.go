@@ -25,22 +25,33 @@ func runFakeCube(args []string) error {
 	duty := fs.Int("duty", 0, "duty cycle percentage to report in S replies")
 	discovery := fs.String("discovery", "", "also answer UDP discovery on this address, such as 127.0.0.1:23273, as a Cube that is not configured (serve finds it with -discover-target <that address>)")
 	discoverySerial := fs.String("discovery-serial", "KEQ0000000", "serial of the Cube that answers -discovery")
+	fixture := fs.String("fixture", "", "serve a built-in house instead of -greeting: rooms (a wall thermostat with two radiator thermostats, three radiator thermostats, a shutter contact alone)")
+	apply := fs.Bool("apply", true, "carry out the radio commands acknowledged: setpoints, modes, boosts, programmes, presets and locks change the devices' lines (false: acknowledge only)")
+	applyAfter := fs.Duration("apply-after", 0, "apply a command this long after acknowledging it, as a device confirms it after its wakeup")
+	boostFor := fs.Duration("boost-for", 0, "end a boost after this long instead of the device's boost time")
+	control := fs.String("control", "", "serve the control on this loopback address, such as 127.0.0.1:62911: set a device's state, remove it from its room and restore it, drop the connections (see the README)")
 	pair := fs.String("pair", "", "a device that joins pairing mode, <template rf>,<rf>,<serial>[,<delay>]: a copy of the greeting's device <template rf> in no room, joining <delay> (default 2s) after n:, again after a t: deleted it")
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo fakecube -greeting <file> [-listen 127.0.0.1:62910]\n\nBehave like a Cube's LAN interface, using recorded data.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo fakecube -greeting <file> | -fixture <name> [-listen 127.0.0.1:62910]\n\nBehave like a Cube's LAN interface, using recorded data.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *file == "" {
-		return fmt.Errorf("fakecube: -greeting is required")
+	var greeting []cube.Message
+	var err error
+	switch {
+	case (*file == "") == (*fixture == ""):
+		return fmt.Errorf("fakecube: one of -greeting and -fixture is required")
+	case *fixture != "":
+		greeting, err = fakecube.LoadFixture(*fixture)
+	default:
+		greeting, err = fakecube.LoadGreeting(*file)
 	}
-	greeting, err := fakecube.LoadGreeting(*file)
 	if err != nil {
 		return err
 	}
-	srv := &fakecube.Server{Greeting: greeting, Duty: *duty}
+	srv := &fakecube.Server{Greeting: greeting, Duty: *duty, Apply: *apply, ApplyAfter: *applyAfter, BoostFor: *boostFor}
 	if *pair != "" {
 		if srv.Pair, err = parsePair(greeting, *pair); err != nil {
 			return fmt.Errorf("fakecube: -pair: %w", err)
@@ -52,6 +63,13 @@ func runFakeCube(args []string) error {
 	}
 	defer srv.Close()
 	fmt.Fprintf(os.Stderr, "fake cube listening on %s (%d lines)\n", addr, len(greeting))
+	if *control != "" {
+		caddr, err := srv.Control(*control)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "control listening on %s\n", caddr)
+	}
 	if *discovery != "" {
 		d, err := fakecube.StartDiscovery(*discovery, *discoverySerial, 0x0a0b0c)
 		if err != nil {

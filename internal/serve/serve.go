@@ -80,6 +80,10 @@ type Config struct {
 	// (never, or only on request); nil takes the store's setting, else
 	// server.DefaultPollInterval and the others.
 	PollInterval, RefreshInterval, DiscoverInterval *time.Duration
+	// StaleAfter wins over the store's stale_after for this run where it
+	// is set; 0 takes view.StaleAfter. Tests make a device stale with a
+	// short one.
+	StaleAfter *time.Duration
 	// DiscoveryTargets are sent the discovery requests instead of the
 	// broadcast, each host:port.
 	DiscoveryTargets []string
@@ -189,7 +193,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		key   string
 		given *time.Duration
 		v     *time.Duration
-	}{{store.PollIntervalKey, cfg.PollInterval, &poll}, {store.RefreshIntervalKey, cfg.RefreshInterval, &refresh}, {store.DiscoverIntervalKey, cfg.DiscoverInterval, &discover}, {store.StaleAfterKey, nil, &staleAfter}} {
+	}{{store.PollIntervalKey, cfg.PollInterval, &poll}, {store.RefreshIntervalKey, cfg.RefreshInterval, &refresh}, {store.DiscoverIntervalKey, cfg.DiscoverInterval, &discover}, {store.StaleAfterKey, cfg.StaleAfter, &staleAfter}} {
 		if d.given != nil {
 			*d.v = *d.given
 			continue
