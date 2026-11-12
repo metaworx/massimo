@@ -6,7 +6,7 @@ folding kept in the browser, back to top, the columns where there is
 room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
-CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-roles", "sys-caps", "sys-backup"]
+CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-roles", "sys-caps", "sys-backup"]
 
 
 def card_ids(page):

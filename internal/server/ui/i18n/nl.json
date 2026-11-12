@@ -557,6 +557,11 @@
   "log.action.role.remove": "rol verwijderd",
   "log.action.role.disable": "rol omgeschakeld",
   "log.action.capability.disable": "bevoegdheid omgeschakeld",
+  "log.action.provider.add": "aanmeldprovider toegevoegd",
+  "log.action.provider.update": "aanmeldprovider gewijzigd",
+  "log.action.provider.remove": "aanmeldprovider verwijderd",
+  "log.action.identity.add": "identiteit toegewezen",
+  "log.action.identity.remove": "identiteit verwijderd",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "adres",
   "log.kind.server_started": "gestart",
@@ -868,6 +873,68 @@
   "login.title": "Aanmelden",
 
   "login.menu": "Taal en weergave",
+
+  "login.with": "Aanmelden met {name}",
+
+  "login.oidcError.denied": "De provider heeft je niet aangemeld.",
+
+  "login.oidcError.failed": "Aanmelden via de provider is mislukt. Probeer het opnieuw, of meld je aan met naam en wachtwoord.",
+
+  "login.oidcError.refused": "Dit account is op deze server niet bekend. Vraag de eigenaar het aan je gebruiker toe te wijzen.",
+
+  "login.oidcError.disabled": "Je gebruiker is uitgeschakeld of verlopen.",
+
+  "providers.title": "Aanmeldproviders",
+
+  "providers.text": "Gebruikers melden zich naast hun wachtwoord aan via een OpenID Connect-provider zoals Nextcloud, Google of Microsoft. Registreer deze server daar als client, met de omleidings-URI hieronder.",
+
+  "providers.callback": "Te registreren omleidings-URI:",
+
+  "providers.none": "Nog geen provider.",
+
+  "providers.add": "Provider toevoegen",
+
+  "providers.key": "Sleutel",
+
+  "providers.name": "Naam op de knop",
+
+  "providers.issuer": "Uitgever (issuer)",
+
+  "providers.clientId": "Client-ID",
+
+  "providers.clientSecret": "Clientgeheim",
+
+  "providers.secretKept": "Ingesteld; leeg laten om het te behouden.",
+
+  "providers.secretNone": "Nog geen.",
+
+  "providers.scopes": "Scopes",
+
+  "providers.enabled": "Ingeschakeld",
+
+  "providers.autoCreate": "Gebruikers aanmaken die zich aanmelden",
+
+  "providers.autoRole": "Hun rol",
+
+  "providers.autoDomains": "Hun e-maildomeinen",
+
+  "providers.domainsHint": "Gescheiden door komma's; leeg: elk domein.",
+
+  "providers.remove": "Verwijderen",
+
+  "providers.removeConfirm": "De provider {name} verwijderen? Niemand meldt zich er nog via aan, en de identiteiten daar verdwijnen.",
+
+  "providers.removed": "Provider {name} verwijderd.",
+
+  "providers.saved": "Provider {name} opgeslagen.",
+
+  "providers.added": "Provider {name} toegevoegd.",
+
+  "providers.failed": "{name}: niet uitgevoerd: {error}",
+
+  "providers.off": "uitgeschakeld",
+
+  "providers.createsUsers": "maakt gebruikers aan",
   "login.text": "Deze server vraagt wie je bent.",
   "login.user": "Naam",
   "login.password": "Wachtwoord",
@@ -937,6 +1004,30 @@
   "users.unchanged": "Niets gewijzigd.",
   "users.tokens": "Sessies en sleutels",
   "users.tokensNone": "Geen.",
+
+  "users.identities": "Aanmelden via providers",
+
+  "users.identityProvider": "Provider",
+
+  "users.identityEmail": "E-mail bij de provider",
+
+  "users.identityAdd": "Toewijzen",
+
+  "users.identityRemove": "Verwijderen",
+
+  "users.identityRemoveLabel": "{email} bij {provider} verwijderen",
+
+  "users.identityBound": "gekoppeld",
+
+  "users.identityWaiting": "wacht op de eerste aanmelding",
+
+  "users.identitiesNone": "Geen.",
+
+  "users.identityAdded": "{email} toegewezen.",
+
+  "users.identityRemoved": "Identiteit verwijderd.",
+
+  "users.identityEmailNeeded": "Een e-mailadres is nodig.",
   "users.kind.session": "sessie",
   "users.kind.api": "API-sleutel",
   "users.lastUsed": "laatst gebruikt vanaf {from}",
@@ -1012,6 +1103,7 @@
   "cap.restart": "de server herstarten",
   "cap.reboot": "de computer van de server herstarten",
   "cap.audit": "de audit lezen",
+  "cap.auth": "de aanmeldproviders beheren",
   "help.users": "Wie zich aanmeldt heeft één rol, die zegt wat hij mag. Een gast heeft een einddatum; een gebruiker zonder wachtwoord meldt zich alleen met sleutels aan. Een hier gezet wachtwoord beëindigt de sessies van de gebruiker.",
   "help.roles": "Een rol is een verzameling bevoegdheden, die elk een deel bewaken van wat de pagina en de API doen. De zes standaardrollen kunnen worden hernoemd en aangepast, behalve de eigenaar; meer kunnen worden aangemaakt. Een uitgeschakelde rol houdt zijn gebruikers buiten.",
   "help.capabilities": "Een hier uitgezette bevoegdheid wordt elke rol behalve de eigenaar geweigerd, wat de rollen ook zeggen: bijvoorbeeld koppelen zolang niemand mag koppelen, of updates op een machine die met de hand wordt bijgewerkt.",

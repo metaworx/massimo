@@ -25,7 +25,7 @@ import (
 // /manifest.webmanifest makes it installable. /ui/connect.html is the
 // apps' connect page, a page of its own (docs/app.md).
 //
-//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/week-program.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/backup.js ui/roles.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/icons/*.png ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE
+//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/week-program.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/providers.js ui/backup.js ui/roles.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/icons/*.png ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE
 var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per
@@ -43,9 +43,9 @@ var uiPartials = []struct {
 	{"prefs", []string{"appearance.html", "page.html"}},
 	{"notify", []string{"notify.html"}},
 	{"system", []string{"software.html", "maintenance.html", "cubes.html"}},
-	{"system-flow", []string{"users.html", "roles.html", "capabilities.html"}},
+	{"system-flow", []string{"users.html", "providers.html", "roles.html", "capabilities.html"}},
 	{"system-end", []string{"backup.html"}},
-	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "roles-panel.html", "backups-panel.html"}},
+	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "providers-panel.html", "roles-panel.html", "backups-panel.html"}},
 }
 
 // uiPage assembles the page: index.html, the skeleton, with each marker

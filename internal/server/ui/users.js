@@ -55,6 +55,7 @@ function mayPassword(u) {
 async function loadUsers() {
   if (!canManageUsers()) return;
   usersUI.users = (await api("GET", "api/v1/users")) || [];
+  await loadLoginProviders(); // providers.js: for the users' identities
   if (hasCap("roles") && !usersUI.roles) {
     try {
       usersUI.roles = ((await api("GET", "api/v1/roles")) || {}).roles || null;
@@ -287,6 +288,11 @@ function userPanel(u) {
   d.appendChild(tokensBox);
   wireNewKey(u, tokensBox);
   const manage = mayManage(u);
+  // its identities at the sign-in providers, the manager's (providers.js)
+  const idBox = fromTemplate("tpl-user-identities");
+  d.appendChild(idBox);
+  wireIdentities(u, idBox);
+  if (!manage) idBox.classList.add("hidden");
   const self = isSelf(u.name);
   const mayPw = mayPassword(u);
   // the keys are the manager's and the user's own; an outranked user's
@@ -301,6 +307,7 @@ function userPanel(u) {
       if (usersUI.open.has(u.name)) return; // built open, loaded below
       usersUI.open.add(u.name);
       if (manage || self) fillTokens(u, tokensBox);
+      if (manage && providersUI.login.length) fillIdentities(u, idBox);
     } else {
       usersUI.open.delete(u.name);
     }
@@ -370,6 +377,7 @@ function userPanel(u) {
     });
   });
   if (d.open && (manage || self)) fillTokens(u, tokensBox);
+  if (d.open && manage && providersUI.login.length) fillIdentities(u, idBox);
   return d;
 }
 

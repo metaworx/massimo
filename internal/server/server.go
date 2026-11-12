@@ -284,6 +284,7 @@ type Server struct {
 	authLockout time.Duration // the lockout in effect, for the log
 	signIns     signIns       // the addresses with a login running
 	logins      opaqueLogins  // the sign-ins by OPAQUE started, and the proofs given
+	oidc        oidcFlows     // the sign-ins through a provider started, and their codes (oidc.go)
 	tickets     *ticketStore
 	refusals    *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).
@@ -1098,6 +1099,10 @@ func (s *Server) routes() {
 	api("POST /api/v1/login", "none", s.login)
 	api("POST /api/v1/login/start", "none", s.loginStart)
 	api("POST /api/v1/login/finish", "none", s.loginFinish)
+	api("GET /api/v1/login/providers", "none", s.loginProviders)
+	api("POST /api/v1/login/oidc/finish", "none", s.oidcFinish)
+	api("GET /api/v1/login/oidc/callback", "none", s.oidcCallback)
+	api("POST /api/v1/login/oidc/{key}", "none", s.oidcStartLogin)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
@@ -1119,6 +1124,13 @@ func (s *Server) routes() {
 	api("POST /api/v1/users/{name}/tokens", "users", s.postToken)
 	api("DELETE /api/v1/users/{name}/tokens/{id}", "users", s.deleteToken)
 	api("POST /api/v1/users/{name}/register", "users", s.registerOpaque)
+	api("GET /api/v1/users/{name}/identities", "users", s.listIdentities)
+	api("POST /api/v1/users/{name}/identities", "users", s.postIdentity)
+	api("DELETE /api/v1/users/{name}/identities/{id}", "users", s.deleteIdentity)
+	api("GET /api/v1/providers", "auth", s.listProviders)
+	api("POST /api/v1/providers", "auth", s.postProvider)
+	api("PUT /api/v1/providers/{key}", "auth", s.putProvider)
+	api("DELETE /api/v1/providers/{key}", "auth", s.deleteProvider)
 	api("GET /api/v1/roles", "roles", s.listRoles)
 	api("POST /api/v1/roles", "roles", s.postRole)
 	api("PUT /api/v1/roles/{key}", "roles", s.putRole)

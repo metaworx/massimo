@@ -1191,6 +1191,8 @@ function applyLanguage() {
   renderMe();
   renderDeviceSwitches();
   renderUsers();
+  renderProviders(); // providers.js
+  if ($("login-dialog").open) renderLoginProviders(); // login.js
   renderBackups();
   renderPlan();
   renderRoles();
@@ -1209,6 +1211,7 @@ function applyLanguage() {
 // init starts the page once English and the chosen language are loaded.
 async function init() {
   state.token = await readToken();
+  await oidcReturn(); // login.js: back from a provider's sign-in, before the page reads its address
   state.serial = readStored("massimo.serial");
   loadSettings();
   await changeLanguage(state.settings.lang);

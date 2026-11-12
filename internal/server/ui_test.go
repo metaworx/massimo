@@ -46,7 +46,7 @@ func TestUIServed(t *testing.T) {
 		!strings.Contains(body, `<base href="../">`) || !strings.Contains(body, `http-equiv="Content-Security-Policy"`) {
 		t.Fatalf("GET /ui/connect.html: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/week-program.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js", "/ui/notify.js", "/ui/notifytext.js"} {
+	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/week-program.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/providers.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js", "/ui/notify.js", "/ui/notifytext.js"} {
 		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}

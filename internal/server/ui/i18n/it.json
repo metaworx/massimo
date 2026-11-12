@@ -558,6 +558,11 @@
   "log.action.role.remove": "ruolo rimosso",
   "log.action.role.disable": "ruolo commutato",
   "log.action.capability.disable": "capacità commutata",
+  "log.action.provider.add": "provider di accesso aggiunto",
+  "log.action.provider.update": "provider di accesso modificato",
+  "log.action.provider.remove": "provider di accesso rimosso",
+  "log.action.identity.add": "identità assegnata",
+  "log.action.identity.remove": "identità rimossa",
   "log.kind.cube_gone": "sparito",
   "log.kind.address_changed": "indirizzo",
   "log.kind.server_started": "avviato",
@@ -869,6 +874,68 @@
   "login.title": "Accedi",
 
   "login.menu": "Lingua e aspetto",
+
+  "login.with": "Accedi con {name}",
+
+  "login.oidcError.denied": "Il provider non ti ha fatto accedere.",
+
+  "login.oidcError.failed": "L'accesso tramite il provider non è riuscito. Riprova, oppure accedi con nome e password.",
+
+  "login.oidcError.refused": "Questo account non è noto su questo server. Chiedi al proprietario di assegnarlo al tuo utente.",
+
+  "login.oidcError.disabled": "Il tuo utente è disattivato o scaduto.",
+
+  "providers.title": "Provider di accesso",
+
+  "providers.text": "Gli utenti accedono tramite un provider OpenID Connect come Nextcloud, Google o Microsoft, oltre alla password. Registra questo server presso di esso come client, con l'URI di reindirizzamento qui sotto.",
+
+  "providers.callback": "URI di reindirizzamento da registrare:",
+
+  "providers.none": "Ancora nessun provider.",
+
+  "providers.add": "Aggiungi un provider",
+
+  "providers.key": "Chiave",
+
+  "providers.name": "Nome sul pulsante",
+
+  "providers.issuer": "Emittente (issuer)",
+
+  "providers.clientId": "ID client",
+
+  "providers.clientSecret": "Segreto client",
+
+  "providers.secretKept": "Impostato; lascia vuoto per mantenerlo.",
+
+  "providers.secretNone": "Ancora nessuno.",
+
+  "providers.scopes": "Scope",
+
+  "providers.enabled": "Attivo",
+
+  "providers.autoCreate": "Crea gli utenti che accedono",
+
+  "providers.autoRole": "Il loro ruolo",
+
+  "providers.autoDomains": "I loro domini e-mail",
+
+  "providers.domainsHint": "Separati da virgole; vuoto: qualsiasi dominio.",
+
+  "providers.remove": "Rimuovi",
+
+  "providers.removeConfirm": "Rimuovere il provider {name}? Nessuno accede più tramite esso, e le identità presso di esso vengono eliminate.",
+
+  "providers.removed": "Provider {name} rimosso.",
+
+  "providers.saved": "Provider {name} salvato.",
+
+  "providers.added": "Provider {name} aggiunto.",
+
+  "providers.failed": "{name}: non eseguito: {error}",
+
+  "providers.off": "disattivato",
+
+  "providers.createsUsers": "crea utenti",
   "login.text": "Questo server chiede chi sei.",
   "login.user": "Nome",
   "login.password": "Password",
@@ -938,6 +1005,30 @@
   "users.unchanged": "Niente è cambiato.",
   "users.tokens": "Sessioni e chiavi",
   "users.tokensNone": "Nessuna.",
+
+  "users.identities": "Accesso tramite provider",
+
+  "users.identityProvider": "Provider",
+
+  "users.identityEmail": "E-mail presso il provider",
+
+  "users.identityAdd": "Assegna",
+
+  "users.identityRemove": "Rimuovi",
+
+  "users.identityRemoveLabel": "Rimuovi {email} presso {provider}",
+
+  "users.identityBound": "collegata",
+
+  "users.identityWaiting": "attende il primo accesso",
+
+  "users.identitiesNone": "Nessuna.",
+
+  "users.identityAdded": "{email} assegnato.",
+
+  "users.identityRemoved": "Identità rimossa.",
+
+  "users.identityEmailNeeded": "Serve un indirizzo e-mail.",
   "users.kind.session": "sessione",
   "users.kind.api": "chiave API",
   "users.lastUsed": "ultimo uso da {from}",
@@ -1013,6 +1104,7 @@
   "cap.restart": "riavviare il server",
   "cap.reboot": "riavviare il computer del server",
   "cap.audit": "leggere l'audit",
+  "cap.auth": "gestire i provider di accesso",
   "help.users": "Chi accede ha un ruolo, che dice cosa può fare. Un ospite ha una data di fine; un utente senza password accede solo con chiavi. Una password impostata qui termina le sessioni dell'utente.",
   "help.roles": "Un ruolo è un insieme di capacità, ognuna a guardia di una parte di ciò che fanno la pagina e l'API. I sei ruoli predefiniti si possono rinominare e rimodellare, tranne il proprietario; se ne possono creare altri. Un ruolo disattivato tiene fuori i suoi utenti.",
   "help.capabilities": "Una capacità spenta qui è negata a ogni ruolo tranne il proprietario, qualunque cosa dicano i ruoli: per esempio l'associazione finché nessuno deve associare, o gli aggiornamenti su una macchina aggiornata a mano.",

@@ -51,6 +51,8 @@ var actions = map[string]string{
 	"POST /api/v1/login":                           "login",
 	"POST /api/v1/login/start":                     "login.start",
 	"POST /api/v1/login/finish":                    "login",
+	"POST /api/v1/login/oidc/{key}":                "login.start",
+	"POST /api/v1/login/oidc/finish":               "login",
 	"POST /api/v1/logout":                          "logout",
 	"POST /api/v1/cubes":                           "cube.add",
 	"PUT /api/v1/cubes/{sn}":                       "cube.update",
@@ -86,6 +88,11 @@ var actions = map[string]string{
 	"POST /api/v1/users/{name}/tokens":             "token.add",
 	"POST /api/v1/users/{name}/register":           "", // nothing is kept
 	"DELETE /api/v1/users/{name}/tokens/{id}":      "token.revoke",
+	"POST /api/v1/users/{name}/identities":         "identity.add",
+	"DELETE /api/v1/users/{name}/identities/{id}":  "identity.remove",
+	"POST /api/v1/providers":                       "provider.add",
+	"PUT /api/v1/providers/{key}":                  "provider.update",
+	"DELETE /api/v1/providers/{key}":               "provider.remove",
 	"POST /api/v1/roles":                           "role.add",
 	"PUT /api/v1/roles/{key}":                      "role.update",
 	"DELETE /api/v1/roles/{key}":                   "role.remove",
@@ -113,6 +120,7 @@ var changeLines = map[string]string{
 	"device.lock": "change", "room.config": "change", "device.config": "change", "room.program": "change", "device.program": "change",
 	"pairing.start": "change", "pairing.stop": "change",
 	"user.add": "change", "user.update": "change", "user.remove": "change", "token.add": "change", "token.revoke": "change",
+	"identity.add": "change", "identity.remove": "change", "provider.add": "change", "provider.update": "change", "provider.remove": "change",
 	"role.add": "change", "role.update": "change", "role.remove": "change", "role.disable": "change", "capability.disable": "change",
 }
 
@@ -122,7 +130,7 @@ var noCommand = map[string]bool{"login": true, "login.start": true, "logout": tr
 	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true}
 
 // secretFields are the body fields an audit row never keeps.
-var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3"}
+var secretFields = []string{"password", "current_password", "token", "record", "proof", "login", "ke1", "ke3", "client_secret", "code"}
 
 // auditInfo is one audited request on its way through the wrapper.
 type auditInfo struct {

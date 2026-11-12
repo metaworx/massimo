@@ -556,6 +556,11 @@
   "log.action.role.remove": "Rolle entfernt",
   "log.action.role.disable": "Rolle umgeschaltet",
   "log.action.capability.disable": "Fähigkeit umgeschaltet",
+  "log.action.provider.add": "Anmeldedienst hinzugefügt",
+  "log.action.provider.update": "Anmeldedienst geändert",
+  "log.action.provider.remove": "Anmeldedienst entfernt",
+  "log.action.identity.add": "Identität zugewiesen",
+  "log.action.identity.remove": "Identität entfernt",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "Adresse",
   "log.kind.server_started": "gestartet",
@@ -867,6 +872,68 @@
   "login.title": "Anmelden",
 
   "login.menu": "Sprache und Darstellung",
+
+  "login.with": "Anmelden mit {name}",
+
+  "login.oidcError.denied": "Der Anmeldedienst hat dich nicht angemeldet.",
+
+  "login.oidcError.failed": "Die Anmeldung über den Anmeldedienst ist fehlgeschlagen. Versuche es nochmals, oder melde dich mit Name und Passwort an.",
+
+  "login.oidcError.refused": "Dieses Konto ist auf diesem Server nicht bekannt. Bitte den Besitzer, es deinem Benutzer zuzuweisen.",
+
+  "login.oidcError.disabled": "Dein Benutzer ist deaktiviert oder abgelaufen.",
+
+  "providers.title": "Anmeldedienste",
+
+  "providers.text": "Benutzer melden sich neben ihrem Passwort über einen OpenID-Connect-Dienst wie Nextcloud, Google oder Microsoft an. Registriere diesen Server dort als Client, mit der Weiterleitungs-URI unten.",
+
+  "providers.callback": "Zu registrierende Weiterleitungs-URI:",
+
+  "providers.none": "Noch kein Anmeldedienst.",
+
+  "providers.add": "Anmeldedienst hinzufügen",
+
+  "providers.key": "Schlüssel",
+
+  "providers.name": "Name auf der Schaltfläche",
+
+  "providers.issuer": "Aussteller (Issuer)",
+
+  "providers.clientId": "Client-ID",
+
+  "providers.clientSecret": "Client-Geheimnis",
+
+  "providers.secretKept": "Gesetzt; leer lassen, um es zu behalten.",
+
+  "providers.secretNone": "Noch keines.",
+
+  "providers.scopes": "Scopes",
+
+  "providers.enabled": "Aktiviert",
+
+  "providers.autoCreate": "Benutzer anlegen, die sich anmelden",
+
+  "providers.autoRole": "Ihre Rolle",
+
+  "providers.autoDomains": "Ihre E-Mail-Domains",
+
+  "providers.domainsHint": "Durch Kommas getrennt; leer: jede Domain.",
+
+  "providers.remove": "Entfernen",
+
+  "providers.removeConfirm": "Den Anmeldedienst {name} entfernen? Niemand meldet sich mehr darüber an, und die Identitäten dort verschwinden.",
+
+  "providers.removed": "Anmeldedienst {name} entfernt.",
+
+  "providers.saved": "Anmeldedienst {name} gespeichert.",
+
+  "providers.added": "Anmeldedienst {name} hinzugefügt.",
+
+  "providers.failed": "{name}: nicht ausgeführt: {error}",
+
+  "providers.off": "deaktiviert",
+
+  "providers.createsUsers": "legt Benutzer an",
   "login.text": "Dieser Server fragt, wer du bist.",
   "login.user": "Name",
   "login.password": "Passwort",
@@ -936,6 +1003,30 @@
   "users.unchanged": "Nichts geändert.",
   "users.tokens": "Sitzungen und Schlüssel",
   "users.tokensNone": "Keine.",
+
+  "users.identities": "Anmeldung über Anmeldedienste",
+
+  "users.identityProvider": "Anmeldedienst",
+
+  "users.identityEmail": "E-Mail beim Anmeldedienst",
+
+  "users.identityAdd": "Zuweisen",
+
+  "users.identityRemove": "Entfernen",
+
+  "users.identityRemoveLabel": "{email} bei {provider} entfernen",
+
+  "users.identityBound": "verknüpft",
+
+  "users.identityWaiting": "wartet auf die erste Anmeldung",
+
+  "users.identitiesNone": "Keine.",
+
+  "users.identityAdded": "{email} zugewiesen.",
+
+  "users.identityRemoved": "Identität entfernt.",
+
+  "users.identityEmailNeeded": "Eine E-Mail-Adresse ist nötig.",
   "users.kind.session": "Sitzung",
   "users.kind.api": "API-Schlüssel",
   "users.lastUsed": "zuletzt benutzt von {from}",
@@ -1011,6 +1102,7 @@
   "cap.restart": "den Server neu starten",
   "cap.reboot": "den Computer des Servers neu starten",
   "cap.audit": "das Protokoll lesen",
+  "cap.auth": "die Anmeldedienste verwalten",
   "help.users": "Wer sich anmeldet, hat eine Rolle, die sagt, was er darf. Ein Gast hat ein Ende; ein Benutzer ohne Passwort meldet sich nur mit Schlüsseln an. Ein hier gesetztes Passwort beendet die Sitzungen des Benutzers.",
   "help.roles": "Eine Rolle ist eine Menge von Fähigkeiten, von denen jede einen Teil dessen bewacht, was Seite und API tun. Die sechs Standardrollen lassen sich umbenennen und umbauen, außer dem Eigentümer; weitere lassen sich anlegen. Eine gesperrte Rolle hält ihre Benutzer draußen.",
   "help.capabilities": "Eine hier abgeschaltete Fähigkeit wird jeder Rolle außer dem Eigentümer verweigert, was auch die Rollen sagen: zum Beispiel das Anlernen, solange niemand anlernen soll, oder Updates auf einer Box, die von Hand aktualisiert wird.",

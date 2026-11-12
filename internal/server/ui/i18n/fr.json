@@ -558,6 +558,11 @@
   "log.action.role.remove": "rôle retiré",
   "log.action.role.disable": "rôle basculé",
   "log.action.capability.disable": "capacité basculée",
+  "log.action.provider.add": "fournisseur de connexion ajouté",
+  "log.action.provider.update": "fournisseur de connexion modifié",
+  "log.action.provider.remove": "fournisseur de connexion supprimé",
+  "log.action.identity.add": "identité attribuée",
+  "log.action.identity.remove": "identité supprimée",
   "log.kind.cube_gone": "disparu",
   "log.kind.address_changed": "adresse",
   "log.kind.server_started": "démarré",
@@ -869,6 +874,68 @@
   "login.title": "Connexion",
 
   "login.menu": "Langue et apparence",
+
+  "login.with": "Se connecter avec {name}",
+
+  "login.oidcError.denied": "Le fournisseur ne vous a pas connecté.",
+
+  "login.oidcError.failed": "La connexion par le fournisseur a échoué. Réessayez, ou connectez-vous avec un nom et un mot de passe.",
+
+  "login.oidcError.refused": "Ce compte n'est pas connu sur ce serveur. Demandez à son propriétaire de l'attribuer à votre utilisateur.",
+
+  "login.oidcError.disabled": "Votre utilisateur est désactivé ou a expiré.",
+
+  "providers.title": "Fournisseurs de connexion",
+
+  "providers.text": "Les utilisateurs se connectent par un fournisseur OpenID Connect comme Nextcloud, Google ou Microsoft, en plus de leur mot de passe. Enregistrez ce serveur comme client chez lui, avec l'URI de redirection ci-dessous.",
+
+  "providers.callback": "URI de redirection à enregistrer :",
+
+  "providers.none": "Aucun fournisseur pour l'instant.",
+
+  "providers.add": "Ajouter un fournisseur",
+
+  "providers.key": "Clé",
+
+  "providers.name": "Nom sur le bouton",
+
+  "providers.issuer": "Émetteur (issuer)",
+
+  "providers.clientId": "ID client",
+
+  "providers.clientSecret": "Secret client",
+
+  "providers.secretKept": "Défini ; laisser vide pour le garder.",
+
+  "providers.secretNone": "Aucun pour l'instant.",
+
+  "providers.scopes": "Portées (scopes)",
+
+  "providers.enabled": "Activé",
+
+  "providers.autoCreate": "Créer les utilisateurs qui se connectent",
+
+  "providers.autoRole": "Leur rôle",
+
+  "providers.autoDomains": "Leurs domaines de messagerie",
+
+  "providers.domainsHint": "Séparés par des virgules ; vide : tout domaine.",
+
+  "providers.remove": "Supprimer",
+
+  "providers.removeConfirm": "Supprimer le fournisseur {name} ? Plus personne ne se connecte par lui, et les identités chez lui disparaissent.",
+
+  "providers.removed": "Fournisseur {name} supprimé.",
+
+  "providers.saved": "Fournisseur {name} enregistré.",
+
+  "providers.added": "Fournisseur {name} ajouté.",
+
+  "providers.failed": "{name} : non effectué : {error}",
+
+  "providers.off": "désactivé",
+
+  "providers.createsUsers": "crée des utilisateurs",
   "login.text": "Ce serveur demande qui vous êtes.",
   "login.user": "Nom",
   "login.password": "Mot de passe",
@@ -938,6 +1005,30 @@
   "users.unchanged": "Rien n'a changé.",
   "users.tokens": "Sessions et clés",
   "users.tokensNone": "Aucune.",
+
+  "users.identities": "Connexion par des fournisseurs",
+
+  "users.identityProvider": "Fournisseur",
+
+  "users.identityEmail": "E-mail chez le fournisseur",
+
+  "users.identityAdd": "Attribuer",
+
+  "users.identityRemove": "Supprimer",
+
+  "users.identityRemoveLabel": "Supprimer {email} chez {provider}",
+
+  "users.identityBound": "liée",
+
+  "users.identityWaiting": "attend sa première connexion",
+
+  "users.identitiesNone": "Aucune.",
+
+  "users.identityAdded": "{email} attribué.",
+
+  "users.identityRemoved": "Identité supprimée.",
+
+  "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
   "users.kind.session": "session",
   "users.kind.api": "clé API",
   "users.lastUsed": "dernière utilisation depuis {from}",
@@ -1013,6 +1104,7 @@
   "cap.restart": "redémarrer le serveur",
   "cap.reboot": "redémarrer l'ordinateur du serveur",
   "cap.audit": "lire l'audit",
+  "cap.auth": "gérer les fournisseurs de connexion",
   "help.users": "Chaque personne connectée a un rôle, qui dit ce qu'elle peut faire. Un invité a une date de fin ; un utilisateur sans mot de passe se connecte avec des clés seulement. Un mot de passe défini ici met fin aux sessions de l'utilisateur.",
   "help.roles": "Un rôle est un ensemble de capacités, chacune gardant une partie de ce que font la page et l'API. Les six rôles par défaut peuvent être renommés et remaniés, sauf le propriétaire ; d'autres peuvent être créés. Un rôle désactivé tient ses utilisateurs dehors.",
   "help.capabilities": "Une capacité désactivée ici est refusée à tous les rôles sauf au propriétaire, quoi que disent les rôles : par exemple l'appairage tant que personne ne doit appairer, ou les mises à jour sur une machine mise à jour à la main.",

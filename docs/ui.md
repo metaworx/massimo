@@ -18,6 +18,15 @@ The page keeps the session in the browser for 30 days from its last use;
 The card's ☰ sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
+Above the form, a button per enabled OpenID Connect provider,
+**Sign in with Nextcloud** for example
+(docs/api-v1.md, "Sign-in through OpenID Connect"),
+goes to the provider and back signed in,
+the provider's answer taken from the address at once;
+an account the server does not know, or a refusal, comes back to the card,
+which says why.
+The app shows no such button yet:
+the providers refuse a sign-in inside an app's page.
 While it asks, the page shows its name, its version and the sign-in,
 nothing else:
 Sign out forgets what the page loaded of the Cubes,
@@ -642,7 +651,10 @@ to the top of the page.
   is registered by OPAQUE in the browser and never sent;
   **Save**, off while nothing differs from the user;
   **Remove**; the user's sessions and API keys with **Revoke**,
-  and **Create key**, which shows the new key once.
+  and **Create key**, which shows the new key once;
+  where a sign-in provider is enabled, the user's identities at the providers,
+  each with its e-mail and whether it is bound or waits for its first sign-in,
+  **Remove**, and **Assign** an e-mail at a provider to the user.
   **Add a user** opens the form for one;
   its name is checked 2 seconds after the last keystroke and when the field is left:
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
@@ -655,6 +667,17 @@ to the top of the page.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
+- **Sign-in providers** (with `auth`, the owner's alone by default):
+  the redirect URI to register at a provider,
+  the page's address and `api/v1/login/oidc/callback`;
+  every OpenID Connect provider in a panel, its name and key,
+  **disabled** and **creates users** as badges,
+  with its name on the button, issuer, client ID, client secret (written only:
+  the line under it says whether one is set),
+  scopes, **Enabled**,
+  and **Create users who sign in** with their role,
+  which holds no administrative capability, and their e-mail domains;
+  **Save**, **Remove**; **Add a provider** opens the form for one, with its key.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Save**, off while nothing differs from the role,

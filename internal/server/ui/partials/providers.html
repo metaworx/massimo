@@ -1,0 +1,15 @@
+<!-- System settings → Sign-in providers, a section card: the OpenID Connect providers users sign in through, with the capability auth; providers.js draws into #providers-list. -->
+<section id="sys-providers" class="tile section-card providers-settings needs-auth" aria-labelledby="sys-providers-h">
+  <header class="tile-head section-head">
+    <h3 id="sys-providers-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-providers-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="providers.title">Sign-in providers</span></button></h3>
+    <span class="section-badges"></span>
+  </header>
+  <div id="sys-providers-body" class="section-body" aria-live="polite">
+    <p class="muted small" data-i18n="providers.text">Users sign in through an OpenID Connect provider such as Nextcloud, Google or Microsoft beside their password. Register this server there as a client, with the redirect URI below.</p>
+    <p class="small providers-callback"><span data-i18n="providers.callback">Redirect URI to register:</span> <span id="providers-callback" class="mono"></span></p>
+    <div id="providers-list"></div>
+    <div id="provider-new"></div>
+    <div class="actions"><span class="actions-left"><button type="button" id="provider-add" data-i18n="providers.add">Add a provider</button></span></div>
+    <p id="providers-msg" class="small cubes-msg hidden" role="status"></p>
+  </div>
+</section>

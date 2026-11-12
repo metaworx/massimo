@@ -556,6 +556,11 @@
   "log.action.role.remove": "role removed",
   "log.action.role.disable": "role switched",
   "log.action.capability.disable": "capability switched",
+  "log.action.provider.add": "sign-in provider added",
+  "log.action.provider.update": "sign-in provider changed",
+  "log.action.provider.remove": "sign-in provider removed",
+  "log.action.identity.add": "identity assigned",
+  "log.action.identity.remove": "identity removed",
   "log.kind.cube_gone": "gone",
   "log.kind.address_changed": "address",
   "log.kind.server_started": "started",
@@ -867,6 +872,68 @@
   "login.title": "Sign in",
 
   "login.menu": "Language and appearance",
+
+  "login.with": "Sign in with {name}",
+
+  "login.oidcError.denied": "The provider did not sign you in.",
+
+  "login.oidcError.failed": "The sign-in through the provider failed. Try again, or sign in with a name and password.",
+
+  "login.oidcError.refused": "This account is not known on this server. Ask its owner to assign it to your user.",
+
+  "login.oidcError.disabled": "Your user is disabled or has expired.",
+
+  "providers.title": "Sign-in providers",
+
+  "providers.text": "Users sign in through an OpenID Connect provider such as Nextcloud, Google or Microsoft beside their password. Register this server there as a client, with the redirect URI below.",
+
+  "providers.callback": "Redirect URI to register:",
+
+  "providers.none": "No provider yet.",
+
+  "providers.add": "Add a provider",
+
+  "providers.key": "Key",
+
+  "providers.name": "Name on the button",
+
+  "providers.issuer": "Issuer",
+
+  "providers.clientId": "Client ID",
+
+  "providers.clientSecret": "Client secret",
+
+  "providers.secretKept": "Set; leave empty to keep it.",
+
+  "providers.secretNone": "None yet.",
+
+  "providers.scopes": "Scopes",
+
+  "providers.enabled": "Enabled",
+
+  "providers.autoCreate": "Create users who sign in",
+
+  "providers.autoRole": "Their role",
+
+  "providers.autoDomains": "Their e-mail domains",
+
+  "providers.domainsHint": "Comma-separated; empty: any domain.",
+
+  "providers.remove": "Remove",
+
+  "providers.removeConfirm": "Remove the provider {name}? Nobody signs in through it any more, and the identities at it go.",
+
+  "providers.removed": "Provider {name} removed.",
+
+  "providers.saved": "Provider {name} saved.",
+
+  "providers.added": "Provider {name} added.",
+
+  "providers.failed": "{name}: not done: {error}",
+
+  "providers.off": "disabled",
+
+  "providers.createsUsers": "creates users",
   "login.text": "This server asks who you are.",
   "login.user": "Name",
   "login.password": "Password",
@@ -936,6 +1003,30 @@
   "users.unchanged": "Nothing changed.",
   "users.tokens": "Sessions and keys",
   "users.tokensNone": "None.",
+
+  "users.identities": "Sign-in through providers",
+
+  "users.identityProvider": "Provider",
+
+  "users.identityEmail": "E-mail at the provider",
+
+  "users.identityAdd": "Assign",
+
+  "users.identityRemove": "Remove",
+
+  "users.identityRemoveLabel": "Remove {email} at {provider}",
+
+  "users.identityBound": "bound",
+
+  "users.identityWaiting": "waits for its first sign-in",
+
+  "users.identitiesNone": "None.",
+
+  "users.identityAdded": "{email} assigned.",
+
+  "users.identityRemoved": "Identity removed.",
+
+  "users.identityEmailNeeded": "An e-mail is needed.",
   "users.kind.session": "session",
   "users.kind.api": "API key",
   "users.lastUsed": "last used from {from}",
@@ -1011,6 +1102,7 @@
   "cap.restart": "restart the server",
   "cap.reboot": "reboot the computer the server runs on",
   "cap.audit": "read the audit",
+  "cap.auth": "manage the sign-in providers",
   "help.users": "Everyone who signs in has one role, which says what they may do. A guest has an end date; a user without a password signs in with keys only. A password set here ends the user's sessions.",
   "help.roles": "A role is a set of capabilities, each guarding part of what the page and the API do. The six default roles can be renamed and reshaped, except the owner; more can be created. A disabled role keeps its users out.",
   "help.capabilities": "A capability switched off here is denied to every role but the owner, whatever the roles say: for example pairing while nobody should pair, or updates on a box updated by hand.",

@@ -232,6 +232,7 @@ The users routes say what the caller may do with each user they list
 | `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
+| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
@@ -458,6 +459,59 @@ an unknown login, one finished already or one past its minute, `401` too.
 a proof of the password, good once for five minutes,
 for one's own password change.
 
+### Sign-in through OpenID Connect: /api/v1/login/providers, /api/v1/login/oidc/…
+
+A user may sign in through an OpenID Connect provider beside the password:
+Nextcloud, Google, Microsoft, Authentik, Keycloak,
+each found by its issuer's discovery document (docs/store.md section 6,
+"Sign-in through OpenID Connect").
+None of the four routes needs a token.
+
+`GET /api/v1/login/providers` lists the enabled providers for the sign-in's buttons,
+`[{"key": "cloud", "name": "Nextcloud"}]`, empty on a server without users.
+
+`POST /api/v1/login/oidc/{key}` with `{"redirect": "https://massimo.example.com/"}`,
+the page's own address, starts a sign-in:
+the authorization code flow with PKCE (S256), a `state` and a `nonce`,
+the server a confidential client.
+It answers `{"url": …, "expires_at": …}`, the provider's page,
+which the browser opens; the sign-in waits ten minutes.
+The redirect URI is the page's address plus `api/v1/login/oidc/callback`,
+which must be registered at the provider:
+behind a reverse proxy the server cannot know its own address, the page does,
+and a provider sends nobody to a redirect URI it does not know.
+An address locked out is `429`, as for a password;
+an unknown or disabled provider `404`,
+a discovery document that cannot be read or does not do `502`.
+
+`GET /api/v1/login/oidc/callback?code=…&state=…` is where the provider sends the browser.
+The server trades the code at the token endpoint (`client_secret_basic`,
+or `client_secret_post` where the provider names only that) and reads the `id_token`,
+which comes straight from the provider over TLS,
+so OpenID Connect Core 1.0, 3.1.3.7,
+lets that stand in for checking its signature;
+its `iss`, `aud` (and `azp`), `exp` and `nonce` are checked.
+The user is found by the provider's subject (`sub`);
+else by an e-mail an owner assigned to a user,
+which the provider says it verified (`email_verified`),
+and which binds the subject to the user from then on;
+else, where the provider creates users, a new user for an e-mail of its domains,
+with its role.
+The browser goes back to the page with `#oidc=<code>`,
+a one-time code good for a minute,
+or with `#oidc-error=<reason>`:
+`denied` (at the provider), `failed` (its answer did not do),
+`refused` (no user here for the account)
+or `disabled` (the user is disabled or has expired).
+A refusal but `denied` counts as a failed sign-in of the address,
+and is a `login_failed` line of the log.
+A state is good once.
+
+`POST /api/v1/login/oidc/finish` with `{"code": …}` trades the code for the session,
+as `POST /api/v1/login` answers it, with `"provider"` its key;
+from the address the callback came from, once.
+The session's token so never sits in a URL, a history or a proxy's log.
+
 ### Users: /api/v1/users and /api/v1/users/{name}
 
 `GET` and `POST /api/v1/users`; `GET`, `PUT` and `DELETE /api/v1/users/{name}`.
@@ -555,6 +609,25 @@ and a retry with its `Idempotency-Key` answers `201` without it too.
 `DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
 a token of another user is `404`.
 
+### Identities: /api/v1/users/{name}/identities
+
+`GET` and `POST /api/v1/users/{name}/identities`;
+`DELETE /api/v1/users/{name}/identities/{id}`.
+A user's identities at the OpenID Connect providers
+("Sign-in through OpenID Connect" above),
+with the rules of access of the users routes:
+`users`, or `guests` for a guest's; a user does not reach its own.
+
+`GET` lists them by provider:
+`[{"id": 3, "provider": "cloud", "email": "anna@example.com", "bound": true,
+"created_at": …, "bound_at": …, "last_used_at": …}]`;
+the provider's subject is not answered, only whether it is bound.
+`POST` with `{"provider": "cloud", "email": "anna@example.com"}` assigns the e-mail,
+a pre-link that the first sign-in with it binds, `201` with the identity;
+an e-mail that already waits at the provider is `409`,
+an unknown provider `404`, a bad e-mail `400`.
+`DELETE` removes one: no sign-in finds the user by it any more.
+
 ### Roles: /api/v1/roles and /api/v1/roles/{key}
 
 `GET` and `POST /api/v1/roles`; `PUT` and `DELETE /api/v1/roles/{key}`;
@@ -601,6 +674,39 @@ one for every role but `owner`, whatever the roles' sets say
 (for example `pair` while nobody should pair,
 or `update` on a box the owner updates by hand), and `false` enables it again.
 Both need `capabilities`, which only `owner` has by default.
+
+### Providers: /api/v1/providers
+
+`GET` and `POST /api/v1/providers`; `PUT` and `DELETE /api/v1/providers/{key}`.
+The OpenID Connect providers users sign in through
+("Sign-in through OpenID Connect" above).
+They need `auth`, which only `owner` has by default.
+
+```json
+{"key": "cloud", "name": "Nextcloud", "issuer": "https://cloud.example.com",
+ "client_id": "massimo", "client_secret": "…", "scopes": "openid email profile",
+ "auto_create": false, "auto_role": "viewer", "auto_domains": [], "enabled": true}
+```
+
+`POST` adds one: `key`, `issuer` and `client_id` are needed.
+The key is that of a role (lower-case letters, digits, `_` and `-`);
+the issuer an `https` URL (`http` only on loopback),
+whose discovery document is under `/.well-known/openid-configuration`;
+the scopes include `openid`.
+`auto_role`, the role of the users a sign-in creates where `auto_create` is true,
+may not be `owner` nor hold an administrative capability (`guests`,
+`users`, `passwords`, `roles`, `roles.disable`, `capabilities`, `cubes`,
+`settings`, `update`, `restart`, `reboot`, `audit`, `auth`);
+`viewer` where absent.
+`auto_domains` limits it to e-mails of those domains, any where empty.
+`PUT` changes the fields given; the key stays,
+`client_secret` left out stays and `""` clears it.
+The answers never hold the secret:
+`has_secret` says whether there is one,
+and `callback` is the redirect URI's path under the page's address,
+`api/v1/login/oidc/callback`, to register at the provider.
+`DELETE` removes a provider and every identity at it.
+A key in use is `409`, an unknown one `404`.
 
 ### Preferences: /api/v1/me/preferences
 
