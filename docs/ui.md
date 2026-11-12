@@ -504,6 +504,16 @@ to the top of the page.
 
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
+  A holder of `settings` chooses the channel there:
+  the build's own flavour, or devel, nightly, alpha, beta or stable,
+  each taking its own releases and those of every more stable one.
+  The choice is the setting `update.channel`, none for the build's flavour
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),
+  and the release check asks again at once.
+  Where something else decides the channel, it is shown fixed, with the reason:
+  apt's suite, with the line of the apt source that changes it;
+  brew's formula, which another channel's formula replaces;
+  or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
   On a box with the update helper installed (packaging/README.md, "Updating"),
   **Update** (with `update`) installs it and restarts the server.
   If the new version does not come up, the old one is put back.

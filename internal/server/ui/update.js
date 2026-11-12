@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, System settings → Software: which release runs and
-// whether a newer one is out on the update channel, the request to the
+// The Massimo web UI, System settings → Software: the update channel a
+// holder of settings chooses (the setting update.channel), which release
+// runs and whether a newer one is out on that channel, the request to the
 // server's update helper to install it (POST /api/v1/update), and the
 // server's restart (POST /api/v1/restart), after which the page follows
 // /healthz until the server is back, and the computer's reboot (POST
@@ -12,7 +13,12 @@
 
 "use strict";
 
-const updState = { info: null, timer: null, until: 0, grace: 0 };
+const updState = { info: null, setting: null, timer: null, until: 0, grace: 0 };
+
+// UPDATE_FLAVOURS are the channels a box may follow, the most rolling
+// first, as update.Flavours has them: each takes its own releases and
+// those of every more stable one.
+const UPDATE_FLAVOURS = ["devel", "nightly", "alpha", "beta", "stable"];
 
 // updateBusy reports whether the helper is working on an update.
 function updateBusy(h) {
@@ -84,6 +90,70 @@ async function loadUpdate(refresh) {
     $("update-text").textContent = t("update.cannotAsk", { error: e.message });
     return null;
   }
+}
+
+// channelFixed says why the channel cannot be chosen here, "" where it
+// can: apt's suite or brew's formula decides it, or MASSIMO_UPDATE_CHANNEL
+// overrides the setting, which then differs from the channel in effect.
+function channelFixed(u, setting) {
+  if (u.manager === "apt") return t("update.channelApt", { channel: u.channel });
+  if (u.manager === "brew") {
+    return t("update.channelBrew", { channel: u.channel, formula: u.channel === "stable" ? "massimo" : "massimo-" + u.channel });
+  }
+  if (setting.in_effect !== setting.value) return t("update.channelVariable", { channel: setting.in_effect });
+  return "";
+}
+
+// renderChannel shows the channel's choice to a holder of settings, who
+// alone may change it: the build's flavour or a channel of its own, or
+// the channel fixed, with the reason and the way to change it.
+function renderChannel() {
+  const u = updState.info;
+  const setting = updState.setting;
+  const show = !!u && !!setting && hasCap("settings"); // login.js
+  $("update-channel-field").classList.toggle("hidden", !show);
+  if (!show) return;
+  const sel = $("update-channel");
+  const own = [["", u.flavour ? t("update.channelFlavour", { flavour: u.flavour }) : t("update.channelNone")]];
+  sel.replaceChildren(...own.concat(UPDATE_FLAVOURS.map((f) => [f, t("update.flavour." + f)])).map(([value, label]) => {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    return o;
+  }));
+  const fixed = channelFixed(u, setting);
+  sel.disabled = !!fixed;
+  sel.value = fixed ? setting.in_effect : setting.set ? setting.value : "";
+  $("update-channel-note").textContent = fixed || t("update.channelHint");
+}
+
+// loadChannel reads the setting update.channel, for a holder of settings.
+async function loadChannel() {
+  if (!hasCap("settings")) return; // login.js
+  try {
+    const all = (await api("GET", "api/v1/settings")) || {};
+    updState.setting = all["update.channel"] || null;
+  } catch (e) {
+    updState.setting = null;
+  }
+  renderChannel();
+}
+
+// setChannel stores the chosen channel, none for the build's flavour, and
+// checks again for a release on it.
+async function setChannel() {
+  const sel = $("update-channel");
+  let failed = null;
+  sel.disabled = true; // renderChannel decides again
+  try {
+    await api("PUT", "api/v1/settings", { "update.channel": sel.value || null });
+  } catch (e) {
+    failed = e;
+  }
+  await loadUpdate(true);
+  await loadChannel();
+  if (failed) $("update-channel-note").textContent = t("update.channelFailed", { error: failed.message });
+  sel.focus();
 }
 
 // followUpdate polls while the helper works; the server goes away for
@@ -508,12 +578,13 @@ function followRestart(before, until) {
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
+  $("update-channel").addEventListener("change", setChannel);
   $("restart-btn").addEventListener("click", startRestart);
   $("settings-reload").addEventListener("click", reloadSettings);
   $("reboot-btn").addEventListener("click", startReboot);
   $("reboot-cancel").addEventListener("click", cancelReboot);
   onView("system", () => {
-    loadUpdate(false);
+    loadUpdate(false).then(loadChannel);
     loadRestart();
     loadReboot();
     loadServerInfo();

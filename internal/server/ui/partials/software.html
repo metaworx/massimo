@@ -1,10 +1,15 @@
-<!-- System settings → Software update, a section card: the update check and the update, update.js; the restart is under Maintenance (maintenance.html). -->
+<!-- System settings → Software update, a section card: the update channel, the update check and the update, update.js; the restart is under Maintenance (maintenance.html). -->
 <section id="sys-software" class="tile section-card half software-settings" aria-labelledby="sys-software-h">
   <header class="tile-head section-head">
     <h3 id="sys-software-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-software-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="update.title">Software update</span></button></h3>
     <span class="section-badges"></span>
   </header>
   <div id="sys-software-body" class="section-body">
+    <div id="update-channel-field" class="field wide hidden">
+      <label for="update-channel" data-i18n="update.channel">Update channel</label>
+      <select id="update-channel" class="field-control" aria-describedby="update-channel-note"></select>
+      <p id="update-channel-note" class="field-hint muted small"></p>
+    </div>
     <div class="update" aria-live="polite">
       <p id="update-text">–</p>
       <p><a id="update-link" class="hidden" target="_blank" rel="noopener noreferrer"></a></p>
