@@ -2,8 +2,9 @@ name: CI
 
 # Once per commit: a push to main, or a pull request (each push to its
 # branch), never both; and a release tag. Formatting, vet, the tests, a
-# cross build of every release binary, govulncheck, the Debian package in
-# a container, and the Windows service on a Windows runner. A pull
+# cross build of every release binary, actionlint on the workflows,
+# govulncheck, the Debian package in a container, and the Windows
+# service on a Windows runner. A pull
 # request runs the web UI's suite only when it changes the UI, the suite
 # or this file, and on two of its four cases, and the mDNS test against
 # avahi only when it changes the announcement, discovery, the test or
@@ -204,6 +205,27 @@ jobs:
 
       - name: Cross build
         run: make cross
+
+  # The workflows by actionlint, their run: scripts by the runner's
+  # shellcheck (make actionlint, GUIDELINES/project/CI.md, section 2): the
+  # tool is pinned in tools/actionlint/go.mod, a module of its own, whose
+  # go.sum keys setup-go's cache.
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache-dependency-path: tools/actionlint/go.sum
+
+      - name: make actionlint
+        run: make actionlint
 
   # The race detector (make race, GUIDELINES/project/CI.md, section 2) on
   # the packages whose goroutines meet, beside Vet and test rather than in
@@ -1147,7 +1169,7 @@ jobs:
   # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
-    needs: [ changes, test, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
+    needs: [ changes, test, actionlint, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     permissions:
