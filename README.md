@@ -535,7 +535,7 @@ and follows the `devel` builds.
 The other targets:
 `make linux`, `make linux-armv7` and `make darwin` (both Mac architectures)
 build one more release binary each;
-`make release` adds the build record, `SHA256SUMS` and the release manifest;
+`make build-release` adds the build record, `SHA256SUMS` and the release manifest;
 `make vet`, `make test` and `make clean` do what they say;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).

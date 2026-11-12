@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.43.0)
+# Massimo — CI Conventions (v1.44.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -436,7 +436,7 @@ CodeQL's alert 6, cache poisoning by the nightly build's checkout of the commit
 `meta` picked, was dismissed as a false positive:
 that commit is always one of `main`'s first parents;
 `meta` moved to build.yml since, and an alert raised there gets the same answer.
-`make release` runs the build through `tee`,
+`make build-release` runs the build through `tee`,
 four targets at a time (`-j4 -Otarget`, `RELEASE_JOBS`),
 each one's output kept together,
 and writes the build record,
@@ -462,7 +462,7 @@ since `sign` and `rolling` make it.
 It runs in `build`, not beside the keys, which run nothing but openssl and gh.
 
 A push to `main` whose suite passed becomes the `devel` build:
-the same `make release`, as the version `git describe` calls the commit
+the same `make build-release`, as the version `git describe` calls the commit
 (`v0.12.0-alpha.1-37-gabc1234`), with the flavour `devel`,
 signed by `rolling` in the `signing-rolling` environment with
 `MASSIMO_ROLLING_KEY`, whose public half boxes accept for `devel` and

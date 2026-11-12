@@ -20,7 +20,7 @@ OUT      = dist
 # Cross builds are static (no cgo) and do not record the build machine's paths.
 CROSS    = CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
-# Every release binary, as `make release` builds them and
+# Every release binary, as `make build-release` builds them and
 # internal/update.AssetName names them.
 BINARIES = massimo-linux-amd64 massimo-linux-arm64 massimo-linux-armv7 massimo-linux-armv6 \
            massimo-darwin-amd64 massimo-darwin-arm64 massimo-windows-amd64.exe
@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site release release-files clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, and a beta
@@ -264,7 +264,7 @@ site:
 	rm -rf $(OUT)/site
 	packaging/site/build.sh --out $(OUT)/site --no-apt --ref main=HEAD
 
-# release builds every binary and package and the files a GitHub release
+# build-release builds every binary and package and the files a GitHub release
 # carries besides them: the build record (packaging/build-record.sh), which
 # holds the build's log, SHA256SUMS for people, and the manifest the
 # release workflow signs and `massimo update` verifies; SHA256SUMS and the
@@ -278,9 +278,9 @@ RECORD = massimo-build.txt
 # target's output together, so that the record's log reads target by
 # target. A make without -O (macOS's 3.81) runs it with RELEASE_JOBS=.
 RELEASE_JOBS ?= -j4 -Otarget
-release: SHELL := bash
-release: .SHELLFLAGS := -eo pipefail -c
-release: clean
+build-release: SHELL := bash
+build-release: .SHELLFLAGS := -eo pipefail -c
+build-release: clean
 	mkdir -p $(OUT)
 	started=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
 	$(MAKE) --no-print-directory $(RELEASE_JOBS) release-files VERSION='$(VERSION)' FLAVOUR='$(FLAVOUR)' RELEASE='$(RELEASE)' 2>&1 | tee $(OUT)/build.log; \
@@ -292,8 +292,14 @@ release: clean
 	go run ./internal/update/mkmanifest -tag $(VERSION) -commit $$(git rev-parse HEAD) \
 		-flavour $(FLAVOUR) -release '$(RELEASE)' -dir $(OUT) $(BINARIES) $(PACKAGES) $(RECORD) > $(OUT)/massimo-release.json
 
-# The binaries and packages of a release, which `make release` logs.
+# The binaries and packages of a release, which `make build-release` logs.
 release-files: cross packages
+
+# release was the build until 2026-11-12 and is to cut a release (AP
+# Channels, D42-A): it stops, naming the build, so that a "make release"
+# from before builds nothing and publishes nothing.
+release:
+	@echo "release: the build of a release is make build-release; make release is to cut one" >&2; exit 2
 
 clean:
 	rm -rf massimo $(OUT)
