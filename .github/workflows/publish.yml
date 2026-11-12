@@ -92,7 +92,7 @@ jobs:
           changed=("Formula/$name.rb")
           # Every less stable numbered formula whose version is older moves
           # to this release too, built as its own flavour, so that a box on
-          # alpha takes a beta or stable release, as massimo update does;
+          # alpha takes a beta, rc or stable release, as massimo update does;
           # the flavours as update.Flavours ranks them, the least stable
           # first. A formula of a newer release stays.
           own=stable
@@ -100,7 +100,7 @@ jobs:
           sha="$(sed -n 's/^  sha256 "\(.*\)"$/\1/p' formula.rb)"
           want="${TAG#v}"
           followers=""
-          for c in alpha beta stable; do
+          for c in alpha beta rc stable; do
             [ "$c" != "$own" ] || break
             f="tap/Formula/massimo-${c}.rb"
             [ -f "$f" ] || continue

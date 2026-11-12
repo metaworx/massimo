@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Writes a release's build record, massimo-build.txt (`make release`), to
+# Writes a release's build record, massimo-build.txt (`make build-release`), to
 # standard output: where and with what it was built, the build information
 # of every binary (`go version -m`: the Go version, every dependency with
 # its checksum, the commit), that of the nfpm which built the Debian
@@ -23,7 +23,7 @@ section() { printf '\n## %s\n\n' "$1"; }
 
 echo "# massimo build record"
 section "Build"
-echo "command:   make release VERSION=${VERSION:-} FLAVOUR=${FLAVOUR:-} RELEASE=${RELEASE:-}"
+echo "command:   make build-release VERSION=${VERSION:-} FLAVOUR=${FLAVOUR:-} RELEASE=${RELEASE:-}"
 echo "ldflags:   ${LDFLAGS:-}"
 echo "commit:    $(git rev-parse HEAD)"
 echo "tree:      $(git status --porcelain --untracked-files=no | grep -q . && echo modified || echo clean)"

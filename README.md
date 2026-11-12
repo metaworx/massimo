@@ -535,7 +535,7 @@ and follows the `devel` builds.
 The other targets:
 `make linux`, `make linux-armv7` and `make darwin` (both Mac architectures)
 build one more release binary each;
-`make release` adds the build record, `SHA256SUMS` and the release manifest;
+`make build-release` adds the build record, `SHA256SUMS` and the release manifest;
 `make vet`, `make test` and `make clean` do what they say;
 `make race` runs the race detector on the packages whose goroutines meet,
 and `make fuzz` each fuzz target for `FUZZTIME` (10 s).
@@ -1096,48 +1096,60 @@ in its Cube list pick the entry with the serve host's address (started with
 ## Versions
 
 Development happens on `main`.
-`make release-alpha` tags `main` as the next pre-release,
+`make release <flavour>` tags `main` as the next release of that flavour,
+`alpha`, `beta`, `rc` or `stable` (also `make release FLAVOUR=<flavour>`,
+or `make release-alpha` and its siblings),
 which CI tests, builds, signs and publishes,
-and then fast-forwards the branch `release/alpha` to it.
+and then fast-forwards the branch `release/<flavour>` to it.
 Everything below `v1.0.0`, and every version with a suffix (`-alpha.N`,
-`-beta.N`, …), is a pre-release;
+`-beta.N`, `-rc.N`), is a pre-release;
 only a plain `vX.Y.Z` from `v1.0.0` on is stable.
 Below `v1.0.0` a minor release may break things.
+The version is the newest one any release has:
+`make release alpha` counts the suffix up (`v0.2.0-alpha.2`),
+`make release beta` and `make release rc` cut that version's next beta or rc,
+and `make release stable` that version itself, `v0.2.0`.
 A new feature or breaking change starts the next minor
-(`make release-alpha BUMP=minor` gives `v0.2.0-alpha.1`),
-a fix or another round counts the suffix up (`v0.2.0-alpha.2`);
-the suffix names the flavour,
-so a later beta release tags `-beta.N`, and its branch is `release/beta`.
+(`make release alpha BUMP=minor` gives `v0.3.0-alpha.1`),
+a fix of a stable release the next patch (`make release stable BUMP=patch`),
+and `BUMP=major` the next major.
+The next tag never sorts before one already out:
+no alpha after that version's beta, no pre-release after its stable release
+(`packaging/next-version.sh` says which `BUMP` starts the next one).
+`make release` without a flavour stops,
+and so it does with `VERSION=` or `RELEASE=`:
+those are the build's, `make build-release`,
+which `make release` was until 2026-11-12.
 
 A release is made on `main`, checked out, clean and equal to `origin/main`.
-`make release-alpha` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
+`make release <flavour>` cuts `CHANGELOG.md`'s `[Unreleased]` into the release's
 section with `GUIDELINES/shared/tools/changelog.sh`,
-commits it on `main` as `chore(release): vX.Y.Z-alpha.N`, and tags that commit,
+commits it on `main` as `chore(release): vX.Y.Z-beta.N`, and tags that commit,
 signed, with the section as the tag's message,
 so the tag carries the release notes, and the GitHub release shows them.
 It then pushes `main` and the tag together or not at all;
 CI's run of the tag waits for the whole suite before it releases
 (`GUIDELINES/project/CI.md`, "Releases"),
-and moves `release/alpha` once the release is out,
-so that the branch names what the alpha boxes are offered.
+and moves `release/<flavour>` once the release is out,
+so that the branch names what that flavour's boxes are offered.
 It refuses when `main`'s head is released already,
 when `changelog.sh check` finds something,
 and when `[Unreleased]` holds no bullet.
-`make release-alpha DRY=1` shows what it would cut, tag and push,
+`make release <flavour> DRY=1` shows what it would cut, tag and push,
 and does none of it;
 `ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
 
 Every release has a flavour, from the least stable to the most:
 `devel`, every commit of `main` whose tests passed;
 `nightly`, once a day the newest of those;
-`alpha`, the `-alpha.N` tags;
-later `beta`, the `-beta.N` tags, and `stable`, a plain `vX.Y.Z`.
+`alpha`, the `-alpha.N` tags; `beta`, the `-beta.N` tags;
+`rc`, the release candidates, `-rc.N`; and `stable`, a plain `vX.Y.Z`.
 `devel` and `nightly` are one GitHub release each,
 `release/devel` and `release/nightly`, replaced in place,
 signed with a key of their own that boxes accept for those two alone.
 A box follows an update channel, one of those names,
 and takes its channel's releases and every more stable flavour's:
-a box on `alpha` takes a later beta or stable release too.
+a box on `alpha` takes a later beta, rc or stable release too.
 Its channel is `MASSIMO_UPDATE_CHANNEL`, else the setting `update.channel`,
 else its build's flavour;
 every channel's newest build is at `release/<channel>`,

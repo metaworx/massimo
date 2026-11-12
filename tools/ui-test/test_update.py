@@ -111,7 +111,7 @@ def test_channel_is_chosen(page):
     sel = page.locator("#update-channel")
     sel.wait_for(state="visible")
     assert sel.is_enabled() and sel.input_value() == "", "the build's flavour is chosen, and can be changed"
-    assert sel.locator("option").count() == 6, "the build's flavour and five channels"
+    assert sel.locator("option").count() == 7, "the build's flavour and six channels"
     sel.select_option("beta")
     assert wait_until(page, "document.getElementById('update-text').textContent.includes('beta')", 5), \
         "the release check follows beta"

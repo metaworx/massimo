@@ -116,6 +116,10 @@ func TestAccepts(t *testing.T) {
 		{"nightly", "devel", false},
 		{"nightly", "alpha", true},
 		{"stable", "beta", false},
+		{"beta", "rc", true},
+		{"rc", "beta", false},
+		{"rc", "stable", true},
+		{"stable", "rc", false},
 		{"stable", "stable", true},
 		{"main", "alpha", false}, // a branch's own name takes only itself
 		{"ci", "ci", true},

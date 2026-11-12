@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.43.0)
+# Massimo — CI Conventions (v1.45.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -78,7 +78,7 @@ on a push to `main` of a release commit,
 whose summary opens with `chore(release): `,
 it answers `suite=false`,
 and every job is skipped, All tests passed and Release too.
-`make release-alpha` pushes `main` and the tag atomically,
+`make release <flavour>` pushes `main` and the tag atomically,
 and `main` must equal `origin/main` before,
 so the tag's run tests that very commit;
 running the suite on `main` as well tested it twice
@@ -393,11 +393,13 @@ Never echo any slice of a secret to the log.
 
 ## 6. Releases
 
-`make release-alpha` on `main` (checked out, clean,
-equal to `origin/main`) cuts `CHANGELOG.md`'s `[Unreleased]` into the section of
-`vX.Y.Z-alpha.N` (`BUMP=minor` for a feature,
-nothing for a fix) with `changelog.sh cut --commit --tag create`:
-the `chore(release):` commit on `main`,
+`make release <flavour>` on `main` (checked out, clean,
+equal to `origin/main`), the flavour `alpha`, `beta`, `rc` or `stable`,
+cuts `CHANGELOG.md`'s `[Unreleased]` into the section of the next tag,
+which `packaging/next-version.sh` names: `vX.Y.Z-<flavour>.N`,
+or `vX.Y.Z` for stable, `BUMP=minor` for a feature
+and `BUMP=patch` for a fix of a stable release.
+`changelog.sh cut --commit --tag create` makes the `chore(release):` commit on `main`,
 and the signed tag at it with the section as its message.
 `main` and the tag are pushed atomically;
 the tag's push runs ci.yml, whose last job calls release.yml.
@@ -436,7 +438,7 @@ CodeQL's alert 6, cache poisoning by the nightly build's checkout of the commit
 `meta` picked, was dismissed as a false positive:
 that commit is always one of `main`'s first parents;
 `meta` moved to build.yml since, and an alert raised there gets the same answer.
-`make release` runs the build through `tee`,
+`make build-release` runs the build through `tee`,
 four targets at a time (`-j4 -Otarget`, `RELEASE_JOBS`),
 each one's output kept together,
 and writes the build record,
@@ -462,7 +464,7 @@ since `sign` and `rolling` make it.
 It runs in `build`, not beside the keys, which run nothing but openssl and gh.
 
 A push to `main` whose suite passed becomes the `devel` build:
-the same `make release`, as the version `git describe` calls the commit
+the same `make build-release`, as the version `git describe` calls the commit
 (`v0.12.0-alpha.1-37-gabc1234`), with the flavour `devel`,
 signed by `rolling` in the `signing-rolling` environment with
 `MASSIMO_ROLLING_KEY`, whose public half boxes accept for `devel` and
@@ -515,7 +517,7 @@ so that apt did not offer the release until a nightly build of the next commit.
 The rolling builds' tags are no versions,
 so every `git describe` asks for the version tags alone
 (`--match 'v[0-9]*.[0-9]*.[0-9]*'`):
-the Makefile's `VERSION` and `FLAVOUR`, `make release-alpha`'s check,
+the Makefile's `VERSION` and `FLAVOUR`, `make release`'s check,
 and `meta`'s.
 Without it, on 2026-11-10 every commit after the first `release/devel`
 described as `release/devel-1-g…`, which `make packages` could not name a package by.
@@ -530,7 +532,7 @@ A glob cannot refuse a label without its number (`v1.2.3-rc`);
 A rolling tag moves, so nothing fetches it unforced:
 `git fetch --tags` refuses to move a checkout's older copy of one
 ("would clobber existing tag", 2026-11-10).
-`make release-alpha` fetches `main` and the version tags alone (`refs/tags/v*`,
+`make release` fetches `main` and the version tags alone (`refs/tags/v*`,
 the one loose pattern: a refspec allows a single `*` and no class,
 and every match after the fetch is strict),
 and `git fetch --force origin 'refs/tags/release/*:refs/tags/release/*'`

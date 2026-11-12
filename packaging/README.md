@@ -488,7 +488,7 @@ apt repository on the project's site,
 <https://massimo.metaworx.ch/apt/>, one suite per channel (`alpha`;
 later `beta` and `stable`; the rolling `devel` and `nightly` below),
 each holding its own channel's packages and those of every more stable one
-(`devel` < `nightly` < `alpha` < `beta` < `stable`),
+(`devel` < `nightly` < `alpha` < `beta` < `rc` < `stable`),
 as `massimo update` takes them,
 so that a box on `alpha` is offered a `beta` or `stable` release that is newer,
 the same for every Debian and Ubuntu release since the binary is static,
@@ -880,9 +880,9 @@ it then names the copy `massimo.db.before-<version>` it made before.
 ## Updating
 
 Development happens on `main`;
-`make release-alpha` tags it, CI tests the tag while `.github/workflows/build.yml`
+`make release <flavour>` tags it, CI tests the tag while `.github/workflows/build.yml`
 builds it, and `.github/workflows/release.yml` signs and publishes the release,
-then fast-forwards the release branch `release/alpha` to it.
+then fast-forwards the release branch `release/<flavour>` to it.
 Each release has a **flavour**, from the least stable to the most:
 `devel`, every commit of `main` whose tests passed;
 `nightly`, once a day the newest of those;
@@ -893,7 +893,7 @@ later `beta` (`-beta.N`) and `stable` (a plain `vX.Y.Z`).
 the others are a release per tag.
 A box follows an **update channel**, one of those names,
 and takes the newest release of its channel's flavour or a more stable one:
-a box on `alpha` takes a beta or stable release too,
+a box on `alpha` takes a beta, rc or stable release too,
 one on `devel` everything.
 The channel is `MASSIMO_UPDATE_CHANNEL` where set,
 else the setting `update.channel` (`PUT /api/v1/settings`,

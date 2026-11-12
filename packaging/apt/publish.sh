@@ -97,7 +97,7 @@ is_rolling() { # <channel>
 }
 # The flavours, the least stable first, as update.Flavours ranks them: a
 # suite takes its own packages and those of every flavour after it.
-flavours="devel nightly alpha beta stable"
+flavours="devel nightly alpha beta rc stable"
 rank() { # <channel>: its place in flavours, nothing for another name
 	local i=0 f
 	for f in $flavours; do
