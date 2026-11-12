@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site release release-files clean release-alpha
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site release release-files clean release-alpha
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, and a beta
@@ -171,6 +171,15 @@ ui-screenshots:
 # Compose v2.
 lan-test:
 	tools/lan-test/run.sh
+
+# The workflows under .github/workflows/ by actionlint, their run:
+# scripts by shellcheck where it is on the PATH. The tool is pinned in a
+# module of its own, tools/actionlint/go.mod, kept out of massimo's
+# go.mod; go tool builds it once into the build cache (tools/actionlint/
+# README.md). CI's job actionlint runs it (GUIDELINES/project/CI.md,
+# section 2).
+actionlint:
+	go tool -modfile=tools/actionlint/go.mod actionlint
 
 # Cross builds; each lands in $(OUT)/.
 windows:

@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.8.0)
+# {{project_name}} — Project Contract (v1.9.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -31,7 +31,7 @@ so that the two cannot drift apart.
 | Shipped-code paths    | declared as `project.shipped` in `{{guidelines_root}}/config.ini` and listed below; kept honest by `{{shared_root}}/tools/changelog.sh check` (rule: `{{shared_root}}/COMMIT.md` §5) |
 | Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release-alpha` (`BUMP=minor` for a feature, `DRY=1` to see it first) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main` and the tag are pushed atomically; CI tests the tag, releases it and then fast-forwards `release/alpha` to it; `README.md`, "Versions" |
 | Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `{{shared_root}}/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`, is recommended, and CI's Race job runs it), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`), and `make lan-test` for a change to discovery, the mDNS announcement (`internal/announce`), `discover` or the proxy's discovery answers (Docker with Compose v2, `tools/lan-test/README.md`) |
-| Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `{{shared_root}}/lang/go/LINTING.md` requires per platform; `govulncheck ./...` runs in CI for linux and windows; no other linter |
+| Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `{{shared_root}}/lang/go/LINTING.md` requires per platform; `make actionlint` exits 0 for a change under `.github/` (actionlint pinned in `tools/actionlint/`, the `run:` scripts by shellcheck where it is installed, as CI's job is); `govulncheck ./...` runs in CI for linux and windows; no other linter |
 | Commit summary        | declared as `[commit]` in `{{guidelines_root}}/config.ini` and shown below; held to it by `{{shared_root}}/tools/commit-msg.sh` (rule: `{{shared_root}}/COMMIT.md` §3.1) |
 
 A commit touching any path listed below must carry a `CHANGELOG.md` bullet.
