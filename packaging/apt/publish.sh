@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the project's apt repository (packaging/README.md, "The apt
 # repository"): under <out>/apt the Debian packages of the newest releases
-# of every update channel, one suite per channel, indexed with
+# of every update channel, one suite per channel holding its own and every
+# more stable channel's packages, as a box on it takes them, indexed with
 # apt-ftparchive and signed with the repository's OpenPGP key. It has no
 # state of its own: the release workflow rebuilds it from GitHub's
 # releases at every release, and packaging/site/build.sh puts it on the
@@ -22,7 +23,7 @@ set -euo pipefail
 usage() {
 	cat >&2 <<'EOF'
 usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owner/name>] [--index-asset <file>]
-       publish.sh --out <dir> --key <fingerprint> --rolling <flavour> [--repo <owner/name>] [--index-asset <file>]
+       publish.sh --out <dir> --key <fingerprint> --rolling <flavour> [--releases <n>] [--repo <owner/name>] [--index-asset <file>]
        publish.sh --out <dir> --key <fingerprint> --from <dir> --channel <name> [--index-asset <file>]
 
   --out <dir>        <dir>/apt holds the repository (packaging/site/build.sh --apt takes it)
@@ -30,7 +31,8 @@ usage: publish.sh --out <dir> --key <fingerprint> [--releases <n>] [--repo <owne
                      passphrase, if any, in APT_KEY_PASSPHRASE
   --releases <n>     the newest releases kept per channel (default 10)
   --repo <o/n>       the GitHub repository the releases come from (default metaworx/massimo)
-  --rolling <f>      the one rolling suite <f>, devel or nightly, from the release release/<f>
+  --rolling <f>      the one rolling suite <f>, devel or nightly: the release release/<f>, and the
+                     newest numbered releases of every channel
   --from <dir>       take every .deb in <dir> instead of GitHub's releases …
   --channel <name>   … as the one suite <name>
   --archive-key <f>  the public key of the numbered suites (default packaging/apt/archive-key.asc)
@@ -92,6 +94,16 @@ fi
 # every other channel is numbered.
 is_rolling() { # <channel>
 	case "$1" in devel | nightly) return 0 ;; *) return 1 ;; esac
+}
+# The flavours, the least stable first, as update.Flavours ranks them: a
+# suite takes its own packages and those of every flavour after it.
+flavours="devel nightly alpha beta stable"
+rank() { # <channel>: its place in flavours, nothing for another name
+	local i=0 f
+	for f in $flavours; do
+		[ "$f" = "$1" ] && { echo "$i"; return; }
+		i=$((i + 1))
+	done
 }
 if [ -n "$rolling" ] && ! is_rolling "$rolling"; then
 	echo "publish.sh: --rolling $rolling: devel or nightly" >&2
@@ -169,17 +181,11 @@ if [ -n "$from" ]; then
 	mkdir -p "$apt/pool/$channel"
 	cp "$from"/*.deb "$apt/pool/$channel/"
 	suites=$channel
-elif [ -n "$rolling" ]; then
-	# The rolling build's own packages, replaced in place at each build.
-	fetch "release/$rolling" "$rolling"
-	[ -d "$apt/pool/$rolling" ] || {
-		echo "publish.sh: release/$rolling has no packages" >&2
-		exit 1
-	}
-	suites=$rolling
 else
-	# The numbered releases alone: the rolling builds' releases
-	# (release/devel) are suites of their own, signed by their own runs.
+	# The numbered releases, the newest of each channel, into
+	# pool/<channel>: the numbered suites, and a rolling suite's more
+	# stable packages. The rolling builds' releases (release/devel) are
+	# suites of their own, signed by their own runs.
 	tags=$(gh release list --repo "$repo" --limit 200 --exclude-drafts --json tagName --jq '.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z][a-z0-9]*\\.[0-9]+)?$"))')
 	channels=""
 	while read -r tag; do
@@ -202,6 +208,16 @@ else
 		[ ! -d "$apt/pool/$ch" ] || suites="$suites $ch"
 	done
 	suites=${suites# }
+	if [ -n "$rolling" ]; then
+		# The rolling build's own packages, replaced in place at each
+		# build; the numbered releases as they are at this build.
+		fetch "release/$rolling" "$rolling"
+		[ -d "$apt/pool/$rolling" ] || {
+			echo "publish.sh: release/$rolling has no packages" >&2
+			exit 1
+		}
+		suites=$rolling
+	fi
 fi
 [ -n "$suites" ] || {
 	echo "publish.sh: no packages, no suite" >&2
@@ -230,9 +246,25 @@ VERSION=$keyring_version KEYRING=$keys/numbered.gpg ROLLING_KEYRING=$keys/rollin
 # install, before apt knows the repository (packaging/README.md).
 cp "$apt/pool/keyring/massimo-archive-keyring_${keyring_version}_all.deb" "$apt/massimo-archive-keyring.deb"
 
+# The pools of a suite: its own, every more stable channel's, and the
+# keyring's. A channel the ranks do not know keeps to its own.
+suite_pools() { # <suite>
+	local r p pr
+	echo "pool/$1"
+	r=$(rank "$1")
+	for p in "$apt"/pool/*/; do
+		p=$(basename "$p")
+		pr=$(rank "$p")
+		if [ -n "$r" ] && [ -n "$pr" ] && [ "$pr" -gt "$r" ]; then
+			echo "pool/$p"
+		fi
+	done
+	echo pool/keyring
+}
+
 # 3. The suites: Packages per architecture (a package for every
-# architecture is listed in each) from the suite's own pool and the
-# keyring's, Release, InRelease.
+# architecture is listed in each) from the suite's pools, Release,
+# InRelease.
 archs="amd64 arm64 armhf"
 for ch in $suites; do
 	dist=$apt/dists/$ch
@@ -241,7 +273,7 @@ for ch in $suites; do
 		mkdir -p "$dist/main/binary-$a"
 	done
 	# From the repository's root, so that Filename: is relative to it.
-	for dir in "pool/$ch" pool/keyring; do
+	for dir in $(suite_pools "$ch"); do
 		(cd "$apt" && apt-ftparchive packages "$dir")
 	done >"$dist/all.packages"
 	awk -v dist="$dist" -v archs="$archs" '

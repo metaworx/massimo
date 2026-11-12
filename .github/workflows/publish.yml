@@ -89,14 +89,40 @@ jobs:
           name="$(packaging/homebrew/render.sh --tag "$TAG" --conflicts "$others" --out formula.rb)"
           cat formula.rb
           install -D formula.rb "tap/Formula/$name.rb"
+          changed=("Formula/$name.rb")
+          # Every less stable numbered formula whose version is older moves
+          # to this release too, built as its own flavour, so that a box on
+          # alpha takes a beta or stable release, as massimo update does;
+          # the flavours as update.Flavours ranks them, the least stable
+          # first. A formula of a newer release stays.
+          own=stable
+          [ "$name" = massimo ] || own="${name#massimo-}"
+          sha="$(sed -n 's/^  sha256 "\(.*\)"$/\1/p' formula.rb)"
+          want="${TAG#v}"
+          followers=""
+          for c in alpha beta stable; do
+            [ "$c" != "$own" ] || break
+            f="tap/Formula/massimo-${c}.rb"
+            [ -f "$f" ] || continue
+            have="$(sed -n 's/^  version "\(.*\)"$/\1/p' "$f")"
+            if [ -n "$have" ] && dpkg --compare-versions "${have//-/\~}" ge "${want//-/\~}"; then
+              echo "massimo-${c} stays at ${have}"
+              continue
+            fi
+            packaging/homebrew/render.sh --tag "$TAG" --channel "$c" --sha256 "$sha" --conflicts "$others" --out "formula-${c}.rb" >/dev/null
+            install "formula-${c}.rb" "$f"
+            changed+=("Formula/massimo-${c}.rb")
+            followers="${followers}massimo-${c} moves from ${have:-none} to ${TAG}."$'\n'
+            echo "massimo-${c} moves from ${have:-none} to ${TAG}"
+          done
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "Formula/$name.rb"
+          git add "${changed[@]}"
           # A run by hand for a release the tap already has changes nothing.
           if git diff --cached --quiet; then
             echo "the tap holds this formula for ${TAG} already"
             exit 0
           fi
-          git commit -m "$name $TAG" -m "Rendered by metaworx/massimo's release workflow from packaging/homebrew/massimo.rb.in."
+          git commit -m "$name $TAG" -m "${followers}Rendered by metaworx/massimo's release workflow from packaging/homebrew/massimo.rb.in."
           git push

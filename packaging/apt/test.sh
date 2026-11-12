@@ -234,6 +234,25 @@ if [ "$suites" != "alpha stable" ]; then
 	echo "FAIL: publish.sh made the suites $suites, not alpha stable" >&2
 	exit 1
 fi
+# Each suite takes its own and every more stable channel's packages:
+# alpha stable's, stable not alpha's; the rolling suite devel its build's
+# and the numbered releases'.
+pools() { # <dists dir> <suite>
+	sed -n 's#^Filename: \(pool/[^/]*\)/.*#\1#p' "$1/$2/main/binary-amd64/Packages" | sort -u | tr '\n' ' '
+}
+for want in "alpha:pool/alpha pool/keyring pool/stable " "stable:pool/keyring pool/stable "; do
+	got=$(pools "$work/tags/apt/dists" "${want%%:*}")
+	[ "$got" = "${want#*:}" ] || {
+		echo "FAIL: the suite ${want%%:*} takes the pools ${got}not ${want#*:}" >&2
+		exit 1
+	}
+done
+PATH=$work/bin:$PATH publish --out "$work/tags-devel" --key "$rolling_key" --rolling devel >/dev/null
+got=$(pools "$work/tags-devel/apt/dists" devel)
+[ "$got" = "pool/alpha pool/devel pool/keyring pool/stable " ] || {
+	echo "FAIL: the rolling suite devel takes the pools ${got}not its build's and the numbered releases'" >&2
+	exit 1
+}
 if grep -E '^release (view|download) ' "$STUB_LOG" | grep -Ev '^release [a-z]+ (v0\.1\.0-alpha\.1|v1\.2\.3|release/devel|release/nightly) '; then
 	echo "FAIL: publish.sh or build.sh took a release whose tag is no version" >&2
 	exit 1

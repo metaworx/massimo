@@ -487,6 +487,10 @@ The packages of the newest ten releases of every update channel are also in an
 apt repository on the project's site,
 <https://massimo.metaworx.ch/apt/>, one suite per channel (`alpha`;
 later `beta` and `stable`; the rolling `devel` and `nightly` below),
+each holding its own channel's packages and those of every more stable one
+(`devel` < `nightly` < `alpha` < `beta` < `stable`),
+as `massimo update` takes them,
+so that a box on `alpha` is offered a `beta` or `stable` release that is newer,
 the same for every Debian and Ubuntu release since the binary is static,
 signed with the repository's own OpenPGP key (RSA 4096;
 not the Ed25519 release key of the manifest, which apt cannot use).
@@ -1273,6 +1277,10 @@ or before the start with
 the Cubes are added there too.
 `brew upgrade` does not restart a running service;
 `brew services restart massimo-alpha` does.
+A formula follows every more stable channel too, as `massimo update` does:
+a release moves its own formula and every less stable one whose version is older,
+each built as its own flavour,
+so that `brew upgrade massimo-alpha` installs a newer `beta` or `stable` release.
 
 One owner of the binary: brew owns it,
 and the marker under the formula's `share/massimo` tells massimo so.
