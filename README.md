@@ -1109,6 +1109,10 @@ Development happens on `main`.
 or `make release-alpha` and its siblings),
 which CI tests, builds, signs and publishes,
 and then fast-forwards the branch `release/<flavour>` to it.
+Before the release commit it dumps the store the release writes
+into `internal/store/testdata/releases/` and commits it,
+for the migrations' tests of every later binary (docs/store.md, "Migrations");
+that needs go, curl, jq, python3 and sqlite3, and about a minute.
 Everything below `v1.0.0`, and every version with a suffix (`-alpha.N`,
 `-beta.N`, `-rc.N`), is a pre-release;
 only a plain `vX.Y.Z` from `v1.0.0` on is stable.

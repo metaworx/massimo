@@ -71,16 +71,24 @@ DEB_IMAGE ?= debian:trixie-slim
 # release/nightly) in place, and fetch --tags refuses to move a checkout's
 # older copy of one ("would clobber existing tag"); a refspec allows one *
 # and no class, so the fetch takes refs/tags/v*, and every match after it
-# is strict. changelog.sh cuts CHANGELOG.md's [Unreleased] into the
+# is strict. First tools/store-fixture/make.sh dumps the store the release
+# writes, built from HEAD under the coming tag's name and flavour (the
+# release commit changes only the changelog), into
+# internal/store/testdata/releases/<tag>.sql, committed on main as
+# "test(store): The store <tag> writes", so that the tag holds its own dump
+# and every later binary's TestMigratesReleasedStores migrates it; the
+# release CI refuses a tag without it (docs/store.md, "Migrations"). Then
+# changelog.sh cuts CHANGELOG.md's [Unreleased] into the
 # release's section, makes the chore(release) commit on main and the signed
 # tag at it with that section as its message; main and the tag are then
 # pushed atomically, all or nothing, and CI tests the tag and releases it
 # (ci.yml calling release.yml), which then fast-forwards the branch
 # release/<flavour> to it. It refuses when main's head is released already,
 # when changelog.sh check finds something and when [Unreleased] holds no
-# bullet. DRY=1 runs every step as a dry run: changelog.sh says what it
-# would cut and tag, and the push is printed, not made.
-# ASSISTED_BY=agent:model gives the release commit an agent's Assisted-by
+# bullet. DRY=1 runs every step as a dry run: the dump and its commit are
+# named, changelog.sh says what it would cut and tag, and the push is
+# printed, not made. ASSISTED_BY=agent:model gives the dump's commit and
+# the release commit an agent's Assisted-by
 # trailer (COMMIT.md 3.3); the owner's own release needs none.
 # make release was the build until 2026-11-12 (AP Channels, D42-A): with no
 # flavour, or with the build's VERSION or RELEASE, it stops and names
@@ -127,17 +135,25 @@ release:
 	cut="cut $${next#v} --commit --tag create$(if $(ASSISTED_BY), --assisted-by $(ASSISTED_BY))"; \
 	$(CHANGELOG_SH) -q check || { \
 		echo "release: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
+	dump=internal/store/testdata/releases/$$next.sql; \
 	if [ -n "$(DRY)" ]; then \
+		echo "release: would run: tools/store-fixture/make.sh --ref HEAD --flavour $$flavour $$next, and commit $$dump"; \
 		$(CHANGELOG_SH) $$cut || exit 1; \
 		echo "release: would run: git push --atomic origin main refs/tags/$$next"; \
 		exit 0; fi; \
 	$(CHANGELOG_SH) -q $$cut || { \
 		echo "release: changelog.sh refuses to cut $$next; nothing written" >&2; exit 1; }; \
+	tools/store-fixture/make.sh --ref HEAD --flavour $$flavour $$next || { \
+		echo "release: the store's dump for $$next failed; nothing committed or pushed" >&2; exit 1; }; \
+	git add $$dump && timeout 60 git commit -q -m "test(store): The store $$next writes" \
+		-m "Made by make release before the release commit: the store massimo $$next writes against the fake Cube, which TestMigratesReleasedStores migrates in every later binary (docs/store.md, Migrations)."$(if $(ASSISTED_BY), -m "Assisted-by: $(ASSISTED_BY)") || { \
+		echo "release: the dump's commit failed; nothing pushed; to start over: git reset --keep $$sha" >&2; exit 1; }; \
+	dumped=$$(git rev-parse HEAD); \
 	$(CHANGELOG_SH) $$cut --force || { \
-		echo "release: the cut stopped half-way; nothing pushed, see git status and git log -1" >&2; exit 1; }; \
+		echo "release: the cut stopped half-way; nothing pushed, see git status and git log -2; to start over: git tag -d $$next; git reset --keep $$sha" >&2; exit 1; }; \
 	rel=$$(git rev-parse HEAD) && \
-	if [ "$$(git rev-parse $$rel^)" != "$$sha" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
-		echo "release: the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
+	if [ "$$(git rev-parse $$dumped^)" != "$$sha" ] || [ "$$(git rev-parse $$rel^)" != "$$dumped" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
+		echo "release: the dump's commit, the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
 	git push --atomic origin main refs/tags/$$next || { \
 		echo "release: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
 	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/$$flavour: https://github.com/metaworx/massimo/actions"

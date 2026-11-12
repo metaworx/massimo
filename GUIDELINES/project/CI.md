@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.45.0)
+# Massimo — CI Conventions (v1.46.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -399,8 +399,14 @@ cuts `CHANGELOG.md`'s `[Unreleased]` into the section of the next tag,
 which `packaging/next-version.sh` names: `vX.Y.Z-<flavour>.N`,
 or `vX.Y.Z` for stable, `BUMP=minor` for a feature
 and `BUMP=patch` for a fix of a stable release.
-`changelog.sh cut --commit --tag create` makes the `chore(release):` commit on `main`,
-and the signed tag at it with the section as its message.
+First `tools/store-fixture/make.sh` dumps the store the release writes,
+built from `HEAD` under the coming tag's name and flavour,
+into `internal/store/testdata/releases/<tag>.sql`,
+committed on `main` as `test(store): The store <tag> writes` (docs/store.md,
+"Migrations");
+then `changelog.sh cut --commit --tag create` makes the `chore(release):` commit on it,
+and the signed tag at it with the section as its message,
+so that the tag holds its own dump, which `sign` checks before it signs.
 `main` and the tag are pushed atomically;
 the tag's push runs ci.yml, whose last job calls release.yml.
 Once the release is published, `sign` pushes the tag's commit to

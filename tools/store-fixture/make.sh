@@ -2,11 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 #
-# make.sh <tag> [<out>]: the store a released massimo writes, as a text
-# dump for TestMigratesReleasedStores (internal/store/releases_test.go;
-# docs/store.md, "Migrations").
+# make.sh [--ref <commit>] [--flavour <flavour>] <tag> [<out>]: the store
+# a released massimo writes, as a text dump for TestMigratesReleasedStores
+# (internal/store/releases_test.go; docs/store.md, "Migrations").
+# make release runs it before the release commit, with --ref HEAD for the
+# tag it is about to make: the release commit changes only the changelog,
+# so HEAD is the release's code, built under the tag's name. --flavour is
+# the build's flavour, by default the tag's own (none: stable).
 #
-# It builds the tag in a temporary worktree and runs the tag's own
+# It builds the tag (or the ref) in a temporary worktree and runs its own
 # fakecube, with today's tools/ui-test/greeting.txt (its serials and
 # radio addresses are placeholders), and its serve against it, in an
 # empty directory on loopback ports of their own: no .env, no MASSIMO_*
@@ -25,10 +29,26 @@
 # leaves the machine: every program listens on 127.0.0.1.
 set -euo pipefail
 
-tag=${1:?usage: make.sh <tag> [<out>]}
+usage="usage: make.sh [--ref <commit>] [--flavour <flavour>] <tag> [<out>]"
+ref=""
+flavour=""
+while [ $# -gt 0 ]; do
+	case $1 in
+	--ref) ref=${2:?$usage}; shift 2 ;;
+	--flavour) flavour=${2:?$usage}; shift 2 ;;
+	-*) echo "$usage" >&2; exit 2 ;;
+	*) break ;;
+	esac
+done
+tag=${1:?$usage}
 root=$(git rev-parse --show-toplevel)
 out=${2:-$root/internal/store/testdata/releases/$tag.sql}
-commit=$(git -C "$root" rev-parse --short "$tag^{commit}")
+ref=${ref:-$tag}
+commit=$(git -C "$root" rev-parse --short "$ref^{commit}")
+if [ -z "$flavour" ]; then
+	flavour=$(printf '%s\n' "$tag" | sed -nE 's/^v[0-9]+\.[0-9]+\.[0-9]+-([a-z][a-z0-9]*)\.[0-9]+$/\1/p')
+	flavour=${flavour:-stable}
+fi
 work=$(mktemp -d)
 pids=""
 
@@ -50,8 +70,8 @@ for x in s: x.bind(("127.0.0.1", 0))
 print(*[x.getsockname()[1] for x in s])
 for x in s: x.close()')
 
-git -C "$root" -c submodule.recurse=false worktree add -q --detach "$work/src" "$tag"
-(cd "$work/src" && CGO_ENABLED=0 go build -ldflags "-X main.version=$tag -X main.flavour=alpha" -o "$work/massimo" ./cmd/massimo)
+git -C "$root" -c submodule.recurse=false worktree add -q --detach "$work/src" "$commit"
+(cd "$work/src" && CGO_ENABLED=0 go build -ldflags "-X main.version=$tag -X main.flavour=$flavour" -o "$work/massimo" ./cmd/massimo)
 git -C "$root" worktree remove --force "$work/src"
 m=$work/massimo
 data=$work/data

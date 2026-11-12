@@ -32,7 +32,9 @@ func TestMigratesReleasedStores(t *testing.T) {
 		t.Run(strings.TrimSuffix(filepath.Base(dump), ".sql"), func(t *testing.T) {
 			dir := t.TempDir()
 			before, version := loadDump(t, dump, Path(dir))
-			if version >= SchemaVersion() {
+			// A tag's own dump, which make release commits before the
+			// release commit, is at the binary's schema: opened as it is.
+			if version > SchemaVersion() {
 				t.Fatalf("the dump is at schema %d, this binary's is %d", version, SchemaVersion())
 			}
 			s := open(t, dir)

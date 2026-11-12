@@ -859,7 +859,14 @@ Rules:
 - The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
   is the text dump of the store a release's `serve` wrote against the fake Cube,
   one for each release since the store came (v0.7.0-alpha.1),
-  made by `tools/store-fixture/make.sh <tag>`.
+  made by `tools/store-fixture/make.sh <tag>`,
+  and since 2026-11-12 by `make release` itself:
+  it dumps `HEAD` under the coming tag's name and flavour
+  (`make.sh --ref HEAD --flavour <flavour> <tag>`),
+  the release commit changing only the changelog,
+  and commits the dump as `test(store): The store <tag> writes` before the release commit,
+  so that the tag holds its own dump;
+  the release CI's `sign` refuses a tag without it.
   The script builds the tag and sends every release the same requests:
   the settings, setpoints, a room renamed, a user and a key,
   a backup by hand, each where the release takes it.
@@ -870,9 +877,8 @@ Rules:
   which migrates it:
   the file stays sound, no table loses a row, `events` keeps exactly its own,
   every event has its source, and the log, the users and the backups read.
-  A pull request that adds a migration adds the dump of the newest release
-  when it is missing,
-  so that each release's file is migrated by every later binary.
+  Each release's file is so migrated by every later binary;
+  a tag's own dump, at its binary's schema, is opened as it is.
 - `store.sql`, beside the migrations, is the schema they make of an empty file,
   generated, never edited by hand:
   every table as SQLite keeps its statement (an added column at its end),

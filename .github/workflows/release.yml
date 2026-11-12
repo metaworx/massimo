@@ -11,7 +11,8 @@ name: Release
 #
 # The jobs, a key in one each: `sign` holds the release key through the
 # `signing` environment, which only version tags may use, runs nothing but
-# openssl and gh on what build.yml handed over, checks the signature
+# openssl and gh on what build.yml handed over, checks that the tag holds
+# its store dump (make release, tools/store-fixture/make.sh), the signature
 # against the public key compiled into massimo and the flavour against
 # the tag before publishing, and publishes exactly what it signed as a
 # GitHub release, which `massimo update` installs (internal/update);
@@ -96,6 +97,18 @@ jobs:
         with:
           name: release
           path: dist
+
+      # The store the release writes, dumped by make release in a commit
+      # before the release commit (tools/store-fixture/make.sh), so that
+      # every later binary's TestMigratesReleasedStores migrates it
+      # (docs/store.md, "Migrations"): a tag without it is not published.
+      - name: Check the release's store dump
+        run: |
+          dump="internal/store/testdata/releases/${TAG}.sql"
+          if [ ! -s "$dump" ]; then
+            echo "::error::${TAG}'s tree lacks ${dump}: make release makes it; a tag cut otherwise needs tools/store-fixture/make.sh --ref <commit> ${TAG} committed before its release commit, and the tag made again"
+            exit 1
+          fi
 
       # The flavour comes from the tag here again, not from build.yml's
       # What to release, whose answer arrives as an input: a manifest of
