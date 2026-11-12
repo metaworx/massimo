@@ -13,7 +13,9 @@ channel's commit (DIR, as git archive wrote it), each converted by md_html.py
 and put in doc.html.in at the same path under OUT/docs/<channel>/, .md
 become .html. That channel's index.html is its landing page: the home of
 the same commit's packaging/site/index.html, the suites (LIST) in place of
-its placeholder, then the list of documents; and
+its placeholder, the channel's own suite in its apt sources (the rolling
+key's file in Signed-By for devel and nightly), then the list of
+documents; and
 docs/images/ and docs/screenshots/ are copied as they are. A link to any
 other file of the repository goes to GitHub at that commit; one to a file
 the commit does not have fails. --strict fails where a document under
@@ -111,13 +113,21 @@ def title_of(text, fallback):
 
 SECTION = re.compile(r'<(header|main|footer)>(.*?)</\1>', re.S)
 SITE_ANCHOR = 'href="https://massimo.metaworx.ch/#'
+# The update channels with an apt suite of their own (internal/update's
+# Flavours), and the rolling ones, whose suites the rolling key signs.
+SUITES = ('devel', 'nightly', 'alpha', 'beta', 'rc', 'stable')
+ROLLING = ('devel', 'nightly')
+KEYRING = '/usr/share/keyrings/massimo-archive-keyring.gpg'
+ROLLING_KEYRING = '/usr/share/keyrings/massimo-rolling-archive-keyring.gpg'
 
 
-def home_of(tree, suites):
+def home_of(tree, suites, channel=''):
     """The home of a build's packaging/site/index.html: the inside of its
-    header, main and footer, the suites filled in, the site's own anchors
-    on the page itself, and its own list of documents dropped (the page
-    lists them after it); None where the build has no home."""
+    header, main and footer, the suites filled in, the channel's own suite
+    in the apt sources (D39-A), the site's own anchors on the page itself,
+    and its own list of documents dropped (the page lists them after it);
+    None where the build has no home. A channel without a suite of its
+    own (main) keeps the sources as they are."""
     try:
         with open(os.path.join(tree, 'packaging/site/index.html'), encoding='utf-8') as f:
             text = f.read()
@@ -130,6 +140,10 @@ def home_of(tree, suites):
     home = {'header': parts.get('header', ''), 'main': main, 'footer': parts.get('footer', '')}
     for k in home:
         home[k] = home[k].replace('{{SUITES}}', html.escape(suites)).replace(SITE_ANCHOR, 'href="#')
+    if channel in SUITES:
+        home['main'] = re.sub(r'^Suites: [a-z0-9]+$', 'Suites: ' + channel, home['main'], count=1, flags=re.M)
+        if channel in ROLLING:
+            home['main'] = home['main'].replace('Signed-By: ' + KEYRING, 'Signed-By: ' + ROLLING_KEYRING, 1)
     return home
 
 
@@ -181,7 +195,7 @@ def docs(a):
     with open(os.path.join(HERE, 'doc.html.in'), encoding='utf-8') as f:
         template = f.read()
     base = os.path.join(a.out, 'docs', a.channel)
-    home = home_of(a.tree, a.suites)
+    home = home_of(a.tree, a.suites, a.channel)
     # The header's link to the documents: the list, on the landing page.
     anchor = '' if home is None else '#documentation'
     ahead = ''

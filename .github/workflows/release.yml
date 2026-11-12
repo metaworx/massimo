@@ -213,6 +213,7 @@ jobs:
       VERSION: ${{ inputs.version }}
       SHA: ${{ inputs.sha }}
       HAS_APT_KEY: ${{ secrets.MASSIMO_ROLLING_APT_KEY != '' }}
+      HAS_TAP_KEY: ${{ secrets.HOMEBREW_ROLLING_TAP_DEPLOY_KEY != '' }}
     steps:
       # The public key, CHANGELOG.md and changelog.sh for the notes, and
       # the history for the ancestry; nothing from here is built.
@@ -302,6 +303,7 @@ jobs:
       # main's workflow files had changed since the commit (2026-11-10);
       # without the key the token tries.
       - name: Publish
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_KEY: ${{ secrets.ROLLING_TAG_DEPLOY_KEY }}
@@ -313,6 +315,7 @@ jobs:
             gh release create "$RELEASE" --target "$SHA" --prerelease --latest=false --title "$title" --notes-file "$RUNNER_TEMP/notes.md" "${files[@]}"
             packaging/release-assets.sh "$RELEASE" "${files[@]}"
             echo "${RELEASE} made at ${SHA}"
+            echo "published=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if git merge-base --is-ancestor "$SHA" "$cur"; then
@@ -347,6 +350,7 @@ jobs:
             fi
           done
           echo "${RELEASE} moved from ${cur} to ${SHA}"
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       # The rolling suite of the apt repository (packaging/README.md, "The
       # apt repository"): the build's packages as the release now has them,
@@ -383,6 +387,64 @@ jobs:
       - name: No rolling apt key
         if: env.HAS_APT_KEY != 'true'
         run: echo "::warning::MASSIMO_ROLLING_APT_KEY is not set in signing-rolling; the site has no apt suite ${FLAVOUR}."
+
+      # The flavour's Homebrew formula, massimo-devel or massimo-nightly,
+      # in the rolling tap metaworx/homebrew-massimo-rolling, whose deploy
+      # key only this environment holds (packaging/README.md, "Homebrew"):
+      # the newer of this build and the newest numbered release, as a box
+      # on the channel takes them, built from that commit's or tag's
+      # archive as the flavour. Only where this run published the build:
+      # one that found a newer build there leaves the formula to that one's
+      # run. Skipped with a warning without the key.
+      - name: Push the rolling formula to its tap
+        if: env.HAS_TAP_KEY == 'true' && steps.publish.outputs.published == 'true'
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_ROLLING_TAP_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          # The newest numbered release, by the order apt's versions have
+          # (the Makefile's DEBVER: a build sorts after the tag it follows).
+          mine="$(make -s --no-print-directory debver VERSION="$VERSION")"
+          newest="" newest_deb="$mine"
+          for t in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --exclude-drafts --json tagName \
+            --jq '.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z][a-z0-9]*\\.[0-9]+)?$"))'); do
+            d="$(make -s --no-print-directory debver VERSION="$t")"
+            if dpkg --compare-versions "$d" gt "$newest_deb"; then newest="$t" newest_deb="$d"; fi
+          done
+          git clone --depth 1 git@github.com:metaworx/homebrew-massimo-rolling.git tap
+          others=""
+          if [ -d tap/Formula ]; then
+            others="$(find tap/Formula -maxdepth 1 -name '*.rb' -exec basename {} .rb \; | paste -sd, -)"
+          fi
+          if [ -n "$newest" ]; then
+            echo "${newest} is newer than this build (${VERSION}): massimo-${FLAVOUR} follows it"
+            from="$newest"
+            name="$(packaging/homebrew/render.sh --tag "$newest" --channel "$FLAVOUR" --conflicts "$others" --out formula.rb)"
+          else
+            from="$VERSION"
+            name="$(packaging/homebrew/render.sh --commit "$SHA" --version "$VERSION" --channel "$FLAVOUR" --conflicts "$others" --out formula.rb)"
+          fi
+          cat formula.rb
+          install -D formula.rb "tap/Formula/${name}.rb"
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "Formula/${name}.rb"
+          if git diff --cached --quiet; then
+            echo "the tap holds this formula for ${from} already"
+            exit 0
+          fi
+          git commit -m "${name} ${from}" -m "Rendered by metaworx/massimo's release workflow from packaging/homebrew/massimo.rb.in."
+          git push
+
+      - name: No rolling tap key
+        if: env.HAS_TAP_KEY != 'true'
+        run: echo "::warning::HOMEBREW_ROLLING_TAP_DEPLOY_KEY is not set in signing-rolling; the rolling tap has no new massimo-${FLAVOUR}."
 
   # The Homebrew formula of the release's channel, pushed to the tap
   # (publish.yml), once the release is published; skipped without the

@@ -557,8 +557,11 @@ which never sees the numbered suites' key;
 its public half is the keyring package's second file,
 `/usr/share/keyrings/massimo-rolling-archive-keyring.gpg`,
 and `massimo-rolling.asc` on the site.
-A box follows one with its own snippet, `massimo-devel.sources` on the site:
-`Suites: devel` and `Signed-By:` that second file.
+A box follows one with its own snippet, `massimo-devel.sources` on the site,
+installed as `/etc/apt/sources.list.d/massimo.sources`,
+the file the update helper reads:
+`Suites: devel` and `Signed-By:` that second file;
+the channel's page on the site shows it so.
 A box on `alpha` names the first file alone,
 so a leaked rolling key reaches no box on a numbered suite.
 Both public halves are committed,
@@ -1271,13 +1274,29 @@ and `-rollback` goes back.
 ## Homebrew
 
 On a Mac with Homebrew the tap `metaworx/massimo` carries a formula per update channel,
-`massimo-alpha` for `alpha` (and `massimo` once there is a stable channel),
+`massimo-alpha` for `alpha`, `massimo-beta`, `massimo-rc`,
+and `massimo` for `stable` once those are released,
 built from the release's source on the Mac, so that nothing needs notarization:
 
 ```sh
 brew install metaworx/massimo/massimo-alpha
 brew services start massimo-alpha
 ```
+
+The rolling channels have a tap of their own, `metaworx/massimo-rolling`,
+with `massimo-devel` and `massimo-nightly`
+(`brew install metaworx/massimo-rolling/massimo-devel`):
+each rolling build's run renders its formula from the build's commit,
+versioned as `git describe` names it (`0.14.0-alpha.1-94-g38cfa28`),
+which brew sorts after the tag it follows,
+or from the newest numbered release where that is newer,
+and pushes it with a deploy key that only `main`'s runs reach
+(`HOMEBREW_ROLLING_TAP_DEPLOY_KEY`, the `signing-rolling` environment),
+so that the numbered tap's key stays out of their reach.
+All the formulae install `bin/massimo`:
+one is installed at a time, and another channel's replaces it
+(`brew uninstall massimo-alpha && brew install metaworx/massimo-rolling/massimo-devel`,
+then `brew services start massimo-devel`).
 
 The formula builds `bin/massimo` with Go,
 writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
