@@ -1022,10 +1022,7 @@ jobs:
           EOF
           sudo install -o root -g wheel -m 644 "$RUNNER_TEMP/$label.plist" "$plist"
           sudo launchctl bootstrap system "$plist"
-          # stop is called by the trap on EXIT, which shellcheck does not follow.
-          # shellcheck disable=SC2317
-          stop() { sudo launchctl bootout "system/$label" 2>/dev/null || true; sudo rm -f "$plist"; }
-          trap stop EXIT
+          trap 'sudo launchctl bootout "system/$label" 2>/dev/null || true; sudo rm -f "$plist"' EXIT
           for _ in $(seq 30); do grep -q 'msg="announced on the LAN"' "$log" 2>/dev/null && break; sleep 1; done
           sleep 3
           ok=0
