@@ -322,6 +322,7 @@ function renderSchemeSelect() {
 // applies them; applySettings and a change of language call it.
 function applyAppearance() {
   $("theme-select").value = state.settings.theme;
+  $("login-mode").value = state.settings.theme; // the sign-in's menu
   renderSchemeSelect();
   if (themeState.draft) renderSchemeEditor();
   reapplyTheme();

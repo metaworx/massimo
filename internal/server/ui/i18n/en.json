@@ -862,6 +862,8 @@
   "copy.programDiscarded": "programme discarded",
 
   "login.title": "Sign in",
+
+  "login.menu": "Language and appearance",
   "login.text": "This server asks who you are.",
   "login.user": "Name",
   "login.password": "Password",

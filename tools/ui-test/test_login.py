@@ -13,7 +13,9 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     password, and two submits send one sign-in; the operator signs in,
     sees the tiles and no System settings →
     Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
-    forgets the token and brings the dialog back."""
+    forgets the token and the Cube's data and brings the dialog back,
+    with nothing of the page but the name and the version; signed in
+    again, the page is back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
     page = ctx.new_page()
     guard.page = page
@@ -22,6 +24,15 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens without a token"
     named_buttons(page, "the sign-in dialog")
+    # A card in the page, not a modal dialog, whose form a password
+    # manager fills: one password field, the fields named.
+    assert not page.evaluate("document.getElementById('login-dialog').matches(':modal')"), "the sign-in is not modal"
+    assert page.evaluate("document.querySelectorAll('#login-form input[type=password]').length") == 1, "one password field in the form"
+    assert page.evaluate("[document.getElementById('login-user').name, document.getElementById('login-password').name]") == ["username", "password"], \
+        "the fields are named"
+    box = page.locator("#login-dialog").bounding_box()
+    vw = page.viewport_size["width"]
+    assert box["x"] >= 0 and box["x"] + box["width"] <= vw, "the card fits the page's width"
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("wrong")
     page.locator("#login-form button[type=submit]").click()
@@ -55,6 +66,19 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "the token is forgotten"
+    # Signed out, the page shows its name, its version and the sign-in,
+    # and holds nothing of the session.
+    assert page.evaluate("state.rooms.length === 0 && state.cubes.length === 0 && !state.pollTimer"), "the Cube's data is forgotten"
+    assert page.locator(".room").count() == 0, "no room tile is drawn"
+    assert page.locator(".brand h1").is_visible() and page.locator("#version-short").is_visible(), "the name and the version show"
+    for sel in ("#cube-menu", ".top-line > .nav", ".updated-line", "#clock-plain", "main"):
+        assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.locator("#cube-menu").is_visible() and page.locator(".top-line > .nav").is_visible(), "signed in, the header is back"
+    assert page.evaluate("!!state.pollTimer"), "the poll runs again"
 
 
 SIGN_OUT = {"en": "Sign out", "de": "Abmelden"}
@@ -130,3 +154,37 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
         "Sign in stops turning once the answer is in"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+TITLE = {"en": "Sign in", "de": "Anmelden"}
+
+
+def test_sign_in_menu(new_context, case, watch, guard):
+    """Signed out, the sign-in card's ☰ sets the language and the mode:
+    the card speaks the language chosen, and My settings' choices show
+    both, kept in this browser."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in card"
+    menu = page.locator("#login-menu")
+    assert menu.locator("summary").get_attribute("aria-label"), "the ☰ is labelled"
+    menu.locator("summary").click()
+    assert page.locator("#login-lang").is_visible() and page.locator("#login-mode").is_visible(), "the menu shows both choices"
+    named_buttons(page, "the sign-in's menu")
+    other = "de" if case.lang == "en" else "en"
+    page.locator("#login-lang").select_option(other)
+    assert wait_until(page, f"document.querySelector('.login-head h3').textContent === {TITLE[other]!r}", 5), "the card speaks the language chosen"
+    assert page.evaluate("[document.getElementById('lang-select').value, localStorage.getItem('massimo.lang')]") == [other, other], \
+        "My settings' language is the one chosen"
+    page.locator("#login-mode").select_option("dark")
+    assert page.evaluate("[state.settings.theme, document.getElementById('theme-select').value]") == ["dark", "dark"], \
+        "My settings' mode is the one chosen"
+    box = page.locator("#login-menu .menu-items").bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= page.viewport_size["width"], "the menu fits the page"
+    page.keyboard.press("Escape")
+    assert menu.get_attribute("open") is None, "Escape closes the menu"
+    ctx.close()
