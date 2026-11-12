@@ -393,7 +393,7 @@ jobs:
       # Built for the runner; GOOS then selects the code it scans.
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           GOOS=${{ matrix.goos }} "$(go env GOPATH)/bin/govulncheck" ./...
 
   # The Debian package (packaging/README.md, "Debian package"): built for
@@ -499,7 +499,7 @@ jobs:
           api=http://127.0.0.1:18099/api/v1/update
           bin="C:/Program Files/Massimo/massimo.exe"
           data=C:/ProgramData/Massimo
-          up() { for i in $(seq 30); do curl -fsS "$health" && echo && return; sleep 2; done; return 1; }
+          up() { for _ in $(seq 30); do curl -fsS "$health" && echo && return; sleep 2; done; return 1; }
           # As the web UI does it: POST, a second POST in the same moment
           # must be refused, then the helper's states until the last one,
           # left in $st. Both POSTs go out of one curl, the second on the
@@ -523,7 +523,7 @@ jobs:
             cat second.json 2>/dev/null || true; echo
             if [ "$second" != 409 ]; then echo "::error::the second POST answered $second, want 409"; return 1; fi
             st=""
-            for i in $(seq 90); do
+            for _ in $(seq 90); do
               st="$(cat "$data/update-status.json" 2>/dev/null || true)"
               echo "$st" | grep -E '"state": "(done|rolled-back|failed|up-to-date)"' >/dev/null && break
               sleep 2
@@ -704,7 +704,7 @@ jobs:
           }
           list v0.0.0-ci.2
           python -m http.server 8123 --bind 127.0.0.1 --directory ci-stub > stub.log 2>&1 &
-          for i in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8123/repos/metaworx/massimo/releases && break; sleep 1; done
+          for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8123/repos/metaworx/massimo/releases && break; sleep 1; done
 
           # The test-key binary as the service, its settings pointing at the
           # stub (the server's check and, through it, the helper).
@@ -755,7 +755,7 @@ jobs:
           ./mdns.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
           MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./mdns.exe -env mdns.env -data mdns-data serve -listen 0.0.0.0:18097 -announce -proxy off -discover-interval 0 > mdns-serve.log 2>&1 &
           serve=$!
-          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
+          for _ in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
           cat mdns-serve.log
           grep -q 'msg="announced on the LAN"' mdns-serve.log
           if grep -q 'not announced' mdns-serve.log; then echo "::error::serve did not announce itself beside Windows' mDNS"; exit 1; fi
@@ -841,7 +841,7 @@ jobs:
           # The fake Cube reports the fixture's serial.
           printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
           health=https://127.0.0.1:18099/healthz
-          up() { for i in $(seq 30); do curl -fsSk "$health" && return; sleep 2; done; return 1; }
+          up() { for _ in $(seq 30); do curl -fsSk "$health" && return; sleep 2; done; return 1; }
 
           sudo ./massimo install -settings ci.env -listen 127.0.0.1:18099 -tls self-signed
           sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | sed -n 1,3p
@@ -866,7 +866,7 @@ jobs:
           helper=/Library/LaunchDaemons/ch.metaworx.massimo-update.plist
           sudo /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:MASSIMO_GITHUB_TOKEN string $MASSIMO_GITHUB_TOKEN" "$helper"
           sudo launchctl bootout system/ch.metaworx.massimo-update
-          for i in $(seq 50); do sudo launchctl print system/ch.metaworx.massimo-update >/dev/null 2>&1 || break; sleep 0.2; done
+          for _ in $(seq 50); do sudo launchctl print system/ch.metaworx.massimo-update >/dev/null 2>&1 || break; sleep 0.2; done
           sudo launchctl bootstrap system "$helper"
 
           # As the web UI does it: the server writes the request, launchd
@@ -879,7 +879,7 @@ jobs:
             curl -sSk -H 'Authorization: Bearer ci' https://127.0.0.1:18099/api/v1/update
             exit 1
           fi
-          for i in $(seq 90); do
+          for _ in $(seq 90); do
             st="$(cat /var/lib/massimo-update/status.json 2>/dev/null || true)"
             echo "$st" | grep -E '"state": "(done|rolled-back|failed)"' >/dev/null && break
             sleep 2
@@ -932,7 +932,7 @@ jobs:
           git archive --format=tar.gz --prefix=massimo/ -o "$RUNNER_TEMP/src/massimo.tar.gz" HEAD
           sha="$(shasum -a 256 "$RUNNER_TEMP/src/massimo.tar.gz" | cut -d' ' -f1)"
           python3 -m http.server 8321 --bind 127.0.0.1 --directory "$RUNNER_TEMP/src" > "$RUNNER_TEMP/http.log" 2>&1 &
-          for i in $(seq 20); do curl -fsS -o /dev/null http://127.0.0.1:8321/massimo.tar.gz 2>/dev/null && break; sleep 1; done
+          for _ in $(seq 20); do curl -fsS -o /dev/null http://127.0.0.1:8321/massimo.tar.gz 2>/dev/null && break; sleep 1; done
           tap="$(brew --repository)/Library/Taps/local/homebrew-massimo"
           mkdir -p "$tap/Formula"
           packaging/homebrew/render.sh --tag v0.0.0-ci.1 --url http://127.0.0.1:8321/massimo.tar.gz --sha256 "$sha" --out "$tap/Formula/massimo-ci.rb"
@@ -1000,9 +1000,11 @@ jobs:
           EOF
           sudo install -o root -g wheel -m 644 "$RUNNER_TEMP/$label.plist" "$plist"
           sudo launchctl bootstrap system "$plist"
+          # stop is called by the trap on EXIT, which shellcheck does not follow.
+          # shellcheck disable=SC2317
           stop() { sudo launchctl bootout "system/$label" 2>/dev/null || true; sudo rm -f "$plist"; }
           trap stop EXIT
-          for i in $(seq 30); do grep -q 'msg="announced on the LAN"' "$log" 2>/dev/null && break; sleep 1; done
+          for _ in $(seq 30); do grep -q 'msg="announced on the LAN"' "$log" 2>/dev/null && break; sleep 1; done
           sleep 3
           ok=0
           if ! grep -q 'msg="announced on the LAN"' "$log" || grep -q 'not announced' "$log"; then echo "::error::the daemon did not announce itself beside mDNSResponder"; ok=1; fi

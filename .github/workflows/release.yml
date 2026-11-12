@@ -267,6 +267,8 @@ jobs:
           git fetch --quiet --force origin "+refs/tags/${RELEASE}:refs/tags/${RELEASE}" 2>/dev/null || true
           prev="$(git rev-parse --verify --quiet "refs/tags/${RELEASE}^{commit}" || true)"
           {
+            # The backquotes are Markdown's code spans, not a command.
+            # shellcheck disable=SC2016
             printf 'The %s build of `%s` (%s), replaced in place by the next one. Boxes on the channel `%s` take it with `massimo update` or the web UI; it is signed with the rolling key, which boxes accept for the rolling flavours alone.\n\n' "$FLAVOUR" "$VERSION" "$SHA" "$FLAVOUR"
             if [ -n "$prev" ] && git merge-base --is-ancestor "$prev" "$SHA"; then
               printf '## Commits since the previous %s build\n\n' "$FLAVOUR"
