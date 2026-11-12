@@ -493,8 +493,8 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 }
 
 // DeleteUser removes a user: a tombstone under a name of its own
-// (removedName), with every token of the user revoked and every
-// preference a tombstone too. The name is free again, and a user added
+// (removedName), with every token of the user revoked, every preference
+// a tombstone too, and its identities at the providers deleted. The name is free again, and a user added
 // under it later is a row of its own, with none of the removed one's
 // history. The last owner without an end date is ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
@@ -536,6 +536,10 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := removePushSubscriptions(ctx, tx, u.ID, 0); err != nil {
+		return fmt.Errorf("store: user %s: %w", u.Name, err)
+	}
+	// its identities at the providers: no sign-in finds it any more
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id = ?`, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := tx.Commit(); err != nil {

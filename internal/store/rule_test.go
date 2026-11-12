@@ -36,6 +36,9 @@ var contentColumns = map[string][]string{
 	"audit":       {"detail", "remote"},
 	"backups":     {"body", "note"},
 	"commands":    {"request", "result"},
+	// the OpenID Connect providers: the button's name and the client's
+	// secret; the identities' e-mail is a key a sign-in is found by
+	"auth_providers": {"name", "client_secret"},
 }
 
 func isContent(table, col string) bool {

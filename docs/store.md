@@ -517,6 +517,41 @@ CREATE TABLE auth_failures (
     count        INTEGER NOT NULL,
     locked_until TEXT
 );
+
+CREATE TABLE auth_providers (                   -- migration 0016
+    id            INTEGER PRIMARY KEY,
+    uuid          TEXT    NOT NULL UNIQUE,
+    key           TEXT    NOT NULL,             -- unique among the live ones
+    name          TEXT    NOT NULL DEFAULT '',
+    issuer        TEXT    NOT NULL,             -- https://…, its discovery document under it
+    client_id     TEXT    NOT NULL,
+    client_secret TEXT    NOT NULL DEFAULT '',  -- never answered
+    scopes        TEXT    NOT NULL DEFAULT 'openid email profile',
+    auto_create   INTEGER NOT NULL DEFAULT 0,
+    auto_role_id  INTEGER REFERENCES roles (id), -- NULL: viewer
+    auto_domains  TEXT    NOT NULL DEFAULT '',  -- comma-separated; '': any
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT    NOT NULL,
+    updated_at    TEXT    NOT NULL,
+    updated_by    INTEGER REFERENCES users (id),
+    version       INTEGER NOT NULL DEFAULT 1,
+    deleted_at    TEXT,
+    origin        TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE TABLE user_identities (                  -- migration 0016
+    id           INTEGER PRIMARY KEY,
+    uuid         TEXT    NOT NULL UNIQUE,
+    user_id      INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    provider_id  INTEGER NOT NULL REFERENCES auth_providers (id) ON DELETE CASCADE,
+    subject      TEXT,                          -- the provider's sub; NULL until bound
+    email        TEXT    NOT NULL DEFAULT '',   -- lower case
+    created_at   TEXT    NOT NULL,
+    created_by   INTEGER REFERENCES users (id),
+    bound_at     TEXT,
+    last_used_at TEXT
+);
+-- unique (provider_id, subject) where bound, (provider_id, email) where not
 ```
 
 Notes on the tables:
@@ -1194,6 +1229,30 @@ and about as many again freed but not yet collected:
 eight checks sent together peak at 38 MiB of heap with one slot,
 152 MiB without the bound, and eight times 64 MiB with the parameters
 of the first releases (`BenchmarkPasswordChecksAtOnce` in `internal/store`).
+
+### Sign-in through OpenID Connect
+
+A user may sign in through an OpenID Connect provider beside the password (AP Oidc):
+Nextcloud, Google, Microsoft, Authentik, Keycloak,
+each a row of `auth_providers` with its issuer,
+whose discovery document names the endpoints, and the client's id and secret.
+A user's identity at a provider is a row of `user_identities`:
+the provider's subject (`sub`), which does not change,
+finds the user at each sign-in.
+An e-mail an owner assigns to a user is a pre-link without a subject,
+bound to the subject at the first sign-in with that e-mail verified by the provider,
+and by the subject alone from then on, since an address can change hands.
+A waiting e-mail is one per provider.
+Where a provider creates users (`auto_create`),
+a sign-in without an identity creates one with the provider's role
+(`viewer` where it names none),
+for an e-mail of the allowed domains (any where none are named),
+its name from the provider's `preferred_username` or the e-mail,
+`-2`, `-3` added where taken.
+A removed provider is a tombstone whose identities are deleted,
+and a removed user's identities go with it.
+The client secret is kept as the Cubes' keys are, in the store's file,
+and never answered (`has_secret`).
 
 ### Later: ownership per Cube
 
