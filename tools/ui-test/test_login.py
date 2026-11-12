@@ -13,7 +13,9 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     password, and two submits send one sign-in; the operator signs in,
     sees the tiles and no System settings →
     Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
-    forgets the token and brings the dialog back."""
+    forgets the token and the Cube's data and brings the dialog back,
+    with nothing of the page but the name and the version; signed in
+    again, the page is back."""
     ctx = new_context()  # the case's viewport and locale, from browser_context_args
     page = ctx.new_page()
     guard.page = page
@@ -55,6 +57,19 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "the token is forgotten"
+    # Signed out, the page shows its name, its version and the sign-in,
+    # and holds nothing of the session.
+    assert page.evaluate("state.rooms.length === 0 && state.cubes.length === 0 && !state.pollTimer"), "the Cube's data is forgotten"
+    assert page.locator(".room").count() == 0, "no room tile is drawn"
+    assert page.locator(".brand h1").is_visible() and page.locator("#version-short").is_visible(), "the name and the version show"
+    for sel in ("#cube-menu", ".top-line > .nav", ".updated-line", "#clock-plain", "main"):
+        assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.locator("#cube-menu").is_visible() and page.locator(".top-line > .nav").is_visible(), "signed in, the header is back"
+    assert page.evaluate("!!state.pollTimer"), "the poll runs again"
 
 
 SIGN_OUT = {"en": "Sign out", "de": "Abmelden"}

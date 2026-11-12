@@ -137,6 +137,14 @@ body:not(.expert) .expert-only { display: none !important; }
   #view-log, #view-settings { display: none; }
   #nav-menu { display: block; }
 }
+/* Signed out (login.js, askLogin): the name, the version and the sign-in,
+   nothing of the page or of the last session. */
+body.signed-out .top-left > :not(.brand),
+body.signed-out .top-line > .cube,
+body.signed-out .top-line > .nav,
+body.signed-out header.top > :not(.top-line),
+body.signed-out main,
+body.signed-out #notify-toast { display: none !important; }
 .visually-hidden {
   position: absolute;
   width: 1px;

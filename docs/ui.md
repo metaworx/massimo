@@ -12,6 +12,10 @@ which is open from the start once the page has seen the server ask for no key
 (the owner made from `MASSIMO_API_TOKEN` has no password),
 and keeps the session in the browser for 30 days from its last use;
 👤 → Sign out ends it.
+While it asks, the page shows its name, its version and the sign-in,
+nothing else:
+Sign out forgets what the page loaded of the Cubes,
+so that the next to sign in sees nothing of the last session.
 The password stays in the browser:
 the page signs in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE"),
 running argon2id itself while the button turns,

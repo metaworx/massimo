@@ -198,7 +198,9 @@ async function loadMeAndPreferences() {
 }
 
 // askLogin opens the sign-in dialog and resolves true once a session or
-// a key is in, false when the dialog was dismissed.
+// a key is in, false when the dialog was dismissed. While it is open the
+// page is signed out: the body's class signed-out hides all of it but
+// the name, the version and the dialog.
 function askLogin() {
   if (loginPromise) return loginPromise;
   loginPromise = new Promise((resolve) => {
@@ -215,6 +217,7 @@ function askLogin() {
       form.onsubmit = null;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
+      document.body.classList.remove("signed-out");
       loginPromise = null;
       resolve(ok);
     };
@@ -248,6 +251,7 @@ function askLogin() {
       if (!startWaits) afterLogin();
     };
     dlg.onclose = () => done(false);
+    document.body.classList.add("signed-out");
     dlg.showModal();
     $("login-user").focus();
   });
@@ -370,8 +374,8 @@ function afterLogin() {
     });
 }
 
-// logout ends the session (an API key is only forgotten) and asks who
-// is there again. The settings that followed the user go with it: a
+// logout ends the session (an API key is only forgotten), clears what
+// the page loaded of the Cubes and asks who is there again. The settings that followed the user go with it: a
 // change still waiting is sent under the user's token first, then the
 // browser forgets the user's values and schemes and keeps what is kept
 // for this device only, so that the next to sign in neither sees them
@@ -394,8 +398,10 @@ async function logout() {
   state.me = null;
   if (synced) await forgetUserSettings(); // app.js
   closeEvents();
+  clearCubeData(); // app.js: nothing of this session behind the sign-in
   showView("tiles", "replace");
   await loadMeAndPreferences();
+  startPolling();
   refresh().then(connectEvents);
 }
 

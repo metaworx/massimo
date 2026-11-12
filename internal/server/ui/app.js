@@ -941,6 +941,27 @@ function poll(rooms) {
   }).catch(() => {});
 }
 
+// clearCubeData forgets what the page loaded of the Cubes and draws it
+// empty, for the next to sign in, who may be someone else (Sign out,
+// login.js): the Cubes and the found ones, the rooms and the devices,
+// the tiles' states with a setpoint not yet sent, the last poll and the
+// Cube's clock; the poll stops until the sign-in starts it again.
+function clearCubeData() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+  for (const ui of Object.values(state.ui)) if (ui.timer) clearTimeout(ui.timer);
+  Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
+  renderRooms(); // tiles.js
+  renderFound();
+  renderCubeSelect();
+  renderHomeNotice();
+  renderUpdated();
+  for (const id of ["clock", "clock-plain"]) {
+    $(id).textContent = "";
+    $(id).title = "";
+  }
+}
+
 // startPolling runs poll every poll interval.
 function startPolling() {
   if (state.pollTimer) clearInterval(state.pollTimer);
