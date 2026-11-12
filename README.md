@@ -869,6 +869,29 @@ which `serve -discover-target 127.0.0.1:23273` finds.
 after `n:`, a copy of the greeting's 0a010d as 0abcde in no room,
 and joins again after it was removed (a fourth field sets the delay).
 
+The fake carries out the radio commands it acknowledges, as the devices do:
+a setpoint or mode (to every thermostat of the room for a room command),
+a boost, which ends by itself after the device's boost time (`-boost-for` to
+shorten it), a day's programme, the preset temperatures, the valve settings,
+the key lock and a wall thermostat's display;
+the device list and the C lines then show the change,
+also in a new connection's greeting.
+`-apply-after 30s` applies each command that long after the S reply,
+as a device confirms it after its wakeup,
+and `-apply=false` acknowledges only, as the fake did before.
+`-fixture rooms` serves a built-in house instead of `-greeting`:
+a room with a wall thermostat and two radiator thermostats,
+one with three radiator thermostats at different temperatures,
+and one with a shutter contact alone.
+`-control 127.0.0.1:62911` serves a control over HTTP, on loopback only,
+for tests that drive the fake from outside:
+`PUT /devices/<rf>/state` with JSON such as `{"actual_temp": 18.5, "battery_low": true}`
+(also `mode`, `setpoint`, `valve_pct`, `window_open`, `error`, `link_error`,
+`panel_locked`, and `reported: false` for a device the Cube holds no state for),
+`POST /devices/<rf>/remove` and `/restore` to take a device out of its room's
+lists and bring it back, `POST /drop` to make the clients connect again and
+read the greeting, and `GET /devices` for the device list.
+
 ```bash
 massimo discover
 massimo portal-crypto iv -addr <cube-ip>
@@ -1068,7 +1091,9 @@ with `"configured": false`),
 keeps them in the store so that they are still listed after a restart,
 and logs a configured Cube that answers from another address than configured.
 `-poll`, `-refresh` and `-discover-interval` win for one run over the store's
-settings `poll_interval`, `refresh_interval` and `discover_interval`.
+settings `poll_interval`, `refresh_interval` and `discover_interval`,
+and `-stale-after` over `stale_after`,
+also below the hour the API allows, so that a test sees a thermostat go stale.
 
 Room 255 is the room for hidden devices:
 a device that is paired but never reports blocks every command to the room the

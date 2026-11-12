@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -39,6 +40,16 @@ type Server struct {
 	// each device a t: deletes, as the Cube answers each when it is done
 	// with it; 0 writes them at once.
 	ReplyGap time.Duration
+	// Apply makes the fake carry out the radio commands it acknowledges
+	// (apply.go): the devices' L entries and C lines change as the real
+	// Cube's do once the devices confirmed them.
+	Apply bool
+	// ApplyAfter delays applying a command, as a device confirms one
+	// after its wakeup; 0 applies it before the S reply.
+	ApplyAfter time.Duration
+	// BoostFor ends a boost after this long instead of the device's boost
+	// time, so that a test need not wait minutes.
+	BoostFor time.Duration
 
 	ln       net.Listener
 	mu       sync.Mutex
@@ -50,6 +61,10 @@ type Server struct {
 	list     *cube.Message           // the L line set with SetDeviceList
 	deleted  map[cube.RFAddress]bool // deleted with t:
 	quiet    chan struct{}           // open while silent, see SetSilent
+	live     bool                    // a command or the control changed a line: the greeting carries the changes
+	boosts   map[cube.RFAddress]*boost
+	removed  map[cube.RFAddress]bool // taken out with Remove, back with Restore
+	control  *http.Server            // the control's HTTP server, see Control
 }
 
 // SetSilent makes the fake a Cube whose network cable is out, or puts
@@ -129,11 +144,12 @@ func (s *Server) SetGreeting(lines []cube.Message) {
 	s.Greeting = append([]cube.Message(nil), lines...)
 }
 
-// greeting returns the lines a new connection is greeted with.
+// greeting returns the lines a new connection is greeted with, with the
+// changes the fake applied.
 func (s *Server) greeting() []cube.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]cube.Message(nil), s.Greeting...)
+	return s.liveGreetingLocked()
 }
 
 // Drop closes every client connection and keeps listening, as a Cube
@@ -194,11 +210,11 @@ func (s *Server) deleteDevices(addrs []cube.RFAddress) {
 	}
 }
 
-// isDeleted reports whether a t: deleted rf.
+// isDeleted reports whether a t: deleted rf, or Remove took it out.
 func (s *Server) isDeleted(rf cube.RFAddress) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.deleted[rf]
+	return s.deleted[rf] || s.removed[rf]
 }
 
 // visible returns a line the fake sends without the devices deleted
@@ -224,6 +240,8 @@ func (s *Server) visible(m cube.Message) (cube.Message, bool) {
 			i = end
 		}
 		return cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(kept)}, true
+	case 'M':
+		return s.withoutRemoved(m), true
 	}
 	return m, true
 }
@@ -265,6 +283,14 @@ func (s *Server) Close() error {
 	s.mu.Lock()
 	for c := range s.open {
 		c.Close()
+	}
+	if s.control != nil {
+		s.control.Close()
+	}
+	for _, b := range s.boosts {
+		if b.timer != nil {
+			b.timer.Stop()
+		}
 	}
 	s.mu.Unlock()
 	s.SetSilent(false)
@@ -388,6 +414,9 @@ func (s *Server) serve(conn net.Conn) {
 			d := 0
 			if s.Discard || s.DiscardIf != nil && s.DiscardIf(m) {
 				d = 1
+			}
+			if d == 0 && m.Type == 's' && s.Apply {
+				s.apply(m)
 			}
 			reply = fmt.Sprintf("S:%02x,%d,31\r\n", s.Duty, d)
 		case 'f':

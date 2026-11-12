@@ -180,7 +180,7 @@ func TestCloseWithoutRun(t *testing.T) {
 }
 
 // An interval given wins over the store's setting, 0 included; one not
-// given takes the store's, else the default.
+// given takes the store's, else the default. The stale threshold too.
 func TestOpenIntervals(t *testing.T) {
 	clearCubeEnv(t)
 	data := t.TempDir()
@@ -192,11 +192,15 @@ func TestOpenIntervals(t *testing.T) {
 		}
 	}
 	st.Close()
-	inst, err := Open(ctx, Config{Listen: "127.0.0.1:0", DataDir: data, RefreshInterval: &never, Logger: quietLog()})
+	stale := 90 * time.Second // below the API's minimum of an hour, as a test gives it
+	inst, err := Open(ctx, Config{Listen: "127.0.0.1:0", DataDir: data, RefreshInterval: &never, StaleAfter: &stale, Logger: quietLog()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer inst.Close()
+	if got := inst.Server().StaleAfter(); got != stale {
+		t.Errorf("stale after %s, want %s", got, stale)
+	}
 	ts := httptest.NewServer(inst.Server().Handler())
 	defer ts.Close()
 	var settings map[string]struct {
