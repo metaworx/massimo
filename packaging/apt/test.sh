@@ -17,8 +17,32 @@ export GNUPGHOME=$work/gnupg
 mkdir -m 700 "$GNUPGHOME"
 gpg --batch --quiet --quick-gen-key --passphrase '' 'Massimo CI <ci@example.invalid>' rsa3072 sign 1d
 key=$(gpg --list-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')
+# The rolling suites' key, a second throwaway one.
+gpg --batch --quiet --quick-gen-key --passphrase '' 'Massimo CI rolling <ci-rolling@example.invalid>' rsa3072 sign 1d
+rolling_key=$(gpg --list-keys --with-colons 'Massimo CI rolling' | awk -F: '/^fpr/ { print $10; exit }')
+gpg --armor --export "$key" >"$work/archive.asc"
+gpg --armor --export "$rolling_key" >"$work/rolling.asc"
 
-"$root/packaging/apt/publish.sh" --out "$work/site" --key "$key" --from "$root/dist" --channel alpha --index-asset "$work/index.tar.gz"
+# publish.sh signs only with the committed key of the suites' kind:
+# neither throwaway key is one, and the numbered key signs no rolling
+# suite. The test's publish names both throwaway keys as the committed.
+if "$root/packaging/apt/publish.sh" --out "$work/refused" --key "$key" --from "$root/dist" --channel alpha >/dev/null 2>&1; then
+	echo "FAIL: publish.sh signed with a key that is not the committed one" >&2
+	exit 1
+fi
+publish() {
+	"$root/packaging/apt/publish.sh" --archive-key "$work/archive.asc" --rolling-archive-key "$work/rolling.asc" "$@"
+}
+if publish --out "$work/refused" --key "$key" --from "$root/dist" --channel devel >/dev/null 2>&1; then
+	echo "FAIL: publish.sh signed the rolling suite devel with the numbered suites' key" >&2
+	exit 1
+fi
+[ ! -e "$work/refused/apt/dists" ] || {
+	echo "FAIL: a refused publish.sh left suites behind" >&2
+	exit 1
+}
+
+publish --out "$work/site" --key "$key" --from "$root/dist" --channel alpha --index-asset "$work/index.tar.gz"
 
 # The suite verifies against the exported key, as apt will check it.
 gpg --export "$key" >"$work/keyring.gpg"
@@ -26,7 +50,7 @@ gpgv --keyring "$work/keyring.gpg" "$work/site/apt/dists/alpha/InRelease" 2>/dev
 	echo "FAIL: InRelease does not verify" >&2
 	exit 1
 }
-for f in apt/massimo.asc apt/massimo-archive-keyring.deb apt/massimo.sources \
+for f in apt/massimo.asc apt/massimo-rolling.asc apt/massimo-archive-keyring.deb apt/massimo.sources \
 	apt/dists/alpha/Release.gpg apt/dists/alpha/main/binary-amd64/Packages.gz apt/dists/alpha/main/binary-armhf/Packages; do
 	[ -s "$work/site/$f" ] || {
 		echo "FAIL: $f missing" >&2
@@ -39,7 +63,7 @@ done
 # packages are in the tarball itself.
 mkdir "$work/index"
 tar -C "$work/index" -xzf "$work/index.tar.gz"
-for f in apt/dists/alpha/InRelease apt/massimo.asc apt/massimo.sources apt/massimo-archive-keyring.deb apt/pool.tsv; do
+for f in apt/dists/alpha/InRelease apt/massimo.asc apt/massimo-rolling.asc apt/massimo.sources apt/massimo-archive-keyring.deb apt/pool.tsv; do
 	[ -s "$work/index/$f" ] || {
 		echo "FAIL: the index asset lacks $f" >&2
 		exit 1
@@ -65,8 +89,8 @@ done <"$work/index/apt/pool.tsv"
 # alone, as a run of main builds it: the same suites and pool, and the
 # pages of packaging/site, the index with the suites in place of its
 # placeholder, the privacy policy and the stylesheet as they are.
-"$root/packaging/site/build.sh" --out "$work/pages" --apt "$work/site/apt" --no-docs
-"$root/packaging/site/build.sh" --out "$work/pages-index" --apt-index "$work/index.tar.gz" --no-docs
+"$root/packaging/site/build.sh" --out "$work/pages" --apt "$work/site/apt" --no-docs --no-rolling
+"$root/packaging/site/build.sh" --out "$work/pages-index" --apt-index "$work/index.tar.gz" --no-docs --no-rolling
 for d in pages pages-index; do
 	cmp -s "$work/site/apt/dists/alpha/InRelease" "$work/$d/apt/dists/alpha/InRelease" || {
 		echo "FAIL: $d's InRelease is not the repository's" >&2
@@ -105,6 +129,50 @@ grep -q '^Package: massimo-archive-keyring$' "$work/site/apt/dists/alpha/main/bi
 	exit 1
 }
 
+# The keyring package carries both keys, one file each, as the committed
+# public halves have them.
+dpkg-deb -x "$work/site/apt/massimo-archive-keyring.deb" "$work/keyring-pkg"
+for k in archive:massimo-archive-keyring rolling:massimo-rolling-archive-keyring; do
+	gpg --dearmor <"$work/${k%%:*}.asc" >"$work/${k%%:*}.gpg"
+	cmp -s "$work/${k%%:*}.gpg" "$work/keyring-pkg/usr/share/keyrings/${k#*:}.gpg" || {
+		echo "FAIL: the keyring package's ${k#*:}.gpg is not the ${k%%:*} key" >&2
+		exit 1
+	}
+done
+
+# A rolling suite, devel, signed with the rolling key alone; and the site
+# assembled from the numbered index and the rolling one, as a run of main
+# builds it, leaving out the rolling suite nightly, whose index is missing.
+publish --out "$work/rolling" --key "$rolling_key" --from "$root/dist" --channel devel --index-asset "$work/devel-index.tar.gz" >/dev/null
+gpgv --keyring "$work/rolling.gpg" "$work/rolling/apt/dists/devel/InRelease" 2>/dev/null || {
+	echo "FAIL: devel's InRelease does not verify with the rolling key" >&2
+	exit 1
+}
+if gpgv --keyring "$work/archive.gpg" "$work/rolling/apt/dists/devel/InRelease" 2>/dev/null; then
+	echo "FAIL: devel's InRelease verifies with the numbered suites' key" >&2
+	exit 1
+fi
+grep -qx 'Signed-By: /usr/share/keyrings/massimo-rolling-archive-keyring.gpg' "$work/rolling/apt/massimo-devel.sources" || {
+	echo "FAIL: massimo-devel.sources does not name the rolling keyring" >&2
+	exit 1
+}
+"$root/packaging/site/build.sh" --out "$work/pages-rolling" --apt-index "$work/index.tar.gz" --no-docs \
+	--rolling-index devel="$work/devel-index.tar.gz" --rolling-index nightly="$work/missing.tar.gz" >/dev/null
+if [ "$(cd "$work/pages-rolling/apt/dists" && echo *)" != "alpha devel" ]; then
+	echo "FAIL: the assembled site has the suites $(cd "$work/pages-rolling/apt/dists" && echo *), not alpha devel" >&2
+	exit 1
+fi
+for f in massimo.sources massimo-devel.sources massimo.asc massimo-rolling.asc dists/devel/main/binary-amd64/Packages; do
+	[ -s "$work/pages-rolling/apt/$f" ] || {
+		echo "FAIL: the assembled site lacks apt/$f" >&2
+		exit 1
+	}
+done
+cmp -s "$work/rolling/apt/dists/devel/InRelease" "$work/pages-rolling/apt/dists/devel/InRelease" || {
+	echo "FAIL: the assembled site's devel InRelease is not the rolling run's" >&2
+	exit 1
+}
+
 # Only a version tag of the full shape is a release: publish.sh's pool and
 # build.sh's newest index, from a gh that lists v0.1.0-alpha.1 and v1.2.3
 # among tags that only look like one, take those two alone. v1.2.3 comes
@@ -113,7 +181,8 @@ mkdir "$work/bin"
 cat >"$work/bin/gh" <<'GH'
 #!/usr/bin/env bash
 # gh for the version-tag checks: the releases of $STUB_TAGS, newest first,
-# each with one package ($STUB_DEB) and the index asset ($STUB_INDEX).
+# each with one package ($STUB_DEB) and the index asset ($STUB_INDEX, or
+# $STUB_ROLLING_INDEX for a rolling release).
 set -euo pipefail
 printf '%s\n' "$*" >>"$STUB_LOG"
 cmd="$1 $2" tag=${3:-} jq="" dir="" pattern=""
@@ -127,11 +196,20 @@ while [ $# -gt 0 ]; do
 done
 case "$cmd" in
 "release list") jq -nc '$ARGS.positional | map({tagName: .})' --args $STUB_TAGS | jq -r "$jq" ;;
-"release view") jq -nc --arg deb "$(basename "$STUB_DEB")" '{assets: [{name: $deb}, {name: "massimo-apt-index.tar.gz"}]}' | jq -r "$jq" ;;
+"release view")
+	jq -nc --arg deb "$(basename "$STUB_DEB")" --arg tag "$tag" \
+		'{assets: [{name: $deb, url: "https://example.invalid/\($tag)/\($deb)"}, {name: "massimo-apt-index.tar.gz", url: "https://example.invalid/index"}]}' |
+		jq -r "$jq"
+	;;
 "release download")
 	case "$pattern" in
 	*.deb) cp "$STUB_DEB" "$dir/" ;;
-	massimo-apt-index.tar.gz) cp "$STUB_INDEX" "$dir/massimo-apt-index.tar.gz" ;;
+	massimo-apt-index.tar.gz)
+		case "$tag" in
+		release/*) cp "$STUB_ROLLING_INDEX" "$dir/massimo-apt-index.tar.gz" ;;
+		*) cp "$STUB_INDEX" "$dir/massimo-apt-index.tar.gz" ;;
+		esac
+		;;
 	esac
 	;;
 *) echo "gh stub: $cmd" >&2; exit 1 ;;
@@ -139,28 +217,52 @@ esac
 GH
 chmod +x "$work/bin/gh"
 stub_deb=$(find "$root/dist" -maxdepth 1 -name 'massimo_*_amd64.deb' | head -1)
-export STUB_LOG=$work/gh.log STUB_DEB=$stub_deb STUB_INDEX=$work/index.tar.gz
+export STUB_LOG=$work/gh.log STUB_DEB=$stub_deb STUB_INDEX=$work/index.tar.gz STUB_ROLLING_INDEX=$work/devel-index.tar.gz
 export STUB_TAGS='v1.2 verification-test v1..2-alpha.1 v1.2.3-rc release/devel v0.1.0-alpha.1 v1.2.3'
-PATH=$work/bin:$PATH "$root/packaging/apt/publish.sh" --out "$work/tags" --key "$key" >/dev/null || {
+PATH=$work/bin:$PATH publish --out "$work/tags" --key "$key" >/dev/null || {
 	echo "FAIL: publish.sh stops on releases of several channels" >&2
 	exit 1
 }
 PATH=$work/bin:$PATH "$root/packaging/site/build.sh" --out "$work/pages-newest" --apt-index newest --no-docs >/dev/null
+# release/nightly hands over devel's index here, which build.sh leaves out.
+if [ "$(cd "$work/pages-newest/apt/dists" && echo *)" != "alpha devel" ]; then
+	echo "FAIL: build.sh --apt-index newest made the suites $(cd "$work/pages-newest/apt/dists" && echo *), not alpha devel" >&2
+	exit 1
+fi
 suites=$(cd "$work/tags/apt/dists" && echo *)
 if [ "$suites" != "alpha stable" ]; then
 	echo "FAIL: publish.sh made the suites $suites, not alpha stable" >&2
 	exit 1
 fi
-if grep -E '^release (view|download) ' "$STUB_LOG" | grep -Ev '^release [a-z]+ (v0\.1\.0-alpha\.1|v1\.2\.3) '; then
+# Each suite takes its own and every more stable channel's packages:
+# alpha stable's, stable not alpha's; the rolling suite devel its build's
+# and the numbered releases'.
+pools() { # <dists dir> <suite>
+	sed -n 's#^Filename: \(pool/[^/]*\)/.*#\1#p' "$1/$2/main/binary-amd64/Packages" | sort -u | tr '\n' ' '
+}
+for want in "alpha:pool/alpha pool/keyring pool/stable " "stable:pool/keyring pool/stable "; do
+	got=$(pools "$work/tags/apt/dists" "${want%%:*}")
+	[ "$got" = "${want#*:}" ] || {
+		echo "FAIL: the suite ${want%%:*} takes the pools ${got}not ${want#*:}" >&2
+		exit 1
+	}
+done
+PATH=$work/bin:$PATH publish --out "$work/tags-devel" --key "$rolling_key" --rolling devel >/dev/null
+got=$(pools "$work/tags-devel/apt/dists" devel)
+[ "$got" = "pool/alpha pool/devel pool/keyring pool/stable " ] || {
+	echo "FAIL: the rolling suite devel takes the pools ${got}not its build's and the numbered releases'" >&2
+	exit 1
+}
+if grep -E '^release (view|download) ' "$STUB_LOG" | grep -Ev '^release [a-z]+ (v0\.1\.0-alpha\.1|v1\.2\.3|release/devel|release/nightly) '; then
 	echo "FAIL: publish.sh or build.sh took a release whose tag is no version" >&2
 	exit 1
 fi
-unset STUB_LOG STUB_DEB STUB_INDEX STUB_TAGS
+unset STUB_LOG STUB_DEB STUB_INDEX STUB_ROLLING_INDEX STUB_TAGS
 
 # A rotated key makes a newer keyring package, whatever its expiry: here
 # one without any, after the first that expires tomorrow.
 keyring_version() { # <site>
-	local debs=("$1"/apt/pool/alpha/massimo-archive-keyring_*_all.deb)
+	local debs=("$1"/apt/pool/keyring/massimo-archive-keyring_*_all.deb)
 	dpkg-deb -f "${debs[0]}" Version
 }
 sleep 1
@@ -170,7 +272,9 @@ rotated=$(gpg --list-keys --with-colons | awk -F: '/^fpr/ { f = $10 } END { prin
 	echo "FAIL: no second key" >&2
 	exit 1
 }
-"$root/packaging/apt/publish.sh" --out "$work/rotated" --key "$rotated" --from "$root/dist" --channel alpha >/dev/null
+gpg --armor --export "$rotated" >"$work/rotated.asc"
+"$root/packaging/apt/publish.sh" --archive-key "$work/rotated.asc" --rolling-archive-key "$work/rolling.asc" \
+	--out "$work/rotated" --key "$rotated" --from "$root/dist" --channel alpha >/dev/null
 dpkg --compare-versions "$(keyring_version "$work/rotated")" gt "$(keyring_version "$work/site")" || {
 	echo "FAIL: the rotated key's keyring package $(keyring_version "$work/rotated") is not newer than $(keyring_version "$work/site")" >&2
 	exit 1
@@ -181,16 +285,24 @@ dpkg --compare-versions "$(keyring_version "$work/rotated")" gt "$(keyring_versi
 # the file that package owns, so that a new keyring package is what apt
 # verifies with; Debian's own sources stay for the dependencies (adduser
 # is not in the slim images), and apt-cache policy shows the package came
-# from the suite.
-chmod -R a+rX "$work/site"
-docker run --rm -v "$work/site/apt:/repo:ro" "$image" bash -euo pipefail -c '
+# from the suite. The site is the assembled one: the rolling suite devel
+# verifies with its own Signed-By, and not with the numbered suites'.
+chmod -R a+rX "$work/pages-rolling"
+docker run --rm -v "$work/pages-rolling/apt:/repo:ro" "$image" bash -euo pipefail -c '
 	export DEBIAN_FRONTEND=noninteractive
 	apt-get -qq install -y /repo/massimo-archive-keyring.deb >/dev/null
-	sed "s#^URIs: .*#URIs: file:///repo#" /repo/massimo.sources >/etc/apt/sources.list.d/massimo.sources
-	signed_by=$(sed -n "s/^Signed-By: *//p" /etc/apt/sources.list.d/massimo.sources)
-	[ "$(dpkg -S "$signed_by" 2>/dev/null)" = "massimo-archive-keyring: $signed_by" ] ||
-		{ echo "FAIL: Signed-By names $signed_by, which the keyring package does not own" >&2; exit 1; }
+	for s in massimo massimo-devel; do
+		sed "s#^URIs: .*#URIs: file:///repo#" /repo/$s.sources >/etc/apt/sources.list.d/$s.sources
+		signed_by=$(sed -n "s/^Signed-By: *//p" /etc/apt/sources.list.d/$s.sources)
+		[ "$(dpkg -S "$signed_by" 2>/dev/null)" = "massimo-archive-keyring: $signed_by" ] ||
+			{ echo "FAIL: $s.sources names $signed_by, which the keyring package does not own" >&2; exit 1; }
+	done
+	sed "s#massimo-rolling-archive-keyring#massimo-archive-keyring#" /etc/apt/sources.list.d/massimo-devel.sources >/tmp/wrong.sources
+	if apt-get -qq update -o Dir::Etc::sourcelist=/tmp/wrong.sources -o Dir::Etc::sourceparts=- >/dev/null 2>&1; then
+		echo "FAIL: the suite devel verifies with the numbered suites'"'"' key" >&2; exit 1
+	fi
 	apt-get -qq update
+	grep -q "devel/main" <<<"$(apt-cache policy massimo)" || { echo "FAIL: massimo is not in the suite devel" >&2; exit 1; }
 	apt-get -qq install -y massimo >/dev/null
 	grep -q "alpha/main" <<<"$(apt-cache policy massimo)" || { echo "FAIL: not from the suite alpha" >&2; exit 1; }
 	grep -q "alpha/main" <<<"$(apt-cache policy massimo-archive-keyring)" ||
@@ -219,7 +331,7 @@ dpkg-deb -R "${debs[0]}" "$work/newer"
 sed -i "s/^Version: .*/Version: $new/" "$work/newer/DEBIAN/control"
 dpkg-deb --root-owner-group -b "$work/newer" "$work/from/massimo_${new}_amd64.deb" >/dev/null
 cp "${debs[0]}" "$work/from/"
-"$root/packaging/apt/publish.sh" --out "$work/upgrade" --key "$key" --from "$work/from" --channel alpha >/dev/null
+publish --out "$work/upgrade" --key "$key" --from "$work/from" --channel alpha >/dev/null
 chmod -R a+rX "$work/upgrade"
 docker run --rm -v "$work/site/apt:/site1:ro" -v "$work/upgrade/apt:/site2:ro" -e OLD="$old" -e NEW="$new" "$image" bash -euo pipefail -c '
 	fail() { echo "FAIL: $*" >&2; exit 1; }

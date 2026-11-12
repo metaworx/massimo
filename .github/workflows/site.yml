@@ -10,8 +10,11 @@ name: Site
 # the artifact named by apt-artifact; every other run (a push to main, the
 # nightly build) takes the signed index of the newest release that carries
 # one (massimo-apt-index.tar.gz), so that the docs follow main without a
-# release and the apt key stays with the tags. Where no release carries
-# one yet, the build ends without a site and nothing is deployed: a deploy
+# release and the apt key stays with the tags. Either way build.sh adds
+# the rolling suites from the indexes release/devel and release/nightly
+# carry, signed by their own runs with the rolling apt key, and leaves out
+# one that is missing. Where no version tag's release carries an index
+# yet, the build ends without a site and nothing is deployed: a deploy
 # replaces the whole site, and one without the repository would take the
 # repository offline.
 on:
