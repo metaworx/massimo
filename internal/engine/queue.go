@@ -456,7 +456,7 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		if cmd.Passthrough {
 			res.Replies = append(res.Replies, sendResultLine(r))
 			res.Discarded = res.Discarded || r.Discarded
-			q.opts.Logger.Info("proxy client's command sent", "command", l.String(), "discarded", r.Discarded,
+			q.stepLog(cmd).Info("proxy client's command sent", "command", l.String(), "discarded", r.Discarded,
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			continue
 		}
