@@ -38,8 +38,7 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
    (AP Packaging v1.0, Blocks 4 to 10, each a `PLAN+` revision when wanted,
    else `EXEC retire`): Windows code signing (none for now;
    SignPath Foundation first, Certum as fallback), rpm, the MSI and winget,
-   the UI's update button upgrading through apt or brew, a container image,
-   the LoxBerry plugin, a notarized `.pkg` with a cask.
+   a container image, the LoxBerry plugin, a notarized `.pkg` with a cask.
 4. **The store, after stage (e)** (docs/store.md section 9):
    ownership per Cube, `-server` for the commands, secrets in the store,
    the export and import of design.md section 7, the PostgreSQL driver.
@@ -103,7 +102,6 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     the same as the Android app; published on the App Store.
 19. **Channels, the next steps** (AP Channels v1.0):
     apt suites and Homebrew formulae for `devel` and `nightly`,
-    once AptUpdate's DebVersion makes their versions sort,
     with an apt key of their own;
     `beta` and `stable` with `make release-beta` and its stable counterpart,
     `rc` as `-rc.N` tags on `beta`,
