@@ -2,8 +2,8 @@
 
 `make actionlint` lints the workflows under `.github/workflows/`
 with [actionlint](https://github.com/rhysd/actionlint),
-and with shellcheck on their `run:` scripts where `shellcheck` is on the
-`PATH`, as it is on GitHub's Ubuntu runners;
+and their `run:` scripts with shellcheck where it is on the `PATH`,
+as it is on GitHub's Ubuntu runners;
 CI's job "actionlint" runs the same (`GUIDELINES/project/CI.md`, section 2).
 
 The tool is pinned by the `tool` line of this directory's `go.mod`,
