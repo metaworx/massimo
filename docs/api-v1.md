@@ -1552,6 +1552,7 @@ Body:
 | `manual`   | `temp` (4.5 … 30.5, steps of 0.5)        | hold `temp`                                   |
 | `auto`     | optional `temp`                          | follow the week program (`temp` until the next switch point) |
 | `vacation` | `temp`, `until` (`"YYYY-MM-DD HH:MM"`, half hours) | hold `temp` until `until`, then auto |
+| `boost`    | none (`temp` is ignored by the devices)  | open the valves by the thermostats' boost settings (`boost_minutes`, `boost_valve_pct`) for their boost time, then back to the mode they had |
 
 ```json
 {"mode": "manual", "temp": 21}
@@ -1569,7 +1570,11 @@ because the Cube discards a direct command to a room member;
 every thermostat of that room therefore takes the new setpoint,
 which is how MAX! treats setpoints.
 A device outside any room is addressed directly.
-Boost cannot be started over the air.
+A boost is the set-temperature command with mode 3, as a button at a device starts it;
+the command carries the setpoint the device has, which the devices ignore.
+Seen on hardware on 2026-11-13: both thermostats of a room showed `boost` within a minute,
+and returned by themselves to the mode they had after their boost time
+(docs/portal-protocol.md).
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
 

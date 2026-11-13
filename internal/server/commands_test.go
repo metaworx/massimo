@@ -142,7 +142,7 @@ func TestCommandsOfWrites(t *testing.T) {
 	if rows := auditRows(t, ts, "secret", "?limit=1"); rows[0].Result != store.ResultRefused || rows[0].CommandID != 0 {
 		t.Fatalf("refused request's row %+v", rows[0])
 	}
-	callAPI(t, ts, "PUT", setpoint, "secret", `{"mode":"boost"}`)
+	callAPI(t, ts, "PUT", setpoint, "secret", `{"mode":"turbo"}`)
 	rows = auditRows(t, ts, "secret", "?limit=1")
 	if c := commandOfRow(t, ts, "secret", rows[0]); c.State != store.StateDropped || c.Status != 400 || len(c.Steps) != 0 {
 		t.Fatalf("failed request's command %+v", c)

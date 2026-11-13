@@ -131,7 +131,7 @@ func TestAuditDetails(t *testing.T) {
 	callAPI(t, ts, "POST", "/api/v1/roles", "secret", `{"key":"night"}`)
 	callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"Zed","password":"wrong"}`)
 	callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"zed","password":"pw"}`)
-	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"boost"}`)
+	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"turbo"}`)
 	rows := auditRows(t, ts, "secret", "")
 	if len(rows) != 8 {
 		t.Fatalf("%d rows", len(rows))

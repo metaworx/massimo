@@ -183,7 +183,9 @@ Every room has a tile:
 - **"mixed"** next to the mode buttons means the room's thermostats are in
   different modes, for example after another program set one of them.
   The modes in use are outlined, and the note lists each device's mode.
-- The **⋯** menu locks or unlocks the buttons on the room's thermostats,
+- The **⋯** menu starts a **Boost** (the valves open by the thermostats' boost
+  settings for their boost time, then the room returns to its mode),
+  locks or unlocks the buttons on the room's thermostats,
   and deletes a room that has no devices.
 - The room name or the **i** button opens the device list:
   every device with its values (valve, set and measured temperature,

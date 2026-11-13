@@ -395,6 +395,7 @@
 
   "room.actions": "room actions",
   "room.actionsTitle": "Room actions",
+  "room.boost": "Boost",
   "room.lock": "Lock thermostats",
   "room.unlock": "Unlock thermostats",
   "room.delete": "Delete room",
@@ -421,6 +422,8 @@
   "room.deleted": "Room {name} deleted.",
   "room.deleteFailed": "Delete room {name}: {error}",
   "room.noDevices": "No devices in this room.",
+
+  "label.boost": "boost",
 
   "label.auto": "auto",
   "label.manual": "manual {temp} °C",
