@@ -346,11 +346,10 @@ function notifyToast(n) {
 }
 
 function initNotify() {
-  $("menu-notify").addEventListener("click", () => showView("notify"));
   $("notify-on").addEventListener("click", turnOnNotify);
   $("notify-off").addEventListener("click", turnOffNotify);
   $("notify-toast-close").addEventListener("click", () => $("notify-toast").classList.add("hidden"));
-  onView("notify", loadNotify);
+  onView("me", loadNotify);
   // a push while this page is in front: the service worker hands it over
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (ev) => {

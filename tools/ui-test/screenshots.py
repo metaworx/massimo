@@ -51,7 +51,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from helpers import open_user_menu, show_view
+from helpers import open_personal_page, show_view
 
 OUT = Path(__file__).resolve().parents[2] / "docs" / "screenshots"
 NOW = "2026-11-03T20:51:00+01:00"            # the page's clock: the greeting's Cube clock in TZ
@@ -108,7 +108,7 @@ PAGES = {
     "config-copy": ".room",
     "house": "#house",
     "log": None,                                    # its lines run the full width
-    "user-menu": None,                              # the 👤 menu open over the rooms
+    "me": None,                                     # the personal page, 👤's, at its top
     "cube-choice": None,                            # the Cube choice open over the rooms
     "profile": "#profile",                          # My profile, the owner's with keys only
     "prefs": "#prefs",                              # My settings
@@ -321,8 +321,8 @@ def step(page, which):
             changes: { window_open: { from: false, to: true }, setpoint: { from: 18.5, to: 12 } } }) }));
         }""", LOG_TIME)
         page.wait_for_selector("#logview .log-line.kind-state >> nth=-1")
-    elif which == "user-menu":
-        open_user_menu(page)
+    elif which == "me":
+        open_personal_page(page)
     elif which == "nav-menu":
         page.locator("#nav-menu summary").click()
         page.locator("#nav-menu .menu-items").wait_for(state="visible")

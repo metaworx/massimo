@@ -193,7 +193,6 @@ body.signed-out #notify-toast { display: none !important; }
 }
 .menu.nav-menu > summary:hover, .menu.nav-menu[open] > summary { border-color: var(--accent); }
 .nav-menu .menu-items { width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
-.menu-line { margin: 0 0 4px; padding: 6px 10px 10px; color: var(--muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
@@ -322,7 +321,8 @@ body.scrolled .top #refresh-btn, body.scrolled #tls-notice,
 body.scrolled #cube-found, body.scrolled #pending { display: none !important; }
 @media (max-width: 599px) {
   body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
-  body.scrolled .top-left { display: none; }
+  /* out of sight, not out of the page: the h1 stays its heading */
+  body.scrolled .top-left { position: absolute; width: 1px; height: 1px; min-height: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 
 /* slide toggle: a checkbox styled as a switch, keyboard accessible */
@@ -520,6 +520,25 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .menu.sec-menu > summary:hover, .menu.sec-menu[open] > summary { border-color: var(--accent); }
 .sec-menu .menu-items { min-width: 210px; }
+/* the personal page's row: its title with who is signed in under it,
+   then Sign out and the sections menu at the right end */
+.page-title { display: grid; min-width: 0; }
+.page-bar .page-title h2 { margin: 0; white-space: normal; }
+.me-line { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 12px;
+  flex: none;
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.logout-btn:hover { background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+.logout-btn:not(.hidden) + .menu.sec-menu { margin-left: 0; }
 .toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
 .section-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .section-flow { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -559,6 +578,8 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   text-align: left;
 }
 .section-fold:hover { color: var(--accent); }
+/* a card's icon before its title, as the sections menu shows it */
+.section-fold .section-icon { width: 18px; height: 18px; flex: none; color: var(--muted); }
 .fold-i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
 .section-fold[aria-expanded="true"] .fold-i { transform: rotate(90deg); }
 .section-card.folded > .tile-head { border-bottom-color: transparent; border-radius: 11px; }
@@ -665,9 +686,11 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .scheme-msg { margin: 0 0 10px; }
 .scheme-msg.ok { color: var(--ok); }
 .scheme-msg.bad { color: var(--bad); }
-/* the editor's two sets side by side where there is room: the tile
-   widens while it is open */
-.settings:has(.scheme-editor:not(.hidden)) { max-width: 760px; }
+/* the editor's two sets side by side where there is room: My settings'
+   card takes the grid's whole width while it is open */
+@media (min-width: 900px) {
+  .section-grid > .prefs-page:has(.scheme-editor:not(.hidden)) { grid-column: 1 / -1; }
+}
 .scheme-editor h3 { font-size: 1rem; margin: 0 0 8px; }
 .scheme-sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 20px; }
 .scheme-set { border: none; padding: 0; margin: 0; min-width: 0; }
@@ -1410,10 +1433,7 @@ massimo-week-program { display: contents; }
 /* My settings: a row per setting, the switch that keeps it only on this
    device in a column of its own at the right, a band headed "only on this
    device", each row's line running through it; no column where the
-   settings do not follow the user (no-sync). My settings and My profile
-   keep a reading width. */
-.settings.prefs-page, .settings.profile-page, .settings.notify-page { max-width: 640px; }
-.settings.prefs-page:has(.scheme-editor:not(.hidden)) { max-width: 760px; }
+   settings do not follow the user (no-sync). */
 .dev-head, .dev-row, .dev-group { display: grid; grid-template-columns: minmax(0, 1fr) 76px; column-gap: 12px; }
 .no-sync .dev-row, .no-sync .dev-group { grid-template-columns: minmax(0, 1fr); }
 .dev-row, .dev-group { border-top: 1px solid var(--line); }

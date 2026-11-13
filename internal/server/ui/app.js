@@ -871,7 +871,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (isShown("profile") || isShown("prefs") || isShown("notify") || isShown("system")) return true;
+  if (isShown("me") || isShown("system")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -1210,6 +1210,7 @@ function applyLanguage() {
   if (I18N.en) applyI18n(document);
   initHelpSlots();
   pageBar($("system"));
+  pageBar($("me"));
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
@@ -1231,7 +1232,7 @@ function applyLanguage() {
   renderLog();
   if (updState.info) renderUpdate(updState.info);
   if (infoState.store || infoState.config) renderServerInfo();
-  if (isShown("notify")) renderNotify(); // notify.js
+  if (isShown("me")) renderNotify(); // notify.js
   tellWorkerLanguage();
 }
 
@@ -1248,10 +1249,11 @@ async function init() {
   // the header kept at the top; System settings' row there with its
   // sections menu, its cards that fold, back to top
   stickyHeader();
-  const system = $("system");
-  sectionCards(system);
-  pageBar(system);
-  backToTop(system);
+  for (const page of [$("system"), $("me")]) {
+    sectionCards(page);
+    pageBar(page);
+    backToTop(page);
+  }
   initSettings();
   applySettings();
   checkVersion();

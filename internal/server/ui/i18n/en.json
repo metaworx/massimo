@@ -55,11 +55,12 @@
   "nav.logTitle": "Log",
   "nav.settings": "system settings",
   "nav.settingsTitle": "System settings",
-  "nav.user": "who is signed in",
-  "nav.userTitle": "Who is signed in",
-  "nav.userNamed": "Who is signed in: {name}",
+  "nav.user": "personal settings",
+  "nav.userTitle": "Personal settings",
+  "nav.userNamed": "Personal settings of {name}",
   "nav.prefs": "My settings",
   "nav.profile": "My profile",
+  "nav.meTitle": "Personal settings",
   "nav.more": "more pages",
   "nav.moreTitle": "More pages",
   "home.noCube": "No Cube is configured.",
@@ -299,7 +300,7 @@
   "help.button": "help: {label}",
   "help.title": "What does this do?",
 
-  "help.profileName": "The name the 👤 menu and the users list show; your login name stays as it is. Save keeps it.",
+  "help.profileName": "The name the personal page and the users list show; your login name stays as it is. Save keeps it.",
 
   "help.profilePassword": "A password lets you sign in by your name in any browser. It is registered by OPAQUE in this browser, so the server never sees it; a change asks for the current one. Save sets it.",
 

@@ -57,11 +57,12 @@
   "nav.logTitle": "Journal",
   "nav.settings": "réglages du système",
   "nav.settingsTitle": "Réglages du système",
-  "nav.user": "qui est connecté",
-  "nav.userTitle": "Qui est connecté",
-  "nav.userNamed": "Qui est connecté : {name}",
+  "nav.user": "paramètres personnels",
+  "nav.userTitle": "Paramètres personnels",
+  "nav.userNamed": "Paramètres personnels de {name}",
   "nav.prefs": "Mes réglages",
   "nav.profile": "Mon profil",
+  "nav.meTitle": "Paramètres personnels",
   "nav.more": "autres pages",
   "nav.moreTitle": "Autres pages",
   "home.noCube": "Aucun Cube n'est configuré.",
@@ -301,7 +302,7 @@
   "help.button": "aide : {label}",
   "help.title": "À quoi cela sert-il ?",
 
-  "help.profileName": "Le nom que montrent le menu 👤 et la liste des utilisateurs ; votre nom de connexion reste tel quel. Enregistrer le conserve.",
+  "help.profileName": "Le nom que montrent les paramètres personnels et la liste des utilisateurs ; votre nom de connexion reste tel quel. Enregistrer le conserve.",
 
   "help.profilePassword": "Un mot de passe vous permet de vous connecter par votre nom dans n'importe quel navigateur. Il est enregistré par OPAQUE dans ce navigateur, le serveur ne le voit donc jamais ; un changement demande l'actuel. Enregistrer le définit.",
 

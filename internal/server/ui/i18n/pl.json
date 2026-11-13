@@ -58,11 +58,12 @@
   "nav.logTitle": "Dziennik",
   "nav.settings": "ustawienia systemu",
   "nav.settingsTitle": "Ustawienia systemu",
-  "nav.user": "kto jest zalogowany",
-  "nav.userTitle": "Kto jest zalogowany",
-  "nav.userNamed": "Kto jest zalogowany: {name}",
+  "nav.user": "ustawienia osobiste",
+  "nav.userTitle": "Ustawienia osobiste",
+  "nav.userNamed": "Ustawienia osobiste: {name}",
   "nav.prefs": "Moje ustawienia",
   "nav.profile": "Mój profil",
+  "nav.meTitle": "Ustawienia osobiste",
   "nav.more": "więcej stron",
   "nav.moreTitle": "Więcej stron",
   "home.noCube": "Nie skonfigurowano żadnego Cube.",
@@ -306,7 +307,7 @@
   "help.button": "pomoc: {label}",
   "help.title": "Do czego to służy?",
 
-  "help.profileName": "Nazwa, którą pokazują menu 👤 i lista użytkowników; twoja nazwa logowania pozostaje bez zmian. Zapisz ją zachowuje.",
+  "help.profileName": "Nazwa, którą pokazują ustawienia osobiste i lista użytkowników; twoja nazwa logowania pozostaje bez zmian. Zapisz ją zachowuje.",
 
   "help.profilePassword": "Hasło pozwala logować się nazwą w dowolnej przeglądarce. Jest rejestrowane przez OPAQUE w tej przeglądarce, więc serwer nigdy go nie widzi; zmiana wymaga obecnego. Zapisz je ustawia.",
 

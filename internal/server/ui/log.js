@@ -868,26 +868,28 @@ function logCubeChanged() {
   loadLog();
 }
 
-// The pages of the main area: Rooms ("tiles"), the log ("log"), My
-// profile ("profile"), My settings ("prefs"), Notifications ("notify")
-// and System settings ("system"), each with its section and, where it
-// has one, its button in the header; My profile, My settings and
-// Notifications open from the 👤 menu, which is highlighted while one of
-// them is shown, as ☰ is for Log and System
-// settings, which it holds on a narrow screen. The tiles keep their state
-// while hidden. The page shown is in the address (VIEW_HASH), Rooms
-// without one, and the log's range, kind and device after its page
-// (logHash), so that a reload or a link opens it again as chosen and the
-// browser's back and forward move between the pages.
-const VIEW_SECTION = { log: "logview", profile: "profile", prefs: "prefs", notify: "notify", system: "system" };
-const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", system: "view-settings" };
-const VIEW_HASH = { tiles: "", log: "#log", profile: "#profile", prefs: "#prefs", notify: "#notify", system: "#system" };
+// The pages of the main area: Rooms ("tiles"), the log ("log"), the
+// personal settings ("me": My profile, My settings and Notifications as
+// its cards) and System settings ("system"), each with its section and
+// its button in the header; ☰ is highlighted while Log or System
+// settings is shown, which it holds on a narrow screen. The tiles keep
+// their state while hidden. The page shown is in the address
+// (VIEW_HASH), Rooms without one, the personal page at a card by the
+// card's own (CARD_HASH, the addresses of the pages they were), and the
+// log's range, kind and device after its page (logHash), so that a
+// reload or a link opens it again as chosen and the browser's back and
+// forward move between the pages.
+const VIEW_SECTION = { log: "logview", me: "me", system: "system" };
+const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", me: "view-me", system: "view-settings" };
+const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system" };
+const CARD_HASH = { "#profile": "profile", "#prefs": "prefs", "#notify": "notify" };
 let currentView = "tiles";
 
 // viewOfHash is the page an address names, the part before its "?",
-// Rooms for none or another.
+// Rooms for none or another; a card's address names its page.
 function viewOfHash(hash) {
   const page = hash.split("?")[0];
+  if (CARD_HASH[page]) return "me";
   return Object.keys(VIEW_HASH).find((v) => VIEW_HASH[v] && VIEW_HASH[v] === page) || "tiles";
 }
 
@@ -947,14 +949,13 @@ function setAddress(hash, how) {
 function showAddress() {
   const view = viewOfHash(location.hash);
   if (view === "log") readLogHash(location.hash);
-  showView(view, "replace");
+  showView(view, "replace", CARD_HASH[location.hash.split("?")[0]]);
 }
 
 // mayShow reports whether the signed-in user may open a page: System
-// settings with one of its capabilities, My profile as a user.
+// settings with one of its capabilities.
 function mayShow(view) {
   if (view === "system") return hasSystem(); // login.js
-  if (view === "profile") return hasProfile();
   return view in VIEW_BUTTON || view in VIEW_SECTION;
 }
 
@@ -966,14 +967,17 @@ function isShown(view) {
 // showView shows a page, Rooms in place of one the user may not open,
 // puts it into the address as address says (setAddress, a new entry by
 // default; Rooms in place of a page refused), the log with its choices
-// (logHash), and tells the scripts that load what it shows (onView).
-function showView(view, address = "push") {
+// (logHash), the personal page at a card by the card's address, and
+// tells the scripts that load what it shows (onView); the card shown
+// comes into view (showCard), My profile only for a user.
+function showView(view, address = "push", card) {
   if (!mayShow(view)) {
     view = "tiles";
     address = "replace";
   }
+  if (view !== "me" || (card === "profile" && !hasProfile())) card = undefined;
   if (view === "log") fillLogSelects(); // a device the Cube does not have goes before the address takes it
-  setAddress(view === "log" ? logHash() : VIEW_HASH[view], address);
+  setAddress(view === "log" ? logHash() : card ? "#" + card : VIEW_HASH[view], address);
   currentView = view;
   logState.open = view === "log";
   for (const id of ["home-notice", "house", "rooms", "unlisted"]) {
@@ -987,13 +991,13 @@ function showView(view, address = "push") {
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
-  $("user-menu").querySelector("summary").classList.toggle("active", view === "profile" || view === "prefs" || view === "notify");
   $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
   if (view === "log") {
     loadLog();
     logLoadUsers();
   }
   document.dispatchEvent(new CustomEvent("viewshown", { detail: view }));
+  if (card) showCard($(card), true); // components.js
 }
 
 // onView runs fn each time a page is shown, for a script that loads
@@ -1008,14 +1012,12 @@ function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   $("view-log").addEventListener("click", () => showView("log"));
   $("view-settings").addEventListener("click", () => showView("system"));
-  $("menu-profile").addEventListener("click", () => showView("profile"));
-  $("menu-prefs").addEventListener("click", () => showView("prefs"));
+  $("view-me").addEventListener("click", () => showView("me"));
   $("menu-log").addEventListener("click", () => showView("log"));
   $("menu-system").addEventListener("click", () => showView("system"));
   dropdown($("nav-menu"));
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
-  dropdown($("user-menu"));
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
     renderLogClear();

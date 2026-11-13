@@ -12,11 +12,12 @@ from helpers import PANEL_TEXTS, VIEWER, assert_busy, css_hidden, hold, named_bu
 
 def test_settings_open(page, case):
     """My settings holds the page's settings, System settings the
-    server's; each opens alone, named and without a horizontal scroll."""
+    server's; each opens on its own page, named and without a horizontal
+    scroll."""
     show_view(page, "prefs")
     assert page.locator("#prefs #poll-input").is_visible() and page.locator("#prefs .appearance").is_visible(), \
         "My settings: the poll and the appearance"
-    assert page.locator("#system").is_hidden() and page.locator("#profile").is_hidden(), "My settings alone"
+    assert page.locator("#system").is_hidden() and page.locator("#me").is_visible(), "My settings on the personal page"
     named_buttons(page, "My settings")
     assert scroll_width(page) <= case.width, "no horizontal scroll on My settings"
     show_view(page, "system")

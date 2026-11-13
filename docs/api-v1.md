@@ -97,7 +97,7 @@ with a filter box and a clear that only empties the view;
 the tiles keep their state meanwhile.
 The short server version stands next to the brand;
 the Cube selector shows the Cube's name when one is configured.
-My settings, under the header's 👤 menu, has the poll interval (10 s by default;
+My settings, on the personal page the header's 👤 opens, has the poll interval (10 s by default;
 the header is refreshed on it,
 and the rooms as well while the event stream is down;
 the ↻ button in the header runs the same refresh at once, rooms included,
@@ -108,7 +108,7 @@ IP address and radio address, the duty cycle, free slots,
 queued and pending commands and the Cube clock,
 and the tiles show radio addresses and device types),
 and whether the Cube clock is shown in the browser's time zone or the Cube's own;
-the header's 👤 menu says who is signed in and signs out.
+that page says who is signed in and signs out.
 In the tiles a thermometer marks the measured temperature (IS) and a target the
 setpoint (SET);
 AUTO and MANU close an open holiday panel and drop a pending stepper value.

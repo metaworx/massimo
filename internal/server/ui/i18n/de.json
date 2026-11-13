@@ -55,11 +55,12 @@
   "nav.logTitle": "Protokoll",
   "nav.settings": "Systemeinstellungen",
   "nav.settingsTitle": "Systemeinstellungen",
-  "nav.user": "wer angemeldet ist",
-  "nav.userTitle": "Wer angemeldet ist",
-  "nav.userNamed": "Wer angemeldet ist: {name}",
+  "nav.user": "persönliche Einstellungen",
+  "nav.userTitle": "Persönliche Einstellungen",
+  "nav.userNamed": "Persönliche Einstellungen von {name}",
   "nav.prefs": "Meine Einstellungen",
   "nav.profile": "Mein Profil",
+  "nav.meTitle": "Persönliche Einstellungen",
   "nav.more": "weitere Seiten",
   "nav.moreTitle": "Weitere Seiten",
   "home.noCube": "Es ist kein Cube eingerichtet.",
@@ -299,7 +300,7 @@
   "help.button": "Hilfe: {label}",
   "help.title": "Was bewirkt das?",
 
-  "help.profileName": "Der Name, den das 👤-Menü und die Benutzerliste zeigen; dein Anmeldename bleibt, wie er ist. Speichern behält ihn.",
+  "help.profileName": "Der Name, den die persönlichen Einstellungen und die Benutzerliste zeigen; dein Anmeldename bleibt, wie er ist. Speichern behält ihn.",
 
   "help.profilePassword": "Mit einem Passwort meldest du dich in jedem Browser mit deinem Namen an. Es wird per OPAQUE in diesem Browser registriert, der Server sieht es also nie; eine Änderung verlangt das aktuelle. Speichern setzt es.",
 

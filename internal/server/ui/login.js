@@ -131,11 +131,12 @@ function renderOpenBanner() {
   if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
-// renderMe says in the 👤 menu who is signed in, and what Sign out
-// does: a session ends, an API key or the token is only forgotten (Forget
-// key, with a key's icon), and an open server or one without
-// authentication has nothing to end and no profile, so the menu offers
-// My settings alone. The 👤 button's tooltip names the user.
+// renderMe says on the personal page who is signed in, and what Sign
+// out does: a session ends, an API key or the token is only forgotten
+// (Forget key, with a key's icon), and an open server or one without
+// authentication has nothing to end and no profile, so the page has My
+// settings and Notifications alone. The 👤 button's tooltip names the
+// user.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -166,10 +167,11 @@ function renderMe() {
   btn.classList.toggle("hidden", !label);
   // the 👤 button names who is signed in, in its tooltip and to a screen reader
   const who = me && me.user ? (me.user.display_name && me.user.display_name !== me.user.name ? me.user.display_name + " (" + me.user.name + ")" : me.user.name) : "";
-  const sum = $("user-menu-btn");
+  const sum = $("view-me");
   sum.title = who ? t("nav.userNamed", { name: who }) : t("nav.userTitle");
   sum.setAttribute("aria-label", who ? t("nav.userNamed", { name: who }) : t("nav.user"));
-  $("menu-profile").classList.toggle("hidden", !hasProfile());
+  $("profile").classList.toggle("hidden", !hasProfile());
+  pageBar($("me")); // components.js: the sections menu without My profile where it is hidden
   // the own password: Change password, or for a user with keys only Set
   // a password, without the current one it has not
   const named = !!(me && me.mode === "users" && me.user);

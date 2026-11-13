@@ -57,11 +57,12 @@
   "nav.logTitle": "Registro",
   "nav.settings": "impostazioni di sistema",
   "nav.settingsTitle": "Impostazioni di sistema",
-  "nav.user": "chi è connesso",
-  "nav.userTitle": "Chi è connesso",
-  "nav.userNamed": "Chi è connesso: {name}",
+  "nav.user": "impostazioni personali",
+  "nav.userTitle": "Impostazioni personali",
+  "nav.userNamed": "Impostazioni personali di {name}",
   "nav.prefs": "Le mie impostazioni",
   "nav.profile": "Il mio profilo",
+  "nav.meTitle": "Impostazioni personali",
   "nav.more": "altre pagine",
   "nav.moreTitle": "Altre pagine",
   "home.noCube": "Nessun Cube configurato.",
@@ -301,7 +302,7 @@
   "help.button": "aiuto: {label}",
   "help.title": "A cosa serve?",
 
-  "help.profileName": "Il nome che mostrano il menu 👤 e l'elenco degli utenti; il tuo nome di accesso resta com'è. Salva lo conserva.",
+  "help.profileName": "Il nome che mostrano le impostazioni personali e l'elenco degli utenti; il tuo nome di accesso resta com'è. Salva lo conserva.",
 
   "help.profilePassword": "Una password ti permette di accedere con il tuo nome in qualsiasi browser. Viene registrata con OPAQUE in questo browser, quindi il server non la vede mai; una modifica chiede quella attuale. Salva la imposta.",
 

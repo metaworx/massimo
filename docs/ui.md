@@ -14,7 +14,7 @@ which is open from the start once the page has seen the server ask for no key
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
-👤 → Sign out ends it.
+**Sign out** on the personal settings (👤) ends it.
 The card's ☰ sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
@@ -117,22 +117,14 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   the Cube tells it when the server connects, to the minute,
   and the page moves it on from then;
   a clock that was off by 90 s or more says by how much ("3 min ahead").
-- **👤** drops down who is signed in, with the role,
-  or the API key and whose it is;
-  **My profile**, **My settings** and **Notifications**, which open those pages,
-  and **Sign out**, which ends the session, each with its icon;
-  its tooltip names who is signed in, by display name and login.
+- **👤** opens the personal settings (see Personal settings);
+  its tooltip names whose they are, by display name and login.
   The items of **☰** have the icons of their pages.
-  An API key or the server's token is only forgotten in this browser
-  (**Forget key**),
-  and an open server says that it is open to everyone and has nothing to sign out of.
-  Escape, a click outside and a choice close the menu,
-  as they close a room's **⋯**.
-- The three page buttons, a house, a sheet and a cog,
-  switch between **Rooms**, **Log** and **System settings**.
+- The page buttons, a house, a person, a sheet and a cog,
+  switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
 - The page shown is in the address, Rooms without one:
-  `#log`, `#profile` (My profile), `#prefs` (My settings) and `#system`
-  (System settings),
+  `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
+  `#notify`) and `#system` (System settings),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
@@ -387,14 +379,32 @@ A value the page does not know is dropped from the address,
 and so is a device the Cube does not have, once its devices are loaded.
 The filter's text is not in the address.
 
-## My profile
+## Personal settings
 
-👤 → **My profile**, for a user signed in (not on an open server,
+**👤** opens the personal settings, a page built as System settings is:
+its title stays under the header while the page scrolls,
+with who is signed in under it (with the role, or the API key and whose it is),
+**Sign out** at its right end, which ends the session,
+and **Sections** (☰) beside it, which lists the page's cards with their icons
+and brings the one chosen into view.
+An API key or the server's token is only forgotten in this browser
+(**Forget key**, with a key),
+and an open server says that it is open to everyone and has nothing to sign out of.
+The page has three cards, **My profile**, **My settings** and **Notifications**,
+each with its icon in its head, that fold as System settings' do;
+from 900 px they stand two side by side, and My settings takes the whole width
+while its colour editor is open.
+The addresses of the pages they were, `#profile`, `#prefs` and `#notify`,
+open the page at their card.
+
+### My profile
+
+**My profile** is for a user signed in (not on an open server,
 nor with the server's API token).
 Behind the last button of each group below, an ⓘ opens what its buttons do,
 as the settings' ⓘ do:
 
-- **Display name**, the name the 👤 menu and the users list show,
+- **Display name**, the name the personal page and the users list show,
   with **Save**, off while it is the one stored.
 - **Change password**, for a user with a password:
   the own password, with the current one,
@@ -422,9 +432,9 @@ as the settings' ⓘ do:
   comes back refused, saying so.
   The app shows no **Link** buttons, as no provider buttons on its sign-in.
 
-## My settings
+### My settings
 
-👤 → **My settings**, the page's settings:
+**My settings**, the page's settings:
 
 Signed in with a role that has the capability `preferences` (manager,
 operator and viewer by default),
@@ -492,9 +502,9 @@ without the switches.
   A token the file lacks takes the default's value, unknown ones are ignored,
   and a file that is not a scheme says so under the buttons.
 
-## Notifications
+### Notifications
 
-👤 → **Notifications** chooses which events notify you and where,
+**Notifications** chooses which events notify you and where,
 for a user whose role has the capability `preferences` (manager,
 operator and viewer by default);
 a guest, a server without users and the server's API key see a line saying why

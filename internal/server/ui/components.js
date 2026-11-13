@@ -506,14 +506,19 @@ function keepCardInView(card, ms) {
   setTimeout(stop, ms);
 }
 
-// sectionButtons are a button per card of a page, named by the card's
-// data-toc key or else its title, hidden where the card is (its needs-*
-// classes), each bringing its card into view (showCard); data-target is
-// the card's id.
+// sectionButtons are a button per card of a page shown, named by the
+// card's data-toc key or else its title, after the card's icon where it
+// has one (data-icon), hidden where the card is (its needs-* classes),
+// each bringing its card into view (showCard); data-target is the card's
+// id.
 function sectionButtons(page) {
-  return [...page.querySelectorAll(".section-card")].map((card) => {
+  return [...page.querySelectorAll(".section-card:not(.hidden)")].map((card) => {
     const name = card.dataset.toc ? t(card.dataset.toc) : card.querySelector(".section-title").textContent;
     const b = button(name, "toc-link", () => showCard(card));
+    if (card.dataset.icon) {
+      b.textContent = "";
+      b.append(iconEl(card.dataset.icon, "ni"), textEl("span", name));
+    }
     b.dataset.target = card.id;
     for (const c of card.classList) if (c.startsWith("needs-")) b.classList.add(c);
     return b;
