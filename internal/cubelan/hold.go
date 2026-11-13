@@ -63,6 +63,10 @@ type runState struct {
 
 // ending says how a session ended.
 type ending struct {
+	connected bool // the dial succeeded
+	// ours says that our side ended the connection (endedByUs, the
+	// missed polls, the hold's end), so that the Cube may still hold it.
+	ours    bool
 	greeted bool // the connection got its greeting
 	// reported says that the session reported the loss itself, when its
 	// hold began: Run does not report it again.
@@ -75,11 +79,12 @@ type ending struct {
 func (c *Client) Heard() {
 	now := time.Now()
 	c.heardMu.Lock()
-	defer c.heardMu.Unlock()
 	c.lastHeard = now
 	if c.held.Load() && c.heardInHold.IsZero() {
 		c.heardInHold = now
 	}
+	c.heardMu.Unlock()
+	c.noteLink()
 }
 
 // heardTooLong reports whether discovery has heard the Cube for
@@ -102,18 +107,18 @@ func (c *Client) HeldUntil() time.Time {
 }
 
 // beginHold starts holding a lost connection: the loss is reported as
-// Run reports one, the warning first, then Lost, then the event, and
-// the client looks disconnected to its callers.
+// Run reports one, the warning first, then Held and Lost, then the
+// event, and the client looks disconnected to its callers.
 func (c *Client) beginHold(st *runState, err error) {
 	now := time.Now()
 	until := now.Add(c.opts.holdFor())
+	st.lost, st.warned = now, now
+	c.evlog.Warn("cube connection lost", "addr", c.Address(), "error", err, "held_until", until.Format(time.RFC3339))
 	c.heardMu.Lock()
-	c.heardInHold, c.holdUntil = time.Time{}, until
+	c.heardInHold, c.holdUntil, c.lostAt = time.Time{}, until, now
 	c.heardMu.Unlock()
 	c.held.Store(true)
 	c.online.Store(false)
-	st.lost, st.warned = now, now
-	c.evlog.Warn("cube connection lost", "addr", c.Address(), "error", err, "held_until", until.Format(time.RFC3339))
 	c.lost.Store(true)
 	c.emit(Event{Kind: EventDisconnected, Err: err})
 }
@@ -127,6 +132,7 @@ func (c *Client) resumeHold(st *runState) {
 	c.lost.Store(false)
 	st.lost = time.Time{}
 	c.evlog.Info("cube connection re-established", "addr", c.Address(), "down_for", down.Round(time.Second), "held", true)
+	c.noteLink()
 	c.emit(Event{Kind: EventConnected, Cause: CauseLoss, DownFor: down})
 }
 

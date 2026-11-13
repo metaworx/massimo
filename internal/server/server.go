@@ -163,6 +163,9 @@ type Options struct {
 	// it resumes when the network is back (cubelan.Options.Hold): 0 is
 	// cubelan.DefaultHold, a negative value holds nothing.
 	CubeHold time.Duration
+	// cubeOptions, set by a test, changes the options of each Cube's
+	// client before it is made: a short reply timeout, a quick dialer.
+	cubeOptions func(*cubelan.Options)
 	// RefreshInterval is how often each Cube's snapshot is refreshed in
 	// full by reconnecting, so that a write the Cube acknowledged but did
 	// not apply does not leave it wrong until the next restart; 0 never.
@@ -1424,9 +1427,13 @@ type cubeView struct {
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
-	MAC       string         `json:"mac,omitempty"`
-	LastSeen  *time.Time     `json:"last_seen,omitempty"`
-	Connected bool           `json:"connected"`
+	MAC       string     `json:"mac,omitempty"`
+	LastSeen  *time.Time `json:"last_seen,omitempty"`
+	Connected bool       `json:"connected"`
+	// Link says how the server stands with the Cube beyond connected:
+	// a lost connection held open, a Cube that refuses a new one while it
+	// holds the server's old one (stale) or another client's (busy).
+	Link      *cubelan.Link  `json:"link,omitempty"`
 	Firmware  string         `json:"firmware,omitempty"`
 	RFAddress string         `json:"rf_address,omitempty"`
 	Budget    cubelan.Budget `json:"budget"`
@@ -1464,6 +1471,8 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v := cubeView{Serial: rt.cubeSerial(), Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
+	link := rt.client.Link()
+	v.Link = &link
 	v.ProxyListening = s.proxyListening(rt)
 	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {

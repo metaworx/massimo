@@ -1139,6 +1139,7 @@ then every Cube discovery found on the LAN that is not configured:
     "mac": "00:1a:22:0a:0b:0c",
     "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
+    "link": {"state": "connected"},
     "firmware": "1.1.3",
     "rf_address": "0a0104",
     "budget": {"duty_cycle_pct": 4, "free_memory_slots": 50, "updated_at": "2026-11-04T15:28:11+01:00"},
@@ -1197,6 +1198,30 @@ Its row stays in the server's store with its first and latest sighting
 (the latest is written once per server run, or when an answer changes the row),
 so that a restart does not announce it again;
 after a restart it is listed once a run has heard it.
+
+`link` says how the server stands with a configured Cube,
+beyond `connected`,
+with `since` and for a hold `until` where they apply:
+
+- `connected`:
+  a connection is up and its greeting read;
+- `held`:
+  the Cube is lost, its connection held open since the loss,
+  until `until` at the latest,
+  so that it resumes once the network is back (`serve -cube-hold`, README.md);
+- `stale`:
+  the Cube answers discovery from its address,
+  but the server's connections time out, since `since`,
+  after the server's side ended the last one;
+  the Cube still holds that one, as after an outage of the server's network,
+  and lets go after up to about 40 minutes;
+  `POST /api/v1/cubes/{sn}/reboot` frees it at once (below);
+- `busy`:
+  the same signs, the server having left no connection behind;
+  another client holds the Cube, such as the MAX! software,
+  another server or an integration;
+- `offline`:
+  none of these, such as a Cube that answers nothing.
 
 `source` says where a configured Cube's configuration comes from:
 `env` (taken over from the settings file into the store),

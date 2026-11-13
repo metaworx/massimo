@@ -155,6 +155,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 When the Cube chosen is not connected, a notice above the rooms says so,
 naming it by its name and giving its serial:
+first why, where the server knows (its connection held open,
+or the Cube refusing the server, as in System settings → Cubes),
 the address the server tries, when the Cube last sent data
 (or last answered discovery),
 and what to check, a Cube serving one client at a time;
@@ -722,7 +724,13 @@ to the top of the page.
   a table of its facts for everyone who sees the panel
   (address, port, firmware, radio address, the Cube's clock,
   duty cycle, free slots, pending and queued, refreshed while it is open),
-  its connection,
+  its connection, in the head's badge,
+  and above the facts a notice with since when where the server knows why it
+  is not connected (`link` of `docs/api-v1.md`, "GET /api/v1/cubes"):
+  its lost connection held open until a time, so that it carries on when the
+  network is back, the Cube still holding the server's old connection
+  (it lets go after up to about 40 minutes, or a reboot frees it),
+  or the Cube busy with another client;
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),

@@ -74,7 +74,18 @@ function fillCubeFacts(d, c) {
   const facts = { host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
   for (const td of d.querySelectorAll(".cube-info [data-fact]")) td.textContent = facts[td.dataset.fact] || "–";
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
+  fillLinkState(d, c);
   fillProxyState(d, c);
+}
+
+// fillLinkState says above the Cube's facts why it is not connected,
+// where the server knows (linkText, app.js), and since when.
+function fillLinkState(d, c) {
+  const box = d.querySelector(".cube-link-state");
+  if (!box) return;
+  clear(box);
+  const text = linkText(c);
+  if (text) box.appendChild(noticeEl(text, { since: c.link && c.link.since }));
 }
 
 // fillProxyState says under the proxy address where the Cube's proxy
@@ -618,7 +629,9 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
 // nothing, so that a redraw does not redraw the pairing again when the
 // answers come, under what the user is typing there.
 function cubePanel(c) {
-  const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
+  const link = linkState(c); // app.js
+  const linkLabel = link === "connected" || link === "offline" ? t(c.connected ? "cubes.connected" : "cubes.disconnected") : t("link.badge." + link);
+  const badges = [badgeEl(linkLabel, link === "connected" ? "ok" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
   const failing = proxyFailing([c]);
@@ -643,7 +656,7 @@ function cubePanel(c) {
   // fields at the left, the pairing and the hidden devices at the right
   const form = d.querySelector("form.cube-form");
   sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), sum.querySelector(".panel-badges"));
-  sum.after(elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form));
+  sum.after(elem("div", "cube-link-state"), elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form));
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));

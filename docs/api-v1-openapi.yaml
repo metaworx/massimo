@@ -3822,6 +3822,17 @@ components:
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
+        link:
+          type: object
+          description: "How the server stands with a configured Cube beyond connected (docs/api-v1.md, GET /api/v1/cubes)"
+          required: [state]
+          properties:
+            state:
+              type: string
+              enum: [connected, held, stale, busy, offline]
+              description: "held: a lost connection held open; stale: the Cube answers discovery but refuses a new connection while it holds the server's old one; busy: the same, another client holding it"
+            since: {type: string, format: date-time, description: "Since when: the loss of a held connection, the first refused dial"}
+            until: {type: string, format: date-time, description: The hold ends then at the latest}
         firmware: {type: string, example: "1.1.3"}
         rf_address: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}

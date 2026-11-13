@@ -290,3 +290,44 @@ def test_proxy_not_listening(page, case):
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s .cube-proxy-state .notice\")" % PANEL, 5), \
         "the notice gone once the listener listens, the panel open"
+
+
+STALE = {"en": "it still holds the server's old connection", "de": "Er hält noch dessen alte Verbindung"}
+STALE_BADGE = {"en": "old connection", "de": "alte Verbindung"}
+
+
+def test_cube_link_stale(page, case):
+    """A Cube that refuses the server while it holds the server's old
+    connection (link stale, stubbed): the panel's badge says so, the open
+    panel a notice above its facts with since when, and Rooms' notice
+    the same first; the notice goes once the Cube is connected again."""
+    def stale(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["connected"] = False
+                c["link"] = {"state": "stale", "since": "2026-11-13T21:41:24+01:00"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    page.route("**/api/v1/cubes", stale)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s .panel-badges\") && "
+                          "document.querySelector(\"%s .panel-badges\").textContent.includes(%s)"
+                          % (PANEL, PANEL, json.dumps(STALE_BADGE[case.lang])), 5), "the panel's badge"
+        panel, _ = open_panel(page)
+        notice = panel.locator(".cube-link-state .notice")
+        assert notice.count() == 1 and STALE[case.lang] in notice.inner_text(), "the notice above the facts"
+        assert notice.locator(".notice-since").count() == 1, "since when"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
+        panel.locator("summary").click()
+        show_view(page, "tiles")
+        assert wait_until(page, "document.querySelector('#home-notice .home-notice-detail').textContent.includes(%s)"
+                          % json.dumps(STALE[case.lang]), 5), "Rooms' notice says it"
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    show_view(page, "system")
+    assert wait_until(page, "!document.querySelector(\"%s .cube-link-state .notice\")" % PANEL, 5), \
+        "the notice gone once the Cube is connected"
+    show_view(page, "tiles")

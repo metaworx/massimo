@@ -94,6 +94,14 @@ type Client struct {
 	lastHeard   time.Time // discovery last heard the Cube at its address
 	heardInHold time.Time // first heard since the hold began
 	holdUntil   time.Time // the hold ends then at the latest
+	lostAt      time.Time // the held connection was lost then
+	// The link state's record (link.go): whether our side ended the last
+	// connection, the dials that timed out in a row since one and when
+	// the first of them did, and the state last logged.
+	lastEndOurs  bool
+	timeouts     int
+	timeoutSince time.Time
+	linkLogged   LinkState
 
 	addrMu sync.Mutex
 	addr   string        // host:port; "" until known, see SetAddress
@@ -277,6 +285,7 @@ func (c *Client) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		c.noteEnd(end, err)
 		if end.greeted {
 			backoff = c.opts.Backoff
 			if !end.reported {
@@ -396,6 +405,7 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 				} else {
 					c.evlog.Info("cube connection re-established", "addr", c.Address(), "down_for", time.Since(lost).Round(time.Second))
 				}
+				c.noteLink()
 				c.emit(ev)
 			}
 		}
@@ -440,9 +450,9 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 		select {
 		case <-ctx.Done():
 			c.write(cube.CmdQuit)
-			return ending{greeted: greeted.Load(), reported: held}, ctx.Err()
+			return ending{connected: true, ours: true, greeted: greeted.Load(), reported: held}, ctx.Err()
 		case err := <-readErr:
-			return ending{greeted: greeted.Load(), reported: held}, err
+			return ending{connected: true, ours: endedByUs(err), greeted: greeted.Load(), reported: held}, err
 		case <-got:
 			if held && lines.Load() > linesAtHold {
 				// The Cube answered on the held connection: the missed
@@ -457,9 +467,9 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 		case now := <-holdTick:
 			switch {
 			case !now.Before(c.HeldUntil()):
-				return ending{greeted: true, reported: true}, &errHoldEnded{why: fmt.Sprintf("held for %s", hold)}
+				return ending{connected: true, ours: true, greeted: true, reported: true}, &errHoldEnded{why: fmt.Sprintf("held for %s", hold)}
 			case c.heardTooLong(now):
-				return ending{greeted: true, reported: true}, &errHoldEnded{why: fmt.Sprintf("the Cube answered discovery for %s", c.opts.holdHeard())}
+				return ending{connected: true, ours: true, greeted: true, reported: true}, &errHoldEnded{why: fmt.Sprintf("the Cube answered discovery for %s", c.opts.holdHeard())}
 			}
 		case <-probe:
 			if held || !greeted.Load() || !c.probeSilent(conn) {
@@ -501,7 +511,7 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 						startHold(lossErr)
 						continue
 					}
-					return ending{greeted: greeted.Load()}, lossErr
+					return ending{connected: true, ours: true, greeted: greeted.Load()}, lossErr
 				}
 				c.log.Warn("poll failed", "error", err)
 			default:

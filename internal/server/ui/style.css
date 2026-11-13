@@ -650,6 +650,9 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 /* A Cube proxy that does not listen (noticeEl): under the proxy address,
    and in System Info's line of the listener. */
 .cube-proxy-state .notice { margin: -6px 0 12px; overflow-wrap: anywhere; }
+/* Why a Cube is not connected, where the server knows (cubes.js
+   fillLinkState): above its facts. */
+.cube-link-state .notice { margin: 4px 0 12px; overflow-wrap: anywhere; }
 .sys-proxy { overflow-wrap: anywhere; }
 .sys-proxy .notice { margin: 4px 0 6px; }
 .cube-hidden { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 6px; margin-bottom: 12px; }
