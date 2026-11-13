@@ -53,7 +53,7 @@ func putProgram(t *testing.T, url, ifMatch, body string) (int, map[string]any) {
 // one with the current tag goes, a write still on its way counts, and a
 // member's own write changes the room's tag.
 func TestProgramTag(t *testing.T) {
-	fc, ts, _, _ := startRoomsApply(t, nil, 600*time.Millisecond)
+	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{applyAfter: 600 * time.Millisecond, fast: true, slow: true})
 	base := ts.URL + "/api/v1/cubes/KEQ0000100/"
 	room, tag := programWith(t, base+"rooms/2/program")
 	if room["pending"] != false || room["program_consistent"] != true || room["source"] != "0a0204" {
@@ -105,6 +105,12 @@ func TestProgramTag(t *testing.T) {
 	if member == written || room["program_consistent"] != false {
 		t.Fatalf("after a member's write: %s consistent %v", member, room["program_consistent"])
 	}
+	// Each write is confirmed before the next, so that no re-read is in
+	// flight when it is sent (cubelan.ErrBusy).
+	eventually(t, "the member's programme confirmed", func() bool {
+		room, _ = programWith(t, base+"rooms/2/program")
+		return room["pending"] == false
+	})
 	// Without If-Match a write is unconditional.
 	if code, _ := putProgram(t, base+"rooms/2/program", "", monday); code != 200 {
 		t.Fatalf("without If-Match: %d", code)
@@ -115,7 +121,7 @@ func TestProgramTag(t *testing.T) {
 // what changed and the new tag, and of its room's virtual wall
 // thermostat.
 func TestProgramConfigEvents(t *testing.T) {
-	_, ts, _, _ := startRooms(t)
+	_, ts, _, _ := startRoomsOpts(t, roomsOpts{fast: true, slow: true})
 	evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices=all")
 	for i := 0; i < 10; i++ {
 		next(t, evs)

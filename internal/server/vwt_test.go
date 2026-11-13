@@ -23,20 +23,24 @@ import (
 // The server polls often, so that a state the fake is given arrives.
 func startRooms(t *testing.T) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
 	t.Helper()
-	return startRoomsWith(t, nil)
+	return startRoomsOpts(t, roomsOpts{})
 }
 
-// startRoomsWith is startRooms with the fixture's lines changed first.
-func startRoomsWith(t *testing.T, change func([]cube.Message) []cube.Message) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
-	t.Helper()
-	return startRoomsApply(t, change, 0)
+// roomsOpts are startRoomsOpts' choices.
+type roomsOpts struct {
+	change     func([]cube.Message) []cube.Message // the fixture's lines changed first
+	applyAfter time.Duration                       // the fake Cube applies a command this long after its S reply
+	// fast re-reads a written device's configuration within a few tenths
+	// of a second; slow polls every two minutes. A test of several writes
+	// in a row needs neither: a poll or a re-read waiting for its answer
+	// makes a write fail meanwhile (cubelan.ErrBusy).
+	fast, slow bool
 }
 
-// startRoomsApply is startRoomsWith with the fake Cube applying a
-// command applyAfter after its S reply; the server re-reads a written
-// device's configuration within a few tenths of a second.
-func startRoomsApply(t *testing.T, change func([]cube.Message) []cube.Message, applyAfter time.Duration) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
+// startRoomsOpts is startRooms with choices.
+func startRoomsOpts(t *testing.T, o roomsOpts) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
 	t.Helper()
+	change, applyAfter := o.change, o.applyAfter
 	greeting, err := fakecube.RoomsFixture()
 	if err != nil {
 		t.Fatal(err)
@@ -58,8 +62,15 @@ func startRoomsApply(t *testing.T, change func([]cube.Message) []cube.Message, a
 	if err != nil {
 		t.Fatal(err)
 	}
-	follow := []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
-	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: 50 * time.Millisecond,
+	var follow []time.Duration
+	if o.fast {
+		follow = []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
+	}
+	poll := 50 * time.Millisecond
+	if o.slow {
+		poll = 2 * time.Minute
+	}
+	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: poll,
 		FollowUpDelays: follow})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
@@ -263,7 +274,7 @@ func lastRadio(t *testing.T, fc *fakecube.Server) cube.RadioCommand {
 // wall thermostat; its settings the store; it is neither renamed, moved
 // nor deleted.
 func TestVirtualWallThermostatCommands(t *testing.T) {
-	fc, ts, s, st := startRooms(t)
+	fc, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
 	path := "/api/v1/cubes/KEQ0000100/devices/"
 	room := func(rc cube.RadioCommand, cmd byte, id uint8) bool {
 		return rc.Command == cmd && rc.Target.Room && rc.Target.RoomID == id
@@ -345,14 +356,14 @@ func TestVirtualWallThermostatCommands(t *testing.T) {
 // A room takes one wall thermostat: adding or moving a second into it is
 // refused before anything is sent, as the original software refuses it.
 func TestSecondWallThermostatRefused(t *testing.T) {
-	fc, ts, _, _ := startRoomsWith(t, func(lines []cube.Message) []cube.Message {
+	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{slow: true, change: func(lines []cube.Message) []cube.Message {
 		p, err := fakecube.PairingFrom(lines, 0x0a0201, 0x0a0299, "NEQ0000299", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		out := append([]cube.Message(nil), lines[:len(lines)-1]...)
 		return append(out, p.Config, lines[len(lines)-1])
-	})
+	}})
 	before := len(fc.Received())
 	code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0299", `{"room_id":1,"name":"Zweiter"}`)
 	if code != 409 || !strings.Contains(body["error"].(string), "wall thermostat already") {
