@@ -775,3 +775,22 @@ func TestMetadataWithoutTrailingBytes(t *testing.T) {
 		t.Fatalf("built metadata encoded as %x", back)
 	}
 }
+
+// A week programme encodes as the recorded wall thermostat's C line
+// holds it, and decodes back.
+func TestEncodeWeekProgram(t *testing.T) {
+	c, err := ParseConfig("0a010e,zgoBDgMAEP9ORVEwMDAwNTA3KiI9CURIVQhFIEUgRSBFIEUgRSBFIEUgRSBFIEUgREhVCEUgRSBFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgREhUbETMVRRFIEUgRSBFIEUgRSBFIEUgRSBESFRsRMxVFEUgRSBFIEUgRSBFIEUgRSBFIERIVGxEzFUURSBFIEUgRSBFIEUgRSBFIEUgBxgw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := EncodeWeekProgram(c.Wall.WeekProgram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(raw, c.Raw[0x16:0x16+WeekProgramSize]) {
+		t.Fatalf("encoded\n%x\nrecorded\n%x", raw, c.Raw[0x16:0x16+WeekProgramSize])
+	}
+	if _, err := EncodeWeekProgram(WeekProgram{}); err == nil {
+		t.Fatal("an empty programme encoded")
+	}
+}

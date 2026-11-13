@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -373,5 +374,50 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 		if m.Type == 's' || m.Type == 'm' {
 			t.Fatalf("sent %s", m)
 		}
+	}
+}
+
+// The option proxy_virtual is kept per Cube; with it on, the proxy gets
+// a virtual wall thermostat per room whose C line and L entry read as a
+// wall thermostat's, with the room's programme and temperature.
+func TestProxyVirtualOption(t *testing.T) {
+	_, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	rt := s.cubes["keq0000100"]
+	if vs := s.proxyVirtuals(rt); vs != nil {
+		t.Fatalf("off by default: %d", len(vs))
+	}
+	if code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_virtual":true}`); code != 200 || body["proxy_virtual"] != true {
+		t.Fatalf("PUT: %d %v", code, body)
+	}
+	if o, _ := st.CubeOptions(context.Background(), 1); !o.ProxyVirtual {
+		t.Fatal("not kept in the store")
+	}
+	vs := s.proxyVirtuals(rt)
+	if len(vs) != 3 {
+		t.Fatalf("%d virtual wall thermostats", len(vs))
+	}
+	for _, v := range vs {
+		cfg, err := cube.ParseConfig(v.RF.String() + "," + base64.StdEncoding.EncodeToString(v.Config))
+		if err != nil || cfg.Type != cube.DeviceWallThermostat || cfg.RoomID != v.Room.ID || cfg.Serial != v.Serial {
+			t.Fatalf("room %d's C line: %+v %v", v.Room.ID, cfg, err)
+		}
+		states, err := cube.ParseDeviceList(base64.StdEncoding.EncodeToString(v.Entry), map[cube.RFAddress]cube.DeviceType{v.RF: cube.DeviceWallThermostat})
+		if err != nil || len(states) != 1 {
+			t.Fatalf("room %d's L entry: %v", v.Room.ID, err)
+		}
+		switch v.Room.ID {
+		case 1:
+			if v.Wall != 0x0a0201 || states[0].ActualTemp == nil || *states[0].ActualTemp != 21.4 || len(cfg.Wall.WeekProgram[cube.Monday]) == 0 {
+				t.Fatalf("room 1: %+v %+v", v, states[0])
+			}
+		case 2:
+			if v.Wall != 0 || v.Member != 0x0a0204 || *states[0].ActualTemp != 19.5 {
+				t.Fatalf("room 2: %+v %+v", v, states[0])
+			}
+		}
+	}
+	do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_virtual":false}`)
+	if s.proxyVirtuals(rt) != nil {
+		t.Fatal("still on")
 	}
 }

@@ -131,6 +131,41 @@ the server's copy forgets the devices it deleted,
 as after `DELETE /api/v1/cubes/{sn}/devices/{rf}`,
 so that the original software's deletions show at once.
 
+## Virtual wall thermostats
+
+With the Cube's option `proxy_virtual` on (the Cube's settings in the web UI,
+or `PUT /api/v1/cubes/{sn}`), the proxy shows its clients the API's view `virtual`:
+every room has one wall thermostat, its virtual one
+(docs/api-v1.md, "The virtual wall thermostat"),
+and the real wall thermostats are left out, as hidden devices are.
+The original software allows one wall thermostat per room and shows a room
+by it, so it shows the room's temperature as Massimo's other clients do.
+A client sees the change at its next connection.
+
+Nothing of a virtual wall thermostat reaches the Cube:
+
+- The greeting's room and device list names it in its room,
+  its C line has a wall thermostat's layout with the room's presets and week programme,
+  and its entry in the L line has its state; `c:` and `l:` answer the same.
+- A metadata write is stripped of the virtual wall thermostats,
+  and the real wall thermostats are put back.
+  One the proxy cannot read, such as a part after the first of a multi-part write,
+  is not sent while the option is on; the client gets `A:`,
+  and the log a `proxy_warning`.
+- A set-temperature or week programme command to a virtual wall thermostat
+  goes to its room, as a real wall thermostat's reaches its room.
+  Settings, display, key lock, links and group go to the room's real wall
+  thermostat; where there is none, the proxy answers with `S:` and sends nothing.
+  A link with a virtual wall thermostat is a link with the room's real one,
+  or answered the same way.
+- A `t:` that deletes a virtual wall thermostat is answered and leaves it.
+
+Pairing a real wall thermostat through the original software is refused by it,
+since every room shows one: pair it through Massimo's web UI,
+or with the option off.
+The option is off until the test with the original software has passed
+(AP RoomApi, Block 8).
+
 ## Pairing
 
 `n:<seconds>` from a client starts pairing on the server,

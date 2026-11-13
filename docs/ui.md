@@ -621,7 +621,9 @@ to the top of the page.
   the address the Cube answers discovery from, shown in grey),
   **Follow the address the Cube answers discovery from**,
   **Proxy address** (the address of this server other programs connect to for this Cube;
-  empty: :62910 when it is the only Cube) and **Serial in discovery replies**.
+  empty: :62910 when it is the only Cube), **Serial in discovery replies**
+  and **Show proxy clients the virtual wall thermostat of every room**
+  (docs/proxy.md, "Virtual wall thermostats").
   **Hidden devices** lists the devices hidden besides those of room 255,
   each with its name, serial number and radio address and **Show again**;
   **Hide** takes a radio address,

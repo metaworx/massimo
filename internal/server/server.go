@@ -376,6 +376,9 @@ type runtime struct {
 	// programs holds the week programmes written and not yet confirmed
 	// by the devices' configurations (etag.go).
 	programs pendingPrograms
+	// proxyVirtual is the Cube's option proxy_virtual: its proxy shows
+	// clients the virtual wall thermostats (proxy_virtual.go).
+	proxyVirtual atomic.Bool
 
 	subs   map[chan event]*subscriber // the stream subscribers (resume.go)
 	subsMu sync.Mutex
@@ -1367,11 +1370,14 @@ type cubeView struct {
 	// The configuration PUT /api/v1/cubes/{sn} changes: whether the
 	// address follows discovery, the proxy listener's address and the
 	// serial of its discovery replies, and the hidden radio addresses.
-	ConfiguredAddress string   `json:"configured_address"` // "" follows discovery; Address is where it connects now
-	FollowDiscovery   bool     `json:"follow_discovery"`
-	ProxyAddress      string   `json:"proxy_address,omitempty"`
-	ProxySerial       string   `json:"proxy_serial,omitempty"`
-	Hidden            []string `json:"hidden"`
+	ConfiguredAddress string `json:"configured_address"` // "" follows discovery; Address is where it connects now
+	FollowDiscovery   bool   `json:"follow_discovery"`
+	ProxyAddress      string `json:"proxy_address,omitempty"`
+	ProxySerial       string `json:"proxy_serial,omitempty"`
+	// ProxyVirtual is the option that makes the proxy show the virtual
+	// wall thermostats.
+	ProxyVirtual bool     `json:"proxy_virtual"`
+	Hidden       []string `json:"hidden"`
 	// ProxyListening lists the addresses the Cube's proxy listens on now.
 	ProxyListening []string `json:"proxy_listening,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
@@ -1411,7 +1417,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	b := rt.client.Budget()
 	cfg := rt.config()
 	v := cubeView{Serial: rt.cubeSerial(), Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
-		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
+		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
 	v.ProxyListening = s.proxyListening(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {

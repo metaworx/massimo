@@ -473,6 +473,7 @@
   "cubes.listening": "Il proxy è in ascolto su {addr}.",
   "cubes.proxySerial": "Numero di serie nelle risposte alla ricerca",
   "cubes.proxySerialHint": "vuoto: quello del Cube",
+  "cubes.proxyVirtual": "Mostra ai client del proxy il termostato a parete virtuale di ogni stanza",
   "cubes.hidden": "Dispositivi nascosti",
   "cubes.hiddenNone": "Nessuno, oltre a quelli della stanza 255.",
   "cubes.hide": "Nascondi",

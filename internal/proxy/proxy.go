@@ -64,6 +64,10 @@ type Options struct {
 	// Hidden at every use, so that the list can change while the proxy
 	// runs.
 	HiddenList func() []cube.RFAddress
+	// Virtual, when set, lists the rooms' virtual wall thermostats that
+	// clients see in place of the real wall thermostats (virtual.go);
+	// none while the Cube's setting proxy_virtual is off.
+	Virtual func() []Virtual
 	// ShowHidden shows the hidden devices and room 255 instead.
 	ShowHidden bool
 	// OnWrite, when set, is called after each radio write (s:) of a
@@ -322,11 +326,16 @@ func (p *Proxy) serve(ctx context.Context, conn net.Conn) {
 func (p *Proxy) greeting() []cube.Message {
 	snap := p.opts.Client.Snapshot()
 	md := snap.Metadata()
-	lines := snap.LinesExcluding(p.hidden(md), p.hiddenRooms(md))
+	vs := p.virtuals()
+	skip, skipRooms := p.clientHidden(md, vs), p.hiddenRooms(md)
+	lines := snap.LinesExcluding(skip, skipRooms)
 	for i, m := range lines {
 		if m.Type == 'H' {
 			lines[i] = p.hello(snap.Hello())
 		}
+	}
+	if len(vs) > 0 && md != nil {
+		lines = p.virtualGreeting(lines, md, skip, skipRooms, vs)
 	}
 	return lines
 }
@@ -357,15 +366,22 @@ func (p *Proxy) hello(h *cube.Hello) cube.Message {
 // message has type 0 when nothing is to be written.
 func (p *Proxy) local(m cube.Message) (cube.Message, bool) {
 	snap := p.opts.Client.Snapshot()
-	hidden := p.hidden(snap.Metadata())
+	vs := p.virtuals()
+	hidden := p.clientHidden(snap.Metadata(), vs)
 	switch m.Type {
 	case 'l':
 		if l, ok := snap.DeviceListLineExcluding(hidden); ok {
+			if len(vs) > 0 {
+				l = withVirtualEntries(l, vs)
+			}
 			return l, true
 		}
 		return cube.Message{}, true
 	case 'c':
 		rf, err := cube.ParseRFAddress(strings.TrimSpace(m.Data))
+		if v, ok := vs[rf]; ok && err == nil {
+			return virtualConfigLine(v), true
+		}
 		if err != nil || hidden[rf] {
 			return cube.Message{}, true
 		}
@@ -386,8 +402,17 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 			return []cube.Message{{Type: 'S', Data: fmt.Sprintf("%02x,1,%02x", b.DutyCyclePct, b.FreeMemorySlots)}}
 		}
 	}
+	vs := p.virtuals()
+	if m.Type == 's' && len(vs) > 0 {
+		routed, send := p.routeVirtual(m, vs, remote)
+		if !send {
+			b := p.opts.Client.Budget()
+			return []cube.Message{{Type: 'S', Data: fmt.Sprintf("%02x,0,%02x", b.DutyCyclePct, b.FreeMemorySlots)}}
+		}
+		m = routed
+	}
 	lines := []cube.Message{m}
-	if m.Type == 't' && !p.opts.ShowHidden {
+	if m.Type == 't' && (!p.opts.ShowHidden || len(vs) > 0) {
 		kept, ok := p.withoutHidden(m, remote)
 		if !ok {
 			// The Cube acknowledges t: with an empty A line per device.
@@ -395,8 +420,13 @@ func (p *Proxy) passthrough(ctx context.Context, m cube.Message, remote string) 
 		}
 		lines = []cube.Message{kept}
 	}
-	if m.Type == 'm' && !p.opts.ShowHidden {
-		if merged, ok := p.withHidden(m); ok {
+	if m.Type == 'm' && (!p.opts.ShowHidden || len(vs) > 0) {
+		merged, ok, refuse := p.withHidden(m, vs, remote)
+		if refuse {
+			// The client expects the Cube's A; nothing was written.
+			return []cube.Message{{Type: 'A'}}
+		}
+		if ok {
 			lines = merged
 		}
 	}
@@ -545,7 +575,11 @@ func (p *Proxy) withoutHidden(m cube.Message, remote string) (cube.Message, bool
 			"proxy: delete command not understood, refused", "remote", remote, "command", m.String(), "error", err)
 		return cube.Message{}, false
 	}
-	hidden := p.hidden(p.opts.Client.Snapshot().Metadata())
+	vs := p.virtuals()
+	hidden := p.clientHidden(p.opts.Client.Snapshot().Metadata(), vs)
+	for rf := range vs {
+		hidden[rf] = true // a virtual wall thermostat is no device to delete
+	}
 	var kept []cube.RFAddress
 	var refused []string
 	for _, rf := range addrs {
@@ -568,40 +602,61 @@ func (p *Proxy) withoutHidden(m cube.Message, remote string) (cube.Message, bool
 
 // withHidden puts the hidden devices, and their rooms, back into a
 // client's metadata write, so that a client that never saw them cannot
-// remove them from the Cube. The result may need several m: parts.
-func (p *Proxy) withHidden(m cube.Message) ([]cube.Message, bool) {
+// remove them from the Cube; with virtual wall thermostats (vs) it takes
+// them out and puts the real wall thermostats back. The result may need
+// several m: parts. refuse is set for a write that must not reach the
+// Cube: one that may hold a virtual wall thermostat the proxy cannot
+// take out.
+func (p *Proxy) withHidden(m cube.Message, vs map[cube.RFAddress]Virtual, remote string) (lines []cube.Message, ok, refuse bool) {
 	idx, data, ok := strings.Cut(m.Data, ",")
 	if !ok || idx != "00" {
+		if len(vs) > 0 {
+			p.refuseMetadata("metadata_multipart", remote, nil)
+			return nil, false, true
+		}
 		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Summary: map[string]any{"what": "metadata_multipart"}},
 			"proxy: multi-part metadata write passed through unchanged; hidden devices may be lost", "index", idx)
-		return nil, false
+		return nil, false, false
 	}
 	raw, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
-		return nil, false
+		if len(vs) > 0 {
+			p.refuseMetadata("metadata_not_understood", remote, err)
+			return nil, false, true
+		}
+		return nil, false, false
 	}
 	md, err := cube.DecodeMetadata(raw)
 	if err != nil {
+		if len(vs) > 0 {
+			p.refuseMetadata("metadata_not_understood", remote, err)
+			return nil, false, true
+		}
 		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Summary: map[string]any{"what": "metadata_not_understood"}, Err: err},
 			"proxy: metadata write not understood, passed through unchanged", "error", err)
-		return nil, false
+		return nil, false, false
 	}
 	cur := p.opts.Client.Snapshot().Metadata()
 	if cur == nil {
-		return nil, false
+		return nil, false, len(vs) > 0
 	}
-	added := cubeio.KeepHidden(md, cur, p.hidden(cur))
-	if added == 0 {
-		return nil, false
+	stripped := stripVirtual(md, vs)
+	added := cubeio.KeepHidden(md, cur, p.clientHidden(cur, vs))
+	if added == 0 && stripped == 0 {
+		return nil, false, false
 	}
 	cmds, err := cube.WriteMetadataCommands(md)
 	if err != nil {
+		if len(vs) > 0 {
+			p.refuseMetadata("metadata_not_encoded", remote, err)
+			return nil, false, true
+		}
 		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Summary: map[string]any{"what": "metadata_not_encoded"}, Err: err},
 			"proxy: metadata write with hidden devices could not be encoded, passed through unchanged", "error", err)
-		return nil, false
+		return nil, false, false
 	}
-	p.log.Info("proxy: hidden devices put back into a client's metadata write", "devices", added)
-	return cmds, true
+	p.log.Info("proxy: hidden devices put back into a client's metadata write", "devices", added, "virtual_taken_out", stripped)
+	return cmds, true, false
 }
 
 // hidden is the set of devices left out for clients.
