@@ -222,8 +222,9 @@ body.signed-out #notify-toast { display: none !important; }
 .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
 /* Cubes found on the LAN but not configured, counted under the header: a
-   link to System settings → Cubes, or the count alone without cubes */
-.cube-found { margin: 8px 0 0; font-size: 0.9rem; max-width: 100%; color: var(--warn); }
+   link to System settings → Cubes, or the count alone without cubes; in
+   the text's colour, as the warning's has too little contrast on the page */
+.cube-found { margin: 8px 0 0; font-size: 0.9rem; max-width: 100%; }
 .cube-found-link {
   padding: 0;
   border: none;
