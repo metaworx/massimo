@@ -367,7 +367,9 @@ docker run --rm -v "$work/site/apt:/site1:ro" -v "$work/upgrade/apt:/site2:ro" -
 # box on alpha asks for devel: the source names devel and the rolling
 # keyring, and apt installs the newer package; back to alpha, the source
 # goes back and nothing is downgraded; a channel without a suite here
-# (nightly) fails apt-get update, and the source is put back.
+# (nightly) fails apt-get update, and the source is put back. The box
+# starts from a keyring package older than the rolling key, one without
+# its file: the helper upgrades the keyring package from alpha first.
 mkdir -p "$work/sw-alpha" "$work/sw-devel"
 cp "${debs[0]}" "$work/sw-alpha/"
 cp "$work/from/massimo_${new}_amd64.deb" "$work/sw-devel/"
@@ -375,16 +377,28 @@ publish --out "$work/switch" --key "$key" --from "$work/sw-alpha" --channel alph
 publish --out "$work/switch-devel" --key "$rolling_key" --from "$work/sw-devel" --channel devel >/dev/null
 cp -R "$work/switch-devel/apt/dists/devel" "$work/switch/apt/dists/"
 cp -R "$work/switch-devel/apt/pool/devel" "$work/switch/apt/pool/"
-chmod -R a+rX "$work/switch"
-docker run --rm -v "$work/switch/apt:/repo:ro" -e OLD="$old" -e NEW="$new" "$image" bash -euo pipefail -c '
+# devel's keyring package too, as build.sh assembles every suite's pool:
+# the helper upgrades it from devel once it follows that suite.
+cp "$work/switch-devel/apt/pool/keyring/"*.deb "$work/switch/apt/pool/keyring/"
+dpkg-deb -R "$work/switch/apt/massimo-archive-keyring.deb" "$work/old-keyring"
+rm "$work/old-keyring/usr/share/keyrings/massimo-rolling-archive-keyring.gpg"
+sed -i '/massimo-rolling-archive-keyring/d' "$work/old-keyring/DEBIAN/md5sums"
+sed -i "s/^Version: .*/Version: 0.1/" "$work/old-keyring/DEBIAN/control"
+mkdir -p "$work/old"
+dpkg-deb --root-owner-group -b "$work/old-keyring" "$work/old/massimo-archive-keyring_0.1_all.deb" >/dev/null
+chmod -R a+rX "$work/switch" "$work/old"
+docker run --rm -v "$work/switch/apt:/repo:ro" -v "$work/old:/old:ro" -e OLD="$old" -e NEW="$new" "$image" bash -euo pipefail -c '
 	fail() { echo "FAIL: $*" >&2; exit 1; }
 	version() { dpkg-query -W --showformat="\${Version}" massimo; }
 	source=/etc/apt/sources.list.d/massimo.sources
 	suite() { sed -n "s/^Suites: *//p" "$source"; }
 	signed() { sed -n "s/^Signed-By: *//p" "$source"; }
 	st() { cat /var/lib/massimo-update/status.json; }
+	keyring() { dpkg-query -W --showformat="\${Version}" massimo-archive-keyring; }
+	rolling=/usr/share/keyrings/massimo-rolling-archive-keyring.gpg
 	export DEBIAN_FRONTEND=noninteractive
-	apt-get -qq install -y /repo/massimo-archive-keyring.deb >/dev/null
+	apt-get -qq install -y /old/massimo-archive-keyring_0.1_all.deb >/dev/null
+	[ ! -e "$rolling" ] || fail "the old keyring package carries the rolling key"
 	sed "s#^URIs: .*#URIs: file:///repo#" /repo/massimo.sources >"$source"
 	apt-get -qq update
 	apt-get -qq install -y massimo >/dev/null
@@ -394,6 +408,8 @@ docker run --rm -v "$work/switch/apt:/repo:ro" -e OLD="$old" -e NEW="$new" "$ima
 	ask() { echo "$1" >/var/lib/massimo/update-request; $helper >/tmp/out 2>&1 || true; }
 
 	ask devel
+	[ -e "$rolling" ] || fail "the helper did not upgrade the keyring package ($(keyring)): $(st)"
+	dpkg --compare-versions "$(keyring)" gt 0.1 || fail "the keyring package is still $(keyring)"
 	[ "$(suite)" = devel ] || fail "the source names $(suite), not devel: $(st)"
 	[ "$(signed)" = /usr/share/keyrings/massimo-rolling-archive-keyring.gpg ] || fail "devel signed by $(signed)"
 	[ "$(version)" = "$NEW" ] || fail "on devel the helper left $(version), not $NEW: $(st)"

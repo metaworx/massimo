@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,10 +25,14 @@ import (
 // fakeApt stands in for apt-get and dpkg-query: it records each command
 // line and answers from the script, one reply per apt-get call in turn;
 // dpkg-query answers with before until apt-get install ran, then after.
+// The keyring package's install alone answers with keyring, and where
+// givesKey is set brings the rolling keyring.
 type fakeApt struct {
 	before, after string
 	updates       []aptReply // apt-get update, in turn; the last one repeats
 	install       aptReply
+	keyring       aptReply
+	givesKey      bool
 	calls         []string
 	installed     bool
 }
@@ -54,6 +59,13 @@ func (f *fakeApt) run(_ context.Context, name string, args ...string) ([]byte, e
 			}
 		}
 		return []byte(r.out), r.err
+	case name == "apt-get" && slices.Equal(args, aptKeyringArgs):
+		if f.keyring.err == nil && f.givesKey {
+			if err := os.WriteFile(aptRollingKeyring, []byte("key"), 0o644); err != nil {
+				return nil, err
+			}
+		}
+		return []byte(f.keyring.out), f.keyring.err
 	case name == "apt-get" && args[0] == "install":
 		if f.install.err == nil {
 			f.installed = true
@@ -123,7 +135,7 @@ func TestAptUpdateRunsTheFixedCommands(t *testing.T) {
 	want := []string{
 		"dpkg-query -W --showformat=${Version} massimo",
 		"apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/massimo.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0",
-		"apt-get install -y -q --only-upgrade -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 massimo",
+		"apt-get install -y -q --only-upgrade -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 massimo massimo-archive-keyring",
 		"dpkg-query -W --showformat=${Version} massimo",
 	}
 	if !reflect.DeepEqual(f.calls, want) {
@@ -464,6 +476,37 @@ func TestAptUpdateSwitchesTheSuite(t *testing.T) {
 	}
 }
 
+// TestAptUpdateFetchesTheRollingKey: a box on alpha whose keyring
+// package predates the rolling key asks for devel; the helper fetches
+// alpha, upgrades the keyring package from there, which brings the key,
+// then switches and installs as before.
+func TestAptUpdateFetchesTheRollingKey(t *testing.T) {
+	f := &fakeApt{before: "0.15.0~alpha.1", after: "0.15.0~alpha.1+59.ge9a86b3", givesKey: true}
+	req, status := aptSwitchHelper(t, f, aptSnippet, "devel", false)
+	if err := runUpdate([]string{"-request", req, "-status", status}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSource(t); !strings.Contains(got, "Suites: devel") || !strings.Contains(got, install.AptRollingKeyring) {
+		t.Fatalf("source\n%s", got)
+	}
+	if st := readStatus(t, status); st.State != "done" || st.Channel != "devel" {
+		t.Fatalf("status %+v", st)
+	}
+	// alpha fetched and the keyring upgraded, then devel fetched and both
+	// packages upgraded
+	var apt []string
+	for _, c := range f.calls {
+		if strings.HasPrefix(c, "apt-get ") {
+			apt = append(apt, c)
+		}
+	}
+	line := func(args []string) string { return "apt-get " + strings.Join(args, " ") }
+	want := []string{line(aptUpdateArgs), line(aptKeyringArgs), line(aptUpdateArgs), line(aptInstallArgs)}
+	if !reflect.DeepEqual(apt, want) {
+		t.Fatalf("apt ran\n%s\nwant\n%s", strings.Join(apt, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 // TestAptUpdateSwitchFailures: the source stays as it was where the switch
 // cannot be made, and goes back where apt cannot fetch the new suite.
 func TestAptUpdateSwitchFailures(t *testing.T) {
@@ -472,16 +515,20 @@ func TestAptUpdateSwitchFailures(t *testing.T) {
 		name, source, channel string
 		rollingKey            bool
 		updates               []aptReply
+		keyring               aptReply
 		want                  string
 		ran                   bool
 	}{
-		{"not the README's", two, "beta", true, nil, "set its Suites: line to beta by hand", false},
-		{"no rolling key", aptSnippet, "nightly", false, nil, "does not carry", false},
-		{"fetch fails", aptSnippet, "beta", true, []aptReply{{"E: The repository 'x beta InRelease' does not have a Release file.", errors.New("exit status 100")}},
+		{"not the README's", two, "beta", true, nil, aptReply{}, "set its Suites: line to beta by hand", false},
+		// the suite alpha has no keyring package with the rolling key yet
+		{"no rolling key", aptSnippet, "nightly", false, nil, aptReply{}, "even upgraded from the suite alpha", true},
+		{"keyring upgrade fails", aptSnippet, "devel", false, nil, aptReply{"E: Sub-process /usr/bin/dpkg returned an error code (1)", errors.New("exit status 100")},
+			"apt-get install massimo-archive-keyring: exit status 100", true},
+		{"fetch fails", aptSnippet, "beta", true, []aptReply{{"E: The repository 'x beta InRelease' does not have a Release file.", errors.New("exit status 100")}}, aptReply{},
 			"is back on the suite alpha", true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			f := &fakeApt{before: "0.14.0~alpha.1", updates: c.updates}
+			f := &fakeApt{before: "0.14.0~alpha.1", updates: c.updates, keyring: c.keyring}
 			req, status := aptSwitchHelper(t, f, c.source, c.channel, c.rollingKey)
 			err := runUpdate([]string{"-request", req, "-status", status})
 			if err == nil || !strings.Contains(err.Error(), c.want) {

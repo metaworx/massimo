@@ -433,10 +433,12 @@ and runs apt for the massimo source of "The apt repository" alone,
 apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/massimo.sources \
   -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
 apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confdef \
-  -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 massimo
+  -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=120 \
+  massimo massimo-archive-keyring
 ```
 
-so it follows that source's suite and does what `apt upgrade` does for massimo,
+so it follows that source's suite and does what `apt upgrade` does for massimo
+and its keyring package, a new or rotated key arriving as any update does,
 the other sources' lists left as they are.
 Where the request names another update channel than the source's suite,
 chosen in the web UI (the setting `update.channel`),
@@ -453,9 +455,11 @@ one entry, one suite, the project's repository or a local `file:` one,
 and `Signed-By:` a file of `massimo-archive-keyring`;
 any other is left to its owner,
 and the helper's last run names the line to edit.
-A rolling suite needs the keyring package's rolling key,
-which a box has once it has upgraded `massimo-archive-keyring`
-to a version that carries both keys.
+A rolling suite needs the keyring package's rolling key:
+where the box's `massimo-archive-keyring` predates it,
+the helper first fetches the source's current suite
+and upgrades the keyring package from there,
+and switches once the key is in place.
 While another apt run holds apt's lock (`unattended-upgrades` among them)
 it waits up to two minutes for each command,
 since `apt-get update` does not wait itself,
