@@ -1568,7 +1568,8 @@ which is how MAX! treats setpoints.
 A device outside any room is addressed directly.
 A boost is the set-temperature command with mode 3, as a button at a device starts it;
 the command carries the setpoint the device has, which the devices ignore.
-Seen on hardware on 2026-11-13: both thermostats of a room showed `boost` within a minute
+Seen on hardware on 2026-11-13: both thermostats of a room showed `boost` within a minute,
+and returned by themselves to the mode they had after their boost time
 (docs/portal-protocol.md).
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
