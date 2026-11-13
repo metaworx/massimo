@@ -570,6 +570,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .pair-device-form input[type="text"], .pair-device-form select { min-width: 0; max-width: 100%; }
 .device .pair-device-form { margin-top: 8px; }
 .device .confirm-box { margin-top: 8px; }
+.device .vwt-settings { margin-top: 8px; }
 .unlisted-msg { margin: 0; padding: 0 14px 12px; }
 
 /* appearance: mode and colour scheme (theme.js), the scheme editor */

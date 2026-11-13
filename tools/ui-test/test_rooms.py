@@ -64,6 +64,12 @@ def test_stale_and_expert(page, case):
         for (const k of Object.keys(d.received || {})) d.received[k] = iso;
         updateDevice(d);
       }
+      // The room's virtual wall thermostat, as the server makes it stale
+      // when every source of its temperature is.
+      const v = JSON.parse(JSON.stringify(state.rooms[0].vwt));
+      v.stale = true;
+      for (const k of Object.keys(v.received || {})) v.received[k] = iso;
+      updateDevice(v);
     }""")
     tile = page.locator(".room").first
     note = tile.locator(".stale-note")
@@ -147,3 +153,27 @@ def test_a_switch_point_takes_a_full_time(page, case):
     finally:
         page.unroute("**/rooms/*/program")
     tile.locator(".config-tabs .close").click()
+
+
+def test_virtual_wall_thermostat(page, case):
+    """The tile's temperature is the room's virtual wall thermostat's;
+    expert mode lists it in the device list, with its settings, and
+    outside expert mode it is not shown."""
+    room = page.evaluate("() => { const r = state.rooms[0]; return {id: r.id, vwt: r.vwt, real: r.devices.some((d) => d.virtual)}; }")
+    assert room["vwt"] and room["vwt"]["virtual"], "the room has its virtual wall thermostat"
+    assert not room["real"], "the room's devices are the real ones"
+    tile = page.locator(".room").first
+    actual = (room["vwt"].get("state") or {}).get("actual_temp")
+    if actual is not None:
+        shown = tile.locator(".temp-is").text_content().replace(",", ".")
+        assert ("%.1f" % actual) in shown, f"the tile shows the room's temperature {actual} ({shown!r})"
+    tile.locator(".room-name-btn").click()
+    page.wait_for_selector(".room .device", timeout=5000)
+    assert tile.locator(".device.virtual").is_hidden(), "not shown outside expert mode"
+    page.evaluate("() => { state.settings.expert = true; applySettings(); }")
+    virtual = tile.locator(".device.virtual")
+    assert virtual.is_visible(), "listed in expert mode"
+    assert wait_until(page, "document.querySelector('.room .device.virtual select[name=temp_method]').value === 'median'", 5), "its setting loaded"
+    assert virtual.locator("input[name=rf_address]").get_attribute("placeholder") == room["vwt"]["rf_address"], "its address as the placeholder"
+    named_buttons(page, "the virtual wall thermostat")
+    page.evaluate("() => { state.settings.expert = false; applySettings(); }")
