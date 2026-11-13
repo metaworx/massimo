@@ -175,6 +175,7 @@ type Options struct {
 	Queue                engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
+	// One that cannot listen is tried again until it does.
 	Proxy []ProxyListener
 	// ShowHidden shows the hidden devices (those of cube.HiddenRoom and
 	// of the Hidden lists) everywhere instead of hiding them.
@@ -245,6 +246,12 @@ type Options struct {
 	// tests; nil for push.Sender's defaults.
 	pushClient *http.Client
 	pushRetry  []time.Duration
+	// proxyRetry is the first and the longest wait between a proxy
+	// listener's tries, for the tests; zero for 1 s and 30 s.
+	proxyRetry [2]time.Duration
+	// proxyListen opens a proxy listener in place of net.Listen, for
+	// the tests.
+	proxyListen func(addr string) (net.Listener, error)
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and

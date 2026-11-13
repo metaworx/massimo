@@ -24,6 +24,21 @@ or `-sn <serial>` restricts the server to one Cube.
 Discovery is answered only for a listener on port 62910,
 since a discovery reply carries no port.
 
+A listener that cannot listen is tried again until it does:
+an address the host does not carry yet,
+such as a second address that is added later or that the network manager
+brings up after `serve` starts, or a port another program still holds.
+The first try is at the start, or when the proxy address is set;
+the next after a second, the wait doubling up to 30 seconds.
+`serve` logs `proxy listener not started` at Error with the reason
+the first time and whenever the reason changes,
+each further try only at Debug,
+and `cube proxy listening` once it listens, with the number of tries it took.
+A listener that fails while it listens, which is rare,
+logs `proxy listener failed` and is tried again the same way.
+Until it listens it is neither among the Cube's `proxy_listening`
+nor in the discovery replies.
+
 ## Several Cubes on one host
 
 A discovery reply carries no address either:

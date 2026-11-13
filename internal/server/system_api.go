@@ -124,7 +124,7 @@ type listener struct {
 	api  bool
 }
 
-// listeners are the API's listener and the Cube proxies' running now.
+// listeners are the API's listener and the Cube proxies' listening now.
 func (s *Server) listeners() []listener {
 	var out []listener
 	s.mu.RLock()
@@ -138,6 +138,9 @@ func (s *Server) listeners() []listener {
 	}
 	s.proxyMu.Lock()
 	for _, pr := range s.proxies {
+		if !pr.listening {
+			continue
+		}
 		if l, ok := parseListener(pr.pl.Addr); ok {
 			out = append(out, l)
 		}
