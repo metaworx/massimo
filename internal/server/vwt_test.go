@@ -393,6 +393,7 @@ func TestBoostOverTheAir(t *testing.T) {
 			t.Fatalf("%s sent %s, want %s", path, last, want)
 		}
 	}
+}
 
 // The option proxy_virtual is kept per Cube; with it on, the proxy gets
 // a virtual wall thermostat per room whose C line and L entry read as a
