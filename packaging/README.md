@@ -1414,3 +1414,10 @@ kept here because they cost time to learn.
   which is what `MASSIMO_GITHUB_TOKEN` is for.
 - For a sudoers line with a command list,
   check with `sudo -n <allowed command>`, not `sudo -n true`.
+- A Cube's proxy address must be an address of the host.
+  One the host takes on after `serve` starts,
+  a second address added by hand or brought up late by the network manager,
+  is picked up within 30 s,
+  since a listener that cannot listen is tried again (docs/proxy.md);
+  until then the Cube's panel and System Info say why it does not listen.
+  Before that (seen on a Pi on 2026-11-13) it stayed down until `serve` restarted.
