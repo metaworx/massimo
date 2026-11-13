@@ -1,4 +1,4 @@
-# AP SiteOnly v1.0: Site changes deploy alone
+# AP SiteOnly v1.1: Site changes deploy alone
 
 ## TL;DR
 
@@ -9,6 +9,8 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 - `site` = every changed path in `[ci] untested` or `[ci] site`, none shipped
 - `[ci] site` in `GUIDELINES/config.ini`: `docs/**`, `README.md`, `CONTRIBUTING.md`;
   the OpenAPI file included (D64-C)
+- v1.1: the site's own pages in `packaging/site/` too, by name, and no longer
+  shipped (D66-A, D67-A); `build.sh` and `index.html` stay code (the apt test)
 - Site job: runs on `site=true` as well
 - push to `main`: Release → devel build → Site → a new **Deploy site** job,
   after All tests passed, calling `site.yml`
@@ -25,6 +27,7 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 1. What to test answers `site`; the Site job runs on it; `[ci] site` in `config.ini`
 2. The Deploy site job for a site-only push to `main`
 3. CI.md section 2, the CHANGELOG fragment, checked against real commits
+4. `packaging/site/`'s pages in `[ci] site` and out of `project.shipped`
 
 ## Discussion
 
@@ -50,6 +53,20 @@ the gate, D62 to D64 here):
 - **D64-C:** `docs/api-v1-openapi.yaml` is a site document like the rest
   ("if any code actually changes, then the code trigger will be fired
   anyway"). Not A, code; not B, only `go test ./internal/server`.
+
+**v1.1** (`PLAN++ D66-A D67-A`, 2026-11-13): the owner asked why the pull
+request `feat(site): The version line sits under the header` (#212), which changes
+`packaging/site/site.py`, `doc.html.in` and `site.css` and a fragment,
+answered `code=true`: is `packaging/site` not site-only?
+
+- **D66-A:** the site's pages leave `project.shipped`, as
+  `:!packaging/site/<file>` exclusions, so the gate's shipped guard stays as
+  it is. A change to them alone owes no CHANGELOG bullet any more.
+  Not B, keep them shipped and drop the guard from the site answer.
+- **D67-A:** `site.py`, `doc.html.in`, `docs.js`, `site.css` and
+  `privacy.html`, listed by name: a new file is code until it is listed.
+  `build.sh` and `index.html` stay code: the Debian package job's apt test
+  builds the site from them. Not B, all of `packaging/site/**`.
 
 ## Analysis
 
@@ -95,6 +112,21 @@ with `site=true` once All tests passed has succeeded, with `contents: read`,
 `pages: write`, `id-token: write`; the `github-pages` environment admits
 `main`. A pull request never deploys.
 
+**`packaging/site/` (v1.1).** `build.sh` makes the site; the Site job runs
+it with `--no-apt`, `site.yml` with the apt repository, and
+`packaging/apt/test.sh` (`make apt-test`, the Debian package job) with
+`--apt`, `--apt-index`, the rolling suites and `newest`, always `--no-docs`.
+With `--no-docs` it renders `index.html` (the `{{SUITES}}` line the test
+checks) and copies `site.css` and `privacy.html`, which the test compares
+byte for byte with their source, whatever they hold; `site.py`,
+`doc.html.in` and `docs.js` make the docs, which only the Site job builds.
+So the apt test reads `build.sh` and `index.html` alone; the other five are
+the Site job's. `project.shipped` names `packaging/**`, and the gate
+answers code for any shipped path; the five leave it by name, as
+`:!packaging/site/site.py` and so on, plain exclusions, `*` not needed.
+`changelog.sh update-contract` renders the list into the contract, and
+`AGENTS.md` and `GUIDELINES/README.md` are generated from it.
+
 **Not changed.** The nightly build may take a site-only commit; its code is
 that of the commit before, which was tested (CI.md section 2). Pages keeps
 the first deploy of a commit, so a nightly whose head `main` already
@@ -139,6 +171,22 @@ to `main` shows Guidelines, Site and Deploy site alone.
 **Verification:** `changelog.sh check`; the guidelines' `check` over the
 branch; reflow of CI.md.
 
+### Block 4: The site's pages (v1.1)
+
+1. `GUIDELINES/config.ini`: `[ci] site` adds the five files;
+   `project.shipped` excludes them; its comment says the site's pages are
+   not shipped.
+2. `changelog.sh update-contract`, then the generated `AGENTS.md` and
+   `GUIDELINES/README.md`.
+3. `GUIDELINES/project/CI.md` section 2 (v1.48.0): the five files, why
+   `build.sh` and `index.html` stay code, and that they are not shipped.
+4. `CHANGELOG.d/Changed/claude-site-pages.md`.
+
+**Verification:** the gate's step, run as in Block 1 with this `config.ini`
+on pull request #212's head merged onto its base (`site=true`), and on a
+change to `packaging/site/build.sh` and to `index.html` (`code=true`);
+`fingerprint.sh check`; `changelog.sh check`; the guidelines' `check`.
+
 ## Proposed commit message
 
 ```
@@ -163,6 +211,24 @@ File-revision-v1: GUIDELINES/project/CI.md::v1.47.0::2026-11-13::2::a change to 
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+Block 4:
+
+```
+perf(pipeline): The site's own pages are the site's documents too
+
+For AP SiteOnly v1.1, Block 4, with the owner's D66-A and D67-A: a change to the site's pages under packaging/site/ ran the whole suite, since packaging/** is shipped and not in [ci] site; site.py, doc.html.in, docs.js, site.css and privacy.html are now the site's documents and not shipped, while build.sh and index.html, which the apt test builds the site from, stay code.
+
+Key changes:
+- config.ini: the five files in [ci] site, and excluded from project.shipped
+- the contract's shipped list, regenerated, and AGENTS.md and GUIDELINES/README.md with it
+- CI.md section 2 names them and why build.sh and index.html stay code
+
+File-revision-v1: GUIDELINES/project/CI.md::v1.48.0::2026-11-13::2::the site's own pages are the site's documents too
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-13): first revision, D62-A, D63-A, D64-C.
+- v1.1 (2026-11-13): Block 4, `packaging/site/`'s pages, D66-A, D67-A;
+  Blocks 1 to 3 merged as pull request #199.
