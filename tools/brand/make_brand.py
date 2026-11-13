@@ -437,18 +437,40 @@ def _rgb(colour: str) -> tuple[int, int, int]:
     return tuple(int(colour[i : i + 2], 16) for i in (1, 3, 5))
 
 
+BLEND_STEPS = 8  # in-between shades for each pair of colours: 7
+TRANSPARENT = 255  # the GIF's transparent index
+
+
+def gif_palette(colours: list[str]) -> list[tuple[int, int, int]]:
+    """A GIF's colours: the drawing's own, and seven shades between each
+    pair of them, so that where two meet inside the mark the edge is
+    smoothed as in the WebP - the same in every frame, so nothing flickers."""
+    pure = list(dict.fromkeys(_rgb(c) for c in colours))
+    blends = [
+        tuple(round(a[k] + (b[k] - a[k]) * t / BLEND_STEPS) for k in range(3))
+        for i, a in enumerate(pure)
+        for b in pure[i + 1 :]
+        for t in range(1, BLEND_STEPS)
+    ]
+    return pure + blends
+
+
 def gif_frame(img: Image.Image, colours: list[str]) -> Image.Image:
-    """A GIF frame: GIF knows only on or off, so every pixel is one of the
-    drawing's own pure colours or transparent - no background blended into
-    the edges, so no fringe on any page."""
-    pal = [v for c in colours for v in _rgb(c)]
-    n = len(colours)
-    palimg = Image.new("P", (1, 1))
-    palimg.putpalette(pal + pal[:3] * (256 - n))  # the rest repeat the first: no stray nearest
-    frame = img.convert("RGB").quantize(palette=palimg, dither=Image.Dither.NONE)
+    """A GIF frame. GIF knows transparency only on or off: a pixel the
+    drawing half covers at the outline is either one of its colours or
+    transparent, so no background is blended into the outline on any page.
+    Inside the mark, its colours and their shades smooth the edges."""
+    pal = [v for c in gif_palette(colours) for v in c]
+    n = len(pal) // 3
+    # The transparent index gets a colour of its own, far from every one of
+    # the drawing's, that no pixel is mapped to; the unused ones repeat the
+    # first colour.
+    lookup = Image.new("P", (1, 1))
+    lookup.putpalette(pal + pal[:3] * (TRANSPARENT - n) + [255, 0, 255])
+    frame = img.convert("RGB").quantize(palette=lookup, dither=Image.Dither.NONE)
     frame.putpalette(pal + [0, 0, 0] * (256 - n))
-    frame.paste(n, mask=img.getchannel("A").point(lambda v: 255 if v < 128 else 0))
-    frame.info["transparency"] = n
+    frame.paste(TRANSPARENT, mask=img.getchannel("A").point(lambda v: 255 if v < 128 else 0))
+    frame.info["transparency"] = TRANSPARENT
     return frame
 
 
