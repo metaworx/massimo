@@ -6,7 +6,8 @@ name: Site
 # a key, and deployed to GitHub Pages.
 #
 # release.yml calls it once per run, after the release or the rolling
-# build. A release hands over the apt repository it has just signed, as
+# build, and ci.yml's Deploy site for a push to main of the site's
+# documents alone, which builds and releases nothing. A release hands over the apt repository it has just signed, as
 # the artifact named by apt-artifact; every other run (a push to main, the
 # nightly build) takes the signed index of the newest release that carries
 # one (massimo-apt-index.tar.gz), so that the docs follow main without a

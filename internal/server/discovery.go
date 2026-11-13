@@ -151,17 +151,36 @@ func (s *Server) configured(serial string) *runtime {
 }
 
 // ownAnswer reports whether an answer is one of this server's proxies':
-// from one of this host's addresses, with a serial the server answers
-// discovery with.
+// from one of this host's addresses with a configured Cube's serial, or,
+// from any address, with a serial of its own that one of its proxies
+// answers with (proxySerial), unless a Cube gave it (cubelan.KindCube).
+// A configured Cube's serial from elsewhere is left in: the Cube itself,
+// or another server's proxy of it, which the Cube may follow.
 func (s *Server) ownAnswer(d cubelan.Discovered, local map[string]bool) bool {
-	if !local[d.IP.String()] {
+	if s.configured(d.Serial) != nil {
+		return local[d.IP.String()]
+	}
+	return d.Kind != cubelan.KindCube && s.proxySerial(d.Serial)
+}
+
+// proxySerial reports whether one of this server's proxies answers
+// discovery with serial: a proxy running now, whenever it started (a Cube
+// added or changed through the API has one serve did not start with), or
+// a configured Cube's proxy, which may be starting again.
+func (s *Server) proxySerial(serial string) bool {
+	if serial == "" {
 		return false
 	}
-	if s.configured(d.Serial) != nil {
-		return true
+	s.proxyMu.Lock()
+	for _, pr := range s.proxies {
+		if strings.EqualFold(pr.pl.DiscoverySerial, serial) {
+			s.proxyMu.Unlock()
+			return true
+		}
 	}
-	for _, pl := range s.opts.Proxy {
-		if strings.EqualFold(pl.DiscoverySerial, d.Serial) {
+	s.proxyMu.Unlock()
+	for _, rt := range s.runtimes() {
+		if strings.EqualFold(rt.config().ProxySerial, serial) {
 			return true
 		}
 	}

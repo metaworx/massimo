@@ -238,6 +238,76 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	}
 }
 
+// foundSerials are the serials a discovery run found, configured or not.
+func foundSerials(t *testing.T, ts *httptest.Server) []string {
+	t.Helper()
+	_, out := postDiscovery(t, ts)
+	found, _ := out["found"].([]any)
+	var serials []string
+	for _, f := range found {
+		serials = append(serials, f.(map[string]any)["serial"].(string))
+	}
+	return serials
+}
+
+// A proxy started after the server, as one of a Cube added or changed
+// through the API is (startCubeProxy), answers discovery with a serial of
+// its own, which no configured Cube has: the server's own answer, never a
+// Cube found.
+func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
+	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	own := freeUDP(t, "127.0.0.1")
+	tcp, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyAddr := tcp.Addr().String()
+	tcp.Close()
+	ts, s := startDiscovering(t, Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()}})
+	eventually(t, "the cube", func() bool {
+		var c cubeView
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
+	})
+	if !s.startProxy(ProxyListener{Serial: "KEQ0000100", Addr: proxyAddr, Discovery: true, DiscoverySerial: "KEQ0000999"}) {
+		t.Fatal("the proxy did not start")
+	}
+	if got := foundSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000000" {
+		t.Fatalf("found %v, want the other Cube alone", got)
+	}
+}
+
+// A proxy's answer with the serial a configured Cube's proxy answers
+// with is this server's from any address, as through NAT or from a
+// container; a Cube's own answer with it is not.
+func TestDiscoveryLeavesOutItsProxySerialFromAnywhere(t *testing.T) {
+	atProxy, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000999", 0x0a0b0c)
+	if err != nil {
+		t.Skip(err)
+	}
+	defer atProxy.Close()
+	atProxy.SetIdentifyOnly(true)
+	mac := func(ip net.IP) string {
+		if ip.String() == "127.0.0.3" {
+			return "02:00:00:00:00:03"
+		}
+		return ""
+	}
+	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", ProxySerial: "KEQ0000999"}}, LookupMAC: mac,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atProxy.Addr()}})
+	if got := foundSerials(t, ts); len(got) != 0 {
+		t.Fatalf("found %v, want none", got)
+	}
+	// A Cube, which answers N and c as well, is never a proxy's answer.
+	atProxy.SetIdentifyOnly(false)
+	if got := foundSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000999" {
+		t.Fatalf("found %v, want the Cube KEQ0000999", got)
+	}
+}
+
 func TestDiscoveryWithoutThePort(t *testing.T) {
 	taken, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
