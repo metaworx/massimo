@@ -63,8 +63,12 @@ type Client struct {
 	conn     net.Conn
 	connAddr string // the address conn was dialled at
 	pending  *pendingReply
-	writeMu  sync.Mutex
-	budget   budgetTracker
+	// turn, of capacity 1, is held by the Send whose command waits for
+	// its reply, from before the write until Send returns: one command
+	// at a time, as the Cube answers them.
+	turn    chan struct{}
+	writeMu sync.Mutex
+	budget  budgetTracker
 	// greeted is closed, and replaced, whenever a greeting is complete.
 	greeted chan struct{}
 	// reconnecting marks a connection closed on purpose by Reconnect.
@@ -97,7 +101,9 @@ type pendingReply struct {
 // Errors returned by Send.
 var (
 	ErrNotConnected = errors.New("cubelan: not connected")
-	ErrBusy         = errors.New("cubelan: another command is waiting for its reply")
+	// ErrBusy is the poll's: it finds another command waiting for its
+	// reply and sends nothing. Send itself waits its turn.
+	ErrBusy = errors.New("cubelan: another command is waiting for its reply")
 )
 
 // replyTimeout is Send's error for a command the Cube did not answer
@@ -150,7 +156,7 @@ func New(opts Options) *Client {
 		evlog = slogx.AtDebug(opts.Logger)
 	}
 	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evlog: evlog, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
-		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1)}
+		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1), turn: make(chan struct{}, 1)}
 	if opts.Addr != "" {
 		c.SetAddress(opts.Addr)
 	}
@@ -373,14 +379,16 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		case err := <-readErr:
 			return greeted.Load(), err
 		case <-poll:
-			_, err := c.Send(ctx, cube.CmdList)
+			_, err := c.trySend(ctx, cube.CmdList)
 			var timeout *replyTimeout
 			switch {
 			case err == nil:
 				missed = 0
 			case errors.Is(err, ErrBusy):
 				// Another command waits for its reply, which tells the
-				// same; nothing is counted.
+				// same: trySend sent nothing, and nothing is counted. The
+				// poll does not wait its turn, so that the loop stays free
+				// for the context and a read error.
 			case errors.As(err, &timeout) && c.Inclusion().Active:
 				// While pairing runs, a poll the Cube leaves unanswered
 				// counts nothing: whether the Cube answers l: then is
@@ -533,22 +541,48 @@ func replies(m cube.Message) int {
 
 // Send writes a command and waits for its reply, the last of them for a
 // t: that deletes several devices. Only one command can be in flight at
-// a time, which matches how the Cube behaves. An L or C reply is in the
-// snapshot, its events emitted, when Send returns it.
+// a time, which matches how the Cube behaves: while another waits for
+// its reply, Send waits for it first, as long as ctx allows. The reply
+// timeout counts from the write. An L or C reply is in the snapshot,
+// its events emitted, when Send returns it.
 func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error) {
+	return c.send(ctx, m, true)
+}
+
+// trySend is Send for the poll: while another command waits for its
+// reply it returns ErrBusy at once, and the session loop goes on.
+func (c *Client) trySend(ctx context.Context, m cube.Message) (cube.Message, error) {
+	return c.send(ctx, m, false)
+}
+
+func (c *Client) send(ctx context.Context, m cube.Message, wait bool) (cube.Message, error) {
 	want := replyType(m.Type)
 	if want == 0 {
 		return cube.Message{}, c.write(m)
 	}
-	p := &pendingReply{want: want, left: replies(m), ch: make(chan cube.Message, 1)}
-	c.mu.Lock()
-	if c.conn == nil {
-		c.mu.Unlock()
+	if !c.isConnected() {
 		return cube.Message{}, ErrNotConnected
 	}
-	if c.pending != nil {
+	select {
+	case c.turn <- struct{}{}:
+	default:
+		if !wait {
+			return cube.Message{}, ErrBusy
+		}
+		select {
+		case c.turn <- struct{}{}:
+		case <-ctx.Done():
+			return cube.Message{}, ctx.Err()
+		}
+	}
+	defer func() { <-c.turn }()
+	// While the turn is held, pending is nil or this Send's: only the
+	// holder sets it.
+	p := &pendingReply{want: want, left: replies(m), ch: make(chan cube.Message, 1)}
+	c.mu.Lock()
+	if c.conn == nil { // dropped while this Send waited its turn
 		c.mu.Unlock()
-		return cube.Message{}, ErrBusy
+		return cube.Message{}, ErrNotConnected
 	}
 	c.pending = p
 	c.mu.Unlock()
@@ -570,6 +604,14 @@ func (c *Client) Send(ctx context.Context, m cube.Message) (cube.Message, error)
 		c.clearPending(p)
 		return cube.Message{}, ctx.Err()
 	}
+}
+
+// isConnected reports whether a connection is open, its greeting
+// complete or not.
+func (c *Client) isConnected() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.conn != nil
 }
 
 func (c *Client) clearPending(p *pendingReply) {
