@@ -364,6 +364,9 @@ type runtime struct {
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
 	last map[cube.RFAddress]*view.State
+	// vwt is the rooms' uids and settings, and each room's virtual wall
+	// thermostat as its last event had it (vwt.go).
+	vwt vwtState
 
 	subs   map[chan event]*subscriber // the stream subscribers (resume.go)
 	subsMu sync.Mutex
@@ -486,6 +489,11 @@ type event struct {
 	// audit marks an event only a user with audit sees (the log's
 	// visibility audit).
 	audit bool
+	// virtual marks an event of a virtual wall thermostat, wallRoom one
+	// whose room has a real wall thermostat, and realWall an event of a
+	// real wall thermostat in a room: the stream's view (?devices=) says
+	// which of them a subscriber gets (vwt.go).
+	virtual, wallRoom, realWall bool
 	// seq is the event's number on the Cube's stream, its id there
 	// (resume.go); 0 for an event the stream did not publish.
 	seq uint64
@@ -810,6 +818,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
 				rt.bk.touch() // the configuration may have changed (backups.go)
 			}
+			if e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventMetadata {
+				s.syncRooms(ctx, rt) // the rooms' uids (vwt.go)
+			}
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
 			}
@@ -818,6 +829,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				ev.Device = e.Device.String()
 				snap := rt.client.Snapshot()
 				ev.Source, ev.Serial = "device", snap.Serial(e.Device)
+				ev.realWall = realWall(snap, e.Device)
 				if c := snap.Config(e.Device); c != nil && c.Type == cube.DeviceCube {
 					ev.Source = "cube"
 					if sn := rt.cubeSerial(); sn != "" {
@@ -873,6 +885,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			rt.subsMu.Unlock()
 			for _, a := range after {
 				rt.emit(a)
+			}
+			switch e.Kind {
+			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
+				s.publishVWTs(rt, ev.Command)
 			}
 		}
 	}
@@ -1400,20 +1416,14 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
 	v := s.summary(rt)
-	v.RoomList = s.rooms(rt)
+	v.RoomList = s.roomsOf(rt, kind)
 	writeJSON(w, http.StatusOK, v)
 	return nil
-}
-
-// rooms is the room list of a Cube as the API shows it.
-func (s *Server) rooms(rt *runtime) []view.Room {
-	return view.Rooms(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
-}
-
-// devices is the device list of a Cube as the API shows it.
-func (s *Server) devices(rt *runtime) []view.Device {
-	return view.Devices(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
 }
 
 func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
@@ -1421,7 +1431,11 @@ func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, s.rooms(rt))
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, s.roomsOf(rt, kind))
 	return nil
 }
 
@@ -1430,7 +1444,11 @@ func (s *Server) getDevices(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, s.devices(rt))
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, s.devicesOf(rt, kind))
 	return nil
 }
 
@@ -1438,6 +1456,12 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		writeJSON(w, http.StatusOK, s.virtualDetail(rt, room))
+		return nil
+	} else if roomAlias.MatchString(r.PathValue("rf")) {
+		return fail(http.StatusNotFound, "no room %s", strings.TrimPrefix(strings.ToLower(r.PathValue("rf")), "room-"))
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -1669,9 +1693,13 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusNotImplemented, "streaming not supported")
 	}
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
 	ch := make(chan event, 64)
 	p := principalOf(r)
-	sub := &subscriber{user: p.userID(), audit: p.has("audit"), gone: make(chan struct{})}
+	sub := &subscriber{user: p.userID(), audit: p.has("audit"), kind: kind, gone: make(chan struct{})}
 	// The last id the client read: the browser's own retry sends the
 	// header, a client that opens a new stream (the web UI, with a fresh
 	// ticket) the parameter; the header is the newer of the two.
@@ -1709,7 +1737,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 		}
 		// Current state first, so a client needs no separate fetch; the
 		// last of it carries the newest id, where a reconnection resumes.
-		devs := s.devices(rt)
+		devs := s.devicesOf(rt, kind)
 		for i, d := range devs {
 			id := ""
 			if i == len(devs)-1 {

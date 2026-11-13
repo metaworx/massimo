@@ -716,7 +716,7 @@ async function loadTimeZone(serial) {
 async function loadRooms() {
   if (!state.serial) return;
   const serial = state.serial;
-  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms"), api("GET", base() + "/devices")]);
+  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms?devices=real"), api("GET", base() + "/devices?devices=real")]);
   state.rooms = rooms || [];
   state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
   state.roomsOf = serial;
@@ -1020,7 +1020,7 @@ async function connectEvents() {
   if (gen !== eventsGen) return; // another connect or close came first
   const serial = state.serial;
   const resume = eventsLast && eventsLast.serial === serial ? eventsLast.id : "";
-  const es = new EventSource(base() + "/events?ticket=" + encodeURIComponent(ticket) +
+  const es = new EventSource(base() + "/events?devices=real&ticket=" + encodeURIComponent(ticket) +
     (resume ? "&last_event_id=" + encodeURIComponent(resume) : ""));
   state.events = es;
   // on adds a listener that first notes the event's id for the next stream.

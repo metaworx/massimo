@@ -37,3 +37,32 @@ func TestStatusFromSnapshot(t *testing.T) {
 		}
 	}
 }
+
+// A room's line carries its temperature: the wall thermostat's, else the
+// radiator thermostats' median.
+func TestStatusRoomTemperature(t *testing.T) {
+	lines, err := fakecube.RoomsFixture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := cubelan.SnapshotFromLines(lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := statusFromSnapshot(snap, cubelan.Budget{}, nil)
+	want := map[uint8]float64{1: 21.4, 2: 19.5}
+	for _, r := range rep.Rooms {
+		w, ok := want[r.ID]
+		switch {
+		case ok && (r.ActualTemp == nil || *r.ActualTemp != w):
+			t.Errorf("room %d: %v, want %.1f", r.ID, r.ActualTemp, w)
+		case !ok && r.ActualTemp != nil:
+			t.Errorf("room %d without a thermostat: %v", r.ID, *r.ActualTemp)
+		}
+		for _, d := range r.Devices {
+			if d.Virtual {
+				t.Errorf("room %d lists its virtual wall thermostat", r.ID)
+			}
+		}
+	}
+}

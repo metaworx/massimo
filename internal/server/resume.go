@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // The event stream's ids and its replay (docs/api-v1.md, "GET …/events").
@@ -30,6 +32,8 @@ const replaySize = 1024
 // must end.
 type subscriber struct {
 	user int64
+	// kind is the stream's view of the devices (?devices=).
+	kind view.Kind
 	// audit says the subscriber may see the events only a user with
 	// audit sees (sign-ins, lockouts).
 	audit bool
@@ -39,7 +43,23 @@ type subscriber struct {
 // sees reports whether the subscriber gets an event published for user
 // (0 for every subscriber).
 func (sub *subscriber) sees(ev event, user int64) bool {
-	return (user == 0 || sub.user == user) && (!ev.audit || sub.audit)
+	return (user == 0 || sub.user == user) && (!ev.audit || sub.audit) && sub.shows(ev)
+}
+
+// shows reports whether the stream's view shows the device an event is
+// of: a virtual wall thermostat's or a real wall thermostat's.
+func (sub *subscriber) shows(ev event) bool {
+	kind := sub.kind
+	if kind == "" {
+		kind = view.KindDefault
+	}
+	switch {
+	case ev.virtual:
+		return view.Shown(kind, ev.wallRoom)
+	case ev.realWall:
+		return kind != view.KindVirtual
+	}
+	return true
 }
 
 // published is an event in the replay ring, with the user it is for (0

@@ -119,6 +119,13 @@ type State struct {
 	LinkError  bool        `json:"link_error"`
 	// PanelLocked is the device's key lock ("LoC" on the display).
 	PanelLocked bool `json:"panel_locked,omitempty"`
+	// Consistent is a virtual wall thermostat's alone: false while the
+	// room's thermostats disagree on mode, setpoint or until.
+	Consistent *bool `json:"consistent,omitempty"`
+
+	// windowOnly marks a virtual wall thermostat's state in a room
+	// without a reported thermostat: it holds the window alone.
+	windowOnly bool
 }
 
 // StateOf is the live state of a device, or nil while the Cube holds no
@@ -141,6 +148,11 @@ type Device struct {
 	// Unlisted marks a device the Cube holds a configuration or state
 	// for that is not in its room and device list.
 	Unlisted bool `json:"unlisted,omitempty"`
+	// Virtual marks a room's virtual wall thermostat (vwt.go), which the
+	// server computes and which is no device of the Cube's.
+	Virtual bool `json:"virtual,omitempty"`
+	// RoomUID is a virtual wall thermostat's room's uid.
+	RoomUID string `json:"room_uid,omitempty"`
 	// Reported is true when the Cube holds state for the device, that
 	// is, the device has transmitted since the Cube's last restart.
 	Reported bool   `json:"reported"`
@@ -160,6 +172,9 @@ type Device struct {
 	// values may be old. Shutter contacts and eco buttons transmit only
 	// on events and are never stale.
 	Stale bool `json:"stale,omitempty"`
+	// Sources is a virtual wall thermostat's alone: the radio addresses
+	// its actual_temp and its mode came from.
+	Sources map[string][]string `json:"sources,omitempty"`
 }
 
 // StaleAfter is how long a thermostat's entry may stay unchanged before
@@ -232,6 +247,9 @@ func Devices(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration) []Devic
 type Room struct {
 	ID   uint8  `json:"id"`
 	Name string `json:"name"`
+	// UID is the room's uid in the server's store, kept for the room's
+	// life; empty where the server has none.
+	UID string `json:"room_uid,omitempty"`
 	// Ready is true when every member of the room has reported since the
 	// Cube's last restart; the Cube discards room commands otherwise.
 	Ready bool `json:"ready"`

@@ -100,7 +100,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		t.Fatalf("cube %+v", c)
 	}
 	var devs []view.Device
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices?devices=real", &devs)
 	if len(devs) != 6 || devs[0].Name == "" {
 		t.Fatalf("devices %+v", devs)
 	}

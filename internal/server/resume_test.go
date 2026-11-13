@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 // sseEvent is an event as a stream sends it.
@@ -27,6 +29,19 @@ func readStream(t *testing.T, ts *httptest.Server, header, param string) <-chan 
 	if param != "" {
 		url += "?last_event_id=" + param
 	}
+	return readStreamFrom(t, url, header)
+}
+
+// readStreamURL opens the event stream at url.
+func readStreamURL(t *testing.T, url string) <-chan sseEvent {
+	t.Helper()
+	return readStreamFrom(t, url, "")
+}
+
+// readStreamFrom opens an event stream, with the header naming the last
+// id where given.
+func readStreamFrom(t *testing.T, url, header string) <-chan sseEvent {
+	t.Helper()
 	req, _ := http.NewRequest("GET", url, nil)
 	if header != "" {
 		req.Header.Set("Last-Event-ID", header)
@@ -136,7 +151,7 @@ func seqOf(t *testing.T, id string) uint64 {
 func TestStreamResumes(t *testing.T) {
 	_, ts, s := start(t, "")
 	rt := s.cubes["keq0000100"]
-	devices := len(s.devices(rt))
+	devices := len(s.devicesOf(rt, view.KindDefault))
 	first := readStream(t, ts, "", "")
 	head := burst(t, first, devices)
 	for i := 1; i <= 3; i++ {
@@ -183,7 +198,7 @@ func TestStreamResumes(t *testing.T) {
 func TestStreamResyncs(t *testing.T) {
 	_, ts, s := start(t, "")
 	rt := s.cubes["keq0000100"]
-	devices := len(s.devices(rt))
+	devices := len(s.devicesOf(rt, view.KindDefault))
 	head := burst(t, readStream(t, ts, "", ""), devices)
 	for i := 0; i < replaySize+2; i++ {
 		mark(rt, i)
@@ -249,7 +264,7 @@ func TestStreamOfASlowClientEnds(t *testing.T) {
 	}
 
 	evs := readStream(t, ts, "", "")
-	burst(t, evs, len(s.devices(rt)))
+	burst(t, evs, len(s.devicesOf(rt, view.KindDefault)))
 	rt.subsMu.Lock()
 	for ch, sub := range rt.subs {
 		delete(rt.subs, ch)

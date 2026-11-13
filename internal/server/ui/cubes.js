@@ -57,7 +57,7 @@ function deviceLabel(rf) {
 // remembers their names.
 async function loadCubeDevices(serial) {
   try {
-    const devs = (await api("GET", "api/v1/cubes/" + encodeURIComponent(serial) + "/devices")) || [];
+    const devs = (await api("GET", "api/v1/cubes/" + encodeURIComponent(serial) + "/devices?devices=real")) || [];
     cubesUI.devices[serial] = devs;
     for (const d of devs) {
       if (d.name) cubesUI.names[d.rf_address] = d.name;
@@ -212,7 +212,7 @@ function cubeRooms(serial) {
 async function loadCubeRooms(serial) {
   if (serial === state.serial) return;
   try {
-    cubesUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms")) || [];
+    cubesUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms?devices=real")) || [];
     redrawPairing(serial);
   } catch (e) {
     cubesUI.rooms[serial] = [];

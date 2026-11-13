@@ -21,7 +21,7 @@ import (
 func serialsOf(t *testing.T, ts *httptest.Server, token string) map[string]string {
 	t.Helper()
 	var devs []map[string]any
-	if code := getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/devices", &devs); code != 200 || len(devs) == 0 {
+	if code := getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/devices?devices=real", &devs); code != 200 || len(devs) == 0 {
 		t.Fatalf("devices: %d %v", code, devs)
 	}
 	out := map[string]string{}

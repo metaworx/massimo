@@ -24,10 +24,14 @@ type statusDevice struct {
 }
 
 type statusRoom struct {
-	ID      uint8          `json:"id"`
-	Name    string         `json:"name"`
-	Ready   bool           `json:"ready"`
-	Devices []statusDevice `json:"devices"`
+	ID    uint8  `json:"id"`
+	Name  string `json:"name"`
+	Ready bool   `json:"ready"`
+	// ActualTemp is the room's temperature, its virtual wall
+	// thermostat's (internal/view/vwt.go): the wall thermostat's, else
+	// the radiator thermostats' median.
+	ActualTemp *float64       `json:"actual_temp,omitempty"`
+	Devices    []statusDevice `json:"devices"`
 }
 
 type statusReport struct {
@@ -102,8 +106,12 @@ func statusFromSnapshot(snap *cubelan.Snapshot, b cubelan.Budget, hidden view.Hi
 		}
 	}
 	inRoom := map[string]bool{}
+	vwts, _ := view.RoomThermostats(snap, hidden, 0, nil)
 	for _, r := range view.Rooms(snap, hidden, 0) {
 		sr := statusRoom{ID: r.ID, Name: r.Name, Ready: r.Ready, Devices: []statusDevice{}}
+		if v, ok := vwts[r.ID]; ok && v.State != nil {
+			sr.ActualTemp = v.State.ActualTemp
+		}
 		for _, d := range r.Devices {
 			sr.Devices = append(sr.Devices, statusDevice{Device: d, Room: r.Name})
 			inRoom[d.RFAddress] = true
@@ -128,7 +136,11 @@ func printStatus(rep statusReport) {
 		if !r.Ready {
 			ready = "NOT READY, room commands are discarded until every device has reported"
 		}
-		fmt.Printf("\nroom %d %s (%s)\n", r.ID, r.Name, ready)
+		temp := ""
+		if r.ActualTemp != nil {
+			temp = fmt.Sprintf(" %.1f°C", *r.ActualTemp)
+		}
+		fmt.Printf("\nroom %d %s%s (%s)\n", r.ID, r.Name, temp, ready)
 		for _, d := range r.Devices {
 			fmt.Println("  " + statusLine(d))
 		}
