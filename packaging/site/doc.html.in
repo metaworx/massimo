@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{TITLE}} · Massimo</title>
 <!-- A documentation page of the project's site, made by
-     packaging/site/site.py from the document named in the footer
+     packaging/site/site.py from the document named under the header
      (packaging/README.md, "The site"). -->
 <link rel="stylesheet" href="/site.css">
 <script src="/docs.js" defer></script>
@@ -20,11 +20,9 @@
 </select>
 </label>
 </header>
+<p class="doc-version">The channel {{CHANNEL}}, {{VERSION}}: <a href="{{SOURCE}}">{{SOURCE_NAME}} on GitHub</a>.{{AHEAD}}</p>
 <main>
 {{BODY}}
 </main>
-<footer>
-{{FOOTER}}<p>The channel {{CHANNEL}}, {{VERSION}}: <a href="{{SOURCE}}">{{SOURCE_NAME}} on GitHub</a>.{{AHEAD}}</p>
-</footer>
-</body>
+{{FOOTER}}</body>
 </html>

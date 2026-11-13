@@ -19,3 +19,4 @@ blockquote { margin: 0; padding-left: 1rem; border-left: 3px solid var(--line); 
 .doc-header { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
 .doc-header .channel { margin-left: auto; color: var(--muted); font-size: .875rem; }
 .doc-header select { margin-left: .25rem; font: inherit; color: var(--text); background: var(--back); }
+.doc-version { margin: .5rem 0 0; color: var(--muted); font-size: .875rem; }
