@@ -2296,6 +2296,29 @@ which reads the Cube's times up to there: an `id` is the quicker cursor.
 A page since a time looks up the oldest event at or after it the same way.
 `400` for a bad `before`, `limit`, `source`, `level`, `device` or `command`.
 
+### GET /api/v1/log?before=&since=&limit=&kind=&source=&level=&device=&user=&command=
+
+Every Cube's log at once, for a server with more than one Cube:
+the same parameters and the same events as a Cube's log,
+each Cube's event with the Cube's serial number in `cube_serial`,
+and the server's own once, without it (`read`, as a Cube's log):
+
+```json
+[
+  {"id": 4711, "kind": "connected", "cube_serial": "KEQ0000100", "time": "…"},
+  {"id": 4712, "kind": "update", "source": "system", "time": "…"},
+  {"id": 4713, "kind": "state", "cube_serial": "KEQ0000200", "device": "0abcde", "serial": "MEQ0000101", …}
+]
+```
+
+Pages go back by `id` across the Cubes, as in a Cube's log.
+A serial number as `device` names one device;
+a radio address names the device of that address on every Cube,
+since each Cube gives out its own.
+A Cube without a row in the store yet adds nothing.
+Without a store, each Cube's last 500 events, merged by time, without `id`.
+A Cube's own log does not carry `cube_serial`.
+
 ### GET /api/v1/cubes/{sn}/events
 
 A `text/event-stream`.

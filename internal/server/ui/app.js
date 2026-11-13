@@ -669,6 +669,7 @@ async function loadCubes() {
   }
   renderCubeSelect();
   renderHomeNotice();
+  logCubesPolled(); // log.js: the Cubes choice, and under All Cubes a new Cube's rooms
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) {
     if (!state.tz[cube.serial]) await loadTimeZone(cube.serial);
@@ -730,12 +731,21 @@ async function loadTimeZone(serial) {
   }
 }
 
+// fetchRooms loads a Cube's rooms, their virtual wall thermostats apart
+// (splitVirtual), and its devices without a room or unlisted, as
+// {rooms, unlisted}.
+async function fetchRooms(serial) {
+  const cube = "api/v1/cubes/" + encodeURIComponent(serial);
+  const [rooms, devices] = await Promise.all([api("GET", cube + "/rooms?devices=all"), api("GET", cube + "/devices?devices=real")]);
+  return { rooms: (rooms || []).map(splitVirtual), unlisted: (devices || []).filter((d) => d.unlisted || d.room_id === 0) };
+}
+
 async function loadRooms() {
   if (!state.serial) return;
   const serial = state.serial;
-  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms?devices=all"), api("GET", base() + "/devices?devices=real")]);
-  state.rooms = (rooms || []).map(splitVirtual);
-  state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
+  const { rooms, unlisted } = await fetchRooms(serial);
+  state.rooms = rooms;
+  state.unlisted = unlisted;
   state.roomsOf = serial;
   renderRooms();
   // log.js: the device chosen is gone, or else the lines drawn before the
@@ -957,6 +967,7 @@ function clearCubeData() {
   state.pollTimer = null;
   for (const ui of Object.values(state.ui)) if (ui.timer) clearTimeout(ui.timer);
   Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
+  logState.cubeRooms.clear(); // log.js: every Cube's rooms, as the last user saw them
   renderRooms(); // tiles.js
   renderFound();
   renderCubeSelect();

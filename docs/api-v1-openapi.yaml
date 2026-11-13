@@ -2382,6 +2382,52 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/log:
+    get:
+      summary: A page of every Cube's events, oldest first
+      x-capability: read
+      description: |
+        Every Cube's log at once, as GET /api/v1/cubes/{sn}/log gives one
+        Cube's: the same parameters and events, each Cube's event with the
+        Cube's serial number in cube_serial, the server's own once and
+        without it. Pages go back by id across the Cubes. A radio address
+        as device names the device of that address on every Cube; a serial
+        number names one device. A Cube without a row in the store yet
+        adds nothing; without a store, the Cubes' last 500 events each,
+        merged by time, without ids.
+      parameters:
+        - {name: before, in: query, description: "An event's id for the page before it, or an RFC 3339 time for the events before that time", schema: {type: string, example: "4711"}}
+        - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
+        - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
+        - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
+        - {name: source, in: query, description: "Only events of this source", schema: {type: string, enum: [device, cube, system, config, queue, server, proxy]}}
+        - {name: level, in: query, description: "Only events of this level and above; info by default", schema: {type: string, enum: [debug, info, warn, error], default: info}}
+        - {name: device, in: query, description: "Only events of this device: by its serial number, or by its radio address on every Cube", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
+        - {name: user, in: query, description: "Only events this user started, by the login name", schema: {type: string, example: anna}}
+        - {name: command, in: query, description: "Only the events of this command", schema: {type: integer, minimum: 1, example: 42}}
+      responses:
+        "200":
+          description: Events as GET /api/v1/cubes/{sn}/log gives them, each Cube's with cube_serial
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    id: {type: integer, description: The event's place in the log; absent without a store}
+                    cube_serial: {type: string, description: "The serial number of the Cube whose event it is; absent for the server's own", example: KEQ0000100}
+                    kind: {type: string}
+                    device: {type: string, description: The device's radio address on its Cube}
+                    serial: {type: string, description: "The device's serial number; the Cube's for its own configuration"}
+                    source: {type: string, enum: [device, cube, system, config, queue, server, proxy]}
+                    level: {type: string, enum: [debug, info, warn, error]}
+                    time: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes/{sn}/events:
     get:
       summary: Server-sent events for connection and state changes

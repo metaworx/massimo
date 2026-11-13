@@ -514,11 +514,18 @@ type event struct {
 	// discard and a retry, its outcome), GET /api/v1/commands/{id}; 0
 	// for none, and once the command is pruned.
 	Command int64 `json:"command,omitempty"`
+	// CubeSerial is the S/N of the Cube whose event it is, in a page of
+	// every Cube's log (GET /api/v1/log); absent elsewhere, and for the
+	// server's own events.
+	CubeSerial string `json:"cube_serial,omitempty"`
 	// userID is By's row in the store, kept in log.user_id.
 	userID int64
 	// audit marks an event only a user with audit sees (the log's
 	// visibility audit).
 	audit bool
+	// server marks the server's own event (logServer), no Cube's, which
+	// every Cube's ring keeps without a store.
+	server bool
 	// virtual marks an event of a virtual wall thermostat, wallRoom one
 	// whose room has a real wall thermostat, and realWall an event of a
 	// real wall thermostat in a room: the stream's view (?devices=) says
@@ -607,6 +614,7 @@ func (rt *runtime) sendUser(userID int64, ev event) {
 // its ring, its log being the ring's.
 func (s *Server) logServer(ev event) {
 	ev.settle()
+	ev.server = true
 	s.nameUser(context.Background(), &ev)
 	eventLine(s.opts.Logger, "", ev)
 	if st := s.opts.Store; st != nil {
@@ -1229,6 +1237,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/cubes/{sn}/events", "read", s.events)
 	api("POST /api/v1/cubes/{sn}/events/ticket", "read", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", "read", s.getLog)
+	api("GET /api/v1/log", "read", s.getAllLog)
 	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
 	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
