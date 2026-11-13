@@ -21,7 +21,7 @@ import (
 // report (they would block room commands if they were moved) are parked
 // in a room of their own on the Cube and left out of every view and
 // every write. The set is the configured list (MASSIMO_CUBE_<SN>_IGNORE)
-// plus the devices of cube.HiddenRoom. See docs/portal-protocol.md.
+// plus the devices of cube.HiddenRoom. See docs/cube-protocol.md.
 type Hidden map[cube.RFAddress]bool
 
 // NewHidden builds the hidden set: the listed devices plus every device

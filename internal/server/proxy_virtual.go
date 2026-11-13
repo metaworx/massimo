@@ -82,7 +82,7 @@ func (s *Server) proxyVirtuals(rt *runtime) []proxy.Virtual {
 }
 
 // virtualEntry is a virtual wall thermostat's L entry, laid out as a
-// wall thermostat's (docs/portal-protocol.md): the flags, the display,
+// wall thermostat's (docs/cube-protocol.md): the flags, the display,
 // the setpoint and the measured temperature with its ninth bit.
 func virtualEntry(rf cube.RFAddress, d view.Device, h *cube.Hello) []byte {
 	a := rf.Bytes()

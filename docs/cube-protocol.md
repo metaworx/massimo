@@ -1,6 +1,8 @@
-# MAX! Cube portal protocol
+# MAX! Cube protocol
 
-How the Cube and the original software talked to eQ-3's portal ("MAX! internet control").
+What is known about the MAX! Cube: its LAN protocol (TCP 62910) and UDP protocol (23272),
+the radio commands it sends, and how it and the original software talked to eQ-3's portal
+("MAX! internet control").
 Reconstructed from the ERNW/Insinuator analysis (2016),
 from the behaviour of the original local software (version 1.4.6),
 and from experiments with real Cubes (firmware 1.1.3) in 2026.
@@ -9,8 +11,13 @@ Serials and radio addresses in the examples are placeholders since 2026-11-08,
 `KEQ0000…` and `0a…`, in the lines quoted as captured too,
 which are otherwise as the hardware sent them.
 
-Despite the title, this is the single record of what is known about the Cube's behaviour,
-on the LAN as well as towards the portal.
+This is the single record of what is known about the Cube's behaviour,
+on the LAN as well as towards the portal;
+until 2026-11-13 it was `docs/portal-protocol.md`.
+Massimo's own portal tools, `massimo portal` and `portal-crypto`,
+are gone since then, kept on the branch `archive/portal`
+with `docs/firmware-extraction.md`, the attempt to read the Cube's firmware:
+without the firmware, the key from the QR code serves nothing.
 
 ## Contents
 
@@ -175,7 +182,8 @@ carries the stale tail `0/lookup` after `http://max.eq-3.de:80/cube\0`,
 which fits exactly `http://max-portal.eq-3.de:80/lookup`.
 So a Cube may itself follow the lookup procedure (GET,
 then POST to the returned URL).
-Untested with our portal: set `u:http://<host>:80/lookup` and watch for a GET.
+Untested with Massimo's fake portal (on the branch `archive/portal`):
+set `u:http://<host>:80/lookup` and watch for a GET.
 
 ## What is public (research, 2026-11-04)
 
@@ -204,7 +212,8 @@ Send 32 zero bytes to `e:` (`e:AAAA…AAA=`).
 In CBC with a zero first block,
 the first ciphertext block is the IV encrypted with the key,
 so decrypting that block with the key yields the IV.
-`massimo portal-crypto iv` does this and also verifies the chaining with the second block.
+`massimo portal-crypto iv` did this and also verified the chaining with the second block;
+it is on the branch `archive/portal`.
 
 Verified on a real Cube: the same plaintext always gives the same ciphertext,
 the first block of a 16-byte and a 32-byte message is identical,

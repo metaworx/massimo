@@ -759,7 +759,7 @@ sudoedit /etc/massimo/env
 
 What to set there:
 
-- `MASSIMO_CUBE_<SN>_ADDRESS`, `_KEY`, `_IV` for every Cube.
+- `MASSIMO_CUBE_<SN>_ADDRESS` for every Cube.
 - `MASSIMO_CUBE_<SN>_PROXY`:
   the address this box answers on for that Cube,
   one of the box's own IP addresses.

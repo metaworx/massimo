@@ -41,10 +41,6 @@ func main() {
 	switch args[0] {
 	case "decode":
 		err = runDecode(rest)
-	case "portal-crypto":
-		err = runPortalCrypto(rest)
-	case "portal":
-		err = runPortal(rest)
 	case "cube":
 		err = runCube(rest)
 	case "watch":
@@ -135,8 +131,6 @@ add Cubes the store does not know. The other commands keep reading them.
 
 commands:
   decode [file]   decode Cube protocol lines (default: stdin) and print JSON
-  portal-crypto   AES helpers for the Cube's portal encryption (see its -h)
-  portal          fake portal server that decrypts and logs what a Cube sends
   cube            send protocol lines to a Cube over the LAN
   watch           stay connected to a Cube and print state changes
   status          show every device, its state and which rooms accept commands
@@ -145,7 +139,7 @@ commands:
   fakecube        serve a recorded greeting as if it were a Cube, for tests
   discover        list the Cubes on the local network (UDP broadcast)
   netconfig       show or set a Cube's network configuration (static or DHCP; see its -h)
-  config          show the settings in effect, with keys and IVs redacted
+  config          show the settings in effect, with secrets redacted
   serve           keep the Cubes connected, serve the JSON API and act as a Cube on the LAN
   legacy          run the original MAX! software with filtered output
   store           back up, migrate or describe serve's store, massimo.db (see its usage)

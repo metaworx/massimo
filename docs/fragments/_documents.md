@@ -29,10 +29,8 @@ on a document under `docs/` that is not).
 
 ## How it works
 
-- [docs/portal-protocol.md](docs/portal-protocol.md):
+- [docs/cube-protocol.md](docs/cube-protocol.md):
   everything learned about the Cube, the portal and the radio commands
-- [docs/firmware-extraction.md](docs/firmware-extraction.md):
-  reading the Cube's firmware over JTAG, hardware facts and the procedure
 - [docs/background.md](docs/background.md): the evaluation before the project,
   licence reasoning, routes to a public server, sources
 - [docs/design.md](docs/design.md): the design proposal, target environments,

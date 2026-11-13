@@ -154,7 +154,7 @@ func TestResolveAddrWhenTheProxyDoesNotAnswer(t *testing.T) {
 }
 
 func TestKnown(t *testing.T) {
-	for _, k := range []string{"MASSIMO_CUBE_KEY", "MASSIMO_CUBE_KEQ1_PROXY_SERIAL", "MASSIMO_LISTEN", "MASSIMO_API_TOKEN", "MASSIMO_DATA", "MASSIMO_LOG_LEVEL", "MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN", "MASSIMO_REBOOT"} {
+	for _, k := range []string{"MASSIMO_CUBE_ADDRESS", "MASSIMO_CUBE_KEQ1_PROXY_SERIAL", "MASSIMO_LISTEN", "MASSIMO_API_TOKEN", "MASSIMO_DATA", "MASSIMO_LOG_LEVEL", "MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN", "MASSIMO_REBOOT"} {
 		if !Known(k) {
 			t.Errorf("%s unknown", k)
 		}
@@ -162,6 +162,21 @@ func TestKnown(t *testing.T) {
 	for _, k := range []string{"MASSIMO_CUBE_KEQ1_KYE", "MASSIMO_CUBE_A_B_KEY", "MASSIMO_FOO"} {
 		if Known(k) {
 			t.Errorf("%s known", k)
+		}
+	}
+}
+
+// The Cube keys and IVs of the portal commands, gone (AP PortalDrop
+// v1.0): neither known nor unknown, but removed, named as ignored.
+func TestRemoved(t *testing.T) {
+	for _, k := range []string{"MASSIMO_CUBE_KEY", "MASSIMO_CUBE_IV", "MASSIMO_CUBE_KEQ1_KEY", "MASSIMO_CUBE_KEQ1_IV"} {
+		if !Removed(k) || Known(k) {
+			t.Errorf("%s: removed %v, known %v", k, Removed(k), Known(k))
+		}
+	}
+	for _, k := range []string{"MASSIMO_TLS_KEY", "MASSIMO_CUBE_A_B_KEY", "MASSIMO_CUBE_ADDRESS", "MASSIMO_CUBE_KEQ1_ADDRESS"} {
+		if Removed(k) {
+			t.Errorf("%s removed", k)
 		}
 	}
 }

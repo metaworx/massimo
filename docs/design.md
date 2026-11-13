@@ -27,13 +27,14 @@ inputs/outputs](https://www.loxone.com/enen/kb/virtual-inputs/) (integration tar
   backup and restore, discovery, the fake portal and the portal research,
   the REST API v1 with a web UI,
   the LAN proxy (serve as a Cube for other clients), and the configuration API.
-  See docs/portal-protocol.md for the hardware findings.
+  See docs/cube-protocol.md for the hardware findings.
 - Phase 1 is partly done: engine, queue, API, live events,
   web UI and Cube backup exist; missing are Loxone, MQTT, SQLite, rules,
   and the packages for LoxBerry, `.deb` and Windows services.
 - Phases 2 to 4 are untouched.
   The portal research track found that the Cube ignores commands in the portal reply;
-  the firmware dump (docs/firmware-extraction.md) is the remaining route.
+  the firmware dump is the remaining route,
+  its procedure on the branch `archive/portal` with the portal code.
 - Deviations from the proposal:
   the web UI is plain JavaScript embedded in the binary,
   not a TypeScript single-page app;

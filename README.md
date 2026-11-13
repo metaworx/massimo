@@ -79,10 +79,8 @@ on a document under `docs/` that is not).
 
 ### How it works
 
-- [docs/portal-protocol.md](docs/portal-protocol.md):
+- [docs/cube-protocol.md](docs/cube-protocol.md):
   everything learned about the Cube, the portal and the radio commands
-- [docs/firmware-extraction.md](docs/firmware-extraction.md):
-  reading the Cube's firmware over JTAG, hardware facts and the procedure
 - [docs/background.md](docs/background.md): the evaluation before the project,
   licence reasoning, routes to a public server, sources
 - [docs/design.md](docs/design.md): the design proposal, target environments,
@@ -894,21 +892,7 @@ read the greeting, and `GET /devices` for the device list.
 
 ```bash
 massimo discover
-massimo portal-crypto iv -addr <cube-ip>
 ```
-
-```bash
-massimo portal -listen :80 -probe default -probe-target 0a010d:6 -probe-cube 192.168.1.46
-```
-
-Probe mode answers each poll with the next reply variant (an `s:` radio
-command in different forms) and judges it by the Cube's free memory
-slots in the following poll: an accepted radio command occupies a slot.
-With `-probe-cube` the portal sends `i:` over the LAN after each reply so the
-next poll comes within seconds.
-`-probe <file>` takes custom variants,
-one `name=text` per line with `\r\n` escapes and the placeholders `{i}`, `{s}`,
-`{shex}`, `{r}`, `{serial}`, `{rf}`, `{fw}`.
 
 `discover` lists the Cubes on the LAN (serial, IP, MAC, RF address, firmware,
 the gateway it uses, and whether the Cube takes its address by DHCP or has a
@@ -919,7 +903,12 @@ or its address is an announced server's,
 and then the massimo servers that announce themselves by mDNS (name, address,
 TLS, version, node; `-json` prints both lists);
 it needs UDP port 23272 and a real LAN interface (not WSL 2).
-`portal-crypto iv` recovers a Cube's portal IV from one `e:` exchange.
+
+The portal commands, `portal` (a fake portal server that decrypted what a Cube sends)
+and `portal-crypto` (the AES helpers for the Cube's portal encryption),
+are gone: the Cube's firmware was not extracted,
+so the key from its QR code serves nothing.
+They are kept on the branch `archive/portal`.
 
 ```bash
 massimo netconfig -addr <cube-ip>
@@ -982,7 +971,7 @@ add a Cube, change its name, address, proxy and hidden devices,
 and remove it while `serve` runs.
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
-The keys and IVs, `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
+`MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,
 `MASSIMO_LOG`, `MASSIMO_LOG_LEVEL`, `MASSIMO_LOG_FORMAT` and the other `MASSIMO_LOG_…`,
 the TLS and update variables and `MASSIMO_CUBE_SN` stay in the file only,
 and every command other than `serve` keeps reading all of its lines as before.
@@ -1047,14 +1036,12 @@ and assigns users their e-mail in System settings → Users;
 what to register at the provider is in docs/oidc.md.
 
 Every variable has a per-Cube form with the serial in it,
-`MASSIMO_CUBE_<SERIAL>_KEY` for `MASSIMO_CUBE_KEY`, which wins for that Cube;
+`MASSIMO_CUBE_<SERIAL>_ADDRESS` for `MASSIMO_CUBE_ADDRESS`, which wins for that Cube;
 the plain form applies to any Cube unless the table says otherwise.
 
 | Variable (per-Cube form) | Meaning |
 |---|---|
 | `MASSIMO_CUBE_<SERIAL>_ADDRESS` | The Cube's address, host[:port]. `serve` serves every Cube that has one. |
-| `MASSIMO_CUBE_<SERIAL>_KEY` | The Cube's key from its QR code (`k` and 32 hex digits), for the portal commands. |
-| `MASSIMO_CUBE_<SERIAL>_IV` | The Cube's portal IV, recovered with `portal-crypto iv`. `portal` serves every Cube that has a key and an IV. |
 | `MASSIMO_CUBE_<SERIAL>_PROXY` | The address of a running `massimo serve` that answers as this Cube. Every command except `serve` connects to it instead of the Cube, because the Cube serves one client at a time and `serve` usually holds that connection; `serve` listens on it. When the proxy does not answer within two seconds, the command prints a warning and connects to the Cube's own address: during the few seconds `serve` restarts, for example after an update, that direct connection takes the Cube's only slot and keeps `serve` from reconnecting until the command ends. Before the command name, `-no-direct` (`massimo -no-direct status`, for scripts) makes that an error instead, and `-direct` skips the proxy and connects to the Cube itself even when the proxy answers; the two exclude each other, and `-addr` always wins. The plain form only with a single Cube. |
 | `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL` | The serial `serve` uses in UDP discovery replies for this Cube, see [docs/proxy.md](docs/proxy.md). The plain form only with a single Cube. |
 | `MASSIMO_CUBE_<SERIAL>_IGNORE` | Radio addresses to hide, comma separated, in addition to room 255 (below). |
@@ -1100,7 +1087,7 @@ Room 255 is the room for hidden devices:
 a device that is paired but never reports blocks every command to the room the
 Cube counts it in, and the Cube never drops it,
 so the way out is to park it in room 255 on the Cube (edit a backup and restore it,
-see docs/portal-protocol.md).
+see docs/cube-protocol.md).
 Every massimo command,
 the API and the proxy then hide that room and its devices without any configuration,
 so `status` on another computer and the original software do not see them either,

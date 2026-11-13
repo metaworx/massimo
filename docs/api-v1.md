@@ -1602,7 +1602,7 @@ The use case is a device that is paired but never reports,
 which blocks every room command for the room the Cube counts it in and which the
 Cube never drops;
 it is parked in room 255 on the Cube and hidden here (see
-[portal-protocol.md](portal-protocol.md)).
+[cube-protocol.md](cube-protocol.md)).
 A device that answers is removed from the Cube instead,
 with `DELETE …/devices/{rf}` (below).
 
@@ -1646,7 +1646,7 @@ A boost is the set-temperature command with mode 3, as a button at a device star
 the command carries the setpoint the device has, which the devices ignore.
 Seen on hardware on 2026-11-13: both thermostats of a room showed `boost` within a minute,
 and returned by themselves to the mode they had after their boost time
-(docs/portal-protocol.md).
+(docs/cube-protocol.md).
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
 
@@ -1780,7 +1780,7 @@ a device out of range or out of battery stays in the Cube's memory,
 and comes back, unlisted, with the server's next full read of the Cube
 (a reconnect or the periodic refresh);
 the Cube's device lists in between do not bring it back.
-Seen on hardware for devices that never report (portal-protocol.md);
+Seen on hardware for devices that never report (cube-protocol.md);
 that one which answers is dropped is expected, not yet seen.
 Such a device is parked in room 255 instead, and hidden (above).
 
