@@ -418,6 +418,7 @@
 
   "room.actions": "akcje pomieszczenia",
   "room.actionsTitle": "Akcje pomieszczenia",
+  "room.boost": "Boost",
   "room.lock": "Zablokuj termostaty",
   "room.unlock": "Odblokuj termostaty",
   "room.delete": "Usuń pomieszczenie",
@@ -444,6 +445,8 @@
   "room.deleted": "Usunięto pomieszczenie {name}.",
   "room.deleteFailed": "Usuwanie pomieszczenia {name}: {error}",
   "room.noDevices": "Brak urządzeń w tym pomieszczeniu.",
+
+  "label.boost": "boost",
 
   "label.auto": "auto",
   "label.manual": "ręcznie {temp} °C",

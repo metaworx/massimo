@@ -50,7 +50,8 @@ A repository of its own, `metaworx/massimo-homeassistant`
 It talks to Massimo's HTTP API, signed in with an API key:
 
 - a `climate` entity per room, as the web UI's tiles are,
-  with presets for the room's eco and comfort temperatures;
+  with presets for the room's eco and comfort temperatures, and boost
+  (`{"mode": "boost"}` on the room's setpoint);
 - per device, sensors for the valve, the battery, the link and the window;
   the Cube's connection, duty cycle and free memory slots as diagnostics;
 - services to write a room's week programme, copy it, and lock thermostats;

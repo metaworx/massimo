@@ -412,6 +412,7 @@
 
   "room.actions": "acties voor de ruimte",
   "room.actionsTitle": "Acties voor de ruimte",
+  "room.boost": "Boost",
   "room.lock": "Thermostaten vergrendelen",
   "room.unlock": "Thermostaten ontgrendelen",
   "room.delete": "Ruimte verwijderen",
@@ -438,6 +439,8 @@
   "room.deleted": "Ruimte {name} verwijderd.",
   "room.deleteFailed": "Ruimte {name} verwijderen: {error}",
   "room.noDevices": "Geen apparaten in deze ruimte.",
+
+  "label.boost": "boost",
 
   "label.auto": "auto",
   "label.manual": "handmatig {temp} °C",

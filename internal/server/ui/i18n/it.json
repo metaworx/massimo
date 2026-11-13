@@ -413,6 +413,7 @@
 
   "room.actions": "azioni del locale",
   "room.actionsTitle": "Azioni del locale",
+  "room.boost": "Boost",
   "room.lock": "Blocca i termostati",
   "room.unlock": "Sblocca i termostati",
   "room.delete": "Elimina il locale",
@@ -439,6 +440,8 @@
   "room.deleted": "Locale {name} eliminato.",
   "room.deleteFailed": "Eliminazione del locale {name}: {error}",
   "room.noDevices": "Nessun dispositivo in questo locale.",
+
+  "label.boost": "boost",
 
   "label.auto": "auto",
   "label.manual": "manuale {temp} °C",

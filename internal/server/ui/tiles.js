@@ -387,11 +387,11 @@ function drawSetpoint(el, room) {
 
 // SENDING_BUTTON is, per write of a tile (roomUI(room).sending), the
 // button that turns while it runs; "device:<rf>" is a device's Lock.
-const SENDING_BUTTON = { auto: ".mode-auto", manual: ".mode-manual", vacation: ".mode-holiday", setpoint: ".pending-save", lock: ".menu-lock", unlock: ".menu-unlock" };
+const SENDING_BUTTON = { auto: ".mode-auto", manual: ".mode-manual", vacation: ".mode-holiday", setpoint: ".pending-save", boost: ".menu-boost", lock: ".menu-lock", unlock: ".menu-unlock" };
 
 // WRITE_BUTTONS are the buttons of a tile that send, or change what is
 // to be sent: all off while one of the tile's writes runs.
-const WRITE_BUTTONS = ".mode-group button, .stepper button, .pending-row button, .vacation-panel button[type=submit], .menu-lock, .menu-unlock, .device-lock";
+const WRITE_BUTTONS = ".mode-group button, .stepper button, .pending-row button, .vacation-panel button[type=submit], .menu-boost, .menu-lock, .menu-unlock, .device-lock";
 
 function sendingSelector(key) {
   if (key && key.startsWith("device:")) return '.device[data-rf="' + key.slice(7) + '"] .device-lock';
@@ -448,10 +448,19 @@ function renderMenu(el, room) {
   const lock = el.querySelector(".menu-lock");
   const unlock = el.querySelector(".menu-unlock");
   const del = el.querySelector(".menu-delete");
+  const boost = el.querySelector(".menu-boost");
   if (thermostats.length) {
+    // A boost opens the valves by the thermostats' boost settings for
+    // their boost time; they then return to the mode they had.
+    boost.addEventListener("click", () => {
+      closeMenu(el);
+      leaveEditing(room);
+      sendRoomSetpoint(room, { mode: "boost" }, t("label.boost"), "boost");
+    });
     lock.addEventListener("click", () => lockRoom(room, true, el));
     unlock.addEventListener("click", () => lockRoom(room, false, el));
   } else {
+    boost.classList.add("hidden");
     lock.classList.add("hidden");
     unlock.classList.add("hidden");
   }
@@ -607,7 +616,7 @@ function deviceBadges(d) {
   } else if (s.mode && isThermostat(d)) {
     const mode = s.mode === "vacation" ? "holiday" : s.mode === "boost" ? "manual" : s.mode;
     const cls = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" }[mode] || "mode";
-    out.push([modeName(s.mode === "boost" ? "manual" : s.mode), cls]);
+    out.push([modeName(s.mode), cls]); // a boost says so, coloured as manual
   }
   return out;
 }
