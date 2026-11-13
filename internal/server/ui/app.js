@@ -554,21 +554,21 @@ function budgetFacts(cube) {
   };
 }
 
+// renderHeader shows the chosen Cube in the header: its connection in
+// the Cube choice, its clock, and in expert mode its name with its radio
+// budget, queued only while commands wait.
 function renderHeader(cube) {
   renderCubeSelect(); // the chosen Cube's connection, its plug
   const f = budgetFacts(cube);
+  $("stats-cube").textContent = cube.name || cube.serial;
   $("duty").textContent = f.duty;
   $("slots").textContent = f.slots;
   $("queued").textContent = f.queued;
+  $("stat-queued").classList.toggle("hidden", !(cube.queued > 0));
   $("pending-n").textContent = f.pending;
-  $("cube-fw").textContent = cube.firmware || "–";
-  $("cube-addr").textContent = cube.address || "–";
-  $("cube-rf").textContent = cube.rf_address || "–";
   const clock = clockText(cube);
-  for (const id of ["clock", "clock-plain"]) {
-    $(id).textContent = clock.text;
-    $(id).title = clock.title;
-  }
+  $("clock-plain").textContent = clock.text;
+  $("clock-plain").title = clock.title;
   const p = $("pending");
   const n = cube.pending_radiograms || 0;
   if (n > 0) {
@@ -859,26 +859,8 @@ function splitVersion(v) {
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
 // otherwise it offers a button.
-// renderStarted shows in expert mode when the server process started,
-// and how long ago (an older server sends no time).
-function renderStarted(iso) {
-  const dd = $("server-started");
-  if (dd.dataset.iso === (iso || "")) return;
-  dd.dataset.iso = iso || "";
-  clear(dd);
-  const ms = Date.parse(iso || "");
-  if (isNaN(ms)) {
-    dd.textContent = "–";
-    return;
-  }
-  dd.appendChild(document.createTextNode(fmtInstant(new Date(ms))));
-  const age = ageEl(iso, false, true);
-  if (age) dd.appendChild(age);
-}
-
-// renderTLS shows the certificate the server serves, from /healthz's
-// tls: in expert mode its source, names and expiry, and, while it is
-// self-signed, a notice under the header and in the sign-in dialog
+// renderTLS shows, from /healthz's tls, while the certificate the server
+// serves is self-signed, a notice under the header and in the sign-in dialog
 // asking to compare the fingerprint the browser shows for it with
 // massimo tls show on the box before signing in; and a warning while
 // the certificate ends within two weeks (or has none yet), computed
@@ -886,16 +868,13 @@ function renderStarted(iso) {
 // shows no fingerprint: it comes over the very connection in question,
 // and a man in the middle would pass the server's along, or rewrite it.
 function renderTLS(tls) {
-  const dd = $("tls-cert");
   const notice = $("tls-notice");
   $("login-tls").classList.toggle("hidden", !(tls && tls.self_signed));
   if (!tls) {
-    dd.textContent = "–";
     notice.classList.add("hidden");
     return;
   }
   const until = Date.parse(tls.not_after || "");
-  dd.textContent = certText(tls);
   const texts = [];
   if (tls.self_signed) texts.push(t("header.selfSigned"));
   if (isNaN(until)) {
@@ -909,8 +888,8 @@ function renderTLS(tls) {
   notice.classList.toggle("hidden", texts.length === 0);
 }
 
-// certText is the certificate the server serves, as /healthz and GET
-// /api/v1/system have it: its source, names and expiry.
+// certText is the certificate the server serves, as GET /api/v1/system
+// has it, for System Info (update.js): its source, names and expiry.
 function certText(tls) {
   if (!tls) return "–";
   const until = Date.parse(tls.not_after || "");
@@ -927,14 +906,11 @@ async function checkVersion() {
     return;
   }
   const v = h && h.version ? h.version : "";
-  renderStarted(h && h.started_at);
   renderTLS(h && h.tls);
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
-    $("version").textContent = parts.short;
-    $("version-rest").textContent = parts.rest || "–";
     return;
   }
   if (v === state.version) return;
@@ -970,10 +946,9 @@ function clearCubeData() {
   renderCubeSelect();
   renderHomeNotice();
   renderUpdated();
-  for (const id of ["clock", "clock-plain"]) {
-    $(id).textContent = "";
-    $(id).title = "";
-  }
+  $("clock-plain").textContent = "";
+  $("clock-plain").title = "";
+  for (const id of ["stats-cube", "duty", "slots", "pending-n", "queued"]) $(id).textContent = "";
 }
 
 // startPolling runs poll every poll interval.

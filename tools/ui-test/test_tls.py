@@ -3,9 +3,9 @@
 """The certificate under the header: a self-signed certificate reported
 by /healthz (stubbed) brings a notice under the header, and in the
 sign-in dialog, asking to compare the browser's fingerprint with the
-server's, and shows none itself; the certificate is in the expert
-details, one that ends within two weeks is a warning in the page's
-language, and nothing shows without one. /healthz is stubbed with the
+server's, and shows none itself (System Info names the certificate,
+test_system_info.py); one that ends within two weeks is a warning in the
+page's language, and nothing shows without one. /healthz is stubbed with the
 page's own version, so the page does not reload."""
 import json
 
@@ -32,7 +32,6 @@ def unstub_health(page):
 
 def test_nothing_without_tls(page):
     assert page.locator("#tls-notice").is_hidden(), "no certificate notice without TLS"
-    assert page.evaluate("document.getElementById('tls-cert').textContent") == "–", "no certificate in the expert details"
 
 
 def test_self_signed_notice(page):
@@ -42,8 +41,6 @@ def test_self_signed_notice(page):
     assert wait_until(page, "!document.getElementById('tls-notice').classList.contains('hidden')", 5), "self-signed notice"
     assert "massimo tls show" in page.locator("#tls-notice").inner_text(), "the notice names massimo tls show"
     assert "AB:CD:EF:01" not in page.locator("body").inner_text(), "no fingerprint in the page"
-    cert = page.evaluate("document.getElementById('tls-cert').textContent")
-    assert cert.startswith("self-signed · massimo.example.net, 192.0.2.10 · "), f"certificate in the expert details ({cert})"
     unstub_health(page)
 
 

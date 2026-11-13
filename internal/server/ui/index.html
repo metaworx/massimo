@@ -101,20 +101,11 @@
        settings → Cubes, which lists them, for a role with cubes (app.js
        renderFound) -->
   <p id="cube-found" class="cube-found hidden"><button type="button" id="cube-found-link" class="cube-found-link needs-cubes" title="Open System settings → Cubes" data-i18n-attr="title:home.toCubes"></button><span id="cube-found-text" class="without-cubes"></span></p>
-  <dl id="budget" class="budget expert-only">
-    <div><dt data-i18n="budget.server">Server</dt><dd id="version">–</dd></div>
-    <div><dt data-i18n="budget.built">Built with</dt><dd id="version-rest">–</dd></div>
-    <div><dt data-i18n="budget.started">Server started</dt><dd id="server-started">–</dd></div>
-    <div><dt data-i18n="budget.certificate">Certificate</dt><dd id="tls-cert">–</dd></div>
-    <div><dt data-i18n="budget.firmware">Firmware</dt><dd id="cube-fw">–</dd></div>
-    <div><dt data-i18n="budget.address">Address</dt><dd id="cube-addr">–</dd></div>
-    <div><dt data-i18n="budget.radio">Radio</dt><dd id="cube-rf" class="mono">–</dd></div>
-    <div><dt data-i18n="budget.duty">Duty cycle</dt><dd id="duty">–</dd></div>
-    <div><dt data-i18n="budget.slots">Free slots</dt><dd id="slots">–</dd></div>
-    <div><dt data-i18n="budget.queued">Queued</dt><dd id="queued">–</dd></div>
-    <div><dt data-i18n="budget.pending">Pending</dt><dd id="pending-n">–</dd></div>
-    <div><dt data-i18n="budget.clock">Cube clock</dt><dd id="clock" title="">–</dd></div>
-  </dl>
+  <!-- in expert mode, the chosen Cube's radio budget: its name, the duty
+       cycle, the free slots and the radiograms pending, and the commands
+       queued while there are any (app.js renderHeader); the server's facts
+       are System settings → System Info's, the Cube's its panel's -->
+  <p id="cube-stats" class="cube-stats expert-only"><span id="stats-cube" class="stats-cube"></span><span class="stat"><span data-i18n="budget.duty">Duty cycle</span> <span id="duty">–</span></span><span class="stat"><span data-i18n="budget.slots">Free slots</span> <span id="slots">–</span></span><span class="stat"><span data-i18n="budget.pending">Pending</span> <span id="pending-n">–</span></span><span id="stat-queued" class="stat hidden"><span data-i18n="budget.queued">Queued</span> <span id="queued">–</span></span></p>
   <p id="pending" class="notice hidden"></p>
 </header>
 

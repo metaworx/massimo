@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """The header: its order at full width and ☰ on a narrow screen, the log
-button's symbol, the 👤 menu, and the page shown in the address."""
+button's symbol, the 👤 menu, the page shown in the address, and expert
+mode's line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, open_user_menu, show_view, wait_until
+from helpers import VIEWER, css_hidden, open_user_menu, scroll_width, show_view, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -198,3 +199,38 @@ def test_menu_icons_and_user_title(page, case):
     page.keyboard.press("Escape")
     for sel in ("#menu-log", "#menu-system"):
         assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"
+
+
+DUTY = {"en": "Duty cycle", "de": "Duty Cycle"}
+QUEUED = {"en": "Queued", "de": "Warteschlange"}
+
+
+def test_expert_line_of_the_cube(page, case):
+    """In expert mode a line under the header's first: the chosen Cube's
+    name, duty cycle, free slots and pending, queued only while commands
+    wait; it stays when the header compacts, on every page, and is gone
+    outside expert mode, where the Cube's clock shows at the top all the same."""
+    line = page.locator("#cube-stats")
+    assert line.is_hidden(), "no line outside expert mode"
+    page.evaluate("() => { state.settings.expert = true; applySettings(); }")
+    assert line.is_visible(), "the line in expert mode"
+    name = page.evaluate("(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()")
+    assert page.locator("#stats-cube").inner_text() == name, "the chosen Cube's name first"
+    text = line.inner_text()
+    assert DUTY[case.lang] in text and "%" in text, f"the duty cycle ({text!r})"
+    assert page.locator("#stat-queued").is_hidden(), "queued only while commands wait"
+    page.evaluate("""() => {
+      const c = Object.assign({}, state.cubes.find((x) => x.serial === state.serial), { queued: 2 });
+      renderHeader(c);
+    }""")
+    assert page.locator("#stat-queued").is_visible() and QUEUED[case.lang] + " 2" in line.inner_text(), "queued while commands wait"
+    assert page.locator("#clock-plain").is_visible(), "the Cube's clock at the top in expert mode too"
+    page.evaluate("document.body.classList.add('scrolled')")
+    assert line.is_visible(), "the line stays when the header compacts"
+    page.evaluate("document.body.classList.remove('scrolled')")
+    show_view(page, "log")
+    assert line.is_visible(), "on every page"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the line"
+    show_view(page, "tiles")
+    page.evaluate("() => { state.settings.expert = false; applySettings(); }")
+    assert line.is_hidden(), "gone outside expert mode"

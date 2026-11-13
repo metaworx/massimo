@@ -70,7 +70,8 @@ highlighted while one of them is shown.
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its first line without the time of the last update
 and the Cube's clock, and the lines under it go until the page is back
-at its top, the button that reloads a new version apart;
+at its top, the button that reloads a new version and expert mode's line
+of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 - **Cube**:
@@ -121,9 +122,11 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and none of the settings pages.
-- In expert mode the header also shows the Cube's details and its radio budget,
-  when the server was started, with how long ago,
-  and the certificate the server serves (its source, names and expiry).
+- In expert mode a line under the first shows the chosen Cube's name,
+  its duty cycle, free slots and radiograms pending,
+  and the commands queued while there are any.
+  The server's facts are in System settings → **System Info**,
+  the Cube's in its panel under System settings → **Cubes**.
 - With a self-signed certificate (`massimo serve -tls self-signed`)
   the browser warned once, and a line under the header,
   and in the sign-in dialog, asks to compare the SHA-256 fingerprint in
