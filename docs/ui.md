@@ -30,7 +30,8 @@ or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
 While it asks, the page shows its name, its version and the sign-in,
-nothing else:
+nothing else, as it does from its first moment until the server has said who is in,
+so that no button shows before the sign-in:
 Sign out forgets what the page loaded of the Cubes,
 so that the next to sign in sees nothing of the last session.
 The password stays in the browser:

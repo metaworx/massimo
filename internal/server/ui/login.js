@@ -87,7 +87,11 @@ function setToken(token) {
 let sawOpen = false;
 
 // loadMe reads who the page is signed in as and applies it; a server
-// that refuses opens the sign-in dialog through api().
+// that refuses opens the sign-in dialog through api(). The page starts
+// signed out (index.html), so that no button of the header shows before
+// the sign-in; once the server has answered, signed in, open, or not at
+// all (a server out of reach shows the page and its message), the page
+// shows, unless the sign-in dialog is still open (askLogin).
 async function loadMe() {
   try {
     state.me = await api("GET", "api/v1/me");
@@ -96,6 +100,7 @@ async function loadMe() {
   }
   if (state.me && (state.me.mode === "open" || state.me.mode === "none")) sawOpen = true;
   applyCaps();
+  if (!$("login-dialog").open) document.body.classList.remove("signed-out");
   return state.me;
 }
 
