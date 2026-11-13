@@ -891,7 +891,18 @@ for tests that drive the fake from outside:
 `panel_locked`, and `reported: false` for a device the Cube holds no state for),
 `POST /devices/<rf>/remove` and `/restore` to take a device out of its room's
 lists and bring it back, `POST /drop` to make the clients connect again and
-read the greeting, and `GET /devices` for the device list.
+read the greeting, and `GET /devices` for the device list;
+`POST /silent` and `DELETE /silent` pull the Cube's cable and put it back
+(the fake keeps its connections and holds every line meanwhile),
+`POST /release` forgets a dead session (below),
+and `GET /connections` counts the connections so far and open now.
+`-single-client` serves one client at a time, as the Cube does:
+while a client is connected, another client's dial times out (on Linux;
+elsewhere its connection is closed at once).
+A client that leaves while the fake is silent is a session whose end the outage lost,
+and the fake holds it for `-hold-dead` (41 minutes by default,
+as a Cube did on 2026-11-13), refusing every client meanwhile,
+until `POST /release` or an `R` to `-discovery`, which restarts the fake.
 
 ```bash
 massimo discover

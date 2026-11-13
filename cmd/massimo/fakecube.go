@@ -29,7 +29,9 @@ func runFakeCube(args []string) error {
 	apply := fs.Bool("apply", true, "carry out the radio commands acknowledged: setpoints, modes, boosts, programmes, presets and locks change the devices' lines (false: acknowledge only)")
 	applyAfter := fs.Duration("apply-after", 0, "apply a command this long after acknowledging it, as a device confirms it after its wakeup")
 	boostFor := fs.Duration("boost-for", 0, "end a boost after this long instead of the device's boost time")
-	control := fs.String("control", "", "serve the control on this loopback address, such as 127.0.0.1:62911: set a device's state, remove it from its room and restore it, drop the connections (see the README)")
+	control := fs.String("control", "", "serve the control on this loopback address, such as 127.0.0.1:62911: set a device's state, remove it from its room and restore it, drop the connections, go silent, release a dead session (see the README)")
+	singleClient := fs.Bool("single-client", false, "serve one client at a time, as the Cube does: while a client is connected, or a dead session is held, another client's dial times out (on Linux; elsewhere its connection is closed at once)")
+	holdDead := fs.Duration("hold-dead", fakecube.DefaultHoldDead, "with -single-client, how long a session that ended while the fake was silent (the control's POST /silent) is held, as the Cube holds one whose end an outage lost; an R to -discovery frees it at once")
 	pair := fs.String("pair", "", "a device that joins pairing mode, <template rf>,<rf>,<serial>[,<delay>]: a copy of the greeting's device <template rf> in no room, joining <delay> (default 2s) after n:, again after a t: deleted it")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, "usage: massimo fakecube -greeting <file> | -fixture <name> [-listen 127.0.0.1:62910]\n\nBehave like a Cube's LAN interface, using recorded data.\n\n")
@@ -51,7 +53,8 @@ func runFakeCube(args []string) error {
 	if err != nil {
 		return err
 	}
-	srv := &fakecube.Server{Greeting: greeting, Duty: *duty, Apply: *apply, ApplyAfter: *applyAfter, BoostFor: *boostFor}
+	srv := &fakecube.Server{Greeting: greeting, Duty: *duty, Apply: *apply, ApplyAfter: *applyAfter, BoostFor: *boostFor,
+		SingleClient: *singleClient, HoldDead: *holdDead}
 	if *pair != "" {
 		if srv.Pair, err = parsePair(greeting, *pair); err != nil {
 			return fmt.Errorf("fakecube: -pair: %w", err)
@@ -76,6 +79,7 @@ func runFakeCube(args []string) error {
 			return fmt.Errorf("fakecube: -discovery: %w", err)
 		}
 		defer d.Close()
+		d.SetOnRestart(srv.Restart) // an R ends the TCP sessions too
 		fmt.Fprintf(os.Stderr, "answering discovery on %s as %s\n", d.Addr(), *discoverySerial)
 	}
 	if srv.Pair != nil {

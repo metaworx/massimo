@@ -10,6 +10,7 @@ package fakecube
 import (
 	"bufio"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -50,6 +51,15 @@ type Server struct {
 	// BoostFor ends a boost after this long instead of the device's boost
 	// time, so that a test need not wait minutes.
 	BoostFor time.Duration
+	// SingleClient makes the fake serve one client at a time, as the
+	// Cube does (oneclient.go): while a client is connected, or a dead
+	// session is held, another client is refused; on Linux its dial times
+	// out, as on hardware.
+	SingleClient bool
+	// HoldDead is how long a SingleClient fake keeps a session that ended
+	// while it was silent, as the Cube keeps one whose end the outage
+	// lost; 0 is DefaultHoldDead. Release and Restart end it sooner.
+	HoldDead time.Duration
 
 	ln       net.Listener
 	mu       sync.Mutex
@@ -65,6 +75,16 @@ type Server struct {
 	boosts   map[cube.RFAddress]*boost
 	removed  map[cube.RFAddress]bool // taken out with Remove, back with Restore
 	control  *http.Server            // the control's HTTP server, see Control
+	closed   bool                    // Close was called
+
+	// The one-client rule (SingleClient, oneclient.go).
+	deadUntil time.Time     // a dead session is held until then; zero: none
+	deadTimer *time.Timer   // ends the dead session at deadUntil
+	refusing  bool          // the backlog is cut and a connection parked
+	park      net.Conn      // the fake's own connection in the accept queue
+	parkAddr  string        // its local address, to know it once accepted
+	freed     chan struct{} // closed and replaced whenever the slot changes
+	restarts  int           // Restart calls
 }
 
 // SetSilent makes the fake a Cube whose network cable is out, or puts
@@ -82,6 +102,13 @@ func (s *Server) SetSilent(on bool) {
 		close(s.quiet)
 		s.quiet = nil
 	}
+}
+
+// isSilent reports whether the fake is silent (SetSilent).
+func (s *Server) isSilent() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.quiet != nil
 }
 
 // audible waits while the fake is silent.
@@ -281,8 +308,19 @@ func (s *Server) Serve(ln net.Listener) string {
 func (s *Server) Close() error {
 	err := s.ln.Close()
 	s.mu.Lock()
+	s.closed = true
 	for c := range s.open {
 		c.Close()
+	}
+	if s.park != nil {
+		s.park.Close()
+	}
+	if s.deadTimer != nil {
+		s.deadTimer.Stop()
+	}
+	if s.freed != nil {
+		close(s.freed)
+		s.freed = nil
 	}
 	if s.control != nil {
 		s.control.Close()
@@ -313,26 +351,80 @@ func (s *Server) Connections() int {
 
 func (s *Server) accept() {
 	for {
+		// A fake that drops SYNs takes no connection while the slot is
+		// taken, so that the kernel's queue fills (oneclient.go).
+		if s.SingleClient && dropsSYN && !s.waitFree() {
+			return
+		}
 		conn, err := s.ln.Accept()
 		if err != nil {
 			return
 		}
 		s.mu.Lock()
+		if s.isParkLocked(conn) {
+			s.mu.Unlock()
+			conn.Close()
+			continue
+		}
+		if s.SingleClient && s.occupiedLocked() {
+			// Outside Linux, or a client that got into the queue before
+			// the backlog was cut: refused.
+			s.mu.Unlock()
+			conn.Close()
+			continue
+		}
 		s.conns++
 		if s.open == nil {
 			s.open = map[net.Conn]bool{}
 		}
 		s.open[conn] = true
+		if s.SingleClient {
+			s.refuseLocked()
+		}
 		s.mu.Unlock()
 		go s.serve(conn)
 	}
 }
 
 func (s *Server) serve(conn net.Conn) {
+	// The lines are read on their own, so that the end of the connection
+	// is seen while the fake is silent too: a client that leaves during
+	// a silence is a FIN the outage lost, and a SingleClient fake holds
+	// its session (holdDeadLocked).
+	lines := make(chan string, 64)
+	done := make(chan struct{})
+	var diedSilent bool // written by the reader before it closes lines
+	go func() {
+		defer close(lines)
+		r := bufio.NewReader(conn)
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				// Not our own Close (Drop, Restart, a write that failed):
+				// the client left.
+				diedSilent = !errors.Is(err, net.ErrClosed) && s.isSilent()
+				return
+			}
+			select {
+			case lines <- line:
+			case <-done:
+				return
+			}
+		}
+	}()
 	defer func() {
+		close(done)
 		conn.Close()
+		for range lines { // the reader's end, and diedSilent with it
+		}
 		s.mu.Lock()
 		delete(s.open, conn)
+		if s.SingleClient {
+			if diedSilent && !s.closed {
+				s.holdDeadLocked()
+			}
+			s.changedLocked()
+		}
 		s.mu.Unlock()
 	}()
 	var wmu sync.Mutex
@@ -369,12 +461,7 @@ func (s *Server) serve(conn net.Conn) {
 			last = m
 		}
 	}
-	r := bufio.NewReader(conn)
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return
-		}
+	for line := range lines {
 		m, err := cube.ParseLine(line)
 		if err != nil {
 			continue

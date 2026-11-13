@@ -25,7 +25,8 @@ const netConfigLen = 22
 // and takes C and R as a Cube with firmware 1.1.3 does: C is answered
 // with status 1 for a static configuration and 2 for DHCP, after which
 // it restarts; R is answered with 2 and restarts it. While restarting it
-// answers nothing. It never changes its own address.
+// answers nothing, and SetOnRestart says what else a restart does. It
+// never changes its own address.
 type DiscoveryResponder struct {
 	Serial    string
 	RFAddress cube.RFAddress
@@ -50,6 +51,26 @@ type DiscoveryResponder struct {
 	// one takes.
 	restartUntil time.Time
 	restartFor   time.Duration
+	// onRestart is called on every restart, see SetOnRestart.
+	onRestart func()
+}
+
+// SetOnRestart sets what a restart (R, or a C that turns DHCP on) does
+// beside the responder's own silence: a Cube's restart ends its TCP
+// sessions too, so massimo fakecube and the tests pass the TCP fake's
+// Restart.
+func (d *DiscoveryResponder) SetOnRestart(f func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onRestart = f
+}
+
+// restartLocked starts a restart. d.mu is held.
+func (d *DiscoveryResponder) restartLocked() {
+	d.restartUntil = time.Now().Add(d.restartFor)
+	if f := d.onRestart; f != nil {
+		go f()
+	}
 }
 
 // SetStatic makes the c reply say the Cube has a static address instead
@@ -194,7 +215,7 @@ func (d *DiscoveryResponder) answer(op byte, named bool, p []byte) ([]byte, bool
 		copy(d.netConfig[:], p[:netConfigLen])
 		d.writes++
 		if d.netConfig[20] != 0 {
-			d.restartUntil = time.Now().Add(d.restartFor)
+			d.restartLocked()
 			return []byte{2}, true
 		}
 		return []byte{1}, true
@@ -203,7 +224,7 @@ func (d *DiscoveryResponder) answer(op byte, named bool, p []byte) ([]byte, bool
 			return nil, false
 		}
 		d.reboots++
-		d.restartUntil = time.Now().Add(d.restartFor)
+		d.restartLocked()
 		return []byte{2}, true
 	}
 	return nil, false
