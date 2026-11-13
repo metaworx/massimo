@@ -920,8 +920,10 @@ An app that embeds the server can take every notification itself as well
 `GET /api/v1/push/vapid` is the server's VAPID public key (RFC 8292),
 `{"key": "<base64url>"}`, which the page gives `pushManager.subscribe`
 as `applicationServerKey`;
-made at the first request and kept in the store (docs/store.md section 5),
+made at the first request and kept sealed in the store (docs/store.md section 5),
 for `read`.
+Where the store's key no longer opens it, a new pair is made,
+and the page, finding its subscription made for another key, subscribes again.
 `POST /api/v1/me/push` takes the browser's `PushSubscription.toJSON()` and a label:
 
 ```json

@@ -62,9 +62,9 @@ func subscription(t *testing.T, endpoint, label string) string {
 		endpoint, base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), base64.RawURLEncoding.EncodeToString(auth), label)
 }
 
-// The VAPID key is made at its first use and kept in the store: the
-// same for the next server over it, and not among the settings the API
-// shows.
+// The VAPID key is made at its first use and kept sealed in the store:
+// the same for the next server over it, not among the settings the API
+// shows, and made anew where it no longer opens.
 func TestVAPIDKey(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	_, ts, _ := startWith(t, opts)
@@ -80,8 +80,9 @@ func TestVAPIDKey(t *testing.T) {
 	if _, err := ecdh.P256().NewPublicKey(raw); err != nil {
 		t.Fatalf("not a P-256 key: %v", err)
 	}
-	if _, ok, _ := opts.Store.Setting(t.Context(), store.VAPIDKey); !ok {
-		t.Fatal("not kept in the store")
+	kept, ok, _ := opts.Store.Setting(t.Context(), store.VAPIDKey)
+	if !ok || !strings.HasPrefix(string(kept), `"v2:`) || strings.Contains(string(kept), "private") {
+		t.Fatalf("not kept sealed in the store: %s", kept)
 	}
 	_, again, _ := startWith(t, opts)
 	if _, text := callAPI(t, again, "GET", "/api/v1/push/vapid", "secret", ""); !strings.Contains(text, v.Key) {
@@ -89,6 +90,12 @@ func TestVAPIDKey(t *testing.T) {
 	}
 	if _, text := callAPI(t, ts, "GET", "/api/v1/settings", "secret", ""); strings.Contains(text, "vapid") {
 		t.Fatalf("the settings show the key: %s", text)
+	}
+	// one that no longer opens is made anew (AP SealedSecrets v1.0, D36-A)
+	opts.Store.SetSetting(t.Context(), store.VAPIDKey, "v2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	_, lost, _ := startWith(t, opts)
+	if code, text := callAPI(t, lost, "GET", "/api/v1/push/vapid", "secret", ""); code != 200 || strings.Contains(text, v.Key) {
+		t.Fatalf("a lost key: %d %s", code, text)
 	}
 	_, legacy, _ := start(t, "secret")
 	if code, _ := callAPI(t, legacy, "GET", "/api/v1/push/vapid", "secret", ""); code != 503 {

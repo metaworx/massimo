@@ -735,9 +735,14 @@ Notes on the tables:
   a subscription is bound to this server's VAPID key, is not replicated,
   and is deleted rather than marked.
   The VAPID key pair (RFC 8292) is the setting `push.vapid`,
-  made at its first use: the private key is in the store itself,
-  not in a file beside it as the OPAQUE key is,
-  so a `store backup` carries it; `GET /api/v1/settings` does not show it.
+  made at its first use and kept sealed, as the providers' client secrets are
+  (section 6, "Sign-in through OpenID Connect"; AP SealedSecrets v1.0):
+  its value is the JSON string of the box, the setting's key its additional data,
+  so a `store backup` carries it but opens it only beside its `opaque.key`;
+  a plain one, from before, is sealed at the next open.
+  One that no longer opens is made anew, and the browsers subscribe again
+  for the new key at their next visit.
+  `GET /api/v1/settings` does not show it.
 - `roles`, `role_capabilities` and `capabilities_disabled` are the capability
   model of section 6;
   the first migration seeds the six default roles with their sets.

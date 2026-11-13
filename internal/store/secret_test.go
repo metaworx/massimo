@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"encoding/pem"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -161,4 +162,40 @@ func make32() []byte {
 		b[i] = byte(i*7 + 3)
 	}
 	return b
+}
+
+// The sealed settings (AP SealedSecrets v1.0, Block 2): push.vapid kept
+// as a sealed box, opened by SecretSetting; a plain one sealed at the
+// next open; a box moved to another setting does not open.
+func TestSealedSettings(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	s := open(t, dir)
+	if err := s.SetSecretSetting(ctx, VAPIDKey, map[string]string{"private": "p", "public": "q"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _, _ := s.Setting(ctx, VAPIDKey)
+	if !strings.HasPrefix(string(raw), `"v2:`) || strings.Contains(string(raw), "private") {
+		t.Fatalf("in the file: %s", raw)
+	}
+	opened, ok, err := s.SecretSetting(ctx, VAPIDKey)
+	if err != nil || !ok || string(opened) != `{"private":"p","public":"q"}` {
+		t.Fatalf("opened: %s %v %v", opened, ok, err)
+	}
+	s.SetSetting(ctx, "moved", raw)
+	if _, _, err := s.SecretSetting(ctx, "moved"); !errors.Is(err, ErrSecretLost) {
+		t.Fatalf("a box moved: %v", err)
+	}
+	if _, ok, err := s.SecretSetting(ctx, "absent"); ok || err != nil {
+		t.Fatalf("absent: %v %v", ok, err)
+	}
+
+	// a plain one, as before the sealing, sealed at the next open
+	s.SetSetting(ctx, VAPIDKey, map[string]string{"private": "old"})
+	s.Close()
+	s = open(t, dir)
+	raw, _, _ = s.Setting(ctx, VAPIDKey)
+	if opened, _, err := s.SecretSetting(ctx, VAPIDKey); !strings.HasPrefix(string(raw), `"v2:`) || string(opened) != `{"private":"old"}` || err != nil {
+		t.Fatalf("sealed at the open: %s %s %v", raw, opened, err)
+	}
 }

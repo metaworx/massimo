@@ -24,6 +24,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -235,7 +236,50 @@ func (s *Store) sealPlainSecrets(ctx context.Context) error {
 		}
 		s.log.Info("a provider's client secret sealed", "provider", r.key)
 	}
-	return s.retireLegacyKey(unopened)
+	n, err := s.sealPlainSettings(ctx)
+	if err != nil {
+		return err
+	}
+	return s.retireLegacyKey(unopened + n)
+}
+
+// sealPlainSettings seals the settings of sealedSettings kept plain or
+// with secret.key, and returns how many sealed with secret.key do not
+// open.
+func (s *Store) sealPlainSettings(ctx context.Context) (int, error) {
+	unopened := 0
+	for _, key := range sealedSettings {
+		raw, ok, err := s.Setting(ctx, key)
+		if err != nil || !ok {
+			if err != nil {
+				return 0, err
+			}
+			continue
+		}
+		var kept string
+		isString := json.Unmarshal(raw, &kept) == nil
+		if isString && strings.HasPrefix(kept, sealedPrefix) {
+			continue
+		}
+		plain := string(raw)
+		if isString && strings.HasPrefix(kept, legacyPrefix) {
+			var lost bool
+			if plain, lost = s.openSecret(key, kept); lost {
+				unopened++
+				s.log.Warn("store: a sealed setting does not open", "setting", key)
+				continue
+			}
+		}
+		sealed, err := s.sealSecret(key, plain)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.SetSetting(ctx, key, sealed); err != nil {
+			return 0, err
+		}
+		s.log.Info("a setting sealed", "setting", key)
+	}
+	return unopened, nil
 }
 
 // retireLegacyKey renames secret.key to secret.key.retired where nothing
