@@ -2,11 +2,12 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, log view: the selected Cube's events from
-// GET …/log, newest first, a page at a time with "Older" at the bottom
-// back through the server's log, the live events of the stream coming in
-// at the top, one line each, with a text
-// filter, a choice of kind, of device and of how far back (the range),
-// and Clear, which sets the first three back.
+// GET …/log, or every Cube's from GET /api/v1/log under All Cubes,
+// newest first, a page at a time with "Older" at the bottom back through
+// the server's log, the live events of the stream coming in at the top
+// (under All Cubes those a poll brings), one line each, with a text
+// filter, a choice of Cubes, kind, device and how far back (the range),
+// and Clear, which sets the choices back but the range.
 // Uses the state, api and helpers of app.js and tiles.js.
 "use strict";
 
@@ -32,6 +33,10 @@ const LOG_RANGES = ["20", "10m", "1h", "today", "week", "month", "all"];
 const LOG_COUNT_RANGE = "20";
 const LOG_COUNT = 20;
 
+// LOG_POLL_MS is how often the log asks for new lines under All Cubes,
+// where the stream, which is the header's Cube's, brings none (D9-A).
+const LOG_POLL_MS = 10000;
+
 const logState = {
   open: false,
   range: LOG_COUNT_RANGE, // one of LOG_RANGES
@@ -52,6 +57,11 @@ const logState = {
   users: null, // the users of the who choice, loaded once the log opens (logLoadUsers)
   openCommands: new Set(), // the commands whose detail is open, by number
   commands: new Map(), // a command's detail as GET /api/v1/commands/{id} answered it, or {error}, by number
+  cubes: "", // "" for the header's Cube, "all" for every Cube (GET /api/v1/log)
+  cubeRooms: new Map(), // under All Cubes, each Cube's {rooms, unlisted} by S/N, null while asked or not answered
+  cubesSeen: "", // the Cubes the choices were last filled for (logCubesPolled)
+  pollTimer: null, // the poll of new lines under All Cubes (logPollSet)
+  polling: false, // a poll is on its way
 };
 
 // LOG_SOURCES are the sources of an event, as the server names them, in
@@ -101,22 +111,54 @@ async function logLoadUsers() {
   fillLogSelects();
 }
 
-// logRooms are the rooms loaded where they are the selected Cube's; none
-// while a Cube switch has not brought the new Cube's yet, since a radio
-// address names a device on its own Cube only.
-function logRooms() {
-  return state.roomsOf === state.serial ? state.rooms : [];
+// logRoomsOf are the rooms and the unlisted list loaded of a Cube, by its
+// S/N, the header's Cube for none: the page's own where they are that
+// Cube's, else those All Cubes loaded (logLoadCubeRooms); null while
+// there are none, as while a Cube switch has not brought the new Cube's,
+// since a radio address names a device on its own Cube only.
+function logRoomsOf(serial) {
+  const sn = serial || state.serial;
+  if (sn && sn === state.serial && state.roomsOf === sn) return { rooms: state.rooms, unlisted: state.unlisted };
+  return logState.cubeRooms.get(sn) || null;
 }
 
-// logDevice finds a device of the rooms or of the unlisted list already
-// loaded by its radio address; null when the Cube has none.
-function logDevice(rf) {
-  if (state.roomsOf !== state.serial) return null;
-  for (const r of state.rooms) {
+// logDevicesOf are the devices of a Cube's rooms and unlisted list, each
+// once, by name, else by S/N.
+function logDevicesOf(rs) {
+  const devs = [];
+  if (!rs) return devs;
+  for (const r of rs.rooms) for (const d of r.devices) devs.push(d);
+  for (const d of rs.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
+  return devs.sort((a, b) => (a.name || logDeviceKey(a)).localeCompare(b.name || logDeviceKey(b)));
+}
+
+// logDevice finds a device of a Cube (logRoomsOf) by its radio address;
+// null when the Cube has none, or nothing of the Cube is loaded.
+function logDevice(rf, serial) {
+  const rs = logRoomsOf(serial);
+  if (!rs) return null;
+  for (const r of rs.rooms) {
     const d = r.devices.find((x) => x.rf_address === rf);
     if (d) return d;
   }
-  return state.unlisted.find((x) => x.rf_address === rf) || null;
+  return rs.unlisted.find((x) => x.rf_address === rf) || null;
+}
+
+// logCubeName names a Cube by its name, else its S/N.
+function logCubeName(serial) {
+  const c = state.cubes.find((x) => x.serial === serial);
+  return c && c.name ? c.name : serial;
+}
+
+// logLineCube is the name of a line's Cube where the log shows every
+// Cube's lines (D2); "" under This Cube and for the server's own lines.
+function logLineCube(line) {
+  return logState.cubes === "all" && line.cubeSerial ? logCubeName(line.cubeSerial) : "";
+}
+
+// logNamePath joins a name to what holds it: "Kitchen › Window".
+function logNamePath(outer, inner) {
+  return t("log.devicePath", { room: outer, device: inner });
 }
 
 // logDeviceKey is how the log names a device in its choice and its
@@ -135,27 +177,28 @@ function logDeviceKey(d) {
 // radio address, in expert mode (renderLogLine).
 function logDeviceName(line) {
   if (!line.device) return "";
-  const d = logDevice(line.device);
+  const d = logDevice(line.device, line.cubeSerial);
   const kept = line.state || {};
   const type = (d && d.type) || kept.type;
   const device = (d && d.name) || kept.name || (type ? upperFirst(typeName(type)) : "");
   if (!device) return logDeviceSerial(line) || line.device;
-  const room = d ? logDeviceRoom(d) : "";
-  return room ? t("log.devicePath", { room, device }) : device;
+  const room = d ? logDeviceRoom(d, line.cubeSerial) : "";
+  return room ? logNamePath(room, device) : device;
 }
 
 // logDeviceSerial is the S/N of a line's device: the line's, else the one
 // the rooms loaded give its radio address; "" for neither.
 function logDeviceSerial(line) {
   if (line.serial) return line.serial;
-  const d = line.device ? logDevice(line.device) : null;
+  const d = line.device ? logDevice(line.device, line.cubeSerial) : null;
   return (d && d.serial) || "";
 }
 
-// logDeviceRoom is the name of the room a device of the rooms loaded is
-// in; "" for a device of the unlisted list.
-function logDeviceRoom(d) {
-  const r = logRooms().find((x) => x.devices.includes(d));
+// logDeviceRoom is the name of the room a device of a Cube's rooms loaded
+// is in; "" for a device of the unlisted list.
+function logDeviceRoom(d, serial) {
+  const rs = logRoomsOf(serial);
+  const r = rs && rs.rooms.find((x) => x.devices.includes(d));
   if (!r) return "";
   return r.name || t("log.room", { id: r.id });
 }
@@ -168,11 +211,13 @@ function upperFirst(s) {
 
 // logOfDevice reports whether a line is of the device chosen, named by
 // its S/N or its radio address; a line stored before events carried the
-// S/N is the chosen device's by its radio address.
+// S/N is the chosen device's by its radio address on the line's Cube.
 function logOfDevice(line, key) {
   if (!key || line.serial === key || line.device === key) return true;
-  for (const r of state.rooms) if (r.devices.some((d) => d.serial === key && d.rf_address === line.device)) return true;
-  return state.unlisted.some((d) => d.serial === key && d.rf_address === line.device);
+  const rs = logRoomsOf(line.cubeSerial);
+  if (!rs) return false;
+  for (const r of rs.rooms) if (r.devices.some((d) => d.serial === key && d.rf_address === line.device)) return true;
+  return rs.unlisted.some((d) => d.serial === key && d.rf_address === line.device);
 }
 
 // logStateText is the short state text of a state event.
@@ -289,7 +334,7 @@ function logConfigText(changes) {
 // differences: a connection's devices, rooms, firmware, budget and how
 // long the Cube was lost; a hello's budget; a list's rooms and devices; a
 // configuration's main values.
-function logSummaryText(kind, s) {
+function logSummaryText(kind, s, serial) {
   const num = (v) => (v === undefined || v === null ? "–" : String(v));
   switch (kind) {
     case "connected": {
@@ -344,7 +389,7 @@ function logSummaryText(kind, s) {
     case "address_changed":
       return t("log.sum.addressChanged", { from: s.from || "–", to: s.to || "–" });
     case "change":
-      return logChangeText(s);
+      return logChangeText(s, serial);
     case "command": {
       const state = logWord("log.cmdState.", s.state);
       if (s.duty_pct === undefined) return t("log.sum.command", { state });
@@ -382,8 +427,9 @@ function logSummaryText(kind, s) {
 }
 
 // logTargetText names what a change concerns: a device by its name, else
-// its S/N; a room by its name; a user, role or key as the line names it.
-function logTargetText(s) {
+// its S/N; a room by its name, of the Cube of the line (its S/N, the
+// header's for none); a user, role or key as the line names it.
+function logTargetText(s, serial) {
   const target = s.target || "";
   const i = target.indexOf(":");
   if (i < 0) return target;
@@ -391,14 +437,14 @@ function logTargetText(s) {
   const id = target.slice(i + 1);
   switch (kind) {
     case "device": {
-      for (const r of logRooms()) {
+      for (const r of (logRoomsOf(serial) || { rooms: [] }).rooms) {
         const d = r.devices.find((x) => x.serial === id || x.rf_address === id);
         if (d && d.name) return d.name;
       }
       return id;
     }
     case "room": {
-      const r = logRooms().find((x) => String(x.id) === id);
+      const r = (logRoomsOf(serial) || { rooms: [] }).rooms.find((x) => String(x.id) === id);
       return r && r.name ? r.name : t("log.room", { id });
     }
     case "token":
@@ -411,10 +457,10 @@ function logTargetText(s) {
 
 // logChangeText is a change line (AP Logging v1.1, Block 6): what was
 // done, to what, and what changed from and to, else what it set.
-function logChangeText(s) {
+function logChangeText(s, serial) {
   const key = "log.action." + s.action;
   const action = t(key) === key ? s.action : t(key);
-  const target = logTargetText(s);
+  const target = logTargetText(s, serial);
   let text = target ? t("log.sum.change", { action, target }) : action;
   const changes = s.changes && Object.keys(s.changes).length ? s.changes : null;
   if (changes) {
@@ -464,6 +510,7 @@ function logLine(ev) {
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" || ev.kind === "cube_gone" ? ev.cube : null,
     by: ev.by || null,
+    cubeSerial: ev.cube_serial || "", // the line's Cube under All Cubes (GET /api/v1/log)
     command: ev.command || 0,
     error: ev.error || "",
     text: ev.error || "",
@@ -489,7 +536,7 @@ function logOwnText(line) {
   if (line.configChanges) return logConfigText(line.configChanges);
   if (line.listChanges) return logListText(line.listChanges);
   if (line.summary) {
-    const s = logSummaryText(line.kind, line.summary);
+    const s = logSummaryText(line.kind, line.summary, line.cubeSerial);
     if (s) return s;
   }
   if (line.state) return logStateText(line.state);
@@ -545,7 +592,9 @@ function logLineMatches(line) {
   if (!logOfDevice(line, logState.device) || !logAtLevel(line) || !logOfChoices(line)) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
-  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, logDeviceSerial(line), logDeviceName(line), logText(line)].join(" ").toLowerCase();
+  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), logLineCube(line), line.device, logDeviceSerial(line), logDeviceName(line), logText(line)]
+    .join(" ")
+    .toLowerCase();
   return hay.includes(f);
 }
 
@@ -554,7 +603,8 @@ function logLineMatches(line) {
 // by its room and name (logDeviceName), with its S/N as the tooltip and,
 // with its radio address, in expert mode, and the text. The Cube's own
 // configuration is the Cube's, by its S/N; a removed device is named by
-// the text alone.
+// the text alone. Under All Cubes a Cube's line names its Cube first,
+// "Upstairs › Kitchen › Window", and the Cube's own lines by it alone.
 function renderLogLine(line) {
   const row = fromTemplate("tpl-log-line");
   row.className += " kind-" + line.kind;
@@ -563,23 +613,27 @@ function renderLogLine(line) {
   const dev = row.querySelector(".log-device");
   const sn = row.querySelector(".log-sn");
   const rf = row.querySelector(".log-rf");
-  if (line.device) {
-    rf.textContent = line.device;
-    const serial = line.gone || line.source === "cube" ? "" : logDeviceSerial(line);
-    if (line.gone) dev.remove();
-    else if (line.source === "cube") dev.textContent = t("log.cubeDevice", { serial: line.serial || line.device });
-    else dev.textContent = logDeviceName(line);
-    if (serial && dev.textContent !== serial) {
-      sn.textContent = serial;
-      dev.title = serial;
-    } else {
-      sn.remove();
-    }
-  } else {
-    dev.remove();
-    sn.remove();
-    rf.remove();
+  const cube = logLineCube(line);
+  let name = "";
+  let serial = "";
+  if (line.device && !line.gone && line.source !== "cube") {
+    name = logDeviceName(line);
+    serial = logDeviceSerial(line);
+  } else if (cube) {
+    name = cube;
+  } else if (line.device && !line.gone) {
+    name = t("log.cubeDevice", { serial: line.serial || line.device });
   }
+  if (name) dev.textContent = cube && name !== cube ? logNamePath(cube, name) : name;
+  else dev.remove();
+  if (serial && name !== serial) {
+    sn.textContent = serial;
+    dev.title = serial;
+  } else {
+    sn.remove();
+  }
+  if (line.device) rf.textContent = line.device;
+  else rf.remove();
   row.querySelector(".log-text").textContent = logText(line);
   if (line.command) {
     const open = logState.openCommands.has(line.command);
@@ -676,13 +730,21 @@ function logCursor() {
   return first.id ? String(first.id) : first.at || null;
 }
 
+// logURL is where a page of the log comes from: every Cube's under All
+// Cubes, else the header's Cube's.
+function logURL() {
+  return logState.cubes === "all" ? "api/v1/log" : base() + "/log";
+}
+
 // logQuery is the query of a page: the size (LOG_COUNT for the count,
-// else LOG_PAGE), the start of a time range, the kind and the device
-// chosen, and where it starts.
-function logQuery(before) {
+// else LOG_PAGE), the start of a time range, or the time given (a poll's,
+// as the server sent it), the kind and the device chosen, and where it
+// starts.
+function logQuery(before, since) {
   let q = "?limit=" + (logState.range === LOG_COUNT_RANGE ? LOG_COUNT : LOG_PAGE);
   const start = logRangeStart(logState.range);
-  if (start) q += "&since=" + encodeURIComponent(start.toISOString());
+  const from = since || (start ? start.toISOString() : "");
+  if (from) q += "&since=" + encodeURIComponent(from);
   if (logState.kind) q += "&kind=" + encodeURIComponent(logState.kind);
   if (logState.source) q += "&source=" + logState.source;
   if (logState.device) q += "&device=" + encodeURIComponent(logState.device);
@@ -700,8 +762,14 @@ function logQuery(before) {
 // fetched and LOG_MAX_LINES more, so that a live event does not take back
 // a page just fetched.
 function appendLogEvent(ev) {
+  if (logState.cubes === "all") return; // the polls bring every Cube's (D9-A)
   const line = logLine(ev);
   line.seq = ++logState.liveSeq;
+  addLogLine(line);
+}
+
+// addLogLine puts a new line on top, as appendLogEvent says.
+function addLogLine(line) {
   logState.lines.push(line);
   let cut = 0;
   if (logState.range === LOG_COUNT_RANGE) {
@@ -742,6 +810,7 @@ function appendLogEvent(ev) {
 // already: the server may have stored it before it answered.
 async function loadLog() {
   if (!state.serial) return;
+  logLoadCubeRooms();
   const gen = ++logState.gen;
   const since = logState.liveSeq;
   logState.loading = true;
@@ -749,7 +818,7 @@ async function loadLog() {
   let evs = null;
   let failed = null;
   try {
-    evs = (await api("GET", base() + "/log" + logQuery())) || [];
+    evs = (await api("GET", logURL() + logQuery())) || [];
   } catch (e) {
     failed = e;
   }
@@ -787,7 +856,7 @@ async function loadOlder() {
   let evs = null;
   let failed = null;
   try {
-    evs = (await api("GET", base() + "/log" + logQuery(logState.cursor))) || [];
+    evs = (await api("GET", logURL() + logQuery(logState.cursor))) || [];
   } catch (e) {
     failed = e;
   }
@@ -808,6 +877,88 @@ async function loadOlder() {
   logState.stick = stick;
 }
 
+// logSameLine reports whether two lines are one event: by its id, else
+// (a log without a store) by its time, kind, device and Cube.
+function logSameLine(a, b) {
+  if (a.id || b.id) return a.id === b.id;
+  return a.at === b.at && a.kind === b.kind && a.device === b.device && a.cubeSerial === b.cubeSerial;
+}
+
+// pollLog asks, under All Cubes while the log is shown, for the lines
+// since the newest one (D9-A); those the log does not hold yet come in on
+// top as a live line does. None is asked while a page or a poll is on
+// its way, and an answer that comes after a new page, another choice or
+// Clear is dropped; one that fails leaves it to the next poll.
+async function pollLog() {
+  if (!logState.open || logState.cubes !== "all" || logState.loading || logState.polling) return;
+  const gen = logState.gen;
+  let newest = null;
+  for (let i = logState.lines.length - 1; i >= 0 && !newest; i--) if (logState.lines[i].at) newest = logState.lines[i];
+  logState.polling = true;
+  let evs = null;
+  try {
+    evs = (await api("GET", "api/v1/log" + logQuery(null, newest ? newest.at : ""))) || [];
+  } catch (e) {
+    evs = null;
+  }
+  logState.polling = false;
+  if (!evs || gen !== logState.gen || logState.cubes !== "all") return;
+  for (const ev of evs) {
+    const line = logLine(ev);
+    if (!logState.lines.some((l) => logSameLine(l, line))) addLogLine(line);
+  }
+}
+
+// logPollSet runs pollLog every LOG_POLL_MS while the log is shown under
+// All Cubes, and stops it otherwise.
+function logPollSet() {
+  const want = logState.open && logState.cubes === "all";
+  if (want && !logState.pollTimer) logState.pollTimer = setInterval(pollLog, LOG_POLL_MS);
+  if (!want && logState.pollTimer) {
+    clearInterval(logState.pollTimer);
+    logState.pollTimer = null;
+  }
+}
+
+// logLoadCubeRooms loads under All Cubes the rooms and the unlisted list
+// of each Cube the page has none of yet, once (D8-A), and names the lines
+// again once they are there; a Cube that does not answer stays without,
+// its lines named by what they kept.
+async function logLoadCubeRooms() {
+  if (logState.cubes !== "all") return;
+  const todo = state.cubes.filter((c) => !logState.cubeRooms.has(c.serial));
+  if (!todo.length) return;
+  await Promise.all(
+    todo.map(async (c) => {
+      logState.cubeRooms.set(c.serial, null);
+      try {
+        logState.cubeRooms.set(c.serial, await fetchRooms(c.serial));
+      } catch (e) {
+        // its lines keep the names they came with
+      }
+    })
+  );
+  if (!logState.open) return;
+  if (fillLogSelects()) logChoicesChanged();
+  else renderLog();
+}
+
+// logCubesKey names the Cubes and their names as the choices were filled
+// for them (logState.cubesSeen).
+function logCubesKey() {
+  return state.cubes.map((c) => c.serial + "\u0000" + (c.name || "")).join("\u0001");
+}
+
+// logCubesPolled follows the Cubes a poll found while the log is shown,
+// when they changed: the Cubes choice, shown with more than one, and
+// under All Cubes the rooms of a Cube new to the page.
+function logCubesPolled() {
+  if (!logState.open || logCubesKey() === logState.cubesSeen) return;
+  if (fillLogSelects()) logChoicesChanged();
+  else renderLog();
+  logLoadCubeRooms();
+}
+
 // pruneLogRange drops the lines a time range no longer holds, now or at
 // the time given; the age timer of app.js calls it every minute. Every
 // event of the range is then in the view, so Older has nothing more.
@@ -823,10 +974,11 @@ function pruneLogRange(now = new Date()) {
   if (logState.open) renderLog();
 }
 
-// renderLogClear turns Clear off while nothing narrows the log: no text
-// filter, every kind and every device.
+// renderLogClear turns Clear off while every choice is at its default:
+// no text filter, this Cube, every kind, source and device, info and
+// everyone.
 function renderLogClear() {
-  $("log-clear").disabled = !(logState.filter || logState.kind || logState.device || logState.source || logState.user || logState.level !== "info");
+  $("log-clear").disabled = !(logState.filter || logState.cubes || logState.kind || logState.device || logState.source || logState.user || logState.level !== "info");
 }
 
 // logChoicesChanged follows a new range, kind or device: the address in
@@ -835,19 +987,24 @@ function renderLogClear() {
 function logChoicesChanged() {
   if (logState.open) setAddress(logHash(), "replace");
   renderLogClear();
+  logPollSet();
   loadLog();
 }
 
-// clearLogFilter sets the text filter, the kind, the source or device,
-// the level and who back to all and loads the log again.
+// clearLogFilter sets the text filter, the Cubes, the kind, the source or
+// device, the level and who back to their defaults and loads the log
+// again.
 function clearLogFilter() {
   logState.filter = "";
+  logState.cubes = "";
   logState.kind = "";
   logState.device = "";
   logState.source = "";
   logState.user = "";
   logState.level = "info";
+  fillLogSelects(); // the devices of the header's Cube again
   $("log-filter").value = "";
+  $("log-cubes").value = "";
   $("log-kind").value = "";
   $("log-device").value = "";
   $("log-level").value = "info";
@@ -855,13 +1012,24 @@ function clearLogFilter() {
   logChoicesChanged();
 }
 
-// fillLogSelects fills the choice of kind, every kind the server sends,
-// and of device, the Cube's devices by name and S/N; a device chosen that
-// is gone falls back to all, one chosen by its radio address takes its
-// S/N, and the answer is true when the choice changed so. Until the
-// Cube's devices are loaded (state.roomsOf), a device chosen from the
-// address stays, shown as the address names it.
+// fillLogSelects fills the choice of Cubes, shown with more than one
+// Cube (or All Cubes chosen), of kind, every kind the server sends, and
+// of device, the Cube's devices by name and S/N, under All Cubes every
+// Cube's, a group each; a device chosen that is gone falls back to all,
+// one chosen by its radio address takes its S/N (but under All Cubes,
+// where it names that address on every Cube, D11-A), and the answer is
+// true when the choice changed so. Until the devices are loaded
+// (logRoomsOf), a device chosen from the address stays, shown as the
+// address names it.
 function fillLogSelects() {
+  logState.cubesSeen = logCubesKey();
+  const all = logState.cubes === "all";
+  const cubes = fillOptions($("log-cubes"), [
+    ["", t("log.thisCube")],
+    ["all", t("log.allCubes")],
+  ]);
+  cubes.value = logState.cubes;
+  cubes.classList.toggle("hidden", state.cubes.length < 2 && !all);
   const groups = LOG_SOURCES.map((src) => ({ group: t("log.src." + src), options: LOG_KINDS.filter((k) => (LOG_KIND_SOURCE[k] || "system") === src).map((k) => [k, logKind(k)]) }));
   const kinds = fillOptions($("log-kind"), [["", t("log.allKinds")]].concat(groups));
   kinds.value = logState.kind;
@@ -871,23 +1039,28 @@ function fillLogSelects() {
   if (logState.user && !users.some((u) => u.name === logState.user)) who.appendChild(new Option(logState.user, logState.user));
   who.value = logState.user;
   who.classList.toggle("hidden", users.length === 0 && !logState.user);
-  const devs = [];
-  for (const r of state.rooms) for (const d of r.devices) devs.push(d);
-  for (const d of state.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
-  devs.sort((a, b) => (a.name || logDeviceKey(a)).localeCompare(b.name || logDeviceKey(b)));
+  const devGroups = all
+    ? state.cubes.map((c) => ({ group: c.name || c.serial, devs: logDevicesOf(logRoomsOf(c.serial)) }))
+    : [{ group: t("log.devicesGroup"), devs: logDevicesOf({ rooms: state.rooms, unlisted: state.unlisted }) }];
+  const devs = devGroups.flatMap((g) => g.devs);
   fillOptions($("log-range"), LOG_RANGES.map((r) => [r, t("log.range." + r)])).value = logState.range;
   const options = [["", t("log.allDevices")]]
     .concat(LOG_SOURCES.map((src) => ["src:" + src, t("log.src." + src)]))
-    .concat(devs.length ? [{ group: t("log.devicesGroup"), options: devs.map((d) => [logDeviceKey(d), d.name ? d.name + " · " + logDeviceKey(d) : logDeviceKey(d)]) }] : []);
-  const byRF = devs.find((d) => d.rf_address === logState.device && d.serial);
+    .concat(
+      devGroups
+        .filter((g) => g.devs.length)
+        .map((g) => ({ group: g.group, options: g.devs.map((d) => [logDeviceKey(d), d.name ? d.name + " · " + logDeviceKey(d) : logDeviceKey(d)]) }))
+    );
+  const byRF = !all && devs.find((d) => d.rf_address === logState.device && d.serial);
   let changed = false;
   if (byRF) {
     logState.device = byRF.serial; // an old link's radio address
     changed = true;
   }
-  const unknown = logState.device !== "" && !devs.some((d) => logDeviceKey(d) === logState.device);
-  const known = !!state.serial && state.roomsOf === state.serial;
-  if (unknown && !known) options.push([logState.device, logState.device]);
+  const listed = devs.some((d) => logDeviceKey(d) === logState.device);
+  const unknown = logState.device !== "" && !listed && !(all && devs.some((d) => d.rf_address === logState.device));
+  const known = all ? state.cubes.length > 0 && state.cubes.every((c) => logRoomsOf(c.serial)) : !!state.serial && state.roomsOf === state.serial;
+  if (logState.device !== "" && !listed && !(unknown && known)) options.push([logState.device, logState.device]);
   const sel = fillOptions($("log-device"), options);
   if (unknown && known) {
     logState.device = "";
@@ -901,8 +1074,13 @@ function fillLogSelects() {
 // logCubeChanged starts the log over for another Cube: the device chosen
 // back to all, the lines and the paging reset, an answer still on its way
 // dropped, and, when the view is open, the address without the device and
-// the Cube's log loaded.
+// the Cube's log loaded. Under All Cubes the log stays as it is, every
+// Cube's, and only names its lines again.
 function logCubeChanged() {
+  if (logState.cubes === "all") {
+    if (logState.open) renderLog();
+    return;
+  }
   logState.gen++;
   logState.device = "";
   logState.lines = [];
@@ -941,12 +1119,13 @@ function viewOfHash(hash) {
   return Object.keys(VIEW_HASH).find((v) => VIEW_HASH[v] && VIEW_HASH[v] === page) || "tiles";
 }
 
-// logHash is the log's address: its page, then the range, the kind and
-// the device chosen (by its S/N), in that order, each left out at its
-// default, so that a plain #log is the last 20 events of every kind and
-// device.
+// logHash is the log's address: its page, then All Cubes, the range, the
+// kind and the device chosen (by its S/N), in that order, each left out
+// at its default, so that a plain #log is the header's Cube's last 20
+// events of every kind and device.
 function logHash() {
   const q = new URLSearchParams();
+  if (logState.cubes) q.set("cubes", logState.cubes);
   if (logState.range !== LOG_COUNT_RANGE) q.set("range", logState.range);
   if (logState.kind) q.set("kind", logState.kind);
   if (logState.source) q.set("source", logState.source);
@@ -957,8 +1136,8 @@ function logHash() {
   return VIEW_HASH.log + (s ? "?" + s : "");
 }
 
-// readLogHash takes the log's range, kind and device from an address of
-// the log, each at its default where it is missing or not one of its
+// readLogHash takes the log's Cubes, range, kind and device from an
+// address of the log, each at its default where it is missing or not one of its
 // values; the device by its S/N, or an old link's radio address, which
 // takes the S/N, and a device the Cube does not have goes, once its
 // devices are loaded (fillLogSelects). The text filter is not in the
@@ -969,6 +1148,7 @@ function readLogHash(hash) {
   const range = q.get("range");
   const kind = q.get("kind");
   const device = (q.get("device") || "").trim();
+  logState.cubes = q.get("cubes") === "all" ? "all" : "";
   logState.range = LOG_RANGES.includes(range) ? range : LOG_COUNT_RANGE;
   logState.kind = LOG_KINDS.includes(kind) ? kind : "";
   if (/^[a-z]{3}[0-9]{7}$/i.test(device)) logState.device = device.toUpperCase();
@@ -1026,6 +1206,7 @@ function showView(view, address = "push") {
   setAddress(view === "log" ? logHash() : VIEW_HASH[view], address);
   currentView = view;
   logState.open = view === "log";
+  logPollSet();
   for (const id of ["home-notice", "house", "rooms", "unlisted"]) {
     $(id).classList.toggle("view-hidden", view !== "tiles");
   }
@@ -1072,6 +1253,11 @@ function initLog() {
     renderLog();
   });
   $("log-clear").addEventListener("click", clearLogFilter);
+  $("log-cubes").addEventListener("change", (ev) => {
+    logState.cubes = ev.target.value === "all" ? "all" : "";
+    fillLogSelects(); // the devices of every Cube, or the header's alone
+    logChoicesChanged();
+  });
   $("log-kind").addEventListener("change", (ev) => {
     logState.kind = ev.target.value;
     logChoicesChanged();

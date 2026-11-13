@@ -8,11 +8,11 @@ or fails leaves the log as it should be."""
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 from conftest import api_call
-from helpers import CHANGES, named_buttons, show_view, wait_until
+from helpers import CHANGES, named_buttons, scroll_width, show_view, wait_until
 
 OLDER = {"en": "Older events", "de": "Ältere Ereignisse"}
 NO_OLDER = {"en": "No older events", "de": "Keine älteren Ereignisse"}
@@ -143,6 +143,89 @@ def test_log_names_room_and_device(page, case):
         assert line.locator(".log-device").inner_text() == room + " › " + want, "no name: the room and the type"
     finally:
         page.evaluate("(n) => { state.rooms[0].devices[0].name = n; renderLog(); }", name)
+    show_view(page, "tiles")
+
+
+SECOND_CUBE = "KEQ0000200"
+
+
+def every_cubes_log(url):
+    """Whether a request is one for every Cube's log, GET /api/v1/log."""
+    return urlparse(url).path.endswith("/api/v1/log")
+
+
+def test_log_of_every_cube(page, case):
+    """With a second Cube the log shows its Cubes choice, and not before.
+    All Cubes reads GET /api/v1/log and is in the address; a line names
+    its Cube first, a Cube's own line the Cube alone, the server's own no
+    Cube; the stream adds no line there, a poll does, since the newest
+    line; the device choice groups the devices by Cube; Clear sets the
+    choice back (AP LogCubes v1.0, Block 3). The second Cube never
+    connects; the lines are the test's own, so that what they name is
+    certain."""
+    show_view(page, "log")
+    choice = page.locator("#log-cubes")
+    assert choice.is_hidden(), "no Cubes choice with one Cube"
+    api_call("POST", "api/v1/cubes", {"serial": SECOND_CUBE, "address": "127.0.0.1:9", "name": "Second"})
+    try:
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!document.getElementById('log-cubes').classList.contains('hidden')", 5), "the choice with two Cubes"
+        with page.expect_response(lambda r: urlparse(r.url).path.endswith("/api/v1/log")) as answer:
+            choice.select_option("all")
+        assert answer.value.status == 200 and isinstance(answer.value.json(), list), "every Cube's log from the server"
+        assert "cubes=all" in page.evaluate("location.hash"), "All Cubes in the address"
+        head = page.evaluate("(() => { const c = state.cubes.find((x) => x.serial === state.serial); return { sn: c.serial, name: c.name || c.serial }; })()")
+        d = page.evaluate("state.rooms[0].devices[0]")
+        room = page.evaluate("state.rooms[0].name")
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+
+        def iso(s):
+            return (now + timedelta(seconds=s)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        lines = [
+            {"id": 900001, "kind": "server_started", "source": "server", "summary": {"version": "test"}, "time": iso(-3)},
+            {"id": 900002, "kind": "disconnected", "source": "cube", "cube_serial": SECOND_CUBE, "time": iso(-2)},
+            {"id": 900003, "kind": "config", "device": d["rf_address"], "serial": d["serial"], "source": "device", "cube_serial": head["sn"], "time": iso(-1)},
+        ]
+        asked = []
+
+        def answer_log(route):
+            asked.append(route.request.url)
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(lines))
+
+        page.route(every_cubes_log, answer_log)
+        page.evaluate("loadLog()")
+        assert wait_until(page, "logState.lines.some((l) => l.id === 900003)", 5), "the lines of the test"
+        dev = page.locator("#log-lines .log-line.kind-config").first.locator(".log-device")
+        assert dev.inner_text() == head["name"] + " › " + room + " › " + d["name"], f"the Cube, the room and the device ({dev.inner_text()!r})"
+        own = page.locator("#log-lines .log-line.kind-disconnected").first.locator(".log-device")
+        assert own.inner_text() == "Second", "a Cube's own line names the Cube alone"
+        assert page.locator("#log-lines .log-line.kind-server_started").first.locator(".log-device").count() == 0, "the server's line no Cube"
+        groups = page.evaluate("[...document.querySelectorAll('#log-device optgroup')].map((g) => g.label)")
+        assert head["name"] in groups, f"the devices grouped by Cube ({groups})"
+        # The stream adds nothing under All Cubes; a poll brings the new lines.
+        n = page.evaluate("logState.lines.length")
+        page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+          kind: "config", device: d.rf_address, serial: d.serial, source: "device", time: new Date().toISOString() }) }))""", d)
+        assert page.evaluate("logState.lines.length") == n, "no line from the stream"
+        lines.append({"id": 900004, "kind": "config", "device": "0a0fee", "serial": "MEQ0000999", "source": "device", "cube_serial": SECOND_CUBE, "time": iso(0)})
+        asked.clear()
+        # pollLog asks again until a poll brings it: one of the timer's may be on its way
+        assert wait_until(page, "(pollLog(), logState.lines.some((l) => l.id === 900004))", 5), "the poll's new line"
+        assert page.evaluate("logState.lines.filter((l) => l.id >= 900001).length") == 4, "each line once"
+        since = parse_qs(urlparse(asked[0]).query).get("since", [""])[0]
+        assert since == lines[2]["time"], f"asked since the newest line ({since!r})"
+        new = page.locator("#log-lines .log-line.kind-config").first.locator(".log-device")
+        assert new.inner_text() == "Second › MEQ0000999", f"the other Cube's device ({new.inner_text()!r})"
+        page.unroute(every_cubes_log)
+        page.locator("#log-clear").click()
+        assert wait_until(page, "logState.cubes === '' && !location.hash.includes('cubes=')", 5) and choice.input_value() == "", "Clear: this Cube again"
+    finally:
+        page.unroute(every_cubes_log)
+        api_call("DELETE", f"api/v1/cubes/{SECOND_CUBE}")
+        page.evaluate("loadCubes()")
+    assert wait_until(page, "document.getElementById('log-cubes').classList.contains('hidden')", 5), "no choice with one Cube again"
+    assert scroll_width(page) <= case.width, "no horizontal scroll"
     show_view(page, "tiles")
 
 

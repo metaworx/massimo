@@ -352,10 +352,23 @@ Only a log left open until every fetched line has gone pages on by the time of
 the oldest line, where an event of that same millisecond can be missed.
 A page that cannot load says so in the log, whatever is chosen;
 an answer that comes after **Clear**, another choice or another Cube is dropped,
-and another Cube starts the log over with every device.
+and another Cube in the header starts the log over with every device.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
+With more than one Cube, a **Cubes** choice comes first in the head:
+**this Cube**, the header's, with the server's own lines (the default),
+or **all Cubes**, every Cube's lines with the server's own once
+(`GET /api/v1/log`).
+Under all Cubes a line names its Cube first ("Upstairs › Kitchen › Window"),
+a Cube's own line, such as its connection, the Cube alone,
+and the server's own lines no Cube;
+the device choice lists every Cube's devices, a group for each Cube,
+and a radio address there names that address on every Cube.
+The page then loads every Cube's rooms once, for the names,
+and asks for the new lines every 10 seconds while the log is shown,
+in place of the header's Cube's stream;
+another Cube in the header leaves the log as it is.
 The choices in the head show one kind of event (all kinds by default,
 grouped by their source), one source or one device (all by default:
 System, Configuration, the Cube, Devices, the queue, the server, the proxy,
@@ -366,12 +379,12 @@ the server answers what matches,
 and the new lines follow the choices too.
 The filter matches any part of a line (time, kind, the device's room, name,
 serial number and radio address, text).
-**Clear** sets the filter, the kind, the source or device, the level and who
-back to their defaults and loads the log again, the range staying;
+**Clear** sets the filter, the Cubes, the kind, the source or device, the level
+and who back to their defaults and loads the log again, the range staying;
 it is off while none of them is set.
 The choices are in the address after `#log`,
 each left out at its default:
-`range=` one of `10m`, `1h`, `today`, `week`, `month` and `all`,
+`cubes=all`, `range=` one of `10m`, `1h`, `today`, `week`, `month` and `all`,
 `kind=` an event's kind, `source=` one of `system`, `config`, `cube`, `device`,
 `queue`, `server` and `proxy`,
 `device=` a device's serial number
