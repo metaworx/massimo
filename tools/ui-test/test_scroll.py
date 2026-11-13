@@ -30,17 +30,6 @@ def test_slow_scroll_goes_down(page, case):
     }""", FOUND2)
     assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
         "at the top, the header whole"
-    # The found Cube's panel opening may still be scrolling smoothly, and
-    # the compositor then undoes the instant scrollTo above: wait until the
-    # page has stood still at the top for a dozen frames.
-    page.evaluate("""() => new Promise((done) => {
-      let still = 0;
-      const tick = () => {
-        if (window.scrollY !== 0) { window.scrollTo(0, 0); still = 0; } else still++;
-        if (still >= 12) done(); else requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    })""")
     page.evaluate("""() => {
       window.scrollLog = [];
       let last = false;
