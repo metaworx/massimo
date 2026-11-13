@@ -333,6 +333,29 @@ replace a dead battery, or remove the device from the Cube:
 
 `started_at` is when the server process started;
 a new time with the same version means the server was restarted.
+
+`features` is what this server can do, by name and version `"MAJOR.MINOR"`:
+`{"event_ids": "1.0", "vwt": "1.0", …}`.
+A minor rises when a feature gains something compatible (a field, a route),
+so a client written for 1.0 works with 1.3,
+and one that needs 1.2 asks for a minor of at least 2;
+under `/api/v1` the major stays 1.
+A name never changes meaning: a feature that goes is taken out of the map.
+A server without the field, older than these names, has none of them.
+The map is the running server's, not its build's:
+without a store (`serve -addr`) the features that need one are left out.
+
+| Name | What it says the server has | Needs the store | First in |
+|------|-----------------------------|-----------------|----------|
+| `event_ids` | the stream's ids, resuming by `Last-Event-ID` or `last_event_id`, `resync` | no | 0.13.0-alpha.1 |
+| `idempotency` | `Idempotency-Key` on writes | yes | 0.8.0-alpha.1 |
+| `commands` | `GET /api/v1/commands/{id}`, and command ids in answers | yes | 0.8.0-alpha.1 |
+| `vwt` | virtual wall thermostats, `devices=`, `room_uid`, `temp_method` | no | the release after 0.15.0-alpha.1 |
+| `program_etag` | the programme's tag, `If-Match`, `412`, `pending`, the config event's `changed` and `etag`, `GET …/devices/{rf}/program` | no | the release after 0.15.0-alpha.1 |
+| `boost` | `{"mode": "boost"}` on the setpoint routes | no | the release after 0.15.0-alpha.1 |
+| `proxy_virtual` | the Cube option `proxy_virtual` | yes | the release after 0.15.0-alpha.1 |
+
+What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
