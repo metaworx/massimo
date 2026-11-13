@@ -296,6 +296,14 @@
 
   "help.button": "help: {label}",
   "help.title": "What does this do?",
+
+  "help.profileName": "The name the 👤 menu and the users list show; your login name stays as it is. Save keeps it.",
+
+  "help.profilePassword": "A password lets you sign in by your name in any browser. It is registered by OPAQUE in this browser, so the server never sees it; a change asks for the current one. Save sets it.",
+
+  "help.profileTokens": "Each browser signed in as you is a session; an API key signs in a program. Revoke ends one at once, signing that browser or program out. Create key makes a key, shown only once: copy it then.",
+
+  "help.profileLinked": "Link signs you in once at the provider; the account that comes back is shown, and Link there makes it sign you in here too. Linking again at a provider replaces the link there. Remove ends a link, but not your last way to sign in.",
   "help.roomName": "The room's name, stored on the Cube and shown by every program that talks to it.",
   "help.comfort": "The comfort temperature (sun symbol), 21.0 °C from the factory. The thermostats switch to it with their comfort/eco button.",
   "help.eco": "The eco or set-back temperature (moon symbol), for nights and absences, 17.0 °C from the factory. The thermostats switch to it with their comfort/eco button.",

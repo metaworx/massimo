@@ -373,7 +373,9 @@ The filter's text is not in the address.
 ## My profile
 
 👤 → **My profile**, for a user signed in (not on an open server,
-nor with the server's API token):
+nor with the server's API token).
+Behind the last button of each group below, an ⓘ opens what its buttons do,
+as the settings' ⓘ do:
 
 - **Display name**, the name the 👤 menu and the users list show,
   with **Save**, off while it is the one stored.

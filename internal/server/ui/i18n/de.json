@@ -296,6 +296,14 @@
 
   "help.button": "Hilfe: {label}",
   "help.title": "Was bewirkt das?",
+
+  "help.profileName": "Der Name, den das 👤-Menü und die Benutzerliste zeigen; dein Anmeldename bleibt, wie er ist. Speichern behält ihn.",
+
+  "help.profilePassword": "Mit einem Passwort meldest du dich in jedem Browser mit deinem Namen an. Es wird per OPAQUE in diesem Browser registriert, der Server sieht es also nie; eine Änderung verlangt das aktuelle. Speichern setzt es.",
+
+  "help.profileTokens": "Jeder als du angemeldete Browser ist eine Sitzung; ein API-Schlüssel meldet ein Programm an. Widerrufen beendet eine sofort und meldet diesen Browser oder dieses Programm ab. Schlüssel anlegen macht einen Schlüssel, der nur einmal gezeigt wird: kopiere ihn dann.",
+
+  "help.profileLinked": "Verknüpfen meldet dich einmal beim Anmeldedienst an; das zurückgekommene Konto wird gezeigt, und Verknüpfen dort lässt es dich auch hier anmelden. Erneutes Verknüpfen bei einem Anmeldedienst ersetzt die Verknüpfung dort. Entfernen beendet eine Verknüpfung, aber nicht deinen letzten Weg zur Anmeldung.",
   "help.roomName": "Der Name des Raums, gespeichert im Cube und in jedem Programm sichtbar, das mit ihm spricht.",
   "help.comfort": "Die Komforttemperatur (Sonnensymbol), ab Werk 21,0 °C. Die Thermostate wechseln mit ihrer Komfort-/Absenktaste zu ihr.",
   "help.eco": "Die Absenktemperatur (Mondsymbol) für die Nacht und Abwesenheiten, ab Werk 17,0 °C. Die Thermostate wechseln mit ihrer Komfort-/Absenktaste zu ihr.",

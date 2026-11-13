@@ -297,6 +297,14 @@
 
   "help.button": "help: {label}",
   "help.title": "Wat doet dit?",
+
+  "help.profileName": "De naam die het 👤-menu en de gebruikerslijst tonen; je aanmeldnaam blijft zoals hij is. Opslaan bewaart hem.",
+
+  "help.profilePassword": "Met een wachtwoord meld je je in elke browser aan met je naam. Het wordt met OPAQUE in deze browser geregistreerd, dus de server ziet het nooit; een wijziging vraagt het huidige. Opslaan stelt het in.",
+
+  "help.profileTokens": "Elke browser die als jou is aangemeld is een sessie; een API-sleutel meldt een programma aan. Intrekken beëindigt er een meteen en meldt die browser of dat programma af. Sleutel aanmaken maakt een sleutel die maar één keer getoond wordt: kopieer hem dan.",
+
+  "help.profileLinked": "Koppelen meldt je één keer aan bij de provider; het teruggekomen account wordt getoond, en Koppelen daar laat het je ook hier aanmelden. Opnieuw koppelen bij een provider vervangt daar de koppeling. Verwijderen beëindigt een koppeling, maar niet je laatste manier om aan te melden.",
   "help.roomName": "De naam van de ruimte, opgeslagen in de Cube en zichtbaar in elk programma dat met de Cube praat.",
   "help.comfort": "De comforttemperatuur (zonsymbool), af fabriek 21,0 °C. De thermostaten schakelen ernaar om met hun comfort/verlaagd-toets.",
   "help.eco": "De verlaagde temperatuur (maansymbool), voor de nacht en tijdens afwezigheid, af fabriek 17,0 °C. De thermostaten schakelen ernaar om met hun comfort/verlaagd-toets.",

@@ -273,6 +273,7 @@ async function renderProfileIdentities(u) {
     btn.addEventListener("click", () => startLink(u, p.key, btn));
     buttons.appendChild(btn);
   }
+  addProfileHelp(buttons.lastElementChild || ul, "profileLinked", t("profile.linked"), box); // users.js
   host.replaceChildren(box);
 }
 
