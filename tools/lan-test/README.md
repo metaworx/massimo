@@ -17,14 +17,15 @@ bridge has both.
 
 ## What it checks
 
-`compose.yaml` puts four hosts on one bridge network of their own:
+`compose.yaml` puts five hosts on one bridge network of their own:
 
 - **cube**:
   `massimo fakecube` with the UI suite's greeting (`tools/ui-test/greeting.txt`,
   the serial `KEQ0000100`), answering discovery on UDP 23272,
   with the MAC `00:1a:22:00:00:01`: eQ-3's prefix, as a Cube's,
   and a placeholder (`tools/identifiers`);
-  it may take its link down (`NET_ADMIN`), which is how its cable is pulled;
+  it may take its link down (`NET_ADMIN`), which is how its cable is pulled,
+  and change its address, which is how it takes another lease;
 - **searcher**:
   `massimo serve` with no Cube, no proxy and no announcement,
   searching only when asked, through `POST /api/v1/cubes/discover` on its own address,
@@ -33,7 +34,10 @@ bridge has both.
   avahi-daemon, then `massimo serve -listen 0.0.0.0:8099 -tls self-signed -poll 5s`
   against the Cube, its proxy answering discovery for it;
 - **client**:
-  avahi-daemon of its own.
+  avahi-daemon of its own;
+- **follower**:
+  `massimo serve` with the Cube by its serial alone (`MASSIMO_CUBE_KEQ0000100_NAME`),
+  no proxy and no announcement, `-discover-interval 0` and `-poll 5s`.
 
 `run.sh` builds a static `massimo` into a temporary directory,
 which every host mounts at `/m`,
@@ -70,6 +74,16 @@ Then it brings up the box and checks:
    which answers nothing for a Cube it has lost;
 9. `serve` stopped, its goodbye takes the server out of the client's avahi.
 
+Then, the cable back, it brings up the follower and checks:
+
+10. the follower connected to the Cube at its address,
+    the Cube moved to another in the bridge's subnet (its last but one),
+    the follower logs "cube connection lost" after its polls left unanswered,
+    searches at the loss, logs the address from discovery,
+    and connects to the Cube at the new one, within 90 s.
+    Without the search at the loss, nothing would search before the periodic run,
+    which `-discover-interval 0` turns off.
+
 The box polls every 5 s so that check 8 tests the loss by polls,
 two left unanswered and 10 s each, about 25 s;
 at the default minute, the connection's keepalive would find it first.
@@ -81,7 +95,7 @@ a container connected again gets a new MAC, not of eQ-3's prefix,
 and `discover` would mark the Cube a proxy.
 
 Each check passed prints a line;
-a failed one prints why and the four hosts' logs,
+a failed one prints why and the five hosts' logs,
 and `run.sh` exits 1 (2 without Docker).
 The hosts are taken down whatever happened,
 under a Compose project of their own (`massimo-lan-<pid>`),

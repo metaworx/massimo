@@ -26,19 +26,23 @@
 #   8. that, the Cube's cable pulled again, the box's serve loses it and
 #      its proxy stops answering for it: a search lists the serial from
 #      nowhere;
-#   9. that the server's goodbye takes it out of the client's avahi.
+#   9. that the server's goodbye takes it out of the client's avahi;
+# then, the cable back, brings up the follower, a serve with the Cube by
+# its serial alone, which polls it every 5 s, and checks
+#  10. that, the Cube moved to another address, the follower loses it,
+#      searches, and connects to it at the new address.
 # The hosts are taken down whatever happened, their logs printed first
 # when a check failed. Needs Docker with Compose v2; exit 1 on a failed
 # check, 2 without Docker.
 set -euo pipefail
-readonly VERSION=1.4.0
+readonly VERSION=1.5.0
 readonly SERIAL=KEQ0000100
 readonly CUBE_MAC=00:1a:22:00:00:01
 readonly BUILD=v0.0.0-lan-test
 
 case "${1:-}" in
 	-h | --help)
-		sed -n '4,32p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '4,36p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	--version)
@@ -67,7 +71,7 @@ compose() { docker compose -f "$here/compose.yaml" "$@"; }
 finish() {
 	local rc=$?
 	if [ "$rc" != 0 ]; then
-		for s in cube searcher box client; do
+		for s in cube searcher box client follower; do
 			echo "--- $s" >&2
 			compose logs --no-color "$s" >&2 2>&1 || true
 		done
@@ -206,3 +210,30 @@ compose exec -T box pkill -TERM -f '/m/massimo -data' || fail "serve not stopped
 gone() { [ -z "$(resolved client)" ]; }
 within 30 gone || fail "the client's avahi still lists the server after its goodbye"
 ok "the server's goodbye takes it out of the client's avahi"
+
+# 10. The follower, a serve with the Cube by its serial alone, finds it,
+# and follows it to another address on the bridge: it takes the Cube for
+# lost by its polls, searches at the loss, and connects at the new one.
+compose exec -T cube ip link set eth0 up
+compose up --detach follower >/dev/null 2>&1 || compose up --detach follower
+# follower_at prints the follower's Cube: its address and whether it is
+# connected.
+follower_at() {
+	compose exec -T follower curl -sf http://127.0.0.1:8099/api/v1/cubes 2>/dev/null | python3 -I -c '
+import json, sys
+for c in json.load(sys.stdin) or []:
+    if c.get("configured"):
+        print(c.get("address"), str(c.get("connected")).lower())
+' 2>/dev/null
+}
+connected_at() { [ "$(follower_at)" = "$1:62910 true" ]; }
+within 30 connected_at "$cube_ip" || fail "the follower is not connected to $SERIAL at $cube_ip: $(follower_at)"
+# Another address in the bridge's subnet, its last but one.
+subnet="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' "${COMPOSE_PROJECT_NAME}_lan")"
+moved_ip="$(python3 -I -c 'import ipaddress, sys; print(ipaddress.ip_network(sys.argv[1]).broadcast_address - 1)' "$subnet")"
+compose exec -T cube sh -c "ip addr flush dev eth0 && ip addr add $moved_ip/${subnet#*/} brd + dev eth0"
+within 90 connected_at "$moved_ip" || fail "the follower did not follow $SERIAL to $moved_ip: $(follower_at)"
+follower_log() { compose logs --no-color --no-log-prefix follower 2>&1; }
+follower_log | grep -q 'msg="cube connection lost"' || fail "the follower does not log the Cube lost"
+follower_log | grep -q "msg=\"cube address from discovery\".* from=$cube_ip to=$moved_ip" || fail "the follower does not log the Cube's new address"
+ok "the Cube moved to $moved_ip, the follower loses it, searches, and connects at the new address"
