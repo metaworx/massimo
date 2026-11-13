@@ -31,6 +31,10 @@ paths:
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
                   node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
+                  features:
+                    type: object
+                    description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual; without a store idempotency, commands and proxy_virtual are left out. A name never changes meaning."
+                    additionalProperties: {type: string, pattern: "^[0-9]+\\.[0-9]+$", example: "1.0"}
                   tls:
                     type: object
                     description: With TLS, the certificate served; absent without.
