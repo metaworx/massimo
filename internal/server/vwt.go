@@ -36,8 +36,11 @@ import (
 type vwtState struct {
 	mu   sync.Mutex
 	info map[uint8]view.RoomInfo // by room, through roomInfo
+	// pub guards last and sent: the pump publishes, and so does a change
+	// of the settings through the API.
+	pub sync.Mutex
 	// last is each room's virtual wall thermostat as its last event had
-	// it, and sent that event's key; only the pump uses them.
+	// it, and sent that event's key.
 	last map[uint8]view.Device
 	sent map[uint8]string
 }
@@ -225,6 +228,8 @@ func (s *Server) virtualDetail(rt *runtime, room cube.RoomMeta) vwtDetail {
 // alone: the log, the notifications and the proxy have the real
 // devices' events.
 func (s *Server) publishVWTs(rt *runtime, cmd int64) {
+	rt.vwt.pub.Lock()
+	defer rt.vwt.pub.Unlock()
 	vwts, walls := view.RoomThermostats(rt.client.Snapshot(), rt.hidden(), s.StaleAfter(), rt.roomInfo())
 	if rt.vwt.last == nil {
 		rt.vwt.last, rt.vwt.sent = map[uint8]view.Device{}, map[uint8]string{}

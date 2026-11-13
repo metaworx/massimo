@@ -1491,8 +1491,10 @@ one of several answers each by name,
 `{"ok": true, "room": {…}, "wall_thermostat": {…}, "settings": {…}}`.
 `temp_method` is `median` or `mean` and needs `configure`, as the room's
 settings do; `rf_address` is six hex digits, or `""` for the room number,
-and one a real device, the Cube or another room's virtual wall thermostat has is `409`.
-A change of its settings is a `config` event of it, and a `state` event where its state changes.
+and one that a real device, the Cube or another room's virtual wall thermostat has
+is `409`.
+A change of its settings is a `config` event of it,
+and a `state` event where its state changes.
 Each command needs the capability of the route it goes to,
 and the audit names the room as its target.
 
