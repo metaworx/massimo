@@ -111,13 +111,20 @@ func (s *Server) isSilent() bool {
 	return s.quiet != nil
 }
 
-// audible waits while the fake is silent.
-func (s *Server) audible() {
+// audibleOr waits while the fake is silent, and reports false when
+// gone closes first: the client left during the silence.
+func (s *Server) audibleOr(gone <-chan struct{}) bool {
 	s.mu.Lock()
 	q := s.quiet
 	s.mu.Unlock()
-	if q != nil {
-		<-q
+	if q == nil {
+		return true
+	}
+	select {
+	case <-q:
+		return true
+	case <-gone:
+		return false
 	}
 }
 
@@ -393,9 +400,11 @@ func (s *Server) serve(conn net.Conn) {
 	// its session (holdDeadLocked).
 	lines := make(chan string, 64)
 	done := make(chan struct{})
-	var diedSilent bool // written by the reader before it closes lines
+	gone := make(chan struct{}) // the reader ended: the client left
+	var diedSilent bool         // written by the reader before it closes gone
 	go func() {
 		defer close(lines)
+		defer close(gone)
 		r := bufio.NewReader(conn)
 		for {
 			line, err := r.ReadString('\n')
@@ -434,7 +443,9 @@ func (s *Server) serve(conn net.Conn) {
 		_, err := conn.Write([]byte(line))
 		return err
 	}
-	s.audible()
+	if !s.audibleOr(gone) {
+		return
+	}
 	greeting := s.greeting()
 	for _, m := range greeting {
 		m, ok := s.visible(m)
@@ -469,7 +480,9 @@ func (s *Server) serve(conn net.Conn) {
 		s.mu.Lock()
 		s.received = append(s.received, m)
 		s.mu.Unlock()
-		s.audible()
+		if !s.audibleOr(gone) {
+			return // the client left during the silence
+		}
 		var reply string
 		switch m.Type {
 		case 'q':
