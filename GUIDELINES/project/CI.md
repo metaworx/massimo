@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.47.0)
+# Massimo — CI Conventions (v1.48.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -146,8 +146,20 @@ Guidelines and Site run, every other job is skipped,
 and a push to `main` makes no devel build but deploys the site,
 through Deploy site, once All tests passed has succeeded.
 Those documents are `docs/**`, `README.md` and `CONTRIBUTING.md`,
+and, since 2026-11-13 (owner, D66-A and D67-A),
+the site's own pages in `packaging/site/`, named one by one:
+`site.py`, `doc.html.in`, `docs.js`, `site.css` and `privacy.html`,
 declared as `[ci] site` in `GUIDELINES/config.ini`,
 a key of the project's own that no shared tool reads.
+The five pages are excluded from `project.shipped` too,
+so a change to them alone owes no CHANGELOG bullet.
+`build.sh` and `index.html` stay code, and shipped:
+the Debian package job's apt test (`packaging/apt/test.sh`)
+builds the site from them with the apt repository,
+which no other test does before the deploy;
+it copies `site.css` and `privacy.html` as they are, whatever they hold,
+and never builds the docs.
+A new file under `packaging/site/` is code until it is listed.
 Only the Guidelines job and Site read them:
 Guidelines with `tools/identifiers` and the guidelines' check of README's
 generated parts against `docs/fragments/`,

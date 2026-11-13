@@ -108,6 +108,11 @@ not this block:
 - `:!.gitattributes`
 - `:!.gitmodules`
 - `:!LICENSE`
+- `:!packaging/site/site.py`
+- `:!packaging/site/doc.html.in`
+- `:!packaging/site/docs.js`
+- `:!packaging/site/site.css`
+- `:!packaging/site/privacy.html`
 <!-- END GENERATED SHIPPED-PATHS -->
 
 A change touching only the paths listed below may skip the test suite:
