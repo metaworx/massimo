@@ -695,6 +695,36 @@ kept here because they cost time to learn.
   Restart `serve` first, then change addresses.
   Linux picks the first static address on the interface as the source for Cube
   connections, not the DHCP one.
+  A UDP `R` frees such a Cube without the power cycle (the next entry).
+- An outage of the network of the box running `serve` leaves the Cube holding
+  `serve`'s connection after `serve` gave it up, and the Cube refuses `serve`
+  until it lets go (2026-11-13, firmware 1.1.3, measured with tcpdump on a Pi):
+  - The owner rebooted the router, so the box's link went down and up four times
+    in about a minute.
+    The two Cubes whose connections were idle were lost after 26–30 s:
+    the keepalive (15 s idle, 5 s apart, 3 probes) ended them,
+    with "read: connection timed out",
+    and the kernel's reset never reached the Cubes.
+    The three Cubes in the middle of a poll kept their connections:
+    TCP retransmits unacknowledged bytes for many minutes,
+    and keepalive probes wait until they are acknowledged.
+  - The Cubes kept the dead session and answered every new SYN with a reset
+    with sequence number 0 and no ACK.
+    Linux ignores such a reset in SYN-SENT,
+    so every dial ended in "i/o timeout".
+    This is the refusal a second client meets (the first entry),
+    with `serve` its own second client.
+  - The refusal ended by itself after 41½ minutes,
+    for both Cubes at the same second.
+    In a reproduction, which dropped the box's traffic to one Cube's port 62910
+    for 26 s with an nft rule, it had not ended after 15¾ minutes.
+  - A SYN from the dead connection's own address and port got no answer at all,
+    not even a challenge ACK, so the kernel cannot reset the old connection,
+    and the sequence number for a reset written by hand is unknown.
+  - A UDP `R` (`"eQ3Max*\0"`, the serial, `R`, to port 23272) freed the Cube:
+    it stopped answering ping at once, answered again within 43 s,
+    and `serve` reconnected 61 s after the `R`.
+    A restart drops the radiograms the Cube has not delivered yet (below).
 - Two routers on the same 192.168.1.0/24 (wired and Wi-Fi) on one box make
   routing ambiguous; the Wi-Fi side needed SO_BINDTODEVICE.
 - A Cube restart drops undelivered radiograms.
