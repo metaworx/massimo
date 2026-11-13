@@ -1,23 +1,22 @@
-# AP Oidc v1.0: OpenID Connect sign-in
+# AP Oidc v1.1: OpenID Connect sign-in
 
 ## TL;DR
 
 Users sign in through an OpenID Connect provider (Nextcloud, Google, Microsoft, Authentik,
-Keycloak) beside the password:
-providers kept in the store, a user's identity matched by the provider's `iss` and `sub`,
-an e-mail the owner assigns bound at the first sign-in with it,
-users created on their own only where a provider allows it.
+Keycloak) beside the password; Blocks 1-5 are in v0.15.0-alpha.1.
+v1.1 fixes what the first real sign-in through breno's Nextcloud showed,
+lets users link their own accounts, restricts a provider to its groups,
+and seals the client secret.
 
-- sign-in → name + password or API key → also "Sign in with <provider>" on the card
-- flow → authorization code + PKCE, confidential client, `state` and `nonce`;
-  `id_token` from the token endpoint over TLS (OIDC Core 3.1.3.7), standard library only
-- identity → `(provider, sub)`; owner's e-mail = pre-link, bound once at `email_verified`
-- auto-create → off by default; on: a role without administrative capabilities
-  (default `viewer`) and the allowed e-mail domains
-- providers → new capability `auth`, held by `owner` alone by default;
-  a user's identities → `users` (`guests` for a guest)
-- client secret → in the store, never in an answer (`has_secret`)
-- redirect URI → the page's own address + `api/v1/login/oidc/callback`, registered at the provider
+- claims → `id_token` only → also the userinfo endpoint (Nextcloud's OIDC app ≥ 2.0)
+- a pre-link → e-mail only → e-mail or the user id at the provider (`sub`), bound at once
+- issuer → checked at the sign-in → checked when saved, the provider's own form kept
+- a refusal → "unknown account", no reason logged → its reason logged and shown
+  under the provider buttons
+- linking → the manager's, by e-mail → also the user's own, "Link" in My Profile;
+  details (name, user name, groups, last sign-in) on both
+- groups → not read → a claim per provider (`groups`), allowed groups; none: any
+- client secret → plain in the store → sealed (AES-GCM) with `secret.key` beside it
 
 ### Blocks
 
@@ -26,6 +25,10 @@ users created on their own only where a provider allows it.
 3. Management: capability `auth`, the providers' and identities' routes, audit; OpenAPI, docs/api-v1.md
 4. UI: the card's provider buttons, System settings → Sign-in providers, a user's identities; i18n; ui-test; docs/ui.md
 5. Guide: setting up a provider, Nextcloud's as the example; README.md
+6. The sign-in fixed: userinfo, a pre-link by user id, the issuer at saving, the reasons; tests; docs
+7. Linked accounts: migration 0019, the details kept, linking from My Profile, a waiting link changed; UI, tests, docs
+8. Groups: migration 0020, the claim and the allowed groups, the refusal; UI, tests, docs
+9. The sealed secret: `secret.key`, sealing on write and at the start, a lost key; tests, docs
 
 ## Discussion
 
@@ -94,6 +97,97 @@ No gate stated a push for this plan,
 so the completion gate offers the push and the pull request.
 A real sign-in through breno's Nextcloud needs a client registered there, the owner's.
 
+### v1.1: after the first real sign-in
+
+Blocks 1-5 were merged (#193) and released in v0.15.0-alpha.1.
+The owner registered a client at breno's Nextcloud on 2026-11-13 and found:
+
+- the issuer `https://cloud.casaleone.ch/`, as typed, was refused at the sign-in,
+  the provider calling itself without the slash; the check belongs to the saving;
+- the refusal showed under the password form, not under the provider's button;
+- with the issuer fixed and the owner's e-mail assigned, the sign-in was refused as an unknown account:
+  the log has `login failed … user=nextcloud:mdr`, Nextcloud's subject,
+  so the code was traded and the `id_token` checked, but no verified e-mail matched.
+  Nextcloud's OIDC app puts the e-mail and the profile into the `id_token` since its 2.0
+  only where the client asks for them by the `claims` parameter, or an admin setting says so;
+  its userinfo endpoint (`/apps/oidc/userinfo`) answers them.
+  Which of the two, the e-mail missing or not verified, was not seen: nothing logged it.
+
+The owner asked, beside them, whether the client secret is encrypted in the store (it is not),
+for linking by the users themselves in My Profile and by the managers on the user's card,
+with the linked account's details shown on both,
+and whether the providers' groups could restrict who signs in.
+
+**The owner's decisions**, 2026-11-13, `PLAN++ Oidc` on the evaluation's gate,
+which recommended each option taken:
+
+- **D20-A.** The client secret sealed with a key of its own,
+  `secret.key` (0600) beside the store's file;
+  a backup or a copy of the store's file alone does not hold it;
+  a lost key means the secret is entered again.
+- **D21-A.** A user links an account in My Profile ("Link" per provider, a sign-in there);
+  linking again at a provider replaces the link there;
+  removing the last way in (no password, no other linked account) is refused to the user.
+  A manager assigns by e-mail or user id, changes a waiting one, removes any.
+  Both show the provider, the e-mail, the name and user name there, the groups,
+  when it was linked and last used, kept current at each sign-in.
+- **D22-A.** Per provider a groups claim (`groups` by default) and allowed groups:
+  a sign-in in none of them is refused, a linked user's too; none named: no restriction.
+- **D25-A** (D23-A of the first evaluation).
+  The userinfo endpoint read after the token exchange, where the discovery names one;
+  its `sub` must be the `id_token`'s; it fills what the `id_token` lacks.
+- **D26-A.** A pre-link by e-mail or by the user id at the provider (`sub`);
+  one by user id is bound from the start.
+- **D27-A.** The issuer checked when an enabled provider is saved:
+  the discovery document must be reached and name the same issuer,
+  but for a trailing slash, where the document's form is kept.
+- **D28-A.** A refusal's reason logged (no e-mail, e-mail not verified, no user,
+  not in the groups, the account another user's),
+  and the page's message for it under the provider buttons.
+- **D29-A.** This revision, the fixes first (Block 6), so that they can go out on their own.
+
+**Refined here, routine:**
+
+- **"The last way in"** is a password or another linked account;
+  API keys, which sign in on the card too, are not counted,
+  being meant for programs.
+  A manager may remove any link: the manager can set a password.
+- **A changed waiting link**: a manager changes the e-mail or the user id of a link
+  not yet used for a sign-in; a used one is removed and assigned again.
+- **The subject is answered** (`subject`) to the user and the managers:
+  the user id at the provider is no secret, and a manager assigns by it.
+- **The groups' values** are read as a list of strings or one string;
+  Microsoft Entra sends group ids, which the allowed groups then name.
+  `groups` is not added to the default scopes: Google refuses a scope it does not know.
+  The guide names it for Nextcloud.
+- **The key file** is made at the first secret written, not at every start,
+  by `internal/safefile`; a read-only store never makes it.
+  A secret is sealed as `v1:` and base64 of the nonce and the AES-256-GCM box,
+  the provider's uuid as the additional data,
+  so that a sealed secret copied to another row does not open.
+  A plain secret left from v0.15.0-alpha.1 is sealed at the next start of a writable store.
+
+**Names chosen here**, routine:
+the reasons `noemail`, `unverified`, `refused`, `group`, `taken`;
+the routes `POST /api/v1/users/{name}/identities/link/{key}` (the user's own, a link started)
+and `PUT /api/v1/users/{name}/identities/{id}`;
+the columns `user_identities.name`, `.username`, `.groups`,
+`auth_providers.groups_claim`, `.allowed_groups`;
+the fragment `#oidc-linked=<key>`;
+the branch `claude/oidc-links`.
+
+**Not in this plan:**
+a role given or kept in step by the groups (D22-B, D22-C);
+a provider trusting e-mails it does not mark verified;
+the key in `.env` (D20-B).
+
+**Who runs it:**
+this session, under the owner's `PLAN++ Oidc` of 2026-11-13,
+whose gate stated the blocks committed on a branch and no push:
+this revision committed first on `claude/oidc-links`, then Blocks 6-9.
+The completion gate offers the push and the pull request.
+The real sign-in through breno's Nextcloud is the owner's.
+
 ## Analysis
 
 **The flow:**
@@ -157,6 +251,63 @@ What changes, by file:
 | `tools/ui-test/test_oidc.py` | 4 | the card's buttons, the panel, the identities |
 | `docs/store.md`, `docs/ui.md`, `docs/oidc.md`, `README.md` | 1, 4, 5 | as the code |
 | `CHANGELOG.d/` | 1-4 | a fragment per bullet |
+
+### v1.1
+
+**The callback**, after the token exchange:
+the userinfo endpoint (`userinfo_endpoint` of the discovery) with the access token;
+an answer whose `sub` is not the `id_token`'s fails the sign-in;
+one that fails otherwise is logged and the `id_token`'s claims go on alone.
+Then, for a sign-in:
+
+1. an identity with that `sub` → its user;
+2. else a waiting e-mail, where the e-mail is verified → bound;
+3. else a user created, where the provider creates users;
+4. else refused, the reason the first that holds:
+   `noemail` (no e-mail sent), `unverified` (an e-mail not marked verified), `refused`;
+5. the groups (Block 8), where the provider names allowed groups: none of them → `group`.
+
+For a link (Block 7), started by a signed-in user for itself:
+the `sub` another user's → `taken`;
+else the user's other identities at the provider removed,
+this one added bound, or the user's waiting e-mail bound,
+and the browser sent back with `#oidc-linked=<key>`, no session made.
+Each sign-in and link writes the identity's details:
+the e-mail, `name`, `preferred_username` and the groups.
+
+**Saving a provider**, enabled, with its issuer changed or newly enabled:
+the discovery read without the cache;
+an issuer that differs only by a trailing slash takes the document's;
+any other difference, or no answer, is a 400 naming what the document says, or why it failed.
+
+**The secret**: `store.Open` reads `secret.key` where it exists;
+`AddProvider` and `UpdateProvider` seal, making the key where none is;
+`Provider` and `Providers` open, and a secret that does not open
+(the key lost or another's) reads as none, with `SecretLost` set and a warning at the start.
+
+**The routes added or changed:**
+
+| Route | Capability | Action |
+|-------|------------|--------|
+| `GET /api/v1/users/{name}/identities` | `users`, or the user's own | |
+| `POST /api/v1/users/{name}/identities` | `users` | `identity.add`, `email` or `subject` |
+| `PUT /api/v1/users/{name}/identities/{id}` | `users` | `identity.update` |
+| `DELETE /api/v1/users/{name}/identities/{id}` | `users`, or the user's own but the last way in | `identity.remove` |
+| `POST /api/v1/users/{name}/identities/link/{key}` | the user's own | `identity.link` |
+
+What changes, by file:
+
+| File | Block | Change |
+|------|-------|--------|
+| `internal/server/oidc.go`, `oidc_test.go` | 6-8 | userinfo, reasons, links, groups |
+| `internal/server/providers_api.go`, tests | 6-8 | the issuer at saving, the identities' routes |
+| `internal/store/identities.go`, `providers.go`, tests | 6-9 | by subject, details, a waiting link changed, groups, sealing |
+| `internal/store/migrations/0019_identity_details.sql`, `0020_provider_groups.sql`, `store.sql` | 7, 8 | the columns |
+| `internal/store/secret.go`, tests | 9 | the key and the box |
+| `internal/server/ui/login.js`, `providers.js`, `users.js`, partials, `i18n/*.json` | 6-8 | the reasons, linking, the details, the groups |
+| `tools/ui-test/test_oidc.py` | 6-8 | as the UI |
+| `docs/api-v1.md`, OpenAPI, `docs/store.md`, `docs/oidc.md`, `docs/ui.md` | 6-9 | as the code |
+| `CHANGELOG.d/` | 6-9 | a fragment per block |
 
 ## Implementation Plan
 
@@ -242,6 +393,70 @@ One functional commit per block, citing `AP Oidc v1.0, Block <n>`.
 
 **Verification:** `reflow.sh --check` shows no new warning. No CHANGELOG bullet: documents only.
 
+Blocks 6-9 end with the same test gate, `make ui-test` where the UI changes,
+and cite `AP Oidc v1.1, Block <n>`.
+
+### Block 6: The sign-in fixed
+
+1. `oidc.go`: the userinfo read and merged; the reasons `noemail`, `unverified`, `refused`,
+   logged at Warn with the provider and the reason.
+2. `providers_api.go`: the issuer checked at saving (D27-A);
+   `POST …/identities` with `subject` instead of `email`, bound from the start;
+   `subject` in the identities' answer.
+3. `identities.go`: `AddSubjectIdentity`.
+4. The page: the reasons' messages under the provider buttons (`login.js`, `index.html`),
+   the manager's form with a choice of e-mail or user id (`providers.js`, `users-panel.html`);
+   i18n in six languages.
+5. Tests: userinfo filling the e-mail, a `sub` mismatch failing, userinfo down;
+   each reason; the issuer with and without the slash, unreachable;
+   a pre-link by subject signing in; `test_oidc.py` with the message's place.
+6. `docs/api-v1.md`, OpenAPI, `docs/oidc.md` (the issuer, the claims, Nextcloud's setting),
+   `docs/ui.md`; `CHANGELOG.d/Fixed/claude-oidc-links-signin.md`.
+
+**Verification:** the test gate with `make ui-test`.
+
+### Block 7: Linked accounts
+
+1. `0019_identity_details.sql`: `user_identities.name`, `.username`, `.groups` (JSON);
+   `store.sql`.
+2. `identities.go`: the details written at each sign-in and link (`TouchIdentity`),
+   `LinkIdentity` (replacing the user's others at the provider, `ErrIdentityTaken`),
+   `UpdateIdentity` (a waiting one's e-mail or subject).
+3. `oidc.go`: the link's start and its callback; `providers_api.go`: the routes, the user's own,
+   the last way in; `audit.go`: `identity.link`, `identity.update`.
+4. The page: My Profile → "Linked accounts" (the list with details, Link per provider, Remove),
+   the card's list with the details and a change of a waiting one;
+   `#oidc-linked=` at load; i18n.
+5. Tests: a link, linking again, a `sub` another user's, the last way in, a waiting one changed,
+   a used one not; `test_oidc.py` linking from My Profile at 1100 and 390 px.
+6. Docs; `CHANGELOG.d/Added/claude-oidc-links-linking.md`.
+
+**Verification:** the test gate with `make ui-test`.
+
+### Block 8: Groups
+
+1. `0020_provider_groups.sql`: `auth_providers.groups_claim` (default `groups`),
+   `.allowed_groups`; `store.sql`; `providers.go`.
+2. `oidc.go`: the claim read from the `id_token` and the userinfo; the refusal `group`.
+3. The page: the provider's form, two fields; the reason's message; i18n.
+4. Tests: in a group, in none, a list and a string, no restriction; `test_oidc.py` the fields.
+5. Docs; `CHANGELOG.d/Added/claude-oidc-links-groups.md`.
+
+**Verification:** the test gate with `make ui-test`.
+
+### Block 9: The sealed secret
+
+1. `secret.go`: the key (`secret.key`, 0600, `safefile`), `seal` and `open` with the provider's uuid.
+2. `providers.go`: sealed on write, opened on read, `SecretLost`;
+   `store.Open` seals plain secrets left from v0.15.0-alpha.1.
+3. `providers_api.go`: `secret_lost` in the answer; the page says so on the provider.
+4. Tests: sealed in the file, opened in the row; a store without the key; a plain secret sealed at the open;
+   a sealed secret copied to another row does not open; read-only makes no key.
+5. `docs/store.md` (the key beside the store, a backup without it), `docs/oidc.md`;
+   `CHANGELOG.d/Changed/claude-oidc-links-secret.md`.
+
+**Verification:** the test gate; `make ui-test` for the page's line.
+
 ## Proposed commit messages
 
 The plan's registration, a commit of its own on main before the work branch:
@@ -265,7 +480,28 @@ Block 3, `feat(server): The providers and users' identities through the API, und
 Block 4, `feat(ui): Sign in with a provider, and System settings for providers and identities`;
 Block 5, `docs(oidc): Setting up an OpenID Connect provider`.
 
+v1.1, on `claude/oidc-links` before its blocks:
+
+```
+chore(aps): Oidc v1.1
+
+The first real sign-in through breno's Nextcloud was refused, and the owner asked for linking in My Profile, groups and a sealed client secret. PLAN++ Oidc of 2026-11-13, with D20-A, D21-A, D22-A and D25-A to D29-A.
+
+Key changes:
+- GUIDELINES/wip/2026-11-12_17-38_AP_Oidc_openid_connect_sign_in.md: v1.1, Blocks 6 to 9, the decisions in its Discussion
+
+File-revision-v1: GUIDELINES/wip/2026-11-12_17-38_AP_Oidc_openid_connect_sign_in.md::v1.1::2026-11-13::All::Blocks 6 to 9, by PLAN++ Oidc
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 6, `fix(server): An OpenID Connect sign-in reads the userinfo and says why it is refused`;
+Block 7, `feat(server): Users link their own accounts at the providers`;
+Block 8, `feat(server): A provider admits only the groups it names`;
+Block 9, `feat(store): The providers' client secrets are sealed with a key beside the store`.
+
 ## Change History
 
 - v1.0 (2026-11-12): the first revision,
   from the owner's request and the evaluation of the same day, with D1-A to D7-A.
+- v1.1 (2026-11-13): Blocks 6 to 9, from the first real sign-in through breno's Nextcloud
+  and the owner's questions, with D20-A, D21-A, D22-A and D25-A to D29-A.
