@@ -50,6 +50,7 @@
   <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <!-- a section card's fold, and back to the top of a page -->
   <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L20 9.5"/><path d="M20 4.5v5h-5"/></symbol>
   <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
   <!-- a page's sections menu: a bulleted list, apart from the header's ☰ -->
   <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5"/><circle cx="4.75" cy="6" r="1.4" fill="currentColor"/><circle cx="4.75" cy="12" r="1.4" fill="currentColor"/><circle cx="4.75" cy="18" r="1.4" fill="currentColor"/></symbol>
@@ -60,14 +61,13 @@
     <div class="top-left">
       <div class="brand">
         <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
-        <h1 class="brand-name" data-brand><span class="brand-initial">M</span><span class="brand-rest">assimo</span></h1>
-        <span id="version-short" class="muted mono small" title="server version" data-i18n-attr="title:header.serverVersion"></span>
+        <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
+        <span id="version-short" class="muted mono small"></span>
       </div>
-      <span class="updated-line">
-        <span id="updated" class="muted" title="time of the last successful poll" data-i18n-attr="title:header.updatedTitle"></span>
-        <button type="button" id="refresh-btn" class="icon-btn refresh-btn" aria-label="refresh" title="Refresh now" data-i18n-attr="aria-label:header.refresh title:header.refreshTitle">↻</button>
-      </span>
-      <span id="clock-plain" class="muted" title=""></span>
+      <!-- the time of the last successful poll and the refresh icon, one
+           button without a frame, its tap area larger than it (app.js
+           renderUpdated) -->
+      <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
     </div>
     <div class="cube">
       <!-- the Cube choice, a menu of the page (components.js pickerMenu):
@@ -81,16 +81,7 @@
     </div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <details id="user-menu" class="menu nav-menu">
-        <summary id="user-menu-btn" class="nav-btn" aria-label="who is signed in" title="Who is signed in" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></summary>
-        <div class="menu-items">
-          <p id="me-line" class="menu-line small"></p>
-          <button type="button" id="menu-profile"><svg class="ni" aria-hidden="true"><use href="#icon-id"/></svg><span data-i18n="nav.profile">My profile</span></button>
-          <button type="button" id="menu-prefs"><svg class="ni" aria-hidden="true"><use href="#icon-sliders"/></svg><span data-i18n="nav.prefs">My settings</span></button>
-          <button type="button" id="menu-notify"><svg class="ni" aria-hidden="true"><use href="#icon-bell"/></svg><span data-i18n="nav.notify">Notifications</span></button>
-          <button type="button" id="logout-btn"><svg class="ni" aria-hidden="true"><use id="logout-icon" href="#icon-signout"/></svg><span id="logout-label" data-i18n="me.signOut">Sign out</span></button>
-        </div>
-      </details>
+      <button type="button" id="view-me" class="icon-btn nav-btn" aria-label="personal settings" title="Personal settings" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></button>
       <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
       <button type="button" id="view-settings" class="icon-btn nav-btn needs-system" aria-label="system settings" title="System settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
       <details id="nav-menu" class="menu nav-menu">
@@ -128,7 +119,7 @@
   </div>
 
   <section id="setup" class="tile setup hidden" aria-labelledby="setup-title">
-    <div class="brand-name brand-big" data-brand><span class="brand-initial">M</span><span class="brand-rest">assimo</span></div>
+    <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
     <header class="tile-head"><h2 id="setup-title" data-i18n="setup.title">No users yet</h2></header>
     <form id="setup-form" class="setup-form">
       <p class="muted small" data-i18n="setup.text">This server has no users, so anyone on the network may do everything. Create the owner here, from the local network, or on the box with massimo user add.</p>
@@ -150,79 +141,106 @@
     </form>
   </section>
 
-  <section id="profile" class="tile settings profile-page hidden" aria-labelledby="profile-title">
-    <header class="tile-head"><h2 id="profile-title" data-i18n="nav.profile">My profile</h2></header>
-    <div class="settings-body">
-      <!-- partials: profile -->
+  <!-- Personal settings, the page 👤 opens: its row kept at the top under
+       the header, with who is signed in, Sign out (or Forget key, none on
+       an open server) and the sections menu (components.js pageBar), and
+       three section cards in a grid (sectionCards, backToTop): My
+       profile, for a signed-in user only, My settings and Notifications,
+       each with the icon the menu shows it with (data-icon). -->
+  <section id="me" class="settings settings-page me-page hidden" aria-labelledby="me-title">
+    <div class="page-bar">
+      <div class="page-title">
+        <h2 id="me-title" data-i18n="nav.meTitle">Personal settings</h2>
+        <p id="me-line" class="me-line small"></p>
+      </div>
+      <button type="button" id="logout-btn" class="logout-btn"><svg class="ni" aria-hidden="true"><use id="logout-icon" href="#icon-signout"/></svg><span id="logout-label" data-i18n="me.signOut">Sign out</span></button>
+      <details class="menu sec-menu">
+        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
     </div>
-  </section>
+    <div class="section-grid">
+      <section id="profile" class="tile section-card half profile-page" data-icon="icon-id" aria-labelledby="profile-title">
+        <header class="tile-head section-head">
+          <h3 id="profile-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="profile-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-id"/></svg><span class="section-title" data-i18n="nav.profile">My profile</span></button></h3>
+        </header>
+        <div id="profile-sec" class="section-body settings-body">
+          <!-- partials: profile -->
+        </div>
+      </section>
 
-  <!-- My settings: a row per setting, the switch that keeps it only on
-       this device in a column of its own at the right (no column where
-       the settings do not follow the user: no-sync) -->
-  <section id="prefs" class="tile settings prefs-page hidden" aria-labelledby="prefs-title">
-    <header class="tile-head"><h2 id="prefs-title" data-i18n="nav.prefs">My settings</h2></header>
-    <div class="settings-body">
-      <div class="dev-head needs-sync">
-        <span></span>
-        <span class="dev-cell dev-colhead" title="A setting switched on here keeps its value in this browser; switched off, your value applies again." data-i18n="settings.thisDevice" data-i18n-attr="title:settings.thisDeviceTitle">only on this device</span>
-      </div>
-      <div class="dev-row">
-        <div class="field">
-          <label for="poll-input" data-i18n="settings.poll">Poll every</label>
-          <span data-help="poll" data-help-label="settings.poll"></span>
-          <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
+      <!-- My settings: a row per setting, the switch that keeps it only on
+           this device in a column of its own at the right (no column where
+           the settings do not follow the user: no-sync) -->
+      <section id="prefs" class="tile section-card half prefs-page" data-icon="icon-sliders" aria-labelledby="prefs-title">
+        <header class="tile-head section-head">
+          <h3 id="prefs-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="prefs-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-sliders"/></svg><span class="section-title" data-i18n="nav.prefs">My settings</span></button></h3>
+        </header>
+        <div id="prefs-sec" class="section-body settings-body">
+          <div class="dev-head needs-sync">
+            <span></span>
+            <span class="dev-cell dev-colhead" title="A setting switched on here keeps its value in this browser; switched off, your value applies again." data-i18n="settings.thisDevice" data-i18n-attr="title:settings.thisDeviceTitle">only on this device</span>
+          </div>
+          <div class="dev-row">
+            <div class="field">
+              <label for="poll-input" data-i18n="settings.poll">Poll every</label>
+              <span data-help="poll" data-help-label="settings.poll"></span>
+              <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
+            </div>
+            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span></label></span>
+          </div>
+          <div class="dev-row">
+            <div class="field">
+              <label class="switch">
+                <input type="checkbox" id="expert-toggle">
+                <span class="slider" aria-hidden="true"></span>
+                <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
+              </label>
+              <span data-help="expert" data-help-label="settings.expertShort"></span>
+            </div>
+            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span></label></span>
+          </div>
+          <div class="dev-row">
+            <div class="field wide">
+              <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
+              <span data-help="clock" data-help-label="settings.clock"></span>
+              <select id="clock-select" class="field-control">
+                <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
+                <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
+              </select>
+            </div>
+            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span></label></span>
+          </div>
+          <div class="dev-row">
+            <div class="field wide">
+              <label for="lang-select" data-i18n="settings.language">Language</label>
+              <span data-help="language" data-help-label="settings.language"></span>
+              <select id="lang-select" class="field-control"></select>
+              <p id="lang-note" class="muted small lang-note hidden"></p>
+            </div>
+            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span></label></span>
+          </div>
+          <!-- partials: prefs -->
         </div>
-        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span></label></span>
-      </div>
-      <div class="dev-row">
-        <div class="field">
-          <label class="switch">
-            <input type="checkbox" id="expert-toggle">
-            <span class="slider" aria-hidden="true"></span>
-            <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
-          </label>
-          <span data-help="expert" data-help-label="settings.expertShort"></span>
-        </div>
-        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span></label></span>
-      </div>
-      <div class="dev-row">
-        <div class="field wide">
-          <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
-          <span data-help="clock" data-help-label="settings.clock"></span>
-          <select id="clock-select" class="field-control">
-            <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
-            <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
-          </select>
-        </div>
-        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span></label></span>
-      </div>
-      <div class="dev-row">
-        <div class="field wide">
-          <label for="lang-select" data-i18n="settings.language">Language</label>
-          <span data-help="language" data-help-label="settings.language"></span>
-          <select id="lang-select" class="field-control"></select>
-          <p id="lang-note" class="muted small lang-note hidden"></p>
-        </div>
-        <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span></label></span>
-      </div>
-      <!-- partials: prefs -->
-    </div>
-  </section>
+      </section>
 
-  <!-- Notifications: which events notify the user, and where (notify.js) -->
-  <section id="notify" class="tile settings notify-page hidden" aria-labelledby="notify-title">
-    <header class="tile-head"><h2 id="notify-title" data-i18n="nav.notify">Notifications</h2></header>
-    <div class="settings-body">
-      <!-- partials: notify -->
+      <!-- Notifications: which events notify the user, and where (notify.js) -->
+      <section id="notify" class="tile section-card half notify-page" data-icon="icon-bell" aria-labelledby="notify-title">
+        <header class="tile-head section-head">
+          <h3 id="notify-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="notify-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-bell"/></svg><span class="section-title" data-i18n="nav.notify">Notifications</span></button></h3>
+        </header>
+        <div id="notify-sec" class="section-body settings-body">
+          <!-- partials: notify -->
+        </div>
+      </section>
     </div>
+    <button type="button" class="icon-btn to-top hidden" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
   </section>
 
   <!-- System settings: its row kept at the top under the header, with
-       the sections menu (components.js pageBar), the row of section
-       buttons, and section cards in a grid (sectionCards, pageContents,
-       backToTop), Users, Roles and Capabilities flowing in two columns
-       where there is room. -->
+       the sections menu (components.js pageBar), and section cards in a
+       grid (sectionCards, backToTop), Users, Roles and Capabilities
+       flowing in two columns where there is room. -->
   <section id="system" class="settings settings-page hidden" aria-labelledby="system-title">
     <div class="page-bar">
       <h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2>
@@ -231,7 +249,6 @@
         <div class="menu-items"></div>
       </details>
     </div>
-    <nav class="toc" aria-label="sections" data-i18n-attr="aria-label:page.sections"></nav>
     <div class="section-grid">
       <!-- partials: system -->
       <div class="section-flow">
@@ -315,7 +332,7 @@
 <dialog id="login-dialog">
   <!-- the sign-in, a card in the signed-out page (login.js askLogin); the
        password form holds the one password field, the API key a form of its own -->
-  <div class="brand-name brand-big" data-brand><span class="brand-initial">M</span><span class="brand-rest">assimo</span></div>
+  <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
   <div class="login-head">
     <h3 data-i18n="login.title">Sign in</h3>
     <!-- the language and the mode before anyone signs in, the settings of My settings -->

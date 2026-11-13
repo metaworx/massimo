@@ -14,7 +14,7 @@ which is open from the start once the page has seen the server ask for no key
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
-👤 → Sign out ends it.
+**Sign out** on the personal settings (👤) ends it.
 The card's ☰ sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
@@ -62,8 +62,8 @@ where the server no longer holds it, the page reloads the rooms
 ## Header
 
 The header's line reads, from the left:
-Massimo's logo with the server's version, the time of the last update with **↻**,
-the Cube's clock;
+Massimo's logo with the server's version and the time of the last update with **↻**,
+all on one baseline, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
@@ -74,13 +74,15 @@ and the logo is the mark alone, the M with the clock in its V.
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
 made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does.
+The drawing has no margin: its bottom edge is the letters' baseline,
+which the version and the time of the last update stand on.
 Its colours follow the light or dark mode chosen, its letters the page's text.
 The sign-in, the form that creates the first owner and the apps' connect page
 show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
-Scrolled, it keeps its first line without the time of the last update
-and the Cube's clock, and the lines under it go until the page is back
+Scrolled, it keeps its first line without the time of the last update,
+and the lines under it go until the page is back
 at its top, the button that reloads a new version and expert mode's line
 of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
@@ -107,24 +109,22 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for others the line is the count alone, and the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **The time of the last update**, **↻**, which asks the server for the
-  current state now, and **the Cube's clock**.
-- **👤** drops down who is signed in, with the role,
-  or the API key and whose it is;
-  **My profile**, **My settings** and **Notifications**, which open those pages,
-  and **Sign out**, which ends the session, each with its icon;
-  its tooltip names who is signed in, by display name and login.
+- **The time of the last update** and **↻**, one button without a frame,
+  which asks the server for the current state now;
+  a finger hits it a little beyond what it shows, and ↻ turns while it asks.
+- **The version** is short; its tooltip is the whole version, "(server version)".
+  The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
+  the Cube tells it when the server connects, to the minute,
+  and the page moves it on from then;
+  a clock that was off by 90 s or more says by how much ("3 min ahead").
+- **👤** opens the personal settings (see Personal settings);
+  its tooltip names whose they are, by display name and login.
   The items of **☰** have the icons of their pages.
-  An API key or the server's token is only forgotten in this browser
-  (**Forget key**),
-  and an open server says that it is open to everyone and has nothing to sign out of.
-  Escape, a click outside and a choice close the menu,
-  as they close a room's **⋯**.
-- The three page buttons, a house, a sheet and a cog,
-  switch between **Rooms**, **Log** and **System settings**.
+- The page buttons, a house, a person, a sheet and a cog,
+  switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
 - The page shown is in the address, Rooms without one:
-  `#log`, `#profile` (My profile), `#prefs` (My settings) and `#system`
-  (System settings),
+  `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
+  `#notify`) and `#system` (System settings),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
@@ -397,14 +397,32 @@ A value the page does not know is dropped from the address,
 and so is a device the Cube does not have, once its devices are loaded.
 The filter's text is not in the address.
 
-## My profile
+## Personal settings
 
-👤 → **My profile**, for a user signed in (not on an open server,
+**👤** opens the personal settings, a page built as System settings is:
+its title stays under the header while the page scrolls,
+with who is signed in under it (with the role, or the API key and whose it is),
+**Sign out** at its right end, which ends the session,
+and **Sections** (☰) beside it, which lists the page's cards with their icons
+and brings the one chosen into view.
+An API key or the server's token is only forgotten in this browser
+(**Forget key**, with a key),
+and an open server says that it is open to everyone and has nothing to sign out of.
+The page has three cards, **My profile**, **My settings** and **Notifications**,
+each with its icon in its head, that fold as System settings' do;
+from 900 px they stand two side by side, and My settings takes the whole width
+while its colour editor is open.
+The addresses of the pages they were, `#profile`, `#prefs` and `#notify`,
+open the page at their card.
+
+### My profile
+
+**My profile** is for a user signed in (not on an open server,
 nor with the server's API token).
 Behind the last button of each group below, an ⓘ opens what its buttons do,
 as the settings' ⓘ do:
 
-- **Display name**, the name the 👤 menu and the users list show,
+- **Display name**, the name the personal page and the users list show,
   with **Save**, off while it is the one stored.
 - **Change password**, for a user with a password:
   the own password, with the current one,
@@ -432,9 +450,9 @@ as the settings' ⓘ do:
   comes back refused, saying so.
   The app shows no **Link** buttons, as no provider buttons on its sign-in.
 
-## My settings
+### My settings
 
-👤 → **My settings**, the page's settings:
+**My settings**, the page's settings:
 
 Signed in with a role that has the capability `preferences` (manager,
 operator and viewer by default),
@@ -502,9 +520,9 @@ without the switches.
   A token the file lacks takes the default's value, unknown ones are ignored,
   and a file that is not a scheme says so under the buttons.
 
-## Notifications
+### Notifications
 
-👤 → **Notifications** chooses which events notify you and where,
+**Notifications** chooses which events notify you and where,
 for a user whose role has the capability `preferences` (manager,
 operator and viewer by default);
 a guest, a server without users and the server's API key see a line saying why
@@ -576,14 +594,13 @@ from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
 The title stays under the header while the page scrolls,
 with **Sections** at its right end (a bulleted list, apart from ☰):
-it lists the cards, marks the one in view and brings the one chosen into view.
-A row of buttons under the title names the cards the role sees,
-each bringing its card into view, opened.
+it lists the cards the role sees, marks the one in view and brings the one
+chosen into view, opened.
 A card folds with the button in its heading,
 which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
-Once the row of buttons is out of sight, **↑** at the bottom right goes back
+Once the first card's head is out of sight, **↑** at the bottom right goes back
 to the top of the page.
 
 - **System Info**, for everyone who opens System settings:
@@ -881,8 +898,7 @@ A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
-`pageContents` fills the page's row of section buttons from them,
-`pageBar` the sections menu of its title's row kept at the top,
+`pageBar` fills the sections menu of its title's row kept at the top,
 and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's connection a `connIcon`;

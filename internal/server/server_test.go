@@ -93,6 +93,20 @@ func getJSON(t *testing.T, ts *httptest.Server, token, path string, v any) int {
 	return resp.StatusCode
 }
 
+// A Cube's summary says when its clock was read, at the greeting, so that
+// a client can move the clock on.
+func TestCubeTimeAt(t *testing.T) {
+	before := time.Now()
+	_, ts, _ := start(t, "")
+	var c cubeView
+	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) != 200 || c.CubeTime == "" {
+		t.Fatalf("cube %+v", c)
+	}
+	if c.CubeTimeAt == nil || c.CubeTimeAt.Before(before.Add(-time.Second)) || c.CubeTimeAt.After(time.Now()) {
+		t.Fatalf("cube_time_at %v, want the greeting's time after %v", c.CubeTimeAt, before)
+	}
+}
+
 func TestServerReadsAndSetpoints(t *testing.T) {
 	fc, ts, s := start(t, "")
 	var c cubeView

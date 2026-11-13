@@ -5,7 +5,7 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import URL
-from helpers import named_buttons, open_user_menu, show_view, sign_out, wait_until
+from helpers import named_buttons, open_personal_page, show_view, sign_out, wait_until
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
@@ -60,8 +60,8 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     assert not page.locator(".cubes-settings.needs-cubes").is_visible(), "no System settings → Cubes for an operator"
     assert not page.locator(".restart.needs-restart").is_visible(), "no restart for an operator"
     named_buttons(page, "the settings as an operator")
-    open_user_menu(page)
-    assert "operator" in page.locator("#me-line").inner_text(), "the 👤 menu says who is signed in"
+    open_personal_page(page)
+    assert "operator" in page.locator("#me-line").inner_text(), "the personal page says who is signed in"
     assert page.locator("#logout-btn").inner_text() == SIGN_OUT[case.lang], "a session is signed out"
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
@@ -71,7 +71,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     assert page.evaluate("state.rooms.length === 0 && state.cubes.length === 0 && !state.pollTimer"), "the Cube's data is forgotten"
     assert page.locator(".room").count() == 0, "no room tile is drawn"
     assert page.locator(".brand h1").is_visible() and page.locator("#version-short").is_visible(), "the name and the version show"
-    for sel in ("#cube-menu", ".top-line > .nav", ".updated-line", "#clock-plain", "main"):
+    for sel in ("#cube-menu", ".top-line > .nav", "#refresh-btn", "main"):
         assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")

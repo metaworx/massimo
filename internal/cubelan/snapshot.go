@@ -17,6 +17,7 @@ import (
 type Snapshot struct {
 	mu       sync.RWMutex
 	hello    *cube.Hello
+	helloAt  time.Time // when the greeting was applied
 	metadata *cube.Metadata
 	configs  map[cube.RFAddress]*cube.DeviceConfig
 	states   map[cube.RFAddress]cube.DeviceState
@@ -199,7 +200,7 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.hello = h
+		s.hello, s.helloAt = h, now
 		return []Event{{Kind: EventHello, Greeting: s.greeting}}, nil
 	case 'M':
 		p, err := cube.ParseMetadataPart(m.Data)
@@ -324,6 +325,14 @@ func (s *Snapshot) Hello() *cube.Hello {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.hello
+}
+
+// HelloAt returns when the latest H line was applied, the moment the
+// Cube's clock in it was read; zero before the first greeting.
+func (s *Snapshot) HelloAt() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.helloAt
 }
 
 // Metadata returns the rooms and devices, or nil before the first greeting.

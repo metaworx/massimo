@@ -521,26 +521,19 @@ function keepCardInView(card, ms) {
   setTimeout(stop, ms);
 }
 
-// pageContents fills a page's row of section buttons (its nav.toc)
-// from its cards, a button each, named by the card's data-toc key or
-// else its title, and hidden where the card is (its needs-* classes);
-// a button brings its card into view (showCard). Called again after a
-// change of language.
-function pageContents(page) {
-  const nav = page.querySelector(".toc");
-  if (!nav) return;
-  clear(nav);
-  for (const b of sectionButtons(page)) nav.appendChild(b);
-}
-
-// sectionButtons are a button per card of a page, named by the card's
-// data-toc key or else its title, hidden where the card is (its needs-*
-// classes), each bringing its card into view (showCard); data-target is
-// the card's id.
+// sectionButtons are a button per card of a page shown, named by the
+// card's data-toc key or else its title, after the card's icon where it
+// has one (data-icon), hidden where the card is (its needs-* classes),
+// each bringing its card into view (showCard); data-target is the card's
+// id.
 function sectionButtons(page) {
-  return [...page.querySelectorAll(".section-card")].map((card) => {
+  return [...page.querySelectorAll(".section-card:not(.hidden)")].map((card) => {
     const name = card.dataset.toc ? t(card.dataset.toc) : card.querySelector(".section-title").textContent;
     const b = button(name, "toc-link", () => showCard(card));
+    if (card.dataset.icon) {
+      b.textContent = "";
+      b.append(iconEl(card.dataset.icon, "ni"), textEl("span", name));
+    }
     b.dataset.target = card.id;
     for (const c of card.classList) if (c.startsWith("needs-")) b.classList.add(c);
     return b;
@@ -680,20 +673,20 @@ function stickyHeader() {
   onScroll();
 }
 
-// backToTop shows a page's .to-top button once the page's row of
-// section buttons is out of sight, and takes the page back to its top,
-// the focus on the row's first button.
+// backToTop shows a page's .to-top button once its first card's head is
+// out of sight, and takes the page back to its top, the focus on its
+// sections menu.
 function backToTop(page) {
   const btn = page.querySelector(".to-top");
-  const nav = page.querySelector(".toc");
-  if (!btn || !nav) return;
-  new IntersectionObserver(([e]) => btn.classList.toggle("hidden", e.isIntersecting)).observe(nav);
+  const head = page.querySelector(".section-card .section-head");
+  if (!btn || !head) return;
+  new IntersectionObserver(([e]) => btn.classList.toggle("hidden", e.isIntersecting || e.boundingClientRect.top > 0)).observe(head);
   btn.addEventListener("click", () => {
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
     settleAtTop();
-    const first = nav.querySelector(".toc-link");
-    if (first) first.focus({ preventScroll: true });
+    const menu = page.querySelector(".sec-menu > summary");
+    if (menu) menu.focus({ preventScroll: true });
   });
 }
 

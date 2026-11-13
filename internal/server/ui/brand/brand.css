@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* Massimo's mark in the web UI, written by tools/brand/make_brand.py (make ui-brand): edit the tool,
    not this file. The parts of brand.svg take these colours; a place sets --brand-cover to its
-   background, which the cover hides the word under the drawing with; --brand-logo-ratio is the
-   logo's width to its height, for a box the logo will take before it has come. */
-:root { --brand-back: #8F8F8F; --brand-m: #1F63C6; --brand-hands: #ED6E21; --brand-logo-ratio: 4.8658; }
+   background, which the cover hides the word under the drawing with; --brand-logo-ratio and
+   --brand-mark-ratio are the logo's and the mark's width to their height, for a box each will
+   take before it has come. Both drawings are tight: no margin, the bottom edge the letters'
+   baseline, the height the M's. */
+:root { --brand-back: #8F8F8F; --brand-m: #1F63C6; --brand-hands: #ED6E21; --brand-logo-ratio: 5.2709; --brand-mark-ratio: 1.0900; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) { --brand-back: #555555; --brand-m: #5B95EC; --brand-hands: #ED6E21; }
 }
@@ -13,5 +15,5 @@
 .brand-m { fill: var(--brand-m); }
 .brand-hands { fill: var(--brand-hands); }
 .brand-letters { fill: var(--fg); }
-.brand-logo { aspect-ratio: 2299.6 / 472.6; }
-.brand-mark { aspect-ratio: 1; }
+.brand-logo { aspect-ratio: 2224.3 / 422.0; }
+.brand-mark { aspect-ratio: 460 / 422; }

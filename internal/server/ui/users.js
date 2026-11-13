@@ -568,9 +568,9 @@ function initUsers() {
       .then(loadPasswordLogin)
       .catch((e) => usersMsg(t("users.failed", { name: "", error: e.message }), false));
   });
-  onView("profile", () => {
+  onView("me", () => {
     profileMsg("");
-    renderProfile();
+    if (hasProfile()) renderProfile(); // login.js
   });
 }
 

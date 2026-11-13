@@ -172,17 +172,15 @@ def choose_cube(page, value):
     cube_item(page, value).click()
 
 
-def open_user_menu(page):
-    """The 👤 menu in the header, open."""
-    menu = page.locator("#user-menu")
-    if menu.get_attribute("open") is None:
-        menu.locator("summary").click()
-    page.locator("#user-menu .menu-items").wait_for(state="visible")
+def open_personal_page(page):
+    """The personal page, opened with 👤 in the header."""
+    page.locator("#view-me").click()
+    page.locator("#me").wait_for(state="visible")
 
 
 def sign_out(page):
-    """Sign out (or Forget key) from the 👤 menu."""
-    open_user_menu(page)
+    """Sign out (or Forget key) at the top of the personal page."""
+    open_personal_page(page)
     page.locator("#logout-btn").click()
 
 
@@ -194,20 +192,27 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
 
 # The pages of the main area: how a user opens each, and the section it
 # shows.
-VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "system": "#view-settings"}
-VIEW_MENU = {"profile": "#menu-profile", "prefs": "#menu-prefs", "notify": "#menu-notify"}
+VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "me": "#view-me", "system": "#view-settings"}
+VIEW_CARD = ("profile", "prefs", "notify")  # the personal page's cards, from its sections menu
 VIEW_FOLDED = {"log": "#menu-log", "system": "#menu-system"}  # in ☰ below 600 px
-VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "profile": "#profile", "prefs": "#prefs", "notify": "#notify", "system": "#system"}
+VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "me": "#me", "profile": "#profile", "prefs": "#prefs", "notify": "#notify",
+                "system": "#system"}
 
 
 def show_view(page, view):
-    """A page of the main area, opened as a user opens it: Rooms, the log
-    and System settings with their button in the header, or on a narrow
-    screen the log and System settings from ☰, My profile, My settings
-    and Notifications from the 👤 menu."""
-    if view in VIEW_MENU:
-        open_user_menu(page)
-        page.locator(VIEW_MENU[view]).click()
+    """A page of the main area, opened as a user opens it: Rooms, the log,
+    the personal page and System settings with their button in the
+    header, or on a narrow screen the log and System settings from ☰; My
+    profile, My settings and Notifications from the personal page's
+    sections menu."""
+    if view in VIEW_CARD:
+        open_personal_page(page)
+        menu = page.locator("#me .sec-menu")
+        if menu.get_attribute("open") is None:
+            menu.locator("summary").click()
+        menu.locator(f".toc-link[data-target='{view}']").click()
+        page.locator(VIEW_SECTION[view]).wait_for(state="visible")
+        scroll_settled(page)  # the menu brings the card in with a smooth scroll
     elif view in VIEW_FOLDED and page.locator("#nav-menu").is_visible():
         menu = page.locator("#nav-menu")
         if menu.get_attribute("open") is None:

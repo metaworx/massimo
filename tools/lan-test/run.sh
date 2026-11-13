@@ -118,6 +118,11 @@ for f in json.load(sys.stdin).get("found") or []:
 }
 cube_listed() { grep -q "^$SERIAL $cube_ip $CUBE_MAC false " <<<"$answers"; }
 finds_cube() { search && cube_listed; }
+# has reports whether its input holds a line matching the pattern. It
+# reads all of it: grep -q stops at the first match, and the log still
+# being written into the pipe then dies of SIGPIPE, which pipefail makes
+# the pipe's failure although the line was there.
+has() { grep -- "$1" >/dev/null; }
 searcher_log() { compose logs --no-color --no-log-prefix searcher 2>&1; }
 gone_lines() { searcher_log | grep -c -- "msg=\"cube gone from the LAN\" source=cube kind=cube_gone serial=$SERIAL ip=$cube_ip " || true; }
 found_lines() { searcher_log | grep -c -- "msg=\"cube found on the LAN\" source=cube kind=cube_found serial=$SERIAL ip=$cube_ip mac=$CUBE_MAC" || true; }
@@ -157,9 +162,9 @@ ok "with the box's proxy up, a search lists $SERIAL once, at the Cube's $cube_ip
 
 # 5. serve announces itself beside avahi-daemon.
 box_log() { compose logs --no-color box 2>&1; }
-announced() { box_log | grep -q 'msg="announced on the LAN"'; }
+announced() { box_log | has 'msg="announced on the LAN"'; }
 within 30 announced || fail "the box's serve did not announce itself"
-if box_log | grep -q 'not announced'; then
+if box_log | has 'not announced'; then
 	fail "the box's log: $(box_log | grep 'not announced')"
 fi
 node="$(box_log | sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' | head -n1)"
@@ -202,7 +207,7 @@ ok "massimo discover on the client lists the server, the box's answer marked pro
 compose exec -T cube ip link set eth0 down
 unlisted() { search && ! grep -q "^$SERIAL " <<<"$answers"; }
 within 45 unlisted || fail "the Cube's cable pulled, a search still lists $SERIAL: $answers"
-box_log | grep -q 'msg="cube connection lost"' || fail "the box's serve does not log the Cube lost"
+box_log | has 'msg="cube connection lost"' || fail "the box's serve does not log the Cube lost"
 ok "the Cube's cable pulled again, the box's serve loses it, and a search no longer lists $SERIAL from its proxy"
 
 # 9. The goodbye takes the server out of the client's avahi.
@@ -234,6 +239,6 @@ moved_ip="$(python3 -I -c 'import ipaddress, sys; print(ipaddress.ip_network(sys
 compose exec -T cube sh -c "ip addr flush dev eth0 && ip addr add $moved_ip/${subnet#*/} brd + dev eth0"
 within 90 connected_at "$moved_ip" || fail "the follower did not follow $SERIAL to $moved_ip: $(follower_at)"
 follower_log() { compose logs --no-color --no-log-prefix follower 2>&1; }
-follower_log | grep -q 'msg="cube connection lost"' || fail "the follower does not log the Cube lost"
-follower_log | grep -q "msg=\"cube address from discovery\".* from=$cube_ip to=$moved_ip" || fail "the follower does not log the Cube's new address"
+follower_log | has 'msg="cube connection lost"' || fail "the follower does not log the Cube lost"
+follower_log | has "msg=\"cube address from discovery\".* from=$cube_ip to=$moved_ip" || fail "the follower does not log the Cube's new address"
 ok "the Cube moved to $moved_ip, the follower loses it, searches, and connects at the new address"

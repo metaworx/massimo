@@ -97,7 +97,8 @@ with a filter box and a clear that only empties the view;
 the tiles keep their state meanwhile.
 The short server version stands next to the brand;
 the Cube selector shows the Cube's name when one is configured.
-My settings, under the header's 👤 menu, has the poll interval (10 s by default;
+My settings, on the personal page the header's 👤 opens,
+has the poll interval (10 s by default;
 the header is refreshed on it,
 and the rooms as well while the event stream is down;
 the ↻ button in the header runs the same refresh at once, rooms included,
@@ -108,7 +109,7 @@ IP address and radio address, the duty cycle, free slots,
 queued and pending commands and the Cube clock,
 and the tiles show radio addresses and device types),
 and whether the Cube clock is shown in the browser's time zone or the Cube's own;
-the header's 👤 menu says who is signed in and signs out.
+that page says who is signed in and signs out.
 In the tiles a thermometer marks the measured temperature (IS) and a target the
 setpoint (SET);
 AUTO and MANU close an open holiday panel and drop a pending stepper value.
@@ -1146,7 +1147,8 @@ then every Cube discovery found on the LAN that is not configured:
     "rooms": 5,
     "devices": 16,
     "queued": 0,
-    "cube_time": "2026-11-04 15:28"
+    "cube_time": "2026-11-04 15:28",
+    "cube_time_at": "2026-11-04T15:28:09+01:00"
   },
   {
     "serial": "KEQ0000000",
@@ -1241,6 +1243,10 @@ so a non-zero value says the states may still change.
 `queued` is the number of commands waiting in the server.
 `observed_since` is when the server first heard from the Cube (see the
 ages of device values below).
+`cube_time` is the Cube's clock, in its own time zone and to the minute,
+as its greeting told it at the last connect, and `cube_time_at` when the
+server read it: the clock moves on by the time since, and the two say how
+far it is off.
 
 The Cube reports its budget only in the answer to a radio command and when a
 connection starts,

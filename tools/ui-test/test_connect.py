@@ -21,7 +21,7 @@ import os
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import TOKEN, URL, clear_preferences
-from helpers import named_buttons, open_user_menu, wait_until
+from helpers import named_buttons, open_personal_page, wait_until
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -334,7 +334,7 @@ def test_server_page_token_from_bridge(new_context, case, watch, guard):
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "and the browser keeps none"
     assert calls(page, "token") == [["token"]], "asked once, at the start"
 
-    open_user_menu(page)
+    open_personal_page(page)
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Forget key asks who is there"
     assert calls(page, "setToken") == [["setToken", None]], "and the app forgets the key"
@@ -350,7 +350,7 @@ def test_server_page_token_from_bridge(new_context, case, watch, guard):
     assert page.evaluate("state.token") == sets[1][1]
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "and not to the browser"
 
-    open_user_menu(page)
+    open_personal_page(page)
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5)
     assert calls(page, "setToken")[-1] == ["setToken", None], "Sign out forgets the session in the app"
