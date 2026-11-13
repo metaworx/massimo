@@ -1282,6 +1282,11 @@ objects of the found Cubes above:
 }
 ```
 
+The server's own proxies are never among them:
+an answer from this host with a configured Cube's serial is left out,
+and so is one from any address with the serial a proxy of this server answers
+with (`proxy_serial`), unless a Cube gave it.
+
 No body.
 A call while a run is going waits for it and gets its result, the same `ran_at`.
 `503` when the server cannot have the discovery port (UDP 23272,

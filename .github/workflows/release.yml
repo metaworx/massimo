@@ -562,10 +562,11 @@ jobs:
   # that the docs of release/devel and release/nightly are the ones just
   # published; the apt repository apt-build has just signed, or else the
   # newest release's signed index. For every run, so that a push to main
-  # brings its docs onto the site; not where apt-build or the rolling
-  # build failed, nor where the caller says so: a nightly build at a
-  # release commit leaves the deploy to the tag's run, since Pages keeps
-  # the first deploy of a commit.
+  # brings its docs onto the site (one of the site's documents alone has no
+  # build and no release, and ci.yml's Deploy site calls site.yml for it
+  # instead); not where apt-build or the rolling build failed, nor where
+  # the caller says so: a nightly build at a release commit leaves the
+  # deploy to the tag's run, since Pages keeps the first deploy of a commit.
   site:
     name: Site
     needs: [ sign, apt-build, rolling ]
