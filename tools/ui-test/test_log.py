@@ -76,6 +76,37 @@ def test_log_names_devices_by_serial(page, case):
     show_view(page, "tiles")
 
 
+def test_log_names_devices_once_the_rooms_come(page):
+    """A reload on the log, the Cube remembered, draws the log before the
+    rooms arrive (a Cube switch there too): a state line names its device
+    by the name it kept meanwhile, and every line gets the device's name
+    once the rooms are there, without leaving the log. The rooms' answer
+    is held back here so that the order is certain."""
+    show_view(page, "log")
+    held = []
+    page.route("**/rooms?devices=all", lambda route: held.append(route))
+    page.reload()
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-state').length > 0", 10), "the log drawn"
+    assert wait_until(page, "state.serial !== null", 5) and held, "the rooms asked for and held"
+    first = page.locator("#log-lines .log-line.kind-state").first
+    kept = page.evaluate("logState.lines.filter((l) => l.state).at(-1).state.name")
+    assert first.locator(".log-device").inner_text() == kept, "the name the line kept, before the rooms"
+    # Lines that kept no name show the S/N until the rooms come.
+    page.evaluate("logState.lines.forEach((l) => { if (l.state) l.state = { ...l.state, name: '' }; }); renderLog();")
+    serial = page.evaluate("logState.lines.filter((l) => l.state).at(-1).serial")
+    assert first.locator(".log-device").inner_text() == serial, "no name yet"
+    for route in held:
+        route.continue_()
+    page.unroute("**/rooms?devices=all")
+    rf =page.evaluate("logState.lines.filter((l) => l.state).at(-1).device")
+    want = "state.rooms.flatMap((r) => r.devices).find((d) => d.rf_address === %r)?.name" % rf
+    assert wait_until(page, "state.roomsOf === state.serial", 10), "the rooms arrived"
+    name = page.evaluate(want)
+    assert name and wait_until(page, "document.querySelector('#log-lines .log-line.kind-state .log-device').textContent === %r" % name, 5), \
+        "the device's name once the rooms are there"
+    show_view(page, "tiles")
+
+
 SAYS = {
     "en": {"down": "down for 5 min", "missed": "(while disconnected)", "renamed": "renamed", "comfort": "comfort 21.0 → 21.5"},
     "de": {"down": "5 min getrennt", "missed": "(während getrennt)", "renamed": "umbenannt", "comfort": "Komfort 21,0 → 21,5"},

@@ -263,7 +263,8 @@ def test_link_from_my_profile(page, case, provider):
         # back in My profile: the account shown before it is stored
         confirm = page.locator("#profile-identities .link-confirm")
         confirm.wait_for(state="visible", timeout=10000)
-        assert page.evaluate("currentView") == "profile", "My profile"
+        assert page.evaluate("currentView") == "me", "the personal page"
+        assert page.evaluate("location.hash") == "#profile", "at My profile"
         assert provider.email in confirm.inner_text(), "the account's e-mail"
         assert page.evaluate("document.activeElement && document.activeElement.classList.contains('link-confirm-title')"), "the question has the focus"
         me = page.evaluate("state.me.user.name")

@@ -101,9 +101,17 @@ async function logLoadUsers() {
   fillLogSelects();
 }
 
+// logRooms are the rooms loaded where they are the selected Cube's; none
+// while a Cube switch has not brought the new Cube's yet, since a radio
+// address names a device on its own Cube only.
+function logRooms() {
+  return state.roomsOf === state.serial ? state.rooms : [];
+}
+
 // logDevice finds a device of the rooms or of the unlisted list already
 // loaded by its radio address; null when the Cube has none.
 function logDevice(rf) {
+  if (state.roomsOf !== state.serial) return null;
   for (const r of state.rooms) {
     const d = r.devices.find((x) => x.rf_address === rf);
     if (d) return d;
@@ -118,12 +126,14 @@ function logDeviceKey(d) {
 }
 
 // logDeviceName is how a line names its device: by its name from the
-// rooms and the unlisted list already loaded, else by its S/N, the radio
-// address only for a device without either.
+// rooms and the unlisted list already loaded, else by the name the line
+// kept of it (a state line's, until the rooms come), else by its S/N, the
+// radio address only for a device without either.
 function logDeviceName(line) {
   if (!line.device) return "";
   const d = logDevice(line.device);
   if (d && d.name) return d.name;
+  if (line.state && line.state.name) return line.state.name;
   return line.serial || (d && d.serial) || line.device;
 }
 
@@ -352,14 +362,14 @@ function logTargetText(s) {
   const id = target.slice(i + 1);
   switch (kind) {
     case "device": {
-      for (const r of state.rooms) {
+      for (const r of logRooms()) {
         const d = r.devices.find((x) => x.serial === id || x.rf_address === id);
         if (d && d.name) return d.name;
       }
       return id;
     }
     case "room": {
-      const r = state.rooms.find((x) => String(x.id) === id);
+      const r = logRooms().find((x) => String(x.id) === id);
       return r && r.name ? r.name : t("log.room", { id });
     }
     case "token":
