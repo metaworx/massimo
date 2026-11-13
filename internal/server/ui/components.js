@@ -559,21 +559,30 @@ function pageBar(page) {
 // bottom margin, so that the page is as long scrolled as not: a page
 // little taller than the window would otherwise become too short to stay
 // scrolled, the header grow back, and the page jump to and fro.
-// Scrolled from 96 px down, not again under 8 px.
+// Scrolled from 96 px down, not again under 8 px. The browser's scroll
+// anchoring is off while the header changes: measuring the compacted
+// header lays the page out once without the margin, the page under the
+// header moved up by what the header gave up, and the browser took the
+// scroll back by as much, to the top where that was more than 96 px (the
+// expert list, the found Cubes open), so that the header grew back and
+// the screen flickered (tools/ui-test/test_scroll.py).
 function stickyHeader() {
   const top = document.querySelector(".top");
+  const root = document.documentElement;
   // the border box: compacting changes the padding, which the content
   // box does not see
-  const height = () => document.documentElement.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
+  const height = () => root.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
   new ResizeObserver(height).observe(top, { box: "border-box" });
   const set = (on) => {
     if (on === document.body.classList.contains("scrolled")) return;
+    root.style.overflowAnchor = "none";
     top.style.marginBottom = "";
     const whole = top.getBoundingClientRect().height;
     const margin = parseFloat(getComputedStyle(top).marginBottom) || 0;
     document.body.classList.toggle("scrolled", on);
     if (on) top.style.marginBottom = margin + whole - top.getBoundingClientRect().height + "px";
-    height();
+    height(); // laid out with the margin, before the anchoring is back
+    root.style.overflowAnchor = "";
   };
   const onScroll = () => {
     const y = window.scrollY;
