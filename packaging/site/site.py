@@ -248,7 +248,7 @@ def docs(a):
         body = (home['header'].strip() + '\n' + home['main'].strip() + '\n'
                 + '<h2 id="documentation">Documentation</h2>\n' + body)
         write('index.html', 'packaging/site/index.html', 'The channel %s' % a.channel, body,
-              footer=home['footer'].strip() + '\n')
+              footer='<footer>\n' + home['footer'].strip() + '\n</footer>\n')
 
     for d in ('docs/images', 'docs/screenshots'):
         if os.path.isdir(os.path.join(a.tree, d)):
