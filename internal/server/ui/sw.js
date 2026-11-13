@@ -84,7 +84,7 @@ async function show(n) {
   await self.registration.showNotification(title, {
     body,
     lang,
-    icon: scoped("ui/icons/icon-192.png"),
+    icon: scoped("ui/brand/tile-192.png"),
     tag: [n.kind, n.device || n.cube || ""].join("-"),
     timestamp: Date.parse(n.time) || Date.now(),
     data: { url: n.url || "" },

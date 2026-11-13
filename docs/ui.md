@@ -517,6 +517,14 @@ The page is at most 640 px wide, as My settings is.
 `manifest.webmanifest` names the page, its icons and its colours,
 so that a phone's browser offers to add it to the Home Screen,
 where it opens without the browser's bar.
+Its icons are Massimo's mark, from `ui/brand/` (`make ui-brand`,
+`tools/brand/README.md`): the mark in white on a blue rounded square,
+and for the launchers that cut an icon to a shape of their own (Android's
+maskable icons, the Home Screen of iOS) the same blue as a full square,
+the mark within the circle they keep.
+The browser's tab shows the small mark: `favicon.svg`,
+in the colours of the browser's own light or dark,
+and `favicon.ico` at `/favicon.ico` for browsers without SVG icons.
 Its service worker, `sw.js`, beside the page so that it covers the page,
 shows a notification in the language the page last told it
 (the texts of the page's tables, kept for when the server is out of reach),

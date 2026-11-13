@@ -14,6 +14,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -72,13 +73,18 @@ func TestUIServed(t *testing.T) {
 		Display  string
 		Icons    []struct{ Src, Sizes, Purpose string }
 	}
-	if code != 200 || ct != "application/manifest+json" || json.Unmarshal([]byte(body), &manifest) != nil || manifest.StartURL != "." || manifest.Display != "standalone" || len(manifest.Icons) != 3 {
+	if code != 200 || ct != "application/manifest+json" || json.Unmarshal([]byte(body), &manifest) != nil || manifest.StartURL != "." || manifest.Display != "standalone" || len(manifest.Icons) != 4 {
 		t.Fatalf("GET /manifest.webmanifest: %d %s %s", code, ct, body)
 	}
+	purposes := map[string]int{}
 	for _, icon := range manifest.Icons {
+		purposes[icon.Purpose]++
 		if code, ct, body := get("/" + icon.Src); code != 200 || ct != "image/png" || !strings.HasPrefix(body, "\x89PNG") {
 			t.Fatalf("GET /%s: %d %s", icon.Src, code, ct)
 		}
+	}
+	if purposes["any"] != 2 || purposes["maskable"] != 2 {
+		t.Fatalf("the manifest's icons by purpose: %v", purposes)
 	}
 	resp, err := http.Get(ts.URL + "/")
 	if err != nil {
@@ -95,7 +101,7 @@ func TestUIServed(t *testing.T) {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
 	}
-	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/nope.js", "/ui/icons/", "/ui/icons/nope.png", "/other"} {
+	for _, p := range []string{"/ui/", "/ui/index.html", "/ui/nope.js", "/ui/i18n", "/ui/i18n/", "/ui/i18n/xx.json", "/ui/i18n/en.js", "/ui/i18n/EN.json", "/ui/partials/cubes.html", "/ui/partials/", "/ui/vendor/", "/ui/vendor/README.md", "/ui/vendor/nope.js", "/ui/icons/icon-192.png", "/ui/brand/", "/ui/brand/nope.png", "/ui/brand/.make_brand", "/other"} {
 		if code, _, _ := get(p); code != 404 {
 			t.Fatalf("GET %s: %d, want 404", p, code)
 		}
@@ -198,6 +204,60 @@ func pageIDs(t *testing.T, name, page string) map[string]bool {
 // every id the scripts look up ($("…")) and every template they clone
 // (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
 // script of another page (uiPageScripts), in that page.
+// Massimo's mark (make ui-brand): every file the page's head, the connect
+// page's, the manifest and the service worker name is served with its
+// type; /favicon.ico at the root, where browsers look; an SVG with a
+// policy that lets its own style be, the dark rule of the favicon.
+func TestUIBrand(t *testing.T) {
+	_, ts, _ := startWith(t, Options{})
+	get := func(p string) (*http.Response, string) {
+		t.Helper()
+		resp, err := http.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp, string(b)
+	}
+	_, page := get("/")
+	_, connect := get("/ui/connect.html")
+	sw, err := uiFiles.ReadFile("ui/sw.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := regexp.MustCompile(`"(ui/brand/[^"]+|favicon\.ico)"`)
+	types := map[string]string{".svg": "image/svg+xml", ".css": "text/css", ".png": "image/png", ".ico": "image/x-icon"}
+	seen := map[string]bool{}
+	for _, text := range []string{page, connect, string(sw)} {
+		for _, m := range named.FindAllStringSubmatch(text, -1) {
+			seen[m[1]] = true
+		}
+	}
+	for _, want := range []string{"ui/brand/brand.css", "ui/brand/favicon.svg", "favicon.ico", "ui/brand/apple-touch-180.png", "ui/brand/tile-192.png"} {
+		if !seen[want] {
+			t.Errorf("%s is named nowhere", want)
+		}
+	}
+	for name := range seen {
+		resp, body := get("/" + name)
+		ct := resp.Header.Get("Content-Type")
+		if resp.StatusCode != 200 || !strings.HasPrefix(ct, types[path.Ext(name)]) || body == "" {
+			t.Errorf("GET /%s: %d %s", name, resp.StatusCode, ct)
+		}
+		csp := resp.Header.Get("Content-Security-Policy")
+		if path.Ext(name) == ".svg" && csp != "default-src 'none'; style-src 'unsafe-inline'" {
+			t.Errorf("GET /%s: the policy %q", name, csp)
+		}
+	}
+	if resp, body := get("/ui/brand/brand.svg"); resp.StatusCode != 200 || !strings.Contains(body, `<symbol id="logo-m"`) || !strings.Contains(body, `<symbol id="mark-cover"`) {
+		t.Fatalf("the sprite: %d", resp.StatusCode)
+	}
+	if resp, body := get("/favicon.ico"); resp.StatusCode != 200 || !strings.HasPrefix(body, "\x00\x00\x01\x00") || resp.Header.Get("ETag") == "" {
+		t.Fatalf("GET /favicon.ico: %d %q", resp.StatusCode, body[:min(4, len(body))])
+	}
+}
+
 func TestUIPage(t *testing.T) {
 	files, err := fs.Glob(uiFiles, "ui/partials/*.html")
 	if err != nil {

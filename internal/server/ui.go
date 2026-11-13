@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -18,14 +19,15 @@ import (
 
 // The web UI: plain HTML, CSS and JavaScript, no build step. It is
 // served at / (the page, assembled from index.html and the partials at
-// start) and /ui/ (the files, the translations under /ui/i18n/, the
-// app icons under /ui/icons/, the vendored OPAQUE client under
-// /ui/vendor/, ui/vendor/README.md) and talks to the API; beside the
-// page, /sw.js is its service worker, whose scope is the page's, and
-// /manifest.webmanifest makes it installable. /ui/connect.html is the
+// start) and /ui/ (the files, the translations under /ui/i18n/, Massimo's
+// mark under /ui/brand/, which make ui-brand writes from tools/brand,
+// the vendored OPAQUE client under /ui/vendor/, ui/vendor/README.md) and
+// talks to the API; beside the page, /sw.js is its service worker, whose
+// scope is the page's, /manifest.webmanifest makes it installable, and
+// /favicon.ico is where browsers look for an icon. /ui/connect.html is the
 // apps' connect page, a page of its own (docs/app.md).
 //
-//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/week-program.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/providers.js ui/backup.js ui/roles.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/icons/*.png ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE
+//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/tiles.js ui/week-program.js ui/config.js ui/log.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/providers.js ui/backup.js ui/roles.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE
 var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per
@@ -151,9 +153,24 @@ func (s *Server) uiRoutes(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "application/manifest+json")
 		serve(w, r, "manifest.webmanifest")
 	})
-	mux.HandleFunc("GET /ui/icons/{file}", func(w http.ResponseWriter, r *http.Request) {
+	// Massimo's mark: an SVG is an image with a style of its own (the
+	// favicon's dark rule), which the page's policy would refuse it; an
+	// image runs no script. Go's table has no .ico.
+	brand := func(w http.ResponseWriter, r *http.Request, name string) {
 		securityHeaders(w)
-		serve(w, r, "icons/"+r.PathValue("file"))
+		switch path.Ext(name) {
+		case ".svg":
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+		case ".ico":
+			w.Header().Set("Content-Type", "image/x-icon")
+		}
+		serve(w, r, "brand/"+name)
+	}
+	mux.HandleFunc("GET /ui/brand/{file}", func(w http.ResponseWriter, r *http.Request) {
+		brand(w, r, r.PathValue("file"))
+	})
+	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		brand(w, r, "favicon.ico")
 	})
 	mux.HandleFunc("GET /ui/vendor/{file}", func(w http.ResponseWriter, r *http.Request) {
 		securityHeaders(w)
