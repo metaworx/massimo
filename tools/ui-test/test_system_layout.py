@@ -117,12 +117,12 @@ def test_header_and_page_bar_stay(page, case):
         top: document.querySelector('.top').getBoundingClientRect().top,
         topBottom: document.querySelector('.top').getBoundingClientRect().bottom,
         bar: document.querySelector('#system .page-bar').getBoundingClientRect().top,
-        brand: document.querySelector('.top-left').getBoundingClientRect().width,
+        brand: getComputedStyle(document.querySelector('.top-left')).display,
     })""")
     assert abs(geo["top"]) <= 1, f"the header at the top ({geo})"
     assert abs(geo["bar"] - geo["topBottom"]) <= 2, f"the page's row under it ({geo})"
     if case.width < 600:
-        assert geo["brand"] <= 1, "on a phone the Cube choice takes the brand's line, the brand out of sight"
+        assert geo["brand"] == "none", "on a phone the Cube choice takes the brand's line"
     menu = page.locator("#system .sec-menu")
     menu.locator("summary").click()
     current = menu.locator(".toc-link[aria-current='true']")

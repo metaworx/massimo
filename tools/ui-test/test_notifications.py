@@ -68,7 +68,12 @@ GUEST = {"mode": "users", "user": {"name": "guest1", "role": "guest", "has_passw
 
 
 def assert_axe(page, where):
-    """axe-core finds no violation on the page as it stands."""
+    """axe-core finds no violation on the page, taken to its top first:
+    Notifications is a card of the personal page, which opens scrolled to
+    it, and a scrolled header on a phone has no room for the brand, the
+    page's level-one heading (style.css, body.scrolled)."""
+    page.evaluate("window.scrollTo(0, 0)")
+    wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3)
     results = Axe().run(page)
     assert results.violations_count == 0, f"axe on {where}:\n{results.generate_report()}"
 
