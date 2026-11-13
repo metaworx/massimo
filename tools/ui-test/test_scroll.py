@@ -68,3 +68,26 @@ def test_slow_scroll_goes_down(page, case):
       applySettings();
       window.scrollTo(0, 0);
     }""")
+
+
+def test_scroll_to_the_bottom_stays_there(page, case):
+    """The page scrolled to its bottom at once, as a click on Older at the
+    log's end does: the header compacts and the page stays at its bottom.
+    Measuring the compacted header once laid the page out shorter for a
+    moment, the browser cut the scroll to fit it, and the button at the
+    end went out of view."""
+    page.evaluate("""() => {
+      const spacer = document.createElement('div');
+      spacer.id = 'scroll-spacer';
+      spacer.style.height = '400px';
+      document.querySelector('main').appendChild(spacer);
+      window.scrollTo(0, 0);
+    }""")
+    assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
+        "at the top, the header whole"
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the header compacted"
+    page.wait_for_timeout(200)
+    y, bottom = page.evaluate("[Math.round(window.scrollY), document.documentElement.scrollHeight - innerHeight]")
+    assert abs(y - bottom) <= 1, f"the page stays at its bottom ({y}, its bottom {bottom})"
+    page.evaluate("() => { document.getElementById('scroll-spacer').remove(); window.scrollTo(0, 0); }")
