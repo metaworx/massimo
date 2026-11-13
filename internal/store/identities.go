@@ -344,7 +344,7 @@ func (s *Store) TouchIdentity(ctx context.Context, id int64, d IdentityDetails) 
 	if err := s.writable(); err != nil {
 		return err
 	}
-	d = cleanDetails(d)
+	d = CleanDetails(d)
 	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET last_used_at = ?, email = CASE WHEN ? = '' THEN email ELSE ? END,
 		name = ?, username = ?, groups = ? WHERE id = ?`, s.nowText(), d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), id); err != nil {
 		return fmt.Errorf("store: identity %d: %w", id, err)
@@ -352,9 +352,10 @@ func (s *Store) TouchIdentity(ctx context.Context, id int64, d IdentityDetails) 
 	return nil
 }
 
-// cleanDetails bounds what a provider says: an e-mail as kept or none,
-// names of at most 128 bytes, at most 100 groups of at most 128 bytes.
-func cleanDetails(d IdentityDetails) IdentityDetails {
+// CleanDetails bounds what a provider says, as an identity keeps it: an
+// e-mail as kept or none, names of at most 128 bytes, at most 100 groups
+// of at most 128 bytes.
+func CleanDetails(d IdentityDetails) IdentityDetails {
 	if e, err := normalEmail(d.Email); err == nil {
 		d.Email = e
 	} else {
@@ -397,7 +398,7 @@ func (s *Store) LinkIdentity(ctx context.Context, userID, providerID int64, subj
 	if subject == "" {
 		return Identity{}, fmt.Errorf("%w: no subject", ErrBadProvider)
 	}
-	d = cleanDetails(d)
+	d = CleanDetails(d)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Identity{}, fmt.Errorf("store: link: %w", err)

@@ -299,6 +299,14 @@
 
   "help.button": "aide : {label}",
   "help.title": "À quoi cela sert-il ?",
+
+  "help.profileName": "Le nom que montrent le menu 👤 et la liste des utilisateurs ; votre nom de connexion reste tel quel. Enregistrer le conserve.",
+
+  "help.profilePassword": "Un mot de passe vous permet de vous connecter par votre nom dans n'importe quel navigateur. Il est enregistré par OPAQUE dans ce navigateur, le serveur ne le voit donc jamais ; un changement demande l'actuel. Enregistrer le définit.",
+
+  "help.profileTokens": "Chaque navigateur connecté en votre nom est une session ; une clé d'API connecte un programme. Révoquer en met fin aussitôt et déconnecte ce navigateur ou ce programme. Créer la clé en crée une, montrée une seule fois : copiez-la alors.",
+
+  "help.profileLinked": "Lier vous connecte une fois chez le fournisseur ; le compte revenu est montré, et Lier là le fait vous connecter ici aussi. Lier à nouveau chez un fournisseur y remplace le lien. Supprimer met fin à un lien, mais pas à votre dernier moyen de connexion.",
   "help.roomName": "Le nom de la pièce, enregistré dans le Cube et affiché par tous les programmes qui communiquent avec lui.",
   "help.comfort": "La température confort (symbole soleil), 21,0 °C en réglage d’usine. Les thermostats y passent avec leur touche confort/éco.",
   "help.eco": "La température éco ou température réduite (symbole lune), pour la nuit et les absences, 17,0 °C en réglage d’usine. Les thermostats y passent avec leur touche confort/éco.",
@@ -600,7 +608,11 @@
 
   "log.action.identity.update": "identité modifiée",
 
-  "log.action.identity.link": "liaison de compte commencée",
+  "log.action.identity.link": "compte lié",
+
+  "log.action.identity.link.start": "liaison de compte commencée",
+
+  "log.action.identity.link.cancel": "liaison de compte annulée",
   "log.action.identity.remove": "identité supprimée",
   "log.kind.cube_gone": "disparu",
   "log.kind.address_changed": "adresse",
@@ -1125,9 +1137,29 @@
 
   "profile.linkError.taken": "Ce compte est déjà lié à un autre utilisateur ici.",
 
-  "profile.linkError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de {name}.",
+  "profile.linkError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de ce fournisseur.",
 
   "profile.linkError.failed": "La liaison par le fournisseur a échoué. Réessayez.",
+
+  "profile.linkError.expired": "Le compte revenu ne peut plus être lié : {error}",
+
+  "profile.linkCancelled": "Rien n'a été lié.",
+
+  "profile.confirm.title": "Lier ce compte chez {name} ?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Nom",
+
+  "profile.confirm.username": "Nom d'utilisateur",
+
+  "profile.confirm.subject": "Identifiant",
+
+  "profile.confirm.groups": "Groupes",
+
+  "profile.confirm.replaces": "Cela remplace votre lien vers {accounts}.",
+
+  "profile.confirm.link": "Lier",
 
   "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
 

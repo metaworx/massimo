@@ -494,8 +494,34 @@ func TestOIDCLink(t *testing.T) {
 	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/nope", anna, `{"redirect": "`+ts.URL+`/"}`); code != 404 {
 		t.Fatalf("an unknown provider: %d", code)
 	}
-	if run := link(anna, map[string]any{"sub": "a1", "email": "Anna@example.com", "name": "Anna B", "preferred_username": "anna.b", "groups": []string{"family", "admins"}}); run.fragment != "oidc-linked=cloud" {
-		t.Fatalf("link: %+v", run)
+	// confirm stores a link come back, as anna, once
+	confirm := func(run oidcRun, method string, token string) (int, string) {
+		t.Helper()
+		code, ok := strings.CutPrefix(run.fragment, "oidc-link-confirm=")
+		if !ok {
+			t.Fatalf("no confirmation: %+v", run)
+		}
+		return callAPI(t, ts, method, "/api/v1/users/anna/identities/link/pending/"+code, token, "")
+	}
+	run := link(anna, map[string]any{"sub": "a1", "email": "Anna@example.com", "name": "Anna B", "preferred_username": "anna.b", "groups": []string{"family", "admins"}})
+	code, text := confirm(run, "GET", anna)
+	var pending pendingLinkView
+	if json.Unmarshal([]byte(text), &pending); code != 200 || pending.Email != "anna@example.com" || pending.Username != "anna.b" || pending.ProviderName != "cloud" ||
+		strings.Join(pending.Groups, ",") != "family,admins" || len(pending.Replaces) != 0 {
+		t.Fatalf("the pending link: %d %s", code, text)
+	}
+	var none []identityView
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &none); len(none) != 0 {
+		t.Fatalf("stored before the confirmation: %+v", none)
+	}
+	if c, _ := confirm(run, "POST", "secret"); c != 403 {
+		t.Fatalf("the owner confirms anna's: %d", c)
+	}
+	if c, text := confirm(run, "POST", anna); c != 200 {
+		t.Fatalf("confirm: %d %s", c, text)
+	}
+	if c, _ := confirm(run, "POST", anna); c != 404 {
+		t.Fatalf("confirmed twice: %d", c)
 	}
 	var list []identityView
 	if c := getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); c != 200 || len(list) != 1 {
@@ -506,8 +532,22 @@ func TestOIDCLink(t *testing.T) {
 		t.Fatalf("the link: %+v", i)
 	}
 	// linked again with another account at the provider: it replaces
-	if run := link(anna, map[string]any{"sub": "a2", "groups": "solo"}); run.fragment != "oidc-linked=cloud" {
-		t.Fatalf("link again: %+v", run)
+	// linked again with another account: shown with the link it replaces,
+	// a cancel stores nothing, a confirmation replaces
+	run = link(anna, map[string]any{"sub": "a2", "groups": "solo"})
+	_, text = confirm(run, "GET", anna)
+	if json.Unmarshal([]byte(text), &pending); len(pending.Replaces) != 1 || pending.Replaces[0].Subject != "a1" {
+		t.Fatalf("the link it replaces: %s", text)
+	}
+	if c, _ := confirm(run, "DELETE", anna); c != 200 {
+		t.Fatalf("cancel: %d", c)
+	}
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &none); len(none) != 1 || none[0].Subject != "a1" {
+		t.Fatalf("after the cancel: %+v", none)
+	}
+	run = link(anna, map[string]any{"sub": "a2", "groups": "solo"})
+	if c, _ := confirm(run, "POST", anna); c != 200 {
+		t.Fatalf("link again: %d", c)
 	}
 	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); len(list) != 1 || list[0].Subject != "a2" || strings.Join(list[0].Groups, ",") != "solo" {
 		t.Fatalf("replaced: %+v", list)
@@ -536,7 +576,7 @@ func TestOIDCLink(t *testing.T) {
 	}
 
 	// a manager changes a link no sign-in used, not one used
-	code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", "secret", `{"provider": "cloud", "email": "a@example.com"}`)
+	code, text = callAPI(t, ts, "POST", "/api/v1/users/anna/identities", "secret", `{"provider": "cloud", "email": "a@example.com"}`)
 	var w identityView
 	json.Unmarshal([]byte(text), &w)
 	if code != 201 {
@@ -615,5 +655,39 @@ func TestOIDCGroups(t *testing.T) {
 	st.UpdateProvider(ctx, "cloud", func(p *store.AuthProvider) error { p.AllowedGroups = nil; return nil }, 0)
 	if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1"})); who != "anna" {
 		t.Fatalf("no restriction: %q", who)
+	}
+}
+
+// A pending link (AP Oidc v1.2, Block 10) is its user's, from its
+// address, for ten minutes: another user or address finds nothing and
+// leaves it; a peek leaves it, a take ends it; too old, it is gone.
+func TestOIDCPendingLink(t *testing.T) {
+	var o oidcFlows
+	now := time.Now()
+	code := o.hold(&oidcPendingLink{userID: 7, ip: "192.0.2.1", expires: now.Add(oidcStartTTL)}, now)
+	if code == "" {
+		t.Fatal("not held")
+	}
+	if _, ok := o.pendingLink(code, 8, "192.0.2.1", now, true); ok {
+		t.Fatal("another user's")
+	}
+	if _, ok := o.pendingLink(code, 7, "192.0.2.2", now, true); ok {
+		t.Fatal("from another address")
+	}
+	if _, ok := o.pendingLink(code, 7, "192.0.2.1", now, false); !ok {
+		t.Fatal("a peek")
+	}
+	if _, ok := o.pendingLink(code, 7, "192.0.2.1", now.Add(oidcStartTTL), false); ok {
+		t.Fatal("too old")
+	}
+	if _, ok := o.pendingLink(code, 7, "192.0.2.1", now, true); ok {
+		t.Fatal("too old, and still there")
+	}
+	code = o.hold(&oidcPendingLink{userID: 7, ip: "192.0.2.1", expires: now.Add(oidcStartTTL)}, now)
+	if _, ok := o.pendingLink(code, 7, "192.0.2.1", now, true); !ok {
+		t.Fatal("taken")
+	}
+	if _, ok := o.pendingLink(code, 7, "192.0.2.1", now, true); ok {
+		t.Fatal("taken twice")
 	}
 }

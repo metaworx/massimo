@@ -121,6 +121,15 @@
   </li>
 </template>
 
+<template id="tpl-link-confirm">
+  <div class="link-confirm notice" role="group">
+    <p class="link-confirm-title" tabindex="-1"></p>
+    <dl class="link-confirm-details"></dl>
+    <p class="link-confirm-replaces small hidden"></p>
+    <div class="actions"><span class="actions-right"><button type="button" class="cancel-link" data-i18n="action.cancel">Cancel</button><button type="button" class="primary confirm-link" data-i18n="profile.confirm.link">Link</button></span></div>
+  </div>
+</template>
+
 <template id="tpl-profile-identities">
   <div class="user-identities-box profile-identities">
     <span class="muted small" data-i18n="profile.linked">Linked accounts</span>

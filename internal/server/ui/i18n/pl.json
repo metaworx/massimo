@@ -304,6 +304,14 @@
 
   "help.button": "pomoc: {label}",
   "help.title": "Do czego to służy?",
+
+  "help.profileName": "Nazwa, którą pokazują menu 👤 i lista użytkowników; twoja nazwa logowania pozostaje bez zmian. Zapisz ją zachowuje.",
+
+  "help.profilePassword": "Hasło pozwala logować się nazwą w dowolnej przeglądarce. Jest rejestrowane przez OPAQUE w tej przeglądarce, więc serwer nigdy go nie widzi; zmiana wymaga obecnego. Zapisz je ustawia.",
+
+  "help.profileTokens": "Każda przeglądarka zalogowana jako ty to sesja; klucz API loguje program. Unieważnij kończy ją od razu, wylogowując tę przeglądarkę lub program. Utwórz klucz tworzy klucz, pokazany tylko raz: wtedy go skopiuj.",
+
+  "help.profileLinked": "Powiąż loguje cię raz u dostawcy; konto, które wróci, jest pokazane, a Powiąż tam sprawia, że loguje cię także tutaj. Ponowne powiązanie u dostawcy zastępuje tam powiązanie. Usuń kończy powiązanie, ale nie twój ostatni sposób logowania.",
   "help.roomName": "Nazwa pomieszczenia, zapisana w Cube i widoczna w każdym programie, który się z nim komunikuje.",
   "help.comfort": "Temperatura komfortowa (symbol słońca), fabrycznie 21,0 °C. Termostaty przełączają się na nią przyciskiem temperatury komfortowej/obniżonej.",
   "help.eco": "Temperatura obniżona (symbol księżyca) na noc i czas nieobecności, fabrycznie 17,0 °C. Termostaty przełączają się na nią przyciskiem temperatury komfortowej/obniżonej.",
@@ -617,7 +625,11 @@
 
   "log.action.identity.update": "tożsamość zmieniona",
 
-  "log.action.identity.link": "rozpoczęto powiązanie konta",
+  "log.action.identity.link": "konto powiązane",
+
+  "log.action.identity.link.start": "rozpoczęto powiązanie konta",
+
+  "log.action.identity.link.cancel": "anulowano powiązanie konta",
   "log.action.identity.remove": "usunięto tożsamość",
   "log.kind.cube_gone": "zniknął",
   "log.kind.address_changed": "adres",
@@ -1148,9 +1160,29 @@
 
   "profile.linkError.taken": "To konto jest tu już powiązane z innym użytkownikiem.",
 
-  "profile.linkError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od {name}.",
+  "profile.linkError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od dostawcy.",
 
   "profile.linkError.failed": "Powiązanie przez dostawcę nie powiodło się. Spróbuj ponownie.",
+
+  "profile.linkError.expired": "Konta, które wróciło, nie można już powiązać: {error}",
+
+  "profile.linkCancelled": "Nic nie zostało powiązane.",
+
+  "profile.confirm.title": "Powiązać to konto u {name}?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Nazwa",
+
+  "profile.confirm.username": "Nazwa użytkownika",
+
+  "profile.confirm.subject": "Identyfikator użytkownika",
+
+  "profile.confirm.groups": "Grupy",
+
+  "profile.confirm.replaces": "To zastępuje twoje powiązanie z {accounts}.",
+
+  "profile.confirm.link": "Powiąż",
 
   "users.identityEmailNeeded": "Potrzebny jest adres e-mail.",
 

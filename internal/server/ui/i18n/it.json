@@ -299,6 +299,14 @@
 
   "help.button": "aiuto: {label}",
   "help.title": "A cosa serve?",
+
+  "help.profileName": "Il nome che mostrano il menu 👤 e l'elenco degli utenti; il tuo nome di accesso resta com'è. Salva lo conserva.",
+
+  "help.profilePassword": "Una password ti permette di accedere con il tuo nome in qualsiasi browser. Viene registrata con OPAQUE in questo browser, quindi il server non la vede mai; una modifica chiede quella attuale. Salva la imposta.",
+
+  "help.profileTokens": "Ogni browser connesso a tuo nome è una sessione; una chiave API connette un programma. Revoca ne termina una subito, disconnettendo quel browser o programma. Crea la chiave ne crea una, mostrata una sola volta: copiala allora.",
+
+  "help.profileLinked": "Collega ti fa accedere una volta presso il provider; l'account tornato viene mostrato, e Collega lì ti fa accedere con esso anche qui. Collegare di nuovo presso un provider vi sostituisce il collegamento. Rimuovi termina un collegamento, ma non il tuo ultimo modo di accedere.",
   "help.roomName": "Il nome del locale, memorizzato sul Cube e mostrato da ogni programma che comunica con esso.",
   "help.comfort": "La temperatura comfort (simbolo del sole), 21,0 °C di fabbrica. I termostati passano a essa con il tasto comfort/ridotta.",
   "help.eco": "La temperatura ridotta (simbolo della luna), per la notte e le assenze, 17,0 °C di fabbrica. I termostati passano a essa con il tasto comfort/ridotta.",
@@ -600,7 +608,11 @@
 
   "log.action.identity.update": "identità modificata",
 
-  "log.action.identity.link": "collegamento dell'account avviato",
+  "log.action.identity.link": "account collegato",
+
+  "log.action.identity.link.start": "collegamento dell'account avviato",
+
+  "log.action.identity.link.cancel": "collegamento dell'account annullato",
   "log.action.identity.remove": "identità rimossa",
   "log.kind.cube_gone": "sparito",
   "log.kind.address_changed": "indirizzo",
@@ -1125,9 +1137,29 @@
 
   "profile.linkError.taken": "Questo account è già collegato a un altro utente qui.",
 
-  "profile.linkError.group": "Questo account non è in nessuno dei gruppi che questo server ammette da {name}.",
+  "profile.linkError.group": "Questo account non è in nessuno dei gruppi che questo server ammette dal provider.",
 
   "profile.linkError.failed": "Il collegamento tramite il provider non è riuscito. Riprova.",
+
+  "profile.linkError.expired": "L'account tornato non può più essere collegato: {error}",
+
+  "profile.linkCancelled": "Non è stato collegato nulla.",
+
+  "profile.confirm.title": "Collegare questo account presso {name}?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Nome",
+
+  "profile.confirm.username": "Nome utente",
+
+  "profile.confirm.subject": "ID utente",
+
+  "profile.confirm.groups": "Gruppi",
+
+  "profile.confirm.replaces": "Questo sostituisce il tuo collegamento a {accounts}.",
+
+  "profile.confirm.link": "Collega",
 
   "users.identityEmailNeeded": "Serve un indirizzo e-mail.",
 

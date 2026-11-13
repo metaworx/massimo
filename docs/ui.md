@@ -382,7 +382,9 @@ The filter's text is not in the address.
 ## My profile
 
 👤 → **My profile**, for a user signed in (not on an open server,
-nor with the server's API token):
+nor with the server's API token).
+Behind the last button of each group below, an ⓘ opens what its buttons do,
+as the settings' ⓘ do:
 
 - **Display name**, the name the 👤 menu and the users list show,
   with **Save**, off while it is the one stored.
@@ -404,9 +406,12 @@ nor with the server's API token):
   which is refused for the last way the user signs in
   (no password and no other linked account);
   **Link Nextcloud** per enabled provider goes there to sign in
-  and back to My profile, which says whether the account is linked
-  or is another user's already;
-  linking again at a provider replaces the link there.
+  and back to My profile, which shows the account before it is linked:
+  its e-mail, name, user name, user ID and groups,
+  and "This replaces your link to …" where the user has one there,
+  with **Link** and **Cancel**;
+  an account another user has, or one in none of the provider's groups,
+  comes back refused, saying so.
   The app shows no **Link** buttons, as no provider buttons on its sign-in.
 
 ## My settings

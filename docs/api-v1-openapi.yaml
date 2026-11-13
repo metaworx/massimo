@@ -901,12 +901,12 @@ paths:
       description: |
         The user's own only (403 for another's): a sign-in at the
         provider, as POST /api/v1/login/oidc/{key} starts one, whose
-        callback links the account to the user, replacing the user's
-        other identities at the provider, and sends the page back with
-        #oidc-linked=<key>, or #oidc-link-error=taken where another user
-        has the account, group where it is in none of the groups the
-        provider admits (failed where the provider's answer did not do).
-        No session is made.
+        callback keeps the account as a pending link and sends the page
+        back with #oidc-link-confirm=<code>, which the routes under
+        …/link/pending/{code} show, store or drop; or with
+        #oidc-link-error=taken where another user has the account, group
+        where it is in none of the groups the provider admits (failed
+        where the provider's answer did not do). No session is made.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -936,6 +936,85 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/identities/link/pending/{code}:
+    parameters:
+      - {$ref: "#/components/parameters/name"}
+      - {name: code, in: path, required: true, description: "The code of #oidc-link-confirm=", schema: {type: string}}
+    get:
+      summary: A link come back, before it is stored
+      x-capability: users
+      description: |
+        The user's own, from the address that started it, for ten minutes:
+        the account at the provider and the user's identities at that
+        provider the link would replace. Another user's code is 403, an
+        unknown, used or old one 404.
+      responses:
+        "200":
+          description: The pending link
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PendingLink"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No link waits under the code
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    post:
+      summary: Store a link come back
+      x-capability: users
+      description: |
+        Links the account to the user, replacing the user's other
+        identities at the provider; the code is spent.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      responses:
+        "200":
+          description: Linked
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Identity"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No link waits under the code
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: Another user has linked the account since
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+    delete:
+      summary: Drop a link come back
+      x-capability: users
+      description: Nothing is stored; the code is spent.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      responses:
+        "200":
+          description: Dropped
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No link waits under the code
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/users/{name}/identities/{id}:
     put:
@@ -3326,6 +3405,18 @@ components:
         created_at: {type: string, format: date-time}
         bound_at: {type: string, format: date-time}
         last_used_at: {type: string, format: date-time}
+    PendingLink:
+      type: object
+      properties:
+        provider: {type: string, description: The provider's key}
+        provider_name: {type: string}
+        subject: {type: string, description: The user id at the provider}
+        email: {type: string}
+        name: {type: string}
+        username: {type: string}
+        groups: {type: array, items: {type: string}}
+        replaces: {type: array, items: {$ref: "#/components/schemas/Identity"}, description: "The user's identities at the provider the link replaces"}
+        expires_at: {type: string, format: date-time}
     IdentityAdd:
       type: object
       description: The provider and either email or subject.

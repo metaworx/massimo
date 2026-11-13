@@ -260,8 +260,18 @@ def test_link_from_my_profile(page, case, provider):
         named_buttons(page, "My profile with linked accounts")
         with page.expect_navigation(url=back_at_page, timeout=10000):
             button.click()
-        assert wait_until(page, "currentView === 'profile' && !document.getElementById('profile-msg').classList.contains('hidden')", 10), \
-            "back in My profile, which says how it went"
+        # back in My profile: the account shown before it is stored
+        confirm = page.locator("#profile-identities .link-confirm")
+        confirm.wait_for(state="visible", timeout=10000)
+        assert page.evaluate("currentView") == "profile", "My profile"
+        assert provider.email in confirm.inner_text(), "the account's e-mail"
+        assert page.evaluate("document.activeElement && document.activeElement.classList.contains('link-confirm-title')"), "the question has the focus"
+        me = page.evaluate("state.me.user.name")
+        assert not any(i["provider"] == key for i in api_call("GET", f"api/v1/users/{me}/identities")), "nothing stored yet"
+        named_buttons(page, "the link's confirmation")
+        confirm.locator(".confirm-link").click()
+        assert wait_until(page, "!document.getElementById('profile-msg').classList.contains('hidden')", 10), \
+            "My profile says how it went"
         assert page.evaluate("document.getElementById('profile-msg').textContent") == page.evaluate(f"t('profile.linkDone', {{name: {name!r}}})"), \
             "the account is linked"
         assert page.url.endswith("#profile"), "the fragment is My profile's again"
@@ -272,6 +282,13 @@ def test_link_from_my_profile(page, case, provider):
         assert row.locator(".change-identity").is_hidden(), "a user does not change its own, it links again"
         again = page.locator(f"#profile-identities button[data-provider='{key}']")
         assert again.inner_text() == page.evaluate(f"t('profile.linkAgain', {{name: {name!r}}})"), "Link again"
+        # again, cancelled: nothing stored
+        with page.expect_navigation(url=back_at_page, timeout=10000):
+            again.click()
+        confirm.wait_for(state="visible", timeout=10000)
+        confirm.locator(".cancel-link").click()
+        assert wait_until(page, "document.getElementById('profile-msg').textContent === t('profile.linkCancelled')", 5), "nothing was linked"
+        assert confirm.count() == 0, "the confirmation is gone"
     finally:
         api_call("DELETE", f"api/v1/providers/{key}")
 

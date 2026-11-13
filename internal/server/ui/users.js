@@ -419,19 +419,36 @@ async function renderProfile() {
       if (ok) loadMe(); // the 👤 menu names the user by it
     });
   });
+  addProfileHelp(save, "profileName", t("users.displayName"), form);
   const tokens = fromTemplate("tpl-user-tokens");
   wireNewKey(u, tokens, "profile");
+  addProfileHelp(tokens.querySelector(".create-key"), "profileTokens", t("users.tokens"), tokens);
+  // the password's form is static markup: its help made again, in the
+  // language now chosen
+  const pwForm = $("me-password-form");
+  for (const old of pwForm.querySelectorAll(".help-btn, .help-text")) old.remove();
+  addProfileHelp(pwForm.querySelector("button[type=submit]"), "profilePassword", t("me.changePassword"), pwForm);
   $("profile-name").replaceChildren(form);
   $("profile-tokens").replaceChildren(tokens);
   fillTokens(u, tokens, "profile");
   await renderProfileIdentities(u); // providers.js
   if (oidcLinked) {
-    // back from a link (oidcReturn, login.js)
-    const p = providersUI.login.find((x) => x.key === oidcLinked.key);
-    const name = p ? p.name : oidcLinked.key || "";
-    profileMsg(oidcLinked.error ? t("profile.linkError." + oidcLinked.error, { name }) : t("profile.linkDone", { name }), !oidcLinked.error);
+    // back from a link (oidcReturn, login.js): shown to confirm, or why
+    // there is none
+    const back = oidcLinked;
     oidcLinked = null;
+    if (back.confirm) await renderLinkConfirm(u, back.confirm); // providers.js
+    else profileMsg(t("profile.linkError." + back.error), false);
   }
+}
+
+// addProfileHelp puts My profile's ⓘ (helpParts, app.js) behind a group's
+// last button, and its explanation at the end of the group (AP Oidc
+// v1.2, D37-C).
+function addProfileHelp(after, key, label, group) {
+  const { btn, text } = helpParts(key, label);
+  after.after(btn);
+  group.appendChild(text);
 }
 
 // newUserForm is the form that adds a user, from its template.

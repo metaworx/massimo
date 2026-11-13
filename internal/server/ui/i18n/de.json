@@ -297,6 +297,14 @@
 
   "help.button": "Hilfe: {label}",
   "help.title": "Was bewirkt das?",
+
+  "help.profileName": "Der Name, den das 👤-Menü und die Benutzerliste zeigen; dein Anmeldename bleibt, wie er ist. Speichern behält ihn.",
+
+  "help.profilePassword": "Mit einem Passwort meldest du dich in jedem Browser mit deinem Namen an. Es wird per OPAQUE in diesem Browser registriert, der Server sieht es also nie; eine Änderung verlangt das aktuelle. Speichern setzt es.",
+
+  "help.profileTokens": "Jeder als du angemeldete Browser ist eine Sitzung; ein API-Schlüssel meldet ein Programm an. Widerrufen beendet eine sofort und meldet diesen Browser oder dieses Programm ab. Schlüssel anlegen macht einen Schlüssel, der nur einmal gezeigt wird: kopiere ihn dann.",
+
+  "help.profileLinked": "Verknüpfen meldet dich einmal beim Anmeldedienst an; das zurückgekommene Konto wird gezeigt, und Verknüpfen dort lässt es dich auch hier anmelden. Erneutes Verknüpfen bei einem Anmeldedienst ersetzt die Verknüpfung dort. Entfernen beendet eine Verknüpfung, aber nicht deinen letzten Weg zur Anmeldung.",
   "help.roomName": "Der Name des Raums, gespeichert im Cube und in jedem Programm sichtbar, das mit ihm spricht.",
   "help.comfort": "Die Komforttemperatur (Sonnensymbol), ab Werk 21,0 °C. Die Thermostate wechseln mit ihrer Komfort-/Absenktaste zu ihr.",
   "help.eco": "Die Absenktemperatur (Mondsymbol) für die Nacht und Abwesenheiten, ab Werk 17,0 °C. Die Thermostate wechseln mit ihrer Komfort-/Absenktaste zu ihr.",
@@ -598,7 +606,11 @@
 
   "log.action.identity.update": "Identität geändert",
 
-  "log.action.identity.link": "Kontoverknüpfung begonnen",
+  "log.action.identity.link": "Konto verknüpft",
+
+  "log.action.identity.link.start": "Kontoverknüpfung begonnen",
+
+  "log.action.identity.link.cancel": "Kontoverknüpfung abgebrochen",
   "log.action.identity.remove": "Identität entfernt",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "Adresse",
@@ -1123,9 +1135,29 @@
 
   "profile.linkError.taken": "Dieses Konto ist hier schon mit einem anderen Benutzer verknüpft.",
 
-  "profile.linkError.group": "Dieses Konto ist in keiner der Gruppen, die dieser Server von {name} zulässt.",
+  "profile.linkError.group": "Dieses Konto ist in keiner der Gruppen, die dieser Server vom Anmeldedienst zulässt.",
 
   "profile.linkError.failed": "Die Verknüpfung über den Anmeldedienst ist fehlgeschlagen. Versuche es nochmals.",
+
+  "profile.linkError.expired": "Das zurückgekommene Konto kann nicht mehr verknüpft werden: {error}",
+
+  "profile.linkCancelled": "Nichts wurde verknüpft.",
+
+  "profile.confirm.title": "Dieses Konto bei {name} verknüpfen?",
+
+  "profile.confirm.email": "E-Mail",
+
+  "profile.confirm.name": "Name",
+
+  "profile.confirm.username": "Benutzername",
+
+  "profile.confirm.subject": "Benutzer-ID",
+
+  "profile.confirm.groups": "Gruppen",
+
+  "profile.confirm.replaces": "Das ersetzt deine Verknüpfung mit {accounts}.",
+
+  "profile.confirm.link": "Verknüpfen",
 
   "users.identityEmailNeeded": "Eine E-Mail-Adresse ist nötig.",
 

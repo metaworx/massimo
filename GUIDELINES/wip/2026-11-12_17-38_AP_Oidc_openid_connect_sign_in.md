@@ -1,4 +1,4 @@
-# AP Oidc v1.1: OpenID Connect sign-in
+# AP Oidc v1.2: OpenID Connect sign-in
 
 ## TL;DR
 
@@ -6,7 +6,8 @@ Users sign in through an OpenID Connect provider (Nextcloud, Google, Microsoft, 
 Keycloak) beside the password; Blocks 1-5 are in v0.15.0-alpha.1.
 v1.1 fixes what the first real sign-in through breno's Nextcloud showed,
 lets users link their own accounts, restricts a provider to its groups,
-and seals the client secret.
+and seals the client secret (since sealed with a key derived from `opaque.key`, AP SealedSecrets).
+v1.2 asks before a link is stored, and explains My profile's controls.
 
 - claims → `id_token` only → also the userinfo endpoint (Nextcloud's OIDC app ≥ 2.0)
 - a pre-link → e-mail only → e-mail or the user id at the provider (`sub`), bound at once
@@ -17,6 +18,10 @@ and seals the client secret.
   details (name, user name, groups, last sign-in) on both
 - groups → not read → a claim per provider (`groups`), allowed groups; none: any
 - client secret → plain in the store → sealed (AES-GCM) with `secret.key` beside it
+- a link → stored as it comes back → shown first (account, name, groups, the link it replaces),
+  stored at **Link**, dropped at **Cancel**
+- My profile → its buttons unexplained → an ⓘ per group: display name, password,
+  sessions and keys, linked accounts
 
 ### Blocks
 
@@ -29,6 +34,8 @@ and seals the client secret.
 7. Linked accounts: migration 0019, the details kept, linking from My Profile, a waiting link changed; UI, tests, docs
 8. Groups: migration 0020, the claim and the allowed groups, the refusal; UI, tests, docs
 9. The sealed secret: `secret.key`, sealing on write and at the start, a lost key; tests, docs
+10. The link confirmed: the pending link, its routes, My profile's confirmation; tests, docs
+11. Help in My profile: an ⓘ per group of controls, six languages; ui-test, docs/ui.md
 
 ## Discussion
 
@@ -188,6 +195,49 @@ this revision committed first on `claude/oidc-links`, then Blocks 6-9.
 The completion gate offers the push and the pull request.
 The real sign-in through breno's Nextcloud is the owner's.
 
+### v1.2: a link confirmed, and help in My profile
+
+The owner's real sign-in through breno's Nextcloud worked on 2026-11-13
+with the e-mail assigned; a first attempt had looked refused because the browser,
+still signed in at Nextcloud, never showed its page.
+The owner then asked for a confirmation once a link comes back,
+since an admin with an admin and a personal account at Nextcloud
+could link the wrong one, and for help icons in My profile.
+
+**The owner's decisions**, 2026-11-13, `PLAN++ Oidc` on the evaluation's gate:
+
+- **D38-A.** A link is shown before it is stored:
+  the provider, the account's e-mail, name, user name and groups,
+  and the link it replaces, if any; **Link** stores it, **Cancel** drops it.
+  A wrong account then never replaces a good link.
+- **D37-C.** An ⓘ, the page's help button, behind the controls of My profile.
+- **D39-A.** This revision, Blocks 10 and 11.
+
+**Refined here, routine:**
+
+- **The pending link** is held in memory like a sign-in's one-time code,
+  ten minutes, once, for the user who started the link and from its address;
+  a restart drops it.
+  The account another user has (`taken`) and one outside the provider's groups (`group`)
+  are refused at the callback, before anything is shown.
+- **One ⓘ per group of controls**, not per button:
+  the display name, the password, the sessions and keys, the linked accounts;
+  each explains what its buttons do,
+  Link among them (a sign-in at the provider, which then signs the user in here).
+
+**Names chosen here**, routine:
+the fragment `#oidc-link-confirm=<code>`;
+the routes `GET`, `POST` and `DELETE /api/v1/users/{name}/identities/link/pending/{code}`;
+the actions `identity.link` for the confirmation, the change itself,
+and `identity.link.start` for the start;
+the help keys `help.profileName`, `help.profilePassword`, `help.profileTokens`,
+`help.profileLinked`; the branch `claude/oidc-confirm`.
+
+**Who runs it:**
+this session, under the owner's `PLAN++ Oidc` of 2026-11-13,
+whose gate stated both blocks run on a branch, without a push:
+this revision committed first on `claude/oidc-confirm`, then Blocks 10 and 11.
+
 ## Analysis
 
 **The flow:**
@@ -308,6 +358,32 @@ What changes, by file:
 | `tools/ui-test/test_oidc.py` | 6-8 | as the UI |
 | `docs/api-v1.md`, OpenAPI, `docs/store.md`, `docs/oidc.md`, `docs/ui.md` | 6-9 | as the code |
 | `CHANGELOG.d/` | 6-9 | a fragment per block |
+
+### v1.2
+
+**The callback of a link**, after the token exchange and the groups' check:
+the account another user's is `taken`, as before;
+else the pending link is kept (the user, the provider, the subject, the details,
+the address, ten minutes) under a new code,
+and the browser goes back with `#oidc-link-confirm=<code>`.
+My profile reads it (`GET …/link/pending/{code}`):
+the provider's key and name, the account's details,
+and `replaces`, the user's identities at that provider a link would remove.
+`POST` stores it (`LinkIdentity`, as Block 7 did at the callback),
+`DELETE` drops it; a code unknown, spent, too old, another user's
+or from another address is `404`.
+
+What changes, by file:
+
+| File | Block | Change |
+|------|-------|--------|
+| `internal/server/oidc.go`, `oidc_test.go` | 10 | the pending link, its three routes |
+| `internal/server/server.go`, `audit.go` | 10 | the routes, `identity.link.start` |
+| `internal/server/ui/login.js`, `providers.js`, `users.js`, `partials/users-panel.html`, i18n | 10 | the confirmation in My profile |
+| `internal/server/ui/users.js`, `login.js`, `partials/profile.html`, i18n | 11 | the ⓘ per group |
+| `tools/ui-test/test_oidc.py`, a test of My profile's help | 10, 11 | as the page |
+| `docs/api-v1.md`, OpenAPI, `docs/ui.md`, `docs/oidc.md` | 10, 11 | as the code |
+| `CHANGELOG.d/Added/` | 10, 11 | a fragment each |
 
 ## Implementation Plan
 
@@ -457,6 +533,35 @@ and cite `AP Oidc v1.1, Block <n>`.
 
 **Verification:** the test gate; `make ui-test` for the page's line.
 
+Blocks 10 and 11 end with the same test gate and `make ui-test`,
+and cite `AP Oidc v1.2, Block <n>`.
+
+### Block 10: The link confirmed
+
+1. `oidc.go`: `oidcPendingLink` in `oidcFlows` (at most `maxTracked`);
+   the callback keeps it and answers `#oidc-link-confirm=<code>`;
+   `GET`, `POST` and `DELETE …/identities/link/pending/{code}`, the user's own.
+2. `server.go`, `audit.go`: the routes; `identity.link` the confirmation,
+   a change line; `identity.link.start` the start, none.
+3. The page: `#oidc-link-confirm=` opens My profile with the confirmation
+   at the top of Linked accounts: the details, "This replaces …", **Link** and **Cancel**;
+   i18n in six languages.
+4. Tests: confirmed, cancelled, twice, too old, another user's, another address,
+   a replacement listed; `test_oidc.py`: the confirmation, then linked, and a cancel.
+5. `docs/api-v1.md`, OpenAPI, `docs/ui.md`, `docs/oidc.md`;
+   `CHANGELOG.d/Added/claude-oidc-confirm-link.md`.
+
+**Verification:** the test gate with `make ui-test`.
+
+### Block 11: Help in My profile
+
+1. `helpParts` (app.js) behind the display name's Save, the password's title,
+   the sessions and keys, and the linked accounts; the explanations in six languages.
+2. Tests: each group's ⓘ labelled, opening its text; `named_buttons` on My profile.
+3. `docs/ui.md`; `CHANGELOG.d/Added/claude-oidc-confirm-help.md`.
+
+**Verification:** the test gate with `make ui-test`.
+
 ## Proposed commit messages
 
 The plan's registration, a commit of its own on main before the work branch:
@@ -499,9 +604,28 @@ Block 7, `feat(server): Users link their own accounts at the providers`;
 Block 8, `feat(server): A provider admits only the groups it names`;
 Block 9, `feat(store): The providers' client secrets are sealed with a key beside the store`.
 
+v1.2, on `claude/oidc-confirm` before its blocks:
+
+```
+chore(aps): Oidc v1.2
+
+The owner's real sign-in through breno's Nextcloud worked; the owner asked that a link be shown before it is stored, so that a wrong account cannot replace a good link, and for help in My profile. PLAN++ Oidc of 2026-11-13, with D37-C, D38-A and D39-A.
+
+Key changes:
+- GUIDELINES/wip/2026-11-12_17-38_AP_Oidc_openid_connect_sign_in.md: v1.2, Blocks 10 and 11, the decisions in its Discussion
+
+File-revision-v1: GUIDELINES/wip/2026-11-12_17-38_AP_Oidc_openid_connect_sign_in.md::v1.2::2026-11-13::All::Blocks 10 and 11, by PLAN++ Oidc
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 10, `feat(server): A link is shown before it is stored`;
+Block 11, `feat(ui): My profile explains its controls`.
+
 ## Change History
 
 - v1.0 (2026-11-12): the first revision,
   from the owner's request and the evaluation of the same day, with D1-A to D7-A.
 - v1.1 (2026-11-13): Blocks 6 to 9, from the first real sign-in through breno's Nextcloud
   and the owner's questions, with D20-A, D21-A, D22-A and D25-A to D29-A.
+- v1.2 (2026-11-13): Blocks 10 and 11, a link confirmed and help in My profile,
+  with D37-C, D38-A and D39-A.
