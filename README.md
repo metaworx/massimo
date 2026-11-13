@@ -987,9 +987,9 @@ and `store info` prints its schema version, node and row counts
 (also in the web UI, System settings → Maintenance → Store, as
 `massimo config`'s settings are under Settings in effect, secrets left out).
 The copy holds the database alone:
-`opaque.key`, `secret.key` and `node.key` beside it are kept with it,
-since without `opaque.key` no password of `auth_version` 2 signs in,
-and without `secret.key` no sign-in provider's client secret opens (packaging/README.md,
+`opaque.key` and `node.key` beside it are kept with it,
+since without `opaque.key` no password of `auth_version` 2 signs in
+and no sign-in provider's client secret opens (packaging/README.md,
 "The store").
 Run as the service user they act on the service's store from any directory,
 for example `sudo -u _massimo massimo store info`.

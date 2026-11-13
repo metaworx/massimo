@@ -122,6 +122,62 @@ func (s *Store) SetSetting(ctx context.Context, key string, value any) error {
 	return nil
 }
 
+// sealedSettings are the settings kept sealed (secret.go; AP
+// SealedSecrets v1.0, Block 2): in the file, the JSON string of a sealed
+// box, the setting's key its additional data. SecretSetting and
+// SetSecretSetting read and write them.
+var sealedSettings = []string{VAPIDKey}
+
+// ErrSecretLost is a sealed setting that does not open: opaque.key lost,
+// or another store's.
+var ErrSecretLost = errors.New("store: a sealed secret does not open")
+
+// SecretSetting returns a sealed setting opened, and whether it is set;
+// ErrSecretLost where it does not open. One kept plain, from before the
+// sealing, is answered as it is.
+func (s *Store) SecretSetting(ctx context.Context, key string) (json.RawMessage, bool, error) {
+	raw, ok, err := s.Setting(ctx, key)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	var kept string
+	if json.Unmarshal(raw, &kept) != nil {
+		return raw, true, nil // plain: not a string
+	}
+	plain, lost := s.openSecret(key, kept)
+	if lost {
+		return nil, true, fmt.Errorf("%w: setting %s", ErrSecretLost, key)
+	}
+	if plain == kept {
+		return raw, true, nil // a plain string
+	}
+	return json.RawMessage(plain), true, nil
+}
+
+// SetSecretSetting writes a setting sealed; value is marshalled to JSON
+// unless it is a json.RawMessage.
+func (s *Store) SetSecretSetting(ctx context.Context, key string, value any) error {
+	if err := s.writable(); err != nil {
+		return err
+	}
+	raw, ok := value.(json.RawMessage)
+	if !ok {
+		b, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("store: setting %s: %w", key, err)
+		}
+		raw = b
+	}
+	if !json.Valid(raw) {
+		return fmt.Errorf("store: setting %s: not JSON", key)
+	}
+	sealed, err := s.sealSecret(key, string(raw))
+	if err != nil {
+		return err
+	}
+	return s.SetSetting(ctx, key, sealed)
+}
+
 // DeleteSetting removes a setting, leaving a tombstone (deleted_at) so
 // that the removal can be replicated.
 func (s *Store) DeleteSetting(ctx context.Context, key string) error {

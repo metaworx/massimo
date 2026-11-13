@@ -86,7 +86,7 @@ func (s *Store) loadOpaque() error {
 			return fmt.Errorf("store: %s: %w", p, err)
 		}
 		s.opq = srv
-		return nil
+		return s.setSealKey(blk.Bytes)
 	case !errors.Is(err, fs.ErrNotExist):
 		return fmt.Errorf("store: %w", err)
 	case s.readOnly:
@@ -111,6 +111,19 @@ func (s *Store) loadOpaque() error {
 	}
 	s.opq = srv
 	s.log.Info("OPAQUE key created", "path", p)
+	return s.setSealKey(key)
+}
+
+// setSealKey derives the key of the sealed secrets (secret.go) from the
+// bytes of opaque.key (AP SealedSecrets v1.0, D32-A).
+func (s *Store) setSealKey(opaqueKey []byte) error {
+	key, err := deriveSealKey(opaqueKey)
+	if err != nil {
+		return err
+	}
+	s.secretMu.Lock()
+	s.secret = key
+	s.secretMu.Unlock()
 	return nil
 }
 

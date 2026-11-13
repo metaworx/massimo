@@ -49,12 +49,18 @@ type vapidSetting struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// vapidKey returns the server's VAPID key pair, made and kept at its
-// first use.
+// vapidKey returns the server's VAPID key pair, made and kept sealed at
+// its first use (AP SealedSecrets v1.0, Block 2). One that no longer
+// opens, opaque.key lost, is made anew: the page subscribes again for
+// the new key at its next visit (D36-A).
 func (s *Server) vapidKey(ctx context.Context, st *store.Store) (*ecdsa.PrivateKey, []byte, error) {
 	s.vapidMu.Lock()
 	defer s.vapidMu.Unlock()
-	raw, ok, err := st.Setting(ctx, store.VAPIDKey)
+	raw, ok, err := st.SecretSetting(ctx, store.VAPIDKey)
+	if errors.Is(err, store.ErrSecretLost) {
+		s.log.Warn("api: the VAPID key does not open; a new one is made, and the browsers subscribe again", "setting", store.VAPIDKey)
+		ok, err = false, nil
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,7 +93,7 @@ func (s *Server) vapidKey(ctx context.Context, st *store.Store) (*ecdsa.PrivateK
 		return nil, nil, err
 	}
 	v := vapidSetting{Private: base64.RawURLEncoding.EncodeToString(d), Public: base64.RawURLEncoding.EncodeToString(pub), CreatedAt: time.Now().UTC()}
-	if err := st.SetSetting(ctx, store.VAPIDKey, v); err != nil {
+	if err := st.SetSecretSetting(ctx, store.VAPIDKey, v); err != nil {
 		return nil, nil, err
 	}
 	s.log.Info("VAPID key created", "setting", store.VAPIDKey)

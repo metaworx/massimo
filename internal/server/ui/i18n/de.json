@@ -963,7 +963,7 @@
 
   "providers.secretNone": "Noch keines.",
 
-  "providers.secretLost": "Gesetzt, öffnet sich aber nicht mehr: secret.key neben dem Speicher fehlt oder ist ein anderes. Gib das Geheimnis neu ein.",
+  "providers.secretLost": "Gesetzt, öffnet sich aber nicht mehr: opaque.key neben dem Speicher fehlt oder ist ein anderes. Gib das Geheimnis neu ein.",
 
   "providers.scopes": "Scopes",
 

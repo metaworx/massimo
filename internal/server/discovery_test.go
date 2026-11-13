@@ -59,9 +59,32 @@ func startDiscovering(t *testing.T, opts Options) (*httptest.Server, *Server) {
 	return ts, s
 }
 
+// postDiscovery asks for a run and returns the answer of one that began
+// after the call. A call while a run is going shares it, and that run
+// sent its requests before what the test changed just before the call:
+// under load the run at the start may still be ending when the test
+// already sees what it found. An answer without ran_at, an error, is
+// returned as it is.
 func postDiscovery(t *testing.T, ts *httptest.Server) (int, map[string]any) {
 	t.Helper()
-	return do(t, ts, "POST", "/api/v1/cubes/discover", "")
+	called := time.Now()
+	for i := 0; ; i++ {
+		code, out := do(t, ts, "POST", "/api/v1/cubes/discover", "")
+		at, ok := out["ran_at"].(string)
+		if !ok {
+			return code, out
+		}
+		ranAt, err := time.Parse(time.RFC3339Nano, at)
+		if err != nil {
+			t.Fatalf("ran_at %q: %v", at, err)
+		}
+		if !ranAt.Before(called) {
+			return code, out
+		}
+		if i == 2 {
+			t.Fatalf("three runs in a row began before the call, the last at %s", at)
+		}
+	}
 }
 
 func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {

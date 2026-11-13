@@ -38,7 +38,7 @@ type providerView struct {
 	Issuer      string    `json:"issuer"`
 	ClientID    string    `json:"client_id"`
 	HasSecret   bool      `json:"has_secret"`
-	SecretLost  bool      `json:"secret_lost"` // sealed, and secret.key does not open it
+	SecretLost  bool      `json:"secret_lost"` // sealed, and the key from opaque.key does not open it
 	Scopes      string    `json:"scopes"`
 	AutoCreate  bool      `json:"auto_create"`
 	AutoRole    string    `json:"auto_role"`
