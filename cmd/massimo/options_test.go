@@ -13,8 +13,8 @@ import (
 )
 
 func TestGlobalOptionsSelectTheCube(t *testing.T) {
-	t.Setenv("MASSIMO_CUBE_KEY", "default")
-	t.Setenv("MASSIMO_CUBE_KEQ0000001_KEY", "one")
+	t.Setenv("MASSIMO_CUBE_NAME", "default")
+	t.Setenv("MASSIMO_CUBE_KEQ0000001_NAME", "one")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
 	t.Setenv("MASSIMO_CUBE_SN", "ignored-here")
 	t.Setenv("MASSIMO_ENV_FILE", "")
@@ -27,8 +27,8 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	if selectedSN != "keq0000001" || !snExplicit || !showHidden {
 		t.Fatalf("sn %q explicit %v show %v", selectedSN, snExplicit, showHidden)
 	}
-	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
-		t.Fatalf("key %q", v)
+	if v := cubeEnv(env.Name); v != "one" {
+		t.Fatalf("name %q", v)
 	}
 	addr := ""
 	if err := defaultAddr(&addr, "cube"); err != nil || addr != "10.0.0.1" {
@@ -46,8 +46,8 @@ func TestGlobalOptionsSelectTheCube(t *testing.T) {
 	}
 	selectedSN, snExplicit = "", false
 	useDeviceSerial("KEQ0000001")
-	if v := cubeEnv("MASSIMO_CUBE_KEY"); v != "one" {
-		t.Fatalf("key after device serial %q", v)
+	if v := cubeEnv(env.Name); v != "one" {
+		t.Fatalf("name after device serial %q", v)
 	}
 }
 

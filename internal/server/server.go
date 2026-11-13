@@ -1685,7 +1685,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		// The thermostats ignore the temperature of a boost: they open
 		// their valves by their boost settings for their boost time and
 		// then return to the mode they had (seen on hardware 2026-11-13,
-		// docs/portal-protocol.md). The command still carries one; the
+		// docs/cube-protocol.md). The command still carries one; the
 		// setpoint the device has keeps the line what it was.
 		req.Temp = cube.TempOff
 		if st, ok := rt.client.Snapshot().State(t.RFAddress); ok && st.Setpoint != nil {

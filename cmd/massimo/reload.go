@@ -98,14 +98,10 @@ func settings() map[string]string {
 }
 
 // unusedByServe reports a variable serve does not read for itself: the
-// Cube keys and IVs, which only the portal commands need, and the Cube a
+// Cube keys and IVs nothing reads any more (env.Removed), and the Cube a
 // command picks.
 func unusedByServe(k string) bool {
-	if k == env.Key || k == env.IV || k == env.SN || k == env.FileVar {
-		return true
-	}
-	mid, ok := strings.CutPrefix(k, env.Prefix)
-	return ok && (strings.HasSuffix(mid, "_KEY") || strings.HasSuffix(mid, "_IV"))
+	return env.Removed(k) || k == env.SN || k == env.FileVar
 }
 
 // settingsReloader reads the settings file again, one reload at a time.

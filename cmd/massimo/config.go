@@ -23,14 +23,15 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// runConfig prints the MASSIMO_* settings in effect. Keys and IVs are
-// redacted to their length, so the output can be pasted into a bug
-// report.
+// runConfig prints the MASSIMO_* settings in effect. Keys, IVs and
+// tokens are redacted to their length, so the output can be pasted into
+// a bug report; a Cube key or IV left over from the portal commands is
+// named as ignored (env.Removed).
 func runConfig(args []string) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo config\n\nShow the settings in effect (env file, selected Cube, variables), with\nkeys and IVs redacted.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo config\n\nShow the settings in effect (env file, selected Cube, variables), with\nsecrets redacted.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -48,8 +49,6 @@ func runConfig(args []string) error {
 	fmt.Printf("log level:     %s\n", logLevelState())
 	fmt.Printf("selected cube: %s (from %s)\n", orNone(selectedSN), src)
 	fmt.Println("for the commands (serve takes these from its store, see below):")
-	fmt.Printf("key in effect: %s\n", redact(cubeEnv(env.Key)))
-	fmt.Printf("iv in effect:  %s\n", redact(cubeEnv(env.IV)))
 	fmt.Printf("address:       %s\n", orNone(cubeEnv(env.Address)))
 	fmt.Printf("hidden:        %s\n", orNone(cubeEnv(env.Ignore)))
 	fmt.Printf("proxy:         %s\n", orNone(cubeEnv(env.Proxy)))
@@ -72,26 +71,15 @@ func runConfig(args []string) error {
 		}
 		src := env.Source(k)
 		note := ""
-		if !env.Known(k) {
+		switch {
+		case env.Removed(k):
+			note = "   <- ignored: the portal commands were removed (archive/portal)"
+		case !env.Known(k):
 			note = "   <- unknown name, typo?"
 		}
 		fmt.Printf("  %-40s %-45s (%s)%s\n", k, v, src, note)
 	}
 	printStore(os.Stdout)
-	if sns, _ := env.Serials(env.Key); len(sns) > 0 {
-		fmt.Printf("\ncubes with a key: %s\n", strings.Join(sns, ", "))
-		for _, sn := range sns {
-			missing := []string{}
-			for _, v := range []string{env.IV, env.Address} {
-				if _, set := env.PerCubeValue(v, sn); set == "" {
-					missing = append(missing, strings.TrimPrefix(v, env.Prefix))
-				}
-			}
-			if len(missing) > 0 {
-				fmt.Printf("  %s: no %s\n", sn, strings.Join(missing, ", "))
-			}
-		}
-	}
 	return nil
 }
 

@@ -241,7 +241,7 @@ Stays in `.env`, because it is needed before the store is open, or is a secret:
 | `MASSIMO_LOG`, `-log` | opened before anything else, and the place errors of the store itself go |
 | `MASSIMO_LOG_LEVEL`, `-log-level` | the level of that log, set before the store opens, whose own lines are logged at it |
 | `MASSIMO_API_TOKEN`, `-token` | a secret; becomes the owner's API key (section 6) and keeps working as today |
-| `MASSIMO_CUBE_<SN>_KEY`, `_IV` | secrets; stay in the file in version 1 (open decision 2) |
+| `MASSIMO_CUBE_<SN>_KEY`, `_IV` | read by nothing since AP PortalDrop: the portal commands are gone, kept on the branch `archive/portal`; a line left is named as ignored |
 | `MASSIMO_DATA`, `-data` | names the store |
 | `MASSIMO_ENV_FILE`, `-env` | names the file |
 | `MASSIMO_UPDATE_REQUEST`, `MASSIMO_UPDATE_CHANNEL`, `MASSIMO_GITHUB_TOKEN` | the update helper's contract with root and a secret |
@@ -292,9 +292,8 @@ does today and compares it with the store:
    The store wins because the UI edited it on purpose; a stale line in
    the file is the expected state on a box that was migrated and
    never had its file cleaned.
-3. Keys and IVs come from `.env` by serial in every case;
-   a Cube row without a key in the file is served without the portal commands,
-   as today.
+3. Keys and IVs came from `.env` by serial in every case,
+   for the portal commands, which are gone since AP PortalDrop.
 4. `-addr` and `-sn` on the command line work as today for one run and write nothing.
 
 What the user sees: the first start after the update logs the store's creation,
@@ -1329,8 +1328,7 @@ Nothing in version 1 depends on it.
 
 ## 7. The commands and the store
 
-`status`, `backup`, `restore`, `watch`, `cube`, `discover`, `portal-crypto`,
-`portal`, `config`, `legacy`,
+`status`, `backup`, `restore`, `watch`, `cube`, `discover`, `config`, `legacy`,
 `install` and `update` keep reading `.env` through `internal/env` and talk to
 the Cube or to the proxy, as they do today; they do not open the store.
 That is why `_ADDRESS`,

@@ -145,7 +145,7 @@ type CopyStep struct {
 
 // CopyCommands builds the commands that give a thermostat put into room
 // the room's settings, in the original software's order after pairing
-// and after a move (docs/portal-protocol.md, "Pairing a device, as the
+// and after a move (docs/cube-protocol.md, "Pairing a device, as the
 // original software does it", steps 4 to 7): 0x40 auto with temperature
 // 0 to the device, directly as in the original software's log, without
 // the error reset and the retry, since the Cube discarded such a 0x40

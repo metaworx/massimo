@@ -44,7 +44,7 @@ const (
 	// there (docs/reports/write-test-2026-11-05.md).
 	maxRestoreDutyPct = 80
 	// radioCostPct is about what one radio configuration write costs
-	// in duty cycle, measured on hardware (docs/portal-protocol.md).
+	// in duty cycle, measured on hardware (docs/cube-protocol.md).
 	radioCostPct = 1.25
 	// ntpReadTimeout bounds the read of the Cube's NTP servers for the
 	// clock group of a plan.

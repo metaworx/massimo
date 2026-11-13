@@ -13,7 +13,7 @@ import (
 )
 
 // RemoveCommands builds the commands that delete a device from the Cube
-// as the original software deletes it (docs/portal-protocol.md,
+// as the original software deletes it (docs/cube-protocol.md,
 // "Pairing a device, as the original software does it"): unlink, the
 // out-part of MoveCommands for the room the device is in, the
 // metadata's or else its C line's, which after a wakeup of that room

@@ -15,7 +15,7 @@ import (
 // The Cube's network configuration over UDP 23272: c reads it, C writes
 // it, N reports the addresses in use, R restarts the Cube. Confirmed on
 // a Cube with firmware 1.1.3 (2026-11-06) against a capture of the
-// original software, see docs/portal-protocol.md: C has the layout of
+// original software, see docs/cube-protocol.md: C has the layout of
 // the c reply and is answered with one status byte, 1 when the new
 // configuration applies at once (sent from the new address), 2 when the
 // Cube restarts by itself (a write that turns DHCP on). The software

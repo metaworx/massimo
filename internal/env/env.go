@@ -29,7 +29,11 @@ import (
 
 // Variable names.
 const (
-	Prefix  = "MASSIMO_CUBE_"
+	Prefix = "MASSIMO_CUBE_"
+	// Key and IV, and their per-Cube forms, were the Cube's portal key
+	// and IV, which only the portal commands read; those are gone, kept
+	// on the branch archive/portal (AP PortalDrop v1.0), and a line left
+	// is ignored (Removed).
 	Key     = Prefix + "KEY"
 	IV      = Prefix + "IV"
 	Address = Prefix + "ADDRESS"
@@ -92,7 +96,26 @@ const (
 var Moved = []string{Address, Name, Proxy, ProxySerial, Ignore}
 
 // perCubeSuffixes are the variables that have a per-Cube form.
-var perCubeSuffixes = []string{"_KEY", "_IV", "_ADDRESS", "_IGNORE", "_PROXY", "_PROXY_SERIAL", "_NAME"}
+var perCubeSuffixes = []string{"_ADDRESS", "_IGNORE", "_PROXY", "_PROXY_SERIAL", "_NAME"}
+
+// Removed reports whether a MASSIMO_* name is one the program no longer
+// reads, but names as ignored: the Cube keys and IVs of the portal
+// commands, MASSIMO_CUBE_KEY, MASSIMO_CUBE_IV and their per-Cube forms.
+func Removed(k string) bool {
+	if k == Key || k == IV {
+		return true
+	}
+	mid, ok := strings.CutPrefix(k, Prefix)
+	if !ok {
+		return false
+	}
+	for _, suffix := range []string{"_KEY", "_IV"} {
+		if sn, ok := strings.CutSuffix(mid, suffix); ok && sn != "" && !strings.Contains(sn, "_") {
+			return true
+		}
+	}
+	return false
+}
 
 // CubePort is the Cube's TCP port, also the proxy's default.
 const CubePort = "62910"
@@ -177,7 +200,7 @@ func Serials(name string) (serials []string, values map[string]string) {
 // Known reports whether a MASSIMO_* name is one the program reads.
 func Known(k string) bool {
 	switch k {
-	case Key, IV, Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
+	case Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
 		LogFormat, LogFileFormat, LogProcessFormat, LogRotateSize, LogKeep, LogKeepMin,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", "MASSIMO_REBOOT",
 		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies, Announce,
