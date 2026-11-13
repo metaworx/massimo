@@ -91,19 +91,58 @@ def test_log_names_devices_once_the_rooms_come(page):
     first = page.locator("#log-lines .log-line.kind-state").first
     kept = page.evaluate("logState.lines.filter((l) => l.state).at(-1).state.name")
     assert first.locator(".log-device").inner_text() == kept, "the name the line kept, before the rooms"
-    # Lines that kept no name show the S/N until the rooms come.
+    # Lines that kept no name show the device's type until the rooms come,
+    # and its S/N as the tooltip.
     page.evaluate("logState.lines.forEach((l) => { if (l.state) l.state = { ...l.state, name: '' }; }); renderLog();")
-    serial = page.evaluate("logState.lines.filter((l) => l.state).at(-1).serial")
-    assert first.locator(".log-device").inner_text() == serial, "no name yet"
+    last = page.evaluate("(() => { const l = logState.lines.filter((x) => x.state).at(-1); return { serial: l.serial, type: upperFirst(typeName(l.state.type)) }; })()")
+    assert first.locator(".log-device").inner_text() == last["type"], "the type, no name yet"
+    assert first.locator(".log-device").get_attribute("title") == last["serial"], "the S/N as the tooltip"
     for route in held:
         route.continue_()
     page.unroute("**/rooms?devices=all")
-    rf =page.evaluate("logState.lines.filter((l) => l.state).at(-1).device")
-    want = "state.rooms.flatMap((r) => r.devices).find((d) => d.rf_address === %r)?.name" % rf
+    rf = page.evaluate("logState.lines.filter((l) => l.state).at(-1).device")
+    want = """(() => { const r = state.rooms.find((x) => x.devices.some((d) => d.rf_address === %r));
+      const d = r && r.devices.find((x) => x.rf_address === %r);
+      return d && d.name ? t("log.devicePath", { room: r.name, device: d.name }) : ""; })()""" % (rf, rf)
     assert wait_until(page, "state.roomsOf === state.serial", 10), "the rooms arrived"
-    name = page.evaluate(want)
-    assert name and wait_until(page, "document.querySelector('#log-lines .log-line.kind-state .log-device').textContent === %r" % name, 5), \
-        "the device's name once the rooms are there"
+    path = page.evaluate(want)
+    assert path and wait_until(page, "document.querySelector('#log-lines .log-line.kind-state .log-device').textContent === %r" % path, 5), \
+        "the device's room and name once the rooms are there"
+    show_view(page, "tiles")
+
+
+def test_log_names_room_and_device(page, case):
+    """A line names its device by its room and name, "Kitchen › Window";
+    one without a name by its room and type; its S/N is the tooltip and,
+    beside the radio address, shows in expert mode only; the filter finds
+    the line by its room and by its S/N (AP LogCubes v1.0, Block 2)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    room = page.evaluate("state.rooms[0].name")
+    page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+      kind: "config", device: d.rf_address, serial: d.serial, source: "device", time: new Date().toISOString() }) }))""", d)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-config').length > 0", 5), "the line"
+    line = page.locator("#log-lines .log-line.kind-config").first
+    dev = line.locator(".log-device")
+    assert dev.inner_text() == room + " › " + d["name"], f"the room and the name ({dev.inner_text()!r})"
+    assert dev.get_attribute("title") == d["serial"], "the S/N as the tooltip"
+    sn = line.locator(".log-sn")
+    assert sn.inner_text() == d["serial"] and not sn.is_visible(), "the S/N for expert mode only"
+    page.evaluate("() => { state.settings.expert = true; applySettings(); }")
+    assert sn.is_visible() and line.locator(".log-rf").is_visible(), "the S/N and the radio address in expert mode"
+    page.evaluate("() => { state.settings.expert = false; applySettings(); }")
+    for what in (room, d["serial"]):
+        page.locator("#log-filter").fill(what)
+        assert page.locator("#log-lines .log-line.kind-config").count() > 0, f"the filter finds it by {what!r}"
+    page.locator("#log-filter").fill("")
+    name = d["name"]
+    page.evaluate("state.rooms[0].devices[0].name = ''; renderLog();")
+    try:
+        want = page.evaluate("(t) => upperFirst(typeName(t))", d["type"])
+        assert line.locator(".log-device").inner_text() == room + " › " + want, "no name: the room and the type"
+    finally:
+        page.evaluate("(n) => { state.rooms[0].devices[0].name = n; renderLog(); }", name)
     show_view(page, "tiles")
 
 

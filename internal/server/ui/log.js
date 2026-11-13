@@ -125,16 +125,45 @@ function logDeviceKey(d) {
   return d.serial || d.rf_address;
 }
 
-// logDeviceName is how a line names its device: by its name from the
-// rooms and the unlisted list already loaded, else by the name the line
-// kept of it (a state line's, until the rooms come), else by its S/N, the
-// radio address only for a device without either.
+// logDeviceName is how a line names its device (AP LogCubes v1.0, D1-A,
+// D3-A, D4-A): by its room and name from the rooms and the unlisted list
+// already loaded, "Kitchen › Window"; by the name the line kept (a state
+// line's) where those give none, until the rooms come and for a device
+// the Cube has no longer; by its type where no name is known, after its
+// room; by its S/N where not even the type is, the radio address only for
+// a device without one. The S/N is then in the tooltip and, beside the
+// radio address, in expert mode (renderLogLine).
 function logDeviceName(line) {
   if (!line.device) return "";
   const d = logDevice(line.device);
-  if (d && d.name) return d.name;
-  if (line.state && line.state.name) return line.state.name;
-  return line.serial || (d && d.serial) || line.device;
+  const kept = line.state || {};
+  const type = (d && d.type) || kept.type;
+  const device = (d && d.name) || kept.name || (type ? upperFirst(typeName(type)) : "");
+  if (!device) return logDeviceSerial(line) || line.device;
+  const room = d ? logDeviceRoom(d) : "";
+  return room ? t("log.devicePath", { room, device }) : device;
+}
+
+// logDeviceSerial is the S/N of a line's device: the line's, else the one
+// the rooms loaded give its radio address; "" for neither.
+function logDeviceSerial(line) {
+  if (line.serial) return line.serial;
+  const d = line.device ? logDevice(line.device) : null;
+  return (d && d.serial) || "";
+}
+
+// logDeviceRoom is the name of the room a device of the rooms loaded is
+// in; "" for a device of the unlisted list.
+function logDeviceRoom(d) {
+  const r = logRooms().find((x) => x.devices.includes(d));
+  if (!r) return "";
+  return r.name || t("log.room", { id: r.id });
+}
+
+// upperFirst is a text with its first letter in upper case, for a word
+// that stands in for a name ("radiator thermostat").
+function upperFirst(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 // logOfDevice reports whether a line is of the device chosen, named by
@@ -516,28 +545,39 @@ function logLineMatches(line) {
   if (!logOfDevice(line, logState.device) || !logAtLevel(line) || !logOfChoices(line)) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
-  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, line.serial, logDeviceName(line), logText(line)].join(" ").toLowerCase();
+  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), line.device, logDeviceSerial(line), logDeviceName(line), logText(line)].join(" ").toLowerCase();
   return hay.includes(f);
 }
 
 // renderLogLine is one line of the log, from its template
 // (tpl-log-line): the time, the kind, the device when the line has one,
-// by its name, else its S/N, with its radio address in expert mode, and
-// the text. The Cube's own configuration is the Cube's, by its S/N; a
-// removed device is named by the text alone.
+// by its room and name (logDeviceName), with its S/N as the tooltip and,
+// with its radio address, in expert mode, and the text. The Cube's own
+// configuration is the Cube's, by its S/N; a removed device is named by
+// the text alone.
 function renderLogLine(line) {
   const row = fromTemplate("tpl-log-line");
   row.className += " kind-" + line.kind;
   row.querySelector(".log-time").textContent = fmtLogTime(line.time);
   row.querySelector(".log-kind").textContent = logKind(line.kind);
   const dev = row.querySelector(".log-device");
+  const sn = row.querySelector(".log-sn");
   const rf = row.querySelector(".log-rf");
   if (line.device) {
     rf.textContent = line.device;
+    const serial = line.gone || line.source === "cube" ? "" : logDeviceSerial(line);
     if (line.gone) dev.remove();
-    else dev.textContent = line.source === "cube" ? t("log.cubeDevice", { serial: line.serial || line.device }) : logDeviceName(line);
+    else if (line.source === "cube") dev.textContent = t("log.cubeDevice", { serial: line.serial || line.device });
+    else dev.textContent = logDeviceName(line);
+    if (serial && dev.textContent !== serial) {
+      sn.textContent = serial;
+      dev.title = serial;
+    } else {
+      sn.remove();
+    }
   } else {
     dev.remove();
+    sn.remove();
     rf.remove();
   }
   row.querySelector(".log-text").textContent = logText(line);

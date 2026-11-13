@@ -565,6 +565,7 @@
   "log.sum.change": "{action} {target}",
   "log.viaCli": "{text}, by the command line",
   "log.room": "room {id}",
+  "log.devicePath": "{room} › {device}",
   "log.cfg.name": "name",
   "log.cfg.address": "address",
   "log.cfg.follow_discovery": "follows discovery",

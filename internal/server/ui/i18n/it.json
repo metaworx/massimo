@@ -567,6 +567,7 @@
   "log.sum.change": "{action} {target}",
   "log.viaCli": "{text}, dalla riga di comando",
   "log.room": "stanza {id}",
+  "log.devicePath": "{room} › {device}",
   "log.cfg.name": "nome",
   "log.cfg.address": "indirizzo",
   "log.cfg.follow_discovery": "segue la ricerca",

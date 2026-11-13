@@ -322,8 +322,12 @@ The level choice "debug and above" also shows the debug lines, such as the
 greeting's hello, room and device list and configurations, each with its
 summary, which the log leaves out at "info and above", the default;
 "warnings" keeps the lost connections and the failures.
-A line names its device by name, else by serial number,
-with the radio address after it in expert mode only;
+A line names its device by its room and name ("Kitchen › Window"),
+one without a name by its room and type ("Kitchen › Radiator thermostat");
+until the rooms are loaded, by the name a state line kept, else its type
+or serial number.
+The serial number is the name's tooltip and, with the radio address after
+it, shows in expert mode only;
 the Cube's own configuration reads "Cube KEQ0000000".
 A removed device reads "Removed radiator thermostat MEQ0000101 (Window)",
 with its name as it was.
@@ -360,7 +364,8 @@ the level and above (info by default) and, for those who
 may see the users, who made a change (everyone by default);
 the server answers what matches,
 and the new lines follow the choices too.
-The filter matches any part of a line (time, kind, device, text).
+The filter matches any part of a line (time, kind, the device's room, name,
+serial number and radio address, text).
 **Clear** sets the filter, the kind, the source or device, the level and who
 back to their defaults and loads the log again, the range staying;
 it is off while none of them is set.

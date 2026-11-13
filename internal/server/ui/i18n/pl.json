@@ -584,6 +584,7 @@
   "log.sum.change": "{action} {target}",
   "log.viaCli": "{text}, z wiersza poleceń",
   "log.room": "pomieszczenie {id}",
+  "log.devicePath": "{room} › {device}",
   "log.cfg.name": "nazwa",
   "log.cfg.address": "adres",
   "log.cfg.follow_discovery": "podąża za wyszukiwaniem",
