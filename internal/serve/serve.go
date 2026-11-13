@@ -221,6 +221,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	if err != nil {
 		return nil, err
 	}
+	srv.SetAPIAddr(ln.Addr()) // System Info's interfaces
 	return &Instance{cfg: cfg, log: log, root: root, src: src, st: st, srv: srv, ln: ln, cubes: su.cubes}, nil
 }
 

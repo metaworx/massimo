@@ -318,6 +318,11 @@ type Server struct {
 	// at which each also asks whether its caller is still let in.
 	streamKeepAlive atomic.Int64
 
+	// apiAddr is where the API listens (SetAPIAddr), under mu, for GET
+	// /api/v1/system; proxyCheck the proxy's certificate (proxied.go).
+	apiAddr    net.Addr
+	proxyCheck proxyCheck
+
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
 	discMu    sync.Mutex
