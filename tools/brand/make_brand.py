@@ -409,7 +409,8 @@ def brand_css(v: Variant, i_style: str) -> str:
     vb = logo_parts(i_style)[0].split()
 
     def tokens(pose: Pose) -> str:
-        return f"--brand-back: {pose.backing or pose.colour}; --brand-m: {pose.colour}; --brand-hands: {pose.finger_colour};"
+        back = pose.backing or pose.colour
+        return f"--brand-back: {back}; --brand-m: {pose.colour}; --brand-hands: {pose.finger_colour};"
 
     ratio = float(vb[2]) / float(vb[3])
 
@@ -898,6 +899,7 @@ def plan(flavour: str, base: str, scopes: set[str], themes: tuple[str, ...], i_s
                 png(svg, px, px).save(out / f"png/{base}-tile-{px}.png")
 
         jobs.append(Job("tile", names, run))
+
     def favicon(out: Path, theme: str) -> None:
         s = svgs(theme)
         sizes = [16, 24, 32, 48, 64, 128, 256]
