@@ -101,14 +101,3 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
     published on F-Droid and on Google Play.
 17. **An iOS app**:
     the same as the Android app; published on the App Store.
-19. **Channels, the next steps** (AP Channels v1.0):
-    apt suites and Homebrew formulae for `devel` and `nightly`,
-    with an apt key of their own;
-    `beta` and `stable` with `make release-beta` and its stable counterpart,
-    `rc` as `-rc.N` tags on `beta`,
-    and a suite and a formula taking every more stable flavour;
-    the channel's selector in the UI (System settings → Software);
-    "All tests passed" as the ruleset's one required check;
-    the old `alpha` branch deleted once `release/alpha` has had a release;
-    the guidelines at v4.54.0 or later, for `changelog.sh preview` in the
-    rolling builds' notes.
