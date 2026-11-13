@@ -226,7 +226,12 @@ Every room has a tile:
     - A switch point's time is typed in full, hours and minutes;
       the rows take the order of their times at the next change or at **Send**.
     - **Reset day** and **Reset all** go back to what the Cube has.
-    - **Send** writes only the days that changed.
+    - **Send** writes only the days that changed,
+      naming the programme it was loaded as (its tag, `If-Match`).
+      Where the programme was changed elsewhere since,
+      or a write to it is still on its way, nothing is sent:
+      the edits stay, and **Load the current programme** replaces them
+      with the programme as it is now.
   - **Copy**:
     copies this room's stored settings (temperatures, week programme,
     radiator settings) to other rooms.

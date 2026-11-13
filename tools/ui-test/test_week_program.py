@@ -125,3 +125,34 @@ def test_a_day_holds_thirteen_switch_points(page, case):
     assert tile.locator(".prog-bar .prog-seg").count() == 13, "the bar has 13 segments"
     tile.locator(".prog-reset-all").click()
     leave(tile)
+
+
+def test_a_programme_changed_elsewhere_is_not_overwritten(page, case, watch):
+    """Send names the tag of the programme loaded (If-Match); a 412, the
+    programme changed elsewhere, sends nothing and keeps the edits, and
+    its button loads the current programme. The 412 is the browser's
+    stand-in for the server's, so that the fake Cube's programme stays."""
+    tile, _ = first_tile(page)
+    open_tab(tile, "program")
+    seen = {}
+    watch.expected.append(("/program", 412))
+
+    def refuse(route):
+        seen["if_match"] = route.request.headers.get("if-match", "")
+        route.fulfill(status=412, content_type="application/json",
+                      body='{"error": "changed", "etag": "pchanged"}')
+
+    page.route("**/rooms/*/program", lambda route: refuse(route) if route.request.method == "PUT" else route.continue_())
+    try:
+        day_button(tile, "monday").click()
+        bump_first_temp(tile)
+        tile.locator(".config-body form button[type=submit]").first.click()
+        reload = tile.locator(".config-body .prog-reload")
+        reload.wait_for()
+        assert seen.get("if_match", "").startswith('"p'), "Send names the loaded programme's tag"
+        assert marked(tile, "dirty"), "the edits stay until the reload"
+        reload.click()
+        assert wait_until(page, "!document.querySelector('.prog-days .day.dirty')", 5), "the reload drops the edits"
+    finally:
+        page.unroute("**/rooms/*/program")
+    leave(tile)
