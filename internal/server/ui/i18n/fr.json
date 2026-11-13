@@ -918,6 +918,8 @@
 
   "login.oidcError.unverified": "Le fournisseur n'a pas confirmé l'adresse e-mail de ce compte, il n'a donc pas été associé. Demandez au propriétaire du serveur d'attribuer plutôt votre identifiant chez le fournisseur.",
 
+  "login.oidcError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de ce fournisseur.",
+
   "login.oidcError.disabled": "Votre utilisateur est désactivé ou a expiré.",
 
   "providers.title": "Fournisseurs de connexion",
@@ -945,6 +947,12 @@
   "providers.secretNone": "Aucun pour l'instant.",
 
   "providers.scopes": "Portées (scopes)",
+
+  "providers.allowedGroups": "Groupes admis",
+
+  "providers.groupsHint": "Séparés par des virgules ; vide : tout groupe. Seuls les comptes de l'un d'eux se connectent ou sont liés.",
+
+  "providers.groupsClaim": "Revendication des groupes",
 
   "providers.enabled": "Activé",
 
@@ -1094,6 +1102,8 @@
   "profile.linkFailed": "La liaison n'a pas démarré : {error}",
 
   "profile.linkError.taken": "Ce compte est déjà lié à un autre utilisateur ici.",
+
+  "profile.linkError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de {name}.",
 
   "profile.linkError.failed": "La liaison par le fournisseur a échoué. Réessayez.",
 

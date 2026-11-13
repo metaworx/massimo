@@ -13,6 +13,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -31,6 +32,10 @@ var (
 // DefaultScopes are the scopes a provider asks for when none are given.
 const DefaultScopes = "openid email profile"
 
+// DefaultGroupsClaim is the claim a provider's groups come in when it
+// names none.
+const DefaultGroupsClaim = "groups"
+
 // AuthProvider is one row of auth_providers.
 type AuthProvider struct {
 	ID           int64
@@ -44,26 +49,33 @@ type AuthProvider struct {
 	AutoCreate   bool
 	AutoRole     string   // the key of a created user's role; "" for viewer
 	AutoDomains  []string // the e-mail domains a sign-in creates users for; none: any
-	Enabled      bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Version      int64
+	GroupsClaim  string   // the claim of the account's groups
+	// AllowedGroups are the groups it admits: a sign-in or a link of an
+	// account in none of them is refused; none admits any.
+	AllowedGroups []string
+	Enabled       bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Version       int64
 }
 
 const providerColumns = `p.id, p.uuid, p.key, p.name, p.issuer, p.client_id, p.client_secret, p.scopes, p.auto_create,
-	coalesce(r.key, ''), p.auto_domains, p.enabled, p.created_at, p.updated_at, p.version`
+	coalesce(r.key, ''), p.auto_domains, p.groups_claim, p.allowed_groups, p.enabled, p.created_at, p.updated_at, p.version`
 
 const providerFrom = ` FROM auth_providers p LEFT JOIN roles r ON r.id = p.auto_role_id `
 
 func scanProvider(row scanner) (AuthProvider, error) {
 	var p AuthProvider
-	var domains string
+	var domains, allowed string
 	var created, updated sql.NullString
 	if err := row.Scan(&p.ID, &p.UUID, &p.Key, &p.Name, &p.Issuer, &p.ClientID, &p.ClientSecret, &p.Scopes, &p.AutoCreate,
-		&p.AutoRole, &domains, &p.Enabled, &created, &updated, &p.Version); err != nil {
+		&p.AutoRole, &domains, &p.GroupsClaim, &allowed, &p.Enabled, &created, &updated, &p.Version); err != nil {
 		return AuthProvider{}, err
 	}
 	p.AutoDomains = splitDomains(domains)
+	if json.Unmarshal([]byte(allowed), &p.AllowedGroups) != nil || p.AllowedGroups == nil {
+		p.AllowedGroups = []string{}
+	}
 	p.CreatedAt, p.UpdatedAt = parseTime(created), parseTime(updated)
 	return p, nil
 }
@@ -99,6 +111,21 @@ func (p AuthProvider) AllowsDomain(email string) bool {
 	return at > 0 && containsString(p.AutoDomains, strings.ToLower(email[at+1:]))
 }
 
+// AdmitsGroups reports whether an account in the groups may sign in or
+// be linked: any where the provider names no allowed groups, else one in
+// at least one of them.
+func (p AuthProvider) AdmitsGroups(groups []string) bool {
+	if len(p.AllowedGroups) == 0 {
+		return true
+	}
+	for _, g := range groups {
+		if containsString(p.AllowedGroups, g) {
+			return true
+		}
+	}
+	return false
+}
+
 // checkProvider normalises a provider to write and checks it: the key as
 // a role's, an issuer that is an absolute https URL (http on a loopback
 // host, for tests and a provider on the same box), a client id, scopes
@@ -113,7 +140,22 @@ func checkProvider(p *AuthProvider) error {
 		p.Scopes = DefaultScopes
 	}
 	p.AutoDomains = splitDomains(strings.Join(p.AutoDomains, ","))
+	p.GroupsClaim = strings.TrimSpace(p.GroupsClaim)
+	if p.GroupsClaim == "" {
+		p.GroupsClaim = DefaultGroupsClaim
+	}
+	allowed := []string{}
+	for _, g := range p.AllowedGroups {
+		if g = strings.TrimSpace(g); g != "" && !containsString(allowed, g) {
+			allowed = append(allowed, g)
+		}
+	}
+	p.AllowedGroups = allowed
 	switch {
+	case len(p.GroupsClaim) > 64:
+		return fmt.Errorf("%w: groups claim longer than 64 bytes", ErrBadProvider)
+	case len(p.AllowedGroups) > 100:
+		return fmt.Errorf("%w: more than 100 allowed groups", ErrBadProvider)
 	case !roleKey.MatchString(p.Key):
 		return fmt.Errorf("%w: key %q: lower case letters, digits, _ and -, starting with a letter", ErrBadProvider, p.Key)
 	case !validIssuer(p.Issuer):
@@ -220,9 +262,11 @@ func (s *Store) AddProvider(ctx context.Context, p AuthProvider, by int64) (Auth
 		return AuthProvider{}, err
 	}
 	now := s.nowText()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_providers (uuid, key, name, issuer, client_id, client_secret, scopes, auto_create, auto_role_id, auto_domains, enabled, created_at, updated_at, updated_by, origin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), p.Key, p.Name, p.Issuer, p.ClientID, p.ClientSecret, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","), p.Enabled, now, now, nullID(by), s.nodeID); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_providers (uuid, key, name, issuer, client_id, client_secret, scopes, auto_create, auto_role_id, auto_domains,
+		groups_claim, allowed_groups, enabled, created_at, updated_at, updated_by, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), p.Key, p.Name, p.Issuer, p.ClientID, p.ClientSecret, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
+		p.GroupsClaim, groupsText(p.AllowedGroups), p.Enabled, now, now, nullID(by), s.nodeID); err != nil {
 		return AuthProvider{}, fmt.Errorf("store: add provider %s: %w", p.Key, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -262,10 +306,10 @@ func (s *Store) UpdateProvider(ctx context.Context, key string, change func(*Aut
 	if err != nil {
 		return AuthProvider{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE auth_providers SET name = ?, issuer = ?, client_id = ?, client_secret = ?, scopes = ?, auto_create = ?, auto_role_id = ?, auto_domains = ?, enabled = ?,
-		updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-		p.Name, p.Issuer, p.ClientID, p.ClientSecret, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","), p.Enabled,
-		s.nowText(), nullID(by), s.nodeID, p.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE auth_providers SET name = ?, issuer = ?, client_id = ?, client_secret = ?, scopes = ?, auto_create = ?, auto_role_id = ?, auto_domains = ?,
+		groups_claim = ?, allowed_groups = ?, enabled = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		p.Name, p.Issuer, p.ClientID, p.ClientSecret, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
+		p.GroupsClaim, groupsText(p.AllowedGroups), p.Enabled, s.nowText(), nullID(by), s.nodeID, p.ID); err != nil {
 		return AuthProvider{}, fmt.Errorf("store: provider %s: %w", p.Key, err)
 	}
 	if err := tx.Commit(); err != nil {

@@ -26,6 +26,15 @@
       <label data-i18n="providers.scopes">Scopes</label>
       <input type="text" name="scopes" class="field-control" autocomplete="off" spellcheck="false" placeholder="openid email profile">
     </div>
+    <div class="field wide">
+      <label data-i18n="providers.allowedGroups">Allowed groups</label>
+      <input type="text" name="allowed_groups" class="field-control" autocomplete="off" spellcheck="false" placeholder="family, admins">
+      <p class="muted small field-hint" data-i18n="providers.groupsHint">Comma-separated; empty: any group. Only accounts in one of them sign in or link.</p>
+    </div>
+    <div class="field wide">
+      <label data-i18n="providers.groupsClaim">Groups claim</label>
+      <input type="text" name="groups_claim" class="field-control" autocomplete="off" spellcheck="false" maxlength="64" placeholder="groups">
+    </div>
     <div class="field">
       <label class="switch">
         <input type="checkbox" name="enabled">

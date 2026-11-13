@@ -42,6 +42,8 @@ type providerView struct {
 	AutoCreate  bool      `json:"auto_create"`
 	AutoRole    string    `json:"auto_role"`
 	AutoDomains []string  `json:"auto_domains"`
+	GroupsClaim string    `json:"groups_claim"`
+	Allowed     []string  `json:"allowed_groups"`
 	Enabled     bool      `json:"enabled"`
 	Callback    string    `json:"callback"` // the redirect URI's path under the page's address
 	CreatedAt   time.Time `json:"created_at"`
@@ -50,7 +52,7 @@ type providerView struct {
 
 func viewProvider(p store.AuthProvider) providerView {
 	return providerView{Key: p.Key, Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, HasSecret: p.ClientSecret != "", Scopes: p.Scopes,
-		AutoCreate: p.AutoCreate, AutoRole: cmpOr(p.AutoRole, store.RoleViewer), AutoDomains: p.AutoDomains, Enabled: p.Enabled,
+		AutoCreate: p.AutoCreate, AutoRole: cmpOr(p.AutoRole, store.RoleViewer), AutoDomains: p.AutoDomains, GroupsClaim: p.GroupsClaim, Allowed: p.AllowedGroups, Enabled: p.Enabled,
 		Callback: oidcCallback, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }
 
@@ -87,6 +89,8 @@ type providerRequest struct {
 	AutoCreate   *bool     `json:"auto_create"`
 	AutoRole     *string   `json:"auto_role"`
 	AutoDomains  *[]string `json:"auto_domains"`
+	GroupsClaim  *string   `json:"groups_claim"`
+	Allowed      *[]string `json:"allowed_groups"`
 	Enabled      *bool     `json:"enabled"`
 }
 
@@ -103,6 +107,10 @@ func (req providerRequest) apply(p *store.AuthProvider) {
 	set(&p.ClientSecret, req.ClientSecret)
 	set(&p.Scopes, req.Scopes)
 	set(&p.AutoRole, req.AutoRole)
+	set(&p.GroupsClaim, req.GroupsClaim)
+	if req.Allowed != nil {
+		p.AllowedGroups = *req.Allowed
+	}
 	if req.AutoCreate != nil {
 		p.AutoCreate = *req.AutoCreate
 	}

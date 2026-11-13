@@ -250,7 +250,8 @@ paths:
         #oidc-error=<reason>: denied (at the provider), failed (its answer
         did not do), refused (no user here for the account), noemail (none,
         and no e-mail sent), unverified (none, and the e-mail that would
-        have counted not verified) or disabled.
+        have counted not verified), group (in none of the groups the
+        provider admits) or disabled.
         A refusal counts as a failed sign-in of the address.
       security: []
       parameters:
@@ -899,7 +900,8 @@ paths:
         callback links the account to the user, replacing the user's
         other identities at the provider, and sends the page back with
         #oidc-linked=<key>, or #oidc-link-error=taken where another user
-        has the account (failed where the provider's answer did not do).
+        has the account, group where it is in none of the groups the
+        provider admits (failed where the provider's answer did not do).
         No session is made.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
@@ -3242,6 +3244,8 @@ components:
         auto_create: {type: boolean, description: A sign-in without an identity creates the user}
         auto_role: {type: string, description: The role of a user created so, viewer by default}
         auto_domains: {type: array, items: {type: string}, description: The e-mail domains it creates users for; none for any}
+        groups_claim: {type: string, description: The claim of the account's groups, groups by default}
+        allowed_groups: {type: array, items: {type: string}, description: "The groups it admits: an account in none of them neither signs in nor links; none for any"}
         enabled: {type: boolean}
         callback: {type: string, description: "The redirect URI's path under the page's address", example: api/v1/login/oidc/callback}
         created_at: {type: string, format: date-time}
@@ -3259,6 +3263,8 @@ components:
         auto_create: {type: boolean}
         auto_role: {type: string}
         auto_domains: {type: array, items: {type: string}}
+        groups_claim: {type: string, maxLength: 64, description: "groups where empty"}
+        allowed_groups: {type: array, maxItems: 100, items: {type: string}}
         enabled: {type: boolean}
     Identity:
       type: object

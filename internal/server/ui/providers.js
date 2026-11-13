@@ -89,6 +89,8 @@ function providerForm(p, onCancel) {
   field("enabled").checked = p ? p.enabled : true;
   field("auto_create").checked = !!(p && p.auto_create);
   field("auto_domains").value = p ? (p.auto_domains || []).join(", ") : "";
+  field("allowed_groups").value = p ? (p.allowed_groups || []).join(", ") : "";
+  field("groups_claim").value = p ? p.groups_claim || "" : "";
   fillOptions(field("auto_role"), autoRoleOptions(p && p.auto_role));
   field("auto_role").value = p ? p.auto_role : "viewer";
   form.querySelector(".secret-hint").textContent = t(p && p.has_secret ? "providers.secretKept" : "providers.secretNone");
@@ -121,6 +123,8 @@ function providerForm(p, onCancel) {
       auto_create: field("auto_create").checked,
       auto_role: field("auto_role").value,
       auto_domains: field("auto_domains").value.split(",").map((d) => d.trim()).filter(Boolean),
+      allowed_groups: field("allowed_groups").value.split(",").map((g) => g.trim()).filter(Boolean),
+      groups_claim: field("groups_claim").value.trim(),
     };
     const secret = field("client_secret").value;
     if (secret || !p) body.client_secret = secret;

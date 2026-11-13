@@ -46,9 +46,14 @@ func TestProvidersAPI(t *testing.T) {
 			t.Errorf("add %s: %d %s, want %d", b, code, text, want)
 		}
 	}
-	code, text = callAPI(t, ts, "PUT", "/api/v1/providers/cloud", "secret", `{"auto_create": true, "auto_role": "guest", "auto_domains": ["example.org"], "enabled": false}`)
+	if p.GroupsClaim != "groups" || len(p.Allowed) != 0 {
+		t.Fatalf("the groups' defaults: %+v", p)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/providers/cloud", "secret", `{"auto_create": true, "auto_role": "guest", "auto_domains": ["example.org"], "enabled": false,
+		"groups_claim": "roles", "allowed_groups": ["family", "family", " admins "]}`)
 	json.Unmarshal([]byte(text), &p)
-	if code != 200 || !p.AutoCreate || p.AutoRole != store.RoleGuest || len(p.AutoDomains) != 1 || p.Enabled || !p.HasSecret {
+	if code != 200 || !p.AutoCreate || p.AutoRole != store.RoleGuest || len(p.AutoDomains) != 1 || p.Enabled || !p.HasSecret ||
+		p.GroupsClaim != "roles" || strings.Join(p.Allowed, ",") != "family,admins" {
 		t.Fatalf("change: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "PUT", "/api/v1/providers/cloud", "secret", `{"key": "other"}`); code != 400 {

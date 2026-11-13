@@ -916,6 +916,8 @@
 
   "login.oidcError.unverified": "Der Anmeldedienst hat die E-Mail-Adresse dieses Kontos nicht bestätigt, darum wurde es nicht zugeordnet. Bitte den Besitzer des Servers, stattdessen deine Benutzer-ID beim Anmeldedienst zuzuweisen.",
 
+  "login.oidcError.group": "Dieses Konto ist in keiner der Gruppen, die dieser Server vom Anmeldedienst zulässt.",
+
   "login.oidcError.disabled": "Dein Benutzer ist deaktiviert oder abgelaufen.",
 
   "providers.title": "Anmeldedienste",
@@ -943,6 +945,12 @@
   "providers.secretNone": "Noch keines.",
 
   "providers.scopes": "Scopes",
+
+  "providers.allowedGroups": "Zugelassene Gruppen",
+
+  "providers.groupsHint": "Durch Kommas getrennt; leer: jede Gruppe. Nur Konten in einer davon melden sich an oder werden verknüpft.",
+
+  "providers.groupsClaim": "Claim der Gruppen",
 
   "providers.enabled": "Aktiviert",
 
@@ -1092,6 +1100,8 @@
   "profile.linkFailed": "Die Verknüpfung hat nicht begonnen: {error}",
 
   "profile.linkError.taken": "Dieses Konto ist hier schon mit einem anderen Benutzer verknüpft.",
+
+  "profile.linkError.group": "Dieses Konto ist in keiner der Gruppen, die dieser Server von {name} zulässt.",
 
   "profile.linkError.failed": "Die Verknüpfung über den Anmeldedienst ist fehlgeschlagen. Versuche es nochmals.",
 

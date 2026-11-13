@@ -917,6 +917,8 @@
 
   "login.oidcError.unverified": "De provider heeft het e-mailadres van dit account niet bevestigd, dus het is niet gekoppeld. Vraag de eigenaar van de server om in plaats daarvan je gebruikers-ID bij de provider toe te wijzen.",
 
+  "login.oidcError.group": "Dit account zit in geen van de groepen die deze server van de provider toelaat.",
+
   "login.oidcError.disabled": "Je gebruiker is uitgeschakeld of verlopen.",
 
   "providers.title": "Aanmeldproviders",
@@ -944,6 +946,12 @@
   "providers.secretNone": "Nog geen.",
 
   "providers.scopes": "Scopes",
+
+  "providers.allowedGroups": "Toegelaten groepen",
+
+  "providers.groupsHint": "Gescheiden door komma's; leeg: elke groep. Alleen accounts in een ervan melden zich aan of worden gekoppeld.",
+
+  "providers.groupsClaim": "Claim van de groepen",
 
   "providers.enabled": "Ingeschakeld",
 
@@ -1093,6 +1101,8 @@
   "profile.linkFailed": "De koppeling is niet gestart: {error}",
 
   "profile.linkError.taken": "Dat account is hier al aan een andere gebruiker gekoppeld.",
+
+  "profile.linkError.group": "Dat account zit in geen van de groepen die deze server van {name} toelaat.",
 
   "profile.linkError.failed": "De koppeling via de provider is mislukt. Probeer het opnieuw.",
 

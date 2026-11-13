@@ -202,7 +202,7 @@ async function oidcReturn() {
   const m = /^#oidc(-error|-linked|-link-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
   if (!m) return;
   if (m[1] === "-linked" || m[1] === "-link-error") {
-    oidcLinked = m[1] === "-linked" ? { key: m[2] } : { error: m[2] === "taken" ? "taken" : "failed" };
+    oidcLinked = m[1] === "-linked" ? { key: m[2] } : { error: ["taken", "group"].includes(m[2]) ? m[2] : "failed" };
     history.replaceState(null, "", location.pathname + location.search + "#profile");
     return;
   }

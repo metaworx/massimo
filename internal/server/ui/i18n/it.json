@@ -918,6 +918,8 @@
 
   "login.oidcError.unverified": "Il provider non ha confermato l'e-mail di questo account, quindi non è stato associato. Chiedi al proprietario del server di assegnare invece il tuo ID utente presso il provider.",
 
+  "login.oidcError.group": "Questo account non è in nessuno dei gruppi che questo server ammette dal provider.",
+
   "login.oidcError.disabled": "Il tuo utente è disattivato o scaduto.",
 
   "providers.title": "Provider di accesso",
@@ -945,6 +947,12 @@
   "providers.secretNone": "Ancora nessuno.",
 
   "providers.scopes": "Scope",
+
+  "providers.allowedGroups": "Gruppi ammessi",
+
+  "providers.groupsHint": "Separati da virgole; vuoto: qualsiasi gruppo. Solo gli account in uno di essi accedono o vengono collegati.",
+
+  "providers.groupsClaim": "Claim dei gruppi",
 
   "providers.enabled": "Attivo",
 
@@ -1094,6 +1102,8 @@
   "profile.linkFailed": "Il collegamento non è partito: {error}",
 
   "profile.linkError.taken": "Questo account è già collegato a un altro utente qui.",
+
+  "profile.linkError.group": "Questo account non è in nessuno dei gruppi che questo server ammette da {name}.",
 
   "profile.linkError.failed": "Il collegamento tramite il provider non è riuscito. Riprova.",
 

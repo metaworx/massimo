@@ -916,6 +916,8 @@
 
   "login.oidcError.unverified": "The provider did not confirm this account's e-mail, so it was not matched. Ask the server's owner to assign your user ID at the provider instead.",
 
+  "login.oidcError.group": "This account is in none of the groups this server admits from the provider.",
+
   "login.oidcError.disabled": "Your user is disabled or has expired.",
 
   "providers.title": "Sign-in providers",
@@ -943,6 +945,12 @@
   "providers.secretNone": "None yet.",
 
   "providers.scopes": "Scopes",
+
+  "providers.allowedGroups": "Allowed groups",
+
+  "providers.groupsHint": "Comma-separated; empty: any group. Only accounts in one of them sign in or link.",
+
+  "providers.groupsClaim": "Groups claim",
 
   "providers.enabled": "Enabled",
 
@@ -1092,6 +1100,8 @@
   "profile.linkFailed": "The link did not start: {error}",
 
   "profile.linkError.taken": "That account is already linked to another user here.",
+
+  "profile.linkError.group": "That account is in none of the groups this server admits from {name}.",
 
   "profile.linkError.failed": "The link through the provider failed. Try again.",
 

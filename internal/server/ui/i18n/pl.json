@@ -939,6 +939,8 @@
 
   "login.oidcError.unverified": "Dostawca nie potwierdził adresu e-mail tego konta, więc nie zostało ono dopasowane. Poproś właściciela serwera, aby zamiast tego przypisał twój identyfikator użytkownika u dostawcy.",
 
+  "login.oidcError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od dostawcy.",
+
   "login.oidcError.disabled": "Twój użytkownik jest wyłączony lub wygasł.",
 
   "providers.title": "Dostawcy logowania",
@@ -966,6 +968,12 @@
   "providers.secretNone": "Jeszcze brak.",
 
   "providers.scopes": "Zakresy (scopes)",
+
+  "providers.allowedGroups": "Dopuszczone grupy",
+
+  "providers.groupsHint": "Oddzielone przecinkami; puste: dowolna grupa. Tylko konta w jednej z nich logują się lub są powiązywane.",
+
+  "providers.groupsClaim": "Claim grup",
 
   "providers.enabled": "Włączony",
 
@@ -1117,6 +1125,8 @@
   "profile.linkFailed": "Powiązanie nie rozpoczęło się: {error}",
 
   "profile.linkError.taken": "To konto jest tu już powiązane z innym użytkownikiem.",
+
+  "profile.linkError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od {name}.",
 
   "profile.linkError.failed": "Powiązanie przez dostawcę nie powiodło się. Spróbuj ponownie.",
 

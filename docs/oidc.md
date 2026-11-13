@@ -86,6 +86,29 @@ and from the provider's userinfo endpoint where its discovery document names one
 for what the `id_token` lacks.
 A disabled or expired user is refused as with a password.
 
+## Groups
+
+A provider may admit only the accounts in some of its groups:
+its **Allowed groups**, any where none are named.
+An account in none of them neither signs in nor links,
+even where it was linked before,
+so that taking it out of the group at the provider takes it out of Massimo too;
+the card says why.
+Massimo reads the groups from the claim **Groups claim**, `groups` by default,
+in the `id_token` or from the userinfo, as a list of names or one name;
+each linked account shows its groups in My profile and on the user's card.
+The provider must be asked for them:
+
+- **Nextcloud**: add the scope `groups` to the provider's scopes in Massimo;
+  the claim `groups` lists the group IDs.
+- **Keycloak**: a "Group Membership" mapper on the client, claim name `groups`.
+- **Microsoft Entra ID**: the token configuration's groups claim,
+  which lists the groups' object IDs: name those in Massimo.
+- **Google** sends no groups; its e-mail domains are the provider's
+  **Their e-mail domains** for users it creates.
+
+Groups do not set a user's role.
+
 ## Nextcloud
 
 Nextcloud is a provider with its app **OpenID Connect Provider** (`oidc`).

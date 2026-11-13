@@ -513,7 +513,8 @@ or with `#oidc-error=<reason>`:
 `refused` (no user here for the account),
 `noemail` (none found, and the provider sent no e-mail),
 `unverified` (none found, and the e-mail, which an assignment waits for
-or a user would have been created for, is not marked verified)
+or a user would have been created for, is not marked verified),
+`group` (the account in none of the groups the provider admits)
 or `disabled` (the user is disabled or has expired).
 A refusal but `denied` counts as a failed sign-in of the address,
 and is a `login_failed` line of the log,
@@ -662,6 +663,7 @@ whose callback links the account to the user instead of signing in:
 it replaces the user's other identities at the provider,
 and sends the browser back with `#oidc-linked=<key>`;
 `#oidc-link-error=taken` where another user has the account,
+`#oidc-link-error=group` where it is in none of the groups the provider admits,
 `#oidc-link-error=failed` where the provider's answer did not do.
 No session is made, and nothing counts against the address.
 
@@ -722,7 +724,8 @@ They need `auth`, which only `owner` has by default.
 ```json
 {"key": "cloud", "name": "Nextcloud", "issuer": "https://cloud.example.com",
  "client_id": "massimo", "client_secret": "…", "scopes": "openid email profile",
- "auto_create": false, "auto_role": "viewer", "auto_domains": [], "enabled": true}
+ "auto_create": false, "auto_role": "viewer", "auto_domains": [],
+ "groups_claim": "groups", "allowed_groups": ["family"], "enabled": true}
 ```
 
 `POST` adds one: `key`, `issuer` and `client_id` are needed.
@@ -743,6 +746,11 @@ may not be `owner` nor hold an administrative capability (`guests`,
 `settings`, `update`, `restart`, `reboot`, `audit`, `auth`);
 `viewer` where absent.
 `auto_domains` limits it to e-mails of those domains, any where empty.
+`allowed_groups` are the groups the provider admits, read from the claim `groups_claim`
+(`groups` where empty) of the `id_token` or the userinfo,
+a list of strings or one string:
+an account in none of them neither signs in (`#oidc-error=group`)
+nor links (`#oidc-link-error=group`); any where empty.
 `PUT` changes the fields given; the key stays,
 `client_secret` left out stays and `""` clears it.
 The answers never hold the secret:

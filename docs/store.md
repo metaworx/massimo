@@ -547,6 +547,8 @@ CREATE TABLE auth_providers (                   -- migration 0016
     auto_create   INTEGER NOT NULL DEFAULT 0,
     auto_role_id  INTEGER REFERENCES roles (id), -- NULL: viewer
     auto_domains  TEXT    NOT NULL DEFAULT '',  -- comma-separated; '': any
+    groups_claim  TEXT    NOT NULL DEFAULT 'groups', -- migration 0020: the claim of the groups
+    allowed_groups TEXT   NOT NULL DEFAULT '[]', -- migration 0020: a JSON array; []: any
     enabled       INTEGER NOT NULL DEFAULT 1,
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL,
@@ -1297,6 +1299,8 @@ which replaces the user's other identities at that provider;
 an account another user has is refused.
 Each sign-in and link writes what the provider said of the account:
 the e-mail, the name, the user name and the groups (migration 0019).
+A provider may admit only some groups, read from its groups claim (migration 0020):
+an account in none of them neither signs in nor links.
 An identity no sign-in has used may be changed;
 a used one is removed and assigned again.
 The client secret is kept as the Cubes' keys are, in the store's file,

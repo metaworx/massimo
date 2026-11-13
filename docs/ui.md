@@ -25,7 +25,8 @@ goes to the provider and back signed in,
 the provider's answer taken from the address at once;
 an account the server does not know, or a refusal, comes back to the card,
 which says why under the providers' buttons:
-the account not known, no e-mail sent, or the e-mail not verified.
+the account not known, no e-mail sent, the e-mail not verified,
+or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
 While it asks, the page shows its name, its version and the sign-in,
@@ -726,7 +727,8 @@ to the top of the page.
   **disabled** and **creates users** as badges,
   with its name on the button, issuer, client ID, client secret (written only:
   the line under it says whether one is set),
-  scopes, **Enabled**,
+  scopes, **Allowed groups** (comma-separated, any where empty)
+  and the **Groups claim** they are read from (`groups` where empty), **Enabled**,
   and **Create users who sign in** with their role,
   which holds no administrative capability, and their e-mail domains;
   **Save**, which for an enabled provider first reads its discovery document

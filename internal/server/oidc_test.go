@@ -415,9 +415,12 @@ func TestOIDCUserinfo(t *testing.T) {
 	// the e-mail from the userinfo alone
 	bert, _ := st.AddUser(ctx, store.User{Name: "bert", Role: store.RoleOperator}, "", 0)
 	st.AddIdentity(ctx, bert.ID, "cloud", "bert@example.com", 0)
-	f.userinfo = map[string]any{"sub": "sub-2", "email": "bert@example.com", "email_verified": "true"}
+	f.userinfo = map[string]any{"sub": "sub-2", "email": "bert@example.com", "email_verified": "true", "groups": []string{"g1"}}
 	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "sub-2"})); name != "bert" {
 		t.Fatalf("e-mail from the userinfo: %q", name)
+	}
+	if ids, _ := st.Identities(ctx, bert.ID); len(ids) != 1 || strings.Join(ids[0].Groups, ",") != "g1" {
+		t.Fatalf("the groups from the userinfo: %+v", ids)
 	}
 
 	// a user id assigned: no e-mail needed
@@ -559,5 +562,58 @@ func TestOIDCLink(t *testing.T) {
 	}
 	if code, _ := callAPI(t, ts, "PUT", "/api/v1/users/bert/identities/1", "secret", `{"email": "x@example.com"}`); code != 409 {
 		t.Fatalf("one a sign-in used: %d", code)
+	}
+}
+
+// A provider's groups (AP Oidc v1.1, Block 8, D22-A): an account in none
+// of the groups it admits is refused, a sign-in and a link alike; a list
+// or one string; another claim, from the userinfo too; none named admits
+// any.
+func TestOIDCGroups(t *testing.T) {
+	f := newFakeIdP(t)
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true,
+		AllowedGroups: []string{"family", " family", ""}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	p, _, _ := st.Provider(ctx, "cloud")
+	if p.GroupsClaim != "groups" || strings.Join(p.AllowedGroups, ",") != "family" {
+		t.Fatalf("the provider: %+v", p)
+	}
+	anna := userToken(t, st, "anna", store.RoleOperator)
+	annaU, _, _ := st.User(ctx, "anna")
+	st.AddSubjectIdentity(ctx, annaU.ID, "cloud", "a1", 0)
+	for name, groups := range map[string]any{"none": nil, "others": []string{"guests"}, "a number": 7} {
+		if run := f.signIn(t, ts, "cloud", map[string]any{"sub": "a1", "groups": groups}); run.fragment != "oidc-error=group" {
+			t.Errorf("%s: %+v", name, run)
+		}
+	}
+	for name, groups := range map[string]any{"a list": []string{"x", "family"}, "a string": "family"} {
+		if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1", "groups": groups})); who != "anna" {
+			t.Errorf("%s: %q", name, who)
+		}
+	}
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/cloud", anna, `{"redirect": "`+ts.URL+`/"}`)
+	if code != 200 {
+		t.Fatalf("link: %d %s", code, text)
+	}
+	if run := f.grant(t, ts, text, map[string]any{"sub": "a2"}); run.fragment != "oidc-link-error=group" {
+		t.Fatalf("a link outside the groups: %+v", run)
+	}
+	// another claim
+	st.UpdateProvider(ctx, "cloud", func(p *store.AuthProvider) error { p.GroupsClaim = "roles"; return nil }, 0)
+	if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1", "groups": "nope", "roles": []string{"family"}})); who != "anna" {
+		t.Fatalf("the roles claim: %q", who)
+	}
+	var list []identityView
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); len(list) != 1 || strings.Join(list[0].Groups, ",") != "family" {
+		t.Fatalf("the groups kept: %+v", list)
+	}
+	// none named: any
+	st.UpdateProvider(ctx, "cloud", func(p *store.AuthProvider) error { p.AllowedGroups = nil; return nil }, 0)
+	if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1"})); who != "anna" {
+		t.Fatalf("no restriction: %q", who)
 	}
 }

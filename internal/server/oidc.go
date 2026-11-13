@@ -72,6 +72,9 @@ const (
 	oidcUnverified = "unverified"
 	// oidcTaken is a link of an account another user has
 	oidcTaken = "taken"
+	// oidcGroup is a sign-in or link of an account in none of the
+	// groups the provider admits
+	oidcGroup = "group"
 )
 
 // oidcClient talks to the providers.
@@ -425,9 +428,10 @@ func (c oidcClaims) groupsOf(claim string) []string {
 	return nil
 }
 
-// details are what the claims say of the account, kept on its identity.
-func (c oidcClaims) details() store.IdentityDetails {
-	return store.IdentityDetails{Email: c.Email, Name: c.Name, Username: c.PreferredUsername, Groups: c.groupsOf("groups")}
+// details are what the claims say of the account, kept on its identity,
+// its groups from the provider's claim.
+func (c oidcClaims) details(p store.AuthProvider) store.IdentityDetails {
+	return store.IdentityDetails{Email: c.Email, Name: c.Name, Username: c.PreferredUsername, Groups: c.groupsOf(p.GroupsClaim)}
 }
 
 // verified reports whether the provider vouches for the e-mail: true,
@@ -739,10 +743,17 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) error {
 		}
 		return refuse(oidcFailed, "", err)
 	}
+	who := cmpOr(claims.Email, p.Key+":"+claims.Subject)
+	if !p.AdmitsGroups(claims.groupsOf(p.GroupsClaim)) {
+		if started.linkUser != 0 {
+			s.log.Warn("api: OpenID Connect link refused", "provider", p.Key, "remote", ip, "account", who, "reason", oidcGroup)
+			return back("oidc-link-error=" + oidcGroup)
+		}
+		return refuse(oidcGroup, who, nil)
+	}
 	if started.linkUser != 0 {
 		return back(s.oidcLink(ctx, p, started.linkUser, claims, ip))
 	}
-	who := cmpOr(claims.Email, p.Key+":"+claims.Subject)
 	u, identity, reason, err := s.oidcUser(ctx, p, claims)
 	switch {
 	case err != nil:
@@ -752,7 +763,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) error {
 	case u.Disabled || u.Expired(time.Now()):
 		return refuse(oidcDisabled, u.Name, nil)
 	}
-	if err := s.opts.Store.TouchIdentity(ctx, identity, claims.details()); err != nil {
+	if err := s.opts.Store.TouchIdentity(ctx, identity, claims.details(p)); err != nil {
 		s.log.Warn("api: identity not touched", "error", err)
 	}
 	code := s.oidc.prove(&oidcProven{userID: u.ID, provider: p.Key, ip: ip, expires: time.Now().Add(oidcCodeTTL)}, time.Now())
@@ -775,7 +786,7 @@ func (s *Server) oidcLink(ctx context.Context, p store.AuthProvider, userID int6
 		s.log.Warn("api: OpenID Connect link failed", "provider", p.Key, "remote", ip, "error", cmpOr(fmt.Sprint(err), "the user is gone"))
 		return "oidc-link-error=" + oidcFailed
 	}
-	if _, err := st.LinkIdentity(ctx, u.ID, p.ID, c.Subject, c.details()); errors.Is(err, store.ErrIdentityTaken) {
+	if _, err := st.LinkIdentity(ctx, u.ID, p.ID, c.Subject, c.details(p)); errors.Is(err, store.ErrIdentityTaken) {
 		s.log.Warn("api: OpenID Connect link refused", "provider", p.Key, "user", u.Name, "remote", ip, "reason", oidcTaken)
 		return "oidc-link-error=" + oidcTaken
 	} else if err != nil {

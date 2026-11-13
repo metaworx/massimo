@@ -274,3 +274,38 @@ def test_link_from_my_profile(page, case, provider):
         assert again.inner_text() == page.evaluate(f"t('profile.linkAgain', {{name: {name!r}}})"), "Link again"
     finally:
         api_call("DELETE", f"api/v1/providers/{key}")
+
+
+def test_groups_admitted(page, new_context, case, provider):
+    """A provider that admits only some groups (AP Oidc v1.1, Block 8):
+    its form shows them, and an account in none of them comes back to the
+    card, which says so."""
+    key = f"groups-{case.width}-{case.lang}"
+    user = f"groups-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": user, "role": "viewer"})
+    api_call("POST", "api/v1/providers", {"key": key, "name": "Groups", "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET,
+                                          "allowed_groups": ["family", "admins"]})
+    api_call("POST", f"api/v1/users/{user}/identities", {"provider": key, "subject": "sub-" + provider.email})
+    try:
+        page.goto(URL)
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "system")
+        panel = page.locator(f".provider-panel[data-key='{key}']")
+        panel.locator("summary").click()
+        assert panel.locator("[name=allowed_groups]").input_value() == "family, admins", "the groups admitted"
+        assert panel.locator("[name=groups_claim]").input_value() == "groups", "the claim, by default"
+
+        ctx = new_context()
+        other = ctx.new_page()
+        other.set_default_timeout(5000)
+        other.goto(URL)
+        assert wait_until(other, "document.getElementById('login-dialog').open", 5), "the sign-in card"
+        with other.expect_navigation(url=back_at_page, timeout=10000):
+            other.locator(f"#login-providers button[data-provider='{key}']").click()
+        assert wait_until(other, "!document.getElementById('login-providers-error').classList.contains('hidden')", 10), "the card says why"
+        assert other.evaluate("document.getElementById('login-providers-error').textContent") == other.evaluate("t('login.oidcError.group')"), \
+            "in none of the groups"
+        ctx.close()
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
+        api_call("DELETE", f"api/v1/users/{user}")
