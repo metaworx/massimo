@@ -77,7 +77,7 @@ below), theme the page it is for.
 | `ladder` | `png/`: the icon at 64, 128, 180, 192, 1024 px, the small one at 16, 24, 32, 48 px |
 | `tile` | `svg/` and `png/`: the mark in white on a blue square, for an app, at 180, 192, 512 px |
 | `favicon` | `favicon.ico`, 16 to 256 px, the small icon up to 48 |
-| `homeassistant` | `homeassistant-brand/`: `icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png` and their `dark_` ones |
+| `homeassistant` | `homeassistant-brand/`: `icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png` and their `dark_` ones, trimmed to what is drawn as Home Assistant's brand rules ask - the icon a square on the mark's wider side |
 | `turn-fast` | `anim/`: the turn at 40, 80 and 160 ms a frame - 80 frames of 4.5°, a turn in 3.2, 6.4 or 12.8 s - as GIF and WebP |
 | `turn-slow` | `anim/`: the turn at 1 s and 3 s a frame - 800 frames of 0.45°, a turn in 13 min 20 s or 40 min - as GIF |
 | `tick` | `anim/`: 60 frames of a second, 6° each, a turn a minute, as GIF |

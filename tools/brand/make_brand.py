@@ -579,6 +579,21 @@ def png(svg: str, width: int | None = None, height: int | None = None) -> Image.
     return Image.open(io.BytesIO(data)).convert("RGBA")
 
 
+def trimmed(svg: str, size: int, square: bool) -> Image.Image:
+    """An image cropped to what is drawn, as Home Assistant's brand rules ask:
+    rendered at four times the size, cropped to its drawn pixels, a square
+    one squared on its wider side, then scaled - size its side, or else its
+    height."""
+    big = png(svg, size * SUPERSAMPLE, size * SUPERSAMPLE) if square else png(svg, height=size * SUPERSAMPLE)
+    big = big.crop(big.getchannel("A").getbbox())
+    if square:
+        side = max(big.size)
+        canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+        canvas.paste(big, ((side - big.width) // 2, (side - big.height) // 2))
+        return canvas.resize((size, size), Image.Resampling.LANCZOS)
+    return big.resize((round(size * big.width / big.height), size), Image.Resampling.LANCZOS)
+
+
 def smooth(svg: str, size: int) -> Image.Image:
     """Rendered at four times the size and scaled down: the cleanest edges."""
     big = png(svg, size * SUPERSAMPLE, size * SUPERSAMPLE)
@@ -736,7 +751,7 @@ def cycle(deg: float) -> Pose:
     return Pose(left_top=left, right_top=right, minute_deg=deg % 360)
 
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 @dataclass(frozen=True)
@@ -785,7 +800,8 @@ SCOPES = {
     "favicon": "favicon.ico, 16 to 256 px",
     "ui": "the web UI's files, flat and by fixed names: brand.svg (a sprite), brand.css, favicon.svg, "
     "favicon.ico, tile-192/512.png, maskable-192/512.png, apple-touch-180.png (make ui-brand)",
-    "homeassistant": "homeassistant-brand/: icon.png, icon@2x.png, logo.png, logo@2x.png, and dark_ ones",
+    "homeassistant": "homeassistant-brand/: icon.png, icon@2x.png, logo.png, logo@2x.png, and dark_ ones, "
+    "trimmed to the mark",
     "turn-fast": "the turn at 40, 80 and 160 ms a frame, 80 frames, as GIF and WebP",
     "turn-slow": "the turn at 1 s and 3 s a frame, 800 frames, as GIF",
     "tick": "the tick turn, 60 frames of a second, as GIF",
@@ -937,10 +953,10 @@ def plan(flavour: str, base: str, scopes: set[str], themes: tuple[str, ...], i_s
         def run(out: Path) -> None:
             for theme in themes:
                 s, p = svgs(theme), prefixes[theme]
-                png(s["icon"], 256, 256).save(out / f"homeassistant-brand/{p}icon.png")
-                png(s["icon"], 512, 512).save(out / f"homeassistant-brand/{p}icon@2x.png")
-                png(s["logo"], height=128).save(out / f"homeassistant-brand/{p}logo.png")
-                png(s["logo"], height=256).save(out / f"homeassistant-brand/{p}logo@2x.png")
+                trimmed(s["icon"], 256, True).save(out / f"homeassistant-brand/{p}icon.png", optimize=True)
+                trimmed(s["icon"], 512, True).save(out / f"homeassistant-brand/{p}icon@2x.png", optimize=True)
+                trimmed(s["logo"], 128, False).save(out / f"homeassistant-brand/{p}logo.png", optimize=True)
+                trimmed(s["logo"], 256, False).save(out / f"homeassistant-brand/{p}logo@2x.png", optimize=True)
 
         jobs.append(Job("Home Assistant's brand images", names, run))
     return jobs
