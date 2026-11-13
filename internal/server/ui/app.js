@@ -597,9 +597,11 @@ function renderCubeSelect() {
     sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
     icon: connIcon(c.connected),
   }));
+  // a found Cube opens System settings → Cubes, where it can be added,
+  // for a role with cubes; for others it is information
   if (state.found.length) {
     items.push({ group: t("discover.group") });
-    for (const c of state.found) items.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: true });
+    for (const c of state.found) items.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: !hasCap("cubes") });
   }
   if (hasCap("discover")) {
     items.push({ separator: true });
@@ -614,6 +616,7 @@ function renderCubeSelect() {
     onPick: (v) => {
       menu.open = false;
       if (v === DISCOVER) discoverCubes();
+      else if (v.startsWith("found:")) showFound();
       else selectCube(v);
     },
     shown: {
@@ -771,7 +774,6 @@ async function discoverCubes() {
     await loadCubes();
     const n = (res.found || []).filter((c) => !isConfigured(c)).length;
     showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
-    if (n) $("cube-found").open = true;
   } catch (e) {
     showSearch(t("discover.failed", { error: e.message }), 15000, true);
   } finally {
@@ -790,32 +792,23 @@ function addFound(c) {
   renderFound();
 }
 
-// renderFound lists, under the header, the Cubes found on the LAN that
-// the server does not serve, each with Add (foundRow, cubes.js), which
-// serves it at once, and the other way to add them: the lines for the server's
-// env file, ready to copy. The address makes serve take the Cube; a
-// name alone would as well, serve then follows the address the Cube
-// answers discovery from.
+// renderFound counts, under the header, the Cubes found on the LAN that
+// the server does not serve: for a role with cubes a link to System
+// settings → Cubes (showFound), which lists them with Add and the lines
+// for the server's settings file (cubes.js); the count alone otherwise.
 function renderFound() {
-  const box = $("cube-found");
   const n = state.found.length;
-  box.classList.toggle("hidden", !n);
+  $("cube-found").classList.toggle("hidden", !n);
   if (!n) return;
-  box.querySelector("summary").textContent = tn("discover.found", n);
-  const body = box.querySelector(".cube-found-body");
-  clear(body);
-  const list = elem("ul");
-  for (const c of state.found) list.appendChild(foundRow(c)); // cubes.js
-  body.appendChild(list);
-  body.appendChild(textEl("p", t("discover.hintAdd")));
-  body.appendChild(textEl("p", t("discover.hint")));
-  const lines = [];
-  for (const c of state.found) {
-    const p = "MASSIMO_CUBE_" + c.serial + "_";
-    lines.push(p + "ADDRESS=" + (c.address || ""), p + "NAME=");
-  }
-  body.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
-  body.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
+  $("cube-found-link").textContent = tn("discover.found", n);
+  $("cube-found-text").textContent = tn("discover.found", n);
+}
+
+// showFound opens System settings with the Cubes card in view, which
+// lists the found Cubes.
+function showFound() {
+  showView("system");
+  showCard($("sys-cubes"), true); // components.js
 }
 
 function selectCube(serial) {
@@ -1127,6 +1120,7 @@ function initSettings() {
   $("reload-btn").addEventListener("click", () => location.reload());
   $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("home-notice-cubes").addEventListener("click", () => showView("system"));
+  $("cube-found-link").addEventListener("click", showFound);
   $("clock-select").addEventListener("change", (ev) => {
     setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();

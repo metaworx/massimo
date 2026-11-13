@@ -428,7 +428,6 @@
   "discover.hintFile": "Le fichier env est /etc/massimo/env pour un serveur installé avec « massimo install », sinon .env dans le répertoire de travail du serveur ou le fichier indiqué avec -env. README.md décrit les variables.",
   "discover.log": "Cube {serial} à {address}, non configuré",
 
-  "discover.hintAdd": "Ajouter le prend en charge tout de suite ; le serveur le garde dans sa base, sous Réglages du système → Cubes.",
   "cubes.title": "Cubes",
   "cubes.none": "Aucun Cube n'est encore configuré.",
   "cubes.found": "Trouvés sur le réseau local, non configurés",

@@ -97,10 +97,10 @@
   </div>
   <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
   <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span></p>
-  <details id="cube-found" class="cube-found hidden">
-    <summary></summary>
-    <div class="cube-found-body"></div>
-  </details>
+  <!-- the Cubes found on the LAN and not served, counted: a link to System
+       settings → Cubes, which lists them, for a role with cubes (app.js
+       renderFound) -->
+  <p id="cube-found" class="cube-found hidden"><button type="button" id="cube-found-link" class="cube-found-link needs-cubes" title="Open System settings → Cubes" data-i18n-attr="title:home.toCubes"></button><span id="cube-found-text" class="without-cubes"></span></p>
   <dl id="budget" class="budget expert-only">
     <div><dt data-i18n="budget.server">Server</dt><dd id="version">–</dd></div>
     <div><dt data-i18n="budget.built">Built with</dt><dd id="version-rest">–</dd></div>

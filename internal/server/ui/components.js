@@ -476,15 +476,34 @@ function sectionBadges(card, badges) {
 }
 
 // showCard brings a card into view, opened, with the focus on its
-// heading's button.
-function showCard(card) {
+// heading's button. On a page just opened (instant) the cards above it
+// still grow as their data comes, and a smooth scroll keeps the target
+// it started with and stops short: the card is brought there at once,
+// and again while the cards around it change size for two seconds,
+// until the user scrolls.
+function showCard(card, instant) {
   if (card.classList.contains("folded")) {
     foldCard(card, false);
     store("massimo.fold." + card.id, null);
   }
-  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const smooth = !instant && !matchMedia("(prefers-reduced-motion: reduce)").matches;
   card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
   card.querySelector(".section-fold").focus({ preventScroll: true });
+  if (instant) keepCardInView(card, 2000);
+}
+
+// keepCardInView brings a card to the top again whenever its page's
+// cards change size, for ms or until the user scrolls by hand.
+function keepCardInView(card, ms) {
+  const by = ["wheel", "touchstart", "keydown", "pointerdown"];
+  const ro = new ResizeObserver(() => card.scrollIntoView({ block: "start" }));
+  const stop = () => {
+    ro.disconnect();
+    for (const ev of by) removeEventListener(ev, stop);
+  };
+  ro.observe(card.parentElement);
+  for (const ev of by) addEventListener(ev, stop, { passive: true });
+  setTimeout(stop, ms);
 }
 
 // pageContents fills a page's row of section buttons (its nav.toc)

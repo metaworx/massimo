@@ -85,20 +85,14 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
   Cubes it finds but does not serve are listed in the choice under "Found,
-  not configured" and cannot be chosen,
+  not configured",
   as long as they answer: one that a search or the server's own look no
-  longer hears leaves the list at the page's next poll;
-  a line under the header counts them and opens to their address,
-  whether they take it by DHCP or have a static one ("DHCP" or "static address"),
-  their firmware and the lines to put into the server's env file
-  (`/etc/massimo/env` for a server installed with `massimo install`,
-  otherwise `.env`).
-  The server serves a Cube once its `MASSIMO_CUBE_<SERIAL>_ADDRESS`,
-  or only a `_NAME`, is there and the server has been restarted;
-  with a name alone it takes the address from discovery and follows it.
-  With several Cubes each also needs a `_PROXY` address.
-  Key and IV are only needed for the portal commands (README.md,
-  "Cube variables").
+  longer hears leaves the list at the page's next poll.
+  A line under the header counts them.
+  For a role that may add Cubes, the line and a found Cube in the choice
+  open System settings with **Cubes** in view,
+  which lists them with **Add** and the lines for the server's env file;
+  for others the line is the count alone, and the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
 - **The time of the last update**, **↻**, which asks the server for the
@@ -613,7 +607,16 @@ to the top of the page.
   the LAN** while discovery hears it, with its address,
   DHCP flag and firmware, "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
-  which serves a found Cube at once (also in the list of found Cubes under the header).
+  which serves a found Cube at once.
+  Under the found Cubes, the lines to put into the server's env file
+  serve them too (`/etc/massimo/env` for a server installed with `massimo install`,
+  otherwise `.env`):
+  the server serves a Cube once its `MASSIMO_CUBE_<SERIAL>_ADDRESS`,
+  or only a `_NAME`, is there and the server has been restarted;
+  with a name alone it takes the address from discovery and follows it.
+  With several Cubes each also needs a `_PROXY` address.
+  Key and IV are only needed for the portal commands (README.md,
+  "Cube variables").
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 
   From 760 px a Cube's panel has two columns: its settings at the left,

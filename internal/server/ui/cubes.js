@@ -655,8 +655,7 @@ function cubePanel(c) {
 // (tpl-found-row): its serial, address and firmware, the massimo proxies
 // that answer for it, in expert mode its radio and MAC address and the
 // gateway it uses, how long ago it answered, and Add (addCube),
-// which serves it at once; the header's list of found Cubes (app.js) and
-// System settings → Cubes show it.
+// which serves it at once; System settings → Cubes lists it.
 function foundRow(c) {
   const li = fromTemplate("tpl-found-row");
   li.dataset.serial = c.serial;
@@ -703,7 +702,25 @@ function renderCubes() {
       ul.appendChild(li);
     }
     box.appendChild(ul);
+    box.appendChild(foundHints(state.found));
   }
+}
+
+// foundHints is the other way to serve the found Cubes: the lines for the
+// server's settings file, ready to copy, and where that file is. The
+// address makes serve take the Cube; a name alone would as well, serve
+// then follows the address the Cube answers discovery from.
+function foundHints(found) {
+  const box = elem("div", "cubes-found-hints needs-cubes");
+  box.appendChild(textEl("p", t("discover.hint"), "muted small"));
+  const lines = [];
+  for (const c of found) {
+    const p = "MASSIMO_CUBE_" + c.serial + "_";
+    lines.push(p + "ADDRESS=" + (c.address || ""), p + "NAME=");
+  }
+  box.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
+  box.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
+  return box;
 }
 
 // initCubes draws System settings → Cubes when the page opens; the panels
