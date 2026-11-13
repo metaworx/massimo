@@ -373,6 +373,23 @@ then wakeup of the new room,
 Links are therefore the only per-device data that is not readable from the Cube;
 a restore derives them from the room layout.
 
+One wall thermostat per room (2026-11-12, the original software 1.4.6, Cube firmware
+not noted): moving a wall thermostat into a room that has one already is refused
+by the software before it sends anything, with "Attention: You cannot add any more
+devices of this type. The maximum number of devices of this type has been reached
+for this room."
+The message speaks of "devices of this type", so the software probably limits the
+other types per room as well;
+eQ-3's documents name up to 8 radiator thermostats and 8 window contacts per wall
+thermostat. Those limits are not confirmed:
+only the wall thermostat's was seen.
+The Cube's metadata itself could hold two
+(one written by another tool), and nothing says how the radiator thermostats
+would choose between two temperatures and two setpoints.
+Massimo refuses a second wall thermostat in a room the same way
+(`PUT …/devices/{rf}`, `409`) and copes with a Cube that has two
+(docs/api-v1.md, "The virtual wall thermostat").
+
 So wall thermostats take 0x11 and 0x12 with the same payloads as radiator thermostats,
 and their C line ends with offset,
 window-open temperature and boost (3 bytes after the week program at 0x16).

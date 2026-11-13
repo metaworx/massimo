@@ -23,9 +23,18 @@ import (
 // The server polls often, so that a state the fake is given arrives.
 func startRooms(t *testing.T) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
 	t.Helper()
+	return startRoomsWith(t, nil)
+}
+
+// startRoomsWith is startRooms with the fixture's lines changed first.
+func startRoomsWith(t *testing.T, change func([]cube.Message) []cube.Message) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
+	t.Helper()
 	greeting, err := fakecube.RoomsFixture()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if change != nil {
+		greeting = change(greeting)
 	}
 	fc := &fakecube.Server{Greeting: greeting, Apply: true}
 	addr, err := fc.Start("127.0.0.1:0")
@@ -220,5 +229,128 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 	defer rt.subsMu.Unlock()
 	if len(rt.replay) == 0 {
 		t.Fatal("nothing kept for replay")
+	}
+}
+
+// lastRadio is the last radio command the fake Cube received.
+func lastRadio(t *testing.T, fc *fakecube.Server) cube.RadioCommand {
+	t.Helper()
+	got := fc.Received()
+	for i := len(got) - 1; i >= 0; i-- {
+		if got[i].Type == 's' {
+			rc, err := cube.ParseRadioCommand(got[i].Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return rc
+		}
+	}
+	t.Fatal("no radio command")
+	return cube.RadioCommand{}
+}
+
+// A virtual wall thermostat's commands reach its room, or its room's real
+// wall thermostat; its settings the store; it is neither renamed, moved
+// nor deleted.
+func TestVirtualWallThermostatCommands(t *testing.T) {
+	fc, ts, s, st := startRooms(t)
+	path := "/api/v1/cubes/KEQ0000100/devices/"
+	room := func(rc cube.RadioCommand, cmd byte, id uint8) bool {
+		return rc.Command == cmd && rc.Target.Room && rc.Target.RoomID == id
+	}
+
+	if code, body := do(t, ts, "PUT", path+"room-2/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 || !room(lastRadio(t, fc), cube.RFSetTemperature, 2) {
+		t.Fatalf("setpoint: %d %v %+v", code, body, lastRadio(t, fc))
+	}
+	if code, body := do(t, ts, "PUT", path+"000002/program", `{"monday":[{"temp":17,"until":"06:00"},{"temp":21,"until":"24:00"}]}`); code != 200 || !room(lastRadio(t, fc), cube.RFSetWeekProgram, 2) {
+		t.Fatalf("program: %d %v", code, body)
+	}
+
+	// The room's settings and the virtual wall thermostat's in one body.
+	code, body := do(t, ts, "PUT", path+"VWT0000002/config", `{"comfort_temp":22.5,"temp_method":"mean"}`)
+	if code != 200 || body["room"] == nil || body["settings"] == nil {
+		t.Fatalf("config: %d %v", code, body)
+	}
+	if rc := lastRadio(t, fc); rc.Command != cube.RFSetTemperatures {
+		t.Fatalf("config sent %+v", rc)
+	}
+	rows, _ := st.Rooms(context.Background(), 1)
+	if rows[1].TempMethod != "mean" {
+		t.Fatalf("the store's room 2: %+v", rows[1])
+	}
+	var d vwtDetail
+	getJSON(t, ts, "", path+"room-2", &d)
+	if d.Settings.TempMethod != "mean" || *d.State.ActualTemp != 20.7 {
+		t.Fatalf("after the settings: %+v %v", d.Settings, *d.State.ActualTemp)
+	}
+	// The settings alone answer with them.
+	if code, body := do(t, ts, "PUT", path+"room-2/config", `{"temp_method":"median"}`); code != 200 || body["settings"] == nil || body["room"] != nil {
+		t.Fatalf("settings alone: %d %v", code, body)
+	}
+
+	// The real wall thermostat's own: room 1 has one, room 2 none.
+	if code, _ := do(t, ts, "PUT", path+"room-2/config", `{"temp_offset":1}`); code != 400 {
+		t.Fatalf("an offset without a wall thermostat: %d", code)
+	}
+	if code, body := do(t, ts, "PUT", path+"room-1/config", `{"display_actual":true}`); code != 200 {
+		t.Fatalf("display: %d %v", code, body)
+	} else if rc := lastRadio(t, fc); rc.Command != cube.RFSetDisplayMode || rc.Target.RFAddress != 0x0a0201 {
+		t.Fatalf("display sent %+v", rc)
+	}
+	if code, _ := do(t, ts, "PUT", path+"room-2/lock", `{"locked":true}`); code != 409 {
+		t.Fatalf("a lock without a wall thermostat: %d", code)
+	}
+	if code, body := do(t, ts, "PUT", path+"room-1/lock", `{"locked":true}`); code != 200 {
+		t.Fatalf("lock: %d %v", code, body)
+	} else if rc := lastRadio(t, fc); rc.Command != cube.RFLockControls || rc.Target.RFAddress != 0x0a0201 {
+		t.Fatalf("lock sent %+v", rc)
+	}
+
+	// Its address: the owner's, unless a device or another room has it.
+	for addr, want := range map[string]int{"0a0201": 409, "000001": 409, "zz": 400, "000150": 200} {
+		if code, _ := do(t, ts, "PUT", path+"room-2/config", `{"rf_address":"`+addr+`"}`); code != want {
+			t.Fatalf("rf_address %s: %d, want %d", addr, code, want)
+		}
+	}
+	getJSON(t, ts, "", path+"room-2", &d)
+	if d.RFAddress != "000150" || d.Settings.RFAddress != "000150" {
+		t.Fatalf("after the address: %s %+v", d.RFAddress, d.Settings)
+	}
+	if code, _ := do(t, ts, "PUT", path+"000150/setpoint", `{"mode":"auto"}`); code != 200 {
+		t.Fatalf("by its new address: %d", code)
+	}
+
+	for _, c := range []struct{ method, path, body string }{
+		{"PUT", "room-1", `{"name":"Neu"}`},
+		{"PUT", "room-1", `{"room_id":2}`},
+		{"DELETE", "room-1", ""},
+	} {
+		if code, _ := do(t, ts, c.method, path+c.path, c.body); code != 409 {
+			t.Fatalf("%s %s: %d", c.method, c.path, code)
+		}
+	}
+	_ = s
+}
+
+// A room takes one wall thermostat: adding or moving a second into it is
+// refused before anything is sent, as the original software refuses it.
+func TestSecondWallThermostatRefused(t *testing.T) {
+	fc, ts, _, _ := startRoomsWith(t, func(lines []cube.Message) []cube.Message {
+		p, err := fakecube.PairingFrom(lines, 0x0a0201, 0x0a0299, "NEQ0000299", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := append([]cube.Message(nil), lines[:len(lines)-1]...)
+		return append(out, p.Config, lines[len(lines)-1])
+	})
+	before := len(fc.Received())
+	code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0299", `{"room_id":1,"name":"Zweiter"}`)
+	if code != 409 || !strings.Contains(body["error"].(string), "wall thermostat already") {
+		t.Fatalf("a second wall thermostat: %d %v", code, body)
+	}
+	for _, m := range fc.Received()[before:] {
+		if m.Type == 's' || m.Type == 'm' {
+			t.Fatalf("sent %s", m)
+		}
 	}
 }

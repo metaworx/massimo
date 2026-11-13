@@ -225,6 +225,9 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtUpdate)
+	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {
 		return err
@@ -318,6 +321,9 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 		if _, ok := rt.hidden().Room(md, newRoom); !ok {
 			return 0, fail(http.StatusNotFound, "no room %d", newRoom)
 		}
+		if other, ok := secondWall(md, rf, newRoom); ok && c.Type == cube.DeviceWallThermostat && newRoom != cur.RoomID {
+			return 0, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
+		}
 		if newRoom != cur.RoomID {
 			if withCopy {
 				if err := s.require(r, "configure"); err != nil {
@@ -398,6 +404,9 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 	if c.Type == cube.DeviceCube {
 		return 0, fail(http.StatusBadRequest, "the cube itself is not in a room")
 	}
+	if other, ok := secondWall(md, c.RFAddress, room); ok && c.Type == cube.DeviceWallThermostat {
+		return 0, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
+	}
 	if withCopy {
 		if err := s.require(r, "configure"); err != nil {
 			return 0, err
@@ -429,6 +438,9 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtRemove)
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -656,6 +668,9 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtConfig)
 	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {
@@ -911,6 +926,9 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtProgram)
 	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {

@@ -1304,6 +1304,10 @@ func (s *Server) deviceTarget(sn, name string) string {
 	if rt == nil {
 		return "device:" + strings.ToLower(name)
 	}
+	if room, ok := virtualOf(rt, name); ok {
+		// A virtual wall thermostat's commands are its room's.
+		return "room:" + strconv.Itoa(int(room.ID))
+	}
 	rf, err := deviceOf(rt, name)
 	if err != nil {
 		return "device:" + strings.ToLower(name)
@@ -1498,6 +1502,9 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtSetpoint)
+	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
 		return err
@@ -1520,6 +1527,9 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtLock)
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {

@@ -1476,6 +1476,31 @@ In `default` and `virtual` every room has one wall thermostat,
 in `virtual` always the same;
 `default` only adds to what a client saw before.
 Any other value is `400`.
+Its commands are the device routes', under any of its names:
+
+| Route | Does |
+|-------|------|
+| `PUT …/setpoint` | the room's setpoint (`PUT …/rooms/{id}/setpoint`) |
+| `PUT …/program` | the room's programme (`PUT …/rooms/{id}/program`) |
+| `PUT …/config` | `temp_method` and `rf_address` to its own settings; `temp_offset` and `display_actual` to the room's real wall thermostat, `400` without one; every other field to the room (`PUT …/rooms/{id}/config`) |
+| `PUT …/lock` | the room's real wall thermostat's key lock; `409` without one, whose radiator thermostats are locked one by one |
+| `PUT …/devices/{rf}`, `DELETE` | `409`: it is renamed with its room and goes with it |
+
+A configuration of one part answers as that part's route does;
+one of several answers each by name,
+`{"ok": true, "room": {…}, "wall_thermostat": {…}, "settings": {…}}`.
+`temp_method` is `median` or `mean` and needs `configure`, as the room's
+settings do; `rf_address` is six hex digits, or `""` for the room number,
+and one a real device, the Cube or another room's virtual wall thermostat has is `409`.
+A change of its settings is a `config` event of it, and a `state` event where its state changes.
+Each command needs the capability of the route it goes to,
+and the audit names the room as its target.
+
+A room takes one wall thermostat, as in the original software:
+moving or adding a second one into a room (`PUT …/devices/{rf}`) is `409`
+before anything is sent.
+A Cube that has two in a room, set up by another tool, is shown as it is.
+
 `GET …/devices/{rf}` answers for a virtual wall thermostat whatever the view,
 with the room's settings and week programme in a wall thermostat's shape
 (`wall_thermostat`, from the room's wall thermostat, else its first radiator
