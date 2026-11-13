@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/server"
 )
 
 // exitRestart is the exit status of a serve that stopped for a restart:
@@ -114,6 +115,24 @@ func restartBy(mode string, p processInfo) (by, blocked string, err error) {
 		return byLaunchd, "", nil
 	}
 	return "", "no service manager would start this server again (in a terminal, or under one massimo does not know: -restart exit if it restarts serve)", nil
+}
+
+// installKind says how this server was installed, for System Info
+// (server.Options.Install): the package manager that owns the binary,
+// else the service manager that started it, as restartBy finds it
+// whatever -restart says, else server.InstallOther.
+func installKind(m install.Manager, packaged bool, p processInfo) string {
+	switch {
+	case packaged:
+		return m.Name
+	case p.service:
+		return server.InstallWindowsService
+	case p.goos == "linux" && systemdStarted(p):
+		return server.InstallSystemd
+	case p.goos == "darwin" && (p.ppid == 1 || p.getenv("XPC_SERVICE_NAME") == install.Label || homebrewJob(p.getenv("XPC_SERVICE_NAME"))):
+		return server.InstallLaunchd
+	}
+	return server.InstallOther
 }
 
 // restarter carries out a restart: helper, where set, asks the service

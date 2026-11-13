@@ -499,7 +499,7 @@ each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no cog.
 
 The page is a card per part, as wide as the page:
-Software update first, then Maintenance, Cubes, Users, Roles,
+System Info first, then Software update, Maintenance, Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -515,6 +515,15 @@ the browser keeps which cards are folded.
 Once the row of buttons is out of sight, **↑** at the bottom right goes back
 to the top of the page.
 
+- **System Info**, for everyone who opens System settings:
+  a table of the server's version and what it was built with,
+  when it started and how long ago, the certificate it serves
+  (its source, names and expiry; none on plain HTTP),
+  how it was installed (the Debian package, Homebrew, the Windows service,
+  a systemd or launchd service, or other: by hand, a container or another supervisor),
+  the system it runs on with its processor, the host's name,
+  and the address the server sees this browser at
+  (`docs/api-v1.md`, "GET /api/v1/system").
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
@@ -581,7 +590,7 @@ to the top of the page.
   and every `MASSIMO_*` variable with where it came from, a key, an IV, a
   token or a password as "set, not shown"
   (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
-  From 900 px Software update and Maintenance share a row.
+  From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
   each in a panel whose head shows the name, the serial and the address,

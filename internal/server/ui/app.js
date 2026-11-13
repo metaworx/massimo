@@ -882,9 +882,7 @@ function renderTLS(tls) {
     return;
   }
   const until = Date.parse(tls.not_after || "");
-  const parts = [tls.source, (tls.names || []).join(", ")];
-  if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
-  dd.textContent = parts.filter(Boolean).join(" · ");
+  dd.textContent = certText(tls);
   const texts = [];
   if (tls.self_signed) texts.push(t("header.selfSigned"));
   if (isNaN(until)) {
@@ -896,6 +894,16 @@ function renderTLS(tls) {
   }
   $("tls-notice-text").textContent = texts.join(" ");
   notice.classList.toggle("hidden", texts.length === 0);
+}
+
+// certText is the certificate the server serves, as /healthz and GET
+// /api/v1/system have it: its source, names and expiry.
+function certText(tls) {
+  if (!tls) return "–";
+  const until = Date.parse(tls.not_after || "");
+  const parts = [tls.source, (tls.names || []).join(", ")];
+  if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
+  return parts.filter(Boolean).join(" · ") || "–";
 }
 
 async function checkVersion() {

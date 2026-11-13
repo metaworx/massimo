@@ -1,0 +1,21 @@
+<!-- System settings → System Info, a section card: the server's version, start and certificate, how it was installed, the computer it runs on and the address the server sees the browser at, from GET /api/v1/system, update.js. -->
+<section id="sys-info" class="tile section-card half system-info" aria-labelledby="sys-info-h">
+  <header class="tile-head section-head">
+    <h3 id="sys-info-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-info-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="sysinfo.title">System Info</span></button></h3>
+    <span class="section-badges"></span>
+  </header>
+  <div id="sys-info-body" class="section-body">
+    <table class="info-table">
+      <tbody>
+        <tr><th scope="row" data-i18n="budget.server">Server</th><td id="info-version">–</td></tr>
+        <tr><th scope="row" data-i18n="budget.built">Built with</th><td id="info-built">–</td></tr>
+        <tr><th scope="row" data-i18n="budget.started">Server started</th><td id="info-started">–</td></tr>
+        <tr><th scope="row" data-i18n="budget.certificate">Certificate</th><td id="info-tls">–</td></tr>
+        <tr><th scope="row" data-i18n="sysinfo.install">Installation</th><td id="info-install">–</td></tr>
+        <tr><th scope="row" data-i18n="sysinfo.system">System</th><td id="info-system">–</td></tr>
+        <tr><th scope="row" data-i18n="sysinfo.host">Host name</th><td id="info-host" class="mono">–</td></tr>
+        <tr><th scope="row" data-i18n="sysinfo.client">Your address</th><td id="info-client" class="mono">–</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>

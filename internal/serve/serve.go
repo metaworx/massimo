@@ -107,6 +107,8 @@ type Config struct {
 	Update  server.UpdateOptions
 	Restart server.RestartOptions
 	Reboot  server.RebootOptions
+	// Install says how the server was installed (server.Options.Install).
+	Install string
 	// LogAttrs are added to the first log line, "api listening", after
 	// the restart and the reboot: the command's sighup.
 	LogAttrs []any
@@ -214,7 +216,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
-		Restart: cfg.Restart, Reboot: cfg.Reboot, Deliverers: cfg.Deliverers})
+		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return nil, err

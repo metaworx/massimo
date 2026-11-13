@@ -2327,6 +2327,43 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/system:
+    get:
+      summary: The server, how it was installed, the computer it runs on and the caller's address
+      x-capability: read
+      description: |
+        What System settings → System Info shows. Beside the version, the
+        start and the certificate, which /healthz gives anyone, how the
+        server was installed, the operating system, the host's name and the
+        caller's address as the server sees it (the client a trusted proxy
+        names).
+      responses:
+        "200":
+          description: The server and its computer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: {type: string, description: The build version with the Go details, as /healthz has it}
+                  started_at: {type: string, format: date-time, description: When the server process started.}
+                  tls:
+                    type: object
+                    description: With TLS, the certificate served, as /healthz has it; absent without.
+                  install:
+                    type: string
+                    description: |
+                      The package manager that owns the binary (apt, brew), else what runs
+                      the server: windows-service, systemd or launchd; other for a
+                      terminal, a container or a supervisor massimo does not know.
+                  os: {type: string, description: "The operating system, as Go names it: linux, darwin, windows."}
+                  os_name: {type: string, description: The distribution's name from /etc/os-release; absent elsewhere.}
+                  arch: {type: string, description: "The processor, as Go names it: amd64, arm64, arm."}
+                  hostname: {type: string}
+                  client_ip: {type: string, description: The caller's address as the server sees it.}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/update:
     get:
       summary: The newest signed release on the update channel

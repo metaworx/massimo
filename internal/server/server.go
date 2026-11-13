@@ -35,6 +35,7 @@
 //	POST /api/v1/cubes/{sn}/pairing                  start pairing (inclusion mode), {"seconds":60}
 //	GET  /api/v1/cubes/{sn}/pairing                  pairing state and the devices that joined
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
+//	GET  /api/v1/system                              how the server is installed, the computer, the caller's address (system_api.go)
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
 //	GET  /api/v1/restart                             whether the server can be restarted from here (restart_api.go)
@@ -184,6 +185,11 @@ type Options struct {
 	Restart RestartOptions
 	// Reboot configures the reboot of the computer (reboot_api.go).
 	Reboot RebootOptions
+	// Install says how the server was installed, for GET /api/v1/system
+	// (system_api.go): the package manager that owns the binary ("apt",
+	// "brew"), else what runs it (InstallWindowsService, InstallSystemd,
+	// InstallLaunchd); empty is InstallOther.
+	Install string
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
 	// request, and while a Cube configured by serial has no address.
@@ -1167,6 +1173,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
 	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
+	api("GET /api/v1/system", "read", s.getSystem)
 	api("GET /api/v1/update", "read", s.getUpdate)
 	api("POST /api/v1/update", "update", s.startUpdate)
 	api("GET /api/v1/restart", "restart", s.getRestart)

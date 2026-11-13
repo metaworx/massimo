@@ -589,6 +589,46 @@ function followRestart(before, until) {
   }, RESTART_POLL_MS);
 }
 
+// OS_NAMES are the operating systems as Go names them, for System Info
+// where the server has no distribution's name.
+const OS_NAMES = { linux: "Linux", darwin: "macOS", windows: "Windows", freebsd: "FreeBSD" };
+
+// loadSystemInfo fills System settings → System Info from GET
+// /api/v1/system: the version and what it was built with, when the
+// server started and how long ago, the certificate (certText, app.js),
+// how it was installed, the operating system and processor, the host's
+// name, and the address the server sees this browser at.
+async function loadSystemInfo() {
+  let v;
+  try {
+    v = await api("GET", "api/v1/system");
+  } catch (e) {
+    return; // the rows keep their dashes
+  }
+  if (!v) return;
+  const parts = splitVersion(v.version || "");
+  $("info-version").textContent = parts.short || "–";
+  $("info-built").textContent = parts.rest || "–";
+  const started = $("info-started");
+  clear(started);
+  const ms = Date.parse(v.started_at || "");
+  if (isNaN(ms)) started.textContent = "–";
+  else {
+    started.appendChild(document.createTextNode(fmtInstant(new Date(ms))));
+    const age = ageEl(v.started_at, false, true);
+    if (age) started.appendChild(age);
+  }
+  $("info-tls").textContent = v.tls ? certText(v.tls) : t("sysinfo.noTLS");
+  // a kind this page has no text for, a package manager's, as it is
+  const kind = v.install || "other";
+  const label = t("sysinfo.install." + kind);
+  $("info-install").textContent = label === "sysinfo.install." + kind ? kind : label;
+  const os = v.os_name || OS_NAMES[v.os] || v.os || "";
+  $("info-system").textContent = [os, v.arch].filter(Boolean).join(" · ") || "–";
+  $("info-host").textContent = v.hostname || "–";
+  $("info-client").textContent = v.client_ip || "–";
+}
+
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
@@ -602,6 +642,7 @@ function initUpdate() {
     loadRestart();
     loadReboot();
     loadServerInfo();
+    loadSystemInfo();
   });
 }
 
