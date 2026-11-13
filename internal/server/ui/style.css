@@ -321,8 +321,7 @@ body.scrolled .top #refresh-btn, body.scrolled #tls-notice,
 body.scrolled #cube-found, body.scrolled #pending { display: none !important; }
 @media (max-width: 599px) {
   body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
-  /* out of sight, not out of the page: the h1 stays its heading */
-  body.scrolled .top-left { position: absolute; width: 1px; height: 1px; min-height: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  body.scrolled .top-left { display: none; }
 }
 
 /* slide toggle: a checkbox styled as a switch, keyboard accessible */
