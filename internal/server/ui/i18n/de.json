@@ -395,6 +395,7 @@
 
   "room.actions": "Raumaktionen",
   "room.actionsTitle": "Raumaktionen",
+  "room.boost": "Boost",
   "room.lock": "Thermostate sperren",
   "room.unlock": "Thermostate entsperren",
   "room.delete": "Raum löschen",
@@ -421,6 +422,8 @@
   "room.deleted": "Raum {name} gelöscht.",
   "room.deleteFailed": "Raum {name} löschen: {error}",
   "room.noDevices": "Keine Geräte in diesem Raum.",
+
+  "label.boost": "Boost",
 
   "label.auto": "auto",
   "label.manual": "manuell {temp} °C",

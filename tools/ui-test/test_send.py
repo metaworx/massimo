@@ -195,3 +195,21 @@ def test_house_send_turns_and_needs_a_room(page, case):
     finally:
         page.unroute("**/rooms/*/setpoint")
     page.locator("#house-cancel").click()
+
+
+def test_boost_from_the_room_menu(page, case):
+    """The room's ⋯ has Boost: it sends the room's setpoint with mode
+    boost, the menu closing, the item turning until the answer."""
+    tile, sel = first_tile(page)
+    held, sent = [], []
+    hold(page, "**/rooms/*/setpoint", "PUT", held, sent)
+    try:
+        tile.locator("details.menu summary").click()
+        tile.locator(".menu-boost").click()
+        assert wait_held(page, held), "the setpoint PUT is sent"
+        assert sent == [{"mode": "boost"}], f"the body names the boost alone: {sent}"
+        assert tile.locator("details.menu").get_attribute("open") is None, "the menu closes"
+        answer(held)
+        assert wait_until(page, "!document.querySelector(%r).disabled" % (sel + " .mode-auto"), 5), "the tile's buttons are back"
+    finally:
+        page.unroute("**/rooms/*/setpoint")

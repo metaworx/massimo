@@ -193,11 +193,11 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		t.Fatalf("DELETE empty room: %d, m lines %d→%d, rooms %d", resp.StatusCode, before, countType(fc, 'm'), len(rt.client.Snapshot().Metadata().Rooms))
 	}
 	// Bad requests.
-	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", strings.NewReader(`{"mode":"boost"}`))
+	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", strings.NewReader(`{"mode":"turbo"}`))
 	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != 400 {
-		t.Fatalf("boost accepted: %d", resp.StatusCode)
+		t.Fatalf("an unknown mode accepted: %d", resp.StatusCode)
 	}
 	// Backup download.
 	resp, _ = http.Get(ts.URL + "/api/v1/cubes/KEQ0000100/backup?format=yaml")

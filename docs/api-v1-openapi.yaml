@@ -2796,6 +2796,7 @@ components:
             manual: {value: {mode: manual, temp: 21}}
             auto: {value: {mode: auto}}
             vacation: {value: {mode: vacation, temp: 17, until: "2026-11-10 12:00"}}
+            boost: {value: {mode: boost}}
   responses:
     ProgramChanged:
       description: The programme changed since its tag was read, or a write to it is still on its way
@@ -3767,13 +3768,14 @@ components:
       properties:
         mode:
           type: string
-          enum: [auto, manual, vacation]
+          enum: [auto, manual, vacation, boost]
+          description: "boost opens the valves by the thermostats' boost settings for their boost time, then they return to the mode they had"
         temp:
           type: number
           minimum: 4.5
           maximum: 30.5
           multipleOf: 0.5
-          description: Required for manual and vacation; optional for auto
+          description: Required for manual and vacation; optional for auto; ignored by the devices for boost
         until:
           type: string
           description: "Vacation end, YYYY-MM-DD HH:MM on a half hour; required for vacation"

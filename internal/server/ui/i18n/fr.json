@@ -397,6 +397,7 @@
 
   "room.actions": "actions de la pièce",
   "room.actionsTitle": "Actions de la pièce",
+  "room.boost": "Boost",
   "room.lock": "Verrouiller les thermostats",
   "room.unlock": "Déverrouiller les thermostats",
   "room.delete": "Supprimer la pièce",
@@ -423,6 +424,8 @@
   "room.deleted": "Pièce {name} supprimée.",
   "room.deleteFailed": "Supprimer la pièce {name} : {error}",
   "room.noDevices": "Aucun appareil dans cette pièce.",
+
+  "label.boost": "boost",
 
   "label.auto": "auto",
   "label.manual": "manuel {temp} °C",

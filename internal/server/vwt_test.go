@@ -375,3 +375,21 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 		}
 	}
 }
+
+// A boost goes over the air as the room's set-temperature command with
+// mode 3, carrying the setpoint the room has; on a virtual wall
+// thermostat too. The fake Cube applies it as the devices do.
+func TestBoostOverTheAir(t *testing.T) {
+	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{slow: true})
+	for _, path := range []string{"rooms/2/setpoint", "devices/0a0205/setpoint", "devices/room-2/setpoint"} {
+		code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/"+path, `{"mode":"boost"}`)
+		if code != 200 {
+			t.Fatalf("%s: %d %v", path, code, body)
+		}
+		got := fc.Received()
+		want, _ := cube.CmdSetTemperature(cube.Target{RFAddress: lastRadio(t, fc).Target.RFAddress, RoomID: 2, Room: true}, 20, cube.ModeBoost, cube.Until{})
+		if last := got[len(got)-1]; last.String() != want.String() {
+			t.Fatalf("%s sent %s, want %s", path, last, want)
+		}
+	}
+}
