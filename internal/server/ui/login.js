@@ -211,7 +211,7 @@ async function oidcReturn() {
 // renderLoginProviders draws a button per enabled provider on the
 // sign-in card; none in the app, whose WebView the providers refuse.
 async function renderLoginProviders() {
-  const box = $("login-providers");
+  const box = $("login-provider-buttons");
   clear(box);
   const list = appBridge() ? [] : await loadLoginProviders(); // providers.js
   for (const p of list) {
@@ -221,7 +221,8 @@ async function renderLoginProviders() {
     btn.addEventListener("click", () => startProvider(p.key, btn));
     box.appendChild(btn);
   }
-  box.classList.toggle("hidden", !list.length);
+  // shown with its buttons, or with a provider's refusal alone
+  $("login-providers").classList.toggle("hidden", !list.length && $("login-providers-error").classList.contains("hidden"));
 }
 
 // startProvider starts a sign-in through a provider and opens its page.
@@ -232,7 +233,7 @@ async function startProvider(key, btn) {
       location.assign(started.url);
     });
   } catch (e) {
-    showResult($("login-error"), t("login.failed", { error: e.message }), false);
+    showResult($("login-providers-error"), t("login.failed", { error: e.message }), false);
   }
 }
 
@@ -274,9 +275,11 @@ function askLogin() {
     $("login-token").value = "";
     $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
+    // a provider's refusal under the providers' buttons
+    showResult($("login-providers-error"), "", false);
     if (oidcError) {
       const key = "login.oidcError." + oidcError;
-      showResult(error, t(key) === key ? t("login.oidcError.failed") : t(key), false);
+      showResult($("login-providers-error"), t(key) === key ? t("login.oidcError.failed") : t(key), false);
       oidcError = null;
     }
     renderLoginProviders();

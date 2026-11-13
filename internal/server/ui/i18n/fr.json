@@ -910,6 +910,10 @@
 
   "login.oidcError.refused": "Ce compte n'est pas connu sur ce serveur. Demandez à son propriétaire de l'attribuer à votre utilisateur.",
 
+  "login.oidcError.noemail": "Le fournisseur n'a pas indiqué l'adresse e-mail de ce compte, il n'a donc pas été associé. Demandez au propriétaire du serveur d'attribuer plutôt votre identifiant chez le fournisseur.",
+
+  "login.oidcError.unverified": "Le fournisseur n'a pas confirmé l'adresse e-mail de ce compte, il n'a donc pas été associé. Demandez au propriétaire du serveur d'attribuer plutôt votre identifiant chez le fournisseur.",
+
   "login.oidcError.disabled": "Votre utilisateur est désactivé ou a expiré.",
 
   "providers.title": "Fournisseurs de connexion",
@@ -1037,7 +1041,15 @@
 
   "users.identityProvider": "Fournisseur",
 
+  "users.identityKind": "Attribuer par",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "identifiant",
+
   "users.identityEmail": "E-mail chez le fournisseur",
+
+  "users.identitySubject": "Identifiant chez le fournisseur",
 
   "users.identityAdd": "Attribuer",
 
@@ -1056,6 +1068,10 @@
   "users.identityRemoved": "Identité supprimée.",
 
   "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
+
+  "users.identitySubjectNeeded": "Un identifiant est nécessaire.",
+
+  "users.identityUserID": "identifiant {id}",
   "users.kind.session": "session",
   "users.kind.api": "clé API",
   "users.lastUsed": "dernière utilisation depuis {from}",

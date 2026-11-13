@@ -909,6 +909,10 @@
 
   "login.oidcError.refused": "Dit account is op deze server niet bekend. Vraag de eigenaar het aan je gebruiker toe te wijzen.",
 
+  "login.oidcError.noemail": "De provider heeft niet gezegd welk e-mailadres dit account heeft, dus het is niet gekoppeld. Vraag de eigenaar van de server om in plaats daarvan je gebruikers-ID bij de provider toe te wijzen.",
+
+  "login.oidcError.unverified": "De provider heeft het e-mailadres van dit account niet bevestigd, dus het is niet gekoppeld. Vraag de eigenaar van de server om in plaats daarvan je gebruikers-ID bij de provider toe te wijzen.",
+
   "login.oidcError.disabled": "Je gebruiker is uitgeschakeld of verlopen.",
 
   "providers.title": "Aanmeldproviders",
@@ -1036,7 +1040,15 @@
 
   "users.identityProvider": "Provider",
 
+  "users.identityKind": "Toewijzen via",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "gebruikers-ID",
+
   "users.identityEmail": "E-mail bij de provider",
+
+  "users.identitySubject": "Gebruikers-ID bij de provider",
 
   "users.identityAdd": "Toewijzen",
 
@@ -1055,6 +1067,10 @@
   "users.identityRemoved": "Identiteit verwijderd.",
 
   "users.identityEmailNeeded": "Een e-mailadres is nodig.",
+
+  "users.identitySubjectNeeded": "Een gebruikers-ID is nodig.",
+
+  "users.identityUserID": "gebruikers-ID {id}",
   "users.kind.session": "sessie",
   "users.kind.api": "API-sleutel",
   "users.lastUsed": "laatst gebruikt vanaf {from}",

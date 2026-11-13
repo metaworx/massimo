@@ -4,9 +4,12 @@
 package server
 
 import (
+	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -30,8 +33,12 @@ type fakeIdP struct {
 	// methods is token_endpoint_auth_methods_supported; the client's
 	// method is checked against it.
 	methods []string
-	mu      sync.Mutex
-	grants  map[string]fakeGrant
+	// userinfo, where set, is the userinfo endpoint's answer for the
+	// access token, its status userinfoStatus where not 0.
+	userinfo       map[string]any
+	userinfoStatus int
+	mu             sync.Mutex
+	grants         map[string]fakeGrant
 }
 
 type fakeGrant struct {
@@ -46,8 +53,19 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	f := &fakeIdP{t: t, secret: "s3cr:et", grants: map[string]fakeGrant{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize?prompt=login",
-			"token_endpoint": f.srv.URL + "/token", "token_endpoint_auth_methods_supported": f.methods})
+		doc := map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize?prompt=login",
+			"token_endpoint": f.srv.URL + "/token", "token_endpoint_auth_methods_supported": f.methods}
+		if f.userinfo != nil {
+			doc["userinfo_endpoint"] = f.srv.URL + "/userinfo"
+		}
+		writeJSON(w, 200, doc)
+	})
+	mux.HandleFunc("GET /userinfo", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer at" {
+			writeJSON(w, 401, map[string]string{"error": "invalid_token"})
+			return
+		}
+		writeJSON(w, cmp.Or(f.userinfoStatus, 200), f.userinfo)
 	})
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
@@ -203,8 +221,15 @@ func TestOIDCSignIn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// an unverified e-mail binds nothing
-	if run := f.signIn(t, ts, "cloud", map[string]any{"email": "anna@example.com"}); run.status != 303 || run.fragment != "oidc-error=refused" {
+	// an unverified e-mail binds nothing, and says so where an e-mail
+	// waits; none sent says that
+	if run := f.signIn(t, ts, "cloud", map[string]any{"email": "anna@example.com"}); run.status != 303 || run.fragment != "oidc-error=unverified" {
+		t.Fatalf("unverified: %+v", run)
+	}
+	if run := f.signIn(t, ts, "cloud", map[string]any{"email": "nobody@example.com"}); run.fragment != "oidc-error=refused" {
+		t.Fatalf("unverified, none waiting: %+v", run)
+	}
+	if run := f.signIn(t, ts, "cloud", nil); run.fragment != "oidc-error=noemail" {
 		t.Fatalf("unverified: %+v", run)
 	}
 	run := f.signIn(t, ts, "cloud", map[string]any{"email": "Anna@Example.com", "email_verified": true})
@@ -313,7 +338,7 @@ func TestOIDCAutoCreate(t *testing.T) {
 	if run := f.signIn(t, ts, "cloud", verified("s1", "eve@example.net")); run.fragment != "oidc-error=refused" {
 		t.Fatalf("a foreign domain: %+v", run)
 	}
-	if run := f.signIn(t, ts, "cloud", map[string]any{"sub": "s1", "email": "carl@example.org"}); run.fragment != "oidc-error=refused" {
+	if run := f.signIn(t, ts, "cloud", map[string]any{"sub": "s1", "email": "carl@example.org"}); run.fragment != "oidc-error=unverified" {
 		t.Fatalf("an unverified e-mail: %+v", run)
 	}
 	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", verified("s1", "carl@example.org", "preferred_username", "Carl Example", "name", "Carl E."))); name != "carl-example" {
@@ -349,3 +374,81 @@ func TestNewUserName(t *testing.T) {
 		}
 	}
 }
+
+// The userinfo endpoint (AP Oidc v1.1, Block 6, D25-A): it fills in the
+// e-mail and its verification the id_token lacks, as Nextcloud's OIDC
+// app answers; an answer for another subject fails the sign-in, one that
+// fails leaves the id_token's claims alone. A user id assigned signs in
+// at once.
+func TestOIDCUserinfo(t *testing.T) {
+	f := newFakeIdP(t)
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	anna, _ := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleOperator}, "", 0)
+	st.AddIdentity(ctx, anna.ID, "cloud", "anna@example.com", 0)
+
+	f.userinfo = map[string]any{"sub": "other", "email": "anna@example.com", "email_verified": true}
+	if run := f.signIn(t, ts, "cloud", nil); run.fragment != "oidc-error=failed" {
+		t.Fatalf("another subject: %+v", run)
+	}
+	f.userinfo, f.userinfoStatus = map[string]any{"error": "x"}, 500
+	if run := f.signIn(t, ts, "cloud", nil); run.fragment != "oidc-error=noemail" {
+		t.Fatalf("userinfo down: %+v", run)
+	}
+	f.userinfoStatus = 0
+	// the id_token's e-mail, its verification from the userinfo
+	f.userinfo = map[string]any{"sub": "sub-1", "email": "ANNA@example.com", "email_verified": true, "preferred_username": "anna.b"}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"email": "anna@example.com"})); name != "anna" {
+		t.Fatalf("verified by the userinfo: %q", name)
+	}
+	// the e-mail from the userinfo alone
+	bert, _ := st.AddUser(ctx, store.User{Name: "bert", Role: store.RoleOperator}, "", 0)
+	st.AddIdentity(ctx, bert.ID, "cloud", "bert@example.com", 0)
+	f.userinfo = map[string]any{"sub": "sub-2", "email": "bert@example.com", "email_verified": "true"}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "sub-2"})); name != "bert" {
+		t.Fatalf("e-mail from the userinfo: %q", name)
+	}
+
+	// a user id assigned: no e-mail needed
+	f.userinfo = map[string]any{"sub": "mdr"}
+	carl, _ := st.AddUser(ctx, store.User{Name: "carl", Role: store.RoleOperator}, "", 0)
+	if _, err := st.AddSubjectIdentity(ctx, carl.ID, "cloud", "mdr", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddSubjectIdentity(ctx, anna.ID, "cloud", "mdr", 0); !errors.Is(err, store.ErrIdentityExists) {
+		t.Fatalf("a user id twice: %v", err)
+	}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "mdr"})); name != "carl" {
+		t.Fatalf("by the user id: %q", name)
+	}
+}
+
+// fakeDiscovery answers every discovery request with an issuer: the one
+// asked for, without its trailing slash, or the one says gives for it;
+// "" for an issuer not reached.
+func fakeDiscovery(t *testing.T, says map[string]string) {
+	t.Helper()
+	old := oidcClient
+	oidcClient = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		asked := strings.TrimSuffix(r.URL.Scheme+"://"+r.URL.Host+strings.TrimSuffix(r.URL.Path, "/.well-known/openid-configuration"), "/")
+		issuer, ok := says[asked]
+		if !ok {
+			issuer = asked
+		}
+		if issuer == "" {
+			return nil, context.DeadlineExceeded
+		}
+		rec := httptest.NewRecorder()
+		writeJSON(rec, 200, map[string]any{"issuer": issuer, "authorization_endpoint": asked + "/authorize", "token_endpoint": asked + "/token"})
+		return rec.Result(), nil
+	})}
+	t.Cleanup(func() { oidcClient = old })
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

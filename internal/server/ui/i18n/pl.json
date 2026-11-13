@@ -931,6 +931,10 @@
 
   "login.oidcError.refused": "To konto nie jest znane na tym serwerze. Poproś właściciela, aby przypisał je do twojego użytkownika.",
 
+  "login.oidcError.noemail": "Dostawca nie podał adresu e-mail tego konta, więc nie zostało ono dopasowane. Poproś właściciela serwera, aby zamiast tego przypisał twój identyfikator użytkownika u dostawcy.",
+
+  "login.oidcError.unverified": "Dostawca nie potwierdził adresu e-mail tego konta, więc nie zostało ono dopasowane. Poproś właściciela serwera, aby zamiast tego przypisał twój identyfikator użytkownika u dostawcy.",
+
   "login.oidcError.disabled": "Twój użytkownik jest wyłączony lub wygasł.",
 
   "providers.title": "Dostawcy logowania",
@@ -1060,7 +1064,15 @@
 
   "users.identityProvider": "Dostawca",
 
+  "users.identityKind": "Przypisz przez",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "identyfikator użytkownika",
+
   "users.identityEmail": "E-mail u dostawcy",
+
+  "users.identitySubject": "Identyfikator użytkownika u dostawcy",
 
   "users.identityAdd": "Przypisz",
 
@@ -1079,6 +1091,10 @@
   "users.identityRemoved": "Usunięto tożsamość.",
 
   "users.identityEmailNeeded": "Potrzebny jest adres e-mail.",
+
+  "users.identitySubjectNeeded": "Potrzebny jest identyfikator użytkownika.",
+
+  "users.identityUserID": "identyfikator {id}",
   "users.kind.session": "sesja",
   "users.kind.api": "klucz API",
   "users.lastUsed": "ostatnio użyty z {from}",

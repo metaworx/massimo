@@ -94,8 +94,15 @@
       <select name="provider" class="field-control"></select>
     </div>
     <div class="field wide">
-      <label data-i18n="users.identityEmail">E-mail at the provider</label>
-      <input type="email" name="email" class="field-control" autocomplete="off" spellcheck="false">
+      <label data-i18n="users.identityKind">Assign by</label>
+      <select name="kind" class="field-control">
+        <option value="email" data-i18n="users.identityByEmail">e-mail</option>
+        <option value="subject" data-i18n="users.identityBySubject">user ID</option>
+      </select>
+    </div>
+    <div class="field wide">
+      <label class="identity-value-label" data-i18n="users.identityEmail">E-mail at the provider</label>
+      <input type="email" name="account" class="field-control" autocomplete="off" spellcheck="false">
     </div>
     <div class="actions"><span class="actions-right"><button type="button" class="add-identity" data-i18n="users.identityAdd">Assign</button></span></div>
   </div>

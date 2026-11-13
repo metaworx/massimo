@@ -908,6 +908,10 @@
 
   "login.oidcError.refused": "Dieses Konto ist auf diesem Server nicht bekannt. Bitte den Besitzer, es deinem Benutzer zuzuweisen.",
 
+  "login.oidcError.noemail": "Der Anmeldedienst hat die E-Mail-Adresse dieses Kontos nicht mitgeteilt, darum wurde es nicht zugeordnet. Bitte den Besitzer des Servers, stattdessen deine Benutzer-ID beim Anmeldedienst zuzuweisen.",
+
+  "login.oidcError.unverified": "Der Anmeldedienst hat die E-Mail-Adresse dieses Kontos nicht bestätigt, darum wurde es nicht zugeordnet. Bitte den Besitzer des Servers, stattdessen deine Benutzer-ID beim Anmeldedienst zuzuweisen.",
+
   "login.oidcError.disabled": "Dein Benutzer ist deaktiviert oder abgelaufen.",
 
   "providers.title": "Anmeldedienste",
@@ -1035,7 +1039,15 @@
 
   "users.identityProvider": "Anmeldedienst",
 
+  "users.identityKind": "Zuweisen über",
+
+  "users.identityByEmail": "E-Mail",
+
+  "users.identityBySubject": "Benutzer-ID",
+
   "users.identityEmail": "E-Mail beim Anmeldedienst",
+
+  "users.identitySubject": "Benutzer-ID beim Anmeldedienst",
 
   "users.identityAdd": "Zuweisen",
 
@@ -1054,6 +1066,10 @@
   "users.identityRemoved": "Identität entfernt.",
 
   "users.identityEmailNeeded": "Eine E-Mail-Adresse ist nötig.",
+
+  "users.identitySubjectNeeded": "Eine Benutzer-ID ist nötig.",
+
+  "users.identityUserID": "Benutzer-ID {id}",
   "users.kind.session": "Sitzung",
   "users.kind.api": "API-Schlüssel",
   "users.lastUsed": "zuletzt benutzt von {from}",

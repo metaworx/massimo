@@ -23,10 +23,13 @@ an "OAuth client") of the web kind, confidential, with:
 
 The provider then names a **client ID** and a **client secret**,
 and its **issuer**: the URL its discovery document is under,
-`<issuer>/.well-known/openid-configuration`.
-Massimo needs the issuer exactly as that document names it,
-with or without a trailing slash as there,
-and over `https`.
+`<issuer>/.well-known/openid-configuration`, over `https`.
+Massimo reads that document when an enabled provider is saved:
+a provider not reached,
+or one that calls itself by another issuer, is not saved,
+and the page says what the document names.
+An issuer typed with a trailing slash too many or too few
+is kept as the document writes it, which the sign-in compares exactly.
 
 ## Adding it in Massimo
 
@@ -46,13 +49,19 @@ in this order:
 1. **The provider's account is known**:
    the user it was bound to before, by the provider's subject (`sub`),
    which never changes.
-2. **An e-mail assigned**:
+2. **An e-mail or a user ID assigned**:
    in System settings → Users,
-   a user's **Sign-in through providers** takes a provider and an e-mail.
-   The first sign-in with that e-mail binds the account to the user,
-   which is found by the subject alone from then on.
-   The provider must say the e-mail is verified (`email_verified`),
-   else the e-mail does not bind.
+   a user's **Sign-in through providers** takes a provider,
+   and either an e-mail or the user ID at the provider.
+   - A **user ID** is the provider's subject (`sub`) itself:
+     the account is bound at once, and no e-mail is needed.
+     Nextcloud's user ID is the login name; Google's is a number.
+   - An **e-mail** binds the account to the user at its first sign-in,
+     which is then found by the subject alone.
+     The provider must send the e-mail and say it is verified (`email_verified`),
+     else it does not bind.
+     Only the account's one primary e-mail is sent;
+     a second address never matches.
 3. **Users created**:
    where the provider's **Create users who sign in** is on,
    an account with a verified e-mail of the domains named (any where none are)
@@ -61,7 +70,15 @@ in this order:
    It is off by default.
 
 Anyone else comes back to the sign-in card,
-which says the account is not known on this server.
+which says, under the providers' buttons, why:
+the account is not known on this server,
+the provider sent no e-mail,
+or it did not mark the e-mail verified.
+The log has a warning with the provider, the account and that reason.
+
+Massimo reads the claims from the `id_token`,
+and from the provider's userinfo endpoint where its discovery document names one,
+for what the `id_token` lacks.
 A disabled or expired user is refused as with a password.
 
 ## Nextcloud
@@ -71,12 +88,15 @@ In Administration settings → Security → OpenID Connect clients,
 add a client named `Massimo` with the redirect URI above,
 of the type confidential;
 Nextcloud shows its client ID and secret.
-The issuer is Nextcloud's address, such as `https://cloud.example.com`;
+The issuer is Nextcloud's address, such as `https://cloud.example.com`,
+without a trailing slash, as its discovery document writes it;
 the web server must answer `/.well-known/openid-configuration`
 as the app's documentation describes.
-Check with the first sign-in whether its `id_token` carries `email_verified`;
-where it does not, an assigned e-mail does not bind,
-and the log says `login_failed` for the account.
+Since its version 2.0 the app puts the e-mail and the profile into the `id_token`
+only where the client asks for them, or its admin setting says so;
+Massimo reads them from its userinfo endpoint.
+Where the e-mail still does not bind (the log says `unverified` or `noemail`),
+assign the user's Nextcloud login name as the user ID instead.
 
 ## Google and Microsoft
 

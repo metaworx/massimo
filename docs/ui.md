@@ -24,7 +24,8 @@ Above the form, a button per enabled OpenID Connect provider,
 goes to the provider and back signed in,
 the provider's answer taken from the address at once;
 an account the server does not know, or a refusal, comes back to the card,
-which says why.
+which says why under the providers' buttons:
+the account not known, no e-mail sent, or the e-mail not verified.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
 While it asks, the page shows its name, its version and the sign-in,
@@ -689,8 +690,10 @@ to the top of the page.
   **Remove**; the user's sessions and API keys with **Revoke**,
   and **Create key**, which shows the new key once;
   where a sign-in provider is enabled, the user's identities at the providers,
-  each with its e-mail and whether it is bound or waits for its first sign-in,
-  **Remove**, and **Assign** an e-mail at a provider to the user.
+  each with its e-mail, or its user ID there,
+  and whether it is bound or waits for its first sign-in,
+  **Remove**, and **Assign** to the user, at a provider,
+  by an e-mail or by the user ID there.
   **Add a user** opens the form for one;
   its name is checked 2 seconds after the last keystroke and when the field is left:
   the letters a to z, digits and `. _ - @`, starting with a letter or a digit,
@@ -713,7 +716,9 @@ to the top of the page.
   scopes, **Enabled**,
   and **Create users who sign in** with their role,
   which holds no administrative capability, and their e-mail domains;
-  **Save**, **Remove**; **Add a provider** opens the form for one, with its key.
+  **Save**, which for an enabled provider first reads its discovery document
+  and says what is wrong where the issuer is not reached or named otherwise,
+  **Remove**; **Add a provider** opens the form for one, with its key.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Save**, off while nothing differs from the role,

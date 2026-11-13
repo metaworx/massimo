@@ -1326,7 +1326,9 @@ massimo-week-program { display: contents; }
 .provider-form { display: flex; flex-direction: column; gap: 6px; }
 .providers-callback .mono { overflow-wrap: anywhere; }
 .login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }
+.login-providers p { margin: 0; }
 .user-tokens li .revoke-token { margin-left: auto; }
 .user-key { word-break: break-all; user-select: all; }
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }

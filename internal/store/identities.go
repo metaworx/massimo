@@ -8,7 +8,9 @@ package store
 // finds its user by the provider's subject (sub), which does not change;
 // an e-mail an owner assigned is a pre-link, bound to the subject at the
 // first sign-in with that e-mail verified, and by its subject alone from
-// then on, since an address can change hands at a provider.
+// then on, since an address can change hands at a provider. An owner may
+// assign the subject itself, the user id at the provider, which is bound
+// from the start (AP Oidc v1.1, D26-A).
 
 import (
 	"context"
@@ -119,6 +121,56 @@ func (s *Store) AddIdentity(ctx context.Context, userID int64, provider, email s
 	}
 	id, _ := res.LastInsertId()
 	return s.identity(ctx, s.db, id)
+}
+
+// AddSubjectIdentity assigns the user id at a provider (its sub) to a
+// user, bound from the start: the next sign-in with it finds the user.
+// A subject another identity at the provider has is ErrIdentityExists.
+func (s *Store) AddSubjectIdentity(ctx context.Context, userID int64, provider, subject string, by int64) (Identity, error) {
+	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	subject = strings.TrimSpace(subject)
+	if subject == "" || len(subject) > 255 {
+		return Identity{}, fmt.Errorf("%w: a user id of 1 to 255 bytes", ErrBadProvider)
+	}
+	p, ok, err := s.Provider(ctx, provider)
+	if err != nil {
+		return Identity{}, err
+	}
+	if !ok {
+		return Identity{}, fmt.Errorf("%w: %s", ErrNoProvider, provider)
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject = ?`, p.ID, subject).Scan(&n); err != nil {
+		return Identity{}, fmt.Errorf("store: identity: %w", err)
+	}
+	if n > 0 {
+		return Identity{}, fmt.Errorf("%w: user id %s at %s", ErrIdentityExists, subject, p.Key)
+	}
+	now := s.nowText()
+	res, err := s.db.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, subject, created_at, created_by, bound_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), userID, p.ID, subject, now, nullID(by), now)
+	if err != nil {
+		return Identity{}, fmt.Errorf("store: identity: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	return s.identity(ctx, s.db, id)
+}
+
+// EmailWaits reports whether an e-mail waits at a provider for a user
+// that is not removed: a pre-link its first verified sign-in binds.
+func (s *Store) EmailWaits(ctx context.Context, providerID int64, email string) (bool, error) {
+	email, err := normalEmail(email)
+	if err != nil {
+		return false, nil
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities i JOIN users u ON u.id = i.user_id
+		WHERE i.provider_id = ? AND i.subject IS NULL AND i.email = ? AND u.deleted_at IS NULL`, providerID, email).Scan(&n); err != nil {
+		return false, fmt.Errorf("store: identity: %w", err)
+	}
+	return n > 0, nil
 }
 
 func (s *Store) identity(ctx context.Context, q queryer, id int64) (Identity, error) {

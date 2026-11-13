@@ -13,7 +13,8 @@ package server
 //	DELETE             /api/v1/users/{name}/identities/{id}  capability users
 //
 // A provider's client secret is written, never answered: has_secret
-// says whether it has one.
+// says whether it has one. An enabled provider is saved only where its
+// issuer's discovery document is reached and names it (checkIssuer).
 
 import (
 	"encoding/json"
@@ -149,6 +150,21 @@ func (s *Server) checkAutoRole(r *http.Request, st *store.Store, p store.AuthPro
 	return nil
 }
 
+// saveIssuer checks the issuer of a provider about to be saved enabled,
+// and keeps the document's form of it (checkIssuer); a disabled one is
+// saved as it is.
+func saveIssuer(r *http.Request, p *store.AuthProvider) error {
+	if !p.Enabled {
+		return nil
+	}
+	issuer, err := checkIssuer(r.Context(), strings.TrimSpace(p.Issuer))
+	if err != nil {
+		return fail(http.StatusBadRequest, "issuer: %v", err)
+	}
+	p.Issuer = issuer
+	return nil
+}
+
 // postProvider handles POST /api/v1/providers: a new provider, enabled
 // unless enabled is false.
 func (s *Server) postProvider(w http.ResponseWriter, r *http.Request) error {
@@ -167,6 +183,9 @@ func (s *Server) postProvider(w http.ResponseWriter, r *http.Request) error {
 	p := store.AuthProvider{Key: *req.Key, Enabled: true}
 	req.apply(&p)
 	if err := s.checkAutoRole(r, st, p); err != nil {
+		return err
+	}
+	if err := saveIssuer(r, &p); err != nil {
 		return err
 	}
 	p, err = st.AddProvider(r.Context(), p, principalOf(r).userID())
@@ -204,12 +223,21 @@ func (s *Server) putProvider(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusNotFound, "no provider %q", key)
 	}
+	before := now
 	req.apply(&now)
 	if err := s.checkAutoRole(r, st, now); err != nil {
 		return err
 	}
+	// the issuer checked where it changes or the provider is enabled,
+	// outside the transaction too
+	if now.Issuer != before.Issuer || now.Enabled && !before.Enabled {
+		if err := saveIssuer(r, &now); err != nil {
+			return err
+		}
+	}
 	p, err := st.UpdateProvider(r.Context(), key, func(p *store.AuthProvider) error {
 		req.apply(p)
+		p.Issuer = now.Issuer
 		return nil
 	}, principalOf(r).userID())
 	if err != nil {
@@ -247,11 +275,13 @@ func (s *Server) deleteProvider(w http.ResponseWriter, r *http.Request) error {
 }
 
 // identityView is an identity as the API answers it: the provider's
-// subject is not answered, only whether it is bound.
+// subject, the user id there, which is no secret, and whether it is
+// bound.
 type identityView struct {
 	ID         int64      `json:"id"`
 	Provider   string     `json:"provider"`
 	Email      string     `json:"email"`
+	Subject    string     `json:"subject"`
 	Bound      bool       `json:"bound"`
 	CreatedAt  time.Time  `json:"created_at"`
 	BoundAt    *time.Time `json:"bound_at,omitempty"`
@@ -259,11 +289,15 @@ type identityView struct {
 }
 
 func viewIdentity(i store.Identity) identityView {
-	return identityView{ID: i.ID, Provider: i.Provider, Email: i.Email, Bound: i.Bound(), CreatedAt: i.CreatedAt, BoundAt: optTime(i.BoundAt), LastUsedAt: optTime(i.LastUsedAt)}
+	return identityView{ID: i.ID, Provider: i.Provider, Email: i.Email, Subject: i.Subject, Bound: i.Bound(), CreatedAt: i.CreatedAt, BoundAt: optTime(i.BoundAt), LastUsedAt: optTime(i.LastUsedAt)}
 }
 
 func identitySubject(i store.Identity, u store.User) map[string]any {
-	return map[string]any{"id": i.ID, "uuid": i.UUID, "provider": i.Provider, "email": i.Email, "user": u.Name}
+	m := map[string]any{"id": i.ID, "uuid": i.UUID, "provider": i.Provider, "email": i.Email, "user": u.Name}
+	if i.Subject != "" {
+		m["subject"] = i.Subject
+	}
+	return m
 }
 
 // listIdentities handles GET /api/v1/users/{name}/identities.
@@ -289,7 +323,8 @@ func (s *Server) listIdentities(w http.ResponseWriter, r *http.Request) error {
 }
 
 // postIdentity handles POST /api/v1/users/{name}/identities: an e-mail
-// at a provider assigned to the user, bound at its first sign-in.
+// at a provider assigned to the user, bound at its first sign-in, or the
+// user id there (subject), bound at once.
 func (s *Server) postIdentity(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -303,13 +338,19 @@ func (s *Server) postIdentity(w http.ResponseWriter, r *http.Request) error {
 	var req struct {
 		Provider string `json:"provider"`
 		Email    string `json:"email"`
+		Subject  string `json:"subject"`
 	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil || req.Provider == "" || req.Email == "" {
-		return fail(http.StatusBadRequest, "body must have \"provider\" and \"email\"")
+	if err := dec.Decode(&req); err != nil || req.Provider == "" || (req.Email == "") == (req.Subject == "") {
+		return fail(http.StatusBadRequest, "body must have \"provider\" and either \"email\" or \"subject\"")
 	}
-	i, err := st.AddIdentity(r.Context(), u.ID, req.Provider, req.Email, principalOf(r).userID())
+	var i store.Identity
+	if req.Subject != "" {
+		i, err = st.AddSubjectIdentity(r.Context(), u.ID, req.Provider, req.Subject, principalOf(r).userID())
+	} else {
+		i, err = st.AddIdentity(r.Context(), u.ID, req.Provider, req.Email, principalOf(r).userID())
+	}
 	if err != nil {
 		return providerFail(err)
 	}

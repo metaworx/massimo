@@ -167,10 +167,11 @@ function identityRow(u, i) {
   li.dataset.id = String(i.id);
   const known = providersUI.login.find((p) => p.key === i.provider);
   li.querySelector(".identity-provider").textContent = known ? known.name : i.provider;
-  li.querySelector(".identity-email").textContent = i.email;
+  const account = i.email || t("users.identityUserID", { id: i.subject });
+  li.querySelector(".identity-email").textContent = account;
   li.querySelector(".identity-state").textContent = t(i.bound ? "users.identityBound" : "users.identityWaiting");
   const remove = li.querySelector(".remove-identity");
-  remove.setAttribute("aria-label", t("users.identityRemoveLabel", { email: i.email, provider: known ? known.name : i.provider }));
+  remove.setAttribute("aria-label", t("users.identityRemoveLabel", { email: account, provider: known ? known.name : i.provider }));
   remove.addEventListener("click", () => {
     userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/identities/" + i.id), t("users.identityRemoved"), u.name, remove);
   });
@@ -193,26 +194,36 @@ async function fillIdentities(u, box) {
 }
 
 // wireIdentities wires a user panel's identities once, when it is built:
-// the providers to choose, Assign. The box is hidden where there is no
-// provider.
+// the providers to choose, by e-mail or by the user id there, Assign.
+// The box is hidden where there is no provider.
 function wireIdentities(u, box) {
   box.classList.toggle("hidden", !providersUI.login.length);
   const select = box.querySelector("select[name=provider]");
-  const email = box.querySelector("input[name=email]");
-  select.id = "user-identity-provider-" + u.name;
-  select.previousElementSibling.htmlFor = select.id;
-  email.id = "user-identity-email-" + u.name;
-  email.previousElementSibling.htmlFor = email.id;
+  const kind = box.querySelector("select[name=kind]");
+  const account = box.querySelector("input[name=account]");
+  for (const [el, what] of [[select, "provider"], [kind, "kind"], [account, "account"]]) {
+    el.id = "user-identity-" + what + "-" + u.name;
+    el.previousElementSibling.htmlFor = el.id;
+  }
   fillOptions(select, providersUI.login.map((p) => [p.key, p.name]));
+  const label = box.querySelector(".identity-value-label");
+  kind.addEventListener("change", () => {
+    const bySubject = kind.value === "subject";
+    label.dataset.i18n = bySubject ? "users.identitySubject" : "users.identityEmail";
+    label.textContent = t(label.dataset.i18n);
+    account.type = bySubject ? "text" : "email";
+  });
   const add = box.querySelector(".add-identity");
   add.addEventListener("click", () => {
-    const value = email.value.trim();
+    const value = account.value.trim();
+    const bySubject = kind.value === "subject";
     if (!value) {
-      usersMsg(t("users.identityEmailNeeded"), false);
+      usersMsg(t(bySubject ? "users.identitySubjectNeeded" : "users.identityEmailNeeded"), false);
       return;
     }
-    userAction(() => api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/identities", { provider: select.value, email: value }),
-      t("users.identityAdded", { email: value }), u.name, add);
+    const body = bySubject ? { provider: select.value, subject: value } : { provider: select.value, email: value };
+    userAction(() => api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/identities", body),
+      t("users.identityAdded", { email: bySubject ? t("users.identityUserID", { id: value }) : value }), u.name, add);
   });
 }
 

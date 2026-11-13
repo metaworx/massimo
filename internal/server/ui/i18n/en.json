@@ -908,6 +908,10 @@
 
   "login.oidcError.refused": "This account is not known on this server. Ask its owner to assign it to your user.",
 
+  "login.oidcError.noemail": "The provider did not say which e-mail this account has, so it was not matched. Ask the server's owner to assign your user ID at the provider instead.",
+
+  "login.oidcError.unverified": "The provider did not confirm this account's e-mail, so it was not matched. Ask the server's owner to assign your user ID at the provider instead.",
+
   "login.oidcError.disabled": "Your user is disabled or has expired.",
 
   "providers.title": "Sign-in providers",
@@ -1035,7 +1039,15 @@
 
   "users.identityProvider": "Provider",
 
+  "users.identityKind": "Assign by",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "user ID",
+
   "users.identityEmail": "E-mail at the provider",
+
+  "users.identitySubject": "User ID at the provider",
 
   "users.identityAdd": "Assign",
 
@@ -1054,6 +1066,10 @@
   "users.identityRemoved": "Identity removed.",
 
   "users.identityEmailNeeded": "An e-mail is needed.",
+
+  "users.identitySubjectNeeded": "A user ID is needed.",
+
+  "users.identityUserID": "user ID {id}",
   "users.kind.session": "session",
   "users.kind.api": "API key",
   "users.lastUsed": "last used from {from}",

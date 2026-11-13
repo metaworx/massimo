@@ -910,6 +910,10 @@
 
   "login.oidcError.refused": "Questo account non è noto su questo server. Chiedi al proprietario di assegnarlo al tuo utente.",
 
+  "login.oidcError.noemail": "Il provider non ha indicato l'e-mail di questo account, quindi non è stato associato. Chiedi al proprietario del server di assegnare invece il tuo ID utente presso il provider.",
+
+  "login.oidcError.unverified": "Il provider non ha confermato l'e-mail di questo account, quindi non è stato associato. Chiedi al proprietario del server di assegnare invece il tuo ID utente presso il provider.",
+
   "login.oidcError.disabled": "Il tuo utente è disattivato o scaduto.",
 
   "providers.title": "Provider di accesso",
@@ -1037,7 +1041,15 @@
 
   "users.identityProvider": "Provider",
 
+  "users.identityKind": "Assegna tramite",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "ID utente",
+
   "users.identityEmail": "E-mail presso il provider",
+
+  "users.identitySubject": "ID utente presso il provider",
 
   "users.identityAdd": "Assegna",
 
@@ -1056,6 +1068,10 @@
   "users.identityRemoved": "Identità rimossa.",
 
   "users.identityEmailNeeded": "Serve un indirizzo e-mail.",
+
+  "users.identitySubjectNeeded": "Serve un ID utente.",
+
+  "users.identityUserID": "ID utente {id}",
   "users.kind.session": "sessione",
   "users.kind.api": "chiave API",
   "users.lastUsed": "ultimo uso da {from}",
