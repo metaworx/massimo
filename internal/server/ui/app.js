@@ -738,7 +738,12 @@ async function loadRooms() {
   state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
   state.roomsOf = serial;
   renderRooms();
-  if (logState.open && fillLogSelects()) logChoicesChanged(); // log.js: the device chosen is gone
+  // log.js: the device chosen is gone, or else the lines drawn before the
+  // rooms came (a reload on the log, a Cube switch there) get their names
+  if (logState.open) {
+    if (fillLogSelects()) logChoicesChanged();
+    else renderLog();
+  }
 }
 
 // splitVirtual takes a room's virtual wall thermostat out of its devices
