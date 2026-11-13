@@ -189,20 +189,21 @@ function pageBase() {
 let oidcError = null;
 
 // oidcLinked is a link of the user's own account come back, for My
-// profile to say (renderProfile, users.js): {key} linked, or {error};
-// null for none.
+// profile (renderProfile, users.js): {confirm} its code, to show it
+// before it is stored, or {error}; null for none.
 let oidcLinked = null;
 
 // oidcReturn reads the fragment a provider's sign-in comes back with,
 // before the page reads its own (log.js showAddress): #oidc=<code>,
 // traded for the session, or #oidc-error=<reason>; a link's,
-// #oidc-linked=<key> or #oidc-link-error=<reason>, opens My profile,
-// which says how it went. The fragment goes from the address either way.
+// #oidc-link-confirm=<code> or #oidc-link-error=<reason>, opens My
+// profile, which shows the link to confirm or says why there is none.
+// The fragment goes from the address either way.
 async function oidcReturn() {
-  const m = /^#oidc(-error|-linked|-link-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
+  const m = /^#oidc(-error|-link-confirm|-link-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
   if (!m) return;
-  if (m[1] === "-linked" || m[1] === "-link-error") {
-    oidcLinked = m[1] === "-linked" ? { key: m[2] } : { error: ["taken", "group"].includes(m[2]) ? m[2] : "failed" };
+  if (m[1] === "-link-confirm" || m[1] === "-link-error") {
+    oidcLinked = m[1] === "-link-confirm" ? { confirm: m[2] } : { error: ["taken", "group"].includes(m[2]) ? m[2] : "failed" };
     history.replaceState(null, "", location.pathname + location.search + "#profile");
     return;
   }

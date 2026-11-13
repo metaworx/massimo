@@ -682,13 +682,22 @@ a bound identity where it has no password and no other bound one, is `409`.
 `POST /api/v1/users/{name}/identities/link/{key}` with `{"redirect": …}`,
 the user's own only (`403` for another's),
 starts a sign-in at the provider as `POST /api/v1/login/oidc/{key}` does,
-whose callback links the account to the user instead of signing in:
-it replaces the user's other identities at the provider,
-and sends the browser back with `#oidc-linked=<key>`;
+whose callback keeps the account as a pending link instead of signing in,
+and sends the browser back with `#oidc-link-confirm=<code>`;
 `#oidc-link-error=taken` where another user has the account,
 `#oidc-link-error=group` where it is in none of the groups the provider admits,
 `#oidc-link-error=failed` where the provider's answer did not do.
 No session is made, and nothing counts against the address.
+
+`GET /api/v1/users/{name}/identities/link/pending/{code}` shows the pending link
+before anything is stored: `provider`, `provider_name`, the account's `subject`,
+`email`, `name`, `username` and `groups`,
+and `replaces`, the user's identities at the provider the link would replace.
+`POST` on it stores the link, replacing those, and answers the identity;
+`DELETE` drops it.
+A pending link is the user's own (`403` for another's),
+from the address that started it, for ten minutes and once;
+an unknown, used or old code is `404`, and a restart drops it.
 
 ### Roles: /api/v1/roles and /api/v1/roles/{key}
 

@@ -598,7 +598,11 @@
 
   "log.action.identity.update": "identiteit gewijzigd",
 
-  "log.action.identity.link": "accountkoppeling gestart",
+  "log.action.identity.link": "account gekoppeld",
+
+  "log.action.identity.link.start": "accountkoppeling gestart",
+
+  "log.action.identity.link.cancel": "accountkoppeling geannuleerd",
   "log.action.identity.remove": "identiteit verwijderd",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "adres",
@@ -1123,9 +1127,29 @@
 
   "profile.linkError.taken": "Dat account is hier al aan een andere gebruiker gekoppeld.",
 
-  "profile.linkError.group": "Dat account zit in geen van de groepen die deze server van {name} toelaat.",
+  "profile.linkError.group": "Dat account zit in geen van de groepen die deze server van de provider toelaat.",
 
   "profile.linkError.failed": "De koppeling via de provider is mislukt. Probeer het opnieuw.",
+
+  "profile.linkError.expired": "Het teruggekomen account kan niet meer gekoppeld worden: {error}",
+
+  "profile.linkCancelled": "Er is niets gekoppeld.",
+
+  "profile.confirm.title": "Dit account bij {name} koppelen?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Naam",
+
+  "profile.confirm.username": "Gebruikersnaam",
+
+  "profile.confirm.subject": "Gebruikers-ID",
+
+  "profile.confirm.groups": "Groepen",
+
+  "profile.confirm.replaces": "Dit vervangt je koppeling met {accounts}.",
+
+  "profile.confirm.link": "Koppelen",
 
   "users.identityEmailNeeded": "Een e-mailadres is nodig.",
 

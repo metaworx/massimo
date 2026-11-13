@@ -426,11 +426,12 @@ async function renderProfile() {
   fillTokens(u, tokens, "profile");
   await renderProfileIdentities(u); // providers.js
   if (oidcLinked) {
-    // back from a link (oidcReturn, login.js)
-    const p = providersUI.login.find((x) => x.key === oidcLinked.key);
-    const name = p ? p.name : oidcLinked.key || "";
-    profileMsg(oidcLinked.error ? t("profile.linkError." + oidcLinked.error, { name }) : t("profile.linkDone", { name }), !oidcLinked.error);
+    // back from a link (oidcReturn, login.js): shown to confirm, or why
+    // there is none
+    const back = oidcLinked;
     oidcLinked = null;
+    if (back.confirm) await renderLinkConfirm(u, back.confirm); // providers.js
+    else profileMsg(t("profile.linkError." + back.error), false);
   }
 }
 

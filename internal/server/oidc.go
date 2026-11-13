@@ -13,8 +13,10 @@ package server
 //	POST /api/v1/login/oidc/finish      {code} → a session, as POST /api/v1/login
 //	POST /api/v1/users/{name}/identities/link/{key}  {redirect} → {url}, a link
 //	                                    of the user's own account; the callback
-//	                                    sends the page back with #oidc-linked=<key>
+//	                                    sends the page back with #oidc-link-confirm=<code>
 //	                                    or #oidc-link-error=<reason>
+//	GET, POST, DELETE /api/v1/users/{name}/identities/link/pending/{code}
+//	                                    the link come back: shown, stored, dropped
 //
 // The authorization code flow with PKCE, the server a confidential
 // client. The id_token comes straight from the token endpoint over TLS,
@@ -120,9 +122,64 @@ type oidcProven struct {
 // restart ends them, and the user starts again.
 type oidcFlows struct {
 	mu        sync.Mutex
-	started   map[string]*oidcStarted // by state
-	proven    map[string]*oidcProven  // by code
+	started   map[string]*oidcStarted     // by state
+	proven    map[string]*oidcProven      // by code
+	pending   map[string]*oidcPendingLink // by code
 	discovery map[string]oidcDiscovery
+}
+
+// oidcPendingLink is a link come back from its provider, shown to its
+// user before it is stored (AP Oidc v1.2, D38-A): the account's subject
+// and details, for the user who started it, from its address.
+type oidcPendingLink struct {
+	userID     int64
+	providerID int64
+	provider   string
+	subject    string
+	details    store.IdentityDetails
+	ip         string
+	expires    time.Time
+}
+
+// hold keeps a pending link under a new code; empty when maxTracked
+// wait.
+func (o *oidcFlows) hold(p *oidcPendingLink, now time.Time) string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.pending == nil {
+		o.pending = map[string]*oidcPendingLink{}
+	}
+	for k, v := range o.pending {
+		if !now.Before(v.expires) {
+			delete(o.pending, k)
+		}
+	}
+	if len(o.pending) >= maxTracked {
+		return ""
+	}
+	code := randomID()
+	o.pending[code] = p
+	return code
+}
+
+// pendingLink finds a pending link for its user from its address, and
+// with take ends it; false for none, one too old, another user's or one
+// from another address, which stays.
+func (o *oidcFlows) pendingLink(code string, userID int64, ip string, now time.Time, take bool) (*oidcPendingLink, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	p, ok := o.pending[code]
+	if !ok || p.userID != userID || p.ip != ip {
+		return nil, false
+	}
+	if !now.Before(p.expires) {
+		delete(o.pending, code)
+		return nil, false
+	}
+	if take {
+		delete(o.pending, code)
+	}
+	return p, true
 }
 
 // start keeps a sign-in under a new state; false when maxTracked wait.
@@ -773,11 +830,12 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) error {
 	return back("oidc=" + code)
 }
 
-// oidcLink links the account of the claims to the user who started the
-// link (AP Oidc v1.1, Block 7) and returns the fragment for the page:
-// oidc-linked=<key>, or oidc-link-error=taken where another user has
-// the account (failed where it failed), which a page signed in shows in
-// My profile, not on the sign-in card. A link is no sign-in: no session, nothing counted against
+// oidcLink keeps the account of the claims as a pending link of the user
+// who started the link (AP Oidc v1.2, Block 10), for the user to see
+// before it is stored, and returns the fragment for the page:
+// oidc-link-confirm=<code>, or oidc-link-error=taken where another user
+// has the account (failed where it failed), which a page signed in
+// shows in My profile, not on the sign-in card. A link is no sign-in: no session, nothing counted against
 // the address.
 func (s *Server) oidcLink(ctx context.Context, p store.AuthProvider, userID int64, c oidcClaims, ip string) string {
 	st := s.opts.Store
@@ -786,15 +844,118 @@ func (s *Server) oidcLink(ctx context.Context, p store.AuthProvider, userID int6
 		s.log.Warn("api: OpenID Connect link failed", "provider", p.Key, "remote", ip, "error", cmpOr(fmt.Sprint(err), "the user is gone"))
 		return "oidc-link-error=" + oidcFailed
 	}
-	if _, err := st.LinkIdentity(ctx, u.ID, p.ID, c.Subject, c.details(p)); errors.Is(err, store.ErrIdentityTaken) {
-		s.log.Warn("api: OpenID Connect link refused", "provider", p.Key, "user", u.Name, "remote", ip, "reason", oidcTaken)
-		return "oidc-link-error=" + oidcTaken
-	} else if err != nil {
+	if other, _, ok, err := st.UserBySubject(ctx, p.ID, c.Subject); err != nil {
 		s.log.Warn("api: OpenID Connect link failed", "provider", p.Key, "user", u.Name, "remote", ip, "error", err)
 		return "oidc-link-error=" + oidcFailed
+	} else if ok && other.ID != u.ID {
+		s.log.Warn("api: OpenID Connect link refused", "provider", p.Key, "user", u.Name, "remote", ip, "reason", oidcTaken)
+		return "oidc-link-error=" + oidcTaken
 	}
-	s.log.Info("account linked", "provider", p.Key, "user", u.Name, "remote", ip)
-	return "oidc-linked=" + p.Key
+	code := s.oidc.hold(&oidcPendingLink{userID: u.ID, providerID: p.ID, provider: p.Key, subject: c.Subject, details: store.CleanDetails(c.details(p)), ip: ip,
+		expires: time.Now().Add(oidcStartTTL)}, time.Now())
+	if code == "" {
+		s.log.Warn("api: OpenID Connect link failed", "provider", p.Key, "user", u.Name, "remote", ip, "error", store.ErrBusy)
+		return "oidc-link-error=" + oidcFailed
+	}
+	return "oidc-link-confirm=" + code
+}
+
+// pendingLinkView is a pending link as GET …/link/pending/{code}
+// answers it: the account at the provider, and the identities of the
+// user at that provider a link would replace.
+type pendingLinkView struct {
+	Provider     string         `json:"provider"`
+	ProviderName string         `json:"provider_name"`
+	Subject      string         `json:"subject"`
+	Email        string         `json:"email"`
+	Name         string         `json:"name"`
+	Username     string         `json:"username"`
+	Groups       []string       `json:"groups"`
+	Replaces     []identityView `json:"replaces"`
+	ExpiresAt    time.Time      `json:"expires_at"`
+}
+
+// pendingLink finds the request's pending link, the user's own, and
+// with take ends it.
+func (s *Server) pendingLink(r *http.Request, take bool) (store.User, *oidcPendingLink, error) {
+	st, err := s.userStore()
+	if err != nil {
+		return store.User{}, nil, err
+	}
+	u, a, err := s.targetUser(r, st, true)
+	if err != nil {
+		return store.User{}, nil, err
+	}
+	auditTarget(r, "user:"+u.Name)
+	if !a.self {
+		return store.User{}, nil, fail(http.StatusForbidden, "a user confirms only its own links")
+	}
+	p, ok := s.oidc.pendingLink(r.PathValue("code"), u.ID, s.clientIP(r), time.Now(), take)
+	if !ok {
+		return store.User{}, nil, fail(http.StatusNotFound, "no link waits under this code, or it took too long; link again")
+	}
+	return u, p, nil
+}
+
+// getPendingLink handles GET /api/v1/users/{name}/identities/link/pending/{code}:
+// the link come back, for the user to confirm (AP Oidc v1.2, D38-A).
+func (s *Server) getPendingLink(w http.ResponseWriter, r *http.Request) error {
+	u, p, err := s.pendingLink(r, false)
+	if err != nil {
+		return err
+	}
+	st := s.opts.Store
+	v := pendingLinkView{Provider: p.provider, ProviderName: p.provider, Subject: p.subject, Email: p.details.Email, Name: p.details.Name,
+		Username: p.details.Username, Groups: p.details.Groups, Replaces: []identityView{}, ExpiresAt: p.expires}
+	if v.Groups == nil {
+		v.Groups = []string{}
+	}
+	if prov, ok, err := st.Provider(r.Context(), p.provider); err == nil && ok {
+		v.ProviderName = cmpOr(prov.Name, prov.Key)
+	}
+	list, err := st.Identities(r.Context(), u.ID)
+	if err != nil {
+		return providerFail(err)
+	}
+	for _, i := range list {
+		if i.ProviderID == p.providerID && i.Subject != p.subject {
+			v.Replaces = append(v.Replaces, viewIdentity(i))
+		}
+	}
+	writeJSON(w, http.StatusOK, v)
+	return nil
+}
+
+// confirmPendingLink handles POST /api/v1/users/{name}/identities/link/pending/{code}:
+// the link stored, replacing the user's other identities at the provider.
+func (s *Server) confirmPendingLink(w http.ResponseWriter, r *http.Request) error {
+	u, p, err := s.pendingLink(r, true)
+	if err != nil {
+		return err
+	}
+	i, err := s.opts.Store.LinkIdentity(r.Context(), u.ID, p.providerID, p.subject, p.details)
+	if errors.Is(err, store.ErrIdentityTaken) {
+		return fail(http.StatusConflict, "the account is another user's")
+	}
+	if err != nil {
+		return providerFail(err)
+	}
+	auditSubject(r, identitySubject(i, u))
+	s.log.Info("account linked", "provider", p.provider, "user", u.Name, "remote", s.clientIP(r))
+	writeJSON(w, http.StatusOK, viewIdentity(i))
+	return nil
+}
+
+// cancelPendingLink handles DELETE /api/v1/users/{name}/identities/link/pending/{code}:
+// the link dropped, nothing stored.
+func (s *Server) cancelPendingLink(w http.ResponseWriter, r *http.Request) error {
+	if _, p, err := s.pendingLink(r, true); err != nil {
+		return err
+	} else {
+		auditSubject(r, map[string]any{"provider": p.provider})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
 }
 
 // oidcStartLink handles POST /api/v1/users/{name}/identities/link/{key}:

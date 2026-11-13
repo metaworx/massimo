@@ -597,7 +597,11 @@
 
   "log.action.identity.update": "Identität geändert",
 
-  "log.action.identity.link": "Kontoverknüpfung begonnen",
+  "log.action.identity.link": "Konto verknüpft",
+
+  "log.action.identity.link.start": "Kontoverknüpfung begonnen",
+
+  "log.action.identity.link.cancel": "Kontoverknüpfung abgebrochen",
   "log.action.identity.remove": "Identität entfernt",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "Adresse",
@@ -1122,9 +1126,29 @@
 
   "profile.linkError.taken": "Dieses Konto ist hier schon mit einem anderen Benutzer verknüpft.",
 
-  "profile.linkError.group": "Dieses Konto ist in keiner der Gruppen, die dieser Server von {name} zulässt.",
+  "profile.linkError.group": "Dieses Konto ist in keiner der Gruppen, die dieser Server vom Anmeldedienst zulässt.",
 
   "profile.linkError.failed": "Die Verknüpfung über den Anmeldedienst ist fehlgeschlagen. Versuche es nochmals.",
+
+  "profile.linkError.expired": "Das zurückgekommene Konto kann nicht mehr verknüpft werden: {error}",
+
+  "profile.linkCancelled": "Nichts wurde verknüpft.",
+
+  "profile.confirm.title": "Dieses Konto bei {name} verknüpfen?",
+
+  "profile.confirm.email": "E-Mail",
+
+  "profile.confirm.name": "Name",
+
+  "profile.confirm.username": "Benutzername",
+
+  "profile.confirm.subject": "Benutzer-ID",
+
+  "profile.confirm.groups": "Gruppen",
+
+  "profile.confirm.replaces": "Das ersetzt deine Verknüpfung mit {accounts}.",
+
+  "profile.confirm.link": "Verknüpfen",
 
   "users.identityEmailNeeded": "Eine E-Mail-Adresse ist nötig.",
 

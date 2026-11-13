@@ -597,7 +597,11 @@
 
   "log.action.identity.update": "identity changed",
 
-  "log.action.identity.link": "account link started",
+  "log.action.identity.link": "account linked",
+
+  "log.action.identity.link.start": "account link started",
+
+  "log.action.identity.link.cancel": "account link cancelled",
   "log.action.identity.remove": "identity removed",
   "log.kind.cube_gone": "gone",
   "log.kind.address_changed": "address",
@@ -1122,9 +1126,29 @@
 
   "profile.linkError.taken": "That account is already linked to another user here.",
 
-  "profile.linkError.group": "That account is in none of the groups this server admits from {name}.",
+  "profile.linkError.group": "That account is in none of the groups this server admits from the provider.",
 
   "profile.linkError.failed": "The link through the provider failed. Try again.",
+
+  "profile.linkError.expired": "The account that came back can no longer be linked: {error}",
+
+  "profile.linkCancelled": "Nothing was linked.",
+
+  "profile.confirm.title": "Link this account at {name}?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Name",
+
+  "profile.confirm.username": "User name",
+
+  "profile.confirm.subject": "User ID",
+
+  "profile.confirm.groups": "Groups",
+
+  "profile.confirm.replaces": "This replaces your link to {accounts}.",
+
+  "profile.confirm.link": "Link",
 
   "users.identityEmailNeeded": "An e-mail is needed.",
 

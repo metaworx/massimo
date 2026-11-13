@@ -276,6 +276,57 @@ async function renderProfileIdentities(u) {
   host.replaceChildren(box);
 }
 
+// renderLinkConfirm shows a link come back at the top of Linked
+// accounts, before it is stored (AP Oidc v1.2, D38-A): the account at
+// the provider and the link it replaces; Link stores it, Cancel drops
+// it.
+async function renderLinkConfirm(u, code) {
+  const path = "api/v1/users/" + encodeURIComponent(u.name) + "/identities/link/pending/" + encodeURIComponent(code);
+  let p;
+  try {
+    p = await api("GET", path);
+  } catch (e) {
+    profileMsg(t("profile.linkError.expired", { error: e.message }), false);
+    return;
+  }
+  const box = fromTemplate("tpl-link-confirm");
+  box.querySelector(".link-confirm-title").textContent = t("profile.confirm.title", { name: p.provider_name });
+  const dl = box.querySelector(".link-confirm-details");
+  const row = (key, value) => {
+    if (!value) return;
+    dl.appendChild(textEl("dt", t(key)));
+    dl.appendChild(textEl("dd", value));
+  };
+  row("profile.confirm.email", p.email);
+  row("profile.confirm.name", p.name);
+  row("profile.confirm.username", p.username);
+  row("profile.confirm.subject", p.subject);
+  row("profile.confirm.groups", (p.groups || []).join(", "));
+  const replaces = box.querySelector(".link-confirm-replaces");
+  if (p.replaces && p.replaces.length) {
+    const accounts = p.replaces.map((i) => i.email || i.username || i.subject).join(", ");
+    replaces.textContent = t("profile.confirm.replaces", { accounts });
+    replaces.classList.remove("hidden");
+  }
+  const link = box.querySelector(".confirm-link");
+  const cancel = box.querySelector(".cancel-link");
+  link.addEventListener("click", () => {
+    userAction(() => api("POST", path), t("profile.linkDone", { name: p.provider_name }), u.name, link, "profile");
+  });
+  cancel.addEventListener("click", async () => {
+    try {
+      await whileBusy(cancel, () => api("DELETE", path));
+    } catch (e) {
+      // gone already: nothing was stored either way
+    }
+    box.remove();
+    profileMsg(t("profile.linkCancelled"), true);
+  });
+  const host = $("profile-identities");
+  host.insertBefore(box, host.firstChild);
+  box.querySelector(".link-confirm-title").focus();
+}
+
 // startLink starts the link of the user's own account at a provider: a
 // sign-in there, which comes back to My profile (oidcReturn, login.js).
 async function startLink(u, key, btn) {

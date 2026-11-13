@@ -1332,6 +1332,12 @@ massimo-week-program { display: contents; }
 .user-identities li .identity-change { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
 .user-identities li .identity-change input { flex: 1 1 12em; min-width: 0; }
 .profile-link-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.link-confirm { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.link-confirm-title { font-weight: 600; margin: 0; }
+.link-confirm-details { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+.link-confirm-details dt { color: var(--muted); }
+.link-confirm-details dd { margin: 0; overflow-wrap: anywhere; }
+.link-confirm-replaces { margin: 0; }
 /* System settings → Sign-in providers; the sign-in card's provider buttons */
 .provider-form { display: flex; flex-direction: column; gap: 6px; }
 .providers-callback .mono { overflow-wrap: anywhere; }

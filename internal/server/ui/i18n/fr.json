@@ -599,7 +599,11 @@
 
   "log.action.identity.update": "identité modifiée",
 
-  "log.action.identity.link": "liaison de compte commencée",
+  "log.action.identity.link": "compte lié",
+
+  "log.action.identity.link.start": "liaison de compte commencée",
+
+  "log.action.identity.link.cancel": "liaison de compte annulée",
   "log.action.identity.remove": "identité supprimée",
   "log.kind.cube_gone": "disparu",
   "log.kind.address_changed": "adresse",
@@ -1124,9 +1128,29 @@
 
   "profile.linkError.taken": "Ce compte est déjà lié à un autre utilisateur ici.",
 
-  "profile.linkError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de {name}.",
+  "profile.linkError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de ce fournisseur.",
 
   "profile.linkError.failed": "La liaison par le fournisseur a échoué. Réessayez.",
+
+  "profile.linkError.expired": "Le compte revenu ne peut plus être lié : {error}",
+
+  "profile.linkCancelled": "Rien n'a été lié.",
+
+  "profile.confirm.title": "Lier ce compte chez {name} ?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Nom",
+
+  "profile.confirm.username": "Nom d'utilisateur",
+
+  "profile.confirm.subject": "Identifiant",
+
+  "profile.confirm.groups": "Groupes",
+
+  "profile.confirm.replaces": "Cela remplace votre lien vers {accounts}.",
+
+  "profile.confirm.link": "Lier",
 
   "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
 

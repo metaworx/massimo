@@ -616,7 +616,11 @@
 
   "log.action.identity.update": "tożsamość zmieniona",
 
-  "log.action.identity.link": "rozpoczęto powiązanie konta",
+  "log.action.identity.link": "konto powiązane",
+
+  "log.action.identity.link.start": "rozpoczęto powiązanie konta",
+
+  "log.action.identity.link.cancel": "anulowano powiązanie konta",
   "log.action.identity.remove": "usunięto tożsamość",
   "log.kind.cube_gone": "zniknął",
   "log.kind.address_changed": "adres",
@@ -1147,9 +1151,29 @@
 
   "profile.linkError.taken": "To konto jest tu już powiązane z innym użytkownikiem.",
 
-  "profile.linkError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od {name}.",
+  "profile.linkError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od dostawcy.",
 
   "profile.linkError.failed": "Powiązanie przez dostawcę nie powiodło się. Spróbuj ponownie.",
+
+  "profile.linkError.expired": "Konta, które wróciło, nie można już powiązać: {error}",
+
+  "profile.linkCancelled": "Nic nie zostało powiązane.",
+
+  "profile.confirm.title": "Powiązać to konto u {name}?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Nazwa",
+
+  "profile.confirm.username": "Nazwa użytkownika",
+
+  "profile.confirm.subject": "Identyfikator użytkownika",
+
+  "profile.confirm.groups": "Grupy",
+
+  "profile.confirm.replaces": "To zastępuje twoje powiązanie z {accounts}.",
+
+  "profile.confirm.link": "Powiąż",
 
   "users.identityEmailNeeded": "Potrzebny jest adres e-mail.",
 

@@ -599,7 +599,11 @@
 
   "log.action.identity.update": "identità modificata",
 
-  "log.action.identity.link": "collegamento dell'account avviato",
+  "log.action.identity.link": "account collegato",
+
+  "log.action.identity.link.start": "collegamento dell'account avviato",
+
+  "log.action.identity.link.cancel": "collegamento dell'account annullato",
   "log.action.identity.remove": "identità rimossa",
   "log.kind.cube_gone": "sparito",
   "log.kind.address_changed": "indirizzo",
@@ -1124,9 +1128,29 @@
 
   "profile.linkError.taken": "Questo account è già collegato a un altro utente qui.",
 
-  "profile.linkError.group": "Questo account non è in nessuno dei gruppi che questo server ammette da {name}.",
+  "profile.linkError.group": "Questo account non è in nessuno dei gruppi che questo server ammette dal provider.",
 
   "profile.linkError.failed": "Il collegamento tramite il provider non è riuscito. Riprova.",
+
+  "profile.linkError.expired": "L'account tornato non può più essere collegato: {error}",
+
+  "profile.linkCancelled": "Non è stato collegato nulla.",
+
+  "profile.confirm.title": "Collegare questo account presso {name}?",
+
+  "profile.confirm.email": "E-mail",
+
+  "profile.confirm.name": "Nome",
+
+  "profile.confirm.username": "Nome utente",
+
+  "profile.confirm.subject": "ID utente",
+
+  "profile.confirm.groups": "Gruppi",
+
+  "profile.confirm.replaces": "Questo sostituisce il tuo collegamento a {accounts}.",
+
+  "profile.confirm.link": "Collega",
 
   "users.identityEmailNeeded": "Serve un indirizzo e-mail.",
 
