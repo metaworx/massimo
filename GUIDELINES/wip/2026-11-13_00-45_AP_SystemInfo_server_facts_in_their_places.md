@@ -1,26 +1,24 @@
-# AP SystemInfo v1.0: Server facts in their places
+# AP SystemInfo v1.1: Server facts in their places
 
 ## TL;DR
 
 A server never lists its own proxies' Cubes as found,
-and the web UI's header loses the tall parts that made it flicker:
-the found Cubes become a link, the server's facts a System Info tile,
-the Cube's facts its card in System settings → Cubes,
-and the header keeps the current Cube's budget on one line.
+and the web UI's server facts sit in a System Info tile,
+the Cube's in its card, the header keeping the current Cube's budget.
+v1.1 adds Block 7: the server's clock, its addresses, its full host name,
+and the proxy in front of it with that proxy's certificate.
 
-- own proxy's answer → never found: the proxies running now,
-  not only `serve`'s first ones
-- header flicker on a slow scroll → the header out of scroll anchoring,
-  a slow-scroll test
-- "N Cubes found, not configured" pane → a link to System settings → Cubes
-  (`cubes`), else text; the Cube menu's found entries jump there too
-- the header's expert list → a System Info tile before Software update,
-  `GET /api/v1/system`: version, built with, started, certificate,
-  installation, host, client address
-- firmware, address, radio, Cube clock → each Cube's card: an info block,
-  and duty cycle, free slots, pending in its head
-- header, expert mode: the current Cube's name, duty cycle, free slots, pending,
-  queued when not zero; kept when the header compacts
+- Blocks 1 to 6 done: #198, #202 (with a CI fix), out in v0.15.0-alpha.1
+- "Server time" after "Server started": the server's zone, ticking,
+  a note when it differs from the browser's clock
+- "IP addresses" after "Host name": an interface a line, MAC then addresses,
+  for the API's and the Cube proxies' listeners; `*` the API's
+- host name → `hostname -f`, the host bold, the domain regular
+- through a trusted proxy that says HTTPS (every common header) → "(proxied)",
+  the address it serves, its certificate read best effort,
+  at the first proxied request after the start and daily
+- the page on HTTPS, the server not, no trusted proxy → "(proxied)",
+  `-trusted-proxies` named
 
 ### Blocks
 
@@ -38,6 +36,9 @@ and the header keeps the current Cube's budget on one line.
    its info block, both refreshed in place
 6. HeaderStats: the header's one line for the current Cube in place of the expert list;
    the documents
+7. SystemDetails: `GET /api/v1/system`'s clock, full host name,
+   interfaces and proxy, the proxy's certificate checked best effort;
+   the four rows; the documents and six languages; its own pull request
 
 Blocks 2 to 6 are one pull request.
 
@@ -99,6 +100,45 @@ The certificate's notice under the header,
 for a self-signed or ending certificate, stays: it is a warning for everyone,
 not an expert fact.
 
+**v1.1, the owner's requests** (2026-11-13,
+on System Info as v0.15.0-alpha.1 shows it): "looking great!", and
+
+- after "Server started", "Current Server time";
+- after "Hostname", "Server IP address(es)",
+  "starting with the MAC followed by it's IPs,
+  on interface per row in the second column
+  (only the interfaces the service is listening on)";
+- "Hostname: show `hostname -f` with the hostname bold and the domain regular";
+- "Certificate: show "(proxied)" and evaluate a standard header that should be
+  set by the proxy to indicate SSL" and the original `<fqdn>:<port>`
+  or `<ip>:<port>`, with `SSL-Cert: <path-to-pub>` as the owner's idea.
+
+**The owner's decisions on them** (2026-11-13, `PLAN++`):
+
+- **D21-A**, as recommended: the server's time in its own zone, named, ticking,
+  with a note when it differs from the browser's clock by more than 5 s.
+- **D22-A, as the owner put it:**
+  the interfaces of the API's listener and of the Cube proxies';
+  one on every address counts each interface that is up, loopback,
+  IPv6 link-local addresses and interfaces without one left out;
+  "with the API's addresses bold or marked with and Asterisk explaind under the
+  interfaces".
+  Chosen here: an asterisk, explained under the lines with the API's port;
+  bold is the host name's already.
+  Where the API listens on every address,
+  the note says so instead of an asterisk on each.
+- **D23, as the owner put it:**
+  the proxy's certificate read through a TLS handshake with the proxy,
+  best effort ("the access may be blocked by a firewall"),
+  "on server start and once a day";
+  "support all common formats for the SSL-indication".
+  Read as: the server learns the proxy's address only from a request through it,
+  so the first such request after the start is when it checks, then once a day,
+  and again when the address changes.
+  The header naming the certificate's path is not taken:
+  no standard header carries it.
+- **D24-A**, as recommended: this plan, v1.1, Block 7 in its own pull request.
+
 **Names chosen here**, routine and not the owner's decisions:
 
 - the route `GET /api/v1/system`, with the capability `read`,
@@ -111,6 +151,9 @@ not an expert fact.
 - the tile `sys-info` in `partials/system-info.html`;
   the header's line `cube-stats`
 - the branches `claude/own-cubes` (Block 1) and `claude/system-info` (Blocks 2 to 6)
+- Block 7's fields `now`, `time_zone`, `fqdn`, `interfaces` (`name`, `mac`,
+  `addresses` of `ip` and `api`), `api_port` and `proxy` (`proto`, `host`,
+  `port`, `certificate`); the branch `claude/system-details`
 
 **Not in this plan:**
 the found Cubes' list in System settings → Cubes, which stays as it is
@@ -120,7 +163,8 @@ the Cube clock at the top of the header;
 the pending notice under the header, for everyone.
 
 **Who runs it:**
-this session, under the owner's `PLAN++ SystemInfo` of 2026-11-13.
+this session, under the owner's `PLAN++ SystemInfo` of 2026-11-13,
+and Block 7 under their `PLAN++` on v1.1's requests the same day.
 The pull requests are pushed and opened; merging them is the owner's.
 Nothing is sent to a real box.
 
@@ -232,6 +276,57 @@ One line, `expert-only`, shows the current Cube's name,
 then duty cycle, free slots and pending, and queued where it is not zero,
 from `renderHeader`'s Cube; it stays when the header compacts (D19-A).
 
+### System details (Block 7)
+
+- **The clock.**
+  `GET /api/v1/system` gives `now`, the server's time with its offset,
+  and `time_zone`: `TZ` where set,
+  else the zone `/etc/localtime` links to (Linux, macOS),
+  else the zone's abbreviation (Windows).
+  The page keeps the difference to its own clock and ticks the row every
+  second in that zone (`fmtInstant` takes a zone), with a note from 5 s on.
+- **The full host name.**
+  Go's `LookupCNAME` of `os.Hostname()` gives what `hostname -f` gives,
+  `/etc/hosts` first: measured on the development PC,
+  both answered the name of its `127.0.1.1` line.
+  A one-second limit, and `os.Hostname()` where it fails.
+  `fqdn` beside `hostname`; the page sets the part before the first dot bold.
+- **The addresses.**
+  The API's listener is opened by `internal/serve` after the server is made,
+  so the server is told its address (`SetAPIAddr`);
+  the Cube proxies' are in `s.proxies`.
+  A listener on every address (`:8099`, `0.0.0.0`, `::`) takes each interface
+  that is up and not the loopback; one on an address, that address's.
+  An interface is listed with its MAC and all its addresses but IPv6 link-local
+  ones, an address marked `api` where the API's listener takes it;
+  `api_port` names the port for the note.
+- **The proxy.**
+  The server believes forwarded headers only from `-trusted-proxies`
+  (`trustedProxy`, as `clientIP` does).
+  HTTPS is said by `Forwarded: proto=https` (RFC 7239),
+  `X-Forwarded-Proto`, `X-Forwarded-Scheme`, `X-Forwarded-Protocol`,
+  `X-Url-Scheme` or `X-Scheme` set to `https`,
+  `X-Forwarded-Ssl: on`, `Front-End-Https: on`,
+  or Cloudflare's `CF-Visitor: {"scheme":"https"}`, the first of a list taken.
+  The host comes from `Forwarded: host=`, `X-Forwarded-Host`,
+  else the request's `Host`; the port from `X-Forwarded-Port`,
+  the host's own port, else 443 or 80.
+  No standard header names the proxy's certificate or its path.
+- **The proxy's certificate.**
+  A TLS handshake with the proxy itself: the request's peer address,
+  which a trusted proxy is, the forwarded port,
+  the forwarded host as the server name; the chain read whatever it is,
+  then verified against the system's roots for that name (`trusted`).
+  Five seconds at most, best effort: an error is reported, not retried.
+  At the first proxied request after the start, then once a day,
+  and when the proxied address changes, in the background;
+  the answer gives the last result and when it was taken.
+  The peer and the port come from a trusted proxy only,
+  so nobody else can make the server connect elsewhere.
+- **Without a trusted proxy** the server cannot tell; the page can:
+  `location.protocol` is `https:` while the server serves no TLS.
+  The row then says "(proxied)" and names `-trusted-proxies`.
+
 ### What changes, by file
 
 - `internal/server/discovery.go`, its test (Block 1)
@@ -246,6 +341,10 @@ from `renderHeader`'s Cube; it stays when the header compacts (D19-A).
 - `internal/server/ui/cubes.js`, `partials/cube-panel.html`, `style.css`,
   a UI test (Block 5)
 - `internal/server/ui/index.html`, `app.js`, `style.css`, UI tests (Block 6)
+- `internal/server/system_api.go`, a file for the proxy's check and its tests,
+  `internal/serve/serve.go`, `internal/server/ui/update.js`,
+  `partials/system-info.html`, `style.css`, `docs/api-v1.md`,
+  `docs/api-v1-openapi.yaml`, `tools/ui-test/test_system_info.py` (Block 7)
 - `internal/server/ui/i18n/*.json`, `docs/ui.md` and a `CHANGELOG.d` fragment,
   with the block they belong to
 
@@ -367,6 +466,31 @@ the Go gate, `make cross`, `make ui-test`.
 `make ui-test`, the Go gate, `make cross`.
 Branch `claude/system-info` from `main`, one pull request for Blocks 2 to 6.
 
+### Block 7: SystemDetails
+
+1. `system_api.go`:
+   `now`, `time_zone`, `fqdn`, `interfaces`, `api_port`; `SetAPIAddr`,
+   called by `internal/serve` once the API listens.
+2. The proxy: the forwarded headers read from a trusted proxy,
+   every format the Analysis names (a table test); the certificate check,
+   in the background, at the first proxied request after the start, daily,
+   and on a new address;
+   its test against a TLS server of its own on the loopback.
+3. The tile: "Server time" after "Server started", ticking;
+   "IP addresses" after "Host name", an interface a line, `*` and its note;
+   the host name with the host bold;
+   the certificate "(proxied)" with the proxied address and the proxy's
+   certificate, or the page's own HTTPS with `-trusted-proxies` named.
+4. `docs/api-v1.md`, the OpenAPI file, `docs/ui.md`, six languages,
+   `CHANGELOG.d/Added/claude-system-details.md`.
+5. `tools/ui-test/test_system_info.py`:
+   the rows from a stubbed answer, the clock ticking, the marks,
+   the proxied certificate, the page's HTTPS.
+
+**Verification:**
+the Go gate, `go test -race` of the server, `make cross`, `make ui-test`.
+Branch `claude/system-details` from `main`, its own pull request.
+
 ## Proposed commit message
 
 Block 1:
@@ -392,8 +516,14 @@ Blocks 2 to 6, one commit each, in the same form:
 `feat(ui): Each Cube's facts in its card`,
 `feat(ui): The header shows the current Cube's budget on one line`.
 
+Block 7: `feat(ui): System Info shows the server's clock, addresses, full name and proxy`.
+
 ## Change History
 
 - v1.0 (2026-11-13): the first revision, by `PLAN++ SystemInfo`,
   with D14-A, D15-B, D16-A, D17-A and D18 as the owner gave them,
   D19-A and D20-A as recommended.
+- v1.1 (2026-11-13): Block 7, SystemDetails,
+  the owner's four requests on System Info, by `PLAN++` with D21-A,
+  D22-A and D23 as the owner gave them and D24-A; Blocks 1 to 6 marked done;
+  the TL;DR for the plan as it stands.
