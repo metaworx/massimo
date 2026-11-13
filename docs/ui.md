@@ -30,7 +30,8 @@ or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
 While it asks, the page shows its name, its version and the sign-in,
-nothing else:
+nothing else, as it does from its first moment until the server has said who is in,
+so that no button shows before the sign-in:
 Sign out forgets what the page loaded of the Cubes,
 so that the next to sign in sees nothing of the last session.
 The password stays in the browser:
@@ -564,15 +565,18 @@ to the top of the page.
 
 - **System Info**, for everyone who opens System settings:
   a table of the server's version and what it was built with,
-  when it started and how long ago,
+  when it started, as the server's clock read it, to the second in its zone,
+  then how long ago,
   the server's time in its own zone, ticking,
   with a note where it differs from this browser's clock by more than 5 s,
+  both times in this browser's zone when the pointer rests on them,
   the certificate the browser sees,
   how it was installed (the Debian package, Homebrew, the Windows service,
   a systemd or launchd service, or other: by hand, a container or another supervisor),
   the system it runs on with its processor,
   the host's full name, the host bold and the domain as it is,
-  the interfaces the server listens on, a line each with the MAC and the addresses,
+  the interfaces the server listens on,
+  a line each with the name, the MAC and the addresses,
   an asterisk marking the web interface's,
   and the address the server sees this browser at
   (`docs/api-v1.md`, "GET /api/v1/system").
@@ -580,6 +584,8 @@ to the top of the page.
   or, where a trusted proxy serves the page, the proxy's, "(proxied)":
   its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
   with the address the proxy serves;
+  where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
+  and address, and that with that header the server reads the proxy's certificate;
   a page on HTTPS from a server without TLS says "(proxied)" too,
   and that `-trusted-proxies` would show more.
 - **Software update**:

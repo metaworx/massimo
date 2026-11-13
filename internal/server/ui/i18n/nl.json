@@ -175,6 +175,7 @@
   "sysinfo.now": "Servertijd",
   "sysinfo.ahead": "{d} voor op deze browser",
   "sysinfo.behind": "{d} achter op deze browser",
+  "sysinfo.browserTime": "{time} in de tijdzone van deze browser, {zone}",
   "sysinfo.addresses": "IP-adressen",
   "sysinfo.apiMark": "* de webinterface, poort {port}",
   "sysinfo.apiAll": "De webinterface luistert op alle, poort {port}.",
@@ -185,8 +186,8 @@
   "sysinfo.proxyError": "niet leesbaar: {error}",
   "sysinfo.proxyPlain": "geen, gewoon HTTP bij de proxy",
   "sysinfo.proxyHttps": "HTTPS bij de proxy",
-  "sysinfo.proxyUnknown": "de proxy noemt geen schema",
   "sysinfo.proxyHint": "De server vertrouwt deze proxy niet: genoemd met -trusted-proxies toont hij hier diens adres en certificaat.",
+  "sysinfo.proxyNoScheme": "De proxy stuurt geen X-Forwarded-Proto: daarmee leest de server het certificaat van de proxy.",
   "sysinfo.ownCert": "dat van de server: {cert}",
 
   "update.title": "Software-update",

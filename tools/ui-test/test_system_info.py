@@ -7,6 +7,7 @@ the computer, its full name and the interfaces it listens on, and the
 address the server sees this browser at; first as the test server
 answers, in a terminal without TLS on the loopback, then stubbed boxes."""
 import json
+import re
 import time
 
 from helpers import scroll_width, show_view, wait_until
@@ -113,8 +114,18 @@ def test_system_details_behind_a_proxy(page, case):
         "the full name, the host bold"
     lines = page.locator("#info-addrs .sys-iface")
     assert lines.count() == 2, "an interface a line"
-    assert lines.nth(0).inner_text().split() == ["02:00:00:00:00:01", "192.0.2.8*,", "192.0.2.31"], "the MAC, then the addresses, the API's marked"
-    assert lines.nth(1).inner_text().split()[0] == "wg0" and lines.nth(1).get_attribute("title") == "wg0", "the name where there is no MAC"
+    assert lines.nth(0).inner_text().split() == ["eth0", "02:00:00:00:00:01", "192.0.2.8*,", "192.0.2.31"], \
+        "the name, the MAC, then the addresses, the API's marked"
+    assert lines.nth(1).inner_text().split() == ["wg0", "10.8.0.2"], "the name and the addresses where there is no MAC"
+    # the start as the clock reads it: to the second, the zone, the uptime
+    # after it; both times in this browser's zone on hover
+    started = cell(page, "started")
+    assert re.search(r"\d\d:\d\d:\d\d Europe/Zurich", started) and started.split("Europe/Zurich", 1)[1].strip(), \
+        f"the start to the second, its zone, then the uptime ({started!r})"
+    zone = page.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone")
+    for name in ("started", "now"):
+        title = page.locator("#info-" + name).get_attribute("title") or ""
+        assert zone in title and re.search(r"\d\d:\d\d:\d\d", title), f"the {name} time in this browser's zone on hover ({title!r})"
     assert "8099" in page.locator("#info-addrs .sys-note").inner_text(), "the asterisk explained, with the port"
     cert, served = tls_lines(page)[:2]
     parts = cert.removesuffix(" " + PROXIED[case.lang]).split(" · ")
@@ -132,5 +143,26 @@ def test_system_details_behind_a_proxy(page, case):
     cert, served = tls_lines(page)[:2]
     assert cert.endswith(" " + PROXIED[case.lang]) and served == "https://massimo.example.net:443", \
         "a certificate not read yet, proxied all the same"
+    page.unroute("**/api/v1/system")
+    show_view(page, "tiles")
+
+
+NO_SCHEME = {"en": "The proxy sends no X-Forwarded-Proto", "de": "Der Proxy sendet kein X-Forwarded-Proto"}
+
+
+def test_proxy_without_a_scheme(page, case):
+    """A trusted proxy that names no scheme, as the Raspberry Pi's: the row
+    takes the page's own scheme and address, which the browser knows, and
+    names the header the proxy does not send."""
+    box = dict(BOX, now=time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), time_zone="UTC", interfaces=[],
+               proxy={"host": "massimo.example.net"})
+    box.pop("tls")
+    page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
+    show_view(page, "system")
+    assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "System Info filled"
+    lines = tls_lines(page)
+    origin = page.evaluate("location.protocol + '//' + location.host")
+    assert lines[0].endswith(" " + PROXIED[case.lang]) and lines[1] == origin, f"the page's own scheme and address ({lines})"
+    assert lines[2].startswith(NO_SCHEME[case.lang]), f"the header the proxy does not send ({lines})"
     page.unroute("**/api/v1/system")
     show_view(page, "tiles")

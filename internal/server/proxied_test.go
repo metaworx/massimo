@@ -38,6 +38,7 @@ func TestForwardedTarget(t *testing.T) {
 		{"plain HTTP at an address and a port", map[string]string{"X-Forwarded-Proto": "http"}, "192.0.2.10:8099", "http", "192.0.2.10", 8099},
 		{"an IPv6 address", map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "[2001:db8::1]:8443"}, "", "https", "2001:db8::1", 8443},
 		{"nothing said", map[string]string{"X-Forwarded-For": "192.0.2.60"}, "massimo.example.net:8099", "", "massimo.example.net", 8099},
+		{"no scheme, no port: the port unknown", map[string]string{"X-Forwarded-For": "192.0.2.60"}, "massimo.example.net", "", "massimo.example.net", 0},
 		{"Forwarded wins", map[string]string{"Forwarded": "proto=http", "X-Forwarded-Proto": "https"}, "massimo.example.net", "http", "massimo.example.net", 80},
 	} {
 		h := http.Header{}

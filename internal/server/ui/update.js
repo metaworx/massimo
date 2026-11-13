@@ -595,7 +595,7 @@ const OS_NAMES = { linux: "Linux", darwin: "macOS", windows: "Windows", freebsd:
 
 // sysClock ticks System Info's server time: the server's clock as GET
 // /api/v1/system gave it, kept by its difference to this browser's.
-const sysClock = { timer: null, skew: 0, zone: "", offset: 0 };
+const sysClock = { timer: null, skew: 0, zone: "" };
 
 // knownZone reports whether this browser can show a time in zone.
 function knownZone(zone) {
@@ -613,11 +613,37 @@ function clockSpan(ms) {
   return s < 120 ? s + " s" : Math.round(s / 60) + " min";
 }
 
+// SECONDS is a date and a time to the second, as System Info shows its
+// times.
+const SECONDS = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+
+// offsetOf is the offset in minutes an ISO time carries, 0 for Z.
+function offsetOf(iso) {
+  const m = /([+-])(\d\d):(\d\d)$/.exec(iso || "");
+  return m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+}
+
+// serverTime is an instant as the server's clock reads it, to the
+// second, and the server's zone: in the zone where this browser knows
+// it, else at the offset iso carries.
+function serverTime(ms, iso) {
+  const text = knownZone(sysClock.zone)
+    ? new Intl.DateTimeFormat(undefined, { ...SECONDS, timeZone: sysClock.zone }).format(new Date(ms))
+    : new Intl.DateTimeFormat(undefined, { ...SECONDS, timeZone: "UTC" }).format(new Date(ms + offsetOf(iso) * 60000));
+  return [text, sysClock.zone].filter(Boolean).join(" ");
+}
+
+// browserTime is the same instant in this browser's own zone, named, for
+// a tooltip.
+function browserTime(ms) {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  return t("sysinfo.browserTime", { time: new Intl.DateTimeFormat(undefined, SECONDS).format(new Date(ms)), zone });
+}
+
 // startSystemClock shows the server's time, ticking every second while
-// System settings is shown: in the server's zone where this browser knows
-// it, else at the server's offset with the zone's abbreviation; with a
-// note where the server's clock and this browser's differ by more than
-// 5 s.
+// System settings is shown (serverTime), the same in this browser's zone
+// as its tooltip; with a note where the server's clock and this
+// browser's differ by more than 5 s.
 function startSystemClock(v) {
   const cell = $("info-now");
   if (sysClock.timer) clearInterval(sysClock.timer);
@@ -628,24 +654,35 @@ function startSystemClock(v) {
     return;
   }
   sysClock.skew = ms - Date.now();
-  sysClock.zone = v.time_zone || "";
-  const off = /([+-])(\d\d):(\d\d)$/.exec(v.now);
-  sysClock.offset = off ? (off[1] === "-" ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3])) : 0;
-  const known = knownZone(sysClock.zone);
   const note = Math.abs(sysClock.skew) > 5000 ? t(sysClock.skew > 0 ? "sysinfo.ahead" : "sysinfo.behind", { d: clockSpan(sysClock.skew) }) : "";
   const tick = () => {
     if (!isShown("system")) return;
-    const now = new Date(Date.now() + sysClock.skew);
-    const opts = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
-    let text;
-    if (known) text = new Intl.DateTimeFormat(undefined, { ...opts, timeZone: sysClock.zone }).format(now);
-    else text = new Intl.DateTimeFormat(undefined, { ...opts, timeZone: "UTC" }).format(new Date(now.getTime() + sysClock.offset * 60000));
+    const now = Date.now() + sysClock.skew;
     clear(cell);
-    cell.appendChild(document.createTextNode([text, sysClock.zone].filter(Boolean).join(" ")));
+    cell.appendChild(document.createTextNode(serverTime(now, v.now)));
     if (note) cell.appendChild(textEl("span", note, "muted small sys-skew"));
+    cell.title = browserTime(now);
   };
   tick();
   sysClock.timer = setInterval(tick, 1000);
+}
+
+// fillStarted shows when the server started as its clock read it
+// (serverTime), then how long ago, its uptime; in this browser's zone as
+// its tooltip.
+function fillStarted(v) {
+  const cell = $("info-started");
+  clear(cell);
+  cell.removeAttribute("title");
+  const ms = Date.parse(v.started_at || "");
+  if (isNaN(ms)) {
+    cell.textContent = "–";
+    return;
+  }
+  cell.appendChild(document.createTextNode(serverTime(ms, v.started_at)));
+  const age = ageEl(v.started_at, false, true);
+  if (age) cell.appendChild(age);
+  cell.title = browserTime(ms);
 }
 
 // fillHostName shows the host's full name, the host bold and its domain
@@ -678,10 +715,15 @@ function fillAddresses(v) {
   }
   const all = ifs.every((i) => i.addresses.every((a) => a.api));
   for (const i of ifs) {
+    // text that wraps as words do: the name, the MAC, the addresses
     const line = elem("div", "sys-iface");
-    line.title = i.name;
-    line.appendChild(textEl("span", i.mac || i.name, "mono sys-mac"));
-    line.appendChild(textEl("span", i.addresses.map((a) => a.ip + (a.api && !all ? "*" : "")).join(", "), "mono"));
+    const parts = [textEl("span", i.name, "mono sys-name")];
+    if (i.mac) parts.push(textEl("span", i.mac, "mono sys-mac"));
+    parts.push(textEl("span", i.addresses.map((a) => a.ip + (a.api && !all ? "*" : "")).join(", "), "mono"));
+    parts.forEach((part, n) => {
+      if (n) line.appendChild(document.createTextNode(" "));
+      line.appendChild(part);
+    });
     cell.appendChild(line);
   }
   const port = v.api_port || "";
@@ -692,9 +734,10 @@ function fillAddresses(v) {
 // fillCertificate shows the certificate the browser sees: the proxy's,
 // "(proxied)", where a trusted proxy serves the page (its names, expiry
 // and issuer as the server last read them, or why it could not), with the
-// address the proxy serves; the page's own HTTPS while the server serves
-// none, which only a proxy does, with the setting that would tell more;
-// else the server's own (certText, app.js).
+// address the proxy serves, the page's own where the proxy names no
+// scheme, and the header it does not send; the page's own HTTPS while the
+// server serves none, which only a proxy does, with the setting that would
+// tell more; else the server's own (certText, app.js).
 function fillCertificate(v) {
   const cell = $("info-tls");
   clear(cell);
@@ -702,8 +745,17 @@ function fillCertificate(v) {
   const p = v.proxy;
   if (p) {
     const c = p.certificate;
+    if (!p.proto) {
+      // no scheme from the proxy: the page's own, which the browser knows
+      const https = location.protocol === "https:";
+      line(t(https ? "sysinfo.proxyHttps" : "sysinfo.proxyPlain") + " " + t("sysinfo.proxied"));
+      line(location.protocol + "//" + location.host, "mono muted small");
+      line(t("sysinfo.proxyNoScheme"), "muted small");
+      if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
+      return;
+    }
     let text;
-    if (p.proto !== "https") text = t(p.proto === "http" ? "sysinfo.proxyPlain" : "sysinfo.proxyUnknown");
+    if (p.proto !== "https") text = t("sysinfo.proxyPlain");
     else if (!c) text = t("sysinfo.proxyPending");
     else if (c.error) text = t("sysinfo.proxyError", { error: c.error });
     else {
@@ -743,15 +795,8 @@ async function loadSystemInfo() {
   const parts = splitVersion(v.version || "");
   $("info-version").textContent = parts.short || "–";
   $("info-built").textContent = parts.rest || "–";
-  const started = $("info-started");
-  clear(started);
-  const ms = Date.parse(v.started_at || "");
-  if (isNaN(ms)) started.textContent = "–";
-  else {
-    started.appendChild(document.createTextNode(fmtInstant(new Date(ms))));
-    const age = ageEl(v.started_at, false, true);
-    if (age) started.appendChild(age);
-  }
+  sysClock.zone = v.time_zone || "";
+  fillStarted(v);
   startSystemClock(v);
   fillCertificate(v);
   // a kind this page has no text for, a package manager's, as it is

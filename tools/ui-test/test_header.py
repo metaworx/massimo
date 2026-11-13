@@ -5,7 +5,7 @@ button's symbol, the 👤 menu, the page shown in the address, and expert
 mode's line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, open_user_menu, scroll_width, show_view, wait_until
+from helpers import VIEWER, css_hidden, hold, open_user_menu, scroll_width, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -234,3 +234,29 @@ def test_expert_line_of_the_cube(page, case):
     show_view(page, "tiles")
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
     assert line.is_hidden(), "gone outside expert mode"
+
+
+def test_no_buttons_before_the_session_is_known(page, case, watch):
+    """The page starts signed out (login.js loadMe): while the server has
+    not said who is in, the header shows the name and none of its buttons,
+    so that none flickers before a sign-in; once it has, they show. A
+    server that answers with an error shows the page all the same, with
+    what it can say."""
+    held, sent = [], []
+    hold(page, "**/api/v1/me", "GET", held, sent)
+    page.reload()
+    assert wait_held(page, held), "the page asks who is in"
+    for part in (".top-line > .nav", ".top-line > .cube"):
+        assert page.locator(part).is_hidden(), f"{part} hidden before the answer"
+    assert page.locator(".top .brand-name").is_visible(), "the name shows"
+    held[0].continue_()
+    page.unroute("**/api/v1/me")
+    assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "shown once the server has answered"
+    assert page.locator(".top-line > .nav").is_visible() and page.locator(".top-line > .cube").is_visible(), "the buttons once signed in"
+    watch.expected.append(("/api/v1/me", 500))
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=500, content_type="application/json", body='{"error":"test"}'))
+    page.reload()
+    assert wait_until(page, "!document.body.classList.contains('signed-out')", 10), "a server that cannot say shows the page all the same"
+    page.unroute("**/api/v1/me")
+    page.reload()
+    page.wait_for_selector(".room", timeout=10000)
