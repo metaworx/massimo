@@ -71,7 +71,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     assert page.evaluate("state.rooms.length === 0 && state.cubes.length === 0 && !state.pollTimer"), "the Cube's data is forgotten"
     assert page.locator(".room").count() == 0, "no room tile is drawn"
     assert page.locator(".brand h1").is_visible() and page.locator("#version-short").is_visible(), "the name and the version show"
-    for sel in ("#cube-menu", ".top-line > .nav", ".updated-line", "#clock-plain", "main"):
+    for sel in ("#cube-menu", ".top-line > .nav", "#refresh-btn", "main"):
         assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")

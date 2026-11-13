@@ -1422,6 +1422,9 @@ type cubeView struct {
 	Config        *cube.CubeConfig `json:"config,omitempty"`
 	RoomList      []view.Room      `json:"room_list,omitempty"`
 	CubeTime      string           `json:"cube_time,omitempty"`
+	// CubeTimeAt is when the server read CubeTime, the Cube's clock in
+	// its greeting at the last connect, so that a client can move it on.
+	CubeTimeAt *time.Time `json:"cube_time_at,omitempty"`
 }
 
 type deviceDetail struct {
@@ -1446,6 +1449,9 @@ func (s *Server) summary(rt *runtime) cubeView {
 		v.Connected = rt.client.Connected()
 		v.Firmware, v.RFAddress, v.Updated, v.ObservedSince = h.FirmwareVersion, h.RFAddress.String(), snap.Updated(), snap.Since()
 		v.CubeTime = strings.TrimSpace(h.CubeDate + " " + h.CubeTime)
+		if at := snap.HelloAt(); !at.IsZero() && v.CubeTime != "" {
+			v.CubeTimeAt = &at
+		}
 		if c := snap.Config(h.RFAddress); c != nil {
 			v.Config = c.Cube
 		}

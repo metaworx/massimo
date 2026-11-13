@@ -62,8 +62,8 @@ where the server no longer holds it, the page reloads the rooms
 ## Header
 
 The header's line reads, from the left:
-Massimo's logo with the server's version, the time of the last update with **↻**,
-the Cube's clock;
+Massimo's logo with the server's version and the time of the last update with **↻**,
+all on one baseline, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
@@ -74,13 +74,15 @@ and the logo is the mark alone, the M with the clock in its V.
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
 made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does.
+The drawing has no margin: its bottom edge is the letters' baseline,
+which the version and the time of the last update stand on.
 Its colours follow the light or dark mode chosen, its letters the page's text.
 The sign-in, the form that creates the first owner and the apps' connect page
 show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
-Scrolled, it keeps its first line without the time of the last update
-and the Cube's clock, and the lines under it go until the page is back
+Scrolled, it keeps its first line without the time of the last update,
+and the lines under it go until the page is back
 at its top, the button that reloads a new version and expert mode's line
 of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
@@ -107,8 +109,14 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for others the line is the count alone, and the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **The time of the last update**, **↻**, which asks the server for the
-  current state now, and **the Cube's clock**.
+- **The time of the last update** and **↻**, one button without a frame,
+  which asks the server for the current state now;
+  a finger hits it a little beyond what it shows, and ↻ turns while it asks.
+- **The version** is short; its tooltip is the whole version, "(server version)".
+  The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
+  the Cube tells it when the server connects, to the minute,
+  and the page moves it on from then;
+  a clock that was off by 90 s or more says by how much ("3 min ahead").
 - **👤** drops down who is signed in, with the role,
   or the API key and whose it is;
   **My profile**, **My settings** and **Notifications**, which open those pages,

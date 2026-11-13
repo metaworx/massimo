@@ -154,9 +154,9 @@ def test_header_order_and_the_narrow_header(page, case):
     of its connection, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
     beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and System settings, opens each, and is
     highlighted while one of them is shown."""
-    order = ["h1", "#updated", "#refresh-btn", "#cube-choice", "#view-tiles", "#user-menu summary"]
+    order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#user-menu summary"]
     b = {sel: box(page, sel) for sel in order}
-    assert b["#updated"]["x"] < b["#refresh-btn"]["x"], "↻ after the time it renews"
+    assert b["#updated"]["x"] < b["#refresh-btn svg"]["x"], "↻ after the time it renews, in the same button"
     assert page.locator("#cube-choice .picker-icon .conn").count() == 1, "the connection, a plug in the Cube choice"
     assert b["#view-tiles"]["x"] < b["#user-menu summary"]["x"], "🏠 left of 👤"
     if case.width >= 600:
@@ -185,6 +185,76 @@ def test_header_order_and_the_narrow_header(page, case):
     assert not active(page, "#nav-menu summary"), "and not on Rooms"
 
 
+# The baseline of an element's text: the bottom of an empty inline-block
+# put at its end, whose baseline is its bottom edge.
+BASELINE = """(sel) => {
+  const probe = document.createElement('span');
+  probe.style.display = 'inline-block';
+  document.querySelector(sel).appendChild(probe);
+  const y = probe.getBoundingClientRect().bottom;
+  probe.remove();
+  return y;
+}"""
+
+# The drawing shown in the header's brand, the logo or (under 600 px) the
+# small mark: its box.
+BRAND_BOX = """() => {
+  const svg = [...document.querySelectorAll('.top .brand-name svg')].find((e) => e.getBoundingClientRect().width > 0);
+  const b = svg.getBoundingClientRect();
+  return {top: b.top, bottom: b.bottom, height: b.height};
+}"""
+
+VERSION_TITLE = {"en": "{v} (server version)", "de": "{v} (Server-Version)"}
+
+
+def test_header_on_one_baseline(page, case):
+    """The logo (the small mark under 600 px), the version and the time of
+    the last update stand on one baseline, the drawing's bottom edge, and
+    the M is as tall as the page buttons. The time and ↻ are one button
+    without a frame, larger to a finger than it looks; the version's
+    tooltip is the whole version."""
+    brand = page.evaluate(BRAND_BOX)
+    button = box(page, "#view-tiles")
+    assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
+    assert abs(brand["top"] - button["y"]) <= 1, f"and level with them: {brand} vs {button}"
+    for sel in ("#version-short", "#updated"):
+        y = page.evaluate(BASELINE, sel)
+        if case.width >= 600 or sel == "#version-short":
+            assert abs(y - brand["bottom"]) <= 1, f"{sel} on the logo's baseline: {y} vs {brand['bottom']}"
+    btn = page.locator("#refresh-btn")
+    assert btn.evaluate("(e) => getComputedStyle(e).borderTopStyle") == "none", "no frame"
+    b = box(page, "#refresh-btn")
+    x = b["x"] + b["width"] / 2
+    for y in (b["y"] - 8, b["y"] + b["height"] + 8):
+        # the button, or another control where one is that close (the Cube
+        # choice under it on a phone)
+        hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); "
+                            "return !!e && (!!e.closest('#refresh-btn') || !!e.closest('button, summary, a, input, select')); }", [x, y])
+        assert hit, f"a tap 8 px off the button still hits it, where no other control is (y {y}, button {b})"
+    assert page.locator("#updated").inner_text() in (btn.get_attribute("aria-label") or ""), "its label says the time"
+    version = page.evaluate("state.version")
+    assert page.locator("#version-short").get_attribute("title") == VERSION_TITLE[case.lang].format(v=version), \
+        "the tooltip is the whole version"
+
+
+def test_cube_clock_in_its_facts(page, case):
+    """The Cube's clock is not in the header: its facts show it, moved on
+    from when the server read it, and how far it is off where that is
+    90 s or more."""
+    assert page.locator("#clock-plain").count() == 0, "no Cube clock in the header"
+    got = page.evaluate("""() => {
+      const c = state.cubes.find((x) => x.serial === state.serial);
+      const read = cubeInstant(c.cube_time, state.tz[c.serial]);
+      if (!read) return null;
+      const plain = clockText(Object.assign({}, c, { cube_time_at: read.toISOString() })).text;
+      const late = clockText(Object.assign({}, c, { cube_time_at: new Date(read.getTime() + 10 * 60000).toISOString() })).text;
+      return { plain, late, note: tn("budget.clockBehind", 10) };
+    }""")
+    assert got, "the fake Cube's clock and time zone are known"
+    assert "(" not in got["plain"], f"no note where the clock is right: {got}"
+    assert got["late"].endswith("(" + got["note"] + ")"), f"read 10 minutes late, the clock is 10 min behind: {got}"
+
+
 def test_menu_icons_and_user_title(page, case):
     """The 👤 menu's items and ☰'s each show their icon; Forget key a key's;
     the 👤 button's tooltip names who is signed in, here the owner of the
@@ -209,7 +279,7 @@ def test_expert_line_of_the_cube(page, case):
     """In expert mode a line under the header's first: the chosen Cube's
     name, duty cycle, free slots and pending, queued only while commands
     wait; it stays when the header compacts, on every page, and is gone
-    outside expert mode, where the Cube's clock shows at the top all the same."""
+    outside expert mode."""
     line = page.locator("#cube-stats")
     assert line.is_hidden(), "no line outside expert mode"
     page.evaluate("() => { state.settings.expert = true; applySettings(); }")
@@ -224,7 +294,6 @@ def test_expert_line_of_the_cube(page, case):
       renderHeader(c);
     }""")
     assert page.locator("#stat-queued").is_visible() and QUEUED[case.lang] + " 2" in line.inner_text(), "queued while commands wait"
-    assert page.locator("#clock-plain").is_visible(), "the Cube's clock at the top in expert mode too"
     page.evaluate("document.body.classList.add('scrolled')")
     assert line.is_visible(), "the line stays when the header compacts"
     page.evaluate("document.body.classList.remove('scrolled')")

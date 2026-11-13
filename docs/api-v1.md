@@ -1146,7 +1146,8 @@ then every Cube discovery found on the LAN that is not configured:
     "rooms": 5,
     "devices": 16,
     "queued": 0,
-    "cube_time": "2026-11-04 15:28"
+    "cube_time": "2026-11-04 15:28",
+    "cube_time_at": "2026-11-04T15:28:09+01:00"
   },
   {
     "serial": "KEQ0000000",
@@ -1225,6 +1226,10 @@ so a non-zero value says the states may still change.
 `queued` is the number of commands waiting in the server.
 `observed_since` is when the server first heard from the Cube (see the
 ages of device values below).
+`cube_time` is the Cube's clock, in its own time zone and to the minute,
+as its greeting told it at the last connect, and `cube_time_at` when the
+server read it: the clock moves on by the time since, and the two say how
+far it is off.
 
 The Cube reports its budget only in the answer to a radio command and when a
 connection starts,

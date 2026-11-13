@@ -50,6 +50,7 @@
   <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <!-- a section card's fold, and back to the top of a page -->
   <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L20 9.5"/><path d="M20 4.5v5h-5"/></symbol>
   <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
   <!-- a page's sections menu: a bulleted list, apart from the header's ☰ -->
   <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5"/><circle cx="4.75" cy="6" r="1.4" fill="currentColor"/><circle cx="4.75" cy="12" r="1.4" fill="currentColor"/><circle cx="4.75" cy="18" r="1.4" fill="currentColor"/></symbol>
@@ -60,14 +61,13 @@
     <div class="top-left">
       <div class="brand">
         <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
-        <h1 class="brand-name" data-brand><span class="brand-initial">M</span><span class="brand-rest">assimo</span></h1>
-        <span id="version-short" class="muted mono small" title="server version" data-i18n-attr="title:header.serverVersion"></span>
+        <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
+        <span id="version-short" class="muted mono small"></span>
       </div>
-      <span class="updated-line">
-        <span id="updated" class="muted" title="time of the last successful poll" data-i18n-attr="title:header.updatedTitle"></span>
-        <button type="button" id="refresh-btn" class="icon-btn refresh-btn" aria-label="refresh" title="Refresh now" data-i18n-attr="aria-label:header.refresh title:header.refreshTitle">↻</button>
-      </span>
-      <span id="clock-plain" class="muted" title=""></span>
+      <!-- the time of the last successful poll and the refresh icon, one
+           button without a frame, its tap area larger than it (app.js
+           renderUpdated) -->
+      <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
     </div>
     <div class="cube">
       <!-- the Cube choice, a menu of the page (components.js pickerMenu):
@@ -128,7 +128,7 @@
   </div>
 
   <section id="setup" class="tile setup hidden" aria-labelledby="setup-title">
-    <div class="brand-name brand-big" data-brand><span class="brand-initial">M</span><span class="brand-rest">assimo</span></div>
+    <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
     <header class="tile-head"><h2 id="setup-title" data-i18n="setup.title">No users yet</h2></header>
     <form id="setup-form" class="setup-form">
       <p class="muted small" data-i18n="setup.text">This server has no users, so anyone on the network may do everything. Create the owner here, from the local network, or on the box with massimo user add.</p>
@@ -314,7 +314,7 @@
 <dialog id="login-dialog">
   <!-- the sign-in, a card in the signed-out page (login.js askLogin); the
        password form holds the one password field, the API key a form of its own -->
-  <div class="brand-name brand-big" data-brand><span class="brand-initial">M</span><span class="brand-rest">assimo</span></div>
+  <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
   <div class="login-head">
     <h3 data-i18n="login.title">Sign in</h3>
     <!-- the language and the mode before anyone signs in, the settings of My settings -->

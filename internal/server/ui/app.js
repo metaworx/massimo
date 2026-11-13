@@ -525,19 +525,38 @@ function fmtInstant(date, timeZone) {
   return new Intl.DateTimeFormat(undefined, opts).format(date);
 }
 
-// clockText returns the clock to show and its tooltip.
+// clockText returns the Cube's clock to show and its tooltip. The Cube
+// tells its clock in its greeting, at a connect; the server says when it
+// read it (cube_time_at), and the clock is moved on by the time since. An
+// offset from that moment of 90 s or more is said after it: the Cube's
+// clock has minutes only.
 function clockText(cube) {
   const raw = cube.cube_time || "";
   const tz = state.tz[cube.serial];
-  const inst = cubeInstant(raw, tz);
-  if (!inst) return { text: raw || "–", title: "" };
+  const read = cubeInstant(raw, tz);
+  if (!read) return { text: raw || "–", title: "" };
+  const at = Date.parse(cube.cube_time_at || "");
+  const since = isNaN(at) ? 0 : Math.max(0, Date.now() - at);
+  const inst = new Date(read.getTime() + since);
   const utc = fmtInstant(inst, "UTC") + " UTC";
+  let text;
   if (state.settings.clock === "cube") {
-    const off = cubeOffset(tz, ...raw.split(/[- :]/).map(Number));
+    // the Cube's own time, moved on as its zone's offset at the reading
+    const [y, mo, d, hh, mm] = raw.split(/[- :]/).map(Number);
+    const off = cubeOffset(tz, y, mo, d, hh, mm);
+    const local = new Date(Date.UTC(y, mo - 1, d, hh, mm) + since);
+    const pad = (n) => String(n).padStart(2, "0");
+    const shown = local.getUTCFullYear() + "-" + pad(local.getUTCMonth() + 1) + "-" + pad(local.getUTCDate()) + " " + pad(local.getUTCHours()) + ":" + pad(local.getUTCMinutes());
     const name = (off === tz.summer.offset_seconds ? tz.summer.name : tz.winter.name) || t("header.cubeTime");
-    return { text: raw + " " + name, title: utc };
+    text = shown + " " + name;
+  } else {
+    text = fmtInstant(inst);
   }
-  return { text: fmtInstant(inst), title: utc };
+  if (!isNaN(at)) {
+    const skew = Math.round((read.getTime() - at) / 60000);
+    if (Math.abs(read.getTime() - at) >= 90000) text += " (" + tn(skew > 0 ? "budget.clockAhead" : "budget.clockBehind", Math.abs(skew)) + ")";
+  }
+  return { text, title: utc };
 }
 
 // --- header -----------------------------------------------------------
@@ -556,8 +575,8 @@ function budgetFacts(cube) {
 }
 
 // renderHeader shows the chosen Cube in the header: its connection in
-// the Cube choice, its clock, and in expert mode its name with its radio
-// budget, queued only while commands wait.
+// the Cube choice, and in expert mode its name with its radio budget,
+// queued only while commands wait. Its clock is in its facts (cubes.js).
 function renderHeader(cube) {
   renderCubeSelect(); // the chosen Cube's connection, its plug
   const f = budgetFacts(cube);
@@ -567,9 +586,6 @@ function renderHeader(cube) {
   $("queued").textContent = f.queued;
   $("stat-queued").classList.toggle("hidden", !(cube.queued > 0));
   $("pending-n").textContent = f.pending;
-  const clock = clockText(cube);
-  $("clock-plain").textContent = clock.text;
-  $("clock-plain").title = clock.title;
   const p = $("pending");
   const n = cube.pending_radiograms || 0;
   if (n > 0) {
@@ -582,16 +598,21 @@ function renderHeader(cube) {
 }
 
 // renderUpdated shows the time of the last successful poll with
-// seconds, in the browser's time; the Cube's clock has no seconds.
+// seconds, in the browser's time, in the refresh button, which says both
+// to a screen reader.
 function renderUpdated() {
   const el = $("updated");
+  const btn = $("refresh-btn");
   if (!state.lastPoll) {
     el.textContent = "";
+    btn.setAttribute("aria-label", t("header.refreshTitle"));
     return;
   }
   const pad = (n) => String(n).padStart(2, "0");
   const last = state.lastPoll;
-  el.textContent = t("header.updated", { time: pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds()) });
+  const time = pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds());
+  el.textContent = t("header.updated", { time });
+  btn.setAttribute("aria-label", t("header.refreshUpdated", { time }));
 }
 
 // renderCubeSelect fills the Cube choice (components.js pickerMenu): the
@@ -909,6 +930,12 @@ function certText(tls) {
   return parts.filter(Boolean).join(" · ") || "–";
 }
 
+// renderVersionTitle names the server's whole version in the tooltip of
+// the short one in the header.
+function renderVersionTitle() {
+  $("version-short").title = state.version ? t("header.versionTitle", { version: state.version }) : "";
+}
+
 async function checkVersion() {
   let h;
   try {
@@ -922,6 +949,7 @@ async function checkVersion() {
     state.version = v;
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
+    renderVersionTitle();
     return;
   }
   if (v === state.version) return;
@@ -957,8 +985,6 @@ function clearCubeData() {
   renderCubeSelect();
   renderHomeNotice();
   renderUpdated();
-  $("clock-plain").textContent = "";
-  $("clock-plain").title = "";
   for (const id of ["stats-cube", "duty", "slots", "pending-n", "queued"]) $(id).textContent = "";
 }
 
@@ -1190,6 +1216,7 @@ function applyLanguage() {
   renderCubeSelect();
   renderFound();
   renderMe();
+  renderVersionTitle();
   renderDeviceSwitches();
   renderUsers();
   renderProviders(); // providers.js

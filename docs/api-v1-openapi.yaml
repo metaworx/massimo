@@ -3758,7 +3758,8 @@ components:
         rooms: {type: integer}
         devices: {type: integer}
         queued: {type: integer, description: Commands waiting in the queue}
-        cube_time: {type: string, example: "2026-11-04 15:28"}
+        cube_time: {type: string, example: "2026-11-04 15:28", description: "The Cube's clock in its greeting at the last connect, its own time zone, to the minute"}
+        cube_time_at: {type: string, format: date-time, description: When the server read cube_time}
     CubeChange:
       type: object
       description: The fields of a Cube's configuration that PUT and POST change
