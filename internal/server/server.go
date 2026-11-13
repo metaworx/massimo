@@ -327,6 +327,7 @@ type Server struct {
 	responder *proxy.Responder // the proxies' discovery socket, when serving
 	discMu    sync.Mutex
 	discRun   *discoveryRun   // the run going on, if any
+	discNext  *discoveryRun   // the run to start when discRun ends, if any
 	ctx       context.Context // Run's, for work that outlives a request
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case

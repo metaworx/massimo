@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -59,31 +58,65 @@ func startDiscovering(t *testing.T, opts Options) (*httptest.Server, *Server) {
 	return ts, s
 }
 
-// postDiscovery asks for a run and returns the answer of one that began
-// after the call. A call while a run is going shares it, and that run
-// sent its requests before what the test changed just before the call:
-// under load the run at the start may still be ending when the test
-// already sees what it found. An answer without ran_at, an error, is
-// returned as it is.
+// postDiscovery asks for a run and fails the test where the answer's
+// run began before the call: the API's call gets a run of its own, one
+// that heard what the test changed just before it (discoverAfter). An
+// answer without ran_at, an error, is returned as it is.
 func postDiscovery(t *testing.T, ts *httptest.Server) (int, map[string]any) {
 	t.Helper()
 	called := time.Now()
-	for i := 0; ; i++ {
-		code, out := do(t, ts, "POST", "/api/v1/cubes/discover", "")
-		at, ok := out["ran_at"].(string)
-		if !ok {
-			return code, out
-		}
-		ranAt, err := time.Parse(time.RFC3339Nano, at)
-		if err != nil {
-			t.Fatalf("ran_at %q: %v", at, err)
-		}
-		if !ranAt.Before(called) {
-			return code, out
-		}
-		if i == 2 {
-			t.Fatalf("three runs in a row began before the call, the last at %s", at)
-		}
+	code, out := do(t, ts, "POST", "/api/v1/cubes/discover", "")
+	at, ok := out["ran_at"].(string)
+	if !ok {
+		return code, out
+	}
+	ranAt, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		t.Fatalf("ran_at %q: %v", at, err)
+	}
+	if ranAt.Before(called) {
+		t.Fatalf("the call got a run that began at %s, before the call at %s", at, called.Format(time.RFC3339Nano))
+	}
+	return code, out
+}
+
+// A call of the API while a run is going gets the run after it, which
+// every call that came meanwhile shares; the discovery loop's call
+// shares the run going.
+func TestACallDuringARunGetsTheNext(t *testing.T) {
+	a, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	// A long wait, so that the calls below come while the first run goes.
+	ts, s := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr()}, DiscoveryWait: time.Second})
+	ctx := context.Background()
+	go s.discover(ctx)
+	var going *discoveryRun
+	eventually(t, "a run going", func() bool {
+		s.discMu.Lock()
+		defer s.discMu.Unlock()
+		going = s.discRun
+		return going != nil
+	})
+	called := time.Now()
+	joined, next := make(chan *discoveryRun, 1), make(chan *discoveryRun, 1)
+	go func() { run, _ := s.discover(ctx); joined <- run }()
+	go func() { run, _ := s.discoverAfter(ctx); next <- run }()
+	_, out := postDiscovery(t, ts)
+	if run := <-joined; run != going {
+		t.Error("the loop's call did not share the run going")
+	}
+	run := <-next
+	if run == going || run.ranAt.Before(called) || !going.ranAt.Before(called) {
+		t.Fatalf("the run going began at %s, the call's at %s, the call at %s", going.ranAt, run.ranAt, called)
+	}
+	if at, _ := time.Parse(time.RFC3339Nano, out["ran_at"].(string)); !at.Equal(run.ranAt) {
+		t.Errorf("two calls during a run got runs that began at %s and %s", at, run.ranAt)
+	}
+	if found, _ := out["found"].([]any); len(found) != 1 {
+		t.Errorf("found %v", out["found"])
 	}
 }
 
@@ -145,22 +178,8 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("%d cube_found events", n)
 	}
-
-	// Two calls during one run share its result.
-	var wg sync.WaitGroup
-	ran := make([]any, 2)
-	for i := range ran {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, out := postDiscovery(t, ts)
-			ran[i] = out["ran_at"]
-		}()
-	}
-	wg.Wait()
-	if ran[0] == nil || ran[0] != ran[1] {
-		t.Fatalf("runs %v", ran)
-	}
+	// Calls during a run share the run after it:
+	// TestACallDuringARunGetsTheNext.
 }
 
 // TestDiscoveryDHCPFlag follows the flag through runs: false for a static
