@@ -1,4 +1,4 @@
-<!-- A Cube's form in System settings → Cubes (detailsPanel puts its head around it) and its notice of a settings file line that differs, cubes.js; the form needs the capability cubes, the pairing (pairing.html) pair. -->
+<!-- A Cube's form in System settings → Cubes (detailsPanel puts its head around it), its facts, and its notice of a settings file line that differs, cubes.js; the form needs the capability cubes, the pairing (pairing.html) pair, the facts neither. -->
 <template id="tpl-cube-panel">
   <form class="cube-form needs-cubes">
     <div class="cube-fields">
@@ -40,6 +40,23 @@
       <span class="actions-right"><button type="submit" class="primary" data-i18n="cubes.save">Save</button></span>
     </div>
   </form>
+</template>
+
+<!-- A Cube's facts at the top of its panel, cubes.js fillCubeFacts: where it is, what it runs, its clock and its radio budget. -->
+<template id="tpl-cube-info">
+  <table class="info-table cube-info">
+    <tbody>
+      <tr><th scope="row" data-i18n="budget.address">Address</th><td class="mono" data-fact="host">–</td></tr>
+      <tr><th scope="row" data-i18n="cubes.port">Port</th><td class="mono" data-fact="port">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.firmware">Firmware</th><td data-fact="firmware">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.radio">Radio</th><td class="mono" data-fact="radio">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.clock">Cube clock</th><td data-fact="clock">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.duty">Duty cycle</th><td data-fact="duty">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.slots">Free slots</th><td data-fact="slots">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.pending">Pending</th><td data-fact="pending">–</td></tr>
+      <tr><th scope="row" data-i18n="budget.queued">Queued</th><td data-fact="queued">–</td></tr>
+    </tbody>
+  </table>
 </template>
 
 <template id="tpl-cube-differs">

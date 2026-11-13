@@ -541,21 +541,34 @@ function clockText(cube) {
 
 // --- header -----------------------------------------------------------
 
+// budgetFacts is a Cube's radio budget as the page shows it, in the
+// header and in its panel (cubes.js): the duty cycle, the free memory
+// slots, the radiograms pending and the commands queued, "–" while unknown.
+function budgetFacts(cube) {
+  const b = cube.budget || {};
+  return {
+    duty: b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %",
+    slots: b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots),
+    pending: String(cube.pending_radiograms || 0),
+    queued: cube.queued === undefined ? "–" : String(cube.queued),
+  };
+}
+
+// renderHeader shows the chosen Cube in the header: its connection in
+// the Cube choice, its clock, and in expert mode its name with its radio
+// budget, queued only while commands wait.
 function renderHeader(cube) {
   renderCubeSelect(); // the chosen Cube's connection, its plug
-  const b = cube.budget || {};
-  $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
-  $("slots").textContent = b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots);
-  $("queued").textContent = cube.queued === undefined ? "–" : String(cube.queued);
-  $("pending-n").textContent = String(cube.pending_radiograms || 0);
-  $("cube-fw").textContent = cube.firmware || "–";
-  $("cube-addr").textContent = cube.address || "–";
-  $("cube-rf").textContent = cube.rf_address || "–";
+  const f = budgetFacts(cube);
+  $("stats-cube").textContent = cube.name || cube.serial;
+  $("duty").textContent = f.duty;
+  $("slots").textContent = f.slots;
+  $("queued").textContent = f.queued;
+  $("stat-queued").classList.toggle("hidden", !(cube.queued > 0));
+  $("pending-n").textContent = f.pending;
   const clock = clockText(cube);
-  for (const id of ["clock", "clock-plain"]) {
-    $(id).textContent = clock.text;
-    $(id).title = clock.title;
-  }
+  $("clock-plain").textContent = clock.text;
+  $("clock-plain").title = clock.title;
   const p = $("pending");
   const n = cube.pending_radiograms || 0;
   if (n > 0) {
@@ -597,9 +610,11 @@ function renderCubeSelect() {
     sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
     icon: connIcon(c.connected),
   }));
+  // a found Cube opens System settings → Cubes, where it can be added,
+  // for a role with cubes; for others it is information
   if (state.found.length) {
     items.push({ group: t("discover.group") });
-    for (const c of state.found) items.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: true });
+    for (const c of state.found) items.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: !hasCap("cubes") });
   }
   if (hasCap("discover")) {
     items.push({ separator: true });
@@ -614,6 +629,7 @@ function renderCubeSelect() {
     onPick: (v) => {
       menu.open = false;
       if (v === DISCOVER) discoverCubes();
+      else if (v.startsWith("found:")) showFound();
       else selectCube(v);
     },
     shown: {
@@ -771,7 +787,6 @@ async function discoverCubes() {
     await loadCubes();
     const n = (res.found || []).filter((c) => !isConfigured(c)).length;
     showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
-    if (n) $("cube-found").open = true;
   } catch (e) {
     showSearch(t("discover.failed", { error: e.message }), 15000, true);
   } finally {
@@ -790,32 +805,23 @@ function addFound(c) {
   renderFound();
 }
 
-// renderFound lists, under the header, the Cubes found on the LAN that
-// the server does not serve, each with Add (foundRow, cubes.js), which
-// serves it at once, and the other way to add them: the lines for the server's
-// env file, ready to copy. The address makes serve take the Cube; a
-// name alone would as well, serve then follows the address the Cube
-// answers discovery from.
+// renderFound counts, under the header, the Cubes found on the LAN that
+// the server does not serve: for a role with cubes a link to System
+// settings → Cubes (showFound), which lists them with Add and the lines
+// for the server's settings file (cubes.js); the count alone otherwise.
 function renderFound() {
-  const box = $("cube-found");
   const n = state.found.length;
-  box.classList.toggle("hidden", !n);
+  $("cube-found").classList.toggle("hidden", !n);
   if (!n) return;
-  box.querySelector("summary").textContent = tn("discover.found", n);
-  const body = box.querySelector(".cube-found-body");
-  clear(body);
-  const list = elem("ul");
-  for (const c of state.found) list.appendChild(foundRow(c)); // cubes.js
-  body.appendChild(list);
-  body.appendChild(textEl("p", t("discover.hintAdd")));
-  body.appendChild(textEl("p", t("discover.hint")));
-  const lines = [];
-  for (const c of state.found) {
-    const p = "MASSIMO_CUBE_" + c.serial + "_";
-    lines.push(p + "ADDRESS=" + (c.address || ""), p + "NAME=");
-  }
-  body.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
-  body.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
+  $("cube-found-link").textContent = tn("discover.found", n);
+  $("cube-found-text").textContent = tn("discover.found", n);
+}
+
+// showFound opens System settings with the Cubes card in view, which
+// lists the found Cubes.
+function showFound() {
+  showView("system");
+  showCard($("sys-cubes"), true); // components.js
 }
 
 function selectCube(serial) {
@@ -853,26 +859,8 @@ function splitVersion(v) {
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
 // otherwise it offers a button.
-// renderStarted shows in expert mode when the server process started,
-// and how long ago (an older server sends no time).
-function renderStarted(iso) {
-  const dd = $("server-started");
-  if (dd.dataset.iso === (iso || "")) return;
-  dd.dataset.iso = iso || "";
-  clear(dd);
-  const ms = Date.parse(iso || "");
-  if (isNaN(ms)) {
-    dd.textContent = "–";
-    return;
-  }
-  dd.appendChild(document.createTextNode(fmtInstant(new Date(ms))));
-  const age = ageEl(iso, false, true);
-  if (age) dd.appendChild(age);
-}
-
-// renderTLS shows the certificate the server serves, from /healthz's
-// tls: in expert mode its source, names and expiry, and, while it is
-// self-signed, a notice under the header and in the sign-in dialog
+// renderTLS shows, from /healthz's tls, while the certificate the server
+// serves is self-signed, a notice under the header and in the sign-in dialog
 // asking to compare the fingerprint the browser shows for it with
 // massimo tls show on the box before signing in; and a warning while
 // the certificate ends within two weeks (or has none yet), computed
@@ -880,18 +868,13 @@ function renderStarted(iso) {
 // shows no fingerprint: it comes over the very connection in question,
 // and a man in the middle would pass the server's along, or rewrite it.
 function renderTLS(tls) {
-  const dd = $("tls-cert");
   const notice = $("tls-notice");
   $("login-tls").classList.toggle("hidden", !(tls && tls.self_signed));
   if (!tls) {
-    dd.textContent = "–";
     notice.classList.add("hidden");
     return;
   }
   const until = Date.parse(tls.not_after || "");
-  const parts = [tls.source, (tls.names || []).join(", ")];
-  if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
-  dd.textContent = parts.filter(Boolean).join(" · ");
   const texts = [];
   if (tls.self_signed) texts.push(t("header.selfSigned"));
   if (isNaN(until)) {
@@ -905,6 +888,16 @@ function renderTLS(tls) {
   notice.classList.toggle("hidden", texts.length === 0);
 }
 
+// certText is the certificate the server serves, as GET /api/v1/system
+// has it, for System Info (update.js): its source, names and expiry.
+function certText(tls) {
+  if (!tls) return "–";
+  const until = Date.parse(tls.not_after || "");
+  const parts = [tls.source, (tls.names || []).join(", ")];
+  if (!isNaN(until)) parts.push(t("header.certUntil", { date: fmtInstant(new Date(until)) }));
+  return parts.filter(Boolean).join(" · ") || "–";
+}
+
 async function checkVersion() {
   let h;
   try {
@@ -913,14 +906,11 @@ async function checkVersion() {
     return;
   }
   const v = h && h.version ? h.version : "";
-  renderStarted(h && h.started_at);
   renderTLS(h && h.tls);
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
-    $("version").textContent = parts.short;
-    $("version-rest").textContent = parts.rest || "–";
     return;
   }
   if (v === state.version) return;
@@ -956,10 +946,9 @@ function clearCubeData() {
   renderCubeSelect();
   renderHomeNotice();
   renderUpdated();
-  for (const id of ["clock", "clock-plain"]) {
-    $(id).textContent = "";
-    $(id).title = "";
-  }
+  $("clock-plain").textContent = "";
+  $("clock-plain").title = "";
+  for (const id of ["stats-cube", "duty", "slots", "pending-n", "queued"]) $(id).textContent = "";
 }
 
 // startPolling runs poll every poll interval.
@@ -1127,6 +1116,7 @@ function initSettings() {
   $("reload-btn").addEventListener("click", () => location.reload());
   $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("home-notice-cubes").addEventListener("click", () => showView("system"));
+  $("cube-found-link").addEventListener("click", showFound);
   $("clock-select").addEventListener("change", (ev) => {
     setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();

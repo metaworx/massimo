@@ -209,10 +209,11 @@ func runServe(args []string) error {
 	}
 	reboot := serveReboot(logger, allowReboot.on)
 	upd := server.UpdateOptions{Version: version, Flavour: flavour, Channel: os.Getenv("MASSIMO_UPDATE_CHANNEL"), Request: *updateRequest, Status: *updateStatus}
-	if m, ok := install.Packaged(""); ok {
-		packagedUpdate(&upd, m, "", os.Getenv)
-		if m.Name == "brew" {
-			serveBrewUpdate(logger, &upd, m, *listen, tlsInEffect != "off")
+	pkg, packaged := install.Packaged("")
+	if packaged {
+		packagedUpdate(&upd, pkg, "", os.Getenv)
+		if pkg.Name == "brew" {
+			serveBrewUpdate(logger, &upd, pkg, *listen, tlsInEffect != "off")
 		}
 	}
 	if runtime.GOOS == "windows" && *updateRequest != "" {
@@ -223,7 +224,7 @@ func runServe(args []string) error {
 
 	cfg := serve.Config{Listen: *listen, Addr: *addr, DataDir: dataDir(), Version: versionString(), SettingsFile: env.File(), Serial: selectedSN, SerialGiven: snExplicit,
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
-		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot,
+		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot, Install: installKind(pkg, packaged, currentProcess()),
 		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: root,
 		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}}
 	// The flags given win for this run; otherwise the store's settings.

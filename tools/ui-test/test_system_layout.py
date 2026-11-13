@@ -6,7 +6,7 @@ folding kept in the browser, back to top, the columns where there is
 room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
-CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-roles", "sys-caps", "sys-backup"]
+CARDS = ["sys-info", "sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-roles", "sys-caps", "sys-backup"]
 
 
 def card_ids(page):
@@ -22,7 +22,7 @@ def test_cards_and_contents(page, case):
     section buttons; the cards flow in two columns at 1100 px and stack
     at 390; nothing overflows."""
     show_view(page, "system")
-    assert card_ids(page) == CARDS, "Software update first, Backup and restore last"
+    assert card_ids(page) == CARDS, "System Info first, Backup and restore last"
     toc = page.locator("#system .toc .toc-link")
     assert toc.count() == len(CARDS), "a section button per card"
     assert [toc.nth(i).get_attribute("data-target") for i in range(toc.count())] == CARDS, "the buttons in the cards' order"

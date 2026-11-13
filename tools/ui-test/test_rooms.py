@@ -53,8 +53,8 @@ def test_open_window(page, case):
 def test_stale_and_expert(page, case):
     """The first room's devices made 30 hours old and stale: the tile
     warns, the values are greyed and the device list says so; expert mode
-    adds the type, the radio address, the exact times and when the server
-    started."""
+    adds the type, the radio address, the exact times and the Cube's
+    radio budget in the header."""
     page.evaluate("""() => {
       const iso = new Date(Date.now() - 30 * 3600 * 1000).toISOString();
       for (const x of state.rooms[0].devices) {
@@ -81,8 +81,10 @@ def test_stale_and_expert(page, case):
     assert ids.startswith("S/N ") and " · RF 0a" in ids, f"the serial beside the radio address in expert mode ({ids!r})"
     assert tile.locator(".device-vals .age-exact").first.is_visible(), "exact times in expert mode"
     assert tile.locator(".device-seen").first.is_visible(), "last seen in expert mode"
-    started = page.locator("#server-started")
-    assert started.is_visible() and started.inner_text().strip() not in ("", "–"), "server start time in expert mode"
+    stats = page.locator("#cube-stats")
+    assert stats.is_visible() and page.locator("#stats-cube").inner_text() == page.evaluate(
+        "(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()"), \
+        "the Cube's name and its radio budget in the header in expert mode"
     assert scroll_width(page) <= case.width, "no horizontal scroll in expert mode"
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
     tile.locator(".room-name-btn").click()

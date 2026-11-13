@@ -2273,6 +2273,38 @@ A single-use ticket for that Cube's event stream, valid for a minute:
 Without a token configured the stream is open and the ticket not needed,
 but the route answers all the same.
 
+### GET /api/v1/system
+
+What System settings → System Info shows (capability `read`):
+the version, the start and the certificate, as `/healthz` has them,
+and what `/healthz` does not tell anyone:
+how the server was installed, the computer it runs on,
+and the caller's address as the server sees it,
+the client a trusted proxy names (`serve -trusted-proxies`).
+
+```json
+{
+  "version": "v0.14.0-alpha.1 (go1.26.0, linux/arm64)",
+  "started_at": "2026-11-13T08:00:00+01:00",
+  "tls": {"source": "self-signed", "names": ["massimo.local"], "not_after": "2027-11-13T08:00:00+01:00", "fingerprint": "…", "self_signed": true},
+  "install": "apt",
+  "os": "linux",
+  "os_name": "Debian GNU/Linux 13 (trixie)",
+  "arch": "arm64",
+  "hostname": "massimo",
+  "client_ip": "192.168.1.20"
+}
+```
+
+`install` is the package manager that owns the binary, `apt` or `brew`,
+else what runs the server: `windows-service`, `systemd` or `launchd`,
+the units of `massimo install` or others;
+`other` for a terminal, a container or a supervisor massimo does not know.
+`os` and `arch` are as Go names them (`linux`, `darwin`, `windows`;
+`amd64`, `arm64`, `arm`);
+`os_name` is the distribution's name from `/etc/os-release`, absent elsewhere.
+`tls` is absent without TLS.
+
 ### GET /api/v1/update?refresh=1
 
 Whether a newer signed release is out on the server's update channel:

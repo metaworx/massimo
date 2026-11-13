@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/packaging"
 )
@@ -64,6 +65,31 @@ func TestRestartBy(t *testing.T) {
 	}
 	if _, _, err := restartBy("always", processInfo{goos: "linux", getenv: envOf(nil)}); err == nil || !strings.Contains(err.Error(), "want auto, exit or off") {
 		t.Fatalf("a bad -restart: %v", err)
+	}
+}
+
+// How the server was installed: the package manager that owns the binary
+// first, else the service manager that started it, else other.
+func TestInstallKind(t *testing.T) {
+	systemd := processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "4242"}), pid: 4242, ppid: 1}
+	for _, c := range []struct {
+		name     string
+		m        install.Manager
+		packaged bool
+		p        processInfo
+		want     string
+	}{
+		{"the deb under systemd", install.Manager{Name: "apt"}, true, systemd, "apt"},
+		{"brew services", install.Manager{Name: "brew"}, true, processInfo{goos: "darwin", getenv: envOf(map[string]string{"XPC_SERVICE_NAME": homebrewLabel}), ppid: 1}, "brew"},
+		{"massimo install's unit", install.Manager{}, false, systemd, server.InstallSystemd},
+		{"massimo install's daemon", install.Manager{}, false, processInfo{goos: "darwin", getenv: envOf(map[string]string{"XPC_SERVICE_NAME": install.Label}), ppid: 1}, server.InstallLaunchd},
+		{"the Windows service", install.Manager{}, false, processInfo{goos: "windows", getenv: envOf(nil), service: true}, server.InstallWindowsService},
+		{"a terminal", install.Manager{}, false, processInfo{goos: "linux", getenv: envOf(nil), ppid: 4242}, server.InstallOther},
+		{"a Windows console", install.Manager{}, false, processInfo{goos: "windows", getenv: envOf(nil), ppid: 4242}, server.InstallOther},
+	} {
+		if got := installKind(c.m, c.packaged, c.p); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 

@@ -70,7 +70,8 @@ highlighted while one of them is shown.
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its first line without the time of the last update
 and the Cube's clock, and the lines under it go until the page is back
-at its top, the button that reloads a new version apart;
+at its top, the button that reloads a new version and expert mode's line
+of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 - **Cube**:
@@ -85,20 +86,14 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
   Cubes it finds but does not serve are listed in the choice under "Found,
-  not configured" and cannot be chosen,
+  not configured",
   as long as they answer: one that a search or the server's own look no
-  longer hears leaves the list at the page's next poll;
-  a line under the header counts them and opens to their address,
-  whether they take it by DHCP or have a static one ("DHCP" or "static address"),
-  their firmware and the lines to put into the server's env file
-  (`/etc/massimo/env` for a server installed with `massimo install`,
-  otherwise `.env`).
-  The server serves a Cube once its `MASSIMO_CUBE_<SERIAL>_ADDRESS`,
-  or only a `_NAME`, is there and the server has been restarted;
-  with a name alone it takes the address from discovery and follows it.
-  With several Cubes each also needs a `_PROXY` address.
-  Key and IV are only needed for the portal commands (README.md,
-  "Cube variables").
+  longer hears leaves the list at the page's next poll.
+  A line under the header counts them.
+  For a role that may add Cubes, the line and a found Cube in the choice
+  open System settings with **Cubes** in view,
+  which lists them with **Add** and the lines for the server's env file;
+  for others the line is the count alone, and the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
 - **The time of the last update**, **↻**, which asks the server for the
@@ -127,9 +122,11 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and none of the settings pages.
-- In expert mode the header also shows the Cube's details and its radio budget,
-  when the server was started, with how long ago,
-  and the certificate the server serves (its source, names and expiry).
+- In expert mode a line under the first shows the chosen Cube's name,
+  its duty cycle, free slots and radiograms pending,
+  and the commands queued while there are any.
+  The server's facts are in System settings → **System Info**,
+  the Cube's in its panel under System settings → **Cubes**.
 - With a self-signed certificate (`massimo serve -tls self-signed`)
   the browser warned once, and a line under the header,
   and in the sign-in dialog, asks to compare the SHA-256 fingerprint in
@@ -505,7 +502,7 @@ each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no cog.
 
 The page is a card per part, as wide as the page:
-Software update first, then Maintenance, Cubes, Users, Roles,
+System Info first, then Software update, Maintenance, Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -521,6 +518,15 @@ the browser keeps which cards are folded.
 Once the row of buttons is out of sight, **↑** at the bottom right goes back
 to the top of the page.
 
+- **System Info**, for everyone who opens System settings:
+  a table of the server's version and what it was built with,
+  when it started and how long ago, the certificate it serves
+  (its source, names and expiry; none on plain HTTP),
+  how it was installed (the Debian package, Homebrew, the Windows service,
+  a systemd or launchd service, or other: by hand, a container or another supervisor),
+  the system it runs on with its processor, the host's name,
+  and the address the server sees this browser at
+  (`docs/api-v1.md`, "GET /api/v1/system").
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
@@ -587,11 +593,16 @@ to the top of the page.
   and every `MASSIMO_*` variable with where it came from, a key, an IV, a
   token or a password as "set, not shown"
   (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
-  From 900 px Software update and Maintenance share a row.
+  From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
-  each in a panel whose head shows the name, the serial and the address,
-  and opens with a click: its connection,
+  each in a panel whose head shows the name, the serial and the address
+  without the port, the duty cycle, the free slots and the radiograms pending,
+  and opens with a click:
+  a table of its facts for everyone who sees the panel
+  (address, port, firmware, radio address, the Cube's clock,
+  duty cycle, free slots, pending and queued, refreshed while it is open),
+  its connection,
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),
@@ -613,7 +624,16 @@ to the top of the page.
   the LAN** while discovery hears it, with its address,
   DHCP flag and firmware, "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
-  which serves a found Cube at once (also in the list of found Cubes under the header).
+  which serves a found Cube at once.
+  Under the found Cubes, the lines to put into the server's env file
+  serve them too (`/etc/massimo/env` for a server installed with `massimo install`,
+  otherwise `.env`):
+  the server serves a Cube once its `MASSIMO_CUBE_<SERIAL>_ADDRESS`,
+  or only a `_NAME`, is there and the server has been restarted;
+  with a name alone it takes the address from discovery and follows it.
+  With several Cubes each also needs a `_PROXY` address.
+  Key and IV are only needed for the portal commands (README.md,
+  "Cube variables").
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 
   From 760 px a Cube's panel has two columns: its settings at the left,

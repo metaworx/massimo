@@ -209,3 +209,46 @@ def test_cube_choice_menu(page, case):
     item.click()
     assert page.locator("#cube-menu").get_attribute("open") is None, "a choice closes the menu"
     assert page.evaluate("state.serial") == "KEQ0000100", "the Cube stays chosen"
+
+
+DUTY = {"en": "Duty cycle", "de": "Duty Cycle"}
+
+
+def test_cube_facts(page, case):
+    """A Cube's panel: its head names the host without the port and shows
+    duty cycle, free slots and pending; open, a table of its facts, which a
+    load of the list refreshes in place, what is typed in the form staying."""
+    show_view(page, "system")
+    cube = page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100')")
+    host, port = cube["address"].rsplit(":", 1)
+    panel = page.locator(PANEL)
+    head = panel.locator("summary")
+    assert head.locator(".mono").inner_text() == "KEQ0000100 · " + host, "the serial and the host, without the port"
+    stats = head.locator(".cube-head-stats").inner_text()
+    assert stats.startswith(DUTY[case.lang] + " ") and stats.count(" · ") == 2, f"duty cycle, free slots and pending in the head ({stats!r})"
+    head.click()
+    info = panel.locator(".cube-info")
+    assert info.is_visible(), "the facts, at the top of the open panel"
+
+    def fact(name):
+        return info.locator(f"[data-fact={name}]").inner_text().strip()
+
+    assert fact("host") == host and fact("port") == port, "the address and the port"
+    assert fact("firmware") == cube["firmware"] and fact("radio") == cube["rf_address"], "the firmware and the radio address"
+    assert fact("clock") not in ("", "–"), "the Cube's clock"
+    assert fact("duty").endswith(" %") and fact("slots") != "–" and fact("pending") != "–" and fact("queued") != "–", "the radio budget"
+    form = panel.locator("form.cube-form")
+    form.locator("input[name=name]").fill("Typing")
+    page.evaluate("""() => {
+      const c = state.cubes.find((x) => x.serial === 'KEQ0000100');
+      c.budget = Object.assign({}, c.budget, { duty_cycle_pct: 42 });
+      c.pending_radiograms = 3;
+      cubesPolled();
+    }""")
+    assert fact("duty") == "42 %" and fact("pending") == "3", "a load of the list refreshes the open panel's facts"
+    assert "42 %" in head.locator(".cube-head-stats").inner_text(), "and its head"
+    assert form.locator("input[name=name]").input_value() == "Typing", "what is typed stays"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the Cube's facts"
+    form.locator("input[name=name]").fill(cube.get("name") or "")
+    head.click()
+    show_view(page, "tiles")

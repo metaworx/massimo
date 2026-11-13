@@ -348,10 +348,7 @@ def step(page, which):
         page.locator("#scheme-editor").wait_for(state="visible")
         to_top(page, page.locator("#prefs .appearance"))
     elif which == "cube-found":
-        found = page.locator("#cube-found")
-        found.wait_for(state="visible")
-        found.locator("summary").click()
-        found.locator(".env-lines").wait_for(state="visible")
+        page.locator("#cube-found-link").wait_for(state="visible")
     elif which == "cubes":
         show_view(page, "system")
         panel = page.locator(".cube-panel[data-serial='KEQ0000100']")

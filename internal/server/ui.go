@@ -42,7 +42,7 @@ var uiPartials = []struct {
 	{"profile", []string{"profile.html"}},
 	{"prefs", []string{"appearance.html", "page.html"}},
 	{"notify", []string{"notify.html"}},
-	{"system", []string{"software.html", "maintenance.html", "cubes.html"}},
+	{"system", []string{"system-info.html", "software.html", "maintenance.html", "cubes.html"}},
 	{"system-flow", []string{"users.html", "providers.html", "roles.html", "capabilities.html"}},
 	{"system-end", []string{"backup.html"}},
 	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "providers-panel.html", "roles-panel.html", "backups-panel.html"}},

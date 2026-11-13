@@ -36,9 +36,44 @@ function cubesVisible() {
   return isShown("system");
 }
 
-// cubesPolled is called by loadCubes after every load of the list.
+// cubesPolled is called by loadCubes after every load of the list: the
+// list drawn again while no panel is open, otherwise each panel's head and
+// facts refreshed in place (fillCubeFacts), so that what is typed stays.
 function cubesPolled() {
-  if (cubesVisible() && cubesUI.open.size === 0 && !cubesUI.busy) renderCubes();
+  if (!cubesVisible()) return;
+  if (cubesUI.open.size === 0 && !cubesUI.busy) {
+    renderCubes();
+    return;
+  }
+  for (const d of document.querySelectorAll("#cubes-list .cube-panel")) {
+    const c = state.cubes.find((x) => x.serial === d.dataset.serial);
+    if (c) fillCubeFacts(d, c);
+  }
+}
+
+// hostPort splits a Cube's address, host:port or [v6]:port, into the
+// host and the port; an address without a port is its host.
+function hostPort(addr) {
+  const a = addr || "";
+  const m = /^\[([^\]]+)\]:(\d+)$/.exec(a) || /^([^:]+):(\d+)$/.exec(a);
+  return m ? { host: m[1], port: m[2] } : { host: a, port: "" };
+}
+
+// fillCubeFacts fills a Cube's panel from its entry of the list: the
+// head's host beside the serial, without the port, and its radio budget
+// (duty cycle, free slots and pending); the facts block (tpl-cube-info)
+// with the address and the port, the firmware, the radio address, the
+// Cube's clock and the whole budget.
+function fillCubeFacts(d, c) {
+  const { host, port } = hostPort(c.address);
+  const f = budgetFacts(c); // app.js
+  d.querySelector("summary > .mono").textContent = host ? c.serial + " · " + host : c.serial;
+  d.querySelector(".cube-head-stats").textContent =
+    [t("budget.duty") + " " + f.duty, t("budget.slots") + " " + f.slots, t("budget.pending") + " " + f.pending].join(" · ");
+  const clock = clockText(c); // app.js
+  const facts = { host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
+  for (const td of d.querySelectorAll(".cube-info [data-fact]")) td.textContent = facts[td.dataset.fact] || "–";
+  d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
 }
 
 // valueText shows a value of a file difference: a list joined, an empty
@@ -564,7 +599,7 @@ function cubePanel(c) {
   const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
-  const d = detailsPanel({ name: c.name || undefined, mono: c.address ? c.serial + " · " + c.address : c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
+  const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
     fromTemplate("tpl-cube-panel"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");
@@ -583,7 +618,9 @@ function cubePanel(c) {
   // two columns where there is room (style.css .cube-cols): the Cube's
   // fields at the left, the pairing and the hidden devices at the right
   const form = d.querySelector("form.cube-form");
-  sum.after(elem("div", "cube-cols", pairingSection(c.serial), form));
+  sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), sum.querySelector(".panel-badges"));
+  sum.after(elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form));
+  fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
     return d;
@@ -655,8 +692,7 @@ function cubePanel(c) {
 // (tpl-found-row): its serial, address and firmware, the massimo proxies
 // that answer for it, in expert mode its radio and MAC address and the
 // gateway it uses, how long ago it answered, and Add (addCube),
-// which serves it at once; the header's list of found Cubes (app.js) and
-// System settings → Cubes show it.
+// which serves it at once; System settings → Cubes lists it.
 function foundRow(c) {
   const li = fromTemplate("tpl-found-row");
   li.dataset.serial = c.serial;
@@ -703,7 +739,25 @@ function renderCubes() {
       ul.appendChild(li);
     }
     box.appendChild(ul);
+    box.appendChild(foundHints(state.found));
   }
+}
+
+// foundHints is the other way to serve the found Cubes: the lines for the
+// server's settings file, ready to copy, and where that file is. The
+// address makes serve take the Cube; a name alone would as well, serve
+// then follows the address the Cube answers discovery from.
+function foundHints(found) {
+  const box = elem("div", "cubes-found-hints needs-cubes");
+  box.appendChild(textEl("p", t("discover.hint"), "muted small"));
+  const lines = [];
+  for (const c of found) {
+    const p = "MASSIMO_CUBE_" + c.serial + "_";
+    lines.push(p + "ADDRESS=" + (c.address || ""), p + "NAME=");
+  }
+  box.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
+  box.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
+  return box;
 }
 
 // initCubes draws System settings → Cubes when the page opens; the panels

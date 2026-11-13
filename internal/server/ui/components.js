@@ -476,15 +476,34 @@ function sectionBadges(card, badges) {
 }
 
 // showCard brings a card into view, opened, with the focus on its
-// heading's button.
-function showCard(card) {
+// heading's button. On a page just opened (instant) the cards above it
+// still grow as their data comes, and a smooth scroll keeps the target
+// it started with and stops short: the card is brought there at once,
+// and again while the cards around it change size for two seconds,
+// until the user scrolls.
+function showCard(card, instant) {
   if (card.classList.contains("folded")) {
     foldCard(card, false);
     store("massimo.fold." + card.id, null);
   }
-  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const smooth = !instant && !matchMedia("(prefers-reduced-motion: reduce)").matches;
   card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
   card.querySelector(".section-fold").focus({ preventScroll: true });
+  if (instant) keepCardInView(card, 2000);
+}
+
+// keepCardInView brings a card to the top again whenever its page's
+// cards change size, for ms or until the user scrolls by hand.
+function keepCardInView(card, ms) {
+  const by = ["wheel", "touchstart", "keydown", "pointerdown"];
+  const ro = new ResizeObserver(() => card.scrollIntoView({ block: "start" }));
+  const stop = () => {
+    ro.disconnect();
+    for (const ev of by) removeEventListener(ev, stop);
+  };
+  ro.observe(card.parentElement);
+  for (const ev of by) addEventListener(ev, stop, { passive: true });
+  setTimeout(stop, ms);
 }
 
 // pageContents fills a page's row of section buttons (its nav.toc)
@@ -560,20 +579,40 @@ function pageBar(page) {
 // little taller than the window would otherwise become too short to stay
 // scrolled, the header grow back, and the page jump to and fro.
 // Scrolled from 96 px down, not again under 8 px.
+//
+// No layout on the way may be shorter than the page, nor move what
+// follows the header where the browser can see it (tools/ui-test/
+// test_scroll.py). Compacting measures the compacted header, a layout of
+// its own: it is made with a margin as tall as the whole header, so that
+// the page is longer for that moment, never shorter, where the browser
+// would cut a scroll near the page's end to fit (the log's Older went out
+// of view under the click). The browser's scroll anchoring is off
+// meanwhile: it took the scroll back by what the page under the header
+// moved, to the top where that was more than 96 px (the expert list, the
+// found Cubes open), the header grew back and the screen flickered.
+// Growing back takes the margin and the class away in one layout.
 function stickyHeader() {
   const top = document.querySelector(".top");
+  const root = document.documentElement;
   // the border box: compacting changes the padding, which the content
   // box does not see
-  const height = () => document.documentElement.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
+  const height = () => root.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
   new ResizeObserver(height).observe(top, { box: "border-box" });
   const set = (on) => {
     if (on === document.body.classList.contains("scrolled")) return;
-    top.style.marginBottom = "";
-    const whole = top.getBoundingClientRect().height;
-    const margin = parseFloat(getComputedStyle(top).marginBottom) || 0;
-    document.body.classList.toggle("scrolled", on);
-    if (on) top.style.marginBottom = margin + whole - top.getBoundingClientRect().height + "px";
-    height();
+    root.style.overflowAnchor = "none";
+    if (on) {
+      const whole = top.getBoundingClientRect().height;
+      const margin = parseFloat(getComputedStyle(top).marginBottom) || 0;
+      top.style.marginBottom = margin + whole + "px";
+      document.body.classList.add("scrolled");
+      top.style.marginBottom = margin + whole - top.getBoundingClientRect().height + "px";
+    } else {
+      top.style.marginBottom = "";
+      document.body.classList.remove("scrolled");
+    }
+    height(); // laid out with the margin, before the anchoring is back
+    root.style.overflowAnchor = "";
   };
   const onScroll = () => {
     const y = window.scrollY;
