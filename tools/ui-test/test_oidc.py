@@ -140,7 +140,7 @@ def test_sign_in_through_a_provider(page, case, new_context, provider):
         box = user_panel.locator(".user-identities-box")
         box.wait_for(state="visible")
         box.locator("select[name=provider]").select_option(key)
-        box.locator("input[name=email]").fill(provider.email.upper())
+        box.locator("input[name=account]").fill(provider.email.upper())
         box.locator(".add-identity").click()
         assert wait_until(page, f"!!document.querySelector(\".user-panel[data-name='{user}'] .user-identities li[data-id]\")", 5), \
             "the identity is listed"
@@ -148,22 +148,7 @@ def test_sign_in_through_a_provider(page, case, new_context, provider):
         assert provider.email in row.inner_text(), "by its e-mail, lower case"
 
         # signed out: the card's button, the provider, back signed in
-        ctx = new_context()
-        try:
-            other = ctx.new_page()
-            other.set_default_timeout(5000)
-            other.goto(URL)
-            assert wait_until(other, "document.getElementById('login-dialog').open", 5), "the sign-in card"
-            button = other.locator(f"#login-providers button[data-provider='{key}']")
-            button.wait_for(state="visible")
-            assert ("Fake " + case.lang) in button.inner_text(), "the button names the provider"
-            with other.expect_navigation(url=back_at_page, timeout=10000):
-                button.click()
-            other.wait_for_selector(".room", timeout=10000)
-            assert other.evaluate("state.me && state.me.user && state.me.user.name") == user, "signed in as the user"
-            assert "#oidc" not in other.url, "the code is gone from the address"
-        finally:
-            ctx.close()
+        sign_in_through(new_context, key, user, "Fake " + case.lang)
         identities = api_call("GET", f"api/v1/users/{user}/identities")
         assert len(identities) == 1 and identities[0]["bound"], f"the identity is bound: {identities}"
     finally:
@@ -171,6 +156,66 @@ def test_sign_in_through_a_provider(page, case, new_context, provider):
             api_call("DELETE", f"api/v1/providers/{key}")
         except Exception:
             pass
+        api_call("DELETE", f"api/v1/users/{user}")
+
+
+def sign_in_through(new_context, key, user, name):
+    """Signed out: the card's button, the provider, back signed in as
+    the user."""
+    ctx = new_context()
+    try:
+        other = ctx.new_page()
+        other.set_default_timeout(5000)
+        other.goto(URL)
+        assert wait_until(other, "document.getElementById('login-dialog').open", 5), "the sign-in card"
+        button = other.locator(f"#login-providers button[data-provider='{key}']")
+        button.wait_for(state="visible")
+        assert name in button.inner_text(), "the button names the provider"
+        with other.expect_navigation(url=back_at_page, timeout=10000):
+            button.click()
+        other.wait_for_selector(".room", timeout=10000)
+        assert other.evaluate("state.me && state.me.user && state.me.user.name") == user, "signed in as the user"
+        assert "#oidc" not in other.url, "the code is gone from the address"
+    finally:
+        ctx.close()
+
+
+def test_assign_by_user_id(page, case, new_context, provider):
+    """The owner assigns the user id at the provider, which signs in at
+    once (AP Oidc v1.1, Block 6)."""
+    key = f"byid-{case.width}-{case.lang}"
+    user = f"byid-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": user, "role": "viewer"})
+    api_call("POST", "api/v1/providers", {"key": key, "name": "By id", "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET})
+    try:
+        page.goto(URL)  # the providers read again for the users' panels
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "system")
+        user_panel = page.locator(f".user-panel[data-name='{user}']")
+        user_panel.locator("summary").click()
+        box = user_panel.locator(".user-identities-box")
+        box.wait_for(state="visible")
+        box.locator("select[name=provider]").select_option(key)
+        box.locator("select[name=kind]").select_option("subject")
+        assert box.locator(".identity-value-label").inner_text() == page.evaluate("t('users.identitySubject')"), \
+            "the field asks for the user id"
+        box.locator("input[name=account]").fill("a-typo")
+        box.locator(".add-identity").click()
+        assert wait_until(page, f"!!document.querySelector(\".user-panel[data-name='{user}'] .user-identities li[data-id]\")", 5), \
+            "the identity is listed"
+        row = page.locator(f".user-panel[data-name='{user}'] .user-identities li[data-id]")
+        assert "a-typo" in row.inner_text(), "by its user id"
+        # changed, while no sign-in used it
+        row.locator(".change-identity").click()
+        field = row.locator(".identity-change input[name=account]")
+        assert field.input_value() == "a-typo", "the change starts from the user id"
+        field.fill("sub-" + provider.email)
+        row.locator(".identity-change button[type=submit]").click()
+        assert wait_until(page, f"(document.querySelector(\".user-panel[data-name='{user}'] .user-identities li[data-id]\") || {{}}).textContent?.includes('sub-')", 5), \
+            "the user id changed"
+        sign_in_through(new_context, key, user, "By id")
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
         api_call("DELETE", f"api/v1/users/{user}")
 
 
@@ -187,10 +232,80 @@ def test_a_refused_account(new_context, case, guard, provider):
         assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in card"
         with page.expect_navigation(url=back_at_page, timeout=10000):
             page.locator(f"#login-providers button[data-provider='{key}']").click()
-        assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 10), "the card says why"
-        assert page.evaluate("document.getElementById('login-error').textContent") == page.evaluate("t('login.oidcError.refused')"), \
+        assert wait_until(page, "!document.getElementById('login-providers-error').classList.contains('hidden')", 10), \
+            "the card says why, under the providers' buttons"
+        assert page.evaluate("document.getElementById('login-providers-error').textContent") == page.evaluate("t('login.oidcError.refused')"), \
             "the account is not known here"
+        assert page.locator("#login-error").is_hidden(), "the password form's line stays empty"
         assert "#oidc" not in page.url, "the reason is gone from the address"
         ctx.close()
     finally:
         api_call("DELETE", f"api/v1/providers/{key}")
+
+
+def test_link_from_my_profile(page, case, provider):
+    """The signed-in user links its own account in My profile (AP Oidc
+    v1.1, Block 7): Link goes to the provider and back to My profile,
+    which says so and lists the account with what the provider said."""
+    key = f"link-{case.width}-{case.lang}"
+    name = "Link " + case.lang
+    api_call("POST", "api/v1/providers", {"key": key, "name": name, "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET})
+    try:
+        page.goto(URL)  # the providers read again
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "profile")
+        button = page.locator(f"#profile-identities button[data-provider='{key}']")
+        button.wait_for(state="visible")
+        assert button.inner_text() == page.evaluate(f"t('profile.link', {{name: {name!r}}})"), "Link names the provider"
+        named_buttons(page, "My profile with linked accounts")
+        with page.expect_navigation(url=back_at_page, timeout=10000):
+            button.click()
+        assert wait_until(page, "currentView === 'profile' && !document.getElementById('profile-msg').classList.contains('hidden')", 10), \
+            "back in My profile, which says how it went"
+        assert page.evaluate("document.getElementById('profile-msg').textContent") == page.evaluate(f"t('profile.linkDone', {{name: {name!r}}})"), \
+            "the account is linked"
+        assert page.url.endswith("#profile"), "the fragment is My profile's again"
+        row = page.locator("#profile-identities .user-identities li[data-id]").filter(has_text=name)
+        row.wait_for(state="visible")
+        assert provider.email in row.inner_text(), "by its e-mail"
+        assert page.evaluate("t('users.identityLastUsed')") in row.locator(".identity-details").inner_text(), "with its last sign-in"
+        assert row.locator(".change-identity").is_hidden(), "a user does not change its own, it links again"
+        again = page.locator(f"#profile-identities button[data-provider='{key}']")
+        assert again.inner_text() == page.evaluate(f"t('profile.linkAgain', {{name: {name!r}}})"), "Link again"
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
+
+
+def test_groups_admitted(page, new_context, case, provider):
+    """A provider that admits only some groups (AP Oidc v1.1, Block 8):
+    its form shows them, and an account in none of them comes back to the
+    card, which says so."""
+    key = f"groups-{case.width}-{case.lang}"
+    user = f"groups-{case.width}-{case.lang}"
+    api_call("POST", "api/v1/users", {"name": user, "role": "viewer"})
+    api_call("POST", "api/v1/providers", {"key": key, "name": "Groups", "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET,
+                                          "allowed_groups": ["family", "admins"]})
+    api_call("POST", f"api/v1/users/{user}/identities", {"provider": key, "subject": "sub-" + provider.email})
+    try:
+        page.goto(URL)
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "system")
+        panel = page.locator(f".provider-panel[data-key='{key}']")
+        panel.locator("summary").click()
+        assert panel.locator("[name=allowed_groups]").input_value() == "family, admins", "the groups admitted"
+        assert panel.locator("[name=groups_claim]").input_value() == "groups", "the claim, by default"
+
+        ctx = new_context()
+        other = ctx.new_page()
+        other.set_default_timeout(5000)
+        other.goto(URL)
+        assert wait_until(other, "document.getElementById('login-dialog').open", 5), "the sign-in card"
+        with other.expect_navigation(url=back_at_page, timeout=10000):
+            other.locator(f"#login-providers button[data-provider='{key}']").click()
+        assert wait_until(other, "!document.getElementById('login-providers-error').classList.contains('hidden')", 10), "the card says why"
+        assert other.evaluate("document.getElementById('login-providers-error').textContent") == other.evaluate("t('login.oidcError.group')"), \
+            "in none of the groups"
+        ctx.close()
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
+        api_call("DELETE", f"api/v1/users/{user}")

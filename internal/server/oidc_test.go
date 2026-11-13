@@ -4,9 +4,12 @@
 package server
 
 import (
+	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -30,8 +33,12 @@ type fakeIdP struct {
 	// methods is token_endpoint_auth_methods_supported; the client's
 	// method is checked against it.
 	methods []string
-	mu      sync.Mutex
-	grants  map[string]fakeGrant
+	// userinfo, where set, is the userinfo endpoint's answer for the
+	// access token, its status userinfoStatus where not 0.
+	userinfo       map[string]any
+	userinfoStatus int
+	mu             sync.Mutex
+	grants         map[string]fakeGrant
 }
 
 type fakeGrant struct {
@@ -46,8 +53,19 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	f := &fakeIdP{t: t, secret: "s3cr:et", grants: map[string]fakeGrant{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize?prompt=login",
-			"token_endpoint": f.srv.URL + "/token", "token_endpoint_auth_methods_supported": f.methods})
+		doc := map[string]any{"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize?prompt=login",
+			"token_endpoint": f.srv.URL + "/token", "token_endpoint_auth_methods_supported": f.methods}
+		if f.userinfo != nil {
+			doc["userinfo_endpoint"] = f.srv.URL + "/userinfo"
+		}
+		writeJSON(w, 200, doc)
+	})
+	mux.HandleFunc("GET /userinfo", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer at" {
+			writeJSON(w, 401, map[string]string{"error": "invalid_token"})
+			return
+		}
+		writeJSON(w, cmp.Or(f.userinfoStatus, 200), f.userinfo)
 	})
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
@@ -95,8 +113,15 @@ func (f *fakeIdP) signIn(t *testing.T, ts *httptest.Server, provider string, cla
 	if code != 200 {
 		t.Fatalf("start: %d %s", code, text)
 	}
+	return f.grant(t, ts, text, claims)
+}
+
+// grant has the fake grant a code for the claims to a start's answer,
+// and calls the callback with it.
+func (f *fakeIdP) grant(t *testing.T, ts *httptest.Server, startAnswer string, claims map[string]any) oidcRun {
+	t.Helper()
 	var started struct{ URL string }
-	json.Unmarshal([]byte(text), &started)
+	json.Unmarshal([]byte(startAnswer), &started)
 	auth, err := url.Parse(started.URL)
 	if err != nil || !strings.HasPrefix(started.URL, f.srv.URL+"/authorize?") {
 		t.Fatalf("the authorization URL %q", started.URL)
@@ -203,8 +228,15 @@ func TestOIDCSignIn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// an unverified e-mail binds nothing
-	if run := f.signIn(t, ts, "cloud", map[string]any{"email": "anna@example.com"}); run.status != 303 || run.fragment != "oidc-error=refused" {
+	// an unverified e-mail binds nothing, and says so where an e-mail
+	// waits; none sent says that
+	if run := f.signIn(t, ts, "cloud", map[string]any{"email": "anna@example.com"}); run.status != 303 || run.fragment != "oidc-error=unverified" {
+		t.Fatalf("unverified: %+v", run)
+	}
+	if run := f.signIn(t, ts, "cloud", map[string]any{"email": "nobody@example.com"}); run.fragment != "oidc-error=refused" {
+		t.Fatalf("unverified, none waiting: %+v", run)
+	}
+	if run := f.signIn(t, ts, "cloud", nil); run.fragment != "oidc-error=noemail" {
 		t.Fatalf("unverified: %+v", run)
 	}
 	run := f.signIn(t, ts, "cloud", map[string]any{"email": "Anna@Example.com", "email_verified": true})
@@ -313,7 +345,7 @@ func TestOIDCAutoCreate(t *testing.T) {
 	if run := f.signIn(t, ts, "cloud", verified("s1", "eve@example.net")); run.fragment != "oidc-error=refused" {
 		t.Fatalf("a foreign domain: %+v", run)
 	}
-	if run := f.signIn(t, ts, "cloud", map[string]any{"sub": "s1", "email": "carl@example.org"}); run.fragment != "oidc-error=refused" {
+	if run := f.signIn(t, ts, "cloud", map[string]any{"sub": "s1", "email": "carl@example.org"}); run.fragment != "oidc-error=unverified" {
 		t.Fatalf("an unverified e-mail: %+v", run)
 	}
 	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", verified("s1", "carl@example.org", "preferred_username", "Carl Example", "name", "Carl E."))); name != "carl-example" {
@@ -347,5 +379,241 @@ func TestNewUserName(t *testing.T) {
 		if got := newUserName(in); got != want {
 			t.Errorf("%q: %q, want %q", in, got, want)
 		}
+	}
+}
+
+// The userinfo endpoint (AP Oidc v1.1, Block 6, D25-A): it fills in the
+// e-mail and its verification the id_token lacks, as Nextcloud's OIDC
+// app answers; an answer for another subject fails the sign-in, one that
+// fails leaves the id_token's claims alone. A user id assigned signs in
+// at once.
+func TestOIDCUserinfo(t *testing.T) {
+	f := newFakeIdP(t)
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	anna, _ := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleOperator}, "", 0)
+	st.AddIdentity(ctx, anna.ID, "cloud", "anna@example.com", 0)
+
+	f.userinfo = map[string]any{"sub": "other", "email": "anna@example.com", "email_verified": true}
+	if run := f.signIn(t, ts, "cloud", nil); run.fragment != "oidc-error=failed" {
+		t.Fatalf("another subject: %+v", run)
+	}
+	f.userinfo, f.userinfoStatus = map[string]any{"error": "x"}, 500
+	if run := f.signIn(t, ts, "cloud", nil); run.fragment != "oidc-error=noemail" {
+		t.Fatalf("userinfo down: %+v", run)
+	}
+	f.userinfoStatus = 0
+	// the id_token's e-mail, its verification from the userinfo
+	f.userinfo = map[string]any{"sub": "sub-1", "email": "ANNA@example.com", "email_verified": true, "preferred_username": "anna.b"}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"email": "anna@example.com"})); name != "anna" {
+		t.Fatalf("verified by the userinfo: %q", name)
+	}
+	// the e-mail from the userinfo alone
+	bert, _ := st.AddUser(ctx, store.User{Name: "bert", Role: store.RoleOperator}, "", 0)
+	st.AddIdentity(ctx, bert.ID, "cloud", "bert@example.com", 0)
+	f.userinfo = map[string]any{"sub": "sub-2", "email": "bert@example.com", "email_verified": "true", "groups": []string{"g1"}}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "sub-2"})); name != "bert" {
+		t.Fatalf("e-mail from the userinfo: %q", name)
+	}
+	if ids, _ := st.Identities(ctx, bert.ID); len(ids) != 1 || strings.Join(ids[0].Groups, ",") != "g1" {
+		t.Fatalf("the groups from the userinfo: %+v", ids)
+	}
+
+	// a user id assigned: no e-mail needed
+	f.userinfo = map[string]any{"sub": "mdr"}
+	carl, _ := st.AddUser(ctx, store.User{Name: "carl", Role: store.RoleOperator}, "", 0)
+	if _, err := st.AddSubjectIdentity(ctx, carl.ID, "cloud", "mdr", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddSubjectIdentity(ctx, anna.ID, "cloud", "mdr", 0); !errors.Is(err, store.ErrIdentityExists) {
+		t.Fatalf("a user id twice: %v", err)
+	}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "mdr"})); name != "carl" {
+		t.Fatalf("by the user id: %q", name)
+	}
+}
+
+// fakeDiscovery answers every discovery request with an issuer: the one
+// asked for, without its trailing slash, or the one says gives for it;
+// "" for an issuer not reached.
+func fakeDiscovery(t *testing.T, says map[string]string) {
+	t.Helper()
+	old := oidcClient
+	oidcClient = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		asked := strings.TrimSuffix(r.URL.Scheme+"://"+r.URL.Host+strings.TrimSuffix(r.URL.Path, "/.well-known/openid-configuration"), "/")
+		issuer, ok := says[asked]
+		if !ok {
+			issuer = asked
+		}
+		if issuer == "" {
+			return nil, context.DeadlineExceeded
+		}
+		rec := httptest.NewRecorder()
+		writeJSON(rec, 200, map[string]any{"issuer": issuer, "authorization_endpoint": asked + "/authorize", "token_endpoint": asked + "/token"})
+		return rec.Result(), nil
+	})}
+	t.Cleanup(func() { oidcClient = old })
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A user links its own account (AP Oidc v1.1, Block 7, D21-A): only for
+// itself; the link carries the account's details, replaces the user's
+// other link at the provider, and is refused where another user has the
+// account; the last way a user signs in is not the user's to remove; a
+// manager changes a link no sign-in used.
+func TestOIDCLink(t *testing.T) {
+	f := newFakeIdP(t)
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	anna := userToken(t, st, "anna", store.RoleOperator)
+	userToken(t, st, "bert", store.RoleOperator)
+	bert, _, _ := st.User(ctx, "bert")
+	st.AddSubjectIdentity(ctx, bert.ID, "cloud", "bert-sub", 0)
+	link := func(token string, claims map[string]any) oidcRun {
+		t.Helper()
+		code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/cloud", token, `{"redirect": "`+ts.URL+`/"}`)
+		if code != 200 {
+			t.Fatalf("link start: %d %s", code, text)
+		}
+		return f.grant(t, ts, text, claims)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/cloud", "secret", `{"redirect": "`+ts.URL+`/"}`); code != 403 {
+		t.Fatalf("the owner links for anna: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/nope", anna, `{"redirect": "`+ts.URL+`/"}`); code != 404 {
+		t.Fatalf("an unknown provider: %d", code)
+	}
+	if run := link(anna, map[string]any{"sub": "a1", "email": "Anna@example.com", "name": "Anna B", "preferred_username": "anna.b", "groups": []string{"family", "admins"}}); run.fragment != "oidc-linked=cloud" {
+		t.Fatalf("link: %+v", run)
+	}
+	var list []identityView
+	if c := getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); c != 200 || len(list) != 1 {
+		t.Fatalf("its own list: %d %+v", c, list)
+	}
+	if i := list[0]; i.Subject != "a1" || !i.Bound || i.Email != "anna@example.com" || i.Name != "Anna B" || i.Username != "anna.b" ||
+		strings.Join(i.Groups, ",") != "family,admins" || i.LastUsedAt == nil {
+		t.Fatalf("the link: %+v", i)
+	}
+	// linked again with another account at the provider: it replaces
+	if run := link(anna, map[string]any{"sub": "a2", "groups": "solo"}); run.fragment != "oidc-linked=cloud" {
+		t.Fatalf("link again: %+v", run)
+	}
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); len(list) != 1 || list[0].Subject != "a2" || strings.Join(list[0].Groups, ",") != "solo" {
+		t.Fatalf("replaced: %+v", list)
+	}
+	if run := link(anna, map[string]any{"sub": "bert-sub"}); run.fragment != "oidc-link-error=taken" {
+		t.Fatalf("bert's account: %+v", run)
+	}
+	// the details at a sign-in
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a2", "name": "Anna C"})); name != "anna" {
+		t.Fatalf("signed in as %q", name)
+	}
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); list[0].Name != "Anna C" {
+		t.Fatalf("the details of the sign-in: %+v", list)
+	}
+
+	// the last way in: anna has no password
+	id := itoa(list[0].ID)
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/anna/identities/"+id, anna, ""); code != 409 {
+		t.Fatalf("its last way in: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/bert/identities/1", anna, ""); code != 403 {
+		t.Fatalf("bert's, by anna: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/anna/identities/"+id, "secret", ""); code != 200 {
+		t.Fatalf("the owner removes it: %d", code)
+	}
+
+	// a manager changes a link no sign-in used, not one used
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", "secret", `{"provider": "cloud", "email": "a@example.com"}`)
+	var w identityView
+	json.Unmarshal([]byte(text), &w)
+	if code != 201 {
+		t.Fatalf("assign: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), anna, `{"email": "b@example.com"}`); code != 403 {
+		t.Fatalf("anna changes her own: %d", code)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), "secret", `{"subject": "bert-sub"}`)
+	if code != 409 {
+		t.Fatalf("to bert's user id: %d %s", code, text)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), "secret", `{"subject": "a3"}`)
+	if json.Unmarshal([]byte(text), &w); code != 200 || w.Subject != "a3" || !w.Bound || w.Email != "" {
+		t.Fatalf("to a user id: %d %s", code, text)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), "secret", `{"email": "C@example.com"}`)
+	if json.Unmarshal([]byte(text), &w); code != 200 || w.Bound || w.Email != "c@example.com" {
+		t.Fatalf("back to an e-mail: %d %s", code, text)
+	}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "bert-sub"})); name != "bert" {
+		t.Fatalf("bert: %q", name)
+	}
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/users/bert/identities/1", "secret", `{"email": "x@example.com"}`); code != 409 {
+		t.Fatalf("one a sign-in used: %d", code)
+	}
+}
+
+// A provider's groups (AP Oidc v1.1, Block 8, D22-A): an account in none
+// of the groups it admits is refused, a sign-in and a link alike; a list
+// or one string; another claim, from the userinfo too; none named admits
+// any.
+func TestOIDCGroups(t *testing.T) {
+	f := newFakeIdP(t)
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true,
+		AllowedGroups: []string{"family", " family", ""}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	p, _, _ := st.Provider(ctx, "cloud")
+	if p.GroupsClaim != "groups" || strings.Join(p.AllowedGroups, ",") != "family" {
+		t.Fatalf("the provider: %+v", p)
+	}
+	anna := userToken(t, st, "anna", store.RoleOperator)
+	annaU, _, _ := st.User(ctx, "anna")
+	st.AddSubjectIdentity(ctx, annaU.ID, "cloud", "a1", 0)
+	for name, groups := range map[string]any{"none": nil, "others": []string{"guests"}, "a number": 7} {
+		if run := f.signIn(t, ts, "cloud", map[string]any{"sub": "a1", "groups": groups}); run.fragment != "oidc-error=group" {
+			t.Errorf("%s: %+v", name, run)
+		}
+	}
+	for name, groups := range map[string]any{"a list": []string{"x", "family"}, "a string": "family"} {
+		if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1", "groups": groups})); who != "anna" {
+			t.Errorf("%s: %q", name, who)
+		}
+	}
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/cloud", anna, `{"redirect": "`+ts.URL+`/"}`)
+	if code != 200 {
+		t.Fatalf("link: %d %s", code, text)
+	}
+	if run := f.grant(t, ts, text, map[string]any{"sub": "a2"}); run.fragment != "oidc-link-error=group" {
+		t.Fatalf("a link outside the groups: %+v", run)
+	}
+	// another claim
+	st.UpdateProvider(ctx, "cloud", func(p *store.AuthProvider) error { p.GroupsClaim = "roles"; return nil }, 0)
+	if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1", "groups": "nope", "roles": []string{"family"}})); who != "anna" {
+		t.Fatalf("the roles claim: %q", who)
+	}
+	var list []identityView
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); len(list) != 1 || strings.Join(list[0].Groups, ",") != "family" {
+		t.Fatalf("the groups kept: %+v", list)
+	}
+	// none named: any
+	st.UpdateProvider(ctx, "cloud", func(p *store.AuthProvider) error { p.AllowedGroups = nil; return nil }, 0)
+	if who := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a1"})); who != "anna" {
+		t.Fatalf("no restriction: %q", who)
 	}
 }

@@ -16,6 +16,7 @@ import (
 // answered nor audited; the role of the users a provider creates without
 // an administrative capability; the key fixed; the removal.
 func TestProvidersAPI(t *testing.T) {
+	fakeDiscovery(t, nil)
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
 	manager := userToken(t, st, "manny", store.RoleManager)
@@ -45,9 +46,14 @@ func TestProvidersAPI(t *testing.T) {
 			t.Errorf("add %s: %d %s, want %d", b, code, text, want)
 		}
 	}
-	code, text = callAPI(t, ts, "PUT", "/api/v1/providers/cloud", "secret", `{"auto_create": true, "auto_role": "guest", "auto_domains": ["example.org"], "enabled": false}`)
+	if p.GroupsClaim != "groups" || len(p.Allowed) != 0 {
+		t.Fatalf("the groups' defaults: %+v", p)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/providers/cloud", "secret", `{"auto_create": true, "auto_role": "guest", "auto_domains": ["example.org"], "enabled": false,
+		"groups_claim": "roles", "allowed_groups": ["family", "family", " admins "]}`)
 	json.Unmarshal([]byte(text), &p)
-	if code != 200 || !p.AutoCreate || p.AutoRole != store.RoleGuest || len(p.AutoDomains) != 1 || p.Enabled || !p.HasSecret {
+	if code != 200 || !p.AutoCreate || p.AutoRole != store.RoleGuest || len(p.AutoDomains) != 1 || p.Enabled || !p.HasSecret ||
+		p.GroupsClaim != "roles" || strings.Join(p.Allowed, ",") != "family,admins" {
 		t.Fatalf("change: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "PUT", "/api/v1/providers/cloud", "secret", `{"key": "other"}`); code != 400 {
@@ -77,9 +83,9 @@ func TestProvidersAPI(t *testing.T) {
 	}
 }
 
-// A user's identities through the API: assigned by e-mail, listed
+// with the user id, removed; a guests holder reaches a guest's only,
 // without the subject, removed; a guests holder reaches a guest's only,
-// and nobody reaches its own without users.
+// and a user lists its own without users but assigns none (AP Oidc v1.1).
 func TestIdentitiesAPI(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
@@ -101,17 +107,33 @@ func TestIdentitiesAPI(t *testing.T) {
 		t.Fatalf("assign: %d %s", code, text)
 	}
 	for b, want := range map[string]int{
-		`{"provider": "cloud", "email": "anna@example.com"}`: 409,
-		`{"provider": "nope", "email": "x@example.com"}`:     404,
-		`{"provider": "cloud", "email": "not an e-mail"}`:    400,
-		`{"provider": "cloud"}`:                              400,
+		`{"provider": "cloud", "email": "anna@example.com"}`:              409,
+		`{"provider": "nope", "email": "x@example.com"}`:                  404,
+		`{"provider": "cloud", "email": "not an e-mail"}`:                 400,
+		`{"provider": "cloud"}`:                                           400,
+		`{"provider": "cloud", "email": "b@example.com", "subject": "b"}`: 400,
+		`{"provider": "cloud", "subject": " "}`:                           400,
 	} {
 		if code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", "secret", b); code != want {
 			t.Errorf("assign %s: %d %s, want %d", b, code, text, want)
 		}
 	}
-	if code, _ := callAPI(t, ts, "GET", "/api/v1/users/anna/identities", anna, ""); code != 403 {
+	code, text = callAPI(t, ts, "POST", "/api/v1/users/anna/identities", "secret", `{"provider": "cloud", "subject": "anna1"}`)
+	var bySub identityView
+	if json.Unmarshal([]byte(text), &bySub); code != 201 || bySub.Subject != "anna1" || !bySub.Bound || bySub.Email != "" {
+		t.Fatalf("assign a user id: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/gus/identities", "secret", `{"provider": "cloud", "subject": "anna1"}`); code != 409 {
+		t.Fatalf("a user id twice: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/anna/identities/"+itoa(bySub.ID), "secret", ""); code != 200 {
+		t.Fatalf("remove the user id: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/users/anna/identities", anna, ""); code != 200 {
 		t.Fatalf("its own, without users: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", anna, `{"provider": "cloud", "email": "a3@example.com"}`); code != 403 {
+		t.Fatalf("assigning its own, without users: %d", code)
 	}
 	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", host, `{"provider": "cloud", "email": "a2@example.com"}`); code != 403 {
 		t.Fatalf("a guests holder on an operator: %d", code)
@@ -137,4 +159,41 @@ func TestIdentitiesAPI(t *testing.T) {
 func itoa(n int64) string {
 	b, _ := json.Marshal(n)
 	return string(b)
+}
+
+// The issuer of a provider saved enabled (AP Oidc v1.1, Block 6, D27-A):
+// its discovery must be reached and name it; one that differs only by a
+// trailing slash takes the document's form; a disabled provider is
+// saved unchecked, and checked once enabled.
+func TestProviderIssuerAtSaving(t *testing.T) {
+	fakeDiscovery(t, map[string]string{"https://slash.example.com": "https://slash.example.com/", "https://odd.example.com": "https://other.example.com", "https://down.example.com": ""})
+	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	add := func(key, issuer string, more string) (int, providerView) {
+		code, text := callAPI(t, ts, "POST", "/api/v1/providers", "secret", `{"key": "`+key+`", "issuer": "`+issuer+`", "client_id": "m"`+more+`}`)
+		var p providerView
+		json.Unmarshal([]byte(text), &p)
+		return code, p
+	}
+	if code, p := add("a", "https://cloud.example.com/", ""); code != 201 || p.Issuer != "https://cloud.example.com" {
+		t.Fatalf("a slash too many: %d %+v", code, p)
+	}
+	if code, p := add("b", "https://slash.example.com", ""); code != 201 || p.Issuer != "https://slash.example.com/" {
+		t.Fatalf("a slash too few: %d %+v", code, p)
+	}
+	for _, issuer := range []string{"https://odd.example.com", "https://down.example.com"} {
+		if code, _ := add("c", issuer, ""); code != 400 {
+			t.Errorf("%s: %d", issuer, code)
+		}
+	}
+	if code, _ := add("c", "https://down.example.com", `, "enabled": false`); code != 201 {
+		t.Fatalf("disabled, unchecked: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/providers/c", "secret", `{"enabled": true}`); code != 400 {
+		t.Fatalf("enabled while down: %d", code)
+	}
+	code, text := callAPI(t, ts, "PUT", "/api/v1/providers/c", "secret", `{"enabled": true, "issuer": "https://cloud.example.com/"}`)
+	var p providerView
+	if json.Unmarshal([]byte(text), &p); code != 200 || p.Issuer != "https://cloud.example.com" || !p.Enabled {
+		t.Fatalf("enabled with a good issuer: %d %s", code, text)
+	}
 }

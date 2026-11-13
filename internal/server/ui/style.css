@@ -1327,12 +1327,18 @@ massimo-week-program { display: contents; }
 .user-identities-box { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .user-identities { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .user-identities li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
-.user-identities li .remove-identity { margin-left: auto; }
+.user-identities li .identity-buttons { margin-left: auto; display: flex; gap: 6px; }
+.user-identities li .identity-details { flex-basis: 100%; }
+.user-identities li .identity-change { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.user-identities li .identity-change input { flex: 1 1 12em; min-width: 0; }
+.profile-link-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
 /* System settings → Sign-in providers; the sign-in card's provider buttons */
 .provider-form { display: flex; flex-direction: column; gap: 6px; }
 .providers-callback .mono { overflow-wrap: anywhere; }
 .login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }
+.login-providers p { margin: 0; }
 .user-tokens li .revoke-token { margin-left: auto; }
 .user-key { word-break: break-all; user-select: all; }
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }

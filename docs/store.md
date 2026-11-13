@@ -547,6 +547,8 @@ CREATE TABLE auth_providers (                   -- migration 0016
     auto_create   INTEGER NOT NULL DEFAULT 0,
     auto_role_id  INTEGER REFERENCES roles (id), -- NULL: viewer
     auto_domains  TEXT    NOT NULL DEFAULT '',  -- comma-separated; '': any
+    groups_claim  TEXT    NOT NULL DEFAULT 'groups', -- migration 0020: the claim of the groups
+    allowed_groups TEXT   NOT NULL DEFAULT '[]', -- migration 0020: a JSON array; []: any
     enabled       INTEGER NOT NULL DEFAULT 1,
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL,
@@ -566,7 +568,10 @@ CREATE TABLE user_identities (                  -- migration 0016
     created_at   TEXT    NOT NULL,
     created_by   INTEGER REFERENCES users (id),
     bound_at     TEXT,
-    last_used_at TEXT
+    last_used_at TEXT,
+    name         TEXT    NOT NULL DEFAULT '',   -- migration 0019: at the provider, at the last sign-in or link
+    username     TEXT    NOT NULL DEFAULT '',   -- preferred_username, likewise
+    groups       TEXT    NOT NULL DEFAULT '[]'  -- a JSON array of strings, likewise
 );
 -- unique (provider_id, subject) where bound, (provider_id, email) where not
 ```
@@ -1287,8 +1292,30 @@ its name from the provider's `preferred_username` or the e-mail,
 `-2`, `-3` added where taken.
 A removed provider is a tombstone whose identities are deleted,
 and a removed user's identities go with it.
-The client secret is kept as the Cubes' keys are, in the store's file,
-and never answered (`has_secret`).
+An owner may assign the user id at the provider (`sub`) instead of an e-mail,
+bound from the start (AP Oidc v1.1).
+A user links its own account by a sign-in at the provider started from My profile,
+which replaces the user's other identities at that provider;
+an account another user has is refused.
+Each sign-in and link writes what the provider said of the account:
+the e-mail, the name, the user name and the groups (migration 0019).
+A provider may admit only some groups, read from its groups claim (migration 0020):
+an account in none of them neither signs in nor links.
+An identity no sign-in has used may be changed;
+a used one is removed and assigned again.
+The client secret is sealed (AP Oidc v1.1, Block 9):
+AES-256-GCM with a key of its own, `secret.key` in the data directory (mode 0600),
+made with the first secret sealed, never by a store opened read-only;
+the column keeps `v1:` and the base64 of the nonce and the box,
+the provider's uuid its additional data,
+so that a box copied to another row does not open.
+A copy or a backup of `massimo.db` alone so does not hold the secrets.
+A plain secret, as v0.15.0-alpha.1 kept them,
+is sealed at the next open of a writable store.
+Lost, or another store's, `secret.key` leaves each secret unopened:
+the provider answers `secret_lost`, and the owner enters the secret again;
+a change that does not write it keeps the box, which the key found again opens.
+The secret is never answered (`has_secret`).
 
 ### Later: ownership per Cube
 

@@ -596,6 +596,10 @@
   "log.action.provider.update": "fournisseur de connexion modifié",
   "log.action.provider.remove": "fournisseur de connexion supprimé",
   "log.action.identity.add": "identité attribuée",
+
+  "log.action.identity.update": "identité modifiée",
+
+  "log.action.identity.link": "liaison de compte commencée",
   "log.action.identity.remove": "identité supprimée",
   "log.kind.cube_gone": "disparu",
   "log.kind.address_changed": "adresse",
@@ -929,6 +933,12 @@
 
   "login.oidcError.refused": "Ce compte n'est pas connu sur ce serveur. Demandez à son propriétaire de l'attribuer à votre utilisateur.",
 
+  "login.oidcError.noemail": "Le fournisseur n'a pas indiqué l'adresse e-mail de ce compte, il n'a donc pas été associé. Demandez au propriétaire du serveur d'attribuer plutôt votre identifiant chez le fournisseur.",
+
+  "login.oidcError.unverified": "Le fournisseur n'a pas confirmé l'adresse e-mail de ce compte, il n'a donc pas été associé. Demandez au propriétaire du serveur d'attribuer plutôt votre identifiant chez le fournisseur.",
+
+  "login.oidcError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de ce fournisseur.",
+
   "login.oidcError.disabled": "Votre utilisateur est désactivé ou a expiré.",
 
   "providers.title": "Fournisseurs de connexion",
@@ -955,7 +965,15 @@
 
   "providers.secretNone": "Aucun pour l'instant.",
 
+  "providers.secretLost": "Défini, mais il ne s'ouvre plus : secret.key à côté du stockage manque ou en est un autre. Saisissez à nouveau le secret.",
+
   "providers.scopes": "Portées (scopes)",
+
+  "providers.allowedGroups": "Groupes admis",
+
+  "providers.groupsHint": "Séparés par des virgules ; vide : tout groupe. Seuls les comptes de l'un d'eux se connectent ou sont liés.",
+
+  "providers.groupsClaim": "Revendication des groupes",
 
   "providers.enabled": "Activé",
 
@@ -1056,7 +1074,15 @@
 
   "users.identityProvider": "Fournisseur",
 
+  "users.identityKind": "Attribuer par",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "identifiant",
+
   "users.identityEmail": "E-mail chez le fournisseur",
+
+  "users.identitySubject": "Identifiant chez le fournisseur",
 
   "users.identityAdd": "Attribuer",
 
@@ -1074,7 +1100,39 @@
 
   "users.identityRemoved": "Identité supprimée.",
 
+  "users.identityChange": "Modifier",
+
+  "users.identityChangeLabel": "Modifier {email} chez {provider}",
+
+  "users.identityChanged": "Identité modifiée.",
+
+  "users.identityGroups": "groupes : {groups}",
+
+  "users.identityLastUsed": "dernière connexion",
+
+  "profile.linked": "Comptes liés",
+
+  "profile.linkedNone": "Aucun compte chez un fournisseur de connexion ne vous est encore lié.",
+
+  "profile.link": "Lier {name}",
+
+  "profile.linkAgain": "Lier {name} à nouveau",
+
+  "profile.linkDone": "Votre compte chez {name} est lié : vous pouvez vous connecter avec.",
+
+  "profile.linkFailed": "La liaison n'a pas démarré : {error}",
+
+  "profile.linkError.taken": "Ce compte est déjà lié à un autre utilisateur ici.",
+
+  "profile.linkError.group": "Ce compte n'est dans aucun des groupes que ce serveur admet de {name}.",
+
+  "profile.linkError.failed": "La liaison par le fournisseur a échoué. Réessayez.",
+
   "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
+
+  "users.identitySubjectNeeded": "Un identifiant est nécessaire.",
+
+  "users.identityUserID": "identifiant {id}",
   "users.kind.session": "session",
   "users.kind.api": "clé API",
   "users.lastUsed": "dernière utilisation depuis {from}",

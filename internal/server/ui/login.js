@@ -188,13 +188,24 @@ function pageBase() {
 // the sign-in card to say; null for none.
 let oidcError = null;
 
+// oidcLinked is a link of the user's own account come back, for My
+// profile to say (renderProfile, users.js): {key} linked, or {error};
+// null for none.
+let oidcLinked = null;
+
 // oidcReturn reads the fragment a provider's sign-in comes back with,
 // before the page reads its own (log.js showAddress): #oidc=<code>,
-// traded for the session, or #oidc-error=<reason>; the fragment goes
-// from the address either way.
+// traded for the session, or #oidc-error=<reason>; a link's,
+// #oidc-linked=<key> or #oidc-link-error=<reason>, opens My profile,
+// which says how it went. The fragment goes from the address either way.
 async function oidcReturn() {
-  const m = /^#oidc(-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
+  const m = /^#oidc(-error|-linked|-link-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
   if (!m) return;
+  if (m[1] === "-linked" || m[1] === "-link-error") {
+    oidcLinked = m[1] === "-linked" ? { key: m[2] } : { error: ["taken", "group"].includes(m[2]) ? m[2] : "failed" };
+    history.replaceState(null, "", location.pathname + location.search + "#profile");
+    return;
+  }
   history.replaceState(null, "", location.pathname + location.search);
   if (m[1]) {
     oidcError = m[2];
@@ -211,7 +222,7 @@ async function oidcReturn() {
 // renderLoginProviders draws a button per enabled provider on the
 // sign-in card; none in the app, whose WebView the providers refuse.
 async function renderLoginProviders() {
-  const box = $("login-providers");
+  const box = $("login-provider-buttons");
   clear(box);
   const list = appBridge() ? [] : await loadLoginProviders(); // providers.js
   for (const p of list) {
@@ -221,7 +232,8 @@ async function renderLoginProviders() {
     btn.addEventListener("click", () => startProvider(p.key, btn));
     box.appendChild(btn);
   }
-  box.classList.toggle("hidden", !list.length);
+  // shown with its buttons, or with a provider's refusal alone
+  $("login-providers").classList.toggle("hidden", !list.length && $("login-providers-error").classList.contains("hidden"));
 }
 
 // startProvider starts a sign-in through a provider and opens its page.
@@ -232,7 +244,7 @@ async function startProvider(key, btn) {
       location.assign(started.url);
     });
   } catch (e) {
-    showResult($("login-error"), t("login.failed", { error: e.message }), false);
+    showResult($("login-providers-error"), t("login.failed", { error: e.message }), false);
   }
 }
 
@@ -274,9 +286,11 @@ function askLogin() {
     $("login-token").value = "";
     $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
+    // a provider's refusal under the providers' buttons
+    showResult($("login-providers-error"), "", false);
     if (oidcError) {
       const key = "login.oidcError." + oidcError;
-      showResult(error, t(key) === key ? t("login.oidcError.failed") : t(key), false);
+      showResult($("login-providers-error"), t(key) === key ? t("login.oidcError.failed") : t(key), false);
       oidcError = null;
     }
     renderLoginProviders();

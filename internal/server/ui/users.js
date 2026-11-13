@@ -390,6 +390,7 @@ async function renderProfile() {
   if (!hasProfile()) {
     clear($("profile-name"));
     clear($("profile-tokens"));
+    clear($("profile-identities"));
     usersUI.self = null;
     return;
   }
@@ -423,6 +424,14 @@ async function renderProfile() {
   $("profile-name").replaceChildren(form);
   $("profile-tokens").replaceChildren(tokens);
   fillTokens(u, tokens, "profile");
+  await renderProfileIdentities(u); // providers.js
+  if (oidcLinked) {
+    // back from a link (oidcReturn, login.js)
+    const p = providersUI.login.find((x) => x.key === oidcLinked.key);
+    const name = p ? p.name : oidcLinked.key || "";
+    profileMsg(oidcLinked.error ? t("profile.linkError." + oidcLinked.error, { name }) : t("profile.linkDone", { name }), !oidcLinked.error);
+    oidcLinked = null;
+  }
 }
 
 // newUserForm is the form that adds a user, from its template.

@@ -23,10 +23,13 @@ an "OAuth client") of the web kind, confidential, with:
 
 The provider then names a **client ID** and a **client secret**,
 and its **issuer**: the URL its discovery document is under,
-`<issuer>/.well-known/openid-configuration`.
-Massimo needs the issuer exactly as that document names it,
-with or without a trailing slash as there,
-and over `https`.
+`<issuer>/.well-known/openid-configuration`, over `https`.
+Massimo reads that document when an enabled provider is saved:
+a provider not reached,
+or one that calls itself by another issuer, is not saved,
+and the page says what the document names.
+An issuer typed with a trailing slash too many or too few
+is kept as the document writes it, which the sign-in compares exactly.
 
 ## Adding it in Massimo
 
@@ -35,6 +38,9 @@ System settings → Sign-in providers → **Add a provider**: a key (`nextcloud`
 the name on the button (`Nextcloud`), the issuer,
 the client ID and the client secret.
 The secret is written only; the page never shows it again.
+Massimo keeps it sealed with `secret.key` beside the store,
+so that a copy of `massimo.db` alone does not hold it;
+where that key is lost, the provider says so and the secret is entered again.
 The provider's button then shows on the sign-in card.
 The same through the API is `POST /api/v1/providers`.
 
@@ -46,13 +52,24 @@ in this order:
 1. **The provider's account is known**:
    the user it was bound to before, by the provider's subject (`sub`),
    which never changes.
-2. **An e-mail assigned**:
+2. **An e-mail or a user ID assigned**:
    in System settings → Users,
-   a user's **Sign-in through providers** takes a provider and an e-mail.
-   The first sign-in with that e-mail binds the account to the user,
-   which is found by the subject alone from then on.
-   The provider must say the e-mail is verified (`email_verified`),
-   else the e-mail does not bind.
+   a user's **Sign-in through providers** takes a provider,
+   and either an e-mail or the user ID at the provider.
+   - A **user ID** is the provider's subject (`sub`) itself:
+     the account is bound at once, and no e-mail is needed.
+     Nextcloud's user ID is the login name; Google's is a number.
+   - An **e-mail** binds the account to the user at its first sign-in,
+     which is then found by the subject alone.
+     The provider must send the e-mail and say it is verified (`email_verified`),
+     else it does not bind.
+     Only the account's one primary e-mail is sent;
+     a second address never matches.
+   - **Linked by the user**:
+     a signed-in user links its own account in My profile → **Linked accounts**,
+     **Link Nextcloud**, by signing in there once;
+     it is bound at once, and replaces the user's other link at that provider.
+     An account another user has is refused.
 3. **Users created**:
    where the provider's **Create users who sign in** is on,
    an account with a verified e-mail of the domains named (any where none are)
@@ -61,8 +78,39 @@ in this order:
    It is off by default.
 
 Anyone else comes back to the sign-in card,
-which says the account is not known on this server.
+which says, under the providers' buttons, why:
+the account is not known on this server,
+the provider sent no e-mail,
+or it did not mark the e-mail verified.
+The log has a warning with the provider, the account and that reason.
+
+Massimo reads the claims from the `id_token`,
+and from the provider's userinfo endpoint where its discovery document names one,
+for what the `id_token` lacks.
 A disabled or expired user is refused as with a password.
+
+## Groups
+
+A provider may admit only the accounts in some of its groups:
+its **Allowed groups**, any where none are named.
+An account in none of them neither signs in nor links,
+even where it was linked before,
+so that taking it out of the group at the provider takes it out of Massimo too;
+the card says why.
+Massimo reads the groups from the claim **Groups claim**, `groups` by default,
+in the `id_token` or from the userinfo, as a list of names or one name;
+each linked account shows its groups in My profile and on the user's card.
+The provider must be asked for them:
+
+- **Nextcloud**: add the scope `groups` to the provider's scopes in Massimo;
+  the claim `groups` lists the group IDs.
+- **Keycloak**: a "Group Membership" mapper on the client, claim name `groups`.
+- **Microsoft Entra ID**: the token configuration's groups claim,
+  which lists the groups' object IDs: name those in Massimo.
+- **Google** sends no groups; its e-mail domains are the provider's
+  **Their e-mail domains** for users it creates.
+
+Groups do not set a user's role.
 
 ## Nextcloud
 
@@ -71,12 +119,15 @@ In Administration settings → Security → OpenID Connect clients,
 add a client named `Massimo` with the redirect URI above,
 of the type confidential;
 Nextcloud shows its client ID and secret.
-The issuer is Nextcloud's address, such as `https://cloud.example.com`;
+The issuer is Nextcloud's address, such as `https://cloud.example.com`,
+without a trailing slash, as its discovery document writes it;
 the web server must answer `/.well-known/openid-configuration`
 as the app's documentation describes.
-Check with the first sign-in whether its `id_token` carries `email_verified`;
-where it does not, an assigned e-mail does not bind,
-and the log says `login_failed` for the account.
+Since its version 2.0 the app puts the e-mail and the profile into the `id_token`
+only where the client asks for them, or its admin setting says so;
+Massimo reads them from its userinfo endpoint.
+Where the e-mail still does not bind (the log says `unverified` or `noemail`),
+assign the user's Nextcloud login name as the user ID instead.
 
 ## Google and Microsoft
 

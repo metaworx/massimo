@@ -243,14 +243,19 @@ paths:
       x-capability: none
       description: |
         The redirect URI. The code is traded at the provider's token
-        endpoint, the id_token's iss, aud, exp and nonce are checked, and
-        the user is found: by the provider's subject; else by an e-mail
+        endpoint, the id_token's iss, aud, exp and nonce are checked, the
+        userinfo endpoint, where the discovery names one, fills in what
+        the id_token lacks (an answer for another sub fails), and the
+        user is found: by the provider's subject; else by an e-mail
         assigned to a user, verified by the provider, which binds the
         subject; else, where the provider creates users, a new one. The
         browser goes back to the page with #oidc=<code>, a one-time code
         good for a minute from the same address, or with
         #oidc-error=<reason>: denied (at the provider), failed (its answer
-        did not do), refused (no user here for the account) or disabled.
+        did not do), refused (no user here for the account), noemail (none,
+        and no e-mail sent), unverified (none, and the e-mail that would
+        have counted not verified), group (in none of the groups the
+        provider admits) or disabled.
         A refusal counts as a failed sign-in of the address.
       security: []
       parameters:
@@ -832,9 +837,10 @@ paths:
       summary: A user's identities at the OpenID Connect providers
       x-capability: users
       description: |
-        Each an e-mail at a provider, waiting for its first sign-in or
-        bound to the provider's subject, which is not answered. A guests
-        holder reaches a guest's only; a user does not reach its own.
+        Each an e-mail at a provider, waiting for its first sign-in, or
+        bound to the provider's subject, with what the provider said of
+        the account at the last sign-in or link. A guests holder reaches a
+        guest's only; a user lists its own.
       parameters:
         - {$ref: "#/components/parameters/name"}
       responses:
@@ -850,13 +856,15 @@ paths:
         "404": {$ref: "#/components/responses/NoUser"}
         "503": {$ref: "#/components/responses/NoStore"}
     post:
-      summary: Assign an e-mail at a provider to a user
+      summary: Assign an e-mail or a user id at a provider to a user
       x-capability: users
       description: |
-        A pre-link: the first sign-in through the provider with the
-        e-mail, which the provider says it verified, binds the provider's
-        subject to the user, and the subject alone finds it from then on.
-        An e-mail waits once per provider (409).
+        By email, a pre-link: the first sign-in through the provider with
+        the e-mail, which the provider says it verified, binds the
+        provider's subject to the user, and the subject alone finds it
+        from then on. An e-mail waits once per provider (409). By subject,
+        the user id at the provider, bound at once; one another identity
+        at the provider has is 409.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -880,16 +888,106 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "409":
-          description: The e-mail already waits at the provider
+          description: The e-mail already waits at the provider, or the user id is another identity's
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/identities/link/{key}:
+    post:
+      summary: Link the user's own account at a provider
+      x-capability: users
+      description: |
+        The user's own only (403 for another's): a sign-in at the
+        provider, as POST /api/v1/login/oidc/{key} starts one, whose
+        callback links the account to the user, replacing the user's
+        other identities at the provider, and sends the page back with
+        #oidc-linked=<key>, or #oidc-link-error=taken where another user
+        has the account, group where it is in none of the groups the
+        provider admits (failed where the provider's answer did not do).
+        No session is made.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: key, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OIDCStart"}
+      responses:
+        "200":
+          description: The provider's page to open
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OIDCStarted"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no enabled provider of the key
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The provider's discovery document cannot be read or does not do
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/users/{name}/identities/{id}:
+    put:
+      summary: Change an identity no sign-in has used yet
+      x-capability: users
+      description: |
+        Its e-mail, which makes it a waiting one, or the user id at the
+        provider (subject), which makes it a bound one. One a sign-in used
+        is removed and assigned again instead (409).
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The identity's id from the list, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Either email or subject.
+              additionalProperties: false
+              properties:
+                email: {type: string}
+                subject: {type: string}
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Identity"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such identity of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: A sign-in used it, or the e-mail or user id is another identity's at the provider
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
     delete:
       summary: Remove one of a user's identities
       x-capability: users
+      description: |
+        A user removes its own too, but not the last way it signs in: a
+        bound identity where the user has no password and no other bound
+        one (409). A manager removes any.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -909,6 +1007,11 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404":
           description: No such user, or no such identity of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The user's own last way to sign in
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -939,7 +1042,10 @@ paths:
       description: |
         key, issuer and client_id are needed; the issuer is an https URL
         (http only on loopback) whose discovery document is under
-        /.well-known/openid-configuration. Enabled unless enabled is false.
+        /.well-known/openid-configuration. Enabled unless enabled is false;
+        an enabled one is saved only where that document is reached and
+        names the issuer, one differing only by a trailing slash kept in
+        the document's form (400 otherwise).
         auto_role, the role of the users a sign-in creates where
         auto_create is true, may not be owner nor hold an administrative
         capability (guests, users, passwords, roles, roles.disable,
@@ -974,7 +1080,8 @@ paths:
       x-capability: auth
       description: |
         The fields given, as in POST; a field left out stays, the client
-        secret too, and "" clears it. The key cannot be changed.
+        secret too, and "" clears it. The key cannot be changed. A change
+        of the issuer, or enabling, checks the issuer as POST does.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {name: key, in: path, required: true, schema: {type: string}}
@@ -3181,6 +3288,8 @@ components:
         auto_create: {type: boolean, description: A sign-in without an identity creates the user}
         auto_role: {type: string, description: The role of a user created so, viewer by default}
         auto_domains: {type: array, items: {type: string}, description: The e-mail domains it creates users for; none for any}
+        groups_claim: {type: string, description: The claim of the account's groups, groups by default}
+        allowed_groups: {type: array, items: {type: string}, description: "The groups it admits: an account in none of them neither signs in nor links; none for any"}
         enabled: {type: boolean}
         callback: {type: string, description: "The redirect URI's path under the page's address", example: api/v1/login/oidc/callback}
         created_at: {type: string, format: date-time}
@@ -3198,6 +3307,8 @@ components:
         auto_create: {type: boolean}
         auto_role: {type: string}
         auto_domains: {type: array, items: {type: string}}
+        groups_claim: {type: string, maxLength: 64, description: "groups where empty"}
+        allowed_groups: {type: array, maxItems: 100, items: {type: string}}
         enabled: {type: boolean}
     Identity:
       type: object
@@ -3205,17 +3316,23 @@ components:
         id: {type: integer}
         provider: {type: string, description: The provider's key}
         email: {type: string, description: Lower case}
-        bound: {type: boolean, description: The first sign-in bound the provider's subject}
+        subject: {type: string, description: The user id at the provider (sub); empty until bound}
+        bound: {type: boolean, description: The identity has the provider's subject}
+        name: {type: string, description: The name at the provider, from the last sign-in or link}
+        username: {type: string, description: The user name at the provider (preferred_username), likewise}
+        groups: {type: array, items: {type: string}, description: The groups at the provider, likewise}
         created_at: {type: string, format: date-time}
         bound_at: {type: string, format: date-time}
         last_used_at: {type: string, format: date-time}
     IdentityAdd:
       type: object
-      required: [provider, email]
+      description: The provider and either email or subject.
+      required: [provider]
       additionalProperties: false
       properties:
         provider: {type: string}
         email: {type: string}
+        subject: {type: string, description: The user id at the provider (sub)}
     LoginProvider:
       type: object
       properties:

@@ -595,6 +595,10 @@
   "log.action.provider.update": "aanmeldprovider gewijzigd",
   "log.action.provider.remove": "aanmeldprovider verwijderd",
   "log.action.identity.add": "identiteit toegewezen",
+
+  "log.action.identity.update": "identiteit gewijzigd",
+
+  "log.action.identity.link": "accountkoppeling gestart",
   "log.action.identity.remove": "identiteit verwijderd",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "adres",
@@ -928,6 +932,12 @@
 
   "login.oidcError.refused": "Dit account is op deze server niet bekend. Vraag de eigenaar het aan je gebruiker toe te wijzen.",
 
+  "login.oidcError.noemail": "De provider heeft niet gezegd welk e-mailadres dit account heeft, dus het is niet gekoppeld. Vraag de eigenaar van de server om in plaats daarvan je gebruikers-ID bij de provider toe te wijzen.",
+
+  "login.oidcError.unverified": "De provider heeft het e-mailadres van dit account niet bevestigd, dus het is niet gekoppeld. Vraag de eigenaar van de server om in plaats daarvan je gebruikers-ID bij de provider toe te wijzen.",
+
+  "login.oidcError.group": "Dit account zit in geen van de groepen die deze server van de provider toelaat.",
+
   "login.oidcError.disabled": "Je gebruiker is uitgeschakeld of verlopen.",
 
   "providers.title": "Aanmeldproviders",
@@ -954,7 +964,15 @@
 
   "providers.secretNone": "Nog geen.",
 
+  "providers.secretLost": "Ingesteld, maar het opent niet meer: secret.key naast de opslag ontbreekt of is een andere. Voer het geheim opnieuw in.",
+
   "providers.scopes": "Scopes",
+
+  "providers.allowedGroups": "Toegelaten groepen",
+
+  "providers.groupsHint": "Gescheiden door komma's; leeg: elke groep. Alleen accounts in een ervan melden zich aan of worden gekoppeld.",
+
+  "providers.groupsClaim": "Claim van de groepen",
 
   "providers.enabled": "Ingeschakeld",
 
@@ -1055,7 +1073,15 @@
 
   "users.identityProvider": "Provider",
 
+  "users.identityKind": "Toewijzen via",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "gebruikers-ID",
+
   "users.identityEmail": "E-mail bij de provider",
+
+  "users.identitySubject": "Gebruikers-ID bij de provider",
 
   "users.identityAdd": "Toewijzen",
 
@@ -1073,7 +1099,39 @@
 
   "users.identityRemoved": "Identiteit verwijderd.",
 
+  "users.identityChange": "Wijzigen",
+
+  "users.identityChangeLabel": "{email} bij {provider} wijzigen",
+
+  "users.identityChanged": "Identiteit gewijzigd.",
+
+  "users.identityGroups": "groepen: {groups}",
+
+  "users.identityLastUsed": "laatst aangemeld",
+
+  "profile.linked": "Gekoppelde accounts",
+
+  "profile.linkedNone": "Er is nog geen account bij een aanmeldprovider aan je gekoppeld.",
+
+  "profile.link": "{name} koppelen",
+
+  "profile.linkAgain": "{name} opnieuw koppelen",
+
+  "profile.linkDone": "Je account bij {name} is gekoppeld: je kunt ermee aanmelden.",
+
+  "profile.linkFailed": "De koppeling is niet gestart: {error}",
+
+  "profile.linkError.taken": "Dat account is hier al aan een andere gebruiker gekoppeld.",
+
+  "profile.linkError.group": "Dat account zit in geen van de groepen die deze server van {name} toelaat.",
+
+  "profile.linkError.failed": "De koppeling via de provider is mislukt. Probeer het opnieuw.",
+
   "users.identityEmailNeeded": "Een e-mailadres is nodig.",
+
+  "users.identitySubjectNeeded": "Een gebruikers-ID is nodig.",
+
+  "users.identityUserID": "gebruikers-ID {id}",
   "users.kind.session": "sessie",
   "users.kind.api": "API-sleutel",
   "users.lastUsed": "laatst gebruikt vanaf {from}",

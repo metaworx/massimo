@@ -517,6 +517,12 @@ which comes straight from the provider over TLS,
 so OpenID Connect Core 1.0, 3.1.3.7,
 lets that stand in for checking its signature;
 its `iss`, `aud` (and `azp`), `exp` and `nonce` are checked.
+Where the discovery document names a `userinfo_endpoint`,
+the server reads it with the access token and fills in what the `id_token` lacks:
+the e-mail with `email_verified`, `name` and `preferred_username`;
+Nextcloud's OIDC app sends them there only, since its 2.0.
+An answer for another `sub` fails the sign-in;
+one that cannot be read is logged, and the `id_token` goes on alone.
 The user is found by the provider's subject (`sub`);
 else by an e-mail an owner assigned to a user,
 which the provider says it verified (`email_verified`),
@@ -527,10 +533,15 @@ The browser goes back to the page with `#oidc=<code>`,
 a one-time code good for a minute,
 or with `#oidc-error=<reason>`:
 `denied` (at the provider), `failed` (its answer did not do),
-`refused` (no user here for the account)
+`refused` (no user here for the account),
+`noemail` (none found, and the provider sent no e-mail),
+`unverified` (none found, and the e-mail, which an assignment waits for
+or a user would have been created for, is not marked verified),
+`group` (the account in none of the groups the provider admits)
 or `disabled` (the user is disabled or has expired).
 A refusal but `denied` counts as a failed sign-in of the address,
-and is a `login_failed` line of the log.
+and is a `login_failed` line of the log,
+beside a warning with the provider, the account and the reason.
 A state is good once.
 
 `POST /api/v1/login/oidc/finish` with `{"code": …}` trades the code for the session,
@@ -642,17 +653,42 @@ a token of another user is `404`.
 A user's identities at the OpenID Connect providers
 ("Sign-in through OpenID Connect" above),
 with the rules of access of the users routes:
-`users`, or `guests` for a guest's; a user does not reach its own.
+`users`, or `guests` for a guest's;
+a user lists its own, removes its own and links its own,
+but assigns and changes none.
 
 `GET` lists them by provider:
-`[{"id": 3, "provider": "cloud", "email": "anna@example.com", "bound": true,
-"created_at": …, "bound_at": …, "last_used_at": …}]`;
-the provider's subject is not answered, only whether it is bound.
+`[{"id": 3, "provider": "cloud", "email": "anna@example.com", "subject": "anna",
+"bound": true, "created_at": …, "bound_at": …, "last_used_at": …}]`;
+`subject` is the user id at the provider, empty until bound.
 `POST` with `{"provider": "cloud", "email": "anna@example.com"}` assigns the e-mail,
 a pre-link that the first sign-in with it binds, `201` with the identity;
-an e-mail that already waits at the provider is `409`,
-an unknown provider `404`, a bad e-mail `400`.
+with `{"provider": "cloud", "subject": "anna"}` instead it assigns the user id there,
+bound at once, which needs no e-mail from the provider
+(Nextcloud's user id is the login name;
+Google's a number, which its sign-in shows nowhere);
+an e-mail that already waits at the provider,
+or a user id another identity there has, is `409`,
+an unknown provider `404`, a bad e-mail or both or neither of the two `400`.
+`GET` answers too what the provider said of the account at the last sign-in or link:
+`name`, `username` (`preferred_username`) and `groups`.
+`PUT …/identities/{id}` with `{"email": …}` or `{"subject": …}` changes one no sign-in used,
+the e-mail making it a waiting one, the user id a bound one;
+one a sign-in used is `409`: it is removed and assigned again.
 `DELETE` removes one: no sign-in finds the user by it any more.
+A user removing its own last way in,
+a bound identity where it has no password and no other bound one, is `409`.
+
+`POST /api/v1/users/{name}/identities/link/{key}` with `{"redirect": …}`,
+the user's own only (`403` for another's),
+starts a sign-in at the provider as `POST /api/v1/login/oidc/{key}` does,
+whose callback links the account to the user instead of signing in:
+it replaces the user's other identities at the provider,
+and sends the browser back with `#oidc-linked=<key>`;
+`#oidc-link-error=taken` where another user has the account,
+`#oidc-link-error=group` where it is in none of the groups the provider admits,
+`#oidc-link-error=failed` where the provider's answer did not do.
+No session is made, and nothing counts against the address.
 
 ### Roles: /api/v1/roles and /api/v1/roles/{key}
 
@@ -711,7 +747,8 @@ They need `auth`, which only `owner` has by default.
 ```json
 {"key": "cloud", "name": "Nextcloud", "issuer": "https://cloud.example.com",
  "client_id": "massimo", "client_secret": "…", "scopes": "openid email profile",
- "auto_create": false, "auto_role": "viewer", "auto_domains": [], "enabled": true}
+ "auto_create": false, "auto_role": "viewer", "auto_domains": [],
+ "groups_claim": "groups", "allowed_groups": ["family"], "enabled": true}
 ```
 
 `POST` adds one: `key`, `issuer` and `client_id` are needed.
@@ -719,12 +756,24 @@ The key is that of a role (lower-case letters, digits, `_` and `-`);
 the issuer an `https` URL (`http` only on loopback),
 whose discovery document is under `/.well-known/openid-configuration`;
 the scopes include `openid`.
+An enabled provider is saved,
+by `POST` or by a `PUT` that changes its issuer or enables it,
+only where that document is reached and names the issuer:
+one that differs only by a trailing slash is kept in the document's form,
+which the sign-in compares exactly;
+any other answer is `400`, saying what the document names or why it was not reached.
+A disabled provider is saved unchecked.
 `auto_role`, the role of the users a sign-in creates where `auto_create` is true,
 may not be `owner` nor hold an administrative capability (`guests`,
 `users`, `passwords`, `roles`, `roles.disable`, `capabilities`, `cubes`,
 `settings`, `update`, `restart`, `reboot`, `audit`, `auth`);
 `viewer` where absent.
 `auto_domains` limits it to e-mails of those domains, any where empty.
+`allowed_groups` are the groups the provider admits, read from the claim `groups_claim`
+(`groups` where empty) of the `id_token` or the userinfo,
+a list of strings or one string:
+an account in none of them neither signs in (`#oidc-error=group`)
+nor links (`#oidc-link-error=group`); any where empty.
 `PUT` changes the fields given; the key stays,
 `client_secret` left out stays and `""` clears it.
 The answers never hold the secret:

@@ -613,6 +613,10 @@
   "log.action.provider.update": "zmieniono dostawcę logowania",
   "log.action.provider.remove": "usunięto dostawcę logowania",
   "log.action.identity.add": "przypisano tożsamość",
+
+  "log.action.identity.update": "tożsamość zmieniona",
+
+  "log.action.identity.link": "rozpoczęto powiązanie konta",
   "log.action.identity.remove": "usunięto tożsamość",
   "log.kind.cube_gone": "zniknął",
   "log.kind.address_changed": "adres",
@@ -950,6 +954,12 @@
 
   "login.oidcError.refused": "To konto nie jest znane na tym serwerze. Poproś właściciela, aby przypisał je do twojego użytkownika.",
 
+  "login.oidcError.noemail": "Dostawca nie podał adresu e-mail tego konta, więc nie zostało ono dopasowane. Poproś właściciela serwera, aby zamiast tego przypisał twój identyfikator użytkownika u dostawcy.",
+
+  "login.oidcError.unverified": "Dostawca nie potwierdził adresu e-mail tego konta, więc nie zostało ono dopasowane. Poproś właściciela serwera, aby zamiast tego przypisał twój identyfikator użytkownika u dostawcy.",
+
+  "login.oidcError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od dostawcy.",
+
   "login.oidcError.disabled": "Twój użytkownik jest wyłączony lub wygasł.",
 
   "providers.title": "Dostawcy logowania",
@@ -976,7 +986,15 @@
 
   "providers.secretNone": "Jeszcze brak.",
 
+  "providers.secretLost": "Ustawiony, ale już się nie otwiera: secret.key obok magazynu brakuje lub jest inny. Wpisz sekret ponownie.",
+
   "providers.scopes": "Zakresy (scopes)",
+
+  "providers.allowedGroups": "Dopuszczone grupy",
+
+  "providers.groupsHint": "Oddzielone przecinkami; puste: dowolna grupa. Tylko konta w jednej z nich logują się lub są powiązywane.",
+
+  "providers.groupsClaim": "Claim grup",
 
   "providers.enabled": "Włączony",
 
@@ -1079,7 +1097,15 @@
 
   "users.identityProvider": "Dostawca",
 
+  "users.identityKind": "Przypisz przez",
+
+  "users.identityByEmail": "e-mail",
+
+  "users.identityBySubject": "identyfikator użytkownika",
+
   "users.identityEmail": "E-mail u dostawcy",
+
+  "users.identitySubject": "Identyfikator użytkownika u dostawcy",
 
   "users.identityAdd": "Przypisz",
 
@@ -1097,7 +1123,39 @@
 
   "users.identityRemoved": "Usunięto tożsamość.",
 
+  "users.identityChange": "Zmień",
+
+  "users.identityChangeLabel": "Zmień {email} u {provider}",
+
+  "users.identityChanged": "Tożsamość zmieniona.",
+
+  "users.identityGroups": "grupy: {groups}",
+
+  "users.identityLastUsed": "ostatnie logowanie",
+
+  "profile.linked": "Powiązane konta",
+
+  "profile.linkedNone": "Żadne konto u dostawcy logowania nie jest jeszcze z tobą powiązane.",
+
+  "profile.link": "Powiąż {name}",
+
+  "profile.linkAgain": "Powiąż ponownie {name}",
+
+  "profile.linkDone": "Twoje konto u {name} jest powiązane: możesz się nim logować.",
+
+  "profile.linkFailed": "Powiązanie nie rozpoczęło się: {error}",
+
+  "profile.linkError.taken": "To konto jest tu już powiązane z innym użytkownikiem.",
+
+  "profile.linkError.group": "To konto nie należy do żadnej z grup, które ten serwer dopuszcza od {name}.",
+
+  "profile.linkError.failed": "Powiązanie przez dostawcę nie powiodło się. Spróbuj ponownie.",
+
   "users.identityEmailNeeded": "Potrzebny jest adres e-mail.",
+
+  "users.identitySubjectNeeded": "Potrzebny jest identyfikator użytkownika.",
+
+  "users.identityUserID": "identyfikator {id}",
   "users.kind.session": "sesja",
   "users.kind.api": "klucz API",
   "users.lastUsed": "ostatnio użyty z {from}",

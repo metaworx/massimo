@@ -1,4 +1,4 @@
-<!-- My profile: the own display name and the own sessions and API keys, which users.js draws into #profile-name and #profile-tokens (renderProfile), and the own password, login.js. -->
+<!-- My profile: the own display name and the own sessions and API keys, which users.js draws into #profile-name and #profile-tokens (renderProfile), the own linked accounts at the sign-in providers, providers.js into #profile-identities, and the own password, login.js. -->
 <div class="profile" aria-live="polite">
   <div id="profile-name"></div>
   <details id="me-password" class="hidden">
@@ -22,5 +22,6 @@
     </form>
   </details>
   <div id="profile-tokens"></div>
+  <div id="profile-identities"></div>
   <p id="profile-msg" class="small cubes-msg hidden" role="status"></p>
 </div>

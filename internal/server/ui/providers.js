@@ -89,9 +89,11 @@ function providerForm(p, onCancel) {
   field("enabled").checked = p ? p.enabled : true;
   field("auto_create").checked = !!(p && p.auto_create);
   field("auto_domains").value = p ? (p.auto_domains || []).join(", ") : "";
+  field("allowed_groups").value = p ? (p.allowed_groups || []).join(", ") : "";
+  field("groups_claim").value = p ? p.groups_claim || "" : "";
   fillOptions(field("auto_role"), autoRoleOptions(p && p.auto_role));
   field("auto_role").value = p ? p.auto_role : "viewer";
-  form.querySelector(".secret-hint").textContent = t(p && p.has_secret ? "providers.secretKept" : "providers.secretNone");
+  form.querySelector(".secret-hint").textContent = t(p && p.secret_lost ? "providers.secretLost" : p && p.has_secret ? "providers.secretKept" : "providers.secretNone");
   const autoOnly = () => {
     for (const el of form.querySelectorAll(".auto-only")) el.classList.toggle("hidden", !field("auto_create").checked);
   };
@@ -121,6 +123,8 @@ function providerForm(p, onCancel) {
       auto_create: field("auto_create").checked,
       auto_role: field("auto_role").value,
       auto_domains: field("auto_domains").value.split(",").map((d) => d.trim()).filter(Boolean),
+      allowed_groups: field("allowed_groups").value.split(",").map((g) => g.trim()).filter(Boolean),
+      groups_claim: field("groups_claim").value.trim(),
     };
     const secret = field("client_secret").value;
     if (secret || !p) body.client_secret = secret;
@@ -159,22 +163,130 @@ function renderProviders() {
   sectionBadges($("sys-providers"), providersUI.list.length ? [badgeEl(String(providersUI.list.length), "mode")] : []);
 }
 
-// --- a user's identities (System settings → Users, users.js) ------------
+// --- a user's identities (System settings → Users, users.js; My profile) --
 
-// identityRow is one of a user's identities, with Remove.
-function identityRow(u, i) {
+// identityDetails is what the provider said of the account at its last
+// sign-in or link: its name and user name, its groups, and when.
+function identityDetails(i) {
+  const el = document.createElement("span");
+  const parts = [];
+  if (i.name) parts.push(i.name);
+  if (i.username && i.username !== i.name) parts.push(i.username);
+  if (i.email && i.subject && i.subject !== i.username) parts.push(t("users.identityUserID", { id: i.subject }));
+  if (i.groups && i.groups.length) parts.push(t("users.identityGroups", { groups: i.groups.join(", ") }));
+  if (parts.length) el.appendChild(document.createTextNode(parts.join(" · ") + " · "));
+  if (i.last_used_at) {
+    el.appendChild(document.createTextNode(t("users.identityLastUsed") + " "));
+    const age = ageEl(i.last_used_at, false, true);
+    if (age) el.appendChild(age);
+  } else {
+    el.appendChild(document.createTextNode(t("users.neverUsed")));
+  }
+  return el;
+}
+
+// identityRow is one of a user's identities, with what the provider said
+// of it, Remove, and for the manager (where is not "profile") Change of
+// one no sign-in used yet.
+function identityRow(u, i, where) {
   const li = fromTemplate("tpl-identity-row");
   li.dataset.id = String(i.id);
   const known = providersUI.login.find((p) => p.key === i.provider);
-  li.querySelector(".identity-provider").textContent = known ? known.name : i.provider;
-  li.querySelector(".identity-email").textContent = i.email;
+  const providerName = known ? known.name : i.provider;
+  li.querySelector(".identity-provider").textContent = providerName;
+  const account = i.email || t("users.identityUserID", { id: i.subject });
+  li.querySelector(".identity-email").textContent = account;
   li.querySelector(".identity-state").textContent = t(i.bound ? "users.identityBound" : "users.identityWaiting");
+  const details = li.querySelector(".identity-details");
+  details.replaceChildren(identityDetails(i));
+  details.classList.remove("hidden");
+  const path = "api/v1/users/" + encodeURIComponent(u.name) + "/identities/" + i.id;
   const remove = li.querySelector(".remove-identity");
-  remove.setAttribute("aria-label", t("users.identityRemoveLabel", { email: i.email, provider: known ? known.name : i.provider }));
+  remove.setAttribute("aria-label", t("users.identityRemoveLabel", { email: account, provider: providerName }));
   remove.addEventListener("click", () => {
-    userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/identities/" + i.id), t("users.identityRemoved"), u.name, remove);
+    userAction(() => api("DELETE", path), t("users.identityRemoved"), u.name, remove, where);
   });
+  const change = li.querySelector(".change-identity");
+  const form = li.querySelector(".identity-change");
+  if (where !== "profile" && !i.last_used_at) {
+    change.classList.remove("hidden");
+    change.setAttribute("aria-label", t("users.identityChangeLabel", { email: account, provider: providerName }));
+    const input = form.querySelector("input[name=account]");
+    const bySubject = !i.email;
+    input.setAttribute("aria-label", t(bySubject ? "users.identitySubject" : "users.identityEmail"));
+    change.addEventListener("click", () => {
+      input.value = bySubject ? i.subject : i.email;
+      form.classList.remove("hidden");
+      change.classList.add("hidden");
+      input.focus();
+    });
+    form.querySelector(".cancel-change").addEventListener("click", () => {
+      form.classList.add("hidden");
+      change.classList.remove("hidden");
+      change.focus();
+    });
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const value = input.value.trim();
+      if (!value) {
+        usersMsg(t(bySubject ? "users.identitySubjectNeeded" : "users.identityEmailNeeded"), false);
+        return;
+      }
+      userAction(() => api("PUT", path, bySubject ? { subject: value } : { email: value }), t("users.identityChanged"), u.name,
+        form.querySelector("button[type=submit]"));
+    });
+  }
   return li;
+}
+
+// --- My profile: the own linked accounts --------------------------------
+
+// renderProfileIdentities draws the user's own linked accounts into My
+// profile: each with what its provider said, Remove, and Link per
+// enabled provider (startLink). Nothing where no provider is enabled and
+// none is linked.
+async function renderProfileIdentities(u) {
+  const host = $("profile-identities");
+  if (!providersUI.login.length) await loadLoginProviders();
+  let list = [];
+  try {
+    list = (await api("GET", "api/v1/users/" + encodeURIComponent(u.name) + "/identities")) || [];
+  } catch (e) {
+    host.replaceChildren(textEl("p", e.message, "muted small bad"));
+    return;
+  }
+  const providers = appBridge() ? [] : providersUI.login;
+  if (!list.length && !providers.length) {
+    clear(host);
+    return;
+  }
+  const box = fromTemplate("tpl-profile-identities");
+  const ul = box.querySelector(".user-identities");
+  if (!list.length) ul.appendChild(textEl("li", t("profile.linkedNone"), "muted small"));
+  for (const i of list) ul.appendChild(identityRow(u, i, "profile"));
+  const buttons = box.querySelector(".profile-link-buttons");
+  for (const p of providers) {
+    const linked = list.some((i) => i.provider === p.key && i.bound);
+    const btn = textEl("button", t(linked ? "profile.linkAgain" : "profile.link", { name: p.name }));
+    btn.type = "button";
+    btn.dataset.provider = p.key;
+    btn.addEventListener("click", () => startLink(u, p.key, btn));
+    buttons.appendChild(btn);
+  }
+  host.replaceChildren(box);
+}
+
+// startLink starts the link of the user's own account at a provider: a
+// sign-in there, which comes back to My profile (oidcReturn, login.js).
+async function startLink(u, key, btn) {
+  try {
+    await whileBusy(btn, async () => {
+      const started = await api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/identities/link/" + encodeURIComponent(key), { redirect: pageBase() });
+      location.assign(started.url);
+    });
+  } catch (e) {
+    profileMsg(t("profile.linkFailed", { error: e.message }), false);
+  }
 }
 
 // fillIdentities loads a user's identities into its open panel.
@@ -193,26 +305,36 @@ async function fillIdentities(u, box) {
 }
 
 // wireIdentities wires a user panel's identities once, when it is built:
-// the providers to choose, Assign. The box is hidden where there is no
-// provider.
+// the providers to choose, by e-mail or by the user id there, Assign.
+// The box is hidden where there is no provider.
 function wireIdentities(u, box) {
   box.classList.toggle("hidden", !providersUI.login.length);
   const select = box.querySelector("select[name=provider]");
-  const email = box.querySelector("input[name=email]");
-  select.id = "user-identity-provider-" + u.name;
-  select.previousElementSibling.htmlFor = select.id;
-  email.id = "user-identity-email-" + u.name;
-  email.previousElementSibling.htmlFor = email.id;
+  const kind = box.querySelector("select[name=kind]");
+  const account = box.querySelector("input[name=account]");
+  for (const [el, what] of [[select, "provider"], [kind, "kind"], [account, "account"]]) {
+    el.id = "user-identity-" + what + "-" + u.name;
+    el.previousElementSibling.htmlFor = el.id;
+  }
   fillOptions(select, providersUI.login.map((p) => [p.key, p.name]));
+  const label = box.querySelector(".identity-value-label");
+  kind.addEventListener("change", () => {
+    const bySubject = kind.value === "subject";
+    label.dataset.i18n = bySubject ? "users.identitySubject" : "users.identityEmail";
+    label.textContent = t(label.dataset.i18n);
+    account.type = bySubject ? "text" : "email";
+  });
   const add = box.querySelector(".add-identity");
   add.addEventListener("click", () => {
-    const value = email.value.trim();
+    const value = account.value.trim();
+    const bySubject = kind.value === "subject";
     if (!value) {
-      usersMsg(t("users.identityEmailNeeded"), false);
+      usersMsg(t(bySubject ? "users.identitySubjectNeeded" : "users.identityEmailNeeded"), false);
       return;
     }
-    userAction(() => api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/identities", { provider: select.value, email: value }),
-      t("users.identityAdded", { email: value }), u.name, add);
+    const body = bySubject ? { provider: select.value, subject: value } : { provider: select.value, email: value };
+    userAction(() => api("POST", "api/v1/users/" + encodeURIComponent(u.name) + "/identities", body),
+      t("users.identityAdded", { email: bySubject ? t("users.identityUserID", { id: value }) : value }), u.name, add);
   });
 }
 
