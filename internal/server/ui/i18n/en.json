@@ -174,6 +174,7 @@
   "sysinfo.now": "Server time",
   "sysinfo.ahead": "{d} ahead of this browser",
   "sysinfo.behind": "{d} behind this browser",
+  "sysinfo.browserTime": "{time} in this browser's zone, {zone}",
   "sysinfo.addresses": "IP addresses",
   "sysinfo.apiMark": "* the web interface, port {port}",
   "sysinfo.apiAll": "The web interface listens on all of them, port {port}.",
@@ -184,8 +185,8 @@
   "sysinfo.proxyError": "not readable: {error}",
   "sysinfo.proxyPlain": "none, plain HTTP at the proxy",
   "sysinfo.proxyHttps": "HTTPS at the proxy",
-  "sysinfo.proxyUnknown": "the proxy names no scheme",
   "sysinfo.proxyHint": "The server does not trust this proxy: named with -trusted-proxies, it shows the proxy's address and certificate here.",
+  "sysinfo.proxyNoScheme": "The proxy sends no X-Forwarded-Proto: with it, the server reads the proxy's certificate.",
   "sysinfo.ownCert": "the server's own: {cert}",
 
   "update.title": "Software update",

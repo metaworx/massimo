@@ -365,9 +365,10 @@ body.scrolled #cube-found, body.scrolled #pending { display: none !important; }
 .info-table th { padding-right: 16px; font-weight: normal; color: var(--muted); white-space: nowrap; width: 1%; }
 .info-table td { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .info-table td .age-exact { display: none; }
-/* System Info: an interface a line, its MAC then its addresses; the note
-   on the web interface's under them; the clock's difference beside it */
-.sys-iface { display: flex; flex-wrap: wrap; gap: 0 10px; }
+/* System Info: an interface a line, as text that wraps: its name, its MAC,
+   its addresses; the note on the web interface's under them; the clock's
+   difference beside it */
+.sys-iface { overflow-wrap: anywhere; }
 .sys-mac { color: var(--muted); }
 .sys-note { margin: 4px 0 0; }
 .sys-skew { margin-left: 8px; }

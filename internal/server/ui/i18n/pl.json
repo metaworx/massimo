@@ -177,6 +177,7 @@
   "sysinfo.now": "Czas serwera",
   "sysinfo.ahead": "{d} przed tą przeglądarką",
   "sysinfo.behind": "{d} za tą przeglądarką",
+  "sysinfo.browserTime": "{time} w strefie czasowej tej przeglądarki, {zone}",
   "sysinfo.addresses": "Adresy IP",
   "sysinfo.apiMark": "* interfejs WWW, port {port}",
   "sysinfo.apiAll": "Interfejs WWW nasłuchuje na wszystkich, port {port}.",
@@ -187,8 +188,8 @@
   "sysinfo.proxyError": "nieczytelny: {error}",
   "sysinfo.proxyPlain": "brak, zwykły HTTP na proxy",
   "sysinfo.proxyHttps": "HTTPS na proxy",
-  "sysinfo.proxyUnknown": "proxy nie podaje schematu",
   "sysinfo.proxyHint": "Serwer nie ufa temu proxy: wskazany przez -trusted-proxies pokaże tutaj jego adres i certyfikat.",
+  "sysinfo.proxyNoScheme": "Proxy nie wysyła X-Forwarded-Proto: z tym nagłówkiem serwer odczyta certyfikat proxy.",
   "sysinfo.ownCert": "własny certyfikat serwera: {cert}",
 
   "update.title": "Aktualizacja oprogramowania",

@@ -2537,7 +2537,7 @@ paths:
                     properties:
                       proto: {type: string, enum: [https, http], description: Absent where no header says.}
                       host: {type: string}
-                      port: {type: integer}
+                      port: {type: integer, description: Absent where neither a scheme nor a port is said.}
                       certificate:
                         type: object
                         description: The proxy's certificate as the last check read it; for https, absent before the first.

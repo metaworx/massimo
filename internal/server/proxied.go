@@ -36,12 +36,13 @@ const (
 
 // proxyView is the proxy a request came through, as GET /api/v1/system
 // shows it: the scheme, the host and the port it serves the server at,
-// Proto empty where no header says; and, for https, its certificate as
-// the last check read it, nil before the first.
+// Proto empty where no header says, Port 0 where neither the scheme nor
+// a port is said; and, for https, its certificate as the last check read
+// it, nil before the first.
 type proxyView struct {
 	Proto       string     `json:"proto,omitempty"`
 	Host        string     `json:"host"`
-	Port        int        `json:"port"`
+	Port        int        `json:"port,omitempty"`
 	Certificate *proxyCert `json:"certificate,omitempty"`
 }
 
@@ -96,8 +97,8 @@ func proxyHeaders(h http.Header) bool {
 // X-Forwarded-Ssl or Front-End-Https "on", or Cloudflare's CF-Visitor,
 // "" where none says; the host from Forwarded, X-Forwarded-Host, else the
 // request's Host; the port from X-Forwarded-Port, else the host's own,
-// else the scheme's. Of a list, the first value counts: the proxy the
-// client reached.
+// else the scheme's, 0 where no scheme is said either. Of a list, the
+// first value counts: the proxy the client reached.
 func forwardedTarget(h http.Header, requestHost string) (proto, host string, port int) {
 	fw := forwardedPairs(h.Get("Forwarded"))
 	proto = strings.ToLower(fw["proto"])
@@ -138,11 +139,12 @@ func forwardedTarget(h http.Header, requestHost string) (proto, host string, por
 	if p, err := strconv.Atoi(firstValue(h.Get("X-Forwarded-Port"))); err == nil && p > 0 {
 		port = p
 	}
-	if port == 0 {
+	switch {
+	case port != 0:
+	case proto == "https":
+		port = 443
+	case proto == "http":
 		port = 80
-		if proto == "https" {
-			port = 443
-		}
 	}
 	return proto, host, port
 }

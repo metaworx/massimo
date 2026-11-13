@@ -2565,7 +2565,8 @@ or Cloudflare's `CF-Visitor`, in that order, the first value of a list;
 `proto` is absent where none says.
 The host comes from `Forwarded` (`host=`), `X-Forwarded-Host`,
 else the request's `Host`; the port from `X-Forwarded-Port`,
-else the host's own, else 443 or 80.
+else the host's own, else 443 or 80 for the scheme said;
+`port` is absent where neither a scheme nor a port is.
 For `https`, `certificate` is the proxy's,
 read through a TLS handshake with the proxy at the request's peer address and
 that port, for that host, best effort, within five seconds:
