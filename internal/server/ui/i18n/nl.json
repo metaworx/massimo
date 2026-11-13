@@ -171,7 +171,7 @@
   "sysinfo.install.other": "Anders: met de hand, een container of een andere supervisor",
   "sysinfo.system": "Systeem",
   "sysinfo.host": "Hostnaam",
-  "sysinfo.client": "Adres van deze browser",
+  "sysinfo.client": "Browseradres",
   "sysinfo.noTLS": "geen, gewoon HTTP",
   "sysinfo.now": "Servertijd",
   "sysinfo.ahead": "{d} voor op deze browser",

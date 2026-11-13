@@ -172,7 +172,7 @@
   "sysinfo.install.other": "Autre : à la main, un conteneur ou un autre superviseur",
   "sysinfo.system": "Système",
   "sysinfo.host": "Nom d'hôte",
-  "sysinfo.client": "Adresse de ce navigateur",
+  "sysinfo.client": "Adresse du navigateur",
   "sysinfo.noTLS": "aucun, HTTP simple",
   "sysinfo.now": "Heure du serveur",
   "sysinfo.ahead": "{d} d'avance sur ce navigateur",

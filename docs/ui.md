@@ -566,14 +566,13 @@ from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
 The title stays under the header while the page scrolls,
 with **Sections** at its right end (a bulleted list, apart from ☰):
-it lists the cards, marks the one in view and brings the one chosen into view.
-A row of buttons under the title names the cards the role sees,
-each bringing its card into view, opened.
+it lists the cards the role sees, marks the one in view and brings the one
+chosen into view, opened.
 A card folds with the button in its heading,
 which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
-Once the row of buttons is out of sight, **↑** at the bottom right goes back
+Once the first card's head is out of sight, **↑** at the bottom right goes back
 to the top of the page.
 
 - **System Info**, for everyone who opens System settings:
@@ -860,8 +859,7 @@ A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
-`pageContents` fills the page's row of section buttons from them,
-`pageBar` the sections menu of its title's row kept at the top,
+`pageBar` fills the sections menu of its title's row kept at the top,
 and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's connection a `connIcon`;

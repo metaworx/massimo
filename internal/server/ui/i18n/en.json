@@ -170,7 +170,7 @@
   "sysinfo.install.other": "Other: by hand, a container or another supervisor",
   "sysinfo.system": "System",
   "sysinfo.host": "Host name",
-  "sysinfo.client": "This browser's address",
+  "sysinfo.client": "Browser address",
   "sysinfo.noTLS": "none, plain HTTP",
   "sysinfo.now": "Server time",
   "sysinfo.ahead": "{d} ahead of this browser",

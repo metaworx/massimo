@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """System settings as section cards (components.js sectionCards,
-pageContents, backToTop): their order, the row of section buttons,
-folding kept in the browser, back to top, the columns where there is
-room, and a Cube's panel in two columns."""
+pageBar, backToTop): their order, the sections menu and no row of
+section buttons, folding kept in the browser, back to top, the columns
+where there is room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
 CARDS = ["sys-info", "sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-roles", "sys-caps", "sys-backup"]
@@ -17,16 +17,26 @@ def left(page, sel):
     return page.evaluate("(s) => Math.round(document.querySelector(s).getBoundingClientRect().left)", sel)
 
 
+def open_sections(page):
+    """System settings' sections menu, open."""
+    menu = page.locator("#system .sec-menu")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    return menu
+
+
 def test_cards_and_contents(page, case):
-    """The cards in the owner's order, each with a button in the row of
-    section buttons; the cards flow in two columns at 1100 px and stack
-    at 390; nothing overflows."""
+    """The cards in the owner's order, each with an item in the sections
+    menu, and no row of section buttons; the cards flow in two columns at
+    1100 px and stack at 390; nothing overflows."""
     show_view(page, "system")
     assert card_ids(page) == CARDS, "System Info first, Backup and restore last"
-    toc = page.locator("#system .toc .toc-link")
-    assert toc.count() == len(CARDS), "a section button per card"
-    assert [toc.nth(i).get_attribute("data-target") for i in range(toc.count())] == CARDS, "the buttons in the cards' order"
-    named_buttons(page, "System settings' row of section buttons")
+    assert page.locator("#system .toc").count() == 0, "no row of section buttons"
+    toc = open_sections(page).locator(".toc-link")
+    assert toc.count() == len(CARDS), "a menu item per card"
+    assert [toc.nth(i).get_attribute("data-target") for i in range(toc.count())] == CARDS, "the items in the cards' order"
+    named_buttons(page, "System settings' sections menu")
+    page.keyboard.press("Escape")
     assert wait_until(page, "document.querySelectorAll('.role-panel').length >= 6", 5), "the roles are listed"
     lefts = {left(page, "#" + c) for c in ("sys-users", "sys-roles", "sys-caps")}
     if case.width >= 900:
@@ -39,7 +49,7 @@ def test_cards_and_contents(page, case):
 
 def test_fold_kept_and_opened_from_contents(page, case):
     """A folded card keeps its head and badges, stays folded after a
-    reload, and its section button opens it again."""
+    reload, and its item in the sections menu opens it again."""
     show_view(page, "system")
     card = page.locator("#sys-users")
     fold = card.locator(".section-fold")
@@ -51,8 +61,8 @@ def test_fold_kept_and_opened_from_contents(page, case):
         page.reload()
         page.locator("#system").wait_for(state="visible")
         assert page.locator("#sys-users-body").is_hidden(), "the card is still folded after a reload"
-        page.locator("#system nav.toc .toc-link[data-target='sys-users']").click()
-        assert page.locator("#sys-users-body").is_visible(), "its section button opens it"
+        open_sections(page).locator(".toc-link[data-target='sys-users']").click()
+        assert page.locator("#sys-users-body").is_visible(), "its item in the menu opens it"
         assert wait_until(page, "document.activeElement === document.querySelector('#sys-users .section-fold')", 3), \
             "the focus on the card's heading"
     finally:
@@ -61,8 +71,8 @@ def test_fold_kept_and_opened_from_contents(page, case):
 
 
 def test_back_to_top(page, case):
-    """Once the row of section buttons is out of sight, ↑ takes the page
-    back to its top."""
+    """Once the first card's head is out of sight, ↑ takes the page back
+    to its top, the focus on the sections menu."""
     show_view(page, "system")
     top = page.locator("#system .to-top")
     assert top.is_hidden(), "no ↑ at the top of the page"
@@ -70,6 +80,8 @@ def test_back_to_top(page, case):
     assert wait_until(page, "!document.querySelector('#system .to-top').classList.contains('hidden')", 3), "↑ once scrolled"
     top.click()
     assert wait_until(page, "window.scrollY === 0", 3), "↑ goes back to the top"
+    assert page.evaluate("document.activeElement === document.querySelector('#system .sec-menu > summary')"), \
+        "the focus on the sections menu"
     show_view(page, "tiles")
 
 

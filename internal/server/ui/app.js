@@ -1210,7 +1210,6 @@ function applyLanguage() {
   if (I18N.en) applyI18n(document);
   initHelpSlots();
   pageBar($("system"));
-  pageContents($("system"));
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
@@ -1247,12 +1246,11 @@ async function init() {
   renderLangSelect();
   initHelpSlots();
   // the header kept at the top; System settings' row there with its
-  // sections menu, its cards that fold, its section buttons, back to top
+  // sections menu, its cards that fold, back to top
   stickyHeader();
   const system = $("system");
   sectionCards(system);
   pageBar(system);
-  pageContents(system);
   backToTop(system);
   initSettings();
   applySettings();

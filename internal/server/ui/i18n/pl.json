@@ -173,7 +173,7 @@
   "sysinfo.install.other": "Inna: ręcznie, kontener lub inny nadzorca",
   "sysinfo.system": "System",
   "sysinfo.host": "Nazwa hosta",
-  "sysinfo.client": "Adres tej przeglądarki",
+  "sysinfo.client": "Adres przeglądarki",
   "sysinfo.noTLS": "brak, zwykły HTTP",
   "sysinfo.now": "Czas serwera",
   "sysinfo.ahead": "{d} przed tą przeglądarką",

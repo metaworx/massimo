@@ -483,7 +483,7 @@ body.scrolled #cube-found, body.scrolled #pending { display: none !important; }
 }
 
 /* System settings: the page at full width, its parts section cards in a
-   grid (components.js sectionCards, pageContents, backToTop); a card is
+   grid (components.js sectionCards, backToTop); a card is
    as wide as the grid, a .half card shares a row where there is room;
    Users, Roles and Capabilities flow in two columns there, none split,
    the break where their heights put it. */
@@ -520,7 +520,6 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .menu.sec-menu > summary:hover, .menu.sec-menu[open] > summary { border-color: var(--accent); }
 .sec-menu .menu-items { min-width: 210px; }
-.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .toc-link { padding: 3px 12px; border-radius: 999px; font-size: 0.9rem; }
 .section-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .section-flow { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
