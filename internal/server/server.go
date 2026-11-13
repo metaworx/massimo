@@ -1074,7 +1074,7 @@ func (s *Server) Handler() http.Handler { return s.handler }
 func (s *Server) routes() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started}
+		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started, "features": s.featuresOf()}
 		if s.opts.Store != nil {
 			h["node_id"] = s.opts.Store.NodeID()
 		}
