@@ -166,3 +166,36 @@ def test_proxy_without_a_scheme(page, case):
     assert lines[2].startswith(NO_SCHEME[case.lang]), f"the header the proxy does not send ({lines})"
     page.unroute("**/api/v1/system")
     show_view(page, "tiles")
+
+
+FAILING = {"serial": "KEQ0000101", "addr": "192.0.2.10:62910", "listening": False,
+           "error": "listen tcp 192.0.2.10:62910: bind: cannot assign requested address",
+           "since": "2026-11-13T08:00:00+01:00", "next_try": "2026-11-13T08:02:30+01:00", "tries": 9}
+PROXIES_BADGE = {"en": "1 proxy not listening", "de": "1 Proxy horcht nicht"}
+LISTENING = {"en": "listening", "de": "horcht"}
+
+
+def test_system_info_cube_proxies(page, case):
+    """The Cube proxies' listeners, a line each: one listening, one that
+    does not with its error, since when and the next try as its tooltip,
+    counted in the card's badge; none listed, a dash and no badge."""
+    box = dict(BOX, cube_proxies=[{"serial": "KEQ0000100", "addr": "192.0.2.5:62910", "listening": True}, FAILING])
+    page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
+    show_view(page, "system")
+    assert wait_until(page, "document.querySelectorAll('#info-proxies .sys-proxy').length === 2", 5), "two listeners listed"
+    lines = page.locator("#info-proxies .sys-proxy")
+    assert lines.nth(0).inner_text().split() == ["KEQ0000100", "192.0.2.5:62910", LISTENING[case.lang]], "the listening one"
+    notice = lines.nth(1).locator(".notice")
+    assert notice.count() == 1, "the one that does not listen, as a notice"
+    text = notice.inner_text()
+    assert "192.0.2.10:62910" in text and "cannot assign requested address" in text, "its address and its error"
+    assert notice.locator(".notice-since").count() == 1, "since when"
+    assert notice.get_attribute("title"), "the next try as its tooltip"
+    assert page.locator("#sys-info .section-badges").inner_text().strip() == PROXIES_BADGE[case.lang], "the card's badge"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with a long error"
+    show_view(page, "tiles")
+    box["cube_proxies"] = []
+    show_view(page, "system")
+    assert wait_until(page, "document.getElementById('info-proxies').textContent === '–'", 5), "none listed: a dash"
+    assert page.locator("#sys-info .section-badges .flag").count() == 0, "no badge"
+    show_view(page, "tiles")

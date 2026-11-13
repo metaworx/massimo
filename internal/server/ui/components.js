@@ -134,6 +134,21 @@ function badgeEl(text, kind) {
   return textEl("span", text, "flag " + kind);
 }
 
+// noticeEl is a lasting warning (.notice) of a text, for a state the
+// server keeps trying to leave, such as a Cube proxy that does not listen
+// (cubes.js, update.js): since, an API time, adds from when it holds;
+// next, an API time, when the server tries again, as its tooltip. Times,
+// not ages: a try comes every few seconds, and refreshAges runs once a
+// minute.
+function noticeEl(text, { since, next } = {}) {
+  const p = textEl("p", text, "notice");
+  const from = Date.parse(since || "");
+  if (!isNaN(from)) p.append(" ", textEl("span", t("notice.since", { time: fmtShortTime(from) }), "notice-since"));
+  const at = Date.parse(next || "");
+  if (!isNaN(at)) p.title = t("notice.next", { time: new Date(at).toLocaleTimeString(i18n.lang) });
+  return p;
+}
+
 // iconEl returns a small inline icon referencing a symbol of the page.
 function iconEl(symbol, cls) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
