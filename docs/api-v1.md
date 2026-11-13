@@ -97,7 +97,8 @@ with a filter box and a clear that only empties the view;
 the tiles keep their state meanwhile.
 The short server version stands next to the brand;
 the Cube selector shows the Cube's name when one is configured.
-My settings, on the personal page the header's 👤 opens, has the poll interval (10 s by default;
+My settings, on the personal page the header's 👤 opens,
+has the poll interval (10 s by default;
 the header is refreshed on it,
 and the rooms as well while the event stream is down;
 the ↻ button in the header runs the same refresh at once, rooms included,
