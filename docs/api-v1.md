@@ -333,6 +333,29 @@ replace a dead battery, or remove the device from the Cube:
 
 `started_at` is when the server process started;
 a new time with the same version means the server was restarted.
+
+`features` is what this server can do, by name and version `"MAJOR.MINOR"`:
+`{"event_ids": "1.0", "vwt": "1.0", …}`.
+A minor rises when a feature gains something compatible (a field, a route),
+so a client written for 1.0 works with 1.3,
+and one that needs 1.2 asks for a minor of at least 2;
+under `/api/v1` the major stays 1.
+A name never changes meaning: a feature that goes is taken out of the map.
+A server without the field, older than these names, has none of them.
+The map is the running server's, not its build's:
+without a store (`serve -addr`) the features that need one are left out.
+
+| Name | What it says the server has | Needs the store | First in |
+|------|-----------------------------|-----------------|----------|
+| `event_ids` | the stream's ids, resuming by `Last-Event-ID` or `last_event_id`, `resync` | no | 0.13.0-alpha.1 |
+| `idempotency` | `Idempotency-Key` on writes | yes | 0.8.0-alpha.1 |
+| `commands` | `GET /api/v1/commands/{id}`, and command ids in answers | yes | 0.8.0-alpha.1 |
+| `vwt` | virtual wall thermostats, `devices=`, `room_uid`, `temp_method` | no | the release after 0.15.0-alpha.1 |
+| `program_etag` | the programme's tag, `If-Match`, `412`, `pending`, the config event's `changed` and `etag`, `GET …/devices/{rf}/program` | no | the release after 0.15.0-alpha.1 |
+| `boost` | `{"mode": "boost"}` on the setpoint routes | no | the release after 0.15.0-alpha.1 |
+| `proxy_virtual` | the Cube option `proxy_virtual` | yes | the release after 0.15.0-alpha.1 |
+
+What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
@@ -1601,6 +1624,7 @@ Body:
 | `manual`   | `temp` (4.5 … 30.5, steps of 0.5)        | hold `temp`                                   |
 | `auto`     | optional `temp`                          | follow the week program (`temp` until the next switch point) |
 | `vacation` | `temp`, `until` (`"YYYY-MM-DD HH:MM"`, half hours) | hold `temp` until `until`, then auto |
+| `boost`    | none (`temp` is ignored by the devices)  | open the valves by the thermostats' boost settings (`boost_minutes`, `boost_valve_pct`) for their boost time, then back to the mode they had |
 
 ```json
 {"mode": "manual", "temp": 21}
@@ -1618,7 +1642,11 @@ because the Cube discards a direct command to a room member;
 every thermostat of that room therefore takes the new setpoint,
 which is how MAX! treats setpoints.
 A device outside any room is addressed directly.
-Boost cannot be started over the air.
+A boost is the set-temperature command with mode 3, as a button at a device starts it;
+the command carries the setpoint the device has, which the devices ignore.
+Seen on hardware on 2026-11-13: both thermostats of a room showed `boost` within a minute,
+and returned by themselves to the mode they had after their boost time
+(docs/portal-protocol.md).
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
 
@@ -2473,9 +2501,11 @@ but the route answers all the same.
 What System settings → System Info shows (capability `read`):
 the version, the start and the certificate, as `/healthz` has them,
 and what `/healthz` does not tell anyone:
-how the server was installed, the computer it runs on,
-and the caller's address as the server sees it,
-the client a trusted proxy names (`serve -trusted-proxies`).
+how the server was installed, the computer it runs on, its clock,
+its full name, the interfaces it listens on,
+the caller's address as the server sees it,
+the client a trusted proxy names (`serve -trusted-proxies`),
+and that proxy, where the request came through one.
 
 ```json
 {
@@ -2487,7 +2517,17 @@ the client a trusted proxy names (`serve -trusted-proxies`).
   "os_name": "Debian GNU/Linux 13 (trixie)",
   "arch": "arm64",
   "hostname": "massimo",
-  "client_ip": "192.168.1.20"
+  "client_ip": "192.168.1.20",
+  "now": "2026-11-13T09:53:10.25+01:00",
+  "time_zone": "Europe/Zurich",
+  "fqdn": "massimo.example.net",
+  "interfaces": [
+    {"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.168.1.8", "api": true}, {"ip": "192.168.1.31"}]}
+  ],
+  "api_port": 8099,
+  "proxy": {"proto": "https", "host": "massimo.example.net", "port": 443,
+    "certificate": {"source": "proxy", "names": ["massimo.example.net"], "not_after": "2027-02-10T12:00:00Z", "fingerprint": "…",
+      "self_signed": false, "issuer": "R11", "trusted": true, "checked_at": "2026-11-13T09:50:02+01:00"}}
 }
 ```
 
@@ -2499,6 +2539,35 @@ the units of `massimo install` or others;
 `amd64`, `arm64`, `arm`);
 `os_name` is the distribution's name from `/etc/os-release`, absent elsewhere.
 `tls` is absent without TLS.
+`now` is the server's clock with its offset, `time_zone` its zone's name:
+`TZ` where set, else the zone `/etc/localtime` links to,
+else the zone's abbreviation, as on Windows.
+`fqdn` is the host's full name as `hostname -f` gives it, `/etc/hosts` first,
+`hostname` where there is none.
+`interfaces` are those the API or a Cube proxy listens on:
+a listener on every address takes each interface that is up but the loopback,
+one on an address that address's interface;
+an interface comes with its MAC and its addresses but link-local ones,
+`api` marking those the API listens on, at `api_port`.
+
+`proxy` is there when the request came from a trusted proxy:
+the scheme, host and port the proxy serves the server at.
+The scheme is read from RFC 7239's `Forwarded` (`proto=`),
+`X-Forwarded-Proto`, `X-Forwarded-Scheme`, `X-Forwarded-Protocol`,
+`X-Url-Scheme` or `X-Scheme`, `X-Forwarded-Ssl: on`, `Front-End-Https: on`,
+or Cloudflare's `CF-Visitor`, in that order, the first value of a list;
+`proto` is absent where none says.
+The host comes from `Forwarded` (`host=`), `X-Forwarded-Host`,
+else the request's `Host`; the port from `X-Forwarded-Port`,
+else the host's own, else 443 or 80.
+For `https`, `certificate` is the proxy's,
+read through a TLS handshake with the proxy at the request's peer address and
+that port, for that host, best effort, within five seconds:
+at the first proxied request after the server's start, once a day after,
+and again when the proxy's address changes.
+It is absent until the first check has read it; `error` says why one failed.
+`trusted` says whether it is valid for the host against the system's roots,
+`issuer` names who issued it.
 
 ### GET /api/v1/update?refresh=1
 

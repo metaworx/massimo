@@ -373,6 +373,22 @@ then wakeup of the new room,
 Links are therefore the only per-device data that is not readable from the Cube;
 a restore derives them from the room layout.
 
+Boost over the air (2026-11-13, Cube firmware 1.1.3, through Massimo's proxy):
+one room-addressed 0x40 with mode 3 in its top bits
+(`00 04 40 00 00 00 <rf of a room member> <room> c0|<setpoint>`),
+the setpoint the room had (5.5 °C), to a room of a radiator thermostat and
+a wall thermostat, both in manual.
+The Cube answered `S:12,0,31`; within 40 seconds both L entries showed mode 3
+and the radiator thermostat's valve 100 %,
+its C line's boost setting (30 minutes at 100 % on these devices;
+5 minutes at 80 % in the earlier captures, the devices' defaults differ).
+The devices showed the boost's remaining minutes on their displays.
+After the boost time the radiator thermostat's entry returned to manual at 5.5 °C,
+valve 0 %, 31 minutes after the command;
+the wall thermostat's followed two minutes later, with its next report.
+Nothing else was sent: a boost ends by itself in the mode the devices had.
+One radio write, the duty cycle 18 % before and 21 % after.
+
 One wall thermostat per room (2026-11-12, the original software 1.4.6, Cube firmware
 not noted): moving a wall thermostat into a room that has one already is refused
 by the software before it sends anything, with "Attention: You cannot add any more

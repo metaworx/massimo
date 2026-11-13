@@ -318,6 +318,11 @@ type Server struct {
 	// at which each also asks whether its caller is still let in.
 	streamKeepAlive atomic.Int64
 
+	// apiAddr is where the API listens (SetAPIAddr), under mu, for GET
+	// /api/v1/system; proxyCheck the proxy's certificate (proxied.go).
+	apiAddr    net.Addr
+	proxyCheck proxyCheck
+
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
 	discMu    sync.Mutex
@@ -1069,7 +1074,7 @@ func (s *Server) Handler() http.Handler { return s.handler }
 func (s *Server) routes() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started}
+		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started, "features": s.featuresOf()}
 		if s.opts.Store != nil {
 			h["node_id"] = s.opts.Store.NodeID()
 		}
@@ -1530,7 +1535,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 
 // setpointRequest is the body of the setpoint endpoints.
 type setpointRequest struct {
-	Mode  string  `json:"mode"`            // auto, manual, vacation
+	Mode  string  `json:"mode"`            // auto, manual, vacation, boost
 	Temp  float64 `json:"temp,omitempty"`  // °C in 0.5 steps; 0 with auto follows the program
 	Until string  `json:"until,omitempty"` // vacation end, "YYYY-MM-DD HH:MM"
 }
@@ -1674,10 +1679,18 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	}
 	mode, err := cube.ParseMode(req.Mode)
 	if err != nil {
-		return fail(http.StatusBadRequest, "mode must be auto, manual or vacation")
+		return fail(http.StatusBadRequest, "mode must be auto, manual, vacation or boost")
 	}
-	if mode == cube.ModeBoost {
-		return fail(http.StatusBadRequest, "boost is started on the device, not over the air")
+	if mode == cube.ModeBoost && req.Temp == 0 {
+		// The thermostats ignore the temperature of a boost: they open
+		// their valves by their boost settings for their boost time and
+		// then return to the mode they had (seen on hardware 2026-11-13,
+		// docs/portal-protocol.md). The command still carries one; the
+		// setpoint the device has keeps the line what it was.
+		req.Temp = cube.TempOff
+		if st, ok := rt.client.Snapshot().State(t.RFAddress); ok && st.Setpoint != nil {
+			req.Temp = *st.Setpoint
+		}
 	}
 	var until cube.Until
 	if mode == cube.ModeVacation {

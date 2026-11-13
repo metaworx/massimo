@@ -2,10 +2,12 @@
 # Copyright (C) 2026 The Massimo Authors
 """System settings → System Info (update.js loadSystemInfo), from GET
 /api/v1/system: the server's version and what it was built with, its
-start, the certificate, how it was installed, the computer and the
+start and clock, the certificate (or a proxy's), how it was installed,
+the computer, its full name and the interfaces it listens on, and the
 address the server sees this browser at; first as the test server
-answers, in a terminal without TLS, then a stubbed Debian box."""
+answers, in a terminal without TLS on the loopback, then stubbed boxes."""
 import json
+import time
 
 from helpers import scroll_width, show_view, wait_until
 
@@ -25,6 +27,11 @@ def cell(page, name):
     return page.locator("#info-" + name).inner_text().strip()
 
 
+def tls_lines(page):
+    """The certificate row's lines, where a proxy serves the page."""
+    return page.evaluate("[...document.querySelectorAll('#info-tls div')].map((d) => d.textContent.trim())")
+
+
 def test_system_info_of_the_test_server(page, case):
     """The test server: its version, a start, no certificate, "other" as
     the installation, the computer, and the loopback as this browser's
@@ -39,7 +46,12 @@ def test_system_info_of_the_test_server(page, case):
     arch = page.evaluate("api('GET', 'api/v1/system').then((v) => v.arch)")
     assert cell(page, "system").endswith(" · " + arch), "the operating system and the processor"
     assert cell(page, "host") not in ("", "–"), "the host's name"
+    assert page.locator("#info-host strong").count() == 1, "the host's own name bold"
     assert cell(page, "client") == "127.0.0.1", "the address the server sees this browser at"
+    assert cell(page, "now") not in ("", "–"), "the server's clock"
+    # the API on 127.0.0.1 alone: the loopback's line, its address marked
+    assert "127.0.0.1*" in cell(page, "addrs") and page.locator("#info-addrs .sys-note").count() == 1, \
+        "the loopback the API listens on, marked and explained"
     assert page.locator("#sys-info").is_visible(), "the tile shown without expert mode"
     assert scroll_width(page) <= case.width, "no horizontal scroll with System Info"
     show_view(page, "tiles")
@@ -65,5 +77,60 @@ def test_system_info_of_a_debian_box(page, case):
     show_view(page, "system")
     assert wait_until(page, "document.getElementById('info-install').textContent === 'dnf'", 5), \
         "a package manager without a text, as the server names it"
+    page.unroute("**/api/v1/system")
+    show_view(page, "tiles")
+
+
+PROXIED = {"en": "(proxied)", "de": "(über Proxy)"}
+UNTRUSTED = {"en": "not trusted", "de": "nicht vertrauenswürdig"}
+AHEAD = {"en": "3 min ahead of this browser", "de": "3 min vor diesem Browser"}
+ALL = {"en": "The web interface listens on all of them, port 8099.", "de": "Die Weboberfläche hört auf alle, Port 8099."}
+
+
+def test_system_details_behind_a_proxy(page, case):
+    """A stubbed box behind a trusted proxy: the server's clock three
+    minutes ahead, ticking, in its zone; the full name with the host bold;
+    an interface a line, the MAC first, the web interface's address marked
+    and explained; the proxy's certificate, "(proxied)", with the address
+    the proxy serves; then the web interface on every address."""
+    now = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() + 180))
+    box = dict(BOX, tls=None, now=now, time_zone="Europe/Zurich", fqdn="massimo-box.example.net", api_port=8099,
+               interfaces=[{"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.0.2.8", "api": True}, {"ip": "192.0.2.31"}]},
+                           {"name": "wg0", "addresses": [{"ip": "10.8.0.2"}]}],
+               proxy={"proto": "https", "host": "massimo.example.net", "port": 443,
+                      "certificate": {"source": "proxy", "names": ["massimo.example.net"], "not_after": "2027-02-10T12:00:00Z",
+                                      "fingerprint": "00", "self_signed": False, "issuer": "Example CA", "trusted": False,
+                                      "checked_at": "2026-11-13T09:50:02+01:00"}})
+    box.pop("tls")
+    page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
+    show_view(page, "system")
+    assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "System Info filled"
+    clock = cell(page, "now")
+    assert "Europe/Zurich" in clock and AHEAD[case.lang] in clock, f"the server's clock in its zone, ahead ({clock!r})"
+    page.wait_for_timeout(1200)
+    assert cell(page, "now") != clock, "the clock ticks"
+    assert page.locator("#info-host strong").inner_text() == "massimo-box" and cell(page, "host") == "massimo-box.example.net", \
+        "the full name, the host bold"
+    lines = page.locator("#info-addrs .sys-iface")
+    assert lines.count() == 2, "an interface a line"
+    assert lines.nth(0).inner_text().split() == ["02:00:00:00:00:01", "192.0.2.8*,", "192.0.2.31"], "the MAC, then the addresses, the API's marked"
+    assert lines.nth(1).inner_text().split()[0] == "wg0" and lines.nth(1).get_attribute("title") == "wg0", "the name where there is no MAC"
+    assert "8099" in page.locator("#info-addrs .sys-note").inner_text(), "the asterisk explained, with the port"
+    cert, served = tls_lines(page)[:2]
+    parts = cert.removesuffix(" " + PROXIED[case.lang]).split(" · ")
+    assert parts[0] == "massimo.example.net" and parts[2].endswith("Example CA") and parts[3] == UNTRUSTED[case.lang] \
+        and cert.endswith(" " + PROXIED[case.lang]), f"the proxy's certificate: names, expiry, issuer, not trusted, proxied ({cert!r})"
+    assert served == "https://massimo.example.net:443", "the address the proxy serves"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the details"
+    show_view(page, "tiles")
+    box["interfaces"] = [{"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.0.2.8", "api": True}, {"ip": "192.0.2.31", "api": True}]}]
+    box["proxy"] = {"proto": "https", "host": "massimo.example.net", "port": 443}
+    show_view(page, "system")
+    assert wait_until(page, "document.querySelector('#info-addrs .sys-note') && !document.getElementById('info-addrs').textContent.includes('*')", 5), \
+        "the web interface everywhere: no asterisk"
+    assert page.locator("#info-addrs .sys-note").inner_text() == ALL[case.lang], "the note says so instead"
+    cert, served = tls_lines(page)[:2]
+    assert cert.endswith(" " + PROXIED[case.lang]) and served == "https://massimo.example.net:443", \
+        "a certificate not read yet, proxied all the same"
     page.unroute("**/api/v1/system")
     show_view(page, "tiles")

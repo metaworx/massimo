@@ -1,4 +1,4 @@
-# AP RoomApi v1.0: Virtual wall thermostat per room
+# AP RoomApi v1.1: Virtual wall thermostat per room
 
 ## TL;DR
 
@@ -24,6 +24,8 @@ and boost over the air.
 - **Programme ETag:** over every member, also in the body; a write on its way → `412`.
 - **Fake Cube:** applies what it acknowledges, with a control port and fixtures.
 - **Boost:** a hardware test, then the route.
+- **Features (v1.1):** `/healthz` → `"features": {"vwt": "1.0", …}`, the running server's
+  abilities by name and version, so that a client of main's builds knows what it may use.
 
 ### Blocks
 
@@ -37,6 +39,7 @@ and boost over the air.
 8. ProxyTest: the original software through the proxy, on the owner's go
 9. BoostTest: one boost on the owner's test Cube and room
 10. Boost: the route, the UI control, the docs
+11. Features: the `features` map in `/healthz` (v1.1)
 
 ## Discussion
 
@@ -86,6 +89,15 @@ the evening of 2026-11-12, with the integration session's feedback twice.
   word for that test is given; nothing else is sent there.
 - **The settings UI** (the per-Cube proxy setting, the VWT's settings) is coordinated with the
   session "Web UI updates".
+
+**Decided with v1.1** (2026-11-13, the owner's `PLAN++ D19-A D18-A`):
+
+- **D19-A:** `/healthz` carries a `features` map, the Home Assistant integration's
+  request (its D12), reviewed and with `proxy_virtual` added (A8).
+- **D18-A:** PR #209, the revert of the slow-scroll test's wait, closed unmerged: the
+  session "Web UI updates" found the failure's cause in the test's setup (an injected
+  found Cube the next poll removes, the header shrinking while the page is scrolled)
+  and fixes it there.
 
 **The integration's answers** (2026-11-12):
 - it reads `?devices=all`, backs each room's climate entity by its VWT, and keeps real wall
@@ -335,6 +347,40 @@ by default until Block 8 has passed.
 - **`/healthz`** carries the version the integration checks. VWTs reach it with the first
   release after Block 4; releases are the owner's.
 
+### A8. Specification: the features map (v1.1)
+
+`GET /healthz`, which needs no sign-in, carries `features`: an object, each key a
+feature's name, each value its version `"MAJOR.MINOR"`, a string without `v`.
+
+```json
+{"ok": true, "version": "…", "started_at": "…",
+ "features": {"event_ids": "1.0", "idempotency": "1.0", "commands": "1.0", "vwt": "1.0",
+              "program_etag": "1.0", "boost": "1.0", "proxy_virtual": "1.0"}}
+```
+
+- **MINOR** rises when a feature gains something compatible: a field, a route. A client
+  written for 1.0 works with 1.3, and one that needs 1.2 asks for a minor of at least 2.
+  **MAJOR** marks an incompatible change, which under `/api/v1` does not happen: every
+  feature here stays 1.x.
+- **A name never changes meaning;** a feature that goes is removed from the map, never
+  redefined. A server without the field has none of them.
+- **The running server's abilities,** built at its start, not the build's: without a
+  store (`serve -addr`) `idempotency` and `commands` are left out, since their routes
+  and headers need it. Permissions stay in `/api/v1/me`.
+
+| Name | What it promises | First release |
+|------|------------------|---------------|
+| `event_ids` | the stream's ids, resume by `Last-Event-ID` or `last_event_id`, `resync` | 0.13.0-alpha.1 |
+| `idempotency` | `Idempotency-Key` on writes (with a store) | 0.8.0-alpha.1 |
+| `commands` | `GET /api/v1/commands/{id}`, command ids in answers (with a store) | 0.8.0-alpha.1 |
+| `vwt` | virtual wall thermostats, `?devices=`, `room_uid`, `temp_method` | after 0.15.0-alpha.1 |
+| `program_etag` | the programme's tag, `If-Match`, `412`, `pending`, `changed` and `etag` on config events, `GET …/devices/{rf}/program` | after 0.15.0-alpha.1 |
+| `boost` | `{"mode": "boost"}` on the setpoint routes | after 0.15.0-alpha.1 |
+| `proxy_virtual` | the Cube option `proxy_virtual` exists (`PUT /api/v1/cubes/{sn}`) | after 0.15.0-alpha.1 |
+
+Left out on purpose: the kept temperature (no client acts on it, and every name is a
+promise), and what `/api/v1/me` or the routes themselves already tell.
+
 ## Implementation Plan
 
 Every block brings its tests, `docs/api-v1.md` and the OpenAPI file for each route change,
@@ -465,6 +511,17 @@ temperature, and nothing it sends reaches a device it would not reach without th
 
 **Verification:** a test with the exact line to the fake Cube; ui-test; only after Block 9 passed.
 
+### Block 11: Features (v1.1)
+
+1. A `features` map built at the server's start from what it can do (the store or
+   none), in `/healthz`.
+2. Tests: `/healthz` with and without a store, each name present only where its routes
+   answer.
+3. Docs: `docs/api-v1.md` under `GET /healthz` (the table of A8), the OpenAPI file.
+4. One PR; the integration session is told once it is merged.
+
+**Verification:** `MASSIMO_ENV_FILE=/dev/null go test ./...`, lint, `make cross`.
+
 ## Proposed commit message
 
 Per block, for example for Block 1:
@@ -485,6 +542,9 @@ Assisted-by: claude-code:claude-opus-5-5
 
 ## Change History
 
+- **v1.1** (2026-11-13): Block 11, the `features` map in `/healthz` (A8), on the owner's
+  D19-A, the Home Assistant integration's request with `proxy_virtual` added; D18-A
+  recorded. Blocks 1 to 7, 9 and 10 are merged; Block 8 waits for the owner's go.
 - **v1.0** (2026-11-13): first revision. It rests on the evaluation of the Home Assistant
   integration's requests (four revisions on 2026-11-12, untracked), its D1 to D13, and the
   integration session's two rounds of feedback.

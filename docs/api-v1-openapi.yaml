@@ -31,6 +31,10 @@ paths:
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
                   node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
+                  features:
+                    type: object
+                    description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual; without a store idempotency, commands and proxy_virtual are left out. A name never changes meaning."
+                    additionalProperties: {type: string, pattern: "^[0-9]+\\.[0-9]+$", example: "1.0"}
                   tls:
                     type: object
                     description: With TLS, the certificate served; absent without.
@@ -2506,6 +2510,45 @@ paths:
                   arch: {type: string, description: "The processor, as Go names it: amd64, arm64, arm."}
                   hostname: {type: string}
                   client_ip: {type: string, description: The caller's address as the server sees it.}
+                  now: {type: string, format: date-time, description: The server's clock with its offset.}
+                  time_zone: {type: string, description: "The server's zone: TZ, else what /etc/localtime links to, else its abbreviation."}
+                  fqdn: {type: string, description: The host's full name as hostname -f gives it.}
+                  interfaces:
+                    type: array
+                    description: The interfaces the API or a Cube proxy listens on.
+                    items:
+                      type: object
+                      properties:
+                        name: {type: string}
+                        mac: {type: string}
+                        addresses:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              ip: {type: string}
+                              api: {type: boolean, description: The API listens on this address.}
+                  api_port: {type: integer, description: The port the API listens on.}
+                  proxy:
+                    type: object
+                    description: The trusted proxy the request came through; absent otherwise.
+                    properties:
+                      proto: {type: string, enum: [https, http], description: Absent where no header says.}
+                      host: {type: string}
+                      port: {type: integer}
+                      certificate:
+                        type: object
+                        description: The proxy's certificate as the last check read it; for https, absent before the first.
+                        properties:
+                          source: {type: string, enum: [proxy]}
+                          names: {type: array, items: {type: string}}
+                          not_after: {type: string, format: date-time}
+                          fingerprint: {type: string}
+                          self_signed: {type: boolean}
+                          issuer: {type: string}
+                          trusted: {type: boolean, description: Valid for the host against the system's roots.}
+                          checked_at: {type: string, format: date-time}
+                          error: {type: string, description: Why the last check failed.}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
@@ -2903,6 +2946,7 @@ components:
             manual: {value: {mode: manual, temp: 21}}
             auto: {value: {mode: auto}}
             vacation: {value: {mode: vacation, temp: 17, until: "2026-11-10 12:00"}}
+            boost: {value: {mode: boost}}
   responses:
     ProgramChanged:
       description: The programme changed since its tag was read, or a write to it is still on its way
@@ -3886,13 +3930,14 @@ components:
       properties:
         mode:
           type: string
-          enum: [auto, manual, vacation]
+          enum: [auto, manual, vacation, boost]
+          description: "boost opens the valves by the thermostats' boost settings for their boost time, then they return to the mode they had"
         temp:
           type: number
           minimum: 4.5
           maximum: 30.5
           multipleOf: 0.5
-          description: Required for manual and vacation; optional for auto
+          description: Required for manual and vacation; optional for auto; ignored by the devices for boost
         until:
           type: string
           description: "Vacation end, YYYY-MM-DD HH:MM on a half hour; required for vacation"
