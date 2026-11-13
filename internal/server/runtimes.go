@@ -95,6 +95,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	rt.store = opts.Store
 	if opts.Store != nil {
 		rt.storeID.Store(c.StoreID)
+		rt.loadOptions(context.Background())
 	}
 	return rt
 }
@@ -235,7 +236,7 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
 		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
-		OnEvent: rt.proxyEvent, Command: s.proxyCommand(rt)})
+		OnEvent: rt.proxyEvent, Command: s.proxyCommand(rt), Virtual: func() []proxy.Virtual { return s.proxyVirtuals(rt) }})
 	var r *proxy.Responder
 	if pl.Discovery {
 		if r = s.ensureResponder(); r != nil {

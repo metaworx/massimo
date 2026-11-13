@@ -444,3 +444,24 @@ func parseClock(s string) (int, error) {
 	}
 	return h*60 + m, nil
 }
+
+// EncodeWeekProgram encodes a week programme as a C line holds it: 182
+// bytes, 13 switch points per day from Saturday on, a day of fewer
+// points padded with its last one, as the devices store it.
+func EncodeWeekProgram(w WeekProgram) ([]byte, error) {
+	out := make([]byte, 0, WeekProgramSize)
+	for d, day := range w {
+		if len(day) == 0 || len(day) > DaySlots {
+			return nil, fmt.Errorf("week programme: %s has %d switch points, want 1 to %d", Weekday(d), len(day), DaySlots)
+		}
+		for s := 0; s < DaySlots; s++ {
+			p := day[min(s, len(day)-1)]
+			v, err := encodeSwitchPoint(p)
+			if err != nil {
+				return nil, fmt.Errorf("week programme: %s: %w", Weekday(d), err)
+			}
+			out = binary.BigEndian.AppendUint16(out, v)
+		}
+	}
+	return out, nil
+}

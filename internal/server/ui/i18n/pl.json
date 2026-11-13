@@ -489,6 +489,7 @@
   "cubes.listening": "Proxy nasłuchuje na {addr}.",
   "cubes.proxySerial": "Numer seryjny w odpowiedziach na wyszukiwanie",
   "cubes.proxySerialHint": "puste: numer urządzenia Cube",
+  "cubes.proxyVirtual": "Pokazuj klientom proxy wirtualny termostat ścienny każdego pomieszczenia",
   "cubes.hidden": "Ukryte urządzenia",
   "cubes.hiddenNone": "Brak, poza tymi w pokoju 255.",
   "cubes.hide": "Ukryj",

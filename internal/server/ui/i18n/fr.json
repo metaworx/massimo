@@ -476,6 +476,7 @@
   "cubes.listening": "Le proxy écoute sur {addr}.",
   "cubes.proxySerial": "Numéro de série dans les réponses de recherche",
   "cubes.proxySerialHint": "vide : celui du Cube",
+  "cubes.proxyVirtual": "Montrer aux clients du proxy le thermostat mural virtuel de chaque pièce",
   "cubes.hidden": "Appareils masqués",
   "cubes.hiddenNone": "Aucun, en dehors de ceux de la pièce 255.",
   "cubes.hide": "Masquer",

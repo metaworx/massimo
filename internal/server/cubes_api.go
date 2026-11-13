@@ -40,6 +40,8 @@ type cubeRequest struct {
 	ProxyAddress    *string   `json:"proxy_address"`
 	ProxySerial     *string   `json:"proxy_serial"`
 	Hidden          *[]string `json:"hidden"`
+	// ProxyVirtual is kept apart from the Cube's row (proxy_virtual.go).
+	ProxyVirtual *bool `json:"proxy_virtual"`
 }
 
 // validAddress checks a host[:port] address; "" is allowed.
@@ -242,6 +244,11 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 		return storeFail(err)
 	}
 	auditCubeChanges(r, before, row)
+	if req.ProxyVirtual != nil {
+		if err := s.setProxyVirtual(r, rt, row.ID, *req.ProxyVirtual); err != nil {
+			return err
+		}
+	}
 	s.noteRow(row)
 	if err := s.applyCube(rt, row); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)

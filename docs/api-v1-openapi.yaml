@@ -3484,6 +3484,7 @@ components:
         follow_discovery: {type: boolean}
         proxy_address: {type: string, description: "The configured proxy address; empty: the default"}
         proxy_serial: {type: string}
+        proxy_virtual: {type: boolean, description: "The proxy shows clients the rooms' virtual wall thermostats"}
         proxy_listening:
           type: array
           description: The addresses the Cube's proxy listens on now
@@ -3513,6 +3514,7 @@ components:
         follow_discovery: {type: boolean, description: The address follows the Cube's discovery answers}
         proxy_address: {type: string, description: "The server's listener for this Cube, host[:port]; empty: :62910 with a single Cube"}
         proxy_serial: {type: string, description: "The serial in discovery replies; empty: the Cube's"}
+        proxy_virtual: {type: boolean, description: "The proxy shows clients the rooms' virtual wall thermostats in place of the real wall thermostats; off by default"}
         hidden:
           type: array
           description: Radio addresses of devices to hide, besides those in room 255

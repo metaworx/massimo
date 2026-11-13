@@ -650,6 +650,8 @@ function cubePanel(c) {
   follow.checked = !!c.follow_discovery;
   field("proxy").value = c.proxy_address || "";
   field("proxy_serial").value = c.proxy_serial || "";
+  const virtual = field("proxy_virtual");
+  virtual.checked = !!c.proxy_virtual;
   if ((c.proxy_listening || []).length) {
     const p = textEl("p", t("cubes.listening", { addr: c.proxy_listening.join(", ") }), "muted small cube-listening");
     field("proxy_serial").parentElement.before(p);
@@ -670,6 +672,7 @@ function cubePanel(c) {
     if (proxy !== (c.proxy_address || "")) body.proxy_address = proxy;
     const ps = field("proxy_serial").value.trim();
     if (ps.toUpperCase() !== (c.proxy_serial || "")) body.proxy_serial = ps;
+    if (virtual.checked !== !!c.proxy_virtual) body.proxy_virtual = virtual.checked;
     const hidden = cubesUI.edits[c.serial] || c.hidden || [];
     if (!sameList(hidden, c.hidden)) body.hidden = hidden;
     return body;
