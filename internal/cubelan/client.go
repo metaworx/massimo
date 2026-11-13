@@ -41,6 +41,13 @@ type Options struct {
 	// client's lines of a connection, a loss, a device paired and a
 	// device forgotten go to debug then, so that the log says each once.
 	EventLines bool
+	// Hold is how long a lost connection is held open, so that it
+	// resumes when the network is back (hold.go): 0 is DefaultHold, a
+	// negative value holds nothing. Without polling nothing is held.
+	Hold time.Duration
+	// HoldHeard ends a hold once discovery has heard the Cube (Heard)
+	// this long without the connection resuming; 0 is DefaultHoldHeard.
+	HoldHeard time.Duration
 }
 
 // Client is a persistent, reconnecting connection to one Cube.
@@ -80,6 +87,13 @@ type Client struct {
 	lost atomic.Bool
 	// inclusion is the pairing state, see inclusion.go.
 	inclusion inclusion
+	// held is set while a lost connection is held open (hold.go).
+	held atomic.Bool
+	// heardMu guards what discovery heard (Heard) and the hold's end.
+	heardMu     sync.Mutex
+	lastHeard   time.Time // discovery last heard the Cube at its address
+	heardInHold time.Time // first heard since the hold began
+	holdUntil   time.Time // the hold ends then at the latest
 
 	addrMu sync.Mutex
 	addr   string        // host:port; "" until known, see SetAddress
@@ -90,6 +104,11 @@ type Client struct {
 	// beforeApply, set by a test before Run, is called with each line
 	// right before it goes into the snapshot; nil otherwise.
 	beforeApply func(cube.Message)
+	// probeSilent says whether a connection's keepalive probes went
+	// unanswered, looked at every probeEvery while nothing is held:
+	// keepaliveSilent on Linux, nil elsewhere; tests set their own.
+	probeSilent func(net.Conn) bool
+	probeEvery  time.Duration
 }
 
 type pendingReply struct {
@@ -118,12 +137,15 @@ func (e *replyTimeout) Error() string {
 }
 
 // keepAlive finds a dead Cube between polls: after 15 s without traffic
-// a probe every 5 s, and the third unanswered one ends the connection,
-// about 30 s after the Cube went. The Cube acknowledges the probes
-// (checked on hardware on 2026-11-09). Go's default, 15 s apart and 9
-// probes, needs 150 s of silence, which a poll every minute never
-// leaves. A probe is not sent while a poll's bytes are unacknowledged;
-// that case is pollMisses'.
+// a probe every 5 s, and three unanswered ones mark the loss, about 30 s
+// after the Cube went: on Linux from the kernel's count of them
+// (keepaliveSilent), and without a hold by the end of the connection.
+// A held connection (hold.go) is not ended by them: TCP_USER_TIMEOUT
+// or a count that covers the hold (keepAliveFor). The Cube acknowledges
+// the probes (checked on hardware on 2026-11-09). Go's default, 15 s
+// apart and 9 probes, needs 150 s of silence, which a poll every minute
+// never leaves. A probe is not sent while a poll's bytes are
+// unacknowledged; that case is pollMisses'.
 var keepAlive = net.KeepAliveConfig{Enable: true, Idle: 15 * time.Second, Interval: 5 * time.Second, Count: 3}
 
 // pollMisses is how many polls in a row, with no line from the Cube
@@ -148,7 +170,7 @@ func New(opts Options) *Client {
 		opts.RemindEvery = 24 * time.Hour
 	}
 	if opts.Dialer == nil {
-		d := &net.Dialer{Timeout: 10 * time.Second, KeepAliveConfig: keepAlive}
+		d := holdDialer(opts.holdFor())
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
 	evlog := opts.Logger
@@ -156,7 +178,8 @@ func New(opts Options) *Client {
 		evlog = slogx.AtDebug(opts.Logger)
 	}
 	c := &Client{opts: opts, snap: newSnapshot(), log: opts.Logger, evlog: evlog, evs: make(chan Event, 64), ready: make(chan struct{}), greeted: make(chan struct{}),
-		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1), turn: make(chan struct{}, 1)}
+		hasAdr: make(chan struct{}), wake: make(chan struct{}, 1), turn: make(chan struct{}, 1),
+		probeSilent: keepaliveSilent, probeEvery: keepAlive.Interval}
 	if opts.Addr != "" {
 		c.SetAddress(opts.Addr)
 	}
@@ -238,7 +261,9 @@ func (c *Client) Ready() <-chan struct{} { return c.ready }
 // after it are logged at Debug, a reminder is warned every RemindEvery
 // while the Cube stays unreachable, and the next greeting logs that the
 // connection is re-established and how long the Cube was down. A
-// connection closed by Reconnect is no loss.
+// connection closed by Reconnect is no loss. A connection lost after
+// its greeting is held first (hold.go): its session reports the loss,
+// and Run dials once the hold ends without a resumption.
 func (c *Client) Run(ctx context.Context) error {
 	select {
 	case <-c.hasAdr:
@@ -246,31 +271,37 @@ func (c *Client) Run(ctx context.Context) error {
 		return ctx.Err()
 	}
 	backoff := c.opts.Backoff
-	var lost, warned time.Time // when the Cube was lost and last warned of; zero while it is up
+	st := &runState{} // when the Cube was lost and last warned of; zero while it is up
 	for {
-		greeted, err := c.session(ctx, lost)
+		end, err := c.session(ctx, st)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if greeted {
+		if end.greeted {
 			backoff = c.opts.Backoff
-			lost = time.Time{}
+			if !end.reported {
+				st.lost = time.Time{}
+			}
 		}
 		if c.reconnecting.Swap(false) {
 			c.log.Info("cube reconnecting", "addr", c.Address())
 			continue
 		}
 		switch now := time.Now(); {
-		case lost.IsZero():
+		case st.lost.IsZero():
 			// The warning first, then Lost, then the event: whoever sees
 			// Lost sees the warning, and whoever reads the event sees Lost.
-			lost, warned = now, now
+			st.lost, st.warned = now, now
 			c.evlog.Warn("cube connection lost", "addr", c.Address(), "error", err, "retry_in", backoff)
 			c.lost.Store(true)
 			c.emit(Event{Kind: EventDisconnected, Err: err})
-		case now.Sub(warned) >= c.opts.RemindEvery:
-			warned = now
-			c.log.Warn("cube still unreachable", "addr", c.Address(), "down_for", now.Sub(lost).Round(time.Second), "error", err)
+		case end.reported:
+			// The hold reported the loss; its end without a resumption,
+			// the Cube's reset among them, is a line of its own.
+			c.log.Warn("cube held connection ended", "addr", c.Address(), "down_for", now.Sub(st.lost).Round(time.Second), "error", err, "retry_in", backoff)
+		case now.Sub(st.warned) >= c.opts.RemindEvery:
+			st.warned = now
+			c.log.Warn("cube still unreachable", "addr", c.Address(), "down_for", now.Sub(st.lost).Round(time.Second), "error", err)
 		default:
 			c.log.Debug("cube connection attempt failed", "addr", c.Address(), "error", err, "retry_in", backoff)
 		}
@@ -286,9 +317,10 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-// session runs one connection until it fails and reports whether the
-// greeting arrived. lost is when the Cube was lost, zero if it was not.
-func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
+// session runs one connection until it fails and says how it ended.
+// st.lost is when the Cube was lost, zero if it was not; a hold that
+// begins in the session sets it, and a resumption clears it.
+func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 	select { // a wake from before this dial is spent
 	case <-c.wake:
 	default:
@@ -296,7 +328,7 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 	addr := c.Address()
 	conn, err := c.opts.Dialer(ctx, addr)
 	if err != nil {
-		return false, err
+		return ending{}, err
 	}
 	defer conn.Close()
 	c.mu.Lock()
@@ -304,6 +336,7 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 	c.mu.Unlock()
 	defer func() {
 		c.online.Store(false)
+		c.endHold()
 		c.mu.Lock()
 		c.conn, c.connAddr = nil, ""
 		if c.pending != nil {
@@ -317,9 +350,11 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 	// snapshot knew from earlier connections.
 	c.snap.beginGreeting()
 	r := cube.NewReader(conn)
+	lost := st.lost // for the greeting's line; the reader must not touch st
 	var greeted atomic.Bool
 	var lines atomic.Int64 // read on this connection, for the missed polls
 	readErr := make(chan error, 1)
+	got := make(chan struct{}, 1) // a line was read: ends a hold
 	go func() {
 		for {
 			conn.SetReadDeadline(time.Now().Add(c.readDeadline()))
@@ -330,6 +365,10 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 			}
 			lines.Add(1)
 			c.handle(m)
+			select {
+			case got <- struct{}{}:
+			default:
+			}
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
 				c.online.Store(true)
@@ -362,11 +401,37 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		}
 	}()
 
+	hold := c.opts.holdFor()
 	var poll <-chan time.Time
 	if c.opts.PollInterval > 0 {
 		t := time.NewTicker(c.opts.PollInterval)
 		defer t.Stop()
 		poll = t.C
+	}
+	// The kernel's count of unanswered keepalive probes marks a loss
+	// between polls (keepaliveSilent), where the platform has it.
+	var probe <-chan time.Time
+	if hold > 0 && c.probeSilent != nil && c.probeEvery > 0 {
+		t := time.NewTicker(c.probeEvery)
+		defer t.Stop()
+		probe = t.C
+	}
+	// While held, holdTick looks at the hold's end and at discovery.
+	var holdTick <-chan time.Time
+	var holdTicker *time.Ticker
+	defer func() {
+		if holdTicker != nil {
+			holdTicker.Stop()
+		}
+	}()
+	held := false
+	var linesAtHold int64 // read when the hold began: a later line resumes it
+	startHold := func(why error) {
+		held = true
+		linesAtHold = lines.Load()
+		c.beginHold(st, why)
+		holdTicker = time.NewTicker(c.holdCheckEvery())
+		holdTick = holdTicker.C
 	}
 	// missed counts the polls in a row that went unanswered with no line
 	// read between them (pollMisses); linesAtMiss is lines at the last.
@@ -375,10 +440,39 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 		select {
 		case <-ctx.Done():
 			c.write(cube.CmdQuit)
-			return greeted.Load(), ctx.Err()
+			return ending{greeted: greeted.Load(), reported: held}, ctx.Err()
 		case err := <-readErr:
-			return greeted.Load(), err
+			return ending{greeted: greeted.Load(), reported: held}, err
+		case <-got:
+			if held && lines.Load() > linesAtHold {
+				// The Cube answered on the held connection: the missed
+				// polls' L, as TCP delivered them once the network was
+				// back.
+				held = false
+				holdTicker.Stop()
+				holdTicker, holdTick = nil, nil
+				missed = 0
+				c.resumeHold(st)
+			}
+		case now := <-holdTick:
+			switch {
+			case !now.Before(c.HeldUntil()):
+				return ending{greeted: true, reported: true}, &errHoldEnded{why: fmt.Sprintf("held for %s", hold)}
+			case c.heardTooLong(now):
+				return ending{greeted: true, reported: true}, &errHoldEnded{why: fmt.Sprintf("the Cube answered discovery for %s", c.opts.holdHeard())}
+			}
+		case <-probe:
+			if held || !greeted.Load() || !c.probeSilent(conn) {
+				continue
+			}
+			startHold(fmt.Errorf("cubelan: %d keepalive probes unanswered", keepAlive.Count))
+			// Nothing is in flight to bring an answer once the network
+			// is back: a poll is.
+			c.write(cube.CmdList)
 		case <-poll:
+			if held {
+				continue // the missed polls are on their way
+			}
 			_, err := c.trySend(ctx, cube.CmdList)
 			var timeout *replyTimeout
 			switch {
@@ -402,7 +496,12 @@ func (c *Client) session(ctx context.Context, lost time.Time) (bool, error) {
 					missed, linesAtMiss = 1, n
 				}
 				if missed >= pollMisses {
-					return greeted.Load(), fmt.Errorf("cubelan: %d polls in a row unanswered: %w", missed, err)
+					lossErr := fmt.Errorf("cubelan: %d polls in a row unanswered: %w", missed, err)
+					if hold > 0 && greeted.Load() {
+						startHold(lossErr)
+						continue
+					}
+					return ending{greeted: greeted.Load()}, lossErr
 				}
 				c.log.Warn("poll failed", "error", err)
 			default:
@@ -558,6 +657,9 @@ func (c *Client) trySend(ctx context.Context, m cube.Message) (cube.Message, err
 func (c *Client) send(ctx context.Context, m cube.Message, wait bool) (cube.Message, error) {
 	want := replyType(m.Type)
 	if want == 0 {
+		if c.held.Load() {
+			return cube.Message{}, ErrNotConnected
+		}
 		return cube.Message{}, c.write(m)
 	}
 	if !c.isConnected() {
@@ -580,7 +682,7 @@ func (c *Client) send(ctx context.Context, m cube.Message, wait bool) (cube.Mess
 	// holder sets it.
 	p := &pendingReply{want: want, left: replies(m), ch: make(chan cube.Message, 1)}
 	c.mu.Lock()
-	if c.conn == nil { // dropped while this Send waited its turn
+	if c.conn == nil || c.held.Load() { // dropped, or held, while this Send waited its turn
 		c.mu.Unlock()
 		return cube.Message{}, ErrNotConnected
 	}
@@ -607,11 +709,11 @@ func (c *Client) send(ctx context.Context, m cube.Message, wait bool) (cube.Mess
 }
 
 // isConnected reports whether a connection is open, its greeting
-// complete or not.
+// complete or not, and not held (hold.go).
 func (c *Client) isConnected() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.conn != nil
+	return c.conn != nil && !c.held.Load()
 }
 
 func (c *Client) clearPending(p *pendingReply) {
@@ -628,14 +730,17 @@ func (c *Client) clearPending(p *pendingReply) {
 // the Cube acknowledged did not take effect. A command waiting for its
 // reply fails with ErrNotConnected, so callers run it through the
 // command queue (engine.Command.Reconnect). Between connections it
-// dials at once and waits for the greeting.
+// dials at once and waits for the greeting. While a lost connection is
+// held (hold.go) it answers ErrNotConnected at once: a new connection
+// would be refused while the Cube holds the old one.
 func (c *Client) Reconnect(ctx context.Context) error { return c.reconnect(ctx, false) }
 
 // ReconnectIfMoved is Reconnect for a Cube found at a new address
 // (SetAddress): it drops only a connection to another address than the
-// client's now. A client between connections dials the new address at
-// once, and one connected to it has done so since, so nothing is
-// dropped then: that would make a second connection to the Cube.
+// client's now, a held one too. A client between connections dials the
+// new address at once, and one connected to it has done so since, so
+// nothing is dropped then: that would make a second connection to the
+// Cube.
 func (c *Client) ReconnectIfMoved(ctx context.Context) error { return c.reconnect(ctx, true) }
 
 func (c *Client) reconnect(ctx context.Context, onlyMoved bool) error {
@@ -647,6 +752,9 @@ func (c *Client) reconnect(ctx context.Context, onlyMoved bool) error {
 		return nil
 	}
 	c.mu.Unlock()
+	if !onlyMoved && conn != nil && c.held.Load() {
+		return ErrNotConnected
+	}
 	if conn == nil {
 		c.wakeDial()
 		select {

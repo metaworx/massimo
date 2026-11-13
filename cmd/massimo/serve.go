@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/announce"
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/logfile"
@@ -38,6 +39,7 @@ func runServe(args []string) error {
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones, for this run and without the store: massimo.db is neither opened nor created, and nothing is written")
 	poll := fs.Duration("poll", server.DefaultPollInterval, "how often to poll the device list (default the store's poll_interval, else 1m)")
 	refresh := fs.Duration("refresh", server.DefaultRefreshInterval, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
+	cubeHold := fs.Duration("cube-hold", cubelan.DefaultHold, "how long a Cube's lost connection is held open, so that it resumes on the same session when the network is back, before serve connects anew, which a Cube that still holds the old session refuses (0 = not at all; without -poll nothing is held)")
 	staleAfter := fs.Duration("stale-after", 0, "mark a thermostat stale once its entry has not changed for this long (default the store's stale_after, else 24h); short values are for tests")
 	discoverEvery := fs.Duration("discover-interval", server.DefaultDiscoverInterval, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API; default the store's discover_interval, else 30m)")
 	var discoverTargets []string
@@ -226,7 +228,10 @@ func runServe(args []string) error {
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot, Install: installKind(pkg, packaged, currentProcess()),
 		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: root,
-		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}}
+		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}, CubeHold: *cubeHold}
+	if *cubeHold <= 0 {
+		cfg.CubeHold = -1 // none
+	}
 	// The flags given win for this run; otherwise the store's settings.
 	for _, d := range []struct {
 		flag string

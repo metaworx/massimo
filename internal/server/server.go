@@ -159,6 +159,10 @@ type Options struct {
 	AuthWindow   time.Duration
 	AuthLockout  time.Duration
 	PollInterval time.Duration // L polling; 0 keeps the driver default of one minute
+	// CubeHold is how long a Cube's lost connection is held open, so that
+	// it resumes when the network is back (cubelan.Options.Hold): 0 is
+	// cubelan.DefaultHold, a negative value holds nothing.
+	CubeHold time.Duration
 	// RefreshInterval is how often each Cube's snapshot is refreshed in
 	// full by reconnecting, so that a write the Cube acknowledged but did
 	// not apply does not leave it wrong until the next restart; 0 never.

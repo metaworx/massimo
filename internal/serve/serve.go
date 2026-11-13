@@ -84,6 +84,9 @@ type Config struct {
 	// is set; 0 takes view.StaleAfter. Tests make a device stale with a
 	// short one.
 	StaleAfter *time.Duration
+	// CubeHold is how long a Cube's lost connection is held open
+	// (server.Options.CubeHold): 0 is the default, negative none.
+	CubeHold time.Duration
 	// DiscoveryTargets are sent the discovery requests instead of the
 	// broadcast, each host:port.
 	DiscoveryTargets []string
@@ -214,7 +217,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	if err != nil {
 		return nil, err
 	}
-	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
+	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers})
 	ln, err := net.Listen("tcp", cfg.Listen)
