@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """The Rooms page: the tiles, a tile's device list and its
-configuration; the open-window badge; the ages of the values, a stale
-device, and what expert mode adds.
+configuration; the problems in a tile's head and in a device's; the ages
+of the values, a stale device, and what expert mode adds.
 
 The window and the staleness come from state events applied in the page
 (updateDevice), since the fake Cube does not change its states.
 """
+import re
+
 from helpers import OPEN, STALE, named_buttons, scroll_width, wait_until
 
 
@@ -32,14 +34,27 @@ def test_tiles_device_list_configuration(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll on the tiles"
 
 
+def head_icons(room):
+    """The icons of a tile head's problems, by their symbol."""
+    return [u.get_attribute("href") for u in room.locator(".tile-head .problems-sum use").all()]
+
+
 def test_open_window(page, case):
-    """The room with the open window contact shows Open on its tile, and
-    the badge goes when a state event closes the contact; the measured
+    """The room with the open window contact shows the open window's icon
+    in its tile's head, which lists the contact, open, with its age; the
+    icon goes when a state event closes the contact; the measured
     temperature shows its age."""
     room = page.locator(".room", has=page.locator(".room-name", has_text="Kind 1"))
-    badge = room.locator(".window-open")
-    assert badge.is_visible() and badge.inner_text().startswith(OPEN[case.lang]), "Open on the tile of the room with the open window"
-    assert page.locator(".room").first.locator(".window-open").is_hidden(), "no Open on a room with closed windows"
+    assert head_icons(room) == ["#icon-window-open"], "the open window in the head of the room with the open window"
+    summary = room.locator(".tile-head .problems-sum")
+    assert OPEN[case.lang] in (summary.get_attribute("aria-label") or "").lower(), "named to a screen reader"
+    assert page.locator(".room").first.locator(".problems").count() == 0, "nothing in the head of a room with closed windows"
+    summary.click()
+    entry = room.locator(".tile-head .problem-entry")
+    assert entry.count() == 1 and entry.locator(".flag").inner_text().startswith(OPEN[case.lang]), "the contact, open"
+    assert entry.locator(".flag .age").count() == 1, "with the opening's age"
+    page.keyboard.press("Escape")
+    assert room.locator(".tile-head details.problems").get_attribute("open") is None, "Escape closes the list"
     assert page.locator(".room .temp-age .age").count() > 0, "age next to the measured temperature"
     page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
@@ -47,7 +62,68 @@ def test_open_window(page, case):
       d.state.window_open = false;
       updateDevice(d);
     }""")
-    assert room.locator(".window-open").is_hidden(), "Open goes when the window closes"
+    assert head_icons(room) == [], "the icon goes when the window closes"
+
+
+def test_problems_in_the_heads(page, case):
+    """A radiator thermostat with a transmit error and a low battery, and
+    two thermostats in different modes: the room's head shows radio,
+    battery and the mixed modes, radio in red; the list names the devices,
+    each once, with their badges; the device's head shows its problems as
+    icons, its mode a word, and every device its type's icon; the room's
+    virtual thermostat, whose flags copy the wall thermostat's, is not
+    listed."""
+    page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.devices.filter((d) => isThermostat(d)).length >= 2) || state.rooms[0];
+      window.__room = r.name;
+      const [a, b] = r.devices.filter((d) => isThermostat(d));
+      const da = JSON.parse(JSON.stringify(a));
+      Object.assign(da.state, { error: true, battery_low: true, mode: "manual" });
+      updateDevice(da);
+      if (b) {
+        const db = JSON.parse(JSON.stringify(b));
+        db.state.mode = "auto";
+        updateDevice(db);
+      }
+    }""")
+    name = page.evaluate("window.__room")
+    room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
+    icons = head_icons(room)
+    assert icons[:2] == ["#icon-radio", "#icon-battery"], f"radio, then battery ({icons})"
+    two = page.evaluate("state.rooms.find((r) => r.name === window.__room).devices.filter((d) => isThermostat(d)).length >= 2")
+    if two:
+        assert "#icon-shuffle" in icons, f"the mixed modes ({icons})"
+    radio = room.locator(".tile-head .problems-sum svg").first
+    assert "tone-bad" in (radio.get_attribute("class") or ""), "radio in red"
+    room.locator(".tile-head .problems-sum").click()
+    entries = room.locator(".tile-head .problem-entry")
+    first = entries.first.inner_text()
+    assert page.evaluate("t('badge.transmitError')") in first and page.evaluate("t('badge.batteryLow')") in first, \
+        f"the device with its badges ({first!r})"
+    names = [e.locator(".problem-name").inner_text() for e in entries.all()]
+    assert len(names) == len(set(names)), f"each device once ({names})"
+    listed = entries.count()
+    page.keyboard.press("Escape")
+    room.locator(".room-name-btn").click()
+    page.wait_for_selector(".room .device", timeout=5000)
+    for dev in room.locator(".device:not(.virtual)").all():
+        assert dev.locator(".device-type-icon[aria-label] svg use").count() == 1, "every device its type's icon"
+    sick = room.locator(".device:not(.virtual)", has=page.locator(".problems-sum")).first
+    assert [u.get_attribute("href") for u in sick.locator(".problems-sum use").all()] == ["#icon-radio", "#icon-battery"], \
+        "the device's problems as icons"
+    assert sick.locator(".device-badges > .flag").count() >= 1, "its mode a word"
+    # the virtual thermostat with the wall thermostat's flags: not listed
+    page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.name === window.__room);
+      if (!r.vwt) return;
+      const v = JSON.parse(JSON.stringify(r.vwt));
+      Object.assign(v.state, { error: true });
+      updateDevice(v);
+    }""")
+    room.locator(".tile-head .problems-sum").click()
+    assert room.locator(".tile-head .problem-entry").count() == listed, "the virtual thermostat not listed"
+    page.keyboard.press("Escape")
+    room.locator(".room-name-btn").click()
 
 
 def test_stale_and_expert(page, case):
@@ -86,6 +162,23 @@ def test_stale_and_expert(page, case):
     ids = tile.locator(".device .device-rf").first.inner_text()
     assert ids.startswith("S/N ") and " · RF 0a" in ids, f"the serial beside the radio address in expert mode ({ids!r})"
     assert tile.locator(".device-vals .age-exact").first.is_visible(), "exact times in expert mode"
+    geo = page.evaluate("""() => {
+      const cell = document.querySelector('.room .device-vals .cell.aged');
+      const r = (sel) => cell.querySelector(sel).getBoundingClientRect();
+      const [k, num, text, exact] = [r('.k'), r('.num'), r('.age-text'), r('.age-exact')];
+      return { k: k.left, kBottom: k.bottom, num: num.left, text: text.left, textTop: text.top, exact: exact.left,
+               exactTop: exact.top, exactH: exact.height, line: parseFloat(getComputedStyle(cell.querySelector('.age-exact')).lineHeight) };
+    }""")
+    assert abs(geo["text"] - geo["k"]) <= 1 and geo["textTop"] >= geo["kBottom"] - 2, f"how old under the value's name ({geo})"
+    assert abs(geo["exact"] - geo["num"]) <= 1 and abs(geo["exactTop"] - geo["textTop"]) <= 2, f"the time under the value ({geo})"
+    assert geo["exactH"] <= geo["line"] * 1.5, f"on one line ({geo})"
+    virtual = tile.locator(".device.virtual .device-seen", has_text=page.evaluate("t('vwt.from', {devices: ''})").strip())
+    if virtual.count():
+        text = virtual.first.inner_text()
+        assert re.search(r"[A-Z]{3}[0-9]{7}", text) and not re.search(r"\b0a0[0-9a-f]{3}\b", text), \
+            f"the virtual thermostat's sources by serial ({text!r})"
+    assert tile.locator(".device.virtual .device-type-icon use").first.get_attribute("href") == "#icon-room", \
+        "the virtual thermostat's icon a room's"
     assert tile.locator(".device-seen").first.is_visible(), "last seen in expert mode"
     stats = page.locator("#cube-stats")
     assert stats.is_visible() and page.locator("#stats-cube").inner_text() == page.evaluate(

@@ -11,7 +11,7 @@ global scope but not on window; page.evaluate reaches it there.
 """
 import time
 
-OPEN = {"en": "Open", "de": "Offen"}
+OPEN = {"en": "open", "de": "offen"}
 USED = "0" * 48
 FOUND2 = {"serial": "LEQ0000506", "configured": False, "address": "192.168.1.78", "rf_address": "0a1b2e",
           "firmware": "1.1.3", "found_at": "2026-11-05T18:40:00+01:00", "last_seen": "2026-11-05T18:40:00+01:00"}

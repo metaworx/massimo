@@ -723,6 +723,11 @@ kept here because they cost time to learn.
   which is unrelated to Cubes but was learned the same night.
 - After a Cube restart, the eco switch stays "not reported" until someone presses it;
   harmless.
+- A wall thermostat with new batteries reports a measured temperature of 0
+  in its L entry until it has measured (2026-11-13, Cube firmware 1.1.3,
+  seen as 0.0 °C in a room on the owner's Cube):
+  0 means "not measured", as it does for a radiator thermostat,
+  and Massimo keeps the last measured value meanwhile.
 - The original MAX! software cannot find a Cube again in the same run after it
   moved the Cube to a static address; a restart of the software does.
 
