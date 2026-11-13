@@ -45,11 +45,12 @@ function roomModes(room) {
 }
 
 // roomActualDevice is the device whose measured temperature stands for
-// the room: the wall thermostat, else the first radiator thermostat that
-// reported one; null when none did.
+// the room: its virtual wall thermostat, which the server computes from
+// the wall thermostat, else the radiator thermostats' median or mean, so
+// that every client shows the same; null while it has none.
 function roomActualDevice(room) {
-  const has = (d) => d.state && d.state.actual_temp !== undefined;
-  return room.devices.find((d) => d.type === "wall_thermostat" && has(d)) || room.devices.find((d) => isThermostat(d) && has(d)) || null;
+  const v = room.vwt;
+  return v && v.state && v.state.actual_temp !== undefined ? v : null;
 }
 
 function roomActual(room) {
@@ -705,11 +706,64 @@ function renderDevice(d) {
 
 function fillDevices(container, room) {
   clear(container);
-  if (room.devices.length === 0) {
-    container.appendChild(textEl("p", t("room.noDevices"), "muted"));
-    return;
-  }
+  if (room.devices.length === 0) container.appendChild(textEl("p", t("room.noDevices"), "muted"));
   for (const d of room.devices) container.appendChild(renderDevice(d));
+  if (room.vwt) container.appendChild(renderVirtual(room)); // expert mode's, after the real devices
+}
+
+// renderVirtual is the room's virtual wall thermostat in expert mode:
+// its values as a device's, what they come from, and its two settings,
+// how a room without a wall thermostat takes its temperature and its
+// radio address.
+function renderVirtual(room) {
+  const v = room.vwt;
+  const el = renderDevice(v);
+  el.classList.add("virtual", "expert-only");
+  for (const b of el.querySelectorAll(".device-lock")) b.remove(); // the real wall thermostat's
+  el.querySelector(".device-type").textContent = t("vwt.type");
+  const from = (v.sources && v.sources.actual_temp) || [];
+  if (from.length) el.querySelector(".device-sub").appendChild(textEl("span", t("vwt.from", { devices: from.join(", ") }), "device-seen"));
+
+  const form = document.createElement("form");
+  form.className = "vwt-settings needs-configure";
+  const method = document.createElement("select");
+  method.name = "temp_method";
+  for (const m of ["median", "mean"]) {
+    const o = document.createElement("option");
+    o.value = m;
+    o.textContent = t("vwt." + m);
+    method.appendChild(o);
+  }
+  const addr = document.createElement("input");
+  addr.name = "rf_address";
+  addr.maxLength = 6;
+  addr.pattern = "[0-9a-fA-F]{6}";
+  addr.placeholder = v.rf_address;
+  const result = elem("p", "tile-result hidden");
+  deviceDetail(v).then((detail) => {
+    const s = (detail && detail.settings) || {};
+    method.value = s.temp_method || "median";
+    addr.value = s.rf_address || "";
+  }).catch(() => {});
+  form.append(
+    fieldRow(t("vwt.method"), method, { hint: t("vwt.methodHint") }),
+    fieldRow(t("vwt.address"), addr, { hint: t("vwt.addressHint") }),
+  );
+  const actions = elem("div", "actions");
+  actions.appendChild(submitButton(t("action.save")));
+  form.append(actions, result);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("PUT", devicePath(v) + "/config", { temp_method: method.value, rf_address: addr.value.trim().toLowerCase() });
+      state.details = {};
+      showResult(result, t("vwt.saved"), true);
+    } catch (err) {
+      showResult(result, err.message, false);
+    }
+  });
+  el.appendChild(form);
+  return el;
 }
 
 function toggleDevices(room, el) {
@@ -751,6 +805,14 @@ function configFocused(room) {
 // user's typing: the state is taken, and drawn once the focus leaves the
 // configuration (renderRoom).
 function updateDevice(d) {
+  if (d.virtual) {
+    const r = state.rooms.find((x) => x.id === d.room_id);
+    if (!r) return;
+    r.vwt = d;
+    if (configFocused(r)) roomUI(r).deferred = true;
+    else rerenderRoom(r);
+    return;
+  }
   for (const r of state.rooms) {
     const i = r.devices.findIndex((x) => x.rf_address === d.rf_address);
     if (i >= 0) {

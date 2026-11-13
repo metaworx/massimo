@@ -733,12 +733,22 @@ async function loadTimeZone(serial) {
 async function loadRooms() {
   if (!state.serial) return;
   const serial = state.serial;
-  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms?devices=real"), api("GET", base() + "/devices?devices=real")]);
-  state.rooms = rooms || [];
+  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms?devices=all"), api("GET", base() + "/devices?devices=real")]);
+  state.rooms = (rooms || []).map(splitVirtual);
   state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
   state.roomsOf = serial;
   renderRooms();
   if (logState.open && fillLogSelects()) logChoicesChanged(); // log.js: the device chosen is gone
+}
+
+// splitVirtual takes a room's virtual wall thermostat out of its devices
+// into room.vwt (docs/api-v1.md, "The virtual wall thermostat"): the
+// tile shows the room's temperature by it, expert mode lists it, and
+// everything else goes by the real devices.
+function splitVirtual(room) {
+  room.vwt = room.devices.find((d) => d.virtual) || null;
+  room.devices = room.devices.filter((d) => !d.virtual);
+  return room;
 }
 
 async function refresh() {
@@ -1010,7 +1020,7 @@ async function connectEvents() {
   if (gen !== eventsGen) return; // another connect or close came first
   const serial = state.serial;
   const resume = eventsLast && eventsLast.serial === serial ? eventsLast.id : "";
-  const es = new EventSource(base() + "/events?devices=real&ticket=" + encodeURIComponent(ticket) +
+  const es = new EventSource(base() + "/events?devices=all&ticket=" + encodeURIComponent(ticket) +
     (resume ? "&last_event_id=" + encodeURIComponent(resume) : ""));
   state.events = es;
   // on adds a listener that first notes the event's id for the next stream.
@@ -1039,7 +1049,7 @@ async function connectEvents() {
   on("state", (ev) => {
     const data = JSON.parse(ev.data);
     if (data.state) updateDevice(data.state);
-    if (!initial) appendLogEvent(data);
+    if (!initial && !(data.state && data.state.virtual)) appendLogEvent(data); // the log is the real devices
   });
   // A handler's load that fails, as when the server is briefly gone, is
   // left to the next poll or event: its rejection is caught here, as the

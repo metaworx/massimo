@@ -153,8 +153,10 @@ For a role with `cubes` its button opens System settings → Cubes.
 
 Every room has a tile:
 
-- **IS** is the measured temperature: the wall thermostat's,
-  else the first radiator thermostat's that reported one.
+- **IS** is the room's temperature, its virtual wall thermostat's
+  (docs/api-v1.md, "The virtual wall thermostat"), which every client shows:
+  the wall thermostat's, else the median of the radiator thermostats',
+  or their mean where the room's setting says so.
   Under it is how long ago the server received it ("12 min", "5 h", "3 days");
   the tooltip has the exact time.
   "≥" means the value was already there when the server connected to the Cube,
@@ -193,6 +195,12 @@ Every room has a tile:
   page, and the page asks the server for a device by its serial.
   Valve, measured temperature, window and a low battery show how old they are;
   in expert mode also the exact time, and when the device was last heard from.
+  Expert mode lists the room's virtual wall thermostat after the devices,
+  with the devices its temperature comes from and its two settings:
+  how a room without a wall thermostat takes its temperature
+  (**Median** or **Mean** of its radiator thermostats)
+  and its radio address, which matters only to clients of the LAN proxy
+  whose device numbers collide; **Save** writes them.
   A device that has not been heard from for more than 24 hours has a "Not seen
   for …" badge.
 - The cog button opens the room's configuration:
