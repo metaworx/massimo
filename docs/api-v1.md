@@ -1182,6 +1182,10 @@ The answer is `201` with the Cube object; a Cube served already is `409`.
 
 changes those fields and leaves the others; an unknown field is `400`,
 so a typo is not taken for "no change".
+`"proxy_virtual": true` makes the Cube's proxy show its clients the rooms'
+virtual wall thermostats (docs/proxy.md, "Virtual wall thermostats"),
+kept apart from the Cube's row and off by default;
+the Cube object says it as `proxy_virtual`.
 The row's `source` becomes `ui`, and the change applies at once:
 a new address reconnects,
 a new proxy address or serial restarts that Cube's proxy listener,

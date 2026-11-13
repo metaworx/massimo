@@ -459,6 +459,13 @@ CREATE TABLE rooms (                         -- migration 0017
 );
 CREATE UNIQUE INDEX rooms_room ON rooms (cube_id, room_id) WHERE deleted_at IS NULL;
 
+CREATE TABLE cube_options (                  -- migration 0018
+    cube_id       INTEGER PRIMARY KEY REFERENCES cubes (id) ON DELETE CASCADE,
+    proxy_virtual INTEGER NOT NULL DEFAULT 0,  -- the proxy shows the virtual wall thermostats
+    updated_at    TEXT    NOT NULL,
+    updated_by    INTEGER REFERENCES users (id)
+);
+
 CREATE TABLE log (                           -- events until migration 0014, made again by 0009 and 0014
     id         INTEGER PRIMARY KEY,
     cube_id    INTEGER REFERENCES cubes (id) ON DELETE CASCADE,  -- NULL: the server's
@@ -708,6 +715,10 @@ Notes on the tables:
   room's life; the other columns are the settings of the room's virtual wall
   thermostat (docs/api-v1.md, "The virtual wall thermostat").
   A row has `version`, `deleted_at` and `origin`, as the owned tables do.
+- `cube_options` (migration 0018) are a Cube's options beyond its row,
+  defaults where it has none: `proxy_virtual` (docs/proxy.md).
+  A table of its own, so that a binary built for an earlier version reads
+  `cubes` as before.
 - `push_subscriptions` (migration 0010) are the browsers and apps a user's
   notifications go to by Web Push (docs/api-v1.md, "Notifications"):
   each tied to the session or API key that subscribed,

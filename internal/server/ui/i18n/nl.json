@@ -472,6 +472,7 @@
   "cubes.listening": "De proxy luistert op {addr}.",
   "cubes.proxySerial": "Serienummer in zoekantwoorden",
   "cubes.proxySerialHint": "leeg: dat van de Cube",
+  "cubes.proxyVirtual": "Proxyclients de virtuele wandthermostaat van elke kamer tonen",
   "cubes.hidden": "Verborgen apparaten",
   "cubes.hiddenNone": "Geen, behalve die in kamer 255.",
   "cubes.hide": "Verbergen",

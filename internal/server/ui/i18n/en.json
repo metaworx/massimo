@@ -471,6 +471,7 @@
   "cubes.listening": "The proxy listens on {addr}.",
   "cubes.proxySerial": "Serial in discovery replies",
   "cubes.proxySerialHint": "empty: the Cube's own",
+  "cubes.proxyVirtual": "Show proxy clients the virtual wall thermostat of every room",
   "cubes.hidden": "Hidden devices",
   "cubes.hiddenNone": "None, besides those in room 255.",
   "cubes.hide": "Hide",
