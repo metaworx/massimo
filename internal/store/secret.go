@@ -3,21 +3,26 @@
 
 package store
 
-// The providers' client secrets sealed (docs/store.md section 6, "Sign-in
-// through OpenID Connect"; AP Oidc v1.1, Block 9, D20-A): AES-256-GCM
-// with a key of its own, secret.key beside the store's file, so that a
-// copy or a backup of massimo.db alone does not hold them. The key is
-// made with the first secret sealed; a store opened read-only never makes
-// it. A secret sealed is "v1:" and the base64 of the nonce and the box,
-// the provider's uuid its additional data, so that a box copied to
-// another row does not open. Lost, the key leaves each secret to be
-// entered again.
+// The secrets kept in massimo.db, sealed (docs/store.md section 6, "Sign-in
+// through OpenID Connect"; AP Oidc v1.1, Block 9; AP SealedSecrets v1.0):
+// AES-256-GCM with a key derived from opaque.key, so that a copy or a
+// backup of massimo.db alone does not hold them. A secret sealed is "v2:"
+// and the base64 of the nonce and the box, with additional data of its
+// own (a provider's uuid), so that a box copied elsewhere does not open.
+// opaque.key lost, or another store's, leaves each secret to be entered
+// again, as it leaves each password to be set again.
+//
+// Before AP SealedSecrets, a build of main sealed with a key file of its
+// own, secret.key, as "v1:": such a secret is opened with it once and
+// sealed again, and the file then renamed secret.key.retired.
 
 import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
@@ -28,117 +33,138 @@ import (
 	"strings"
 )
 
-// SecretKeyFileName is the key of the sealed secrets in the data
-// directory.
-const SecretKeyFileName = "secret.key"
+// SecretKeyFileName is the key file a build of main sealed with before
+// AP SealedSecrets, in the data directory; retiredSuffix is added to its
+// name once nothing sealed with it is left.
+const (
+	SecretKeyFileName = "secret.key"
+	retiredSuffix     = ".retired"
+)
 
-// secretPEM is the PEM block type of the key file, its bytes the 32 of
-// the AES-256 key.
+// secretPEM is the PEM block type of secret.key, its bytes the 32 of the
+// AES-256 key.
 const secretPEM = "MASSIMO SECRET KEY"
 
-// sealedPrefix marks a sealed secret, and its version.
-const sealedPrefix = "v1:"
+// The prefixes of a sealed secret: the version, which says the key.
+const (
+	sealedPrefix = "v2:" // the key derived from opaque.key
+	legacyPrefix = "v1:" // secret.key
+)
 
-// SecretKeyPath returns the key file of the sealed secrets in the data
-// directory dir.
+// sealInfo is the HKDF info of the sealing key, which keeps it apart from
+// the OPAQUE keys it is derived from.
+const sealInfo = "massimo sealed secrets v2"
+
+// SecretKeyPath returns the retired key file of the sealed secrets in the
+// data directory dir.
 func SecretKeyPath(dir string) string { return filepath.Join(dir, SecretKeyFileName) }
 
-// secretKey reads the key, making it where there is none and create is
-// true and the store is writable; nil where there is none.
-func (s *Store) secretKey(create bool) ([]byte, error) {
+// deriveSealKey derives the sealing key from the bytes of opaque.key.
+func deriveSealKey(opaqueKey []byte) ([]byte, error) {
+	key, err := hkdf.Key(sha256.New, opaqueKey, nil, sealInfo, 32)
+	if err != nil {
+		return nil, fmt.Errorf("store: the sealing key: %w", err)
+	}
+	return key, nil
+}
+
+// sealKey is the sealing key, derived when opaque.key was read; nil in a
+// store opened read-only that could not read it.
+func (s *Store) sealKey() []byte {
 	s.secretMu.Lock()
 	defer s.secretMu.Unlock()
-	if s.secret != nil {
-		return s.secret, nil
+	return s.secret
+}
+
+// legacyKey reads secret.key, where a build of main made one; nil where
+// there is none.
+func (s *Store) legacyKey() ([]byte, error) {
+	s.secretMu.Lock()
+	defer s.secretMu.Unlock()
+	if s.legacy != nil {
+		return s.legacy, nil
 	}
 	p := SecretKeyPath(s.dir)
 	b, err := os.ReadFile(p)
 	switch {
-	case err == nil:
-		blk, _ := pem.Decode(b)
-		if blk == nil || blk.Type != secretPEM || len(blk.Bytes) != 32 {
-			return nil, fmt.Errorf("store: %s: not a PEM %s of 32 bytes", p, secretPEM)
-		}
-		s.secret = blk.Bytes
-		return s.secret, nil
-	case !errors.Is(err, fs.ErrNotExist):
-		return nil, fmt.Errorf("store: %w", err)
-	case !create || s.readOnly:
+	case errors.Is(err, fs.ErrNotExist):
 		return nil, nil
-	}
-	key := make32()
-	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("store: %w", err)
 	}
-	if err := pem.Encode(f, &pem.Block{Type: secretPEM, Bytes: key}); err != nil {
-		f.Close()
-		os.Remove(p)
-		return nil, fmt.Errorf("store: %s: %w", p, err)
+	blk, _ := pem.Decode(b)
+	if blk == nil || blk.Type != secretPEM || len(blk.Bytes) != 32 {
+		return nil, fmt.Errorf("store: %s: not a PEM %s of 32 bytes", p, secretPEM)
 	}
-	if err := f.Close(); err != nil {
-		os.Remove(p)
-		return nil, fmt.Errorf("store: %s: %w", p, err)
-	}
-	s.secret = key
-	s.log.Info("secret key created", "path", p)
-	return key, nil
+	s.legacy = blk.Bytes
+	return s.legacy, nil
 }
 
-// make32 is 32 random bytes.
-func make32() []byte {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return b
-}
-
-// sealSecret seals a secret for the row of the uuid; "" stays "".
-func (s *Store) sealSecret(uuid, plain string) (string, error) {
+// sealSecret seals a secret with its additional data aad; "" stays "".
+func (s *Store) sealSecret(aad, plain string) (string, error) {
 	if plain == "" {
 		return "", nil
 	}
-	key, err := s.secretKey(true)
+	key := s.sealKey()
+	if key == nil {
+		return "", errors.New("store: no opaque.key to seal with")
+	}
+	box, err := sealBox(key, aad, plain)
 	if err != nil {
 		return "", err
 	}
-	if key == nil {
-		return "", fmt.Errorf("store: no %s to seal with", SecretKeyFileName)
+	return sealedPrefix + box, nil
+}
+
+// openSecret opens a secret as kept: a sealed one with its key, a plain
+// one, left from before the sealing, as it is. lost is a sealed one that
+// does not open: its key gone, or another store's.
+func (s *Store) openSecret(aad, kept string) (plain string, lost bool) {
+	var key []byte
+	box, sealed := strings.CutPrefix(kept, sealedPrefix)
+	if sealed {
+		key = s.sealKey()
+	} else if box, sealed = strings.CutPrefix(kept, legacyPrefix); sealed {
+		key, _ = s.legacyKey()
+	} else {
+		return kept, false
 	}
+	if key == nil {
+		return "", true
+	}
+	out, err := openBox(key, aad, box)
+	if err != nil {
+		return "", true
+	}
+	return out, false
+}
+
+// sealBox is the base64 of a nonce and the AES-256-GCM box of plain.
+func sealBox(key []byte, aad, plain string) (string, error) {
 	gcm, err := newGCM(key)
 	if err != nil {
 		return "", err
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	rand.Read(nonce)
-	box := gcm.Seal(nonce, nonce, []byte(plain), []byte(uuid))
-	return sealedPrefix + base64.RawStdEncoding.EncodeToString(box), nil
+	return base64.RawStdEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(plain), []byte(aad))), nil
 }
 
-// openSecret opens a secret of the row of the uuid as kept: a sealed one
-// with the key, a plain one, left from before the sealing, as it is.
-// lost is a sealed one that does not open: the key gone, or another's.
-func (s *Store) openSecret(uuid, kept string) (plain string, lost bool) {
-	box, sealed := strings.CutPrefix(kept, sealedPrefix)
-	if !sealed {
-		return kept, false
-	}
-	key, err := s.secretKey(false)
-	if err != nil || key == nil {
-		return "", true
-	}
+// openBox opens what sealBox made.
+func openBox(key []byte, aad, box string) (string, error) {
 	gcm, err := newGCM(key)
 	if err != nil {
-		return "", true
+		return "", err
 	}
 	raw, err := base64.RawStdEncoding.DecodeString(box)
 	if err != nil || len(raw) < gcm.NonceSize() {
-		return "", true
+		return "", errors.New("store: not a sealed box")
 	}
-	out, err := gcm.Open(nil, raw[:gcm.NonceSize()], raw[gcm.NonceSize():], []byte(uuid))
+	out, err := gcm.Open(nil, raw[:gcm.NonceSize()], raw[gcm.NonceSize():], []byte(aad))
 	if err != nil {
-		return "", true
+		return "", err
 	}
-	return string(out), false
+	return string(out), nil
 }
 
 func newGCM(key []byte) (cipher.AEAD, error) {
@@ -149,9 +175,11 @@ func newGCM(key []byte) (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
-// sealPlainSecrets seals the client secrets a store of v0.15.0-alpha.1
-// kept plain, at the open of a writable store; it warns of the sealed
-// ones that do not open.
+// sealPlainSecrets seals, at the open of a writable store, the client
+// secrets kept plain (v0.15.0-alpha.1) or with secret.key (a build of
+// main), and warns of the sealed ones that do not open. Once every one
+// sealed with secret.key is sealed again, the file is renamed
+// secret.key.retired, for the owner to delete.
 func (s *Store) sealPlainSecrets(ctx context.Context) error {
 	var tables int
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'auth_providers'`).Scan(&tables); err != nil {
@@ -170,7 +198,8 @@ func (s *Store) sealPlainSecrets(ctx context.Context) error {
 		id             int64
 		uuid, key, val string
 	}
-	var plain []row
+	var again []row
+	unopened := 0
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.id, &r.uuid, &r.key, &r.val); err != nil {
@@ -180,17 +209,23 @@ func (s *Store) sealPlainSecrets(ctx context.Context) error {
 		if r.val == "" {
 			continue
 		}
-		if !strings.HasPrefix(r.val, sealedPrefix) {
-			plain = append(plain, r)
-		} else if _, lost := s.openSecret(r.uuid, r.val); lost {
-			s.log.Warn("store: a provider's client secret does not open: enter it again", "provider", r.key, "key", SecretKeyPath(s.dir))
+		plain, lost := s.openSecret(r.uuid, r.val)
+		switch {
+		case lost:
+			if strings.HasPrefix(r.val, legacyPrefix) {
+				unopened++
+			}
+			s.log.Warn("store: a provider's client secret does not open: enter it again", "provider", r.key)
+		case !strings.HasPrefix(r.val, sealedPrefix):
+			r.val = plain
+			again = append(again, r)
 		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("store: secrets: %w", err)
 	}
-	for _, r := range plain {
+	for _, r := range again {
 		sealed, err := s.sealSecret(r.uuid, r.val)
 		if err != nil {
 			return err
@@ -200,5 +235,19 @@ func (s *Store) sealPlainSecrets(ctx context.Context) error {
 		}
 		s.log.Info("a provider's client secret sealed", "provider", r.key)
 	}
+	return s.retireLegacyKey(unopened)
+}
+
+// retireLegacyKey renames secret.key to secret.key.retired where nothing
+// sealed with it is left unopened, and logs it.
+func (s *Store) retireLegacyKey(unopened int) error {
+	p := SecretKeyPath(s.dir)
+	if _, err := os.Stat(p); err != nil || unopened > 0 {
+		return nil
+	}
+	if err := os.Rename(p, p+retiredSuffix); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+	s.log.Info("secret.key retired: the secrets are sealed with a key derived from opaque.key; delete the file", "path", p+retiredSuffix)
 	return nil
 }

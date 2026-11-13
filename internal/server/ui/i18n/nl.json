@@ -964,7 +964,7 @@
 
   "providers.secretNone": "Nog geen.",
 
-  "providers.secretLost": "Ingesteld, maar het opent niet meer: secret.key naast de opslag ontbreekt of is een andere. Voer het geheim opnieuw in.",
+  "providers.secretLost": "Ingesteld, maar het opent niet meer: opaque.key naast de opslag ontbreekt of is een andere. Voer het geheim opnieuw in.",
 
   "providers.scopes": "Scopes",
 
