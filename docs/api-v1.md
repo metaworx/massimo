@@ -1369,7 +1369,11 @@ and so is one from any address with the serial a proxy of this server answers
 with (`proxy_serial`), unless a Cube gave it.
 
 No body.
-A call while a run is going waits for it and gets its result, the same `ran_at`.
+A call while a run is going waits for the run after it,
+which starts as that one ends and which every call that came meanwhile shares,
+the same `ran_at`: a run sends its requests as it starts,
+so the answer is never that of a run begun before the call,
+and such a call takes up to twice the wait, about six seconds.
 `503` when the server cannot have the discovery port (UDP 23272,
 the only one the Cubes answer to, or the address of `serve -discover-listen`),
 for example because another program holds it.
