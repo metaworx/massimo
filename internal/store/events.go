@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -122,13 +123,16 @@ type Event struct {
 	Visibility string
 }
 
-// EventQuery selects a page of a Cube's events, and with Server the
-// server's as well: those before an id or a time and at or after a time,
-// of a kind, a source, a device, a serial, a user and a command, at and
-// above a level, of the read visibility and with Audit of the audit's
-// too, at most Limit (MaxEventsPage).
+// EventQuery selects a page of a Cube's events, or of several Cubes'
+// (CubeIDs), and with Server the server's as well: those before an id or
+// a time and at or after a time, of a kind, a source, a device, a serial,
+// a user and a command, at and above a level, of the read visibility and
+// with Audit of the audit's too, at most Limit (MaxEventsPage).
 type EventQuery struct {
-	CubeID    int64
+	CubeID int64
+	// CubeIDs, where given, are the Cubes whose rows the page holds, in
+	// place of CubeID: one walk each, merged by id.
+	CubeIDs   []int64
 	Server    bool      // the server's events too (cube_id NULL)
 	BeforeID  int64     // 0: no bound
 	Before    time.Time // zero: no bound
@@ -561,34 +565,61 @@ func (s *Store) fillSources(ctx context.Context) error {
 	return nil
 }
 
-// Events returns a page of a Cube's events, and with q.Server the
-// server's as well, newest first: at most q.Limit (MaxEventsPage, 1 at
-// least) before q.BeforeID and q.Before and not before q.Since, of
-// q.Kind, q.Source, q.Device, q.Serial and q.UserID, at and above
-// q.MinLevel, where given. The Cube's rows and the server's are two walks
-// in id order, merged: one query for both would sort them.
+// Events returns a page of a Cube's events, or of the Cubes of
+// q.CubeIDs, and with q.Server the server's as well, newest first: at
+// most q.Limit (MaxEventsPage, 1 at least) before q.BeforeID and
+// q.Before and not before q.Since, of q.Kind, q.Source, q.Device,
+// q.Serial and q.UserID, at and above q.MinLevel, where given. Each
+// Cube's rows and the server's are a walk of their own in id order,
+// merged: one query for all would sort them.
 func (s *Store) Events(ctx context.Context, q EventQuery) ([]Event, error) {
 	limit := q.Limit
 	if limit <= 0 || limit > MaxEventsPage {
 		limit = MaxEventsPage
 	}
-	out, err := s.eventsWalk(ctx, q, q.CubeID, limit)
-	if err != nil || !q.Server || q.CubeID == 0 {
-		return out, err
+	cubes := []int64{q.CubeID}
+	if len(q.CubeIDs) > 0 {
+		cubes = slices.Compact(slices.Sorted(slices.Values(q.CubeIDs)))
 	}
-	server, err := s.eventsWalk(ctx, q, 0, limit)
-	if err != nil {
-		return nil, err
+	if q.Server && !slices.Contains(cubes, 0) {
+		cubes = append(cubes, 0)
 	}
-	merged := make([]Event, 0, min(limit, len(out)+len(server)))
-	for i, j := 0, 0; len(merged) < limit && (i < len(out) || j < len(server)); {
-		if j >= len(server) || i < len(out) && out[i].ID > server[j].ID {
-			merged, i = append(merged, out[i]), i+1
-		} else {
-			merged, j = append(merged, server[j]), j+1
+	walks := make([][]Event, 0, len(cubes))
+	for _, cube := range cubes {
+		out, err := s.eventsWalk(ctx, q, cube, limit)
+		if err != nil {
+			return nil, err
 		}
+		walks = append(walks, out)
 	}
-	return merged, nil
+	if len(walks) == 1 {
+		return walks[0], nil
+	}
+	return mergeWalks(walks, limit), nil
+}
+
+// mergeWalks merges walks, each newest first, into one page newest first
+// of at most limit rows.
+func mergeWalks(walks [][]Event, limit int) []Event {
+	n := 0
+	for _, w := range walks {
+		n += len(w)
+	}
+	merged := make([]Event, 0, min(limit, n))
+	at := make([]int, len(walks))
+	for len(merged) < limit {
+		next := -1
+		for k, w := range walks {
+			if at[k] < len(w) && (next < 0 || w[at[k]].ID > walks[next][at[next]].ID) {
+				next = k
+			}
+		}
+		if next < 0 {
+			break
+		}
+		merged, at[next] = append(merged, walks[next][at[next]]), at[next]+1
+	}
+	return merged
 }
 
 // eventsWalk reads one walk of a page: the rows of cube, the server's

@@ -524,3 +524,161 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 		t.Fatalf("the proxy's lines: %+v", evs)
 	}
 }
+
+// startTwoCubes starts a server with the fake Cube KEQ0000100 and a
+// second Cube, KEQ0000200, that never connects; with stored, both are
+// rows of a store, returned with the second Cube's row id.
+func startTwoCubes(t *testing.T, stored bool) (*httptest.Server, *Server, *store.Store, int64) {
+	t.Helper()
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{Queue: engine.Options{Gap: time.Millisecond}}
+	var st *store.Store
+	var second int64
+	if stored {
+		st = testStore(t, "")
+		ctx := context.Background()
+		for _, c := range []store.Cube{{Serial: "KEQ0000100", Address: addr}, {Serial: "KEQ0000200", Address: "127.0.0.1:9"}} {
+			c.Configured, c.Source = true, store.SourceEnv
+			row, err := st.AddCube(ctx, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := CubeFromRow(row)
+			if err != nil {
+				t.Fatal(err)
+			}
+			opts.Cubes, second = append(opts.Cubes, cfg), row.ID
+		}
+		opts.Store = st
+	} else {
+		opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}, {Serial: "KEQ0000200", Addr: "127.0.0.1:9"}}
+	}
+	s := New(opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	waitConnected(t, ts, "KEQ0000100")
+	return ts, s, st, second
+}
+
+// allLog reads a page of every Cube's log.
+func allLog(t *testing.T, ts *httptest.Server, query string) []event {
+	t.Helper()
+	var evs []event
+	if code := getJSON(t, ts, "", "/api/v1/log"+query, &evs); code != 200 {
+		t.Fatalf("log%s: %d", query, code)
+	}
+	return evs
+}
+
+// Every Cube's log is each Cube's rows, with the Cube's S/N, and the
+// server's once, without one, oldest first; paged back by id across the
+// Cubes, every row once; a device by its S/N or by its radio address on
+// every Cube; a Cube's own log carries no Cube's S/N.
+func TestLogOfEveryCube(t *testing.T) {
+	ts, s, st, second := startTwoCubes(t, true)
+	eventually(t, "the fake Cube's burst in the store", func() bool {
+		_, own := logOf(t, ts, "?kind=state")
+		return len(own) >= 6
+	})
+	at := time.Now().UTC()
+	data, _ := json.Marshal(event{Kind: "state", Device: "0a0909", Serial: "MEQ0000909", Time: at})
+	st.AddEvent(store.Event{CubeID: second, Time: at, Kind: "state", Source: "device", Device: "0a0909", Serial: "MEQ0000909", Data: data})
+	s.logServer(systemEvent("settings_read", 0, nil))
+
+	all := allLog(t, ts, "?limit=1000")
+	servers, seconds := map[string]int{}, 0
+	for i, e := range all {
+		if i > 0 && e.ID <= all[i-1].ID {
+			t.Fatalf("not oldest first at %d: %v", i, ids(all))
+		}
+		switch {
+		case e.CubeSerial == "":
+			if e.Source != "system" && e.Source != "server" {
+				t.Fatalf("a Cube's line without its Cube: %+v", e)
+			}
+			servers[e.Kind]++
+		case e.Serial == "MEQ0000909":
+			seconds++
+			if e.CubeSerial != "KEQ0000200" {
+				t.Fatalf("the second Cube's line: %+v", e)
+			}
+		case e.CubeSerial != "KEQ0000100" && e.CubeSerial != "KEQ0000200":
+			t.Fatalf("a Cube's line: %+v", e)
+		}
+	}
+	if servers["server_started"] != 1 || servers["settings_read"] != 1 || seconds != 1 {
+		t.Fatalf("the server's lines %v, the second Cube's %d", servers, seconds)
+	}
+
+	seen := map[int64]bool{}
+	for before := all[len(all)-1].ID + 1; ; {
+		page := allLog(t, ts, "?limit=4&before="+strconv.FormatInt(before, 10))
+		if len(page) == 0 {
+			break
+		}
+		for _, e := range page {
+			if seen[e.ID] || e.ID >= before {
+				t.Fatalf("paging: %d before %d", e.ID, before)
+			}
+			seen[e.ID] = true
+		}
+		before = page[0].ID
+	}
+	if len(seen) != len(all) {
+		t.Fatalf("paged %d of %d", len(seen), len(all))
+	}
+
+	for _, device := range []string{"MEQ0000909", "0a0909"} {
+		page := allLog(t, ts, "?device="+device)
+		if len(page) != 1 || page[0].CubeSerial != "KEQ0000200" {
+			t.Fatalf("device=%s: %+v", device, page)
+		}
+	}
+	for _, e := range rawLog(t, ts, "?limit=1000") {
+		if _, ok := e["cube_serial"]; ok {
+			t.Fatalf("a Cube's own log names the Cube: %v", e)
+		}
+	}
+}
+
+// Without a store, every Cube's log merges the Cubes' rings by time,
+// each Cube's events with its S/N and the server's once, though every
+// ring keeps them.
+func TestLogOfEveryCubeWithoutStore(t *testing.T) {
+	ts, s, _, _ := startTwoCubes(t, false)
+	eventually(t, "the fake Cube's burst in its ring", func() bool {
+		_, own := logOf(t, ts, "?kind=state")
+		return len(own) >= 6
+	})
+	s.logServer(systemEvent("settings_read", 0, nil))
+	all := allLog(t, ts, "?limit=1000")
+	servers, cubes := map[string]int{}, map[string]int{}
+	for i, e := range all {
+		if i > 0 && e.Time.Before(all[i-1].Time) {
+			t.Fatalf("not by time at %d", i)
+		}
+		if e.CubeSerial == "" {
+			if e.Source != "system" && e.Source != "server" {
+				t.Fatalf("a Cube's line without its Cube: %+v", e)
+			}
+			servers[e.Kind]++
+		}
+		cubes[e.CubeSerial]++
+	}
+	if servers["server_started"] != 1 || servers["settings_read"] != 1 {
+		t.Fatalf("the server's lines, each once: %v", servers)
+	}
+	if cubes["KEQ0000100"] < 6 || cubes["KEQ0000200"] == 0 || len(cubes) != 3 {
+		t.Fatalf("the lines by Cube: %v", cubes)
+	}
+}

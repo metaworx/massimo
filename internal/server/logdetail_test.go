@@ -256,7 +256,7 @@ func TestChangedWhileServerDown(t *testing.T) {
 	rt2 := s2.cubes["keq0000100"]
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if evs, err := s2.storedLog(ctx, st, row.ID, logQuery{kind: "metadata", limit: 10, minLevel: 0}); err == nil && len(evs) == 1 {
+		if evs, err := s2.storedLog(ctx, st, map[int64]string{row.ID: ""}, logQuery{kind: "metadata", limit: 10, minLevel: 0}); err == nil && len(evs) == 1 {
 			m := evs[0]
 			if !m.Missed || len(m.ListChanges) != 1 || m.ListChanges[0].Name != "Renamed while down" {
 				t.Fatalf("the line after the restart: %+v", m)

@@ -15,6 +15,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -205,21 +206,14 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	}
 	lq.resolveDevice(rt)
 	lq.audit = principalOf(r).has("audit")
-	if lq.user != "" {
-		id, ok := int64(0), false
-		if st := s.opts.Store; st != nil {
-			if id, ok, err = st.UserIDByName(r.Context(), lq.user); err != nil {
-				return fail(http.StatusInternalServerError, "%v", err)
-			}
-		}
-		if !ok {
+	if none, err := s.logUser(r.Context(), &lq); err != nil || none {
+		if none {
 			writeJSON(w, http.StatusOK, []event{})
-			return nil
 		}
-		lq.userID = id
+		return err
 	}
 	if id := rt.storeID.Load(); id != 0 && rt.store != nil {
-		evs, err := s.storedLog(r.Context(), rt.store, id, lq)
+		evs, err := s.storedLog(r.Context(), rt.store, map[int64]string{id: ""}, lq)
 		if err != nil {
 			return err
 		}
@@ -230,16 +224,97 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// storedLog reads a page from the store, the Cube's rows and the
-// server's, after the writer wrote what is pending, and turns it round,
-// oldest first; who started an event is named as the users table names
-// them now.
-func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, lq logQuery) ([]event, error) {
+// getAllLog handles GET /log: the page of every Cube's events and the
+// server's, as GET /cubes/{sn}/log reads one Cube's, each Cube's event
+// with the Cube's S/N (cube_serial); a radio address names the device of
+// that address on every Cube. A Cube without a row in the store yet
+// (before its first connection) adds nothing. Without a store, the
+// Cubes' rings merged by time, the server's events, which every ring
+// holds, once.
+func (s *Server) getAllLog(w http.ResponseWriter, r *http.Request) error {
+	lq, err := parseLogQuery(r)
+	if err != nil {
+		return err
+	}
+	lq.audit = principalOf(r).has("audit")
+	if none, err := s.logUser(r.Context(), &lq); err != nil || none {
+		if none {
+			writeJSON(w, http.StatusOK, []event{})
+		}
+		return err
+	}
+	rts := s.runtimes()
+	if st := s.opts.Store; st != nil {
+		cubes := map[int64]string{}
+		for _, rt := range rts {
+			if id := rt.storeID.Load(); id != 0 {
+				cubes[id] = rt.cubeSerial()
+			}
+		}
+		evs, err := s.storedLog(r.Context(), st, cubes, lq)
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusOK, evs)
+		return nil
+	}
+	writeJSON(w, http.StatusOK, ringLog(rts, lq))
+	return nil
+}
+
+// ringLog is a page of every Cube's ring, oldest first, without a store:
+// each Cube's events with its S/N, and the server's own once, from the
+// first Cube's ring, since every ring keeps them.
+func ringLog(rts []*runtime, lq logQuery) []event {
+	var all []event
+	for i, rt := range rts {
+		sn := rt.cubeSerial()
+		for _, ev := range rt.recent(0) {
+			if ev.server {
+				if i > 0 {
+					continue
+				}
+			} else {
+				ev.CubeSerial = sn
+			}
+			all = append(all, ev)
+		}
+	}
+	slices.SortStableFunc(all, func(a, b event) int { return a.Time.Compare(b.Time) })
+	return filterEvents(all, lq)
+}
+
+// logUser finds the row of a page's user, by login name; none reports a
+// user the store does not know, whose page is empty.
+func (s *Server) logUser(ctx context.Context, lq *logQuery) (none bool, err error) {
+	if lq.user == "" {
+		return false, nil
+	}
+	id, ok := int64(0), false
+	if st := s.opts.Store; st != nil {
+		if id, ok, err = st.UserIDByName(ctx, lq.user); err != nil {
+			return false, fail(http.StatusInternalServerError, "%v", err)
+		}
+	}
+	if !ok {
+		return true, nil
+	}
+	lq.userID = id
+	return false, nil
+}
+
+// storedLog reads a page from the store, the rows of the Cubes of cubes
+// (each Cube's row id to the S/N its events carry as cube_serial, "" for
+// none) and the server's, after the writer wrote what is pending, and
+// turns it round, oldest first; who started an event is named as the
+// users table names them now. Without a Cube, the server's rows alone.
+func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64]string, lq logQuery) ([]event, error) {
 	if err := st.FlushEvents(ctx); err != nil {
 		s.log.Warn("api: the log's pending events not written", "error", err)
 	}
 	minLevel := lq.minLevel
-	rows, err := st.Events(ctx, store.EventQuery{CubeID: cubeID, Server: true, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since,
+	ids := slices.Sorted(maps.Keys(cubes))
+	rows, err := st.Events(ctx, store.EventQuery{CubeIDs: ids, Server: true, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since,
 		Kind: lq.kind, Source: lq.source, Device: lq.device, Serial: lq.serial, UserID: lq.userID, CommandID: lq.command, MinLevel: &minLevel,
 		Audit: lq.audit, Limit: lq.limit})
 	if err != nil {
@@ -257,6 +332,9 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubeID int64, l
 		ev.Command = rows[i].CommandID
 		if ev.Serial == "" {
 			ev.Serial = rows[i].Serial
+		}
+		if id := rows[i].CubeID; id != 0 {
+			ev.CubeSerial = cubes[id]
 		}
 		if id := rows[i].UserID; id != 0 {
 			by, seen := users[id]

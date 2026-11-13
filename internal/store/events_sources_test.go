@@ -220,6 +220,60 @@ func TestEventsWithServerRows(t *testing.T) {
 	}
 }
 
+// A page of several Cubes, with the server's rows, merges a walk each by
+// id: every row once when paged back by id, newest first, within the
+// terms; without Server, the Cubes' own rows; a Cube named twice is
+// walked once.
+func TestEventsOfSeveralCubes(t *testing.T) {
+	s, a, b := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Millisecond)
+	for i := 0; i < 60; i++ {
+		e := ev(a.ID, at.Add(time.Duration(i)*time.Second), "state", "0a0101", i)
+		switch i % 3 {
+		case 1:
+			e.CubeID, e.Kind, e.Source = 0, "server_started", "system"
+		case 2:
+			e.CubeID = b.ID
+		}
+		s.AddEvent(e)
+	}
+	flush(t, s)
+	var got []int
+	before := int64(0)
+	for {
+		page, err := s.Events(ctx, EventQuery{CubeIDs: []int64{b.ID, a.ID, b.ID}, Server: true, BeforeID: before, Limit: 7})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for i, e := range page {
+			if i > 0 && e.ID >= page[i-1].ID {
+				t.Fatalf("page before %d not newest first: %+v", before, page)
+			}
+			got = append([]int{numberOf(t, e)}, got...)
+		}
+		before = page[len(page)-1].ID
+	}
+	if len(got) != 60 {
+		t.Fatalf("paged %d of 60", len(got))
+	}
+	for i := range got {
+		if got[i] != i {
+			t.Fatalf("event %d: %d", i, got[i])
+		}
+	}
+	if page, _ := s.Events(ctx, EventQuery{CubeIDs: []int64{a.ID, b.ID}, Limit: 100}); len(page) != 40 {
+		t.Fatalf("the Cubes' own rows: %d", len(page))
+	}
+	page, err := s.Events(ctx, EventQuery{CubeIDs: []int64{a.ID, b.ID}, Server: true, Source: "system", Limit: 100})
+	if err != nil || len(page) != 20 {
+		t.Fatalf("the server's rows by their source: %d %v", len(page), err)
+	}
+}
+
 // A level keeps that level and above; nil keeps every level.
 func TestEventsByLevel(t *testing.T) {
 	s, a, _ := eventsStore(t, t.TempDir())
