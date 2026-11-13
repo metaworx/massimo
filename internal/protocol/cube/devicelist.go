@@ -105,8 +105,13 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 			}
 		}
 		if s.Type == DeviceWallThermostat && len(e) >= 13 {
-			t := float64(int(e[8]&0x80)<<1|int(e[12])) / 10
-			s.ActualTemp = &t
+			// 0 is "not measured yet", as a radiator thermostat's: seen
+			// on 2026-11-13 (Cube firmware 1.1.3) from a wall thermostat
+			// after new batteries, until it had measured.
+			if raw := int(e[8]&0x80)<<1 | int(e[12]); raw != 0 {
+				t := float64(raw) / 10
+				s.ActualTemp = &t
+			}
 			// Observed: byte 7 is 0x01 with the setpoint on the display
 			// and 0x04 after the "show measured temperature" command.
 			d := e[7]&0x04 != 0

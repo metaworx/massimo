@@ -696,6 +696,24 @@ func TestWallThermostatConfigAndState(t *testing.T) {
 	}
 }
 
+// A wall thermostat's temperature of 0 is not a measurement: one with new
+// batteries reports it until it has measured (2026-11-13), as a radiator
+// thermostat does.
+func TestWallTemperatureZeroNotReported(t *testing.T) {
+	types := map[RFAddress]DeviceType{0x0a010e: DeviceWallThermostat}
+	states, err := ParseDeviceList("DAoBDvYSGAEkAAAAAA==", types)
+	if err != nil || len(states) != 1 || !states[0].Valid || states[0].Setpoint == nil || *states[0].Setpoint != 18 {
+		t.Fatalf("%+v %v", states, err)
+	}
+	if states[0].ActualTemp != nil {
+		t.Fatalf("actual temperature %v, want none", *states[0].ActualTemp)
+	}
+	states, _ = ParseDeviceList("DAoBDvYSGAEkAAAA7Q==", types)
+	if states[0].ActualTemp == nil || *states[0].ActualTemp != 23.7 {
+		t.Fatalf("a measurement: %+v", states[0])
+	}
+}
+
 func TestWallDisplayMode(t *testing.T) {
 	types := map[RFAddress]DeviceType{0x0a010e: DeviceWallThermostat}
 	for _, c := range []struct {
