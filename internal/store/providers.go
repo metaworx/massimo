@@ -45,7 +45,7 @@ type AuthProvider struct {
 	Issuer       string
 	ClientID     string
 	ClientSecret string // never answered by the API; opened, where kept sealed
-	// SecretLost is a sealed secret that does not open: secret.key gone,
+	// SecretLost is a sealed secret that does not open: opaque.key gone,
 	// or another store's; ClientSecret is then empty.
 	SecretLost bool
 	// kept is the secret as the row keeps it, sealed

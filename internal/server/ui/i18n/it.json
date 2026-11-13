@@ -965,7 +965,7 @@
 
   "providers.secretNone": "Ancora nessuno.",
 
-  "providers.secretLost": "Impostato, ma non si apre più: secret.key accanto all'archivio manca o è un altro. Inserisci di nuovo il segreto.",
+  "providers.secretLost": "Impostato, ma non si apre più: opaque.key accanto all'archivio manca o è un altro. Inserisci di nuovo il segreto.",
 
   "providers.scopes": "Scope",
 

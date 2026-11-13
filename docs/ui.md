@@ -740,7 +740,7 @@ to the top of the page.
   **disabled** and **creates users** as badges,
   with its name on the button, issuer, client ID, client secret (written only:
   the line under it says whether one is set,
-  or that it no longer opens, `secret.key` lost, and is to be entered again),
+  or that it no longer opens, `opaque.key` lost, and is to be entered again),
   scopes, **Allowed groups** (comma-separated, any where empty)
   and the **Groups claim** they are read from (`groups` where empty), **Enabled**,
   and **Create users who sign in** with their role,

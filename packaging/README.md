@@ -824,10 +824,9 @@ installer passes with `-data`:
 
 Next to `massimo.db` (mode 0600) live `massimo.db-wal` and `massimo.db-shm`
 while the server runs, `node.key` (0600), the box's Ed25519 key,
-`opaque.key` (0600), the server's OPAQUE keys,
-without which no password of `auth_version` 2 signs in,
-and, once a sign-in provider has a client secret, `secret.key` (0600),
-which seals the secrets, without which they are entered again;
+and `opaque.key` (0600), the server's OPAQUE keys,
+without which no password of `auth_version` 2 signs in
+and no secret sealed in the store opens;
 a copy of the database belongs with all of them,
 or is made with `massimo store backup <file>`,
 which is consistent while the server runs.

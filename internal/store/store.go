@@ -83,10 +83,12 @@ type Store struct {
 	key    nodeKey
 	opq    *opaque.Server // the OPAQUE keys (opaque.go); nil when read-only
 
-	// secret is the key of the sealed secrets (secret.go), read or made
-	// at its first use; nil before.
+	// secret is the key of the sealed secrets (secret.go), derived from
+	// opaque.key when it is read; nil where it could not be. legacy is
+	// secret.key, read where a sealed secret needs it.
 	secretMu sync.Mutex
 	secret   []byte
+	legacy   []byte
 
 	// commandsPruned is when a write last pruned the commands, in Unix
 	// nanoseconds of the store's clock; 0 before the first.

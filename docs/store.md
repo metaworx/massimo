@@ -735,9 +735,14 @@ Notes on the tables:
   a subscription is bound to this server's VAPID key, is not replicated,
   and is deleted rather than marked.
   The VAPID key pair (RFC 8292) is the setting `push.vapid`,
-  made at its first use: the private key is in the store itself,
-  not in a file beside it as the OPAQUE key is,
-  so a `store backup` carries it; `GET /api/v1/settings` does not show it.
+  made at its first use and kept sealed, as the providers' client secrets are
+  (section 6, "Sign-in through OpenID Connect"; AP SealedSecrets v1.0):
+  its value is the JSON string of the box, the setting's key its additional data,
+  so a `store backup` carries it but opens it only beside its `opaque.key`;
+  a plain one, from before, is sealed at the next open.
+  One that no longer opens is made anew, and the browsers subscribe again
+  for the new key at their next visit.
+  `GET /api/v1/settings` does not show it.
 - `roles`, `role_capabilities` and `capabilities_disabled` are the capability
   model of section 6;
   the first migration seeds the six default roles with their sets.
@@ -1302,16 +1307,18 @@ A provider may admit only some groups, read from its groups claim (migration 002
 an account in none of them neither signs in nor links.
 An identity no sign-in has used may be changed;
 a used one is removed and assigned again.
-The client secret is sealed (AP Oidc v1.1, Block 9):
-AES-256-GCM with a key of its own, `secret.key` in the data directory (mode 0600),
-made with the first secret sealed, never by a store opened read-only;
-the column keeps `v1:` and the base64 of the nonce and the box,
+The client secret is sealed (AP Oidc v1.1, Block 9; AP SealedSecrets v1.0):
+AES-256-GCM with a key derived from `opaque.key` (HKDF-SHA256, its own label),
+so no key file of its own;
+the column keeps `v2:` and the base64 of the nonce and the box,
 the provider's uuid its additional data,
 so that a box copied to another row does not open.
 A copy or a backup of `massimo.db` alone so does not hold the secrets.
 A plain secret, as v0.15.0-alpha.1 kept them,
-is sealed at the next open of a writable store.
-Lost, or another store's, `secret.key` leaves each secret unopened:
+is sealed at the next open of a writable store;
+so is one a build of main sealed as `v1:` with a key file of its own, `secret.key`,
+which is then renamed `secret.key.retired` for the owner to delete.
+Lost, or another store's, `opaque.key` leaves each secret unopened, as each password:
 the provider answers `secret_lost`, and the owner enters the secret again;
 a change that does not write it keeps the box, which the key found again opens.
 The secret is never answered (`has_secret`).

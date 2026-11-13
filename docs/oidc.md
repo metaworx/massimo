@@ -38,7 +38,7 @@ System settings → Sign-in providers → **Add a provider**: a key (`nextcloud`
 the name on the button (`Nextcloud`), the issuer,
 the client ID and the client secret.
 The secret is written only; the page never shows it again.
-Massimo keeps it sealed with `secret.key` beside the store,
+Massimo keeps it sealed with a key derived from `opaque.key` beside the store,
 so that a copy of `massimo.db` alone does not hold it;
 where that key is lost, the provider says so and the secret is entered again.
 The provider's button then shows on the sign-in card.
