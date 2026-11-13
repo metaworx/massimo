@@ -22,3 +22,7 @@ abcdef      made up
 010203      made up, in sequence
 # A virtual wall thermostat's address is its room number (docs/api-v1.md).
 000005      the virtual wall thermostat of room 5, no device's
+000003      the virtual wall thermostat of room 3, no device's
+000100      the first address a virtual wall thermostat takes when its room number is taken
+0001ff      the last address a virtual wall thermostat takes when its room number is taken
+000150      made up, an owner's address for a virtual wall thermostat
