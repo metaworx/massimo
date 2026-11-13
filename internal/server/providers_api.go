@@ -38,6 +38,7 @@ type providerView struct {
 	Issuer      string    `json:"issuer"`
 	ClientID    string    `json:"client_id"`
 	HasSecret   bool      `json:"has_secret"`
+	SecretLost  bool      `json:"secret_lost"` // sealed, and secret.key does not open it
 	Scopes      string    `json:"scopes"`
 	AutoCreate  bool      `json:"auto_create"`
 	AutoRole    string    `json:"auto_role"`
@@ -51,7 +52,7 @@ type providerView struct {
 }
 
 func viewProvider(p store.AuthProvider) providerView {
-	return providerView{Key: p.Key, Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, HasSecret: p.ClientSecret != "", Scopes: p.Scopes,
+	return providerView{Key: p.Key, Name: p.Name, Issuer: p.Issuer, ClientID: p.ClientID, HasSecret: p.ClientSecret != "", SecretLost: p.SecretLost, Scopes: p.Scopes,
 		AutoCreate: p.AutoCreate, AutoRole: cmpOr(p.AutoRole, store.RoleViewer), AutoDomains: p.AutoDomains, GroupsClaim: p.GroupsClaim, Allowed: p.AllowedGroups, Enabled: p.Enabled,
 		Callback: oidcCallback, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }

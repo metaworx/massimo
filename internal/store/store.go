@@ -83,6 +83,11 @@ type Store struct {
 	key    nodeKey
 	opq    *opaque.Server // the OPAQUE keys (opaque.go); nil when read-only
 
+	// secret is the key of the sealed secrets (secret.go), read or made
+	// at its first use; nil before.
+	secretMu sync.Mutex
+	secret   []byte
+
 	// commandsPruned is when a write last pruned the commands, in Unix
 	// nanoseconds of the store's clock; 0 before the first.
 	commandsPruned atomic.Int64
@@ -133,6 +138,10 @@ func Open(dir string, o Options) (*Store, error) {
 		return nil, err
 	}
 	if err := s.loadOpaque(); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	if err := s.sealPlainSecrets(context.Background()); err != nil {
 		s.db.Close()
 		return nil, err
 	}

@@ -944,6 +944,8 @@
 
   "providers.secretNone": "None yet.",
 
+  "providers.secretLost": "Set, but it no longer opens: secret.key beside the store is missing or another one. Enter the secret again.",
+
   "providers.scopes": "Scopes",
 
   "providers.allowedGroups": "Allowed groups",

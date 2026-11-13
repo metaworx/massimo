@@ -946,6 +946,8 @@
 
   "providers.secretNone": "Aucun pour l'instant.",
 
+  "providers.secretLost": "Défini, mais il ne s'ouvre plus : secret.key à côté du stockage manque ou en est un autre. Saisissez à nouveau le secret.",
+
   "providers.scopes": "Portées (scopes)",
 
   "providers.allowedGroups": "Groupes admis",

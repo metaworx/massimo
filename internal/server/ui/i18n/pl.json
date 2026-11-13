@@ -967,6 +967,8 @@
 
   "providers.secretNone": "Jeszcze brak.",
 
+  "providers.secretLost": "Ustawiony, ale już się nie otwiera: secret.key obok magazynu brakuje lub jest inny. Wpisz sekret ponownie.",
+
   "providers.scopes": "Zakresy (scopes)",
 
   "providers.allowedGroups": "Dopuszczone grupy",

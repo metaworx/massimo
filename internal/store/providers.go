@@ -44,12 +44,17 @@ type AuthProvider struct {
 	Name         string // on the sign-in button; "" shows the key
 	Issuer       string
 	ClientID     string
-	ClientSecret string // never answered by the API
-	Scopes       string // space-separated, openid among them
-	AutoCreate   bool
-	AutoRole     string   // the key of a created user's role; "" for viewer
-	AutoDomains  []string // the e-mail domains a sign-in creates users for; none: any
-	GroupsClaim  string   // the claim of the account's groups
+	ClientSecret string // never answered by the API; opened, where kept sealed
+	// SecretLost is a sealed secret that does not open: secret.key gone,
+	// or another store's; ClientSecret is then empty.
+	SecretLost bool
+	// kept is the secret as the row keeps it, sealed
+	kept        string
+	Scopes      string // space-separated, openid among them
+	AutoCreate  bool
+	AutoRole    string   // the key of a created user's role; "" for viewer
+	AutoDomains []string // the e-mail domains a sign-in creates users for; none: any
+	GroupsClaim string   // the claim of the account's groups
 	// AllowedGroups are the groups it admits: a sign-in or a link of an
 	// account in none of them is refused; none admits any.
 	AllowedGroups []string
@@ -72,6 +77,7 @@ func scanProvider(row scanner) (AuthProvider, error) {
 		&p.AutoRole, &domains, &p.GroupsClaim, &allowed, &p.Enabled, &created, &updated, &p.Version); err != nil {
 		return AuthProvider{}, err
 	}
+	p.kept = p.ClientSecret
 	p.AutoDomains = splitDomains(domains)
 	if json.Unmarshal([]byte(allowed), &p.AllowedGroups) != nil || p.AllowedGroups == nil {
 		p.AllowedGroups = []string{}
@@ -206,6 +212,7 @@ func (s *Store) Providers(ctx context.Context) ([]AuthProvider, error) {
 		if err != nil {
 			return nil, fmt.Errorf("store: providers: %w", err)
 		}
+		p.ClientSecret, p.SecretLost = s.openSecret(p.UUID, p.kept)
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -224,6 +231,7 @@ func (s *Store) provider(ctx context.Context, q queryer, key string) (AuthProvid
 	if err != nil {
 		return AuthProvider{}, false, fmt.Errorf("store: provider %s: %w", key, err)
 	}
+	p.ClientSecret, p.SecretLost = s.openSecret(p.UUID, p.kept)
 	return p, true, nil
 }
 
@@ -262,10 +270,15 @@ func (s *Store) AddProvider(ctx context.Context, p AuthProvider, by int64) (Auth
 		return AuthProvider{}, err
 	}
 	now := s.nowText()
+	uuid := newUUID()
+	sealed, err := s.sealSecret(uuid, p.ClientSecret)
+	if err != nil {
+		return AuthProvider{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_providers (uuid, key, name, issuer, client_id, client_secret, scopes, auto_create, auto_role_id, auto_domains,
 		groups_claim, allowed_groups, enabled, created_at, updated_at, updated_by, origin)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), p.Key, p.Name, p.Issuer, p.ClientID, p.ClientSecret, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
+		uuid, p.Key, p.Name, p.Issuer, p.ClientID, sealed, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
 		p.GroupsClaim, groupsText(p.AllowedGroups), p.Enabled, now, now, nullID(by), s.nodeID); err != nil {
 		return AuthProvider{}, fmt.Errorf("store: add provider %s: %w", p.Key, err)
 	}
@@ -306,9 +319,17 @@ func (s *Store) UpdateProvider(ctx context.Context, key string, change func(*Aut
 	if err != nil {
 		return AuthProvider{}, err
 	}
+	// a lost secret not written again stays as kept, which a key found
+	// again opens
+	sealed := p.kept
+	if !p.SecretLost || p.ClientSecret != "" {
+		if sealed, err = s.sealSecret(p.UUID, p.ClientSecret); err != nil {
+			return AuthProvider{}, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE auth_providers SET name = ?, issuer = ?, client_id = ?, client_secret = ?, scopes = ?, auto_create = ?, auto_role_id = ?, auto_domains = ?,
 		groups_claim = ?, allowed_groups = ?, enabled = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-		p.Name, p.Issuer, p.ClientID, p.ClientSecret, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
+		p.Name, p.Issuer, p.ClientID, sealed, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
 		p.GroupsClaim, groupsText(p.AllowedGroups), p.Enabled, s.nowText(), nullID(by), s.nodeID, p.ID); err != nil {
 		return AuthProvider{}, fmt.Errorf("store: provider %s: %w", p.Key, err)
 	}

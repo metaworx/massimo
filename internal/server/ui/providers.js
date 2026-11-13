@@ -93,7 +93,7 @@ function providerForm(p, onCancel) {
   field("groups_claim").value = p ? p.groups_claim || "" : "";
   fillOptions(field("auto_role"), autoRoleOptions(p && p.auto_role));
   field("auto_role").value = p ? p.auto_role : "viewer";
-  form.querySelector(".secret-hint").textContent = t(p && p.has_secret ? "providers.secretKept" : "providers.secretNone");
+  form.querySelector(".secret-hint").textContent = t(p && p.secret_lost ? "providers.secretLost" : p && p.has_secret ? "providers.secretKept" : "providers.secretNone");
   const autoOnly = () => {
     for (const el of form.querySelectorAll(".auto-only")) el.classList.toggle("hidden", !field("auto_create").checked);
   };
