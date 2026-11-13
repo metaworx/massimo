@@ -77,11 +77,12 @@ below), theme the page it is for.
 | `ladder` | `png/`: the icon at 64, 128, 180, 192, 1024 px, the small one at 16, 24, 32, 48 px |
 | `tile` | `svg/` and `png/`: the mark in white on a blue square, for an app, at 180, 192, 512 px |
 | `favicon` | `favicon.ico`, 16 to 256 px, the small icon up to 48 |
-| `homeassistant` | `homeassistant-brand/`: `icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png` and their `dark_` ones |
+| `homeassistant` | `homeassistant-brand/`: `icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png` and their `dark_` ones, trimmed to what is drawn as Home Assistant's brand rules ask - the icon a square on the mark's wider side |
 | `turn-fast` | `anim/`: the turn at 40, 80 and 160 ms a frame - 80 frames of 4.5°, a turn in 3.2, 6.4 or 12.8 s - as GIF and WebP |
 | `turn-slow` | `anim/`: the turn at 1 s and 3 s a frame - 800 frames of 0.45°, a turn in 13 min 20 s or 40 min - as GIF |
 | `tick` | `anim/`: 60 frames of a second, 6° each, a turn a minute, as GIF |
 | `frames` | `frames/`: every frame drawn for the animations, as SVG |
+| `ui` | the web UI's files, flat, by fixed names; `make ui-brand` writes them (below) |
 
 Every turn is a seamless loop, without a pause. A GIF knows transparency only
 on or off: its frames are drawn at four times their size, scaled down, and
@@ -91,3 +92,31 @@ keep the soft ones.
 
 A full build of every flavour is about 14,000 frames: ten minutes on sixteen
 cores, and about 200 MB.
+
+## The web UI's files
+
+`make ui-brand` builds the `ui` scope of the chosen flavour, `grayorange`
+with the i's dot in orange, into `internal/server/ui/brand/`, which the
+server embeds; it makes `tools/brand/.venv` first where there is none,
+which needs the network once.
+The folder is the tool's: its marker `.make_brand` is committed with the
+files, and the next run replaces them all.
+Whoever changes the mark runs it and commits the files with the change;
+the Go build needs no Python.
+
+| File | What |
+|------|------|
+| `brand.svg` | a sprite of symbols without colours: `logo-cover`, `logo-back`, `logo-m`, `logo-hour`, `logo-minute`, `logo-letters`, `logo-dot`, and the small mark's `mark-cover`, `mark-back`, `mark-m`, `mark-hour`, `mark-minute` |
+| `brand.css` | the mark's colours for light and dark pages as `--brand-back`, `--brand-m`, `--brand-hands`, in `style.css`'s pattern; the classes `brand-cover`, `brand-back`, `brand-m`, `brand-hands`, `brand-letters` that colour the sprite's parts; the logo's proportions |
+| `favicon.svg` | the small mark, the light colours, and the dark ones under the browser's dark mode |
+| `favicon.ico` | as the `favicon` scope makes it |
+| `tile-192.png`, `tile-512.png` | the tile, for the manifest's `any` icons and the notifications |
+| `maskable-192.png`, `maskable-512.png` | the tile's blue as a full square, the mark at 0.62, within the circle a maskable icon keeps |
+| `apple-touch-180.png` | the same square, for iOS, which rounds the corners itself |
+
+A page draws a part with `<use href="ui/brand/brand.svg#logo-m" class="brand-m"/>`;
+the cover, first, takes `--brand-cover`, else the page's `--bg`, so that the
+word under the drawing shows until the sprite has come
+(`docs/ui.md`, "Header").
+The minute hand with the hub's square is a part of its own, for a turn the
+page might draw one day.

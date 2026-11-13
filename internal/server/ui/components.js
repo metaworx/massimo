@@ -571,6 +571,48 @@ function pageBar(page) {
   menu.addEventListener("toggle", mark);
 }
 
+// BRAND_PARTS are the parts of Massimo's mark in the sprite
+// (ui/brand/brand.svg, make ui-brand, tools/brand/README.md), each with
+// the class that colours it (ui/brand/brand.css): the cover first.
+const BRAND_PARTS = [
+  ["cover", "brand-cover"],
+  ["back", "brand-back"],
+  ["m", "brand-m"],
+  ["hour", "brand-hands"],
+  ["minute", "brand-hands"],
+];
+
+// brandMarks draws Massimo's logo over every element marked data-brand,
+// whose own text, the word, stays: under the drawing's cover once the
+// sprite has come, in view until then and where it never comes, and what
+// a screen reader reads. Each gets the full logo and the small mark, of
+// which style.css shows one; the drawings are hidden from screen readers.
+function brandMarks(root = document) {
+  const NS = "http://www.w3.org/2000/svg";
+  const draw = (cls, prefix, parts) => {
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", cls);
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    for (const [part, partClass] of parts) {
+      const use = document.createElementNS(NS, "use");
+      use.setAttribute("href", "ui/brand/brand.svg#" + prefix + "-" + part);
+      use.setAttribute("class", partClass);
+      svg.appendChild(use);
+    }
+    return svg;
+  };
+  for (const el of root.querySelectorAll("[data-brand]")) {
+    if (el.querySelector("svg")) continue;
+    el.append(
+      draw("brand-logo", "logo", [...BRAND_PARTS, ["letters", "brand-letters"], ["dot", "brand-hands"]]),
+      draw("brand-mark", "mark", BRAND_PARTS),
+    );
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => brandMarks());
+
 // stickyHeader keeps the page's header at the top (style.css .top): its
 // height in --top-h, for the page's row under it, and the class
 // scrolled on the body once the page has scrolled, which compacts the

@@ -77,6 +77,22 @@ so the proxy passes the `Host` the browser used.
 Caddy does that by itself; nginx needs `proxy_set_header Host $host`,
 as its sample has.
 
+## The scheme
+
+The proxy shows in the server's System Info, `proxy` in `GET /api/v1/system`:
+the scheme, host and port it serves the server at,
+and for HTTPS the proxy's certificate,
+which the server reads through a TLS handshake with the proxy.
+The scheme comes from whichever of the usual headers the proxy sends;
+`docs/api-v1.md`, "GET /api/v1/system", has them in order.
+Without one, System Info shows no scheme and no certificate,
+and nothing else changes.
+Caddy sends `X-Forwarded-Proto` by itself;
+nginx needs `proxy_set_header X-Forwarded-Proto $scheme`, as its samples have.
+A client's own `Forwarded` header passes nginx as it is,
+and the server reads it before `X-Forwarded-Proto`,
+so the samples drop it with `proxy_set_header Forwarded ""`.
+
 ## nginx
 
 ```nginx
@@ -95,6 +111,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Forwarded "";
     }
 }
 ```
@@ -177,6 +195,8 @@ and the box needs no port open to the internet.
            proxy_set_header Host $host;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
            proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_set_header Forwarded "";
        }
    }
    ```
@@ -268,7 +288,7 @@ a name of its own (a subdomain) avoids the question.
 
 ## What the server does not need
 
-`X-Forwarded-Proto` is unused:
+The scheme only feeds System Info (see "The scheme" above):
 the server sets no cookies and builds no absolute URLs,
 and HSTS comes from the proxy.
 A second listener is not needed either: one `-listen` serves the proxy,

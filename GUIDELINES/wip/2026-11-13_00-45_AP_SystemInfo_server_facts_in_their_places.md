@@ -1,24 +1,22 @@
-# AP SystemInfo v1.1: Server facts in their places
+# AP SystemInfo v1.2: Server facts in their places
 
 ## TL;DR
 
 A server never lists its own proxies' Cubes as found,
-and the web UI's server facts sit in a System Info tile,
-the Cube's in its card, the header keeping the current Cube's budget.
-v1.1 adds Block 7: the server's clock, its addresses, its full host name,
-and the proxy in front of it with that proxy's certificate.
+and the web UI's server facts sit in a System Info tile, the Cube's in its card,
+the header keeping the current Cube's budget. v1.2 adds Blocks 8 and 9:
+the tile's times to the second with the browser's on hover,
+the interfaces named, a proxy without a scheme header,
+and a sign-in page that no longer flickers.
 
-- Blocks 1 to 6 done: #198, #202 (with a CI fix), out in v0.15.0-alpha.1
-- "Server time" after "Server started": the server's zone, ticking,
-  a note when it differs from the browser's clock
-- "IP addresses" after "Host name": an interface a line, MAC then addresses,
-  for the API's and the Cube proxies' listeners; `*` the API's
-- host name → `hostname -f`, the host bold, the domain regular
-- through a trusted proxy that says HTTPS (every common header) → "(proxied)",
-  the address it serves, its certificate read best effort,
-  at the first proxied request after the start and daily
-- the page on HTTPS, the server not, no trusted proxy → "(proxied)",
-  `-trusted-proxies` named
+- Blocks 1 to 7 done: #198, #202, #208, #211; out from v0.15.0-alpha.1
+- "Server started" → seconds, the server's zone, the uptime after it;
+  both times → the browser's zone in a tooltip
+- an interface's line → its name, its MAC, its addresses, as text that wraps
+- proxy without `X-Forwarded-Proto` → the page's own scheme and address,
+  the missing header named; no port 80 guessed
+- page start → signed out; the header's buttons once the server has said
+  who is in (or nothing)
 
 ### Blocks
 
@@ -39,8 +37,13 @@ and the proxy in front of it with that proxy's certificate.
 7. SystemDetails: `GET /api/v1/system`'s clock, full host name,
    interfaces and proxy, the proxy's certificate checked best effort;
    the four rows; the documents and six languages; its own pull request
+8. SystemDetails2: the start with seconds, zone and uptime;
+   both times in the browser's zone on hover; the interfaces named;
+   a proxy without a scheme header; tests, documents, six languages
+9. SignedOutStart: the page starts signed out, the header's buttons shown once
+   the session is known; a test holding the first request
 
-Blocks 2 to 6 are one pull request.
+Blocks 2 to 6 are one pull request; Blocks 8 and 9 another.
 
 ## Discussion
 
@@ -139,6 +142,32 @@ on System Info as v0.15.0-alpha.1 shows it): "looking great!", and
   no standard header carries it.
 - **D24-A**, as recommended: this plan, v1.1, Block 7 in its own pull request.
 
+**v1.2, the owner's requests** (2026-11-13, on System Info on the
+Raspberry Pi with a build of Block 7):
+
+- "show seconds and timezone for server start too. uptime after the timezone."
+- "tooltip showing the time in the browser's timezone both for server start
+  and current time."
+- "add interface name before MAC."
+- "loading the login screen flickers the toolbar buttons. they should be
+  hidden by default, and only shown if the session is logged in."
+
+The same screenshot showed the certificate row as "the proxy names no scheme
+(proxied)" at port 80: the Pi's proxy forwards the client's address,
+trusted, but sends no `X-Forwarded-Proto`, while the browser is on HTTPS.
+
+**The owner's decisions on them** (2026-11-13, `PLAN++ as recommended`):
+
+- **D33-A:**
+  this plan, v1.2, Blocks 8 and 9 in one pull request.
+- **D34-A:**
+  a proxy that names no scheme: the page fills in its own scheme and address,
+  and the row names the header the proxy does not send.
+- **D35-A:**
+  the header's buttons once the server has answered who is in: a session,
+  an open server, or no answer at all,
+  so that a server out of reach still shows the page and its message.
+
 **Names chosen here**, routine and not the owner's decisions:
 
 - the route `GET /api/v1/system`, with the capability `read`,
@@ -151,6 +180,7 @@ on System Info as v0.15.0-alpha.1 shows it): "looking great!", and
 - the tile `sys-info` in `partials/system-info.html`;
   the header's line `cube-stats`
 - the branches `claude/own-cubes` (Block 1) and `claude/system-info` (Blocks 2 to 6)
+- Blocks 8 and 9's branch `claude/system-info-start`
 - Block 7's fields `now`, `time_zone`, `fqdn`, `interfaces` (`name`, `mac`,
   `addresses` of `ip` and `api`), `api_port` and `proxy` (`proto`, `host`,
   `port`, `certificate`); the branch `claude/system-details`
@@ -164,7 +194,8 @@ the pending notice under the header, for everyone.
 
 **Who runs it:**
 this session, under the owner's `PLAN++ SystemInfo` of 2026-11-13,
-and Block 7 under their `PLAN++` on v1.1's requests the same day.
+Block 7 under their `PLAN++` on v1.1's requests the same day,
+and Blocks 8 and 9 under their `PLAN++ as recommended` on v1.2's.
 The pull requests are pushed and opened; merging them is the owner's.
 Nothing is sent to a real box.
 
@@ -326,6 +357,46 @@ from `renderHeader`'s Cube; it stays when the header compacts (D19-A).
 - **Without a trusted proxy** the server cannot tell; the page can:
   `location.protocol` is `https:` while the server serves no TLS.
   The row then says "(proxied)" and names `-trusted-proxies`.
+
+### The tile's times, interfaces and proxy (Block 8)
+
+- **"Server started"** is today `fmtInstant` of `started_at` in the browser's
+  zone, to the minute, with its age.
+  The server's `started_at` carries its offset, and `time_zone` names its zone,
+  as the clock has them: the start is shown as the clock is,
+  to the second in the server's zone (or at its offset,
+  where the browser does not know the zone), then the zone,
+  then the age as the uptime.
+- **The tooltips** give the same instant in the browser's own zone,
+  named (`Intl.DateTimeFormat().resolvedOptions().timeZone`);
+  the clock's follows its ticks.
+- **An interface's line** is a flex row today, so that on a narrow tile the
+  MAC takes a line of its own and the addresses wrap as one item.
+  It becomes text: the name, the MAC (where it has one), the addresses,
+  wrapping as words do.
+- **A proxy without a scheme header.**
+  `forwardedTarget` leaves `proto` empty and takes the port 80 then.
+  The port stays unknown (`0`) where neither the scheme nor a port is said,
+  and `port` is left out of the answer then.
+  The page knows its own scheme and address (`location`):
+  where the server says a trusted proxy named no scheme,
+  the row shows the page's, says the proxy sends no `X-Forwarded-Proto`,
+  and that with it the server reads the proxy's certificate.
+
+### The sign-in page's flicker (Block 9)
+
+The page's `<body>` has no class at first, so the header's line shows the
+Cube choice and the page buttons from the first paint.
+`init` (`app.js`) loads the language, then asks who is in (`loadMe`,
+`login.js`); a server that wants a sign-in answers 401,
+`api()` opens the dialog (`askLogin`),
+which puts `signed-out` on the body and hides all but the name,
+the version and the dialog.
+Between the first paint and that answer the buttons show: the flicker.
+The body starts with `signed-out`, and `loadMe` takes it away once the server
+has answered: signed in, open, or not at all (D35-A),
+unless the dialog is open, which keeps it until a sign-in (as now).
+Log out goes through `loadMe` again, as before.
 
 ### What changes, by file
 
@@ -491,6 +562,43 @@ Branch `claude/system-info` from `main`, one pull request for Blocks 2 to 6.
 the Go gate, `go test -race` of the server, `make cross`, `make ui-test`.
 Branch `claude/system-details` from `main`, its own pull request.
 
+### Block 8: SystemDetails2
+
+1. `proxied.go`:
+   the port unknown where neither the scheme nor a port is said;
+   `TestForwardedTarget`.
+2. `update.js`:
+   the start as the clock, with the zone and the uptime;
+   both times' tooltips in the browser's zone; the interface's line as text;
+   the proxy without a scheme from the page's own `location`.
+3. `style.css`:
+   the interface's line as text.
+4. The texts in six languages; `docs/ui.md`, `docs/api-v1.md`.
+5. `tools/ui-test/test_system_info.py`:
+   the start's seconds, zone and uptime; the tooltips; the names;
+   a proxy without a scheme.
+6. `CHANGELOG.d/Changed/claude-system-info-start.md`.
+
+**Verification:**
+the Go gate, `make ui-test`.
+
+### Block 9: SignedOutStart
+
+1. `index.html`:
+   `<body class="signed-out">`.
+2. `login.js`:
+   `loadMe` takes `signed-out` away once the server has answered,
+   unless the sign-in dialog is open.
+3. A UI test: the first `GET /api/v1/me` held,
+   the header's buttons hidden meanwhile, shown once it is answered;
+   the sign-in as before.
+4. `docs/ui.md`; `CHANGELOG.d/Fixed/claude-signed-out-start.md`.
+
+**Verification:**
+`make ui-test`, the Go gate, `make cross`.
+Branch `claude/system-info-start` from `main`,
+one pull request for Blocks 8 and 9.
+
 ## Proposed commit message
 
 Block 1:
@@ -518,6 +626,9 @@ Blocks 2 to 6, one commit each, in the same form:
 
 Block 7: `feat(ui): System Info shows the server's clock, addresses, full name and proxy`.
 
+Block 8:
+`feat(ui): System Info's times to the second, in the browser's zone on hover, and its interfaces named`; Block 9: `fix(ui): The sign-in page shows no buttons before the server has said who is in`.
+
 ## Change History
 
 - v1.0 (2026-11-13): the first revision, by `PLAN++ SystemInfo`,
@@ -526,4 +637,9 @@ Block 7: `feat(ui): System Info shows the server's clock, addresses, full name a
 - v1.1 (2026-11-13): Block 7, SystemDetails,
   the owner's four requests on System Info, by `PLAN++` with D21-A,
   D22-A and D23 as the owner gave them and D24-A; Blocks 1 to 6 marked done;
+  the TL;DR for the plan as it stands.
+- v1.2 (2026-11-13): Blocks 8 and 9,
+  the owner's four requests on System Info and the sign-in page and the proxy
+  row's scheme, by `PLAN++ as recommended` with D33-A, D34-A and D35-A;
+  Block 7 and the scroll test's fix marked done;
   the TL;DR for the plan as it stands.

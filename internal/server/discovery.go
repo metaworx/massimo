@@ -12,7 +12,9 @@ package server
 // is listed as found while it answers: from its first answer to the end
 // of the first complete run it does not answer. cubeFound and cubeGone
 // are the one place each where a Cube becomes found and gone. One
-// configured by serial only follows the address it answers from.
+// configured by serial only follows the address it answers from. A call
+// of the API gets a run begun after it; the discovery loop shares a run
+// going.
 
 import (
 	"context"
@@ -200,29 +202,71 @@ func localIPs() map[string]bool {
 }
 
 // discover runs one discovery and records what it found. A caller that
-// comes while a run is going waits for it and gets its result.
+// comes while a run is going waits for it and gets its result: the
+// discovery loop, whose runs need not begin after it asks.
 func (s *Server) discover(ctx context.Context) (*discoveryRun, error) {
 	s.discMu.Lock()
 	run := s.discRun
 	if run == nil {
-		run = &discoveryRun{done: make(chan struct{}), ranAt: time.Now()}
-		s.discRun = run
-		s.mu.RLock()
-		runCtx := s.ctx
-		s.mu.RUnlock()
-		if runCtx == nil {
-			runCtx = context.Background()
-		}
-		go func() {
-			// Not tied to the caller's request: others may be waiting.
-			run.found, run.err = s.discoverOnce(runCtx)
-			s.discMu.Lock()
-			s.discRun = nil
-			s.discMu.Unlock()
-			close(run.done)
-		}()
+		run = s.startRun(nil)
 	}
 	s.discMu.Unlock()
+	return waitRun(ctx, run)
+}
+
+// discoverAfter is discover for a caller that wants a run begun after
+// its call, the API's: a run going sent its requests before the call,
+// and does not hear a Cube plugged in or moved just before it. While a
+// run is going it waits for the run after it, which starts as that one
+// ends and which every such caller that came meanwhile shares.
+func (s *Server) discoverAfter(ctx context.Context) (*discoveryRun, error) {
+	s.discMu.Lock()
+	var run *discoveryRun
+	switch {
+	case s.discRun == nil:
+		run = s.startRun(nil)
+	case s.discNext != nil:
+		run = s.discNext
+	default:
+		run = &discoveryRun{done: make(chan struct{})}
+		s.discNext = run
+	}
+	s.discMu.Unlock()
+	return waitRun(ctx, run)
+}
+
+// startRun starts run as the run going, a new one where it is nil, and
+// returns it; its end starts the run waiting after it (discNext). discMu
+// is held.
+func (s *Server) startRun(run *discoveryRun) *discoveryRun {
+	if run == nil {
+		run = &discoveryRun{done: make(chan struct{})}
+	}
+	run.ranAt = time.Now()
+	s.discRun = run
+	s.mu.RLock()
+	runCtx := s.ctx
+	s.mu.RUnlock()
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	go func() {
+		// Not tied to a caller's request: others may be waiting.
+		run.found, run.err = s.discoverOnce(runCtx)
+		s.discMu.Lock()
+		s.discRun = nil
+		if next := s.discNext; next != nil {
+			s.discNext = nil
+			s.startRun(next)
+		}
+		s.discMu.Unlock()
+		close(run.done)
+	}()
+	return run
+}
+
+// waitRun waits for run to end, or for ctx.
+func waitRun(ctx context.Context, run *discoveryRun) (*discoveryRun, error) {
 	select {
 	case <-run.done:
 		return run, run.err
@@ -563,10 +607,10 @@ func (s *Server) wakeDiscovery() {
 }
 
 // postDiscover handles POST /api/v1/cubes/discover: one run now, or the
-// one already going; the answer lists every Cube that answered,
-// configured or not.
+// one after the run going (discoverAfter); the answer lists every Cube
+// that answered, configured or not.
 func (s *Server) postDiscover(w http.ResponseWriter, r *http.Request) error {
-	run, err := s.discover(r.Context())
+	run, err := s.discoverAfter(r.Context())
 	if errors.Is(err, errNoDiscoverySocket) {
 		return fail(http.StatusServiceUnavailable, "discovery: %v", err)
 	}

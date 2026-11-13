@@ -1434,7 +1434,9 @@ paths:
       x-capability: discover
       description: |
         UDP discovery, about three seconds. A call while a run is going
-        waits for it and gets its result. serve also runs it at the start
+        waits for the run after it, which every call that came meanwhile
+        shares: never a run begun before the call, so up to about six
+        seconds. serve also runs it at the start
         and every -discover-interval (30 minutes). A Cube that is not
         configured is announced as a cube_found event on every Cube's
         stream when it first answers, and again when it answers after a

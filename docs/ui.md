@@ -61,13 +61,21 @@ where the server no longer holds it, the page reloads the rooms
 ## Header
 
 The header's line reads, from the left:
-**Massimo** with the server's version, the time of the last update with **↻**,
+Massimo's logo with the server's version, the time of the last update with **↻**,
 the Cube's clock;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
-and **☰** beside the house and 👤 holds **Log** and **System settings**,
-highlighted while one of them is shown.
+**☰** beside the house and 👤 holds **Log** and **System settings**,
+highlighted while one of them is shown,
+and the logo is the mark alone, the M with the clock in its V.
+
+The logo lies over the word "Massimo", which a screen reader reads:
+the word shows until the drawing has come (`ui/brand/brand.svg`,
+made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does.
+Its colours follow the light or dark mode chosen, its letters the page's text.
+The sign-in, the form that creates the first owner and the apps' connect page
+show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its first line without the time of the last update
@@ -522,6 +530,14 @@ The page is at most 640 px wide, as My settings is.
 `manifest.webmanifest` names the page, its icons and its colours,
 so that a phone's browser offers to add it to the Home Screen,
 where it opens without the browser's bar.
+Its icons are Massimo's mark, from `ui/brand/` (`make ui-brand`,
+`tools/brand/README.md`): the mark in white on a blue rounded square,
+and for the launchers that cut an icon to a shape of their own (Android's
+maskable icons, the Home Screen of iOS) the same blue as a full square,
+the mark within the circle they keep.
+The browser's tab shows the small mark: `favicon.svg`,
+in the colours of the browser's own light or dark,
+and `favicon.ico` at `/favicon.ico` for browsers without SVG icons.
 Its service worker, `sw.js`, beside the page so that it covers the page,
 shows a notification in the language the page last told it
 (the texts of the page's tables, kept for when the server is out of reach),
