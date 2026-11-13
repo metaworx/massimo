@@ -1,0 +1,5 @@
+# The brand generator's packages (make_brand.py), pinned as last built.
+cairosvg==2.9.1
+skia-pathops==0.9.2
+fonttools==4.68.0
+pillow==13.0.0

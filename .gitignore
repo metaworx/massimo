@@ -25,6 +25,8 @@ massimo-backup-*
 
 # Python environment of the web UI smoke test
 /tools/ui-test/.venv/
+# Python environment of the brand generator
+/tools/brand/.venv/
 # what the suite leaves behind: the traces, screenshots and videos of
 # failed tests, and pytest's cache
 /tools/ui-test/results/
