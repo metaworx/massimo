@@ -211,7 +211,9 @@ func TestBackupsLogged(t *testing.T) {
 // A Cube that follows discovery and answers from a new address says so
 // in its own log, from where to where.
 func TestAddressChangedLogged(t *testing.T) {
-	_, ts, s, _ := startStored(t, Options{})
+	// The Cube is lost at the new address and searched for: on the
+	// loopback, not the LAN.
+	_, ts, s, _ := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
 	rt := s.cubes["keq0000100"]
 	rt.cfgMu.Lock()
 	rt.cfg.FollowDiscovery = true

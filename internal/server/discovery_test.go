@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -527,6 +528,195 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 	if len(cubes) != 1 {
 		t.Fatalf("a configured cube also listed as found: %s", cubes)
 	}
+}
+
+// requestCounter is a discovery target that answers nothing and counts
+// the requests it gets.
+func requestCounter(t *testing.T) (addr string, count func() int) {
+	t.Helper()
+	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pc.Close() })
+	var n atomic.Int64
+	go func() {
+		buf := make([]byte, 512)
+		for {
+			if _, _, err := pc.ReadFrom(buf); err != nil {
+				return
+			}
+			n.Add(1)
+		}
+	}()
+	return pc.LocalAddr().String(), func() int { return int(n.Load()) }
+}
+
+// noRunGoing reports whether no discovery run is going.
+func noRunGoing(s *Server) bool {
+	s.discMu.Lock()
+	defer s.discMu.Unlock()
+	return s.discRun == nil
+}
+
+// movingCube is a Cube configured by serial only, connected at
+// 127.0.0.2 with no run going, which can move to 127.0.0.3 on the same
+// port: its two homes, their discovery responders (the one at 127.0.0.3
+// silent), and a request counter among the targets.
+type movingCube struct {
+	t             *testing.T
+	ts            *httptest.Server
+	s             *Server
+	first, second *fakecube.Server
+	at2, at3      *fakecube.DiscoveryResponder
+	port          string
+	requests      func() int
+}
+
+func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
+	t.Helper()
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &movingCube{t: t, first: &fakecube.Server{Greeting: greeting}, second: &fakecube.Server{Greeting: greeting}}
+	addr, err := m.first.Start("127.0.0.2:0")
+	if err != nil {
+		t.Skipf("cannot listen on 127.0.0.2: %v", err)
+	}
+	t.Cleanup(func() { m.first.Close() })
+	_, m.port, _ = net.SplitHostPort(addr)
+	port, _ := strconv.Atoi(m.port)
+	if _, err := m.second.Start("127.0.0.3:" + m.port); err != nil {
+		t.Skipf("cannot listen on 127.0.0.3: %v", err)
+	}
+	t.Cleanup(func() { m.second.Close() })
+	if m.at2, err = fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107); err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { m.at2.Close() })
+	if m.at3, err = fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107); err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { m.at3.Close() })
+	m.at3.SetSilent(true)
+	counter, requests := requestCounter(t)
+	m.requests = requests
+	m.ts, m.s = startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port, AddressRetry: retry,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{m.at2.Addr(), m.at3.Addr(), counter}})
+	eventually(t, "the cube at 127.0.0.2", func() bool { return m.at(addr) })
+	eventually(t, "the run at the start to end", func() bool { return noRunGoing(m.s) })
+	return m
+}
+
+// at reports whether the Cube is connected at addr.
+func (m *movingCube) at(addr string) bool {
+	var cubes []map[string]any
+	getJSON(m.t, m.ts, "", "/api/v1/cubes", &cubes)
+	return len(cubes) == 1 && cubes[0]["connected"] == true && cubes[0]["address"] == addr
+}
+
+// A Cube configured by serial that is lost is searched for at once,
+// and followed to its new address without a call of the API: the minute
+// between searches is left as it is.
+func TestALostCubeIsSearchedForAtOnce(t *testing.T) {
+	m := startMovingCube(t, 0)
+	m.at2.SetSilent(true)
+	m.at3.SetSilent(false)
+	m.first.Close()
+	eventually(t, "the cube at 127.0.0.3", func() bool {
+		return m.at("127.0.0.3:"+m.port) && m.second.Connections() == 1
+	})
+}
+
+// A Cube still lost after the search at the loss is searched for again
+// every AddressRetry until it answers.
+func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
+	m := startMovingCube(t, 200*time.Millisecond)
+	m.at2.SetSilent(true)
+	before := m.requests()
+	m.first.Close()
+	// The search at the loss hears nobody: both homes are silent.
+	eventually(t, "a search after the loss", func() bool { return m.requests() > before && noRunGoing(m.s) })
+	if m.at("127.0.0.3:" + m.port) {
+		t.Fatal("followed to a silent address")
+	}
+	m.at3.SetSilent(false)
+	eventually(t, "the cube at 127.0.0.3", func() bool {
+		return m.at("127.0.0.3:"+m.port) && m.second.Connections() == 1
+	})
+	// Back, it is no longer searched for.
+	eventually(t, "the last run to end", func() bool { return noRunGoing(m.s) })
+	time.Sleep(600 * time.Millisecond) // a run asked for before it was back
+	settled := m.requests()
+	time.Sleep(500 * time.Millisecond)
+	if n := m.requests(); n != settled {
+		t.Errorf("%d searches after the cube was back", n-settled)
+	}
+}
+
+// fixedCube starts a server over a Cube with a fixed address at
+// 127.0.0.1, which a responder at 127.0.0.3 answers discovery for, and
+// returns the Cube, a count of the warnings that it answers from another
+// address, and the request count.
+func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Server, connected func() bool, warnings, requests func() int) {
+	t.Helper()
+	greeting, err := fakecube.LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc = &fakecube.Server{Greeting: greeting}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fc.Close() })
+	elsewhere, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
+	if err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { elsewhere.Close() })
+	counter, requests := requestCounter(t)
+	var log syncBuffer
+	ts, srv := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, DiscoverInterval: interval,
+		AddressRetry: 100 * time.Millisecond, Logger: slog.New(slog.NewTextHandler(&log, nil)),
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{elsewhere.Addr(), counter}})
+	connected = func() bool {
+		var cubes []map[string]any
+		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+		return len(cubes) == 1 && cubes[0]["connected"] == true
+	}
+	eventually(t, "the cube connected", connected)
+	eventually(t, "no run going", func() bool { return noRunGoing(srv) })
+	warnings = func() int {
+		return strings.Count(log.String(), `msg="cube answers discovery from another address than configured"`)
+	}
+	return srv, fc, connected, warnings, requests
+}
+
+// Without periodic discovery, a lost Cube with a fixed address is not
+// searched for: discovery runs on request only, and cannot move it.
+func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
+	_, fc, connected, warnings, requests := fixedCube(t, 0)
+	fc.Close()
+	eventually(t, "the cube lost", func() bool { return !connected() })
+	time.Sleep(500 * time.Millisecond) // five AddressRetry
+	if n, w := requests(), warnings(); n != 0 || w != 0 {
+		t.Fatalf("%d searches, %d warnings, want none", n, w)
+	}
+}
+
+// With periodic discovery, a lost Cube with a fixed address is searched
+// for, and one that answers from another address is warned of.
+func TestALostFixedCubeWithAnIntervalIsSearchedFor(t *testing.T) {
+	s, fc, connected, warnings, requests := fixedCube(t, time.Hour)
+	// The run at the start may have warned already, where its wait heard
+	// the answer; the searches after the loss repeat until one does.
+	eventually(t, "the run at the start", func() bool { return requests() >= 1 && noRunGoing(s) })
+	before := warnings()
+	fc.Close()
+	eventually(t, "the cube lost", func() bool { return !connected() })
+	eventually(t, "a warning after the loss", func() bool { return warnings() > before })
 }
 
 // homes starts a fake Cube's TCP side on 127.0.0.2 and 127.0.0.3, one
