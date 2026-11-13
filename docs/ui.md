@@ -174,9 +174,18 @@ Every room has a tile:
   so it may be older.
   Radiator thermostats send the measured temperature only now and then,
   mostly after the valve moved.
-- **Open** in the tile's head means a window contact of the room reports an open window.
-  It shows how long ago the window was opened and, as tooltip,
-  which contacts are open; it goes as soon as the window is closed.
+- **Icons in the tile's head** say what is wrong in the room, each in its colour:
+  radio waves, a device the Cube could not reach or that lost its link
+  (red for a transmit error); a battery, one running low;
+  an open window, a window contact reporting it;
+  crossed arrows, the room's thermostats in different modes.
+  A tap on them lists the devices concerned, each once with its serial,
+  its badges led by the same icons and how long ago each came,
+  and for different modes each thermostat's mode;
+  Escape or a click outside closes the list.
+  An icon goes as soon as its problem does.
+  The room's virtual wall thermostat is not listed:
+  its flags are the wall thermostat's.
 - **"Values may be old"**:
   a thermostat of the room has not been heard from for more than 24 hours,
   and the note says how long.
@@ -191,16 +200,18 @@ Every room has a tile:
 - **AUTO** follows the week programme.
   **MANU** keeps the current temperature.
   **HOLIDAY** keeps a temperature until a date and time.
-- **"mixed"** next to the mode buttons means the room's thermostats are in
-  different modes, for example after another program set one of them.
-  The modes in use are outlined, and the note lists each device's mode.
+- With the room's thermostats in different modes, for example after another
+  program set one of them, the modes in use are outlined,
+  and the head's crossed arrows list each thermostat's mode.
 - The **⋯** menu starts a **Boost** (the valves open by the thermostats' boost
   settings for their boost time, then the room returns to its mode),
   locks or unlocks the buttons on the room's thermostats,
   and deletes a room that has no devices.
 - The room name or the **i** button opens the device list:
-  every device with its values (valve, set and measured temperature,
-  offset) and badges for battery, transmission errors, lock, window and mode.
+  every device with its type's icon before its name (a radiator, a wall
+  thermostat, a window, a leaf for the eco button), its values (valve, set
+  and measured temperature, offset), its problems as icons that list them,
+  as in the tile's head, and badges for lock, window and mode.
   Expert mode adds each device's type, serial number and radio address,
   as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
   the radio address is not.
@@ -209,6 +220,7 @@ Every room has a tile:
   Valve, measured temperature, window and a low battery show how old they are;
   in expert mode also the exact time, and when the device was last heard from.
   Expert mode lists the room's virtual wall thermostat after the devices,
+  a house with a thermometer its icon,
   with the devices its temperature comes from and its two settings:
   how a room without a wall thermostat takes its temperature
   (**Median** or **Mean** of its radiator thermostats)

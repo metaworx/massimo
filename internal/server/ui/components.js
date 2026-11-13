@@ -803,6 +803,59 @@ function pickerMenu(details, { items, value, onPick, shown }) {
   });
 }
 
+// problemsEl shows what is wrong in a place, wherever it is put (a
+// tile's head, a device's, a section card's): one icon per kind of
+// problem among its entries, in the order they come, each in the colour
+// of the worst tone of its kind, as the summary of a menu (dropdown)
+// that lists the entries, each with its icon, its name and a mono line
+// (a serial), then its badges, each led by its icon, with its age.
+// An entry is { icon, title, sub, items }, an item { kind, icon, tone,
+// mark, text, at, stale }: kind groups the summary's icons, an item without
+// one is listed but adds no icon (a device's mode beside its problems);
+// tone is a badgeEl kind ("bad", "warn", "fill-ok", …), which colours
+// the badge and, without "fill-", the icon, or mark where an item says
+// how its icon is coloured ("warn"); at is when the value came (ageEl). label names the problems to a screen reader and in the
+// tooltip. Null where no item has a kind: nothing is wrong there.
+function problemsEl(entries, label) {
+  const kinds = new Map(); // kind: { icon, tone }
+  for (const e of entries) {
+    for (const it of e.items) {
+      if (!it.kind) continue;
+      const k = kinds.get(it.kind) || { icon: it.icon, tone: "" };
+      const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
+      if (tone === "bad" || !k.tone) k.tone = tone;
+      kinds.set(it.kind, k);
+    }
+  }
+  if (!kinds.size) return null;
+  const details = elem("details", "menu problems");
+  const summary = document.createElement("summary");
+  summary.className = "problems-sum";
+  summary.title = label;
+  summary.setAttribute("aria-label", label);
+  for (const k of kinds.values()) summary.appendChild(iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
+  const list = elem("div", "menu-items problems-list");
+  for (const e of entries) {
+    if (!e.items.length) continue;
+    const who = elem("div", "problem-who");
+    if (e.icon) who.appendChild(iconEl(e.icon, "ni"));
+    who.appendChild(textEl("span", e.title, "problem-name"));
+    if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
+    const flags = elem("div", "problem-flags");
+    for (const it of e.items) {
+      const b = badgeEl("", it.tone || "mode");
+      if (it.icon) b.appendChild(iconEl(it.icon, "ni"));
+      b.appendChild(document.createTextNode(it.text));
+      const age = it.at ? ageEl(it.at, it.stale) : null; // app.js
+      if (age) b.appendChild(age);
+      flags.appendChild(b);
+    }
+    list.appendChild(elem("div", "problem-entry", who, flags));
+  }
+  details.append(summary, list);
+  return dropdown(details);
+}
+
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, closed by a choice of one of its items, by Escape
 // (the focus back on its summary) and by a click outside it. The room

@@ -933,21 +933,45 @@ button.subtle { color: var(--muted); }
 .temp-val.stale .temp-big { color: var(--muted); }
 .room .setpoint-row { padding-bottom: 18px; }
 
-/* "Open" in a tile's head while a window of the room is open */
-.window-open {
-  flex: none;
-  font-size: 0.85rem;
-  font-weight: 700;
-  padding: 2px 10px;
-  letter-spacing: 0.02em;
+/* What is wrong in a place (components.js problemsEl): an icon per
+   kind of problem in a pill, each in its tone's colour, which drops down
+   the devices with their badges; a device's type as an icon before its
+   name. */
+.menu.problems { flex: none; }
+.menu.problems > summary.problems-sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-color: var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  line-height: 1;
 }
+.problems-sum .ni { width: 18px; height: 18px; }
+.tone-bad { color: var(--bad); }
+.tone-warn { color: var(--warn); }
+.tone-ok { color: var(--ok); }
+.tone-info { color: var(--fill-info); }
+.menu-items.problems-list { min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 2px 0; gap: 0; }
+.problem-entry { display: grid; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.problem-entry:last-child { border-bottom: 0; }
+.problem-who { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+.problem-who .ni { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.problem-name { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
+.problem-sub { color: var(--muted); font-size: 0.8rem; }
+.problem-flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.problem-flags .flag { display: inline-flex; align-items: center; gap: 4px; }
+.problem-flags .flag .ni { width: 14px; height: 14px; }
+.device-type-icon { display: inline-flex; flex: none; color: var(--muted); }
+.device-type-icon .ni { width: 18px; height: 18px; }
 
 /* How old a value is (ageEl): muted and small; the exact time follows in
    expert mode where there is room for it. */
 .age { color: var(--muted); font-size: 0.8em; font-weight: 400; white-space: nowrap; margin-left: 6px; }
 .age .age-exact::before { content: " · "; }
 .temp-age .age { margin-left: 0; }
-.temp-age .age-exact, .window-open .age-exact { display: none; }
+.temp-age .age-exact { display: none; }
 .flag .age { color: inherit; opacity: 0.85; margin-left: 0.4em; }
 .device-vals.stale .num { color: var(--muted); }
 /* In the device list a value's age gets a line of its own under the
@@ -1023,7 +1047,6 @@ button.subtle { color: var(--muted); }
 .mode-row .tool-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tool-btn .ni { width: 18px; height: 18px; flex: none; }
 .mode-vacation { color: var(--warn); font-size: 0.9rem; white-space: nowrap; }
-.mode-mixed { color: var(--warn); font-size: 0.9rem; white-space: nowrap; cursor: help; }
 .mode-row .mode-group button.partial { border-color: var(--accent); border-style: dashed; }
 .suitcase { font-size: 1rem; }
 .house-modes {

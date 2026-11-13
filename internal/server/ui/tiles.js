@@ -224,7 +224,7 @@ function renderRoom(room) {
   const age = src && ageEl(received(src, "actual_temp"), src.stale);
   if (age) el.querySelector(".temp-age").appendChild(age);
 
-  renderWindowOpen(el, room);
+  renderProblems(el, room);
   renderNotReady(el, room);
   renderStale(el, room);
   renderSetpoint(el, room);
@@ -269,20 +269,75 @@ function renderNotReady(el, room) {
   notReady.classList.remove("hidden");
 }
 
-// renderWindowOpen shows "Open" in the tile's head while a window
-// contact of the room reports an open window, with the age of the latest
-// opening and the open contacts in its tooltip.
-function renderWindowOpen(el, room) {
-  const open = room.devices.filter((d) => d.state && d.state.window_open === true);
-  if (!open.length) return;
-  const badge = el.querySelector(".window-open");
-  badge.textContent = t("room.open");
-  const times = open.map((d) => received(d, "window_open")).filter((x) => x);
-  times.sort((a, b) => Date.parse(a) - Date.parse(b));
-  const age = ageEl(times[times.length - 1]);
-  if (age) badge.appendChild(age);
-  badge.title = t("room.openTitle", { list: open.map(deviceName).join(", ") });
-  badge.classList.remove("hidden");
+// PROBLEM_KINDS are the problems a tile's head shows as icons, in their
+// order there, each with its icon (index.html's sprite) and its name.
+const PROBLEM_KINDS = {
+  radio: "icon-radio",
+  battery: "icon-battery",
+  window: "icon-window-open",
+  mixed: "icon-shuffle",
+};
+
+// MODE_TONE colours a mode's badge: auto green, manual (and boost) amber,
+// holiday violet.
+const MODE_TONE = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" };
+
+// modeTone is the badge kind of a thermostat's mode.
+function modeTone(mode) {
+  const m = mode === "vacation" ? "holiday" : mode === "boost" ? "manual" : mode;
+  return MODE_TONE[m] || "mode";
+}
+
+// deviceIcon is the icon of a device's type: a radiator, a wall
+// thermostat, a window or a leaf for the eco button.
+function deviceIcon(d) {
+  if (d.type === "wall_thermostat") return "icon-wall";
+  if (d.type === "shutter_contact") return "icon-window";
+  if (d.type === "eco_button") return "icon-leaf";
+  return "icon-radiator";
+}
+
+// deviceProblems are what is wrong with a device, as problemsEl's items:
+// a radio fault (the Cube could not send to it, or it lost its link) and
+// a low battery; with window, also an open window, with its age.
+function deviceProblems(d, window) {
+  const s = d.state || {};
+  const out = [];
+  if (!d.reported) return out;
+  if (s.error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, tone: "bad", text: t("badge.transmitError") });
+  if (s.link_error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, tone: "warn", text: t("badge.linkError") });
+  if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
+  if (window && s.window_open === true) {
+    out.push({ kind: "window", icon: PROBLEM_KINDS.window, tone: "fill-bad", text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
+  }
+  return out;
+}
+
+// problemsLabel names the kinds of problems among items, for a screen
+// reader and the tooltip.
+function problemsLabel(items) {
+  const kinds = Object.keys(PROBLEM_KINDS).filter((k) => items.some((it) => it.kind === k));
+  return t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") });
+}
+
+// renderProblems shows in the tile's head what is wrong in the room, as
+// icons that open the list of its devices with their problems: a radio
+// fault, a low battery, an open window, and the thermostats' modes where
+// they differ. The room's virtual wall thermostat is not listed: its
+// flags are the wall thermostat's.
+function renderProblems(el, room) {
+  const modes = roomModes(room);
+  const mixed = modes.length > 1;
+  const entries = room.devices.map((d) => {
+    const items = deviceProblems(d, true);
+    if (mixed && isThermostat(d) && d.state && d.state.mode) {
+      items.push({ kind: "mixed", icon: PROBLEM_KINDS.mixed, tone: modeTone(d.state.mode), mark: "warn", text: modeName(d.state.mode) });
+    }
+    return { icon: deviceIcon(d), title: deviceName(d), sub: d.serial || d.rf_address, items };
+  });
+  const box = el.querySelector(".room-problems");
+  const p = problemsEl(entries, problemsLabel(entries.flatMap((e) => e.items))); // components.js
+  if (p) box.appendChild(p);
 }
 
 // renderStale warns on the tile when a device of the room is stale, by
@@ -327,7 +382,8 @@ function renderSetpoint(el, room) {
   const manuBtn = el.querySelector(".mode-manual");
   const holidayBtn = el.querySelector(".mode-holiday");
   // With mixed modes no button is pressed; those in use are marked as
-  // partly pressed, and a note names the devices and their modes.
+  // partly pressed, and the head's problems name the devices and their
+  // modes (renderProblems).
   const pressed = [[autoBtn, "auto"], [manuBtn, "manual"], [holidayBtn, "vacation"]];
   for (const [btn, m] of pressed) {
     const on = mixed ? false : mode === m || (m === "manual" && mode === "boost");
@@ -335,16 +391,6 @@ function renderSetpoint(el, room) {
     btn.classList.toggle("active", on);
     btn.classList.toggle("partial", part);
     btn.setAttribute("aria-pressed", part ? "mixed" : on ? "true" : "false");
-  }
-  const mixedNote = el.querySelector(".mode-mixed");
-  if (mixed) {
-    const list = room.devices
-      .filter((d) => isThermostat(d) && d.state && d.state.mode)
-      .map((d) => deviceName(d) + ": " + modeName(d.state.mode))
-      .join(", ");
-    mixedNote.textContent = t("room.mixed");
-    mixedNote.title = t("room.mixedTitle", { list });
-    mixedNote.classList.remove("hidden");
   }
   holidayBtn.addEventListener("click", () => openVacation(room, el));
   autoBtn.addEventListener("click", () => {
@@ -595,8 +641,9 @@ function renderDeleteConfirm(el, room) {
 
 // --- devices ----------------------------------------------------------
 
-// deviceBadges lists the badges of a device: the warnings, outlined,
-// then its mode or window state as a filled badge, always the last one.
+// deviceBadges lists the badges in words of a device: not reported,
+// stale and locked, outlined, then its mode or window state as a filled
+// badge, always the last one; its problems are icons (deviceProblems).
 // Each is [text, kind, the time of the value for its age].
 function deviceBadges(d) {
   const s = d.state || {};
@@ -606,17 +653,12 @@ function deviceBadges(d) {
     return out;
   }
   if (d.stale) out.push([staleText(d), "warn stale-badge"]);
-  if (s.battery_low) out.push([t("badge.batteryLow"), "bad", received(d, "battery_low")]);
-  if (s.error) out.push([t("badge.transmitError"), "bad"]);
-  if (s.link_error) out.push([t("badge.linkError"), "warn"]);
   if (s.panel_locked) out.push([t("badge.locked"), "warn"]);
   if (s.window_open !== undefined) {
     const at = received(d, "window_open");
     out.push(s.window_open ? [t("badge.open"), "fill-bad", at] : [t("badge.closed"), "fill-ok", at]);
   } else if (s.mode && isThermostat(d)) {
-    const mode = s.mode === "vacation" ? "holiday" : s.mode === "boost" ? "manual" : s.mode;
-    const cls = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" }[mode] || "mode";
-    out.push([modeName(s.mode), cls]); // a boost says so, coloured as manual
+    out.push([modeName(s.mode), modeTone(s.mode)]); // a boost says so, coloured as manual
   }
   return out;
 }
@@ -672,9 +714,16 @@ function deviceValues(grid, d, offset) {
   grid.classList.toggle("stale", !!d.stale);
 }
 
+// renderDevice draws a device of a room's list: its type's icon before
+// its name, its problems as icons that list them (problemsEl), then its
+// badges in words; in expert mode its type, serial and radio address.
 function renderDevice(d) {
   const el = fromTemplate("device-template");
   el.dataset.rf = d.rf_address;
+  const type = el.querySelector(".device-type-icon");
+  type.title = typeName(d.type);
+  type.setAttribute("aria-label", typeName(d.type));
+  type.appendChild(iconEl(deviceIcon(d), "ni"));
   // Type and radio address are for expert mode (.device-sub); a device
   // without a name keeps its S/N, the only way to tell it apart.
   el.querySelector(".device-name").textContent = d.name || t("device.unnamed") + " · " + (d.serial || d.rf_address);
@@ -683,6 +732,9 @@ function renderDevice(d) {
   clear(ids);
   ids.appendChild(deviceIds(d.serial, d.rf_address));
   const badges = el.querySelector(".device-badges");
+  const items = deviceProblems(d, false);
+  const problems = problemsEl([{ icon: deviceIcon(d), title: deviceName(d), sub: d.serial || d.rf_address, items }], problemsLabel(items));
+  if (problems) badges.appendChild(problems);
   for (const [label, kind, at] of deviceBadges(d)) {
     const b = badgeEl(label, kind);
     const age = ageEl(at, d.stale);
@@ -730,6 +782,10 @@ function renderVirtual(room) {
   el.classList.add("virtual", "expert-only");
   for (const b of el.querySelectorAll(".device-lock")) b.remove(); // the real wall thermostat's
   el.querySelector(".device-type").textContent = t("vwt.type");
+  const type = el.querySelector(".device-type-icon");
+  type.title = t("vwt.type");
+  type.setAttribute("aria-label", t("vwt.type"));
+  type.querySelector("use").setAttribute("href", "#icon-room");
   const from = (v.sources && v.sources.actual_temp) || [];
   if (from.length) el.querySelector(".device-sub").appendChild(textEl("span", t("vwt.from", { devices: from.join(", ") }), "device-seen"));
 
