@@ -1389,6 +1389,11 @@ for example because another program holds it.
 `serve` also runs discovery at the start and every 30 minutes (`-discover-interval`,
 `0` for on request only),
 and every minute while a Cube configured by serial has no address yet.
+A Cube whose connection is lost is searched for at the loss and every minute
+until it is back, since it may have taken another address:
+one following discovery always, one with a fixed address
+where `-discover-interval` is not `0`,
+which then logs that it answers from another address.
 The first time a Cube that is not configured answers,
 and again when it answers after a complete run without it,
 every Cube's event stream sends `cube_found`; a Cube found before a restart

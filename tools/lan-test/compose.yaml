@@ -5,7 +5,9 @@
 # with a MAC of eQ-3's prefix, which may take its link down as its cable
 # pulled, the box that runs serve beside avahi, its proxy answering
 # discovery for the Cube, a client with avahi of its own, and a searcher,
-# a second serve with no Cube that searches through its API. run.sh
+# a second serve with no Cube that searches through its API, and a
+# follower, a third serve with the Cube by its serial alone, which
+# follows it to another address after the box is gone. run.sh
 # builds massimo into LAN_TEST_WORK, which every container mounts at /m,
 # names the project, builds the image first, and brings the box up only
 # after the searcher's checks of the Cube alone. The box polls every 5 s,
@@ -61,3 +63,15 @@ services:
       MASSIMO_ENV_FILE: /dev/null
     command: [/m/massimo, -data, /tmp, serve, -listen, "0.0.0.0:8099", -announce=off,
               -proxy, "off", -discover-interval, "0"]
+
+  follower:
+    image: massimo-lan-test:avahi
+    pull_policy: never
+    networks: [lan]
+    volumes:
+      - "${LAN_TEST_WORK:?run tools/lan-test/run.sh}:/m:ro"
+    environment:
+      MASSIMO_ENV_FILE: /dev/null
+      MASSIMO_CUBE_KEQ0000100_NAME: follower
+    command: [/m/massimo, -data, /tmp, serve, -listen, "0.0.0.0:8099", -announce=off,
+              -proxy, "off", -discover-interval, "0", -poll, 5s]

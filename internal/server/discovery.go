@@ -14,7 +14,8 @@ package server
 // are the one place each where a Cube becomes found and gone. One
 // configured by serial only follows the address it answers from. A call
 // of the API gets a run begun after it; the discovery loop shares a run
-// going.
+// going. A lost Cube is searched for at the loss and while it lasts
+// (searchLost), since it may have taken another address.
 
 import (
 	"context"
@@ -38,7 +39,8 @@ const (
 	// DefaultDiscoveryWait is how long a run waits for answers.
 	DefaultDiscoveryWait = 3 * time.Second
 	// addressRetry is how often discovery runs while a Cube configured by
-	// serial has no address yet.
+	// serial has no address yet, or a Cube searchLost takes is lost; the
+	// default of Options.AddressRetry.
 	addressRetry = time.Minute
 )
 
@@ -552,22 +554,40 @@ func (s *Server) foundInfo(serial string) (foundCube, bool) {
 	return *f, true
 }
 
-// discoveryLoop runs discovery at the start and every DiscoverInterval,
-// every minute while a Cube configured by serial has no address, and
-// when wakeDiscovery asks; it is the only periodic discovery.
-func (s *Server) discoveryLoop(ctx context.Context) {
-	needAddress := func() bool {
-		for _, rt := range s.runtimes() {
-			if rt.client.Address() == "" {
-				return true
-			}
+// searchLost reports whether a Cube is searched for while its
+// connection is lost: one following discovery, which only discovery can
+// move, and any where periodic discovery is on, where a fixed address
+// that moved is warned of (noteSerial). Without an interval, discovery
+// runs on request only, but for the Cubes only it can connect.
+func (s *Server) searchLost(rt *runtime) bool {
+	cfg := rt.config()
+	return cfg.Addr == "" || cfg.FollowDiscovery || s.opts.DiscoverInterval > 0
+}
+
+// needSearch reports whether a Cube needs discovery now: one without an
+// address, or one searchLost takes that is lost.
+func (s *Server) needSearch() bool {
+	for _, rt := range s.runtimes() {
+		if rt.client.Address() == "" || rt.client.Lost() && s.searchLost(rt) {
+			return true
 		}
-		return false
+	}
+	return false
+}
+
+// discoveryLoop runs discovery at the start and every DiscoverInterval,
+// every AddressRetry (a minute) while needSearch, and when wakeDiscovery
+// asks: a Cube added without an address, or one lost (pump); it is the
+// only periodic discovery.
+func (s *Server) discoveryLoop(ctx context.Context) {
+	retry := s.opts.AddressRetry
+	if retry <= 0 {
+		retry = addressRetry
 	}
 	// next < 0 waits for wakeDiscovery only: no periodic discovery and
-	// every Cube has its address.
+	// no Cube in need of it.
 	next := time.Duration(0)
-	if s.opts.DiscoverInterval <= 0 && !needAddress() {
+	if s.opts.DiscoverInterval <= 0 && !s.needSearch() {
 		next = -1
 	}
 	for {
@@ -585,9 +605,10 @@ func (s *Server) discoveryLoop(ctx context.Context) {
 			s.log.Warn("discovery failed", "error", err)
 		}
 		switch {
-		case needAddress():
-			// One run a minute for every Cube without an address together.
-			next = addressRetry
+		case s.needSearch():
+			// One run a minute for every Cube without an address or lost
+			// together.
+			next = retry
 		case s.opts.DiscoverInterval > 0:
 			next = s.opts.DiscoverInterval
 		default:
@@ -597,8 +618,8 @@ func (s *Server) discoveryLoop(ctx context.Context) {
 }
 
 // wakeDiscovery runs the discovery loop now, for a Cube added or changed
-// without an address; the loop then repeats every addressRetry until
-// every Cube has one.
+// without an address, or one lost; the loop then repeats every
+// AddressRetry while needSearch.
 func (s *Server) wakeDiscovery() {
 	select {
 	case s.discWake <- struct{}{}:

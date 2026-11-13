@@ -192,8 +192,13 @@ type Options struct {
 	Install string
 	// DiscoverInterval is how often the server looks for Cubes on the LAN
 	// (discovery.go), with a first run at the start; 0 runs it only on
-	// request, and while a Cube configured by serial has no address.
+	// request, and while a Cube configured by serial has no address or a
+	// Cube following discovery is lost. Above 0, a lost Cube with a fixed
+	// address is searched for too (searchLost).
 	DiscoverInterval time.Duration
+	// AddressRetry is how often discovery runs while a Cube needs it
+	// (needSearch); 0 is a minute. The tests shorten it.
+	AddressRetry time.Duration
 	// BackupMinute is the unit of backups.auto_min and backups.auto_max
 	// and how often a Cube's configuration is looked at for its
 	// automatic backup (backups.go); 0 is a minute. The tests shorten it.
@@ -842,6 +847,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			switch e.Kind {
 			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
 				rt.bk.touch() // the configuration may have changed (backups.go)
+			}
+			if e.Kind == cubelan.EventDisconnected && s.searchLost(rt) {
+				s.wakeDiscovery() // it may have taken another address (discovery.go)
 			}
 			if e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventMetadata {
 				s.syncRooms(ctx, rt) // the rooms' uids (vwt.go)
