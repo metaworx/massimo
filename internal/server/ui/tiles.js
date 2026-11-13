@@ -299,15 +299,15 @@ function deviceIcon(d) {
 
 // deviceProblems are what is wrong with a device, as problemsEl's items:
 // a radio fault (the Cube could not send to it, or it lost its link) and
-// a low battery; with window, also an open window, with its age.
-function deviceProblems(d, window) {
+// a low battery; withWindow, also an open window, with its age.
+function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) return out;
   if (s.error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, tone: "bad", text: t("badge.transmitError") });
   if (s.link_error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, tone: "warn", text: t("badge.linkError") });
   if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
-  if (window && s.window_open === true) {
+  if (withWindow && s.window_open === true) {
     out.push({ kind: "window", icon: PROBLEM_KINDS.window, tone: "fill-bad", text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
   }
   return out;
