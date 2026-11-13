@@ -48,7 +48,10 @@ jobs:
   # devel build. code is false where fingerprint.sh finds the same code as
   # the base (a pull request's) or as the commit main was at (a push's):
   # documents alone, as config.ini's [ci] untested names them; every job
-  # but Guidelines is skipped, and main makes no devel build. A tag is
+  # but Guidelines is skipped, and main makes no devel build. site is true
+  # where the changes are the site's documents (config.ini, [ci] site) and
+  # untested ones alone, and none is shipped; code is then false too, Site
+  # runs, and a push to main deploys the site (Deploy site). A tag is
   # always tested whole, and fingerprint.sh's exit 2, an unknown commit
   # included, counts as code. tested is true where the Tested status on
   # the commit tested before holds this code's fingerprint: what passed
@@ -74,6 +77,7 @@ jobs:
     outputs:
       suite: ${{ steps.what.outputs.suite }}
       code: ${{ steps.what.outputs.code }}
+      site: ${{ steps.what.outputs.site }}
       tested: ${{ steps.what.outputs.tested }}
       fp: ${{ steps.what.outputs.fp }}
       ui: ${{ steps.what.outputs.ui }}
@@ -98,7 +102,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          suite=true code=true tested=false fp="" ui=true lan=true
+          suite=true code=true site=false tested=false fp="" ui=true lan=true
           ui_done=false lan_done=false fuzz_done=false
           fpsh=GUIDELINES/shared/tools/fingerprint.sh
           base="" prev=""
@@ -126,6 +130,25 @@ jobs:
             echo "documents alone since ${base}: no test reads them."
             code=false
           fi
+          # The site's documents (config.ini, [ci] site) and untested ones
+          # alone, none shipped: Site checks them, and a push to main deploys
+          # them. git diff's error, an unknown base included, tests.
+          if [ "$code" = true ] && [ -n "$base" ]; then
+            cfg=GUIDELINES/config.ini
+            mapfile -t sites < <(git config -f "$cfg" --get-all ci.site || true)
+            mapfile -t untested < <(git config -f "$cfg" --get-all ci.untested || true)
+            skip=() plain=true
+            for p in "${untested[@]}" "${sites[@]}"; do
+              case "$p" in :*) plain=false ;; esac
+              skip+=(":!${p}")
+            done
+            if [ "${#sites[@]}" -gt 0 ] && [ "$plain" = true ] &&
+              git diff --quiet "$base" HEAD -- . "${skip[@]}" &&
+              shipped="$("$fpsh" -q shipped "${base}..HEAD")" && [ "$shipped" = false ]; then
+              echo "the site's documents alone since ${base}: Site checks them."
+              code=false site=true
+            fi
+          fi
           # The code that ran, and whether an earlier run passed for it:
           # the Tested status on the commit the run before tested (a pull
           # request's head's parent; a merge's second parent, the pull
@@ -151,10 +174,11 @@ jobs:
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
             grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
-          echo "suite=${suite} code=${code} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
+          echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
           {
             echo "suite=${suite}"
             echo "code=${code}"
+            echo "site=${site}"
             echo "tested=${tested}"
             echo "fp=${fp}"
             echo "ui=${ui}"
@@ -1118,11 +1142,12 @@ jobs:
   # deployed: it fails on a document under docs/ missing from
   # docs/fragments/_documents.md, on a link to a file the commit does not
   # have, and on one to a page or heading that is not there. The deploy is
-  # site.yml's, which release.yml calls.
+  # site.yml's, which release.yml calls, and Deploy site for a push of the
+  # site's documents alone. It runs for those too (What to test's site).
   site:
     name: Site
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && (needs.changes.outputs.site == 'true' || needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1201,7 +1226,8 @@ jobs:
   # The release of a pushed commit (release.yml), once All tests passed
   # and the build is done, with build.yml's answers as inputs and the
   # permissions its jobs need: contents to publish, pages and id-token to
-  # deploy the site.
+  # deploy the site. A push of the site's documents alone has no build, so
+  # no Release: Deploy site deploys it.
   # The condition names its status function: without one GitHub adds
   # success(), which is false while any job up the chain was skipped, as
   # Fuzz is on a pull request and Changed paths, now What to test, was on
@@ -1227,3 +1253,18 @@ jobs:
       flavour: ${{ needs.build.outputs.flavour }}
       release: ${{ needs.build.outputs.release }}
       prerelease: ${{ needs.build.outputs.prerelease }}
+
+  # The site's documents alone (What to test's site), pushed to main: no
+  # build and so no Release, but the site is deployed (site.yml) once All
+  # tests passed has succeeded, as release.yml's Site does for every other
+  # push, from the newest release's signed apt index and the rolling
+  # suites'. pages and id-token to deploy; a pull request never does.
+  deploy-site:
+    name: Deploy site
+    needs: [ changes, tests ]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.site == 'true' && needs.tests.result == 'success' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/site.yml
