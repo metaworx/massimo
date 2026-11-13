@@ -211,6 +211,8 @@ def show_view(page, view):
         if menu.get_attribute("open") is None:
             menu.locator("summary").click()
         menu.locator(f".toc-link[data-target='{view}']").click()
+        page.locator(VIEW_SECTION[view]).wait_for(state="visible")
+        scroll_settled(page)  # the menu brings the card in with a smooth scroll
     elif view in VIEW_FOLDED and page.locator("#nav-menu").is_visible():
         menu = page.locator("#nav-menu")
         if menu.get_attribute("open") is None:
