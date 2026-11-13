@@ -66,13 +66,19 @@ package, the font).
 
 ## Scopes and files
 
-Files are named `<basename>-<form>-<theme>[-<size> | -turn-<speed> | -tick-1s]`,
+Files are named `<basename>-<form>-<theme>[-<size> | -turn-<speed> | -tick-1s | -tight]`,
 form `icon`, `logo` or `small` (the icon without its scale, for 48 px and
 below), theme the page it is for.
 
+A drawing has a margin: the icon its 512 box, the logo 6 % of the M's
+height on every side.
+A tight one (`-tight.svg`) has none, for a page that places it exactly:
+its height is the M's, from its top to its foot, its bottom edge the
+letters' baseline, and its sides the M's left and the last letter's right.
+
 | Scope | Writes |
 |-------|--------|
-| `svg` | `svg/`: the icon, the logo and the small icon |
+| `svg` | `svg/`: the icon, the logo and the small icon, each also tight (`-tight.svg`) |
 | `png` | `png/`: the icon at 256 and 512 px, the logo 128 and 256 px high (`-h128`) |
 | `ladder` | `png/`: the icon at 64, 128, 180, 192, 1024 px, the small one at 16, 24, 32, 48 px |
 | `tile` | `svg/` and `png/`: the mark in white on a blue square, for an app, at 180, 192, 512 px |
@@ -106,8 +112,8 @@ the Go build needs no Python.
 
 | File | What |
 |------|------|
-| `brand.svg` | a sprite of symbols without colours: `logo-cover`, `logo-back`, `logo-m`, `logo-hour`, `logo-minute`, `logo-letters`, `logo-dot`, and the small mark's `mark-cover`, `mark-back`, `mark-m`, `mark-hour`, `mark-minute` |
-| `brand.css` | the mark's colours for light and dark pages as `--brand-back`, `--brand-m`, `--brand-hands`, in `style.css`'s pattern; the classes `brand-cover`, `brand-back`, `brand-m`, `brand-hands`, `brand-letters` that colour the sprite's parts; the logo's proportions |
+| `brand.svg` | a sprite of symbols without colours, both drawings tight: `logo-cover`, `logo-back`, `logo-m`, `logo-hour`, `logo-minute`, `logo-letters`, `logo-dot`, and the small mark's `mark-cover`, `mark-back`, `mark-m`, `mark-hour`, `mark-minute` |
+| `brand.css` | the mark's colours for light and dark pages as `--brand-back`, `--brand-m`, `--brand-hands`, in `style.css`'s pattern; the classes `brand-cover`, `brand-back`, `brand-m`, `brand-hands`, `brand-letters` that colour the sprite's parts; the logo's and the mark's proportions, `--brand-logo-ratio` and `--brand-mark-ratio` |
 | `favicon.svg` | the small mark, the light colours, and the dark ones under the browser's dark mode |
 | `favicon.ico` | as the `favicon` scope makes it |
 | `tile-192.png`, `tile-512.png` | the tile, for the manifest's `any` icons and the notifications |

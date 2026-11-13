@@ -189,7 +189,7 @@ body.signed-out #notify-toast { display: none !important; }
   display: inline-grid;
   align-items: center;
   min-height: var(--brand-h);
-  min-width: calc(var(--brand-h) * var(--brand-logo-ratio, 4.87));
+  min-width: calc(var(--brand-h) * var(--brand-logo-ratio, 5.33));
   margin: 0;
   font-size: 1.4rem;
   font-weight: 700;
@@ -201,7 +201,7 @@ body.signed-out #notify-toast { display: none !important; }
 .brand-name .brand-mark { display: none; }
 .brand-big { --brand-h: 3rem; --brand-cover: var(--card); display: grid; justify-content: center; margin: 2px 0 14px; font-size: 2.6rem; }
 @media (max-width: 599px) {
-  .top .brand-name { min-width: var(--brand-h); }
+  .top .brand-name { min-width: calc(var(--brand-h) * var(--brand-mark-ratio, 1.09)); }
   .top .brand-name .brand-logo { display: none; }
   .top .brand-name .brand-mark { display: block; }
   .top .brand-rest {

@@ -322,10 +322,21 @@ def mark(pose: Pose, dy: float = 0) -> str:
     return body + f'<path d="{finger_d(pose, dy)}" fill="{pose.finger_colour}"/>'
 
 
-def icon_svg(pose: Pose, title: str = "Massimo") -> str:
-    """The mark alone, transparent, 512 box."""
+def mark_box(tight: bool = False) -> str:
+    """The mark's viewBox: the 512 box, or tight, the M's own box with no
+    margin, from its top to its foot."""
+    if not tight:
+        return "0 0 512 512"
+    x, y, w, h = M_BOX
+    return f"{x} {y + SHIFT} {w} {h}"
+
+
+def icon_svg(pose: Pose, title: str = "Massimo", tight: bool = False) -> str:
+    """The mark alone, transparent, 512 box; tight, the M's box."""
+    vb = mark_box(tight)
+    _, _, w, h = vb.split()
     return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}" width="{w}" height="{h}">'
         f"<title>{title}</title>{mark(pose, SHIFT)}</svg>\n"
     )
 
@@ -383,15 +394,17 @@ def sprite_svg(pose: Pose, i_style: str) -> str:
     """The web UI's sprite: logo-cover, logo-back, logo-m, logo-hour,
     logo-minute, logo-letters and logo-dot (the i's parts in the accent),
     and the small mark's mark-cover, mark-back, mark-m, mark-hour and
-    mark-minute. Their paths have no fill: the page's classes colour them."""
-    vb, path, i_parts = logo_parts(i_style)
+    mark-minute. Their paths have no fill: the page's classes colour them.
+    Both are tight, without a margin: a drawing's bottom edge is the
+    letters' baseline and its height the M's, for the page to place."""
+    vb, path, i_parts = logo_parts(i_style, tight=True)
     symbols = _parts_symbols("logo", vb, mark_parts(pose))
     plain = "".join(f'<path transform="{t}" d="{d}"/>' for t, d, lit in i_parts if not lit)
     lit = "".join(f'<path transform="{t}" d="{d}"/>' for t, d, lit in i_parts if lit)
     symbols.append(_symbol("logo-letters", vb, f'<path d="{path}"/>{plain}'))
     if lit:
         symbols.append(_symbol("logo-dot", vb, lit))
-    symbols += _parts_symbols("mark", "0 0 512 512", mark_parts(replace(pose, scale=False), SHIFT))
+    symbols += _parts_symbols("mark", mark_box(tight=True), mark_parts(replace(pose, scale=False), SHIFT))
     return (
         '<svg xmlns="http://www.w3.org/2000/svg">\n'
         "<!-- Massimo's mark for the web UI, written by tools/brand/make_brand.py (make ui-brand): "
@@ -406,21 +419,25 @@ def brand_css(v: Variant, i_style: str) -> str:
     proportions."""
     light, _ = themed(v, "light")
     dark, _ = themed(v, "dark")
-    vb = logo_parts(i_style)[0].split()
+    vb = logo_parts(i_style, tight=True)[0].split()
+    mark_vb = mark_box(tight=True).split()
 
     def tokens(pose: Pose) -> str:
         back = pose.backing or pose.colour
         return f"--brand-back: {back}; --brand-m: {pose.colour}; --brand-hands: {pose.finger_colour};"
 
     ratio = float(vb[2]) / float(vb[3])
+    mark_ratio = float(mark_vb[2]) / float(mark_vb[3])
 
     return (
         "/* SPDX-License-Identifier: AGPL-3.0-or-later */\n"
         "/* Massimo's mark in the web UI, written by tools/brand/make_brand.py (make ui-brand): edit the tool,\n"
         "   not this file. The parts of brand.svg take these colours; a place sets --brand-cover to its\n"
-        "   background, which the cover hides the word under the drawing with; --brand-logo-ratio is the\n"
-        "   logo's width to its height, for a box the logo will take before it has come. */\n"
-        f":root {{ {tokens(light)} --brand-logo-ratio: {ratio:.4f}; }}\n"
+        "   background, which the cover hides the word under the drawing with; --brand-logo-ratio and\n"
+        "   --brand-mark-ratio are the logo's and the mark's width to their height, for a box each will\n"
+        "   take before it has come. Both drawings are tight: no margin, the bottom edge the letters'\n"
+        "   baseline, the height the M's. */\n"
+        f":root {{ {tokens(light)} --brand-logo-ratio: {ratio:.4f}; --brand-mark-ratio: {mark_ratio:.4f}; }}\n"
         "@media (prefers-color-scheme: dark) {\n"
         f'  :root:not([data-theme="light"]) {{ {tokens(dark)} }}\n'
         "}\n"
@@ -431,7 +448,7 @@ def brand_css(v: Variant, i_style: str) -> str:
         ".brand-hands { fill: var(--brand-hands); }\n"
         ".brand-letters { fill: var(--fg); }\n"
         f".brand-logo {{ aspect-ratio: {vb[2]} / {vb[3]}; }}\n"
-        ".brand-mark { aspect-ratio: 1; }\n"
+        f".brand-mark {{ aspect-ratio: {mark_vb[2]} / {mark_vb[3]}; }}\n"
     )
 
 
@@ -534,9 +551,10 @@ def _i_parts(style: str) -> list[tuple[str, bool]]:
     return [(quad(side + gap, narrow, top, wide), True), (quad(0, side, side, side), True)]
 
 
-def logo_svg(pose: Pose, text_colour: str, i_style: str = "plain", accent: str = ORANGE) -> str:
-    """The mark as the M of "Massimo", the letters on its baseline."""
-    vb, path, i_parts = logo_parts(i_style)
+def logo_svg(pose: Pose, text_colour: str, i_style: str = "plain", accent: str = ORANGE, tight: bool = False) -> str:
+    """The mark as the M of "Massimo", the letters on its baseline; tight,
+    without a margin."""
+    vb, path, i_parts = logo_parts(i_style, tight)
     i_paths = "".join(
         f'<path transform="{transform}" d="{d}" fill="{accent if lit else text_colour}"/>'
         for transform, d, lit in i_parts
@@ -548,10 +566,13 @@ def logo_svg(pose: Pose, text_colour: str, i_style: str = "plain", accent: str =
     )
 
 
-def logo_parts(i_style: str = "plain") -> tuple[str, str, list[tuple[str, str, bool]]]:
+def logo_parts(i_style: str = "plain", tight: bool = False) -> tuple[str, str, list[tuple[str, str, bool]]]:
     """The logo's viewBox, its letters but a drawn i as one path, and the
     i's parts where it is drawn by itself: (transform, path, whether in the
-    accent). The mark, as mark(pose), is the M."""
+    accent). The mark, as mark(pose), is the M. The viewBox has a margin
+    of 6 % of the M's height on every side; tight, none: the M's top to its
+    foot, which is the letters' baseline, and the M's left to the last
+    letter's right."""
     mx, my, mw, mh = M_BOX
     size = mh / cap_height()  # the letters' capitals as tall as the M
     gap = 0.045 * size
@@ -570,7 +591,12 @@ def logo_parts(i_style: str = "plain") -> tuple[str, str, list[tuple[str, str, b
     else:
         i_parts = []
     total = mw + gap + width
-    pad = 0.06 * mh
+    if tight:
+        # the last letter's right side bearing is margin too
+        font = TTFont(LATO)
+        last = font.getBestCmap()[ord("o")]
+        total -= (font["hmtx"][last][0] - font["glyf"][last].xMax) * size / font["head"].unitsPerEm
+    pad = 0 if tight else 0.06 * mh
     vb = f"{mx - pad:.1f} {my - pad:.1f} {total + 2 * pad:.1f} {mh + 2 * pad:.1f}"
     return vb, path, i_parts
 
@@ -752,7 +778,7 @@ def cycle(deg: float) -> Pose:
     return Pose(left_top=left, right_top=right, minute_deg=deg % 360)
 
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 
 @dataclass(frozen=True)
@@ -794,7 +820,7 @@ VARIANTS = {
 THEMES = ("light", "dark")
 I_CHOICES = ("dot", "plain", "orange", "bang", "bang-up")
 SCOPES = {
-    "svg": "the icon, the logo and the small icon, as SVG",
+    "svg": "the icon, the logo and the small icon, as SVG, each also tight: without a margin (-tight.svg)",
     "png": "the icon at 256 and 512 px, the logo 128 and 256 px high",
     "ladder": "the icon at 64, 128, 180, 192, 1024 px, the small one at 16, 24, 32, 48 px",
     "tile": "the mark in white on a blue square, for an app: SVG, and PNG at 180, 192, 512 px",
@@ -861,20 +887,23 @@ def plan(flavour: str, base: str, scopes: set[str], themes: tuple[str, ...], i_s
     v = VARIANTS[flavour]
     jobs: list[Job] = []
 
-    def svgs(theme: str) -> dict[str, str]:
+    def svgs(theme: str, tight: bool = False) -> dict[str, str]:
         pose, text = themed(v, theme)
         return {
-            "icon": icon_svg(pose),
-            "logo": logo_svg(pose, text, i_style),
-            "small": icon_svg(replace(pose, scale=False)),
+            "icon": icon_svg(pose, tight=tight),
+            "logo": logo_svg(pose, text, i_style, tight=tight),
+            "small": icon_svg(replace(pose, scale=False), tight=tight),
         }
 
     for theme in themes:
         if "svg" in scopes:
-            names = [f"svg/{base}-{form}-{theme}.svg" for form in ("icon", "logo", "small")]
+            forms = ("icon", "logo", "small")
+            names = [f"svg/{base}-{form}-{theme}.svg" for form in forms]
+            names += [f"svg/{base}-{form}-{theme}-tight.svg" for form in forms]
 
             def run(out: Path, theme=theme, names=names) -> None:
-                for name, svg in zip(names, svgs(theme).values(), strict=True):
+                drawings = [*svgs(theme).values(), *svgs(theme, tight=True).values()]
+                for name, svg in zip(names, drawings, strict=True):
                     (out / name).write_text(svg)
 
             jobs.append(Job(f"SVG, {theme}", names, run))
