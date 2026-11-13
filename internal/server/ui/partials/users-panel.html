@@ -109,7 +109,24 @@
 </template>
 
 <template id="tpl-identity-row">
-  <li><span class="flag mode identity-provider"></span><span class="identity-email"></span><span class="muted small identity-state"></span><button type="button" class="remove-identity" data-i18n="users.identityRemove">Remove</button></li>
+  <li>
+    <span class="flag mode identity-provider"></span><span class="identity-email"></span><span class="muted small identity-state"></span>
+    <span class="identity-buttons"><button type="button" class="change-identity hidden" data-i18n="users.identityChange">Change</button><button type="button" class="remove-identity" data-i18n="users.identityRemove">Remove</button></span>
+    <span class="muted small identity-details hidden"></span>
+    <form class="identity-change hidden">
+      <input type="text" name="account" class="field-control" autocomplete="off" spellcheck="false">
+      <button type="submit" class="primary" data-i18n="action.save">Save</button>
+      <button type="button" class="cancel-change" data-i18n="action.cancel">Cancel</button>
+    </form>
+  </li>
+</template>
+
+<template id="tpl-profile-identities">
+  <div class="user-identities-box profile-identities">
+    <span class="muted small" data-i18n="profile.linked">Linked accounts</span>
+    <ul class="user-identities"></ul>
+    <div class="profile-link-buttons"></div>
+  </div>
 </template>
 
 <template id="tpl-profile-form">

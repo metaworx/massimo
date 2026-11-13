@@ -113,8 +113,15 @@ func (f *fakeIdP) signIn(t *testing.T, ts *httptest.Server, provider string, cla
 	if code != 200 {
 		t.Fatalf("start: %d %s", code, text)
 	}
+	return f.grant(t, ts, text, claims)
+}
+
+// grant has the fake grant a code for the claims to a start's answer,
+// and calls the callback with it.
+func (f *fakeIdP) grant(t *testing.T, ts *httptest.Server, startAnswer string, claims map[string]any) oidcRun {
+	t.Helper()
 	var started struct{ URL string }
-	json.Unmarshal([]byte(text), &started)
+	json.Unmarshal([]byte(startAnswer), &started)
 	auth, err := url.Parse(started.URL)
 	if err != nil || !strings.HasPrefix(started.URL, f.srv.URL+"/authorize?") {
 		t.Fatalf("the authorization URL %q", started.URL)
@@ -452,3 +459,105 @@ func fakeDiscovery(t *testing.T, says map[string]string) {
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A user links its own account (AP Oidc v1.1, Block 7, D21-A): only for
+// itself; the link carries the account's details, replaces the user's
+// other link at the provider, and is refused where another user has the
+// account; the last way a user signs in is not the user's to remove; a
+// manager changes a link no sign-in used.
+func TestOIDCLink(t *testing.T) {
+	f := newFakeIdP(t)
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	st := s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	anna := userToken(t, st, "anna", store.RoleOperator)
+	userToken(t, st, "bert", store.RoleOperator)
+	bert, _, _ := st.User(ctx, "bert")
+	st.AddSubjectIdentity(ctx, bert.ID, "cloud", "bert-sub", 0)
+	link := func(token string, claims map[string]any) oidcRun {
+		t.Helper()
+		code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/cloud", token, `{"redirect": "`+ts.URL+`/"}`)
+		if code != 200 {
+			t.Fatalf("link start: %d %s", code, text)
+		}
+		return f.grant(t, ts, text, claims)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/cloud", "secret", `{"redirect": "`+ts.URL+`/"}`); code != 403 {
+		t.Fatalf("the owner links for anna: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities/link/nope", anna, `{"redirect": "`+ts.URL+`/"}`); code != 404 {
+		t.Fatalf("an unknown provider: %d", code)
+	}
+	if run := link(anna, map[string]any{"sub": "a1", "email": "Anna@example.com", "name": "Anna B", "preferred_username": "anna.b", "groups": []string{"family", "admins"}}); run.fragment != "oidc-linked=cloud" {
+		t.Fatalf("link: %+v", run)
+	}
+	var list []identityView
+	if c := getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); c != 200 || len(list) != 1 {
+		t.Fatalf("its own list: %d %+v", c, list)
+	}
+	if i := list[0]; i.Subject != "a1" || !i.Bound || i.Email != "anna@example.com" || i.Name != "Anna B" || i.Username != "anna.b" ||
+		strings.Join(i.Groups, ",") != "family,admins" || i.LastUsedAt == nil {
+		t.Fatalf("the link: %+v", i)
+	}
+	// linked again with another account at the provider: it replaces
+	if run := link(anna, map[string]any{"sub": "a2", "groups": "solo"}); run.fragment != "oidc-linked=cloud" {
+		t.Fatalf("link again: %+v", run)
+	}
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); len(list) != 1 || list[0].Subject != "a2" || strings.Join(list[0].Groups, ",") != "solo" {
+		t.Fatalf("replaced: %+v", list)
+	}
+	if run := link(anna, map[string]any{"sub": "bert-sub"}); run.fragment != "oidc-link-error=taken" {
+		t.Fatalf("bert's account: %+v", run)
+	}
+	// the details at a sign-in
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "a2", "name": "Anna C"})); name != "anna" {
+		t.Fatalf("signed in as %q", name)
+	}
+	if getJSON(t, ts, anna, "/api/v1/users/anna/identities", &list); list[0].Name != "Anna C" {
+		t.Fatalf("the details of the sign-in: %+v", list)
+	}
+
+	// the last way in: anna has no password
+	id := itoa(list[0].ID)
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/anna/identities/"+id, anna, ""); code != 409 {
+		t.Fatalf("its last way in: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/bert/identities/1", anna, ""); code != 403 {
+		t.Fatalf("bert's, by anna: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/anna/identities/"+id, "secret", ""); code != 200 {
+		t.Fatalf("the owner removes it: %d", code)
+	}
+
+	// a manager changes a link no sign-in used, not one used
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", "secret", `{"provider": "cloud", "email": "a@example.com"}`)
+	var w identityView
+	json.Unmarshal([]byte(text), &w)
+	if code != 201 {
+		t.Fatalf("assign: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), anna, `{"email": "b@example.com"}`); code != 403 {
+		t.Fatalf("anna changes her own: %d", code)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), "secret", `{"subject": "bert-sub"}`)
+	if code != 409 {
+		t.Fatalf("to bert's user id: %d %s", code, text)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), "secret", `{"subject": "a3"}`)
+	if json.Unmarshal([]byte(text), &w); code != 200 || w.Subject != "a3" || !w.Bound || w.Email != "" {
+		t.Fatalf("to a user id: %d %s", code, text)
+	}
+	code, text = callAPI(t, ts, "PUT", "/api/v1/users/anna/identities/"+itoa(w.ID), "secret", `{"email": "C@example.com"}`)
+	if json.Unmarshal([]byte(text), &w); code != 200 || w.Bound || w.Email != "c@example.com" {
+		t.Fatalf("back to an e-mail: %d %s", code, text)
+	}
+	if name := signedInAs(t, ts, f.signIn(t, ts, "cloud", map[string]any{"sub": "bert-sub"})); name != "bert" {
+		t.Fatalf("bert: %q", name)
+	}
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/users/bert/identities/1", "secret", `{"email": "x@example.com"}`); code != 409 {
+		t.Fatalf("one a sign-in used: %d", code)
+	}
+}

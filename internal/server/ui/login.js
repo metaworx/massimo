@@ -188,13 +188,24 @@ function pageBase() {
 // the sign-in card to say; null for none.
 let oidcError = null;
 
+// oidcLinked is a link of the user's own account come back, for My
+// profile to say (renderProfile, users.js): {key} linked, or {error};
+// null for none.
+let oidcLinked = null;
+
 // oidcReturn reads the fragment a provider's sign-in comes back with,
 // before the page reads its own (log.js showAddress): #oidc=<code>,
-// traded for the session, or #oidc-error=<reason>; the fragment goes
-// from the address either way.
+// traded for the session, or #oidc-error=<reason>; a link's,
+// #oidc-linked=<key> or #oidc-link-error=<reason>, opens My profile,
+// which says how it went. The fragment goes from the address either way.
 async function oidcReturn() {
-  const m = /^#oidc(-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
+  const m = /^#oidc(-error|-linked|-link-error)?=([A-Za-z0-9_-]*)$/.exec(location.hash);
   if (!m) return;
+  if (m[1] === "-linked" || m[1] === "-link-error") {
+    oidcLinked = m[1] === "-linked" ? { key: m[2] } : { error: m[2] === "taken" ? "taken" : "failed" };
+    history.replaceState(null, "", location.pathname + location.search + "#profile");
+    return;
+  }
   history.replaceState(null, "", location.pathname + location.search);
   if (m[1]) {
     oidcError = m[2];

@@ -385,6 +385,17 @@ nor with the server's API token):
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
   **Create key** shows the new key once.
+- **Linked accounts**, where a sign-in provider is enabled or an account is linked:
+  the own accounts at the providers, each with its e-mail or user ID,
+  what the provider said of it at the last sign-in (name, user name, groups)
+  and when, and **Remove**,
+  which is refused for the last way the user signs in
+  (no password and no other linked account);
+  **Link Nextcloud** per enabled provider goes there to sign in
+  and back to My profile, which says whether the account is linked
+  or is another user's already;
+  linking again at a provider replaces the link there.
+  The app shows no **Link** buttons, as no provider buttons on its sign-in.
 
 ## My settings
 
@@ -692,6 +703,8 @@ to the top of the page.
   where a sign-in provider is enabled, the user's identities at the providers,
   each with its e-mail, or its user ID there,
   and whether it is bound or waits for its first sign-in,
+  what the provider said of it at the last sign-in (name, user name, groups) and when,
+  **Change** of the e-mail or user ID while no sign-in used it,
   **Remove**, and **Assign** to the user, at a provider,
   by an e-mail or by the user ID there.
   **Add a user** opens the form for one;

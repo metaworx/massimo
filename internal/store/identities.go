@@ -15,6 +15,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -27,7 +28,21 @@ var (
 	ErrNoIdentity     = errors.New("store: no such identity")
 	ErrIdentityExists = errors.New("store: identity exists")
 	ErrBadEmail       = errors.New("store: bad e-mail")
+	// ErrIdentityTaken is a link of an account another user has.
+	ErrIdentityTaken = errors.New("store: the account is another user's")
+	// ErrIdentityUsed is a change of an identity a sign-in used: it is
+	// removed and assigned again instead.
+	ErrIdentityUsed = errors.New("store: the identity was used for a sign-in")
 )
+
+// IdentityDetails are what a provider says of an account at a sign-in or
+// a link, kept on its identity for the user and the managers to see.
+type IdentityDetails struct {
+	Email    string
+	Name     string
+	Username string
+	Groups   []string
+}
 
 // Identity is one row of user_identities, with its provider's key.
 type Identity struct {
@@ -38,6 +53,9 @@ type Identity struct {
 	Provider   string // the provider's key
 	Subject    string // "" until bound
 	Email      string
+	Name       string   // at the provider, from the last sign-in or link
+	Username   string   // preferred_username, likewise
+	Groups     []string // likewise
 	CreatedAt  time.Time
 	BoundAt    time.Time
 	LastUsedAt time.Time
@@ -46,15 +64,21 @@ type Identity struct {
 // Bound reports whether the identity has its subject.
 func (i Identity) Bound() bool { return i.Subject != "" }
 
-const identityColumns = `i.id, i.uuid, i.user_id, i.provider_id, p.key, coalesce(i.subject, ''), i.email, i.created_at, i.bound_at, i.last_used_at`
+const identityColumns = `i.id, i.uuid, i.user_id, i.provider_id, p.key, coalesce(i.subject, ''), i.email, i.name, i.username, i.groups,
+	i.created_at, i.bound_at, i.last_used_at`
 
 const identityFrom = ` FROM user_identities i JOIN auth_providers p ON p.id = i.provider_id `
 
 func scanIdentity(row scanner) (Identity, error) {
 	var i Identity
 	var created, bound, used sql.NullString
-	if err := row.Scan(&i.ID, &i.UUID, &i.UserID, &i.ProviderID, &i.Provider, &i.Subject, &i.Email, &created, &bound, &used); err != nil {
+	var groups string
+	if err := row.Scan(&i.ID, &i.UUID, &i.UserID, &i.ProviderID, &i.Provider, &i.Subject, &i.Email, &i.Name, &i.Username, &groups,
+		&created, &bound, &used); err != nil {
 		return Identity{}, err
+	}
+	if json.Unmarshal([]byte(groups), &i.Groups) != nil || i.Groups == nil {
+		i.Groups = []string{}
 	}
 	i.CreatedAt, i.BoundAt, i.LastUsedAt = parseTime(created), parseTime(bound), parseTime(used)
 	return i, nil
@@ -314,13 +338,172 @@ func (s *Store) AddIdentityUser(ctx context.Context, u User, providerID int64, s
 	return out, i, err
 }
 
-// TouchIdentity records a sign-in through the identity.
-func (s *Store) TouchIdentity(ctx context.Context, id int64) error {
+// TouchIdentity records a sign-in through the identity, and what the
+// provider said of the account; an e-mail it did not send stays.
+func (s *Store) TouchIdentity(ctx context.Context, id int64, d IdentityDetails) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET last_used_at = ? WHERE id = ?`, s.nowText(), id); err != nil {
+	d = cleanDetails(d)
+	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET last_used_at = ?, email = CASE WHEN ? = '' THEN email ELSE ? END,
+		name = ?, username = ?, groups = ? WHERE id = ?`, s.nowText(), d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), id); err != nil {
 		return fmt.Errorf("store: identity %d: %w", id, err)
 	}
 	return nil
+}
+
+// cleanDetails bounds what a provider says: an e-mail as kept or none,
+// names of at most 128 bytes, at most 100 groups of at most 128 bytes.
+func cleanDetails(d IdentityDetails) IdentityDetails {
+	if e, err := normalEmail(d.Email); err == nil {
+		d.Email = e
+	} else {
+		d.Email = ""
+	}
+	cut := func(v string) string {
+		v = strings.TrimSpace(v)
+		if len(v) > 128 {
+			v = v[:128]
+		}
+		return v
+	}
+	d.Name, d.Username = cut(d.Name), cut(d.Username)
+	groups := []string{}
+	for _, g := range d.Groups {
+		if g = cut(g); g != "" && len(groups) < 100 && !containsString(groups, g) {
+			groups = append(groups, g)
+		}
+	}
+	d.Groups = groups
+	return d
+}
+
+func groupsText(groups []string) string {
+	if groups == nil {
+		groups = []string{}
+	}
+	b, _ := json.Marshal(groups)
+	return string(b)
+}
+
+// LinkIdentity links an account at a provider to a user, the user's own
+// doing: the account another user's is ErrIdentityTaken; the user's own
+// already, its details are written; else it replaces the user's other
+// identities at the provider, bound from now on.
+func (s *Store) LinkIdentity(ctx context.Context, userID, providerID int64, subject string, d IdentityDetails) (Identity, error) {
+	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	if subject == "" {
+		return Identity{}, fmt.Errorf("%w: no subject", ErrBadProvider)
+	}
+	d = cleanDetails(d)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Identity{}, fmt.Errorf("store: link: %w", err)
+	}
+	defer tx.Rollback()
+	var id, owner int64
+	err = tx.QueryRowContext(ctx, `SELECT id, user_id FROM user_identities WHERE provider_id = ? AND subject = ?`, providerID, subject).Scan(&id, &owner)
+	switch {
+	case err == nil && owner != userID:
+		return Identity{}, ErrIdentityTaken
+	case err != nil && !errors.Is(err, sql.ErrNoRows):
+		return Identity{}, fmt.Errorf("store: link: %w", err)
+	}
+	now := s.nowText()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id = ? AND provider_id = ? AND id != ?`, userID, providerID, id); err != nil {
+		return Identity{}, fmt.Errorf("store: link: %w", err)
+	}
+	if id == 0 {
+		res, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, subject, email, name, username, groups, created_at, created_by, bound_at, last_used_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), userID, providerID, subject, d.Email, d.Name, d.Username, groupsText(d.Groups), now, userID, now, now)
+		if err != nil {
+			return Identity{}, fmt.Errorf("store: link: %w", err)
+		}
+		id, _ = res.LastInsertId()
+	} else if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET email = CASE WHEN ? = '' THEN email ELSE ? END, name = ?, username = ?, groups = ?,
+		bound_at = coalesce(bound_at, ?), last_used_at = ? WHERE id = ?`, d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), now, now, id); err != nil {
+		return Identity{}, fmt.Errorf("store: link: %w", err)
+	}
+	i, err := s.identity(ctx, tx, id)
+	if err != nil {
+		return Identity{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Identity{}, fmt.Errorf("store: link: %w", err)
+	}
+	return i, nil
+}
+
+// UpdateIdentity changes the e-mail, or the user id there, of one of a
+// user's identities no sign-in has used yet (ErrIdentityUsed): an e-mail
+// makes it a waiting one, a user id a bound one. The same rules as
+// AddIdentity and AddSubjectIdentity hold.
+func (s *Store) UpdateIdentity(ctx context.Context, userID, id int64, email, subject string) (Identity, error) {
+	if err := s.writable(); err != nil {
+		return Identity{}, err
+	}
+	subject = strings.TrimSpace(subject)
+	if (email == "") == (subject == "") || len(subject) > 255 {
+		return Identity{}, fmt.Errorf("%w: an e-mail or a user id of 1 to 255 bytes", ErrBadProvider)
+	}
+	if email != "" {
+		var err error
+		if email, err = normalEmail(email); err != nil {
+			return Identity{}, err
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Identity{}, fmt.Errorf("store: identity %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	i, err := s.identity(ctx, tx, id)
+	if err != nil {
+		return Identity{}, err
+	}
+	if i.UserID != userID {
+		return Identity{}, fmt.Errorf("%w: %d", ErrNoIdentity, id)
+	}
+	if !i.LastUsedAt.IsZero() {
+		return Identity{}, fmt.Errorf("%w: remove it and assign it again", ErrIdentityUsed)
+	}
+	var n int
+	if email != "" {
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject IS NULL AND email = ? AND id != ?`, i.ProviderID, email, id).Scan(&n)
+	} else {
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject = ? AND id != ?`, i.ProviderID, subject, id).Scan(&n)
+	}
+	if err != nil {
+		return Identity{}, fmt.Errorf("store: identity %d: %w", id, err)
+	}
+	if n > 0 {
+		return Identity{}, fmt.Errorf("%w: at %s", ErrIdentityExists, i.Provider)
+	}
+	if email != "" {
+		_, err = tx.ExecContext(ctx, `UPDATE user_identities SET email = ?, subject = NULL, bound_at = NULL WHERE id = ?`, email, id)
+	} else {
+		_, err = tx.ExecContext(ctx, `UPDATE user_identities SET subject = ?, email = '', bound_at = ? WHERE id = ?`, subject, s.nowText(), id)
+	}
+	if err != nil {
+		return Identity{}, fmt.Errorf("store: identity %d: %w", id, err)
+	}
+	if i, err = s.identity(ctx, tx, id); err != nil {
+		return Identity{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Identity{}, fmt.Errorf("store: identity %d: %w", id, err)
+	}
+	return i, nil
+}
+
+// Identity returns one of a user's identities.
+func (s *Store) Identity(ctx context.Context, userID, id int64) (Identity, error) {
+	i, err := s.identity(ctx, s.db, id)
+	if err == nil && i.UserID != userID {
+		return Identity{}, fmt.Errorf("%w: %d", ErrNoIdentity, id)
+	}
+	return i, err
 }

@@ -575,6 +575,10 @@
   "log.action.provider.update": "Anmeldedienst geändert",
   "log.action.provider.remove": "Anmeldedienst entfernt",
   "log.action.identity.add": "Identität zugewiesen",
+
+  "log.action.identity.update": "Identität geändert",
+
+  "log.action.identity.link": "Kontoverknüpfung begonnen",
   "log.action.identity.remove": "Identität entfernt",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "Adresse",
@@ -1064,6 +1068,32 @@
   "users.identityAdded": "{email} zugewiesen.",
 
   "users.identityRemoved": "Identität entfernt.",
+
+  "users.identityChange": "Ändern",
+
+  "users.identityChangeLabel": "{email} bei {provider} ändern",
+
+  "users.identityChanged": "Identität geändert.",
+
+  "users.identityGroups": "Gruppen: {groups}",
+
+  "users.identityLastUsed": "zuletzt angemeldet",
+
+  "profile.linked": "Verknüpfte Konten",
+
+  "profile.linkedNone": "Noch kein Konto bei einem Anmeldedienst ist mit dir verknüpft.",
+
+  "profile.link": "{name} verknüpfen",
+
+  "profile.linkAgain": "{name} neu verknüpfen",
+
+  "profile.linkDone": "Dein Konto bei {name} ist verknüpft: du kannst dich damit anmelden.",
+
+  "profile.linkFailed": "Die Verknüpfung hat nicht begonnen: {error}",
+
+  "profile.linkError.taken": "Dieses Konto ist hier schon mit einem anderen Benutzer verknüpft.",
+
+  "profile.linkError.failed": "Die Verknüpfung über den Anmeldedienst ist fehlgeschlagen. Versuche es nochmals.",
 
   "users.identityEmailNeeded": "Eine E-Mail-Adresse ist nötig.",
 

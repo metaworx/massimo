@@ -566,7 +566,10 @@ CREATE TABLE user_identities (                  -- migration 0016
     created_at   TEXT    NOT NULL,
     created_by   INTEGER REFERENCES users (id),
     bound_at     TEXT,
-    last_used_at TEXT
+    last_used_at TEXT,
+    name         TEXT    NOT NULL DEFAULT '',   -- migration 0019: at the provider, at the last sign-in or link
+    username     TEXT    NOT NULL DEFAULT '',   -- preferred_username, likewise
+    groups       TEXT    NOT NULL DEFAULT '[]'  -- a JSON array of strings, likewise
 );
 -- unique (provider_id, subject) where bound, (provider_id, email) where not
 ```
@@ -1287,6 +1290,15 @@ its name from the provider's `preferred_username` or the e-mail,
 `-2`, `-3` added where taken.
 A removed provider is a tombstone whose identities are deleted,
 and a removed user's identities go with it.
+An owner may assign the user id at the provider (`sub`) instead of an e-mail,
+bound from the start (AP Oidc v1.1).
+A user links its own account by a sign-in at the provider started from My profile,
+which replaces the user's other identities at that provider;
+an account another user has is refused.
+Each sign-in and link writes what the provider said of the account:
+the e-mail, the name, the user name and the groups (migration 0019).
+An identity no sign-in has used may be changed;
+a used one is removed and assigned again.
 The client secret is kept as the Cubes' keys are, in the store's file,
 and never answered (`has_secret`).
 

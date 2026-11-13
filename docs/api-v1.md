@@ -629,7 +629,9 @@ a token of another user is `404`.
 A user's identities at the OpenID Connect providers
 ("Sign-in through OpenID Connect" above),
 with the rules of access of the users routes:
-`users`, or `guests` for a guest's; a user does not reach its own.
+`users`, or `guests` for a guest's;
+a user lists its own, removes its own and links its own,
+but assigns and changes none.
 
 `GET` lists them by provider:
 `[{"id": 3, "provider": "cloud", "email": "anna@example.com", "subject": "anna",
@@ -644,7 +646,24 @@ Google's a number, which its sign-in shows nowhere);
 an e-mail that already waits at the provider,
 or a user id another identity there has, is `409`,
 an unknown provider `404`, a bad e-mail or both or neither of the two `400`.
+`GET` answers too what the provider said of the account at the last sign-in or link:
+`name`, `username` (`preferred_username`) and `groups`.
+`PUT …/identities/{id}` with `{"email": …}` or `{"subject": …}` changes one no sign-in used,
+the e-mail making it a waiting one, the user id a bound one;
+one a sign-in used is `409`: it is removed and assigned again.
 `DELETE` removes one: no sign-in finds the user by it any more.
+A user removing its own last way in,
+a bound identity where it has no password and no other bound one, is `409`.
+
+`POST /api/v1/users/{name}/identities/link/{key}` with `{"redirect": …}`,
+the user's own only (`403` for another's),
+starts a sign-in at the provider as `POST /api/v1/login/oidc/{key}` does,
+whose callback links the account to the user instead of signing in:
+it replaces the user's other identities at the provider,
+and sends the browser back with `#oidc-linked=<key>`;
+`#oidc-link-error=taken` where another user has the account,
+`#oidc-link-error=failed` where the provider's answer did not do.
+No session is made, and nothing counts against the address.
 
 ### Roles: /api/v1/roles and /api/v1/roles/{key}
 

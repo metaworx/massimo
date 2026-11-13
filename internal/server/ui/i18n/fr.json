@@ -577,6 +577,10 @@
   "log.action.provider.update": "fournisseur de connexion modifié",
   "log.action.provider.remove": "fournisseur de connexion supprimé",
   "log.action.identity.add": "identité attribuée",
+
+  "log.action.identity.update": "identité modifiée",
+
+  "log.action.identity.link": "liaison de compte commencée",
   "log.action.identity.remove": "identité supprimée",
   "log.kind.cube_gone": "disparu",
   "log.kind.address_changed": "adresse",
@@ -1066,6 +1070,32 @@
   "users.identityAdded": "{email} attribué.",
 
   "users.identityRemoved": "Identité supprimée.",
+
+  "users.identityChange": "Modifier",
+
+  "users.identityChangeLabel": "Modifier {email} chez {provider}",
+
+  "users.identityChanged": "Identité modifiée.",
+
+  "users.identityGroups": "groupes : {groups}",
+
+  "users.identityLastUsed": "dernière connexion",
+
+  "profile.linked": "Comptes liés",
+
+  "profile.linkedNone": "Aucun compte chez un fournisseur de connexion ne vous est encore lié.",
+
+  "profile.link": "Lier {name}",
+
+  "profile.linkAgain": "Lier {name} à nouveau",
+
+  "profile.linkDone": "Votre compte chez {name} est lié : vous pouvez vous connecter avec.",
+
+  "profile.linkFailed": "La liaison n'a pas démarré : {error}",
+
+  "profile.linkError.taken": "Ce compte est déjà lié à un autre utilisateur ici.",
+
+  "profile.linkError.failed": "La liaison par le fournisseur a échoué. Réessayez.",
 
   "users.identityEmailNeeded": "Une adresse e-mail est nécessaire.",
 

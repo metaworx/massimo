@@ -9,8 +9,12 @@ package server
 //
 //	GET, POST          /api/v1/providers                     capability auth
 //	PUT, DELETE        /api/v1/providers/{key}               capability auth
-//	GET, POST          /api/v1/users/{name}/identities       capability users
-//	DELETE             /api/v1/users/{name}/identities/{id}  capability users
+//	GET                /api/v1/users/{name}/identities       capability users, or its own
+//	POST               /api/v1/users/{name}/identities       capability users
+//	PUT                /api/v1/users/{name}/identities/{id}  capability users
+//	DELETE             /api/v1/users/{name}/identities/{id}  capability users, or its own
+//
+// A user's own link is oidc.go's (oidcStartLink).
 //
 // A provider's client secret is written, never answered: has_secret
 // says whether it has one. An enabled provider is saved only where its
@@ -284,12 +288,15 @@ type identityView struct {
 	Subject    string     `json:"subject"`
 	Bound      bool       `json:"bound"`
 	CreatedAt  time.Time  `json:"created_at"`
+	Name       string     `json:"name"`
+	Username   string     `json:"username"`
+	Groups     []string   `json:"groups"`
 	BoundAt    *time.Time `json:"bound_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 }
 
 func viewIdentity(i store.Identity) identityView {
-	return identityView{ID: i.ID, Provider: i.Provider, Email: i.Email, Subject: i.Subject, Bound: i.Bound(), CreatedAt: i.CreatedAt, BoundAt: optTime(i.BoundAt), LastUsedAt: optTime(i.LastUsedAt)}
+	return identityView{ID: i.ID, Provider: i.Provider, Email: i.Email, Subject: i.Subject, Bound: i.Bound(), Name: i.Name, Username: i.Username, Groups: i.Groups, CreatedAt: i.CreatedAt, BoundAt: optTime(i.BoundAt), LastUsedAt: optTime(i.LastUsedAt)}
 }
 
 func identitySubject(i store.Identity, u store.User) map[string]any {
@@ -300,13 +307,34 @@ func identitySubject(i store.Identity, u store.User) map[string]any {
 	return m
 }
 
-// listIdentities handles GET /api/v1/users/{name}/identities.
+// lastWayIn reports whether removing the identity would leave the user
+// no way to sign in on the card but API keys (AP Oidc v1.1, D21-A): no
+// password and no other bound identity. A user is refused that; a
+// manager is not, who can set a password.
+func lastWayIn(r *http.Request, st *store.Store, u store.User, gone store.Identity) (bool, error) {
+	if u.HasPassword || !gone.Bound() {
+		return false, nil
+	}
+	list, err := st.Identities(r.Context(), u.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, i := range list {
+		if i.ID != gone.ID && i.Bound() {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// listIdentities handles GET /api/v1/users/{name}/identities: a user's
+// own too.
 func (s *Server) listIdentities(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
 		return err
 	}
-	u, _, err := s.targetUser(r, st, false)
+	u, _, err := s.targetUser(r, st, true)
 	if err != nil {
 		return err
 	}
@@ -360,8 +388,9 @@ func (s *Server) postIdentity(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// deleteIdentity handles DELETE /api/v1/users/{name}/identities/{id}.
-func (s *Server) deleteIdentity(w http.ResponseWriter, r *http.Request) error {
+// putIdentity handles PUT /api/v1/users/{name}/identities/{id}: the
+// e-mail or the user id of an identity no sign-in has used yet.
+func (s *Server) putIdentity(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
 		return err
@@ -375,12 +404,53 @@ func (s *Server) deleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fail(http.StatusBadRequest, "bad identity id %q", r.PathValue("id"))
 	}
-	var gone store.Identity
-	if list, err := st.Identities(r.Context(), u.ID); err == nil {
-		for _, i := range list {
-			if i.ID == id {
-				gone = i
-			}
+	var req struct {
+		Email   string `json:"email"`
+		Subject string `json:"subject"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || (req.Email == "") == (req.Subject == "") {
+		return fail(http.StatusBadRequest, "body must have either \"email\" or \"subject\"")
+	}
+	i, err := st.UpdateIdentity(r.Context(), u.ID, id, req.Email, req.Subject)
+	if errors.Is(err, store.ErrIdentityUsed) {
+		return fail(http.StatusConflict, "%s", strings.TrimPrefix(err.Error(), "store: "))
+	}
+	if err != nil {
+		return providerFail(err)
+	}
+	auditSubject(r, identitySubject(i, u))
+	s.log.Info("identity changed", "user", u.Name, "provider", i.Provider, "remote", s.clientIP(r))
+	writeJSON(w, http.StatusOK, viewIdentity(i))
+	return nil
+}
+
+// deleteIdentity handles DELETE /api/v1/users/{name}/identities/{id}: a
+// user's own too, but not the last way it signs in (lastWayIn).
+func (s *Server) deleteIdentity(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	u, a, err := s.targetUser(r, st, true)
+	if err != nil {
+		return err
+	}
+	auditTarget(r, "user:"+u.Name)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		return fail(http.StatusBadRequest, "bad identity id %q", r.PathValue("id"))
+	}
+	gone, err := st.Identity(r.Context(), u.ID, id)
+	if err != nil {
+		return providerFail(err)
+	}
+	if a.self {
+		if last, err := lastWayIn(r, st, u, gone); err != nil {
+			return providerFail(err)
+		} else if last {
+			return fail(http.StatusConflict, "this is the last way you sign in: set a password or link another account first")
 		}
 	}
 	if err := st.DeleteIdentity(r.Context(), u.ID, id); err != nil {

@@ -11,6 +11,10 @@ package server
 //	POST /api/v1/login/oidc/{key}       {redirect} → {url}, the provider's page
 //	GET  /api/v1/login/oidc/callback    ?code&state → 303 to the page, #oidc=<code>
 //	POST /api/v1/login/oidc/finish      {code} → a session, as POST /api/v1/login
+//	POST /api/v1/users/{name}/identities/link/{key}  {redirect} → {url}, a link
+//	                                    of the user's own account; the callback
+//	                                    sends the page back with #oidc-linked=<key>
+//	                                    or #oidc-link-error=<reason>
 //
 // The authorization code flow with PKCE, the server a confidential
 // client. The id_token comes straight from the token endpoint over TLS,
@@ -66,6 +70,8 @@ const (
 	// a waiting e-mail would have bound
 	oidcNoEmail    = "noemail"
 	oidcUnverified = "unverified"
+	// oidcTaken is a link of an account another user has
+	oidcTaken = "taken"
 )
 
 // oidcClient talks to the providers.
@@ -94,6 +100,7 @@ type oidcStarted struct {
 	nonce    string
 	verifier string
 	redirect string // the page's address
+	linkUser int64  // a link of this user's, not a sign-in
 	expires  time.Time
 }
 
@@ -337,13 +344,22 @@ func (s *Server) oidcStartLogin(w http.ResponseWriter, r *http.Request) error {
 	if !ok || !p.Enabled {
 		return fail(http.StatusNotFound, "no provider %q", key)
 	}
+	return s.oidcStartFlow(w, r, p, redirect, 0)
+}
+
+// oidcStartFlow keeps a sign-in, or the link of the user linkUser,
+// started at the provider p and answers its authorization URL, with its
+// state, nonce and PKCE challenge.
+func (s *Server) oidcStartFlow(w http.ResponseWriter, r *http.Request, p store.AuthProvider, redirect string, linkUser int64) error {
+	ctx := r.Context()
 	d, err := s.oidcDiscover(ctx, p)
 	if err != nil {
 		s.log.Warn("api: OpenID Connect provider not reached", "provider", p.Key, "error", err)
 		return fail(http.StatusBadGateway, "provider %s: %v", p.Key, err)
 	}
 	now := time.Now()
-	started := &oidcStarted{provider: p.Key, nonce: randomID(), verifier: randomID() + randomID(), redirect: redirect, expires: now.Add(oidcStartTTL)}
+	started := &oidcStarted{provider: p.Key, nonce: randomID(), verifier: randomID() + randomID(), redirect: redirect, linkUser: linkUser,
+		expires: now.Add(oidcStartTTL)}
 	state, ok := s.oidc.start(started, now)
 	if !ok {
 		return passwordBusy(store.ErrBusy)
@@ -378,6 +394,40 @@ type oidcClaims struct {
 	EmailVerified     json.RawMessage `json:"email_verified"`
 	Name              string          `json:"name"`
 	PreferredUsername string          `json:"preferred_username"`
+	// raw are all the claims, for the groups (groupsOf)
+	raw map[string]json.RawMessage
+}
+
+// decodeClaims reads the claims of a JSON object: those the sign-in
+// reads, and all of them raw.
+func decodeClaims(data []byte, c *oidcClaims) error {
+	if err := json.Unmarshal(data, c); err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &c.raw)
+}
+
+// groupsOf reads a claim of groups: a list of strings, or one string;
+// none where the claim is absent or of another kind.
+func (c oidcClaims) groupsOf(claim string) []string {
+	v, ok := c.raw[claim]
+	if !ok {
+		return nil
+	}
+	var many []string
+	if json.Unmarshal(v, &many) == nil {
+		return many
+	}
+	var one string
+	if json.Unmarshal(v, &one) == nil && one != "" {
+		return []string{one}
+	}
+	return nil
+}
+
+// details are what the claims say of the account, kept on its identity.
+func (c oidcClaims) details() store.IdentityDetails {
+	return store.IdentityDetails{Email: c.Email, Name: c.Name, Username: c.PreferredUsername, Groups: c.groupsOf("groups")}
 }
 
 // verified reports whether the provider vouches for the e-mail: true,
@@ -465,9 +515,9 @@ func (s *Server) exchange(ctx context.Context, p store.AuthProvider, started *oi
 	return c, nil
 }
 
-// jwtClaims decodes the payload of a JWT into v, unchecked: the token
+// jwtClaims decodes the payload of a JWT into c, unchecked: the token
 // came straight from the provider over TLS.
-func jwtClaims(token string, v any) error {
+func jwtClaims(token string, c *oidcClaims) error {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return errors.New("not a JWT")
@@ -476,7 +526,7 @@ func jwtClaims(token string, v any) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, v)
+	return decodeClaims(raw, c)
 }
 
 // errOtherSubject is a userinfo answer for another subject than the
@@ -511,7 +561,7 @@ func (s *Server) userinfo(ctx context.Context, endpoint, accessToken string, c *
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/jwt") {
 		err = jwtClaims(strings.TrimSpace(string(body)), &u)
 	} else {
-		err = json.Unmarshal(body, &u)
+		err = decodeClaims(body, &u)
 	}
 	if err != nil {
 		return fmt.Errorf("userinfo: %w", err)
@@ -535,6 +585,14 @@ func (c *oidcClaims) fill(u oidcClaims) {
 	}
 	c.Name = cmpOr(c.Name, u.Name)
 	c.PreferredUsername = cmpOr(c.PreferredUsername, u.PreferredUsername)
+	for k, v := range u.raw {
+		if _, ok := c.raw[k]; !ok {
+			if c.raw == nil {
+				c.raw = map[string]json.RawMessage{}
+			}
+			c.raw[k] = v
+		}
+	}
 }
 
 // autoRoleAllowed checks the role a provider gives the users it creates:
@@ -675,7 +733,14 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) error {
 	}
 	claims, err := s.exchange(ctx, p, started, q.Get("code"))
 	if err != nil {
+		if started.linkUser != 0 {
+			s.log.Warn("api: OpenID Connect link failed", "provider", started.provider, "remote", ip, "error", err)
+			return back("oidc-link-error=" + oidcFailed)
+		}
 		return refuse(oidcFailed, "", err)
+	}
+	if started.linkUser != 0 {
+		return back(s.oidcLink(ctx, p, started.linkUser, claims, ip))
 	}
 	who := cmpOr(claims.Email, p.Key+":"+claims.Subject)
 	u, identity, reason, err := s.oidcUser(ctx, p, claims)
@@ -687,7 +752,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) error {
 	case u.Disabled || u.Expired(time.Now()):
 		return refuse(oidcDisabled, u.Name, nil)
 	}
-	if err := s.opts.Store.TouchIdentity(ctx, identity); err != nil {
+	if err := s.opts.Store.TouchIdentity(ctx, identity, claims.details()); err != nil {
 		s.log.Warn("api: identity not touched", "error", err)
 	}
 	code := s.oidc.prove(&oidcProven{userID: u.ID, provider: p.Key, ip: ip, expires: time.Now().Add(oidcCodeTTL)}, time.Now())
@@ -695,6 +760,67 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) error {
 		return refuse(oidcFailed, u.Name, store.ErrBusy)
 	}
 	return back("oidc=" + code)
+}
+
+// oidcLink links the account of the claims to the user who started the
+// link (AP Oidc v1.1, Block 7) and returns the fragment for the page:
+// oidc-linked=<key>, or oidc-link-error=taken where another user has
+// the account (failed where it failed), which a page signed in shows in
+// My profile, not on the sign-in card. A link is no sign-in: no session, nothing counted against
+// the address.
+func (s *Server) oidcLink(ctx context.Context, p store.AuthProvider, userID int64, c oidcClaims, ip string) string {
+	st := s.opts.Store
+	u, ok, err := st.UserByID(ctx, userID)
+	if err != nil || !ok {
+		s.log.Warn("api: OpenID Connect link failed", "provider", p.Key, "remote", ip, "error", cmpOr(fmt.Sprint(err), "the user is gone"))
+		return "oidc-link-error=" + oidcFailed
+	}
+	if _, err := st.LinkIdentity(ctx, u.ID, p.ID, c.Subject, c.details()); errors.Is(err, store.ErrIdentityTaken) {
+		s.log.Warn("api: OpenID Connect link refused", "provider", p.Key, "user", u.Name, "remote", ip, "reason", oidcTaken)
+		return "oidc-link-error=" + oidcTaken
+	} else if err != nil {
+		s.log.Warn("api: OpenID Connect link failed", "provider", p.Key, "user", u.Name, "remote", ip, "error", err)
+		return "oidc-link-error=" + oidcFailed
+	}
+	s.log.Info("account linked", "provider", p.Key, "user", u.Name, "remote", ip)
+	return "oidc-linked=" + p.Key
+}
+
+// oidcStartLink handles POST /api/v1/users/{name}/identities/link/{key}:
+// a user links its own account at a provider (AP Oidc v1.1, D21-A), a
+// sign-in there whose callback binds the account to the user. Only the
+// user itself starts it: nobody else signs in at the provider for it.
+func (s *Server) oidcStartLink(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	u, a, err := s.targetUser(r, st, true)
+	if err != nil {
+		return err
+	}
+	auditTarget(r, "user:"+u.Name)
+	if !a.self {
+		return fail(http.StatusForbidden, "a user links only its own accounts")
+	}
+	var req oidcStartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return fail(http.StatusBadRequest, "body must have \"redirect\", the page's address")
+	}
+	redirect, ok := pageAddress(req.Redirect)
+	if !ok {
+		return fail(http.StatusBadRequest, "redirect: an http or https address without a query or fragment")
+	}
+	key := strings.ToLower(r.PathValue("key"))
+	p, ok, err := st.Provider(r.Context(), key)
+	if err != nil {
+		return fail(http.StatusInternalServerError, "%v", err)
+	}
+	if !ok || !p.Enabled {
+		return fail(http.StatusNotFound, "no provider %q", key)
+	}
+	auditSubject(r, map[string]any{"provider": p.Key, "user": u.Name})
+	return s.oidcStartFlow(w, r, p, redirect, u.ID)
 }
 
 // oidcFinishRequest is the body of POST /api/v1/login/oidc/finish.

@@ -832,9 +832,10 @@ paths:
       summary: A user's identities at the OpenID Connect providers
       x-capability: users
       description: |
-        Each an e-mail at a provider, waiting for its first sign-in or
-        bound to the provider's subject, which is not answered. A guests
-        holder reaches a guest's only; a user does not reach its own.
+        Each an e-mail at a provider, waiting for its first sign-in, or
+        bound to the provider's subject, with what the provider said of
+        the account at the last sign-in or link. A guests holder reaches a
+        guest's only; a user lists its own.
       parameters:
         - {$ref: "#/components/parameters/name"}
       responses:
@@ -888,10 +889,99 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/users/{name}/identities/link/{key}:
+    post:
+      summary: Link the user's own account at a provider
+      x-capability: users
+      description: |
+        The user's own only (403 for another's): a sign-in at the
+        provider, as POST /api/v1/login/oidc/{key} starts one, whose
+        callback links the account to the user, replacing the user's
+        other identities at the provider, and sends the page back with
+        #oidc-linked=<key>, or #oidc-link-error=taken where another user
+        has the account (failed where the provider's answer did not do).
+        No session is made.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: key, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OIDCStart"}
+      responses:
+        "200":
+          description: The provider's page to open
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OIDCStarted"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no enabled provider of the key
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: The provider's discovery document cannot be read or does not do
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "503": {$ref: "#/components/responses/NoStore"}
   /api/v1/users/{name}/identities/{id}:
+    put:
+      summary: Change an identity no sign-in has used yet
+      x-capability: users
+      description: |
+        Its e-mail, which makes it a waiting one, or the user id at the
+        provider (subject), which makes it a bound one. One a sign-in used
+        is removed and assigned again instead (409).
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+        - {$ref: "#/components/parameters/name"}
+        - {name: id, in: path, required: true, description: The identity's id from the list, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Either email or subject.
+              additionalProperties: false
+              properties:
+                email: {type: string}
+                subject: {type: string}
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Identity"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: No such user, or no such identity of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: A sign-in used it, or the e-mail or user id is another identity's at the provider
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
     delete:
       summary: Remove one of a user's identities
       x-capability: users
+      description: |
+        A user removes its own too, but not the last way it signs in: a
+        bound identity where the user has no password and no other bound
+        one (409). A manager removes any.
       parameters:
         - {$ref: "#/components/parameters/idempotencyKey"}
         - {$ref: "#/components/parameters/name"}
@@ -911,6 +1001,11 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404":
           description: No such user, or no such identity of the user
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: The user's own last way to sign in
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -3173,6 +3268,9 @@ components:
         email: {type: string, description: Lower case}
         subject: {type: string, description: The user id at the provider (sub); empty until bound}
         bound: {type: boolean, description: The identity has the provider's subject}
+        name: {type: string, description: The name at the provider, from the last sign-in or link}
+        username: {type: string, description: The user name at the provider (preferred_username), likewise}
+        groups: {type: array, items: {type: string}, description: The groups at the provider, likewise}
         created_at: {type: string, format: date-time}
         bound_at: {type: string, format: date-time}
         last_used_at: {type: string, format: date-time}

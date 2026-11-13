@@ -575,6 +575,10 @@
   "log.action.provider.update": "sign-in provider changed",
   "log.action.provider.remove": "sign-in provider removed",
   "log.action.identity.add": "identity assigned",
+
+  "log.action.identity.update": "identity changed",
+
+  "log.action.identity.link": "account link started",
   "log.action.identity.remove": "identity removed",
   "log.kind.cube_gone": "gone",
   "log.kind.address_changed": "address",
@@ -1064,6 +1068,32 @@
   "users.identityAdded": "{email} assigned.",
 
   "users.identityRemoved": "Identity removed.",
+
+  "users.identityChange": "Change",
+
+  "users.identityChangeLabel": "Change {email} at {provider}",
+
+  "users.identityChanged": "Identity changed.",
+
+  "users.identityGroups": "groups: {groups}",
+
+  "users.identityLastUsed": "last sign-in",
+
+  "profile.linked": "Linked accounts",
+
+  "profile.linkedNone": "No account at a sign-in provider is linked to you yet.",
+
+  "profile.link": "Link {name}",
+
+  "profile.linkAgain": "Link {name} again",
+
+  "profile.linkDone": "Your account at {name} is linked: you can sign in with it.",
+
+  "profile.linkFailed": "The link did not start: {error}",
+
+  "profile.linkError.taken": "That account is already linked to another user here.",
+
+  "profile.linkError.failed": "The link through the provider failed. Try again.",
 
   "users.identityEmailNeeded": "An e-mail is needed.",
 

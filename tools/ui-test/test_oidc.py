@@ -199,12 +199,20 @@ def test_assign_by_user_id(page, case, new_context, provider):
         box.locator("select[name=kind]").select_option("subject")
         assert box.locator(".identity-value-label").inner_text() == page.evaluate("t('users.identitySubject')"), \
             "the field asks for the user id"
-        box.locator("input[name=account]").fill("sub-" + provider.email)
+        box.locator("input[name=account]").fill("a-typo")
         box.locator(".add-identity").click()
         assert wait_until(page, f"!!document.querySelector(\".user-panel[data-name='{user}'] .user-identities li[data-id]\")", 5), \
             "the identity is listed"
         row = page.locator(f".user-panel[data-name='{user}'] .user-identities li[data-id]")
-        assert ("sub-" + provider.email) in row.inner_text(), "by its user id"
+        assert "a-typo" in row.inner_text(), "by its user id"
+        # changed, while no sign-in used it
+        row.locator(".change-identity").click()
+        field = row.locator(".identity-change input[name=account]")
+        assert field.input_value() == "a-typo", "the change starts from the user id"
+        field.fill("sub-" + provider.email)
+        row.locator(".identity-change button[type=submit]").click()
+        assert wait_until(page, f"(document.querySelector(\".user-panel[data-name='{user}'] .user-identities li[data-id]\") || {{}}).textContent?.includes('sub-')", 5), \
+            "the user id changed"
         sign_in_through(new_context, key, user, "By id")
     finally:
         api_call("DELETE", f"api/v1/providers/{key}")
@@ -231,5 +239,38 @@ def test_a_refused_account(new_context, case, guard, provider):
         assert page.locator("#login-error").is_hidden(), "the password form's line stays empty"
         assert "#oidc" not in page.url, "the reason is gone from the address"
         ctx.close()
+    finally:
+        api_call("DELETE", f"api/v1/providers/{key}")
+
+
+def test_link_from_my_profile(page, case, provider):
+    """The signed-in user links its own account in My profile (AP Oidc
+    v1.1, Block 7): Link goes to the provider and back to My profile,
+    which says so and lists the account with what the provider said."""
+    key = f"link-{case.width}-{case.lang}"
+    name = "Link " + case.lang
+    api_call("POST", "api/v1/providers", {"key": key, "name": name, "issuer": provider.issuer, "client_id": CLIENT_ID, "client_secret": SECRET})
+    try:
+        page.goto(URL)  # the providers read again
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "profile")
+        button = page.locator(f"#profile-identities button[data-provider='{key}']")
+        button.wait_for(state="visible")
+        assert button.inner_text() == page.evaluate(f"t('profile.link', {{name: {name!r}}})"), "Link names the provider"
+        named_buttons(page, "My profile with linked accounts")
+        with page.expect_navigation(url=back_at_page, timeout=10000):
+            button.click()
+        assert wait_until(page, "currentView === 'profile' && !document.getElementById('profile-msg').classList.contains('hidden')", 10), \
+            "back in My profile, which says how it went"
+        assert page.evaluate("document.getElementById('profile-msg').textContent") == page.evaluate(f"t('profile.linkDone', {{name: {name!r}}})"), \
+            "the account is linked"
+        assert page.url.endswith("#profile"), "the fragment is My profile's again"
+        row = page.locator("#profile-identities .user-identities li[data-id]").filter(has_text=name)
+        row.wait_for(state="visible")
+        assert provider.email in row.inner_text(), "by its e-mail"
+        assert page.evaluate("t('users.identityLastUsed')") in row.locator(".identity-details").inner_text(), "with its last sign-in"
+        assert row.locator(".change-identity").is_hidden(), "a user does not change its own, it links again"
+        again = page.locator(f"#profile-identities button[data-provider='{key}']")
+        assert again.inner_text() == page.evaluate(f"t('profile.linkAgain', {{name: {name!r}}})"), "Link again"
     finally:
         api_call("DELETE", f"api/v1/providers/{key}")

@@ -78,9 +78,9 @@ func TestProvidersAPI(t *testing.T) {
 	}
 }
 
-// A user's identities through the API: assigned by e-mail, listed
+// with the user id, removed; a guests holder reaches a guest's only,
 // without the subject, removed; a guests holder reaches a guest's only,
-// and nobody reaches its own without users.
+// and a user lists its own without users but assigns none (AP Oidc v1.1).
 func TestIdentitiesAPI(t *testing.T) {
 	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
@@ -124,8 +124,11 @@ func TestIdentitiesAPI(t *testing.T) {
 	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/users/anna/identities/"+itoa(bySub.ID), "secret", ""); code != 200 {
 		t.Fatalf("remove the user id: %d", code)
 	}
-	if code, _ := callAPI(t, ts, "GET", "/api/v1/users/anna/identities", anna, ""); code != 403 {
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/users/anna/identities", anna, ""); code != 200 {
 		t.Fatalf("its own, without users: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", anna, `{"provider": "cloud", "email": "a3@example.com"}`); code != 403 {
+		t.Fatalf("assigning its own, without users: %d", code)
 	}
 	if code, _ := callAPI(t, ts, "POST", "/api/v1/users/anna/identities", host, `{"provider": "cloud", "email": "a2@example.com"}`); code != 403 {
 		t.Fatalf("a guests holder on an operator: %d", code)

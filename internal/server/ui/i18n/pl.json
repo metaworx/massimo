@@ -594,6 +594,10 @@
   "log.action.provider.update": "zmieniono dostawcę logowania",
   "log.action.provider.remove": "usunięto dostawcę logowania",
   "log.action.identity.add": "przypisano tożsamość",
+
+  "log.action.identity.update": "tożsamość zmieniona",
+
+  "log.action.identity.link": "rozpoczęto powiązanie konta",
   "log.action.identity.remove": "usunięto tożsamość",
   "log.kind.cube_gone": "zniknął",
   "log.kind.address_changed": "adres",
@@ -1089,6 +1093,32 @@
   "users.identityAdded": "Przypisano {email}.",
 
   "users.identityRemoved": "Usunięto tożsamość.",
+
+  "users.identityChange": "Zmień",
+
+  "users.identityChangeLabel": "Zmień {email} u {provider}",
+
+  "users.identityChanged": "Tożsamość zmieniona.",
+
+  "users.identityGroups": "grupy: {groups}",
+
+  "users.identityLastUsed": "ostatnie logowanie",
+
+  "profile.linked": "Powiązane konta",
+
+  "profile.linkedNone": "Żadne konto u dostawcy logowania nie jest jeszcze z tobą powiązane.",
+
+  "profile.link": "Powiąż {name}",
+
+  "profile.linkAgain": "Powiąż ponownie {name}",
+
+  "profile.linkDone": "Twoje konto u {name} jest powiązane: możesz się nim logować.",
+
+  "profile.linkFailed": "Powiązanie nie rozpoczęło się: {error}",
+
+  "profile.linkError.taken": "To konto jest tu już powiązane z innym użytkownikiem.",
+
+  "profile.linkError.failed": "Powiązanie przez dostawcę nie powiodło się. Spróbuj ponownie.",
 
   "users.identityEmailNeeded": "Potrzebny jest adres e-mail.",
 

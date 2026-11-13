@@ -62,6 +62,11 @@ in this order:
      else it does not bind.
      Only the account's one primary e-mail is sent;
      a second address never matches.
+   - **Linked by the user**:
+     a signed-in user links its own account in My profile → **Linked accounts**,
+     **Link Nextcloud**, by signing in there once;
+     it is bound at once, and replaces the user's other link at that provider.
+     An account another user has is refused.
 3. **Users created**:
    where the provider's **Create users who sign in** is on,
    an account with a verified e-mail of the domains named (any where none are)

@@ -576,6 +576,10 @@
   "log.action.provider.update": "aanmeldprovider gewijzigd",
   "log.action.provider.remove": "aanmeldprovider verwijderd",
   "log.action.identity.add": "identiteit toegewezen",
+
+  "log.action.identity.update": "identiteit gewijzigd",
+
+  "log.action.identity.link": "accountkoppeling gestart",
   "log.action.identity.remove": "identiteit verwijderd",
   "log.kind.cube_gone": "weg",
   "log.kind.address_changed": "adres",
@@ -1065,6 +1069,32 @@
   "users.identityAdded": "{email} toegewezen.",
 
   "users.identityRemoved": "Identiteit verwijderd.",
+
+  "users.identityChange": "Wijzigen",
+
+  "users.identityChangeLabel": "{email} bij {provider} wijzigen",
+
+  "users.identityChanged": "Identiteit gewijzigd.",
+
+  "users.identityGroups": "groepen: {groups}",
+
+  "users.identityLastUsed": "laatst aangemeld",
+
+  "profile.linked": "Gekoppelde accounts",
+
+  "profile.linkedNone": "Er is nog geen account bij een aanmeldprovider aan je gekoppeld.",
+
+  "profile.link": "{name} koppelen",
+
+  "profile.linkAgain": "{name} opnieuw koppelen",
+
+  "profile.linkDone": "Je account bij {name} is gekoppeld: je kunt ermee aanmelden.",
+
+  "profile.linkFailed": "De koppeling is niet gestart: {error}",
+
+  "profile.linkError.taken": "Dat account is hier al aan een andere gebruiker gekoppeld.",
+
+  "profile.linkError.failed": "De koppeling via de provider is mislukt. Probeer het opnieuw.",
 
   "users.identityEmailNeeded": "Een e-mailadres is nodig.",
 

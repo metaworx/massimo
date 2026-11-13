@@ -577,6 +577,10 @@
   "log.action.provider.update": "provider di accesso modificato",
   "log.action.provider.remove": "provider di accesso rimosso",
   "log.action.identity.add": "identità assegnata",
+
+  "log.action.identity.update": "identità modificata",
+
+  "log.action.identity.link": "collegamento dell'account avviato",
   "log.action.identity.remove": "identità rimossa",
   "log.kind.cube_gone": "sparito",
   "log.kind.address_changed": "indirizzo",
@@ -1066,6 +1070,32 @@
   "users.identityAdded": "{email} assegnato.",
 
   "users.identityRemoved": "Identità rimossa.",
+
+  "users.identityChange": "Modifica",
+
+  "users.identityChangeLabel": "Modifica {email} presso {provider}",
+
+  "users.identityChanged": "Identità modificata.",
+
+  "users.identityGroups": "gruppi: {groups}",
+
+  "users.identityLastUsed": "ultimo accesso",
+
+  "profile.linked": "Account collegati",
+
+  "profile.linkedNone": "Nessun account presso un provider di accesso è ancora collegato a te.",
+
+  "profile.link": "Collega {name}",
+
+  "profile.linkAgain": "Collega di nuovo {name}",
+
+  "profile.linkDone": "Il tuo account presso {name} è collegato: puoi accedere con esso.",
+
+  "profile.linkFailed": "Il collegamento non è partito: {error}",
+
+  "profile.linkError.taken": "Questo account è già collegato a un altro utente qui.",
+
+  "profile.linkError.failed": "Il collegamento tramite il provider non è riuscito. Riprova.",
 
   "users.identityEmailNeeded": "Serve un indirizzo e-mail.",
 
