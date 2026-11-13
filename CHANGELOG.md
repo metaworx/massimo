@@ -8,6 +8,196 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.15.0-alpha.1] - 2026-11-13
+
+### Added
+
+- `GET …/log?command=<id>` keeps the events of one command, and each
+  event of a command names it in `command`.
+
+- The log shows a command's steps on the radio under its command, the
+  queue's holds for the duty cycle and the memory slots, and to a user
+  with `audit` alone the sign-ins, failed ones and lockouts.
+
+- A line a client of the LAN proxy passes on to the Cube is a command of
+  the store, found in the log with its step; the proxy's clients and its
+  warnings are lines of the log, source `proxy`.
+
+- The web UI's log opens a command under its line, with its steps and,
+  for those who may see the audit, its audit row; its source choice knows
+  the queue, the server and the proxy.
+
+- `massimo user rename <current> <new>` renames a user, asking for the
+  password under the new name; its API keys and settings stay.
+
+- System settings → Software chooses the update channel, for a holder of
+  `settings`; where apt, brew or `MASSIMO_UPDATE_CHANNEL` decides it, the
+  channel is shown fixed with the way to change it.
+
+- The sign-in card's ☰ menu sets the language and the appearance (light,
+  dark or as the system) before anyone signs in.
+
+- The apt repository has the rolling suites `devel` and `nightly`, signed
+  with a key of their own that the keyring package carries beside the
+  numbered suites' key; each rolling build signs its suite.
+
+- The store keeps OpenID Connect providers and each user's identities
+  at them, an e-mail assigned bound at its first sign-in (migration
+  0016, `docs/store.md` section 6).
+
+- Users sign in through an OpenID Connect provider such as Nextcloud,
+  Google or Microsoft, found by subject or an e-mail assigned to them
+  (`docs/api-v1.md`, "Sign-in through OpenID Connect").
+
+- The capability `auth` manages the OpenID Connect providers, owner's
+  alone by default, and a user's identities are assigned by e-mail
+  (`docs/api-v1.md`, "Providers" and "Identities").
+
+- The web UI signs in with a provider's button on the sign-in card, and
+  System settings manages the sign-in providers and assigns users'
+  identities at them by e-mail.
+
+- `make release <flavour>` cuts an `alpha`, `beta`, `rc` or `stable`
+  release, with `BUMP=minor`, `patch` or `major`; `rc`, release
+  candidates, ranks between `beta` and `stable` as an update channel.
+
+- On a box apt updates, the update channel chosen in the web UI switches
+  apt's suite at the next update, the source put back where apt cannot
+  fetch the new one; nothing is downgraded.
+
+- The rolling channels have Homebrew formulae, `massimo-devel` and
+  `massimo-nightly` in the tap `metaworx/massimo-rolling`, pushed by each
+  rolling build, or following a newer numbered release.
+
+- `massimo fakecube` carries out what it acknowledges (setpoints, boosts,
+  programmes, locks), serves a built-in house (`-fixture rooms`), takes
+  a test's control (`-control`); `serve -stale-after` for tests.
+
+- System settings → System Info shows the server's version, start and
+  certificate, how it was installed, the computer it runs on and the
+  browser's address as the server sees it, from `GET /api/v1/system`.
+
+### Changed
+
+- `serve -log` writes JSON lines, made 0640 in `/var/log/massimo`, now
+  `_massimo:adm` 2750; stderr and the journal stay plain; `-log-format`,
+  `-log-file-format` and `-log-process-format` choose (`README.md`).
+
+- A release asks for the owner's approval once: the apt repository and
+  the Homebrew formula start beside the signing and wait for it
+  (`GUIDELINES/project/CI.md`, section 6).
+
+- `serve` rotates its `-log` file itself, on every platform: at 10M, at a
+  change of its format and on a reload; logrotate's file is gone, and the
+  Mac's plist passes `-log`, stderr to `serve.stderr.log`.
+
+- Every line of `serve`'s log names its `source` (`system`, `server`,
+  `cube`, `queue`, `proxy`, `store`, `tls`, `announce`, `push`), and
+  `cube=` where it concerns one; `serving cube` says `from=`.
+
+- Homebrew's service passes `-log`, so `serve` writes and rotates
+  `var/log/massimo/serve.log` in brew's prefix; `var/log/massimo.log`
+  keeps only what it prints before its log.
+
+- The store's `events` are its `log` (migration 0014), whose rows may
+  name their command and be for an auditor's eyes alone; older releases
+  read and write it through a view `events`, so a rollback still works.
+
+- Every event of the web UI's log is one line of serve's log, written
+  from the same record (`kind=`, `command=`, `by=`), and the separate
+  lines that said the same again (`device state`, `backup taken`, …) go.
+
+- The site's landing page follows the channels: each channel's docs
+  index shows its own build's install routes, and the root shows the
+  most stable channel's, with the selector (`packaging/README.md`).
+
+- A removed user's row is renamed `<name>-del-<date>`, so a new user
+  under the name starts with a row of its own rather than the old one's
+  history.
+
+- The workflows are linted by actionlint, pinned in a module of its own
+  that Dependabot updates, in `make actionlint` and in CI's job
+  "actionlint" (`tools/actionlint/README.md`).
+
+- An apt suite and a Homebrew formula take every more stable channel's
+  releases too, as `massimo update` does: `alpha` is offered a newer
+  `beta` or `stable` release, and a rolling suite the numbered releases.
+
+- The build of a release is `make build-release`; `make release` stops
+  and names it, since it is to cut a release.
+
+- Each channel's page on the site names its own apt suite, and for
+  `devel` and `nightly` the rolling key's file; the root keeps the most
+  stable channel's.
+
+- `make release` dumps the store the release writes into
+  `internal/store/testdata/releases/` before the release commit, and
+  the release refuses a tag without it.
+
+- A change to the site's documents alone, `docs/` among them, runs
+  Guidelines and Site, and pushed to `main` it deploys the site without
+  the tests and the devel build (`GUIDELINES/project/CI.md`, section 2).
+
+- The web UI counts the Cubes found on the LAN on one line under the
+  header, a link to System settings → Cubes, which lists them with Add
+  and their settings file lines; a found Cube in the choice opens it.
+
+- Each Cube's panel in System settings → Cubes shows its duty cycle, free
+  slots and pending radiograms in its head, and opens to a table of its
+  address, port, firmware, radio address, clock and radio budget.
+
+- In expert mode the web UI's header shows the chosen Cube's name, duty
+  cycle, free slots and pending radiograms on one line, also scrolled;
+  the server's facts are in System Info, the Cube's in its panel.
+
+### Fixed
+
+- The nightly build no longer deploys the site at a release commit,
+  whose own deploy GitHub Pages then ignored: apt did not offer
+  v0.14.0-alpha.1.
+
+- The queue's lines (`room woken up`, `proxy client's command sent`, the
+  duty cycle's waits) reach `serve`'s log, its file and `-log-level`,
+  rather than Go's default logger on stderr.
+
+- A DNS-01 hook on a box without `curl` or `jq` says which one is
+  missing, where it said that no zone was found; the Debian package
+  suggests both (`packaging/README.md`).
+
+- A pruned command's id is never given to a later one: `commands` has
+  `AUTOINCREMENT` (migration 0014), as the backups have since 0013.
+
+- The audit is pruned, as docs/store.md said it was: `audit.keep_days`
+  keeps a year by default, 0 keeps every row.
+
+- `massimo user` no longer creates a store of its own in the current
+  directory: it asks for `-data` or names the service's command, says
+  which store it wrote, and warns of one that is not the service's.
+
+- Only a version tag of the full shape, `vX.Y.Z` or `vX.Y.Z-<label>.N`,
+  counts as a release: a tag such as `v1.2` or `v1..2-alpha.1` no longer
+  sets the build's version, the apt pool, the site's index or a flavour.
+
+- Signed out, the web UI shows only its name, its version and the
+  sign-in, where Sign out left the last user's rooms, Cube and clock
+  drawn behind it.
+
+- The sign-in is a card in the page instead of a modal dialog, with one
+  password field, so that password managers such as KeePassXC fill it.
+
+- A server no longer lists its own proxies as Cubes found on the LAN when
+  their Cube was added or changed after its start, or when their answer
+  comes from another address, as through NAT.
+
+- The web UI's page scrolls down from the top in small steps again with
+  expert mode on or the found Cubes open: the browser took it back to
+  the top each time the header compacted, and the header flickered.
+
+### Security
+
+- The Homebrew tap's deploy key is held by the `signing` environment,
+  as the release keys are, no longer by any run of the repository.
+
 ## [0.14.0-alpha.1] - 2026-11-11
 
 ### Added
