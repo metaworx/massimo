@@ -246,8 +246,8 @@ function base() {
 // keepalive lets the request outlive the page. api() adds the sign-in on
 // a 401; the sign-in itself and the last preferences sent as the page is
 // left use it as it is (login.js).
-async function apiRequest(method, path, body, { auth = true, keepalive = false, token = "" } = {}) {
-  const headers = {};
+async function apiRequest(method, path, body, { auth = true, keepalive = false, token = "", headers: extra = {} } = {}) {
+  const headers = { ...extra };
   const bearer = token || (auth && state.token);
   if (bearer) headers.Authorization = "Bearer " + bearer;
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -271,13 +271,14 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
 }
 
 // api is apiRequest with the token, asking for a sign-in on a 401 and
-// sending the request again once one is in.
-async function api(method, path, body) {
+// sending the request again once one is in; headers are added to the
+// request's own.
+async function api(method, path, body, headers) {
   try {
-    return await apiRequest(method, path, body);
+    return await apiRequest(method, path, body, { headers });
   } catch (e) {
     if (e.status !== 401) throw e;
-    if (await askLogin()) return api(method, path, body); // login.js
+    if (await askLogin()) return api(method, path, body, headers); // login.js
     throw new Error(t("api.badToken"));
   }
 }
@@ -732,7 +733,7 @@ async function loadTimeZone(serial) {
 async function loadRooms() {
   if (!state.serial) return;
   const serial = state.serial;
-  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms"), api("GET", base() + "/devices")]);
+  const [rooms, devices] = await Promise.all([api("GET", base() + "/rooms?devices=real"), api("GET", base() + "/devices?devices=real")]);
   state.rooms = rooms || [];
   state.unlisted = (devices || []).filter((d) => d.unlisted || d.room_id === 0);
   state.roomsOf = serial;
@@ -1009,7 +1010,7 @@ async function connectEvents() {
   if (gen !== eventsGen) return; // another connect or close came first
   const serial = state.serial;
   const resume = eventsLast && eventsLast.serial === serial ? eventsLast.id : "";
-  const es = new EventSource(base() + "/events?ticket=" + encodeURIComponent(ticket) +
+  const es = new EventSource(base() + "/events?devices=real&ticket=" + encodeURIComponent(ticket) +
     (resume ? "&last_event_id=" + encodeURIComponent(resume) : ""));
   state.events = es;
   // on adds a listener that first notes the event's id for the next stream.

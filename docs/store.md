@@ -449,6 +449,16 @@ CREATE TABLE push_subscriptions (            -- migration 0010
     failures   INTEGER NOT NULL DEFAULT 0    -- failed deliveries since then
 );
 
+CREATE TABLE rooms (                         -- migration 0017
+    id          INTEGER PRIMARY KEY,
+    uuid        TEXT    NOT NULL UNIQUE,     -- the room's uid in the API (room_uid)
+    cube_id     INTEGER NOT NULL REFERENCES cubes (id) ON DELETE CASCADE,
+    room_id     INTEGER NOT NULL,            -- the Cube's room number
+    temp_method TEXT    NOT NULL DEFAULT 'median',  -- median or mean: a room without a wall thermostat
+    rf_address  TEXT    NOT NULL DEFAULT ''  -- the virtual wall thermostat's address; '' its room number
+);
+CREATE UNIQUE INDEX rooms_room ON rooms (cube_id, room_id) WHERE deleted_at IS NULL;
+
 CREATE TABLE log (                           -- events until migration 0014, made again by 0009 and 0014
     id         INTEGER PRIMARY KEY,
     cube_id    INTEGER REFERENCES cubes (id) ON DELETE CASCADE,  -- NULL: the server's
@@ -690,6 +700,14 @@ Notes on the tables:
   and the first migration seeds `settings` with `node.id` and `tenant.id`.
   The listing above leaves those columns out so that it stays readable;
   the migration file has them, and so does `internal/store/migrations/store.sql`.
+- `rooms` (migration 0017) are each Cube's rooms as the server knows them,
+  kept in step with the Cube's metadata:
+  a room it names gets a row and a uid, one it leaves out is marked deleted,
+  and a room that takes a deleted room's number later gets a row of its own.
+  The uid is the room's `room_uid` in the API, which a client keeps for the
+  room's life; the other columns are the settings of the room's virtual wall
+  thermostat (docs/api-v1.md, "The virtual wall thermostat").
+  A row has `version`, `deleted_at` and `origin`, as the owned tables do.
 - `push_subscriptions` (migration 0010) are the browsers and apps a user's
   notifications go to by Web Push (docs/api-v1.md, "Notifications"):
   each tied to the session or API key that subscribed,

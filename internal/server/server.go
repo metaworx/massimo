@@ -370,6 +370,12 @@ type runtime struct {
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
 	last map[cube.RFAddress]*view.State
+	// vwt is the rooms' uids and settings, and each room's virtual wall
+	// thermostat as its last event had it (vwt.go).
+	vwt vwtState
+	// programs holds the week programmes written and not yet confirmed
+	// by the devices' configurations (etag.go).
+	programs pendingPrograms
 
 	subs   map[chan event]*subscriber // the stream subscribers (resume.go)
 	subsMu sync.Mutex
@@ -483,6 +489,13 @@ type event struct {
 	// them now; absent for the Cube, the server's own jobs and a server
 	// without users (the bootstrap token is a key of the first owner).
 	By *eventUser `json:"by,omitempty"`
+	// Changed says, for a "config" event of a thermostat or a virtual
+	// wall thermostat, what of its configuration changed: program, temps
+	// (the presets, boost and valve settings) or settings (a virtual
+	// wall thermostat's own); Etag is the programme's new tag where it
+	// changed (etag.go).
+	Changed []string `json:"changed,omitempty"`
+	Etag    string   `json:"etag,omitempty"`
 	// Command is the command the event belongs to (its attempt, a
 	// discard and a retry, its outcome), GET /api/v1/commands/{id}; 0
 	// for none, and once the command is pruned.
@@ -492,6 +505,11 @@ type event struct {
 	// audit marks an event only a user with audit sees (the log's
 	// visibility audit).
 	audit bool
+	// virtual marks an event of a virtual wall thermostat, wallRoom one
+	// whose room has a real wall thermostat, and realWall an event of a
+	// real wall thermostat in a room: the stream's view (?devices=) says
+	// which of them a subscriber gets (vwt.go).
+	virtual, wallRoom, realWall bool
 	// seq is the event's number on the Cube's stream, its id there
 	// (resume.go); 0 for an event the stream did not publish.
 	seq uint64
@@ -816,6 +834,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
 				rt.bk.touch() // the configuration may have changed (backups.go)
 			}
+			if e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventMetadata {
+				s.syncRooms(ctx, rt) // the rooms' uids (vwt.go)
+			}
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
 			}
@@ -824,6 +845,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				ev.Device = e.Device.String()
 				snap := rt.client.Snapshot()
 				ev.Source, ev.Serial = "device", snap.Serial(e.Device)
+				ev.realWall = realWall(snap, e.Device)
 				if c := snap.Config(e.Device); c != nil && c.Type == cube.DeviceCube {
 					ev.Source = "cube"
 					if sn := rt.cubeSerial(); sn != "" {
@@ -861,6 +883,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				ev.Paired = e.New
 				go rt.writer().Reread(ctx, e.Device)
 			}
+			if e.Kind == cubelan.EventConfig && e.Device != 0 {
+				ev.Changed, ev.Etag = rt.configChanged(e.Device)
+			}
 			after := s.detail(ctx, rt, e, &ev)
 			ev.settle()
 			rt.line(ev)
@@ -879,6 +904,13 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			rt.subsMu.Unlock()
 			for _, a := range after {
 				rt.emit(a)
+			}
+			switch e.Kind {
+			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
+				s.publishVWTs(rt, ev.Command)
+			}
+			if e.Kind == cubelan.EventConfig && len(ev.Changed) > 0 {
+				s.publishVirtualConfig(rt, e.Device, ev.Changed, ev.Etag)
 			}
 		}
 	}
@@ -1091,6 +1123,11 @@ func (s *Server) routes() {
 						writeJSON(w, he.status, map[string]any{"error": he.msg, "no_state": he.noState})
 						return
 					}
+					if he.etag != "" {
+						w.Header().Set("ETag", quoteTag(he.etag))
+						writeJSON(w, he.status, map[string]any{"error": he.msg, "etag": he.etag})
+						return
+					}
 					writeError(w, he.status, he.msg)
 					return
 				}
@@ -1230,6 +1267,8 @@ type httpError struct {
 	noState []string
 	// retryAfter is the Retry-After header's seconds, none when 0.
 	retryAfter int
+	// etag is the current tag of what a 412 refused a write to.
+	etag string
 }
 
 func (e *httpError) Error() string { return e.msg }
@@ -1294,6 +1333,10 @@ func (s *Server) deviceTarget(sn, name string) string {
 	s.mu.RUnlock()
 	if rt == nil {
 		return "device:" + strings.ToLower(name)
+	}
+	if room, ok := virtualOf(rt, name); ok {
+		// A virtual wall thermostat's commands are its room's.
+		return "room:" + strconv.Itoa(int(room.ID))
 	}
 	rf, err := deviceOf(rt, name)
 	if err != nil {
@@ -1407,20 +1450,14 @@ func (s *Server) getCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
 	v := s.summary(rt)
-	v.RoomList = s.rooms(rt)
+	v.RoomList = s.roomsOf(rt, kind)
 	writeJSON(w, http.StatusOK, v)
 	return nil
-}
-
-// rooms is the room list of a Cube as the API shows it.
-func (s *Server) rooms(rt *runtime) []view.Room {
-	return view.Rooms(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
-}
-
-// devices is the device list of a Cube as the API shows it.
-func (s *Server) devices(rt *runtime) []view.Device {
-	return view.Devices(rt.client.Snapshot(), rt.hidden(), s.StaleAfter())
 }
 
 func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
@@ -1428,7 +1465,11 @@ func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, s.rooms(rt))
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, s.roomsOf(rt, kind))
 	return nil
 }
 
@@ -1437,7 +1478,11 @@ func (s *Server) getDevices(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, s.devices(rt))
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, s.devicesOf(rt, kind))
 	return nil
 }
 
@@ -1445,6 +1490,12 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		writeJSON(w, http.StatusOK, s.virtualDetail(rt, room))
+		return nil
+	} else if roomAlias.MatchString(r.PathValue("rf")) {
+		return fail(http.StatusNotFound, "no room %s", strings.TrimPrefix(strings.ToLower(r.PathValue("rf")), "room-"))
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -1481,6 +1532,9 @@ func (s *Server) setDeviceSetpoint(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtSetpoint)
+	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
 		return err
@@ -1503,6 +1557,9 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtLock)
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -1676,9 +1733,13 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusNotImplemented, "streaming not supported")
 	}
+	kind, err := kindOf(r)
+	if err != nil {
+		return err
+	}
 	ch := make(chan event, 64)
 	p := principalOf(r)
-	sub := &subscriber{user: p.userID(), audit: p.has("audit"), gone: make(chan struct{})}
+	sub := &subscriber{user: p.userID(), audit: p.has("audit"), kind: kind, gone: make(chan struct{})}
 	// The last id the client read: the browser's own retry sends the
 	// header, a client that opens a new stream (the web UI, with a fresh
 	// ticket) the parameter; the header is the newer of the two.
@@ -1716,7 +1777,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) error {
 		}
 		// Current state first, so a client needs no separate fetch; the
 		// last of it carries the newest id, where a reconnection resumes.
-		devs := s.devices(rt)
+		devs := s.devicesOf(rt, kind)
 		for i, d := range devs {
 			id := ""
 			if i == len(devs)-1 {

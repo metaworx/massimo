@@ -50,6 +50,7 @@ async function openConfig(room, el, tab) {
     if (!ui.config) return;
     ui.config.cfg = cfg;
     ui.config.prog = MassimoWeekProgram.model(prog);
+    ui.config.etag = prog && prog.etag; // sent back with the write (docs/api-v1.md, "The programme's tag")
     ui.config.edit = freshEdit(room, cfg);
     ui.config.loading = false;
   } catch (e) {
@@ -129,6 +130,7 @@ function renderConfig(el, room) {
     const p = elem("p", "tile-result");
     showResult(p, c.result.text, c.result.ok);
     body.appendChild(p);
+    if (c.result.reload) body.appendChild(button(t("prog.reload"), "prog-reload", c.result.reload));
   }
   markConfigSending(body, c);
 }
@@ -532,14 +534,35 @@ async function sendProgram(room, c) {
   const label = t("prog.label", { days: dayList(Object.keys(body)) });
   setConfigResult(room, c, t("result.waiting", { label }), true);
   try {
-    const res = await api("PUT", base() + "/rooms/" + room.id + "/program", body);
+    const res = await api("PUT", base() + "/rooms/" + room.id + "/program", body, c.etag ? { "If-Match": '"' + c.etag + '"' } : undefined);
     if (!(res && res.discarded)) for (const d of Object.keys(body)) p.orig[d] = W.copyPoints(body[d]);
+    if (res && res.etag) c.etag = res.etag;
     setConfigResult(room, c, resultText(label, res), !(res && res.discarded));
     state.details = {};
   } catch (e) {
+    if (e.status === 412) {
+      // Changed elsewhere since it was loaded, or a write still on its
+      // way: nothing was sent; the edits stay until the reload.
+      c.result = { text: t("prog.outdated"), ok: false, reload: () => reloadProgram(room, c) };
+      rerenderRoom(room);
+      return;
+    }
     setConfigResult(room, c, errorText(label, e), false);
   }
   loadCubes().catch(() => {});
+}
+
+// reloadProgram loads the room's programme as it is now, with its tag,
+// in place of the one edited.
+async function reloadProgram(room, c) {
+  try {
+    const prog = await api("GET", base() + "/rooms/" + room.id + "/program");
+    c.prog = MassimoWeekProgram.model(prog);
+    c.etag = prog && prog.etag;
+    setConfigResult(room, c, t("prog.reloaded"), true);
+  } catch (e) {
+    setConfigResult(room, c, e.message, false);
+  }
 }
 
 // --- copy tab ---------------------------------------------------------

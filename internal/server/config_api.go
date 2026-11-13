@@ -42,6 +42,7 @@ func (s *Server) configRoutes(api func(pattern, capability string, h func(http.R
 	api("GET /api/v1/cubes/{sn}/rooms/{id}/program", "read", s.getRoomProgram)
 	api("PUT /api/v1/cubes/{sn}/rooms/{id}/program", "configure", s.setRoomProgram)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/program", "configure", s.setDeviceProgram)
+	api("GET /api/v1/cubes/{sn}/devices/{rf}/program", "read", s.getDeviceProgram)
 }
 
 // Lookups.
@@ -225,6 +226,9 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtUpdate)
+	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {
 		return err
@@ -318,6 +322,9 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 		if _, ok := rt.hidden().Room(md, newRoom); !ok {
 			return 0, fail(http.StatusNotFound, "no room %d", newRoom)
 		}
+		if other, ok := secondWall(md, rf, newRoom); ok && c.Type == cube.DeviceWallThermostat && newRoom != cur.RoomID {
+			return 0, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
+		}
 		if newRoom != cur.RoomID {
 			if withCopy {
 				if err := s.require(r, "configure"); err != nil {
@@ -398,6 +405,9 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 	if c.Type == cube.DeviceCube {
 		return 0, fail(http.StatusBadRequest, "the cube itself is not in a room")
 	}
+	if other, ok := secondWall(md, c.RFAddress, room); ok && c.Type == cube.DeviceWallThermostat {
+		return 0, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
+	}
 	if withCopy {
 		if err := s.require(r, "configure"); err != nil {
 			return 0, err
@@ -429,6 +439,9 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtRemove)
 	}
 	rf, err := deviceOf(rt, r.PathValue("rf"))
 	if err != nil {
@@ -656,6 +669,9 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
 		return err
+	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtConfig)
 	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {
@@ -912,6 +928,9 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		return s.onVirtual(w, r, rt, room, vwtProgram)
+	}
 	rf, c, err := s.visibleDevice(rt, r)
 	if err != nil {
 		return err
@@ -922,6 +941,11 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	body, err := readBody(r)
 	if err != nil {
 		return err
+	}
+	if before, ok := rt.programOfDevice(rf, c); ok {
+		if err := checkIfMatch(r, before.etag); err != nil {
+			return err
+		}
 	}
 	lines, err := programLines(cube.Target{RFAddress: rf}, body)
 	if err != nil {
@@ -934,7 +958,11 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	rt.afterWrite(rf)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
+	if prog, _, ok := rt.programOf(rf); ok && !res.Discarded {
+		rt.programs.note(rf, withDays(prog, body))
+	}
+	after, _ := rt.programOfDevice(rf, c)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "etag": after.etag})
 	return nil
 }
 
@@ -958,6 +986,10 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	before, _ := rt.programOfRoom(room.ID)
+	if err := checkIfMatch(r, before.etag); err != nil {
+		return err
+	}
 	addr := room.RFAddress
 	if addr == 0 {
 		addr = append(radiators, walls...)[0]
@@ -973,7 +1005,15 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	rt.afterWrite(append(radiators, walls...)...)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
+	if !res.Discarded {
+		for _, rf := range append(radiators, walls...) {
+			if prog, _, ok := rt.programOf(rf); ok {
+				rt.programs.note(rf, withDays(prog, body))
+			}
+		}
+	}
+	after, _ := rt.programOfRoom(room.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "etag": after.etag})
 	return nil
 }
 
@@ -988,25 +1028,35 @@ func (s *Server) getRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	radiators, walls := roomThermostats(rt, room.ID)
-	all := append(radiators, walls...)
-	if len(all) == 0 {
+	rp, ok := rt.programOfRoom(room.ID)
+	if !ok {
 		return fail(http.StatusNotFound, "room %d has no thermostat", room.ID)
 	}
-	c := rt.client.Snapshot().Config(all[0])
-	var prog cube.WeekProgram
-	if c.Thermostat != nil {
-		prog = c.Thermostat.WeekProgram
-	} else {
-		prog = c.Wall.WeekProgram
-	}
-	days, err := json.Marshal(prog)
+	return writeProgram(w, rp)
+}
+
+// getDeviceProgram handles GET /devices/{rf}/program: a thermostat's
+// week programme with its tag, a room member's its room's; a virtual
+// wall thermostat's is its room's.
+func (s *Server) getDeviceProgram(w http.ResponseWriter, r *http.Request) error {
+	rt, err := s.cube(r)
 	if err != nil {
-		return fail(http.StatusInternalServerError, "week programme of %s: %v", all[0], err)
+		return err
 	}
-	var out map[string]any
-	json.Unmarshal(days, &out)
-	out["source"] = all[0].String()
-	writeJSON(w, http.StatusOK, out)
-	return nil
+	if room, ok := virtualOf(rt, r.PathValue("rf")); ok {
+		rp, ok := rt.programOfRoom(room.ID)
+		if !ok {
+			return fail(http.StatusNotFound, "room %d has no thermostat", room.ID)
+		}
+		return writeProgram(w, rp)
+	}
+	rf, c, err := s.visibleDevice(rt, r)
+	if err != nil {
+		return err
+	}
+	rp, ok := rt.programOfDevice(rf, c)
+	if !ok {
+		return fail(http.StatusBadRequest, "device %s is a %s and has no week programme", rf, c.Type)
+	}
+	return writeProgram(w, rp)
 }

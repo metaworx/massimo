@@ -108,7 +108,7 @@ func TestPutCube(t *testing.T) {
 	ctx := context.Background()
 
 	var devs []view.Device
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices?devices=real", &devs)
 	if len(devs) < 2 {
 		t.Fatalf("devices %v", devs)
 	}
@@ -123,7 +123,7 @@ func TestPutCube(t *testing.T) {
 		t.Fatalf("row %+v", row)
 	}
 	var after []view.Device
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &after)
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices?devices=real", &after)
 	if len(after) != len(devs)-1 {
 		t.Fatalf("hidden device still listed: %d of %d", len(after), len(devs))
 	}

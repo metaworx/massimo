@@ -296,6 +296,9 @@ and it will be removed in a later release.
   The answers carry both, `serial` and `rf_address`,
   and the audit names a device by its serial (`device:MEQ0000101`).
 - `{id}` is a room number as the Cube assigns it (1..255).
+- A room's virtual wall thermostat is also `{rf}`:
+  by its radio address, its serial (`VWT0000005`) or its room, `room-5`
+  (see "The virtual wall thermostat").
 
 ## Errors
 
@@ -1327,7 +1330,9 @@ time zone rules) and `room_list`, the rooms as below.
 
 ### GET /api/v1/cubes/{sn}/rooms
 
-Rooms with their devices and live states:
+Rooms with their devices and live states,
+each with its `room_uid` and the devices the view (`devices=`, see
+"The virtual wall thermostat") shows:
 
 ```json
 [
@@ -1359,7 +1364,8 @@ and `state` is then absent.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
 Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
-`actual_temp` when the device reported one,
+`actual_temp` once the device reported one (the last it reported, kept while
+its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
 `error` is the Cube's transmit error flag,
@@ -1391,14 +1397,122 @@ Values that were already there when the server first connected carry that time,
 the Cube's `observed_since`, and may be older;
 a reconnect keeps the times of values that did not change.
 Radiator thermostats report the measured temperature only now and then
-(after the valve moved), which is what `received.actual_temp` is for.
+(after the valve moved), and not at all on vacation, when those bytes carry the end:
+the server keeps the last one until a new one comes,
+and `received.actual_temp` says how old it is.
 `stale` is a hint: a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.
 
+### The virtual wall thermostat
+
+Every visible room has a virtual wall thermostat:
+a wall thermostat the server computes from the room's devices,
+so that every client shows a room by the same numbers.
+The original software allows one wall thermostat per room,
+whose measured temperature the room's radiator thermostats regulate by;
+a room's temperature is its virtual wall thermostat's `actual_temp`,
+whichever client shows it.
+
+```json
+{"rf_address": "000005", "serial": "VWT0000005", "type": "wall_thermostat", "virtual": true,
+ "name": "Bad", "room_id": 5, "room_uid": "0196…", "reported": true,
+ "state": {"mode": "auto", "setpoint": 21, "actual_temp": 20.5, "valve_pct": 30,
+           "window_open": false, "battery_low": false, "error": false, "link_error": false,
+           "consistent": true},
+ "received": {"actual_temp": "…", "mode": "…", …}, "last_seen": "…",
+ "sources": {"actual_temp": ["0a0102", "0a0103"], "mode": ["0a0104"]}}
+```
+
+- It belongs to its room: its name is the room's,
+  it comes with the room and goes with it (`device_forgotten`),
+  and `room_uid` is the room's uid, which no later room of the same number takes.
+  A room deleted and another made with its number while the server was not running
+  cannot be told apart and keeps the uid.
+- Its address is the room number (`000005` for room 5),
+  unless a real device or the Cube has that one:
+  then the first free one from `000100` to `0001ff`.
+  Its serial is `VWT` and the room number in seven digits;
+  no eQ-3 serial starts with V.
+- `actual_temp` is the room's wall thermostat's
+  (of two, set up by another tool, their median),
+  else the median of the room's radiator thermostats',
+  or their mean where the room's setting says so (`temp_method`);
+  a median of two values is their mean, rounded to 0.1 °C.
+  A stale value is left out while a fresh one exists;
+  where all are stale they are used, and the virtual wall thermostat is `stale`.
+  `received.actual_temp` is the oldest of the values used, so that the age never
+  looks better than the data, and `sources.actual_temp` lists them.
+- `mode` is `boost` while any thermostat of the room boosts;
+  else the wall thermostat's, else that of the radiator thermostat that reported last,
+  with `setpoint` and `until` from the same one, named in `sources.mode`
+  (the boosting ones during a boost).
+  `consistent` is false while the room's thermostats disagree on mode,
+  setpoint or `until`.
+- `valve_pct` is the highest of the radiator thermostats',
+  `window_open` true while any shutter contact of the room is open;
+  both are given so that a client need not compute them.
+  `battery_low`, `error`, `link_error` and `panel_locked` are the real wall
+  thermostat's; the radiator thermostats show their own.
+- `reported` is true once a thermostat of the room has reported;
+  a room without one has a virtual wall thermostat with `window_open` alone.
+- It has a `state` event whenever its computed state changes,
+  right after the event of the member that changed it, with the member's `command`.
+  It is never in the device counts, the log, the notifications,
+  a backup or a room's `ready`.
+
+Which devices the lists show is the parameter `devices`
+of `GET …/rooms`, `GET …/devices`, `GET /api/v1/cubes/{sn}` and `GET …/events`:
+
+| `devices=` | real wall thermostats | virtual wall thermostats |
+|------------|-----------------------|--------------------------|
+| `default` (or none) | shown | in each room without a real one |
+| `real` | shown | none: the answer before virtual wall thermostats |
+| `virtual` | left out | in every room |
+| `all` | shown | in every room |
+
+Radiator thermostats, shutter contacts and eco switches are in every view.
+In `default` and `virtual` every room has one wall thermostat,
+in `virtual` always the same;
+`default` only adds to what a client saw before.
+Any other value is `400`.
+Its commands are the device routes', under any of its names:
+
+| Route | Does |
+|-------|------|
+| `PUT …/setpoint` | the room's setpoint (`PUT …/rooms/{id}/setpoint`) |
+| `PUT …/program` | the room's programme (`PUT …/rooms/{id}/program`) |
+| `PUT …/config` | `temp_method` and `rf_address` to its own settings; `temp_offset` and `display_actual` to the room's real wall thermostat, `400` without one; every other field to the room (`PUT …/rooms/{id}/config`) |
+| `PUT …/lock` | the room's real wall thermostat's key lock; `409` without one, whose radiator thermostats are locked one by one |
+| `PUT …/devices/{rf}`, `DELETE` | `409`: it is renamed with its room and goes with it |
+
+A configuration of one part answers as that part's route does;
+one of several answers each by name,
+`{"ok": true, "room": {…}, "wall_thermostat": {…}, "settings": {…}}`.
+`temp_method` is `median` or `mean` and needs `configure`, as the room's
+settings do; `rf_address` is six hex digits, or `""` for the room number,
+and one that a real device, the Cube or another room's virtual wall thermostat has
+is `409`.
+A change of its settings is a `config` event of it,
+and a `state` event where its state changes.
+Each command needs the capability of the route it goes to,
+and the audit names the room as its target.
+
+A room takes one wall thermostat, as in the original software:
+moving or adding a second one into a room (`PUT …/devices/{rf}`) is `409`
+before anything is sent.
+A Cube that has two in a room, set up by another tool, is shown as it is.
+
+`GET …/devices/{rf}` answers for a virtual wall thermostat whatever the view,
+with the room's settings and week programme in a wall thermostat's shape
+(`wall_thermostat`, from the room's wall thermostat, else its first radiator
+thermostat) and its own `settings`:
+`{"temp_method": "median"}`, and `rf_address` where the owner set one.
+
 ### GET /api/v1/cubes/{sn}/devices
 
-Every device the Cube knows, in the Cube's order.
+Every device the Cube knows, in the Cube's order,
+then the virtual wall thermostats the view (`devices=`) shows.
 Devices that are paired but not assigned to a room have `"unlisted": true` and no name;
 they do not appear under rooms.
 
@@ -1639,7 +1753,33 @@ The answer lists every device:
 ### GET /api/v1/cubes/{sn}/rooms/{id}/program
 
 The week programme of the room's first radiator thermostat (else its wall thermostat),
-keyed by weekday as in a backup, plus `source`.
+keyed by weekday as in a backup, plus `source`, its tag `etag` (also the `ETag` header),
+`pending` and `program_consistent`.
+`GET …/devices/{rf}/program` gives one thermostat's the same way;
+a virtual wall thermostat's is its room's.
+
+**The programme's tag.**
+An editor that read a programme sends its tag back with its write,
+in `If-Match` (quoted, `W/` taken, `*` for any),
+and a programme changed since, in another client or at a device,
+is refused with `412`, whose body and `ETag` carry the current tag,
+instead of being overwritten unseen; nothing is sent then.
+A write without `If-Match` is unconditional, as before.
+The tag covers every thermostat of the room,
+since a write to the room or to one member changes the room:
+a member's tag is its room's,
+and `program_consistent` is false while the members' programmes differ.
+A programme written and not yet in the devices' configurations,
+which the server re-reads within minutes after a write,
+counts as written: the GET shows it, `pending: true`, under its own tag,
+so a write based on the copy from before it is `412` too.
+It is pending until the configurations show it, or for ten minutes at most.
+A write's answer carries the new tag, `"etag"`.
+A device's `config` event says what its new configuration changed,
+`"changed": ["program", "temps"]` (the presets, boost and valve settings),
+and `etag` where the programme changed;
+its room's virtual wall thermostat has the same `config` event,
+and one with `"changed": ["settings"]` when its own settings change.
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/program
 
@@ -2058,7 +2198,9 @@ A page since a time looks up the oldest event at or after it the same way.
 ### GET /api/v1/cubes/{sn}/events
 
 A `text/event-stream`.
-On connect, one `state` event per device with its current data;
+On connect, one `state` event per device with its current data,
+the devices of the view `devices=` (see "The virtual wall thermostat"),
+whose events alone the stream then carries;
 afterwards an event whenever the Cube reports a change:
 
 ```
