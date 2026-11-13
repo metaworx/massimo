@@ -45,8 +45,7 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
 5. **The UI when the server is gone**:
    a prominent notice, edits blocked, polling until it is back; brief ready.
 6. **Settings → Server** in the UI:
-   the intervals and the stale threshold, the certificate's details
-   (in the header's expert list for now) and `log.keep_days`,
+   the intervals, the stale threshold and `log.keep_days`,
    which the settings API already takes.
 7. **TLS, later**, each a plan of its own: UPnP, a local CA,
    a Pebble job in CI so that a test reaches an ACME server;
