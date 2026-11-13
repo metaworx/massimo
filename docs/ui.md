@@ -593,8 +593,13 @@ to the top of the page.
   From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
-  each in a panel whose head shows the name, the serial and the address,
-  and opens with a click: its connection,
+  each in a panel whose head shows the name, the serial and the address
+  without the port, the duty cycle, the free slots and the radiograms pending,
+  and opens with a click:
+  a table of its facts for everyone who sees the panel
+  (address, port, firmware, radio address, the Cube's clock,
+  duty cycle, free slots, pending and queued, refreshed while it is open),
+  its connection,
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),

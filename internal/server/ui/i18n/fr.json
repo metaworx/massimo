@@ -464,6 +464,7 @@
   "cubes.removed": "{serial} retiré.",
   "cubes.name": "Nom",
   "cubes.address": "Adresse",
+  "cubes.port": "Port",
   "cubes.addressHint": "hôte ou hôte:port ; vide : par la recherche",
   "cubes.addressFound": "par la recherche : {address}",
   "cubes.follow": "Suivre l'adresse depuis laquelle le Cube répond à la recherche",

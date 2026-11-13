@@ -541,13 +541,26 @@ function clockText(cube) {
 
 // --- header -----------------------------------------------------------
 
+// budgetFacts is a Cube's radio budget as the page shows it, in the
+// header and in its panel (cubes.js): the duty cycle, the free memory
+// slots, the radiograms pending and the commands queued, "–" while unknown.
+function budgetFacts(cube) {
+  const b = cube.budget || {};
+  return {
+    duty: b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %",
+    slots: b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots),
+    pending: String(cube.pending_radiograms || 0),
+    queued: cube.queued === undefined ? "–" : String(cube.queued),
+  };
+}
+
 function renderHeader(cube) {
   renderCubeSelect(); // the chosen Cube's connection, its plug
-  const b = cube.budget || {};
-  $("duty").textContent = b.duty_cycle_pct === undefined ? "–" : b.duty_cycle_pct + " %";
-  $("slots").textContent = b.free_memory_slots === undefined ? "–" : String(b.free_memory_slots);
-  $("queued").textContent = cube.queued === undefined ? "–" : String(cube.queued);
-  $("pending-n").textContent = String(cube.pending_radiograms || 0);
+  const f = budgetFacts(cube);
+  $("duty").textContent = f.duty;
+  $("slots").textContent = f.slots;
+  $("queued").textContent = f.queued;
+  $("pending-n").textContent = f.pending;
   $("cube-fw").textContent = cube.firmware || "–";
   $("cube-addr").textContent = cube.address || "–";
   $("cube-rf").textContent = cube.rf_address || "–";

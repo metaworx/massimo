@@ -463,6 +463,7 @@
   "cubes.removed": "{serial} verwijderd.",
   "cubes.name": "Naam",
   "cubes.address": "Adres",
+  "cubes.port": "Poort",
   "cubes.addressHint": "host of host:poort; leeg: uit de zoekopdracht",
   "cubes.addressFound": "uit de zoekopdracht: {address}",
   "cubes.follow": "Het adres volgen waarvandaan de Cube op de zoekopdracht antwoordt",

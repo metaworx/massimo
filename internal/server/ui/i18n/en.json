@@ -462,6 +462,7 @@
   "cubes.removed": "{serial} removed.",
   "cubes.name": "Name",
   "cubes.address": "Address",
+  "cubes.port": "Port",
   "cubes.addressHint": "host or host:port; empty: from discovery",
   "cubes.addressFound": "from discovery: {address}",
   "cubes.follow": "Follow the address the Cube answers discovery from",
