@@ -29,6 +29,14 @@ func startRooms(t *testing.T) (*fakecube.Server, *httptest.Server, *Server, *sto
 // startRoomsWith is startRooms with the fixture's lines changed first.
 func startRoomsWith(t *testing.T, change func([]cube.Message) []cube.Message) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
 	t.Helper()
+	return startRoomsApply(t, change, 0)
+}
+
+// startRoomsApply is startRoomsWith with the fake Cube applying a
+// command applyAfter after its S reply; the server re-reads a written
+// device's configuration within a few tenths of a second.
+func startRoomsApply(t *testing.T, change func([]cube.Message) []cube.Message, applyAfter time.Duration) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
+	t.Helper()
 	greeting, err := fakecube.RoomsFixture()
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +44,7 @@ func startRoomsWith(t *testing.T, change func([]cube.Message) []cube.Message) (*
 	if change != nil {
 		greeting = change(greeting)
 	}
-	fc := &fakecube.Server{Greeting: greeting, Apply: true}
+	fc := &fakecube.Server{Greeting: greeting, Apply: true, ApplyAfter: applyAfter}
 	addr, err := fc.Start("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +58,9 @@ func startRoomsWith(t *testing.T, change func([]cube.Message) []cube.Message) (*
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: 50 * time.Millisecond})
+	follow := []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
+	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: 50 * time.Millisecond,
+		FollowUpDelays: follow})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())

@@ -1751,7 +1751,33 @@ The answer lists every device:
 ### GET /api/v1/cubes/{sn}/rooms/{id}/program
 
 The week programme of the room's first radiator thermostat (else its wall thermostat),
-keyed by weekday as in a backup, plus `source`.
+keyed by weekday as in a backup, plus `source`, its tag `etag` (also the `ETag` header),
+`pending` and `program_consistent`.
+`GET …/devices/{rf}/program` gives one thermostat's the same way;
+a virtual wall thermostat's is its room's.
+
+**The programme's tag.**
+An editor that read a programme sends its tag back with its write,
+in `If-Match` (quoted, `W/` taken, `*` for any),
+and a programme changed since, in another client or at a device,
+is refused with `412`, whose body and `ETag` carry the current tag,
+instead of being overwritten unseen; nothing is sent then.
+A write without `If-Match` is unconditional, as before.
+The tag covers every thermostat of the room,
+since a write to the room or to one member changes the room:
+a member's tag is its room's,
+and `program_consistent` is false while the members' programmes differ.
+A programme written and not yet in the devices' configurations,
+which the server re-reads within minutes after a write,
+counts as written: the GET shows it, `pending: true`, under its own tag,
+so a write based on the copy from before it is `412` too.
+It is pending until the configurations show it, or for ten minutes at most.
+A write's answer carries the new tag, `"etag"`.
+A device's `config` event says what its new configuration changed,
+`"changed": ["program", "temps"]` (the presets, boost and valve settings),
+and `etag` where the programme changed;
+its room's virtual wall thermostat has the same `config` event,
+and one with `"changed": ["settings"]` when its own settings change.
 
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/program
 

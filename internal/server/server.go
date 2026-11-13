@@ -367,6 +367,9 @@ type runtime struct {
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
+	// programs holds the week programmes written and not yet confirmed
+	// by the devices' configurations (etag.go).
+	programs pendingPrograms
 
 	subs   map[chan event]*subscriber // the stream subscribers (resume.go)
 	subsMu sync.Mutex
@@ -480,6 +483,13 @@ type event struct {
 	// them now; absent for the Cube, the server's own jobs and a server
 	// without users (the bootstrap token is a key of the first owner).
 	By *eventUser `json:"by,omitempty"`
+	// Changed says, for a "config" event of a thermostat or a virtual
+	// wall thermostat, what of its configuration changed: program, temps
+	// (the presets, boost and valve settings) or settings (a virtual
+	// wall thermostat's own); Etag is the programme's new tag where it
+	// changed (etag.go).
+	Changed []string `json:"changed,omitempty"`
+	Etag    string   `json:"etag,omitempty"`
 	// Command is the command the event belongs to (its attempt, a
 	// discard and a retry, its outcome), GET /api/v1/commands/{id}; 0
 	// for none, and once the command is pruned.
@@ -867,6 +877,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				ev.Paired = e.New
 				go rt.writer().Reread(ctx, e.Device)
 			}
+			if e.Kind == cubelan.EventConfig && e.Device != 0 {
+				ev.Changed, ev.Etag = rt.configChanged(e.Device)
+			}
 			after := s.detail(ctx, rt, e, &ev)
 			ev.settle()
 			rt.line(ev)
@@ -889,6 +902,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			switch e.Kind {
 			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
 				s.publishVWTs(rt, ev.Command)
+			}
+			if e.Kind == cubelan.EventConfig && len(ev.Changed) > 0 {
+				s.publishVirtualConfig(rt, e.Device, ev.Changed, ev.Etag)
 			}
 		}
 	}
@@ -1101,6 +1117,11 @@ func (s *Server) routes() {
 						writeJSON(w, he.status, map[string]any{"error": he.msg, "no_state": he.noState})
 						return
 					}
+					if he.etag != "" {
+						w.Header().Set("ETag", quoteTag(he.etag))
+						writeJSON(w, he.status, map[string]any{"error": he.msg, "etag": he.etag})
+						return
+					}
 					writeError(w, he.status, he.msg)
 					return
 				}
@@ -1239,6 +1260,8 @@ type httpError struct {
 	noState []string
 	// retryAfter is the Retry-After header's seconds, none when 0.
 	retryAfter int
+	// etag is the current tag of what a 412 refused a write to.
+	etag string
 }
 
 func (e *httpError) Error() string { return e.msg }

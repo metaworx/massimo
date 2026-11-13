@@ -173,6 +173,8 @@ type vwtDetail struct {
 	view.Device
 	Wall     *cube.WallConfig `json:"wall_thermostat,omitempty"`
 	Settings vwtSettings      `json:"settings"`
+	// Etag is the room's week programme's tag (etag.go).
+	Etag string `json:"etag,omitempty"`
 }
 
 // virtualDetail is the answer of GET …/devices/{rf} for a room's virtual
@@ -193,6 +195,9 @@ func (s *Server) virtualDetail(rt *runtime, room cube.RoomMeta) vwtDetail {
 	}
 	if ri.RFAddress != 0 {
 		d.Settings.RFAddress = ri.RFAddress.String()
+	}
+	if rp, ok := rt.programOfRoom(room.ID); ok {
+		d.Etag = rp.etag
 	}
 	radiators, walls := roomThermostats(rt, room.ID)
 	for _, rf := range append(walls, radiators...) {
@@ -489,7 +494,7 @@ func (s *Server) setVirtualSettings(r *http.Request, rt *runtime, room cube.Room
 	d := s.virtualDetail(rt, room)
 	_, walls := roomThermostats(rt, room.ID)
 	ev := event{Kind: "config", Device: d.RFAddress, Serial: d.Serial, Source: "device", Level: "info", Time: time.Now(),
-		Summary: map[string]any{"changed": []string{"settings"}}, virtual: true, wallRoom: len(walls) > 0}
+		Changed: []string{"settings"}, virtual: true, wallRoom: len(walls) > 0}
 	rt.subsMu.Lock()
 	rt.publishLocked(ev, 0)
 	rt.subsMu.Unlock()
