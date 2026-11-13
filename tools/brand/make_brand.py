@@ -74,6 +74,9 @@ DOT_R, HOLE_R = 6.5, 9
 LEFT_FULL, RIGHT_REST, LOW = 120, 222, 330
 K = 0.5522847498  # a quarter circle as one cubic
 SUPERSAMPLE = 4
+# The mark in the full square: its farthest corner from the centre, 306 of
+# 512, within the safe circle of 205 (0.62 x 306 = 190).
+SQUARE_SCALE = 0.62
 
 
 @dataclass(frozen=True)
@@ -241,6 +244,13 @@ BANG_GAP = 9
 
 def finger_d(pose: Pose, dy: float = 0) -> str:
     """The exclamation-mark finger(s) as a path, along the hands."""
+    return " ".join(p for p in finger_parts(pose, dy) if p)
+
+
+def finger_parts(pose: Pose, dy: float = 0) -> tuple[str, str]:
+    """The fingers as two paths: the minute hand with the hub's square,
+    which turn together, and the hour hand; "" where one is not drawn on
+    top."""
 
     def frame(deg: float):
         a = math.radians(deg)
@@ -263,31 +273,50 @@ def finger_d(pose: Pose, dy: float = 0) -> str:
     tip = MINUTE_LENGTH + HAND_W / 2  # as far as the cut-out hand reached
     side = HUB_R * 1.2  # a dot in the open hub, its corners clear of the rim
     if pose.finger == "bang":
-        return bar(HUB_R + BANG_GAP, BANG_NARROW, tip, BANG_WIDE)
+        return bar(HUB_R + BANG_GAP, BANG_NARROW, tip, BANG_WIDE), ""
     if pose.finger in CLOSED_HUB:
         hour_bar, _ = frame(HOUR_DEG)
         # The dot square to the minute hand is square to the hour hand too,
         # and turns with the minute hand.
-        parts = [dot(0, side), bar(side / 2 + BANG_GAP, BANG_NARROW, tip, BANG_WIDE)]
+        minute = dot(0, side) + " " + bar(side / 2 + BANG_GAP, BANG_NARROW, tip, BANG_WIDE)
+        hour = []
         if pose.hour == "round-orange":
-            parts.append(_d(_hour_capsule(), 0, dy))
+            hour.append(_d(_hour_capsule(), 0, dy))
         if pose.finger == "bang-both":
             if pose.hour == "round":
                 rounded = _round_bar(HOUR_DEG, side / 2 + BANG_GAP, HOUR_REACH, BANG_NARROW, BANG_WIDE)
-                parts.append(_d(rounded, 0, dy))
+                hour.append(_d(rounded, 0, dy))
             else:
-                parts.append(hour_bar(side / 2 + BANG_GAP, BANG_NARROW, HOUR_REACH, BANG_WIDE))
-        return " ".join(parts)
-    return ""
+                hour.append(hour_bar(side / 2 + BANG_GAP, BANG_NARROW, HOUR_REACH, BANG_WIDE))
+        return minute, " ".join(hour)
+    return "", ""
+
+
+def mark_parts(pose: Pose, dy: float = 0) -> dict[str, str]:
+    """The mark's paths in the 512 box, moved down by dy, by what they
+    are: "back", the gray M behind, where the flavour has one; "m", the M
+    with its cut-outs (even-odd); "minute" and "hour", the hands drawn on
+    top, where they are."""
+    parts = {}
+    if pose.backing:
+        legs = [(x, y - BACKING_INSET if y == M_POINTS[0][1] else y) for x, y in M_POINTS]
+        back = _stroke(legs, M_WIDTH - 2 * BACKING_INSET, pathops.LineCap.BUTT_CAP)
+        parts["back"] = _d(back, 0, dy)
+    parts["m"] = _d(outline(pose), 0, dy)
+    if pose.finger != "hand":
+        minute, hour = finger_parts(pose, dy)
+        for name, d in (("minute", minute), ("hour", hour)):
+            if d:
+                parts[name] = d
+    return parts
 
 
 def mark(pose: Pose, dy: float = 0) -> str:
     """The mark as filled paths in the 512 box, moved down by dy."""
-    body = f'<path d="{_d(outline(pose), 0, dy)}" fill="{pose.colour}" fill-rule="evenodd"/>'
-    if pose.backing:
-        legs = [(x, y - BACKING_INSET if y == M_POINTS[0][1] else y) for x, y in M_POINTS]
-        back = _stroke(legs, M_WIDTH - 2 * BACKING_INSET, pathops.LineCap.BUTT_CAP)
-        body = f'<path d="{_d(back, 0, dy)}" fill="{pose.backing}"/>' + body
+    parts = mark_parts(pose, dy)
+    body = f'<path d="{parts["m"]}" fill="{pose.colour}" fill-rule="evenodd"/>'
+    if "back" in parts:
+        body = f'<path d="{parts["back"]}" fill="{pose.backing}"/>' + body
     if pose.finger == "hand":
         return body
     return body + f'<path d="{finger_d(pose, dy)}" fill="{pose.finger_colour}"/>'
@@ -309,6 +338,121 @@ def tile_svg(pose: Pose) -> str:
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">'
         f'<title>Massimo</title><rect width="512" height="512" rx="112" fill="{pose.colour}"/>'
         f'<g transform="translate(256,256) scale(0.72) translate(-256,-256)">{mark(white, SHIFT)}</g></svg>\n'
+    )
+
+
+def square_svg(pose: Pose, scale: float = SQUARE_SCALE) -> str:
+    """The tile's blue as a full square, the mark in white within the
+    circle a maskable icon keeps (40 % of the side), for Android's maskable
+    icons and Apple's touch icon, which round or cut the corners
+    themselves."""
+    white = replace(pose, colour="#FFFFFF")
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">'
+        f'<title>Massimo</title><rect width="512" height="512" fill="{pose.colour}"/>'
+        f'<g transform="translate(256,256) scale({_num(scale)}) translate(-256,-256)">{mark(white, SHIFT)}</g></svg>\n'
+    )
+
+
+# The web UI's sprite (the ui scope): the parts of the logo and of the small
+# mark as symbols without a fill, each drawn by a <use> whose class gives it
+# its colour (brand.css); the cover first, in the background of the place,
+# so that the word under the drawing shows until the sprite has come.
+UI_PARTS = (("back", "brand-back"), ("m", "brand-m"), ("hour", "brand-hands"), ("minute", "brand-hands"))
+
+
+def _symbol(sid: str, vb: str, body: str) -> str:
+    return f'<symbol id="{sid}" viewBox="{vb}">{body}</symbol>'
+
+
+def _rect_of(vb: str) -> str:
+    x, y, w, h = vb.split()
+    return f'<rect x="{x}" y="{y}" width="{w}" height="{h}"/>'
+
+
+def _parts_symbols(prefix: str, vb: str, parts: dict[str, str]) -> list[str]:
+    out = [_symbol(f"{prefix}-cover", vb, _rect_of(vb))]
+    for name, _ in UI_PARTS:
+        if name in parts:
+            rule = ' fill-rule="evenodd"' if name == "m" else ""
+            out.append(_symbol(f"{prefix}-{name}", vb, f'<path d="{parts[name]}"{rule}/>'))
+    return out
+
+
+def sprite_svg(pose: Pose, i_style: str) -> str:
+    """The web UI's sprite: logo-cover, logo-back, logo-m, logo-hour,
+    logo-minute, logo-letters and logo-dot (the i's parts in the accent),
+    and the small mark's mark-cover, mark-back, mark-m, mark-hour and
+    mark-minute. Their paths have no fill: the page's classes colour them."""
+    vb, path, i_parts = logo_parts(i_style)
+    symbols = _parts_symbols("logo", vb, mark_parts(pose))
+    plain = "".join(f'<path transform="{t}" d="{d}"/>' for t, d, lit in i_parts if not lit)
+    lit = "".join(f'<path transform="{t}" d="{d}"/>' for t, d, lit in i_parts if lit)
+    symbols.append(_symbol("logo-letters", vb, f'<path d="{path}"/>{plain}'))
+    if lit:
+        symbols.append(_symbol("logo-dot", vb, lit))
+    symbols += _parts_symbols("mark", "0 0 512 512", mark_parts(replace(pose, scale=False), SHIFT))
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg">\n'
+        "<!-- Massimo's mark for the web UI, written by tools/brand/make_brand.py (make ui-brand): "
+        "edit the tool, not this file. -->\n" + "\n".join(symbols) + "\n</svg>\n"
+    )
+
+
+def brand_css(v: Variant, i_style: str) -> str:
+    """The web UI's brand.css: the mark's colours for light and dark pages
+    as tokens, in style.css's pattern, so that the chosen mode applies; the
+    sprite's classes; the letters in the page's text colour; the logo's
+    proportions."""
+    light, _ = themed(v, "light")
+    dark, _ = themed(v, "dark")
+    vb = logo_parts(i_style)[0].split()
+
+    def tokens(pose: Pose) -> str:
+        back = pose.backing or pose.colour
+        return f"--brand-back: {back}; --brand-m: {pose.colour}; --brand-hands: {pose.finger_colour};"
+
+    ratio = float(vb[2]) / float(vb[3])
+
+    return (
+        "/* SPDX-License-Identifier: AGPL-3.0-or-later */\n"
+        "/* Massimo's mark in the web UI, written by tools/brand/make_brand.py (make ui-brand): edit the tool,\n"
+        "   not this file. The parts of brand.svg take these colours; a place sets --brand-cover to its\n"
+        "   background, which the cover hides the word under the drawing with; --brand-logo-ratio is the\n"
+        "   logo's width to its height, for a box the logo will take before it has come. */\n"
+        f":root {{ {tokens(light)} --brand-logo-ratio: {ratio:.4f}; }}\n"
+        "@media (prefers-color-scheme: dark) {\n"
+        f'  :root:not([data-theme="light"]) {{ {tokens(dark)} }}\n'
+        "}\n"
+        f':root[data-theme="dark"] {{ {tokens(dark)} }}\n'
+        ".brand-cover { fill: var(--brand-cover, var(--bg)); }\n"
+        ".brand-back { fill: var(--brand-back); }\n"
+        ".brand-m { fill: var(--brand-m); }\n"
+        ".brand-hands { fill: var(--brand-hands); }\n"
+        ".brand-letters { fill: var(--fg); }\n"
+        f".brand-logo {{ aspect-ratio: {vb[2]} / {vb[3]}; }}\n"
+        ".brand-mark { aspect-ratio: 1; }\n"
+    )
+
+
+def favicon_svg(v: Variant) -> str:
+    """The small mark as a favicon: the light page's colours, and the dark
+    one's under the browser's dark mode, as the tab strip has it."""
+    light, _ = themed(v, "light")
+    dark, _ = themed(v, "dark")
+    parts = mark_parts(replace(light, scale=False), SHIFT)
+    fills = {"back": light.backing, "m": light.colour, "hour": light.finger_colour, "minute": light.finger_colour}
+    evenodd = ' fill-rule="evenodd"'
+    body = "".join(
+        f'<path class="{name}" d="{parts[name]}" fill="{fills[name]}"{evenodd if name == "m" else ""}/>'
+        for name, _ in UI_PARTS
+        if name in parts
+    )
+    dark_rules = f".back{{fill:{dark.backing}}}" if dark.backing else ""
+    dark_rules += f".m{{fill:{dark.colour}}}"
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">'
+        f"<title>Massimo</title><style>@media (prefers-color-scheme: dark){{{dark_rules}}}</style>{body}</svg>\n"
     )
 
 
@@ -392,6 +536,22 @@ def _i_parts(style: str) -> list[tuple[str, bool]]:
 
 def logo_svg(pose: Pose, text_colour: str, i_style: str = "plain", accent: str = ORANGE) -> str:
     """The mark as the M of "Massimo", the letters on its baseline."""
+    vb, path, i_parts = logo_parts(i_style)
+    i_paths = "".join(
+        f'<path transform="{transform}" d="{d}" fill="{accent if lit else text_colour}"/>'
+        for transform, d, lit in i_parts
+    )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}">'
+        f"<title>Massimo</title>{mark(pose)}"
+        f'<path d="{path}" fill="{text_colour}"/>{i_paths}</svg>\n'
+    )
+
+
+def logo_parts(i_style: str = "plain") -> tuple[str, str, list[tuple[str, str, bool]]]:
+    """The logo's viewBox, its letters but a drawn i as one path, and the
+    i's parts where it is drawn by itself: (transform, path, whether in the
+    accent). The mark, as mark(pose), is the M."""
     mx, my, mw, mh = M_BOX
     size = mh / cap_height()  # the letters' capitals as tall as the M
     gap = 0.045 * size
@@ -406,20 +566,13 @@ def logo_svg(pose: Pose, text_colour: str, i_style: str = "plain", accent: str =
         ass, _ = _letters("ass", size, x0, baseline)
         path = ass + " " + rest
         transform = f"matrix({_num(scale)} 0 0 {_num(-scale)} {_num(x0 + before)} {_num(baseline)})"
-        i_parts = "".join(
-            f'<path transform="{transform}" d="{d}" fill="{accent if lit else text_colour}"/>'
-            for d, lit in _i_parts(i_style)
-        )
+        i_parts = [(transform, d, lit) for d, lit in _i_parts(i_style)]
     else:
-        i_parts = ""
+        i_parts = []
     total = mw + gap + width
     pad = 0.06 * mh
     vb = f"{mx - pad:.1f} {my - pad:.1f} {total + 2 * pad:.1f} {mh + 2 * pad:.1f}"
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vb}">'
-        f"<title>Massimo</title>{mark(pose)}"
-        f'<path d="{path}" fill="{text_colour}"/>{i_parts}</svg>\n'
-    )
+    return vb, path, i_parts
 
 
 def png(svg: str, width: int | None = None, height: int | None = None) -> Image.Image:
@@ -584,7 +737,7 @@ def cycle(deg: float) -> Pose:
     return Pose(left_top=left, right_top=right, minute_deg=deg % 360)
 
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 @dataclass(frozen=True)
@@ -631,6 +784,8 @@ SCOPES = {
     "ladder": "the icon at 64, 128, 180, 192, 1024 px, the small one at 16, 24, 32, 48 px",
     "tile": "the mark in white on a blue square, for an app: SVG, and PNG at 180, 192, 512 px",
     "favicon": "favicon.ico, 16 to 256 px",
+    "ui": "the web UI's files, flat and by fixed names: brand.svg (a sprite), brand.css, favicon.svg, "
+    "favicon.ico, tile-192/512.png, maskable-192/512.png, apple-touch-180.png (make ui-brand)",
     "homeassistant": "homeassistant-brand/: icon.png, icon@2x.png, logo.png, logo@2x.png, and dark_ ones",
     "turn-fast": "the turn at 40, 80 and 160 ms a frame, 80 frames, as GIF and WebP",
     "turn-slow": "the turn at 1 s and 3 s a frame, 800 frames, as GIF",
@@ -744,16 +899,37 @@ def plan(flavour: str, base: str, scopes: set[str], themes: tuple[str, ...], i_s
                 png(svg, px, px).save(out / f"png/{base}-tile-{px}.png")
 
         jobs.append(Job("tile", names, run))
+
+    def favicon(out: Path, theme: str) -> None:
+        s = svgs(theme)
+        sizes = [16, 24, 32, 48, 64, 128, 256]
+        images = [png(s["small"] if px <= 48 else s["icon"], px, px) for px in sizes]
+        images[-1].save(out / "favicon.ico", sizes=[(px, px) for px in sizes], append_images=images[:-1])
+
     if "favicon" in scopes:
         theme = "light" if "light" in themes else themes[0]
 
         def run(out: Path, theme=theme) -> None:
-            s = svgs(theme)
-            sizes = [16, 24, 32, 48, 64, 128, 256]
-            images = [png(s["small"] if px <= 48 else s["icon"], px, px) for px in sizes]
-            images[-1].save(out / "favicon.ico", sizes=[(px, px) for px in sizes], append_images=images[:-1])
+            favicon(out, theme)
 
         jobs.append(Job("favicon", ["favicon.ico"], run))
+    if "ui" in scopes:
+        names = ["brand.svg", "brand.css", "favicon.svg", "favicon.ico"]
+        names += [f"tile-{px}.png" for px in (192, 512)] + [f"maskable-{px}.png" for px in (192, 512)]
+        names += ["apple-touch-180.png"]
+
+        def run(out: Path) -> None:
+            (out / "brand.svg").write_text(sprite_svg(v.pose, i_style))
+            (out / "brand.css").write_text(brand_css(v, i_style))
+            (out / "favicon.svg").write_text(favicon_svg(v))
+            favicon(out, "light")
+            tile, square = tile_svg(v.pose), square_svg(v.pose)
+            for px in (192, 512):
+                png(tile, px, px).save(out / f"tile-{px}.png")
+                png(square, px, px).save(out / f"maskable-{px}.png")
+            png(square, 180, 180).save(out / "apple-touch-180.png")
+
+        jobs.append(Job("the web UI's files", names, run))
     if "homeassistant" in scopes:
         prefixes = {"light": "", "dark": "dark_"}
         names = [
