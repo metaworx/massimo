@@ -1406,6 +1406,9 @@ type cubeView struct {
 	Hidden       []string `json:"hidden"`
 	// ProxyListening lists the addresses the Cube's proxy listens on now.
 	ProxyListening []string `json:"proxy_listening,omitempty"`
+	// ProxyFailing lists the Cube's proxy listeners that do not listen,
+	// and are tried again (runtimes.go).
+	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC       string         `json:"mac,omitempty"`
@@ -1446,6 +1449,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
 	v.ProxyListening = s.proxyListening(rt)
+	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
 		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
 	}

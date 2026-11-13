@@ -2611,6 +2611,19 @@ paths:
                               ip: {type: string}
                               api: {type: boolean, description: The API listens on this address.}
                   api_port: {type: integer, description: The port the API listens on.}
+                  cube_proxies:
+                    type: array
+                    description: The Cubes' proxy listeners, listening or not.
+                    items:
+                      type: object
+                      properties:
+                        serial: {type: string}
+                        addr: {type: string}
+                        listening: {type: boolean}
+                        error: {type: string, description: The last try's error; absent while it listens.}
+                        since: {type: string, format: date-time, description: The first failure; absent while it listens.}
+                        next_try: {type: string, format: date-time, description: When it is tried again; absent while it listens.}
+                        tries: {type: integer, description: The tries so far; absent while it listens.}
                   proxy:
                     type: object
                     description: The trusted proxy the request came through; absent otherwise.
@@ -3638,6 +3651,15 @@ components:
           type: object
           additionalProperties: {type: integer}
           description: Rows per table
+    ProxyFailure:
+      type: object
+      description: A proxy listener that does not listen, and is tried again
+      properties:
+        addr: {type: string}
+        error: {type: string, description: The last try's error}
+        since: {type: string, format: date-time, description: The first failure}
+        next_try: {type: string, format: date-time}
+        tries: {type: integer}
     ConfigView:
       type: object
       properties:
@@ -3743,6 +3765,10 @@ components:
           type: array
           description: The addresses the Cube's proxy listens on now
           items: {type: string}
+        proxy_failing:
+          type: array
+          description: "The Cube's proxy listeners that do not listen, tried again; absent where none"
+          items: {$ref: '#/components/schemas/ProxyFailure'}
         hidden:
           type: array
           description: The hidden list (radio addresses), besides room 255

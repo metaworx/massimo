@@ -185,3 +185,51 @@ func TestProxyFlagListenerRetried(t *testing.T) {
 	taken.Close()
 	greetingAt(t, addr)
 }
+
+// The API shows a listener that does not listen: the Cube's
+// proxy_failing, from the PUT's answer on, and System Info's
+// cube_proxies; both clear once it listens.
+func TestProxyFailingInTheAPI(t *testing.T) {
+	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry})
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := taken.Addr().String()
+	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+addr+`"}`)
+	if code != 200 {
+		taken.Close()
+		t.Fatalf("put %d %v", code, out)
+	}
+	failing, _ := out["proxy_failing"].([]any)
+	if len(failing) != 1 {
+		taken.Close()
+		t.Fatalf("proxy_failing %v", out["proxy_failing"])
+	}
+	f := failing[0].(map[string]any)
+	if f["addr"] != addr || f["error"] == "" || f["since"] == nil || f["next_try"] == nil || f["tries"] != 1.0 {
+		taken.Close()
+		t.Fatalf("proxy_failing[0] %v", f)
+	}
+	var sys systemView
+	getJSON(t, ts, "", "/api/v1/system", &sys)
+	if len(sys.CubeProxies) != 1 {
+		taken.Close()
+		t.Fatalf("cube_proxies %+v", sys.CubeProxies)
+	}
+	if p := sys.CubeProxies[0]; p.Serial != "KEQ0000100" || p.Addr != addr || p.Listening || p.Error == "" || p.Since == nil || p.NextTry == nil || p.Tries < 1 {
+		taken.Close()
+		t.Fatalf("cube_proxies[0] %+v", p)
+	}
+	taken.Close()
+	eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
+	_, out = do(t, ts, "GET", "/api/v1/cubes/KEQ0000100", "")
+	if out["proxy_failing"] != nil {
+		t.Errorf("proxy_failing once listening: %v", out["proxy_failing"])
+	}
+	sys = systemView{}
+	getJSON(t, ts, "", "/api/v1/system", &sys)
+	if p := sys.CubeProxies[0]; !p.Listening || p.Error != "" || p.Since != nil || p.NextTry != nil || p.Tries != 0 {
+		t.Errorf("cube_proxies[0] once listening %+v", p)
+	}
+}

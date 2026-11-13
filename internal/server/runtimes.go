@@ -434,6 +434,67 @@ func (s *Server) proxyListening(rt *runtime) []string {
 	return out
 }
 
+// proxyFailure is a proxy listener that does not listen, as a Cube in
+// the API shows it: its address, the last error, since when it fails,
+// when it is tried next, and the tries so far.
+type proxyFailure struct {
+	Addr    string    `json:"addr"`
+	Error   string    `json:"error"`
+	Since   time.Time `json:"since"`
+	NextTry time.Time `json:"next_try"`
+	Tries   int       `json:"tries"`
+}
+
+// proxyStatus is a proxy listener as GET /api/v1/system shows it: its
+// Cube, its address, whether it listens, and, where it does not, the
+// fields of proxyFailure.
+type proxyStatus struct {
+	Serial    string     `json:"serial,omitempty"`
+	Addr      string     `json:"addr"`
+	Listening bool       `json:"listening"`
+	Error     string     `json:"error,omitempty"`
+	Since     *time.Time `json:"since,omitempty"`
+	NextTry   *time.Time `json:"next_try,omitempty"`
+	Tries     int        `json:"tries,omitempty"`
+}
+
+// failure returns a slot's failure, with s.proxyMu held; false while it
+// listens, or before its first try has ended.
+func (pr *proxyRun) failure() (proxyFailure, bool) {
+	if pr.listening || pr.tries == 0 {
+		return proxyFailure{}, false
+	}
+	return proxyFailure{Addr: pr.pl.Addr, Error: pr.err, Since: pr.since, NextTry: pr.next, Tries: pr.tries}, true
+}
+
+// proxyFailing returns a runtime's proxy listeners that do not listen.
+func (s *Server) proxyFailing(rt *runtime) []proxyFailure {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	var out []proxyFailure
+	for _, pr := range s.proxies {
+		if f, ok := pr.failure(); ok && pr.rt == rt {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// proxyStatuses returns every proxy listener, listening or not.
+func (s *Server) proxyStatuses() []proxyStatus {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	out := []proxyStatus{}
+	for _, pr := range s.proxies {
+		st := proxyStatus{Serial: pr.rt.cubeSerial(), Addr: pr.pl.Addr, Listening: pr.listening}
+		if f, ok := pr.failure(); ok {
+			st.Error, st.Since, st.NextTry, st.Tries = f.Error, &f.Since, &f.NextTry, f.Tries
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
 // proxyAddress is the proxy address configured for a runtime.
 func (s *Server) proxyAddress(rt *runtime) string { return rt.config().ProxyAddress }
 
