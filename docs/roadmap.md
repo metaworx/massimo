@@ -8,7 +8,7 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
 
 1. **On the hardware**, by the owner, with a session watching the log:
    3. Pairing (docs/api-v1.md, "Pairing"): the six steps of pull request #10,
-      the assumptions marked unverified in docs/portal-protocol.md,
+      the assumptions marked unverified in docs/cube-protocol.md,
       the copy of the room's settings on a real thermostat,
       `t:` on a device that answers.
    4. Write test step 1 repeated, to watch the follow-up re-reads and the
@@ -58,7 +58,8 @@ GUIDELINES/wip/HANDOVER.md is the context a session needs to work here.
 9. **Release engineering**:
    macOS notarization; log rotation through SIGHUP; the `edge` mode.
 10. **Firmware dump** of the spare Cube once the FT232H is in
-    (docs/firmware-extraction.md),
+    (its procedure, `docs/firmware-extraction.md`, and the portal code it would revive
+    are on the branch `archive/portal`),
     then the DataFlash and the portal reply format.
 11. **Decisions for the owner**:
     the final set of built-in colour schemes (Massimo,

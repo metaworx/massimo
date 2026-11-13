@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.10.0)
+# {{project_name}} — Project Contract (v1.11.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -117,8 +117,8 @@ the ones an agent trips over most come first:
   Protocol bytes are built only in `internal/protocol/cube` and tested against
   captured lines byte for byte;
   a command the hardware has not confirmed says so in its comment and in
-  `docs/portal-protocol.md`.
-  Hardware findings go into `docs/portal-protocol.md` the day they are made,
+  `docs/cube-protocol.md`.
+  Hardware findings go into `docs/cube-protocol.md` the day they are made,
   with the date and the Cube firmware;
   the lessons of the hardware days are there ("Lessons from the hardware days")
   and in `packaging/README.md` ("Learnings").

@@ -3,7 +3,7 @@
 Two texts from before the first line of code,
 kept as the reasoning behind docs/design.md.
 Dates and facts are as of the evaluation (autumn 2026);
-what the project found out since is in docs/portal-protocol.md.
+what the project found out since is in docs/cube-protocol.md.
 
 ## Part 1: options for the eQ-3 MAX! Cube after end of life
 
@@ -83,7 +83,7 @@ Skip the server replacement unless the reverse engineering is interesting for
 its own sake.
 (The project then chose to do both the bridge and the research;
 the research found that the Cube ignores commands in portal replies,
-see docs/portal-protocol.md.)
+see docs/cube-protocol.md.)
 
 Sources:
 - [eQ-3: Wechselangebot von MAX! zu Homematic IP (cloud until
@@ -152,11 +152,12 @@ the security is only as good as the Cube's fixed key;
 local access may be blocked while the Cube is in server mode;
 the one-time setup still happens locally.
 Cheap first step: point a test Cube at a listener and record what it sends.
-(Done: see docs/portal-protocol.md.
+(Done: see docs/cube-protocol.md.
 The Cube's `e:`/`d:` commands do decrypt and encrypt with the portal key,
 the fake portal decodes every POST,
 but the reply format stays unknown and the Cube ignored every reply line tried;
-the firmware dump is the remaining lead, docs/firmware-extraction.md.)
+the firmware dump is the remaining lead,
+its procedure on the branch `archive/portal`.)
 
 ### Recommendation
 

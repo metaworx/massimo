@@ -79,10 +79,8 @@ on a document under `docs/` that is not).
 
 ### How it works
 
-- [docs/portal-protocol.md](docs/portal-protocol.md):
+- [docs/cube-protocol.md](docs/cube-protocol.md):
   everything learned about the Cube, the portal and the radio commands
-- [docs/firmware-extraction.md](docs/firmware-extraction.md):
-  reading the Cube's firmware over JTAG, hardware facts and the procedure
 - [docs/background.md](docs/background.md): the evaluation before the project,
   licence reasoning, routes to a public server, sources
 - [docs/design.md](docs/design.md): the design proposal, target environments,
@@ -1089,7 +1087,7 @@ Room 255 is the room for hidden devices:
 a device that is paired but never reports blocks every command to the room the
 Cube counts it in, and the Cube never drops it,
 so the way out is to park it in room 255 on the Cube (edit a backup and restore it,
-see docs/portal-protocol.md).
+see docs/cube-protocol.md).
 Every massimo command,
 the API and the proxy then hide that room and its devices without any configuration,
 so `status` on another computer and the original software do not see them either,
