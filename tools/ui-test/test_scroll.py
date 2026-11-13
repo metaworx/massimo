@@ -5,29 +5,53 @@ header compacts once the page is 96 px down and stays so, and the page
 goes down at every step. With expert mode on and the found Cubes open,
 the browser's scroll anchoring once took the page back to the top each
 time the header compacted, the header grew back, and the screen
-flickered until a scroll went past what compacting hides."""
-from helpers import FOUND2, wait_until
+flickered until a scroll went past what compacting hides.
+
+The header is let settle first (quiet_header): one that shrinks while the
+page is a few pixels down, a notice of a radiogram pending that goes,
+has the browser's scroll anchoring keep the content where it was by
+scrolling up, which a step would read as going back."""
+from helpers import wait_until
+
+
+def quiet_header(page):
+    """Waits until nothing changes the header's height any more: no
+    radiogram pending, whose notice goes once the Cube acknowledges it,
+    and the header as high for 0.8 s."""
+    assert wait_until(page, "document.getElementById('pending').classList.contains('hidden')", 10), "no radiogram pending"
+    assert wait_until(page, """(() => {
+        const h = document.querySelector('.top').getBoundingClientRect().height;
+        const now = performance.now();
+        if (window.quietHeight !== h) {
+          window.quietHeight = h;
+          window.quietSince = now;
+        }
+        return now - window.quietSince >= 800;
+    })()""", 10), "the header's height settled"
 
 
 def test_slow_scroll_goes_down(page, case):
-    """Expert mode on, a found Cube shown and open, the page scrolled
-    down 8 px at a time: every step goes down, and the header compacts
-    once and does not grow back on the way; then up again to the top,
-    where the header grows back once."""
-    page.evaluate("""(c) => {
+    """Expert mode on, a found Cube counted under the header, the page
+    scrolled down 8 px at a time: every step goes down, and the header
+    compacts once and does not grow back on the way; then up again to the
+    top, where the header grows back once. The found Cube is one the
+    server found, by a search: one only the page was told of goes at the
+    next poll, and the header with it."""
+    page.evaluate("""async () => {
       state.settings.expert = true;
       applySettings();
-      state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify(
-        { kind: 'cube_found', cube: c, time: c.found_at }) }));
-      const found = document.getElementById('cube-found');
-      if (found && 'open' in found) found.open = true;
+      await api('POST', 'api/v1/cubes/discover');
+      await loadCubes();
       // room to scroll at every width
       const spacer = document.createElement('div');
       spacer.id = 'scroll-spacer';
       spacer.style.height = '2000px';
       document.querySelector('main').appendChild(spacer);
       window.scrollTo(0, 0);
-    }""", FOUND2)
+    }""")
+    assert wait_until(page, "state.found.length > 0 && !document.getElementById('cube-found').classList.contains('hidden')", 10), \
+        "a found Cube counted under the header"
+    quiet_header(page)
     assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
         "at the top, the header whole"
     page.evaluate("""() => {
@@ -83,6 +107,7 @@ def test_scroll_to_the_bottom_stays_there(page, case):
       document.querySelector('main').appendChild(spacer);
       window.scrollTo(0, 0);
     }""")
+    quiet_header(page)
     assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
         "at the top, the header whole"
     page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
