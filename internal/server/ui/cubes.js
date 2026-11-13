@@ -74,6 +74,28 @@ function fillCubeFacts(d, c) {
   const facts = { host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
   for (const td of d.querySelectorAll(".cube-info [data-fact]")) td.textContent = facts[td.dataset.fact] || "–";
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
+  fillProxyState(d, c);
+}
+
+// fillProxyState says under the proxy address where the Cube's proxy
+// listens, and, for a listener that does not, why and since when
+// (noticeEl), the server trying it again; nothing where the form is not
+// there (a Cube of -addr or -sn).
+function fillProxyState(d, c) {
+  const box = d.querySelector(".cube-proxy-state");
+  if (!box) return;
+  clear(box);
+  for (const f of c.proxy_failing || []) {
+    box.appendChild(noticeEl(t("proxy.notListening", { addr: f.addr, error: f.error }), { since: f.since, next: f.next_try }));
+  }
+  if ((c.proxy_listening || []).length) {
+    box.appendChild(textEl("p", t("cubes.listening", { addr: c.proxy_listening.join(", ") }), "muted small cube-listening"));
+  }
+}
+
+// proxyFailing counts the Cube proxy listeners of cubes that do not listen.
+function proxyFailing(cubes) {
+  return cubes.reduce((n, c) => n + (c.proxy_failing || []).length, 0);
 }
 
 // valueText shows a value of a file difference: a list joined, an empty
@@ -599,6 +621,8 @@ function cubePanel(c) {
   const badges = [badgeEl(t(c.connected ? "cubes.connected" : "cubes.disconnected"), c.connected ? "ok" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
+  const failing = proxyFailing([c]);
+  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
   const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
     fromTemplate("tpl-cube-panel"));
   d.dataset.serial = c.serial;
@@ -652,10 +676,8 @@ function cubePanel(c) {
   field("proxy_serial").value = c.proxy_serial || "";
   const virtual = field("proxy_virtual");
   virtual.checked = !!c.proxy_virtual;
-  if ((c.proxy_listening || []).length) {
-    const p = textEl("p", t("cubes.listening", { addr: c.proxy_listening.join(", ") }), "muted small cube-listening");
-    field("proxy_serial").parentElement.before(p);
-  }
+  field("proxy_serial").parentElement.before(elem("div", "cube-proxy-state"));
+  fillProxyState(d, c);
   fillHiddenEditor(c, form.querySelector(".cube-hidden"));
   const actions = form.querySelector(".actions");
   actions.querySelector(".remove-cube").addEventListener("click", () => removeCube(c.serial, actions));
@@ -731,6 +753,8 @@ function renderCubes() {
   const off = state.cubes.filter((c) => !c.connected).length;
   const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
   if (off) badges.push(badgeEl(tn("cubes.badge.disconnected", off), "bad"));
+  const failing = proxyFailing(state.cubes);
+  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
   if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
   sectionBadges($("sys-cubes"), badges);
   if (state.found.length) {

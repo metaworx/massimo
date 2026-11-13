@@ -7,8 +7,9 @@ package server
 // server and the computer it runs on, beside what /healthz tells anyone
 // (the version, the start, the certificate): how it was installed, the
 // operating system, the server's clock and zone, the host's full name, the
-// interfaces the server listens on, the caller's address as the server
-// sees it, and the proxy in front of it (proxied.go).
+// interfaces the server listens on, the Cube proxies' listeners, the
+// caller's address as the server sees it, and the proxy in front of it
+// (proxied.go).
 
 import (
 	"bufio"
@@ -55,6 +56,9 @@ type systemView struct {
 	// (listenedInterfaces), APIPort the API's port.
 	Interfaces []interfaceView `json:"interfaces"`
 	APIPort    int             `json:"api_port,omitempty"`
+	// CubeProxies are the Cube proxies' listeners, those that do not
+	// listen with why (proxyStatuses).
+	CubeProxies []proxyStatus `json:"cube_proxies"`
 	// Proxy is the proxy the request came through, where a trusted one
 	// says so (proxied.go).
 	Proxy *proxyView `json:"proxy,omitempty"`
@@ -98,6 +102,7 @@ func (s *Server) getSystem(w http.ResponseWriter, r *http.Request) error {
 	if v.Interfaces == nil {
 		v.Interfaces = []interfaceView{}
 	}
+	v.CubeProxies = s.proxyStatuses()
 	for _, l := range listeners {
 		if l.api {
 			v.APIPort = l.port
@@ -124,7 +129,7 @@ type listener struct {
 	api  bool
 }
 
-// listeners are the API's listener and the Cube proxies' running now.
+// listeners are the API's listener and the Cube proxies' listening now.
 func (s *Server) listeners() []listener {
 	var out []listener
 	s.mu.RLock()
@@ -138,6 +143,9 @@ func (s *Server) listeners() []listener {
 	}
 	s.proxyMu.Lock()
 	for _, pr := range s.proxies {
+		if !pr.listening {
+			continue
+		}
 		if l, ok := parseListener(pr.pl.Addr); ok {
 			out = append(out, l)
 		}

@@ -607,6 +607,11 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .restore-title { font-weight: 600; margin: 0 0 4px; overflow-wrap: anywhere; }
 .restore-steps li { margin: 2px 0; }
 .cube-listening { margin: -6px 0 12px; overflow-wrap: anywhere; }
+/* A Cube proxy that does not listen (noticeEl): under the proxy address,
+   and in System Info's line of the listener. */
+.cube-proxy-state .notice { margin: -6px 0 12px; overflow-wrap: anywhere; }
+.sys-proxy { overflow-wrap: anywhere; }
+.sys-proxy .notice { margin: 4px 0 6px; }
 .cube-hidden { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 6px; margin-bottom: 12px; }
 .cube-hidden-title { flex-basis: 100%; color: var(--muted); }
 .cube-hidden-list { list-style: none; margin: 0; padding: 0; flex-basis: 100%; }

@@ -731,6 +731,25 @@ function fillAddresses(v) {
   else if (ifs.some((i) => i.addresses.some((a) => a.api))) cell.appendChild(textEl("p", t("sysinfo.apiMark", { port }), "muted small sys-note"));
 }
 
+// fillProxies lists the Cube proxies' listeners, a line each: the Cube's
+// serial and the address, then "listening", or why not and since when
+// (noticeEl), the server trying it again; the card's badge counts those
+// that do not listen.
+function fillProxies(v) {
+  const cell = $("info-proxies");
+  clear(cell);
+  const list = v.cube_proxies || [];
+  if (!list.length) cell.textContent = "–";
+  for (const p of list) {
+    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", textEl("span", p.addr, "mono"));
+    if (p.listening) line.append(" ", textEl("span", t("proxy.listening"), "muted"));
+    else line.appendChild(noticeEl(t("proxy.notListening", { addr: p.addr, error: p.error || "" }), { since: p.since, next: p.next_try }));
+    cell.appendChild(line);
+  }
+  const failing = list.filter((p) => !p.listening).length;
+  sectionBadges($("sys-info"), failing ? [badgeEl(tn("proxy.badge.failing", failing), "warn")] : []);
+}
+
 // fillCertificate shows the certificate the browser sees: the proxy's,
 // "(proxied)", where a trusted proxy serves the page (its names, expiry
 // and issuer as the server last read them, or why it could not), with the
@@ -782,8 +801,9 @@ function fillCertificate(v) {
 // server started and how long ago, the server's clock (startSystemClock),
 // the certificate the browser sees (fillCertificate), how it was
 // installed, the operating system and processor, the host's full name
-// (fillHostName), the interfaces it listens on (fillAddresses), and the
-// address the server sees this browser at.
+// (fillHostName), the interfaces it listens on (fillAddresses), the Cube
+// proxies' listeners (fillProxies), and the address the server sees this
+// browser at.
 async function loadSystemInfo() {
   let v;
   try {
@@ -807,6 +827,7 @@ async function loadSystemInfo() {
   $("info-system").textContent = [os, v.arch].filter(Boolean).join(" · ") || "–";
   fillHostName(v);
   fillAddresses(v);
+  fillProxies(v);
   $("info-client").textContent = v.client_ip || "–";
 }
 

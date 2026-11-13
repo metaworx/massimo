@@ -175,6 +175,7 @@ type Options struct {
 	Queue                engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
+	// One that cannot listen is tried again until it does.
 	Proxy []ProxyListener
 	// ShowHidden shows the hidden devices (those of cube.HiddenRoom and
 	// of the Hidden lists) everywhere instead of hiding them.
@@ -245,6 +246,12 @@ type Options struct {
 	// tests; nil for push.Sender's defaults.
 	pushClient *http.Client
 	pushRetry  []time.Duration
+	// proxyRetry is the first and the longest wait between a proxy
+	// listener's tries, for the tests; zero for 1 s and 30 s.
+	proxyRetry [2]time.Duration
+	// proxyListen opens a proxy listener in place of net.Listen, for
+	// the tests.
+	proxyListen func(addr string) (net.Listener, error)
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
@@ -1408,6 +1415,9 @@ type cubeView struct {
 	Hidden       []string `json:"hidden"`
 	// ProxyListening lists the addresses the Cube's proxy listens on now.
 	ProxyListening []string `json:"proxy_listening,omitempty"`
+	// ProxyFailing lists the Cube's proxy listeners that do not listen,
+	// and are tried again (runtimes.go).
+	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC       string         `json:"mac,omitempty"`
@@ -1448,6 +1458,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
 	v.ProxyListening = s.proxyListening(rt)
+	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
 		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
 	}

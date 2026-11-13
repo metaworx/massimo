@@ -252,3 +252,41 @@ def test_cube_facts(page, case):
     form.locator("input[name=name]").fill(cube.get("name") or "")
     head.click()
     show_view(page, "tiles")
+
+
+FAILING = {"addr": "192.0.2.10:62910", "error": "listen tcp 192.0.2.10:62910: bind: cannot assign requested address",
+           "since": "2026-11-13T08:00:00+01:00", "next_try": "2026-11-13T08:02:30+01:00", "tries": 9}
+PROXY_BADGE = {"en": "1 proxy not listening", "de": "1 Proxy horcht nicht"}
+
+
+def test_proxy_not_listening(page, case):
+    """A proxy listener that does not listen (proxy_failing, stubbed):
+    the Cubes card and the Cube's panel say so in a badge, the panel
+    under the proxy address with the error and since when; an open
+    panel drops the notice once the listener listens."""
+    def failing(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["proxy_failing"] = [FAILING]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    page.route("**/api/v1/cubes", failing)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s .panel-badges\") && "
+                          "document.querySelector(\"%s .panel-badges\").textContent.includes(%s)"
+                          % (PANEL, PANEL, json.dumps(PROXY_BADGE[case.lang])), 5), "the panel's badge"
+        assert PROXY_BADGE[case.lang] in page.locator("#sys-cubes .section-badges").inner_text(), "the card's badge"
+        panel, form = open_panel(page)
+        notice = form.locator(".cube-proxy-state .notice")
+        assert notice.count() == 1, "the notice under the proxy address"
+        text = notice.inner_text()
+        assert "192.0.2.10:62910" in text and "cannot assign requested address" in text, "its address and its error"
+        assert notice.locator(".notice-since").count() == 1 and notice.get_attribute("title"), "since when, the next try"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with a long error"
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "!document.querySelector(\"%s .cube-proxy-state .notice\")" % PANEL, 5), \
+        "the notice gone once the listener listens, the panel open"

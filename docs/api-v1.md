@@ -1211,8 +1211,24 @@ while `address` is where it connects now),
 `follow_discovery` (the address follows the Cube's discovery answers;
 always true without an address),
 `proxy_address` and `proxy_serial` as stored (empty: the default),
-`proxy_listening` (the addresses its proxy listens on now) and `hidden` (the
-radio addresses hidden besides room 255).
+`proxy_listening` (the addresses its proxy listens on now),
+`proxy_failing` (its proxy listeners that do not listen, absent where none)
+and `hidden` (the radio addresses hidden besides room 255).
+
+A proxy listener that cannot listen,
+on an address the host does not carry yet or a port in use,
+is tried again until it does ([docs/proxy.md](proxy.md)):
+after a second, the wait doubling up to 30 seconds.
+Until then it is in `proxy_failing`, not in `proxy_listening`:
+
+```json
+"proxy_failing": [{"addr": "192.0.2.10:62910",
+  "error": "listen tcp 192.0.2.10:62910: bind: cannot assign requested address",
+  "since": "2026-11-13T08:00:00+01:00", "next_try": "2026-11-13T08:02:30+01:00", "tries": 9}]
+```
+
+`error` is the last try's, `since` the first failure's time,
+`next_try` when it is tried again, `tries` the tries so far.
 
 `budget` is what the Cube last reported:
 the share of the hourly radio budget already used,
@@ -1271,7 +1287,8 @@ kept apart from the Cube's row and off by default;
 the Cube object says it as `proxy_virtual`.
 The row's `source` becomes `ui`, and the change applies at once:
 a new address reconnects,
-a new proxy address or serial restarts that Cube's proxy listener,
+a new proxy address or serial restarts that Cube's proxy listener
+(one that cannot listen yet answers with `proxy_failing`, and is tried again),
 a new hidden list hides (or shows) the devices in the API, the UI and the proxy.
 An empty `address` makes the Cube follow discovery.
 An empty `proxy_address` means `:62910` when the Cube is the only one
@@ -2568,6 +2585,12 @@ and that proxy, where the request came through one.
     {"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.168.1.8", "api": true}, {"ip": "192.168.1.31"}]}
   ],
   "api_port": 8099,
+  "cube_proxies": [
+    {"serial": "KEQ0000000", "addr": "192.168.1.31:62910", "listening": true},
+    {"serial": "KEQ0000001", "addr": "192.0.2.10:62910", "listening": false,
+     "error": "listen tcp 192.0.2.10:62910: bind: cannot assign requested address",
+     "since": "2026-11-13T08:00:00+01:00", "next_try": "2026-11-13T09:53:30+01:00", "tries": 230}
+  ],
   "proxy": {"proto": "https", "host": "massimo.example.net", "port": 443,
     "certificate": {"source": "proxy", "names": ["massimo.example.net"], "not_after": "2027-02-10T12:00:00Z", "fingerprint": "…",
       "self_signed": false, "issuer": "R11", "trusted": true, "checked_at": "2026-11-13T09:50:02+01:00"}}
@@ -2592,6 +2615,10 @@ a listener on every address takes each interface that is up but the loopback,
 one on an address that address's interface;
 an interface comes with its MAC and its addresses but link-local ones,
 `api` marking those the API listens on, at `api_port`.
+`cube_proxies` are the Cubes' proxy listeners, listening or not,
+by Cube serial and address;
+one that does not listen has the fields of a Cube's `proxy_failing`
+(`GET /api/v1/cubes`), and is tried again.
 
 `proxy` is there when the request came from a trusted proxy:
 the scheme, host and port the proxy serves the server at.

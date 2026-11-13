@@ -772,6 +772,9 @@ The Cube serves only one LAN client at a time,
 so `serve` is itself a Cube for everyone else:
 it listens on port 62910 on every interface (`-proxy <addr>[:<port>]`,
 repeatable, `-proxy off` to disable) and answers UDP discovery.
+A listener that cannot listen,
+on an address the host does not carry yet or a port in use,
+is tried again, at most 30 seconds apart, until it listens.
 Every other massimo command and the original software connect to the host
 running `serve` (`-addr <serve host>`) and work beside it:
 reads are answered from the server's copy,

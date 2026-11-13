@@ -601,6 +601,11 @@ to the top of the page.
   the interfaces the server listens on,
   a line each with the name, the MAC and the addresses,
   an asterisk marking the web interface's,
+  the Cube proxies' listeners, a line each with the Cube's serial,
+  the address and "listening",
+  or a notice for one that does not listen: the error, since when,
+  and the next try when the pointer rests on it,
+  counted in the card's badge while it fails (docs/proxy.md),
   and the address the server sees this browser at
   (`docs/api-v1.md`, "GET /api/v1/system").
   The certificate is the server's own (its source, names and expiry; none on plain HTTP),
@@ -695,6 +700,12 @@ to the top of the page.
   empty: :62910 when it is the only Cube), **Serial in discovery replies**
   and **Show proxy clients the virtual wall thermostat of every room**
   (docs/proxy.md, "Virtual wall thermostats").
+  Under the proxy address the panel says where the proxy listens,
+  and for a listener that does not, a notice with the error and since when,
+  the next try when the pointer rests on it:
+  the server tries it again until it listens, at most 30 s apart,
+  so an address the host takes on later needs no restart (docs/proxy.md);
+  the panel's head and the card's badge count such listeners.
   **Hidden devices** lists the devices hidden besides those of room 255,
   each with its name, serial number and radio address and **Show again**;
   **Hide** takes a radio address,
