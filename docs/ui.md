@@ -533,13 +533,24 @@ to the top of the page.
 
 - **System Info**, for everyone who opens System settings:
   a table of the server's version and what it was built with,
-  when it started and how long ago, the certificate it serves
-  (its source, names and expiry; none on plain HTTP),
+  when it started and how long ago,
+  the server's time in its own zone, ticking,
+  with a note where it differs from this browser's clock by more than 5 s,
+  the certificate the browser sees,
   how it was installed (the Debian package, Homebrew, the Windows service,
   a systemd or launchd service, or other: by hand, a container or another supervisor),
-  the system it runs on with its processor, the host's name,
+  the system it runs on with its processor,
+  the host's full name, the host bold and the domain as it is,
+  the interfaces the server listens on, a line each with the MAC and the addresses,
+  an asterisk marking the web interface's,
   and the address the server sees this browser at
   (`docs/api-v1.md`, "GET /api/v1/system").
+  The certificate is the server's own (its source, names and expiry; none on plain HTTP),
+  or, where a trusted proxy serves the page, the proxy's, "(proxied)":
+  its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
+  with the address the proxy serves;
+  a page on HTTPS from a server without TLS says "(proxied)" too,
+  and that `-trusted-proxies` would show more.
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:

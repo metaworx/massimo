@@ -593,11 +593,145 @@ function followRestart(before, until) {
 // where the server has no distribution's name.
 const OS_NAMES = { linux: "Linux", darwin: "macOS", windows: "Windows", freebsd: "FreeBSD" };
 
+// sysClock ticks System Info's server time: the server's clock as GET
+// /api/v1/system gave it, kept by its difference to this browser's.
+const sysClock = { timer: null, skew: 0, zone: "", offset: 0 };
+
+// knownZone reports whether this browser can show a time in zone.
+function knownZone(zone) {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return !!zone;
+  } catch (e) {
+    return false;
+  }
+}
+
+// clockSpan says a clock difference in seconds or minutes.
+function clockSpan(ms) {
+  const s = Math.round(Math.abs(ms) / 1000);
+  return s < 120 ? s + " s" : Math.round(s / 60) + " min";
+}
+
+// startSystemClock shows the server's time, ticking every second while
+// System settings is shown: in the server's zone where this browser knows
+// it, else at the server's offset with the zone's abbreviation; with a
+// note where the server's clock and this browser's differ by more than
+// 5 s.
+function startSystemClock(v) {
+  const cell = $("info-now");
+  if (sysClock.timer) clearInterval(sysClock.timer);
+  sysClock.timer = null;
+  const ms = Date.parse(v.now || "");
+  if (isNaN(ms)) {
+    cell.textContent = "–";
+    return;
+  }
+  sysClock.skew = ms - Date.now();
+  sysClock.zone = v.time_zone || "";
+  const off = /([+-])(\d\d):(\d\d)$/.exec(v.now);
+  sysClock.offset = off ? (off[1] === "-" ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3])) : 0;
+  const known = knownZone(sysClock.zone);
+  const note = Math.abs(sysClock.skew) > 5000 ? t(sysClock.skew > 0 ? "sysinfo.ahead" : "sysinfo.behind", { d: clockSpan(sysClock.skew) }) : "";
+  const tick = () => {
+    if (!isShown("system")) return;
+    const now = new Date(Date.now() + sysClock.skew);
+    const opts = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+    let text;
+    if (known) text = new Intl.DateTimeFormat(undefined, { ...opts, timeZone: sysClock.zone }).format(now);
+    else text = new Intl.DateTimeFormat(undefined, { ...opts, timeZone: "UTC" }).format(new Date(now.getTime() + sysClock.offset * 60000));
+    clear(cell);
+    cell.appendChild(document.createTextNode([text, sysClock.zone].filter(Boolean).join(" ")));
+    if (note) cell.appendChild(textEl("span", note, "muted small sys-skew"));
+  };
+  tick();
+  sysClock.timer = setInterval(tick, 1000);
+}
+
+// fillHostName shows the host's full name, the host bold and its domain
+// as it is.
+function fillHostName(v) {
+  const cell = $("info-host");
+  clear(cell);
+  const name = v.fqdn || v.hostname || "";
+  if (!name) {
+    cell.textContent = "–";
+    return;
+  }
+  const dot = name.indexOf(".");
+  cell.appendChild(textEl("strong", dot < 0 ? name : name.slice(0, dot)));
+  if (dot >= 0) cell.appendChild(document.createTextNode(name.slice(dot)));
+}
+
+// fillAddresses lists the interfaces the server listens on, a line each:
+// the MAC (the interface's name where it has none, and as the line's
+// tooltip), then its addresses, those of the web interface marked with an
+// asterisk, which a note under the lines explains; where the web
+// interface takes every address, the note says so instead.
+function fillAddresses(v) {
+  const cell = $("info-addrs");
+  clear(cell);
+  const ifs = v.interfaces || [];
+  if (!ifs.length) {
+    cell.textContent = "–";
+    return;
+  }
+  const all = ifs.every((i) => i.addresses.every((a) => a.api));
+  for (const i of ifs) {
+    const line = elem("div", "sys-iface");
+    line.title = i.name;
+    line.appendChild(textEl("span", i.mac || i.name, "mono sys-mac"));
+    line.appendChild(textEl("span", i.addresses.map((a) => a.ip + (a.api && !all ? "*" : "")).join(", "), "mono"));
+    cell.appendChild(line);
+  }
+  const port = v.api_port || "";
+  if (all) cell.appendChild(textEl("p", t("sysinfo.apiAll", { port }), "muted small sys-note"));
+  else if (ifs.some((i) => i.addresses.some((a) => a.api))) cell.appendChild(textEl("p", t("sysinfo.apiMark", { port }), "muted small sys-note"));
+}
+
+// fillCertificate shows the certificate the browser sees: the proxy's,
+// "(proxied)", where a trusted proxy serves the page (its names, expiry
+// and issuer as the server last read them, or why it could not), with the
+// address the proxy serves; the page's own HTTPS while the server serves
+// none, which only a proxy does, with the setting that would tell more;
+// else the server's own (certText, app.js).
+function fillCertificate(v) {
+  const cell = $("info-tls");
+  clear(cell);
+  const line = (text, cls) => cell.appendChild(textEl("div", text, cls));
+  const p = v.proxy;
+  if (p) {
+    const c = p.certificate;
+    let text;
+    if (p.proto !== "https") text = t(p.proto === "http" ? "sysinfo.proxyPlain" : "sysinfo.proxyUnknown");
+    else if (!c) text = t("sysinfo.proxyPending");
+    else if (c.error) text = t("sysinfo.proxyError", { error: c.error });
+    else {
+      const until = Date.parse(c.not_after || "");
+      text = [(c.names || []).join(", "), isNaN(until) ? "" : t("header.certUntil", { date: fmtInstant(new Date(until)) }),
+        c.issuer ? t("sysinfo.issuer", { issuer: c.issuer }) : "", c.trusted ? "" : t("sysinfo.untrusted")].filter(Boolean).join(" · ");
+    }
+    line(text + " " + t("sysinfo.proxied"));
+    line((p.proto ? p.proto + "://" : "") + p.host + ":" + p.port, "mono muted small");
+    if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
+    return;
+  }
+  if (location.protocol === "https:" && !v.tls) {
+    line(t("sysinfo.proxyHttps") + " " + t("sysinfo.proxied"));
+    line("https://" + location.host, "mono muted small");
+    line(t("sysinfo.proxyHint"), "muted small");
+    return;
+  }
+  cell.textContent = v.tls ? certText(v.tls) : t("sysinfo.noTLS");
+}
+
 // loadSystemInfo fills System settings → System Info from GET
 // /api/v1/system: the version and what it was built with, when the
-// server started and how long ago, the certificate (certText, app.js),
-// how it was installed, the operating system and processor, the host's
-// name, and the address the server sees this browser at.
+// server started and how long ago, the server's clock (startSystemClock),
+// the certificate the browser sees (fillCertificate), how it was
+// installed, the operating system and processor, the host's full name
+// (fillHostName), the interfaces it listens on (fillAddresses), and the
+// address the server sees this browser at.
 async function loadSystemInfo() {
   let v;
   try {
@@ -618,14 +752,16 @@ async function loadSystemInfo() {
     const age = ageEl(v.started_at, false, true);
     if (age) started.appendChild(age);
   }
-  $("info-tls").textContent = v.tls ? certText(v.tls) : t("sysinfo.noTLS");
+  startSystemClock(v);
+  fillCertificate(v);
   // a kind this page has no text for, a package manager's, as it is
   const kind = v.install || "other";
   const label = t("sysinfo.install." + kind);
   $("info-install").textContent = label === "sysinfo.install." + kind ? kind : label;
   const os = v.os_name || OS_NAMES[v.os] || v.os || "";
   $("info-system").textContent = [os, v.arch].filter(Boolean).join(" · ") || "–";
-  $("info-host").textContent = v.hostname || "–";
+  fillHostName(v);
+  fillAddresses(v);
   $("info-client").textContent = v.client_ip || "–";
 }
 
