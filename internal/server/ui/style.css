@@ -974,12 +974,14 @@ button.subtle { color: var(--muted); }
 .temp-age .age-exact { display: none; }
 .flag .age { color: inherit; opacity: 0.85; margin-left: 0.4em; }
 .device-vals.stale .num { color: var(--muted); }
-/* In the device list a value's age gets a line of its own under the
-   number, the exact time another one in expert mode, so the two columns
-   fit a phone. */
+/* In the device list a value's age takes the line under it: how old
+   under the value's name, in expert mode the time under the value, on
+   one line, so that the two columns fit a phone and each age stands
+   under its own value. */
 .device-vals .cell.aged { display: grid; grid-template-columns: auto auto auto auto; justify-content: start; align-items: baseline; column-gap: 8px; }
-.device-vals .age { grid-column: 2 / -1; margin-left: 0; line-height: 1.2; }
-.device-vals .age .age-exact { display: block; }
+.device-vals .cell.aged .age { display: contents; }
+.device-vals .cell.aged .age-text { grid-column: 1; grid-row: 2; line-height: 1.2; }
+.device-vals .cell.aged .age-exact { grid-column: 2 / -1; grid-row: 2; line-height: 1.2; white-space: nowrap; }
 .device-vals .age .age-exact::before { content: none; }
 .device-sub .device-seen { flex-basis: 100%; }
 .stepper {

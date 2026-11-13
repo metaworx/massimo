@@ -217,11 +217,13 @@ Every room has a tile:
   the radio address is not.
   A device without a name is shown by its serial number, here and on every
   page, and the page asks the server for a device by its serial.
-  Valve, measured temperature, window and a low battery show how old they are;
-  in expert mode also the exact time, and when the device was last heard from.
+  Valve, measured temperature, window and a low battery show how old they are,
+  a value's age on the line under its name;
+  in expert mode also the exact time, under the value on the same line,
+  and when the device was last heard from.
   Expert mode lists the room's virtual wall thermostat after the devices,
   a house with a thermometer its icon,
-  with the devices its temperature comes from and its two settings:
+  with the devices its temperature comes from, by serial, and its two settings:
   how a room without a wall thermostat takes its temperature
   (**Median** or **Mean** of its radiator thermostats)
   and its radio address, which matters only to clients of the LAN proxy

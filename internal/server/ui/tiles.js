@@ -786,7 +786,9 @@ function renderVirtual(room) {
   type.title = t("vwt.type");
   type.setAttribute("aria-label", t("vwt.type"));
   type.querySelector("use").setAttribute("href", "#icon-room");
-  const from = (v.sources && v.sources.actual_temp) || [];
+  // the sources by their serial, the radio address of one not in the room
+  const known = new Map(room.devices.map((d) => [d.rf_address, d]));
+  const from = ((v.sources && v.sources.actual_temp) || []).map((rf) => (known.get(rf) && known.get(rf).serial) || rf);
   if (from.length) el.querySelector(".device-sub").appendChild(textEl("span", t("vwt.from", { devices: from.join(", ") }), "device-seen"));
 
   const form = document.createElement("form");

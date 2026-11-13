@@ -7,6 +7,8 @@ of the values, a stale device, and what expert mode adds.
 The window and the staleness come from state events applied in the page
 (updateDevice), since the fake Cube does not change its states.
 """
+import re
+
 from helpers import OPEN, STALE, named_buttons, scroll_width, wait_until
 
 
@@ -160,6 +162,21 @@ def test_stale_and_expert(page, case):
     ids = tile.locator(".device .device-rf").first.inner_text()
     assert ids.startswith("S/N ") and " · RF 0a" in ids, f"the serial beside the radio address in expert mode ({ids!r})"
     assert tile.locator(".device-vals .age-exact").first.is_visible(), "exact times in expert mode"
+    geo = page.evaluate("""() => {
+      const cell = document.querySelector('.room .device-vals .cell.aged');
+      const r = (sel) => cell.querySelector(sel).getBoundingClientRect();
+      const [k, num, text, exact] = [r('.k'), r('.num'), r('.age-text'), r('.age-exact')];
+      return { k: k.left, kBottom: k.bottom, num: num.left, text: text.left, textTop: text.top, exact: exact.left,
+               exactTop: exact.top, exactH: exact.height, line: parseFloat(getComputedStyle(cell.querySelector('.age-exact')).lineHeight) };
+    }""")
+    assert abs(geo["text"] - geo["k"]) <= 1 and geo["textTop"] >= geo["kBottom"] - 2, f"how old under the value's name ({geo})"
+    assert abs(geo["exact"] - geo["num"]) <= 1 and abs(geo["exactTop"] - geo["textTop"]) <= 2, f"the time under the value ({geo})"
+    assert geo["exactH"] <= geo["line"] * 1.5, f"on one line ({geo})"
+    virtual = tile.locator(".device.virtual .device-seen", has_text=page.evaluate("t('vwt.from', {devices: ''})").strip())
+    if virtual.count():
+        text = virtual.first.inner_text()
+        assert re.search(r"[A-Z]{3}[0-9]{7}", text) and not re.search(r"\b0a0[0-9a-f]{3}\b", text), \
+            f"the virtual thermostat's sources by serial ({text!r})"
     assert tile.locator(".device.virtual .device-type-icon use").first.get_attribute("href") == "#icon-room", \
         "the virtual thermostat's icon a room's"
     assert tile.locator(".device-seen").first.is_visible(), "last seen in expert mode"
