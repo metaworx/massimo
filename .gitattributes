@@ -19,9 +19,12 @@ internal/update/release-key.pem text eol=lf
 # The Cube ends its lines with CRLF; the recorded greeting keeps them.
 internal/protocol/cube/testdata/cube-fw0113-greeting.txt -text
 
-# Images: the screenshot set under docs/screenshots/ and its slideshow.
+# Images: the screenshot set under docs/screenshots/ and its slideshow,
+# and the web UI's favicon (internal/server/ui/brand/), which the line for
+# internal/server/ui/** above would otherwise take for text.
 *.png                         binary
 *.gif                         binary
+*.ico                         binary
 
 # The changelog merges by section with changelog.sh merge-driver
 # (GUIDELINES/shared/COMMIT.md 5.5), registered in each clone by the

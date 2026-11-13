@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
+.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
@@ -216,6 +216,14 @@ ui-test:
 # start-up as ui-test; retaken at every change of the UI.
 ui-screenshots:
 	tools/ui-test/run.sh screenshots
+
+# The web UI's brand files into internal/server/ui/brand/: the ui scope of
+# tools/brand/make_brand.py in the chosen flavour (tools/brand/README.md);
+# its Python environment is made the first time, which needs the network.
+BRAND_VENV = tools/brand/.venv
+ui-brand:
+	@test -x $(BRAND_VENV)/bin/python || { python3 -m venv $(BRAND_VENV) && $(BRAND_VENV)/bin/pip install -q -r tools/brand/requirements.txt; }
+	$(BRAND_VENV)/bin/python tools/brand/make_brand.py --flavour grayorange --i dot --scope ui --out internal/server/ui/brand --yes
 
 # Discovery, serve's mDNS announcement and massimo discover on a LAN in
 # Docker, against avahi (tools/lan-test/README.md); needs Docker with
