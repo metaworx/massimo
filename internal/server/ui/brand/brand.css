@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* Massimo's mark in the web UI, written by tools/brand/make_brand.py (make ui-brand): edit the tool,
    not this file. The parts of brand.svg take these colours; a place sets --brand-cover to its
-   background, which the cover hides the word under the drawing with. */
-:root { --brand-back: #8F8F8F; --brand-m: #1F63C6; --brand-hands: #ED6E21; }
+   background, which the cover hides the word under the drawing with; --brand-logo-ratio is the
+   logo's width to its height, for a box the logo will take before it has come. */
+:root { --brand-back: #8F8F8F; --brand-m: #1F63C6; --brand-hands: #ED6E21; --brand-logo-ratio: 4.8658; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) { --brand-back: #555555; --brand-m: #5B95EC; --brand-hands: #ED6E21; }
 }

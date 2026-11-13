@@ -61,13 +61,21 @@ where the server no longer holds it, the page reloads the rooms
 ## Header
 
 The header's line reads, from the left:
-**Massimo** with the server's version, the time of the last update with **↻**,
+Massimo's logo with the server's version, the time of the last update with **↻**,
 the Cube's clock;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
-and **☰** beside the house and 👤 holds **Log** and **System settings**,
-highlighted while one of them is shown.
+**☰** beside the house and 👤 holds **Log** and **System settings**,
+highlighted while one of them is shown,
+and the logo is the mark alone, the M with the clock in its V.
+
+The logo lies over the word "Massimo", which a screen reader reads:
+the word shows until the drawing has come (`ui/brand/brand.svg`,
+made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does.
+Its colours follow the light or dark mode chosen, its letters the page's text.
+The sign-in, the form that creates the first owner and the apps' connect page
+show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its first line without the time of the last update

@@ -411,12 +411,15 @@ def brand_css(v: Variant, i_style: str) -> str:
     def tokens(pose: Pose) -> str:
         return f"--brand-back: {pose.backing or pose.colour}; --brand-m: {pose.colour}; --brand-hands: {pose.finger_colour};"
 
+    ratio = float(vb[2]) / float(vb[3])
+
     return (
         "/* SPDX-License-Identifier: AGPL-3.0-or-later */\n"
         "/* Massimo's mark in the web UI, written by tools/brand/make_brand.py (make ui-brand): edit the tool,\n"
         "   not this file. The parts of brand.svg take these colours; a place sets --brand-cover to its\n"
-        "   background, which the cover hides the word under the drawing with. */\n"
-        f":root {{ {tokens(light)} }}\n"
+        "   background, which the cover hides the word under the drawing with; --brand-logo-ratio is the\n"
+        "   logo's width to its height, for a box the logo will take before it has come. */\n"
+        f":root {{ {tokens(light)} --brand-logo-ratio: {ratio:.4f}; }}\n"
         "@media (prefers-color-scheme: dark) {\n"
         f'  :root:not([data-theme="light"]) {{ {tokens(dark)} }}\n'
         "}\n"

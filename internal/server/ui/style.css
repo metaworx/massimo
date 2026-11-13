@@ -177,7 +177,42 @@ body.signed-out #notify-toast { display: none !important; }
 .menu-line { margin: 0 0 4px; padding: 6px 10px 10px; color: var(--muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* Massimo's logo over the word (components.js brandMarks; its colours and
+   proportions in brand.css, make ui-brand): the word in the box the logo
+   takes, under the drawing's cover once the sprite has come, in view until
+   then and where it never comes; the cover the place's background
+   (--brand-cover, else --bg). Under 600 px the header has the small mark
+   alone, over the word's M, the rest of the word for screen readers. */
+.brand-name {
+  --brand-h: 1.6rem;
+  display: inline-grid;
+  align-items: center;
+  min-height: var(--brand-h);
+  min-width: calc(var(--brand-h) * var(--brand-logo-ratio, 4.87));
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.brand-name > * { grid-area: 1 / 1; }
+.brand-initial { color: var(--brand-m, var(--accent)); }
+.brand-name svg { height: var(--brand-h); }
+.brand-name .brand-mark { display: none; }
+.brand-big { --brand-h: 3rem; --brand-cover: var(--card); display: grid; justify-content: center; margin: 2px 0 14px; font-size: 2.6rem; }
+@media (max-width: 599px) {
+  .top .brand-name { min-width: var(--brand-h); }
+  .top .brand-name .brand-logo { display: none; }
+  .top .brand-name .brand-mark { display: block; }
+  .top .brand-rest {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 /* The Cube choice, a menu of the page (components.js pickerMenu): closed
    the chosen Cube's plug and name, open as wide as its entries need, each
