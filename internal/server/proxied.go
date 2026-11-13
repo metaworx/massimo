@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -248,26 +249,33 @@ func (s *Server) checkProxy(addr, host string) {
 
 // readProxyCert reads the certificate the TLS server at addr presents for
 // host, whatever it is, and whether it is valid for host against roots
-// (nil: the system's). It only reads: the connection is closed after the
+// (nil: the system's). The handshake verifies it as any client does; one
+// it refuses, expired, self-signed or for another name, still hands over
+// the certificates (tls.CertificateVerificationError), which are read as
+// not trusted. It only reads: the connection is closed after the
 // handshake, nothing is sent.
 func readProxyCert(ctx context.Context, addr, host string, roots *x509.CertPool) proxyCert {
 	out := proxyCert{CheckedAt: time.Now()}
-	sni := host
-	if net.ParseIP(host) != nil {
-		sni = ""
-	}
-	// Any certificate is read, an expired or self-signed one too; whether
-	// it is valid is Verify's, below.
-	d := tls.Dialer{Config: &tls.Config{ServerName: sni, InsecureSkipVerify: true}}
+	// An address as ServerName is verified against the certificate's
+	// addresses and sent as no SNI.
+	d := tls.Dialer{Config: &tls.Config{ServerName: host, RootCAs: roots}}
+	var chain []*x509.Certificate
 	conn, err := d.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		out.Error = err.Error()
-		return out
+	if err == nil {
+		defer conn.Close()
+		chain = conn.(*tls.Conn).ConnectionState().PeerCertificates
+		out.Trusted = true
+	} else {
+		var refused *tls.CertificateVerificationError
+		if !errors.As(err, &refused) {
+			out.Error = err.Error()
+			return out
+		}
+		chain = refused.UnverifiedCertificates
 	}
-	defer conn.Close()
-	chain := conn.(*tls.Conn).ConnectionState().PeerCertificates
 	if len(chain) == 0 {
 		out.Error = "the proxy presented no certificate"
+		out.Trusted = false
 		return out
 	}
 	raw := make([][]byte, len(chain))
@@ -277,6 +285,7 @@ func readProxyCert(ctx context.Context, addr, host string, roots *x509.CertPool)
 	st, err := certs.Describe("proxy", &tls.Certificate{Certificate: raw, Leaf: chain[0]})
 	if err != nil {
 		out.Error = err.Error()
+		out.Trusted = false
 		return out
 	}
 	out.Status = st
@@ -284,11 +293,5 @@ func readProxyCert(ctx context.Context, addr, host string, roots *x509.CertPool)
 	if out.Issuer == "" && len(chain[0].Issuer.Organization) > 0 {
 		out.Issuer = chain[0].Issuer.Organization[0]
 	}
-	inter := x509.NewCertPool()
-	for _, c := range chain[1:] {
-		inter.AddCert(c)
-	}
-	_, err = chain[0].Verify(x509.VerifyOptions{DNSName: host, Intermediates: inter, Roots: roots})
-	out.Trusted = err == nil
 	return out
 }

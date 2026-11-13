@@ -58,7 +58,8 @@ func TestForwardedTarget(t *testing.T) {
 }
 
 // The proxy's certificate, read through a handshake with the proxy: any
-// certificate, whether valid for the host against the roots given.
+// certificate, the one the handshake refuses too, and whether it is valid
+// for the host, a name or an address, against the roots given.
 func TestReadProxyCert(t *testing.T) {
 	ts := httptest.NewTLSServer(http.NotFoundHandler())
 	defer ts.Close()
@@ -79,8 +80,11 @@ func TestReadProxyCert(t *testing.T) {
 	if got := readProxyCert(context.Background(), addr, "example.com", roots); !got.Trusted {
 		t.Fatalf("against its own root: %+v", got)
 	}
-	if got := readProxyCert(context.Background(), addr, "other.example.org", roots); got.Trusted {
-		t.Fatalf("for a name it does not carry: %+v", got)
+	if got := readProxyCert(context.Background(), addr, "other.example.org", roots); got.Trusted || got.Error != "" || len(got.Names) == 0 {
+		t.Fatalf("for a name it does not carry, read all the same: %+v", got)
+	}
+	if got := readProxyCert(context.Background(), addr, "127.0.0.1", roots); !got.Trusted {
+		t.Fatalf("for the address it carries: %+v", got)
 	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

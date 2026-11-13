@@ -27,6 +27,11 @@ def cell(page, name):
     return page.locator("#info-" + name).inner_text().strip()
 
 
+def tls_lines(page):
+    """The certificate row's lines, where a proxy serves the page."""
+    return page.evaluate("[...document.querySelectorAll('#info-tls div')].map((d) => d.textContent.trim())")
+
+
 def test_system_info_of_the_test_server(page, case):
     """The test server: its version, a start, no certificate, "other" as
     the installation, the computer, and the loopback as this browser's
@@ -111,10 +116,11 @@ def test_system_details_behind_a_proxy(page, case):
     assert lines.nth(0).inner_text().split() == ["02:00:00:00:00:01", "192.0.2.8*,", "192.0.2.31"], "the MAC, then the addresses, the API's marked"
     assert lines.nth(1).inner_text().split()[0] == "wg0" and lines.nth(1).get_attribute("title") == "wg0", "the name where there is no MAC"
     assert "8099" in page.locator("#info-addrs .sys-note").inner_text(), "the asterisk explained, with the port"
-    tls = cell(page, "tls")
-    assert tls.startswith("massimo.example.net · ") and "Example CA" in tls and UNTRUSTED[case.lang] in tls and PROXIED[case.lang] in tls, \
-        f"the proxy's certificate, proxied ({tls!r})"
-    assert "https://massimo.example.net:443" in tls, "the address the proxy serves"
+    cert, served = tls_lines(page)[:2]
+    parts = cert.removesuffix(" " + PROXIED[case.lang]).split(" · ")
+    assert parts[0] == "massimo.example.net" and parts[2].endswith("Example CA") and parts[3] == UNTRUSTED[case.lang] \
+        and cert.endswith(" " + PROXIED[case.lang]), f"the proxy's certificate: names, expiry, issuer, not trusted, proxied ({cert!r})"
+    assert served == "https://massimo.example.net:443", "the address the proxy serves"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the details"
     show_view(page, "tiles")
     box["interfaces"] = [{"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.0.2.8", "api": True}, {"ip": "192.0.2.31", "api": True}]}]
@@ -123,6 +129,8 @@ def test_system_details_behind_a_proxy(page, case):
     assert wait_until(page, "document.querySelector('#info-addrs .sys-note') && !document.getElementById('info-addrs').textContent.includes('*')", 5), \
         "the web interface everywhere: no asterisk"
     assert page.locator("#info-addrs .sys-note").inner_text() == ALL[case.lang], "the note says so instead"
-    assert PROXIED[case.lang] in cell(page, "tls") and "massimo.example.net:443" in cell(page, "tls"), "a certificate not read yet, proxied all the same"
+    cert, served = tls_lines(page)[:2]
+    assert cert.endswith(" " + PROXIED[case.lang]) and served == "https://massimo.example.net:443", \
+        "a certificate not read yet, proxied all the same"
     page.unroute("**/api/v1/system")
     show_view(page, "tiles")
