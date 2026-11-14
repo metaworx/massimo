@@ -31,6 +31,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/sharedport"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -288,8 +289,9 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 	s.mu.RUnlock()
 	if r == nil {
 		// serve answers no discovery: a socket of its own for this run, on
-		// the discovery port if it is free, since the Cubes answer to it.
-		pc, err := net.ListenPacket("udp4", s.discoveryAddr())
+		// the discovery port if it is free, since the Cubes answer to it;
+		// shared, as the responder's is (ensureResponder).
+		pc, err := sharedport.ListenPacket("udp4", s.discoveryAddr())
 		if err != nil {
 			// The Cubes answer to this port only; another one finds none.
 			s.log.Warn("discovery port in use, no discovery", "port", cubelan.DiscoveryPort, "error", err)

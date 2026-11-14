@@ -1,10 +1,11 @@
-# AP HeaderPages v1.0: the header line and the personal page
+# AP HeaderPages v1.1: the header line and the personal page
 
 ## TL;DR
 
 The header becomes one line on a common baseline, its logo as tall as the
 page buttons. The 👤 menu becomes a page of its own, built like System
-settings.
+settings. Blocks 1 to 4 are merged (#230). v1.1 adds the header's last
+touches and a scroll position kept per page.
 
 - brand tool → a tight logo and mark (no margin): the M from top to
   baseline; `-tight.svg` files; the web UI's sprite takes them; v1.3.0
@@ -17,19 +18,28 @@ settings.
 - "This browser's address" → "Browser address"
 - 👤 menu → 👤 opens the personal page: My profile, My settings,
   Notifications as section cards; ☰ and Sign out in its bar
+- v1.1: the refresh icon a little lower; the logo's round letters
+  whole (D64-A); the version and "updated" wrap as one
+- v1.1: each page back at its own scroll position (D77-A)
 
 ### Blocks
 
 1. BrandTight: the tool's tight shapes, `-tight.svg`, the sprite and
-   `brand.css`; the README; v1.3.0; `make ui-brand`
+   `brand.css`; the README; v1.3.0; `make ui-brand` (done)
 2. Header: the baseline row, the 36 px M, the refresh button, the
    version's tooltip; the Cube's clock out of the header, `cube_time_at`
    in the API and the Cube's facts; tests; `docs/ui.md`, `docs/api-v1.md`
+   (done)
 3. SystemPage: the section buttons' row out; "Browser address"; tests
+   (done)
 4. PersonalPage: one page of three cards, 👤 its button, Sign out and ☰
-   in its bar, the icons; the old addresses; tests; `docs/ui.md`
+   in its bar, the icons; the old addresses; tests; `docs/ui.md` (done)
+5. HeaderTouches: the refresh icon lower, the logo's letters not
+   clipped, the version and "updated" wrapping together; tests
+6. PageScroll: each page's scroll position kept and restored; tests;
+   `docs/ui.md`
 
-The four blocks are one pull request.
+Blocks 1 to 4 were one pull request; Blocks 5 and 6 are another.
 
 ## Discussion
 
@@ -59,6 +69,22 @@ The owner's `EVAL` of the header on 2026-11-13, with screenshots at
 - two plans, this one first (D45-A); the room tile is AP TileBadges.
 
 `PLAN++` with the recommended picks on 2026-11-13.
+
+**v1.1.** The owner looked at the merged header on 2026-11-13/14, while
+evaluating the Cubes' signs:
+
+- the refresh icon sits about 3 px high against "updated";
+- the logo's round letters lose their overshoot below the baseline,
+  which the tight drawing clips: the drawing may paint outside its box
+  (D64-A, overflow visible);
+- where the header wraps, the version and "updated" wrap as one, not
+  one of them alone;
+- each page comes back at the scroll position it was left at (D77-A):
+  the house, System settings, the personal page and the log each keep
+  their own.
+
+The status signs of the same evaluation are AP Signs and AP CubeBadges.
+`PLAN++ as recommended` on 2026-11-14.
 
 ## Analysis
 
@@ -118,6 +144,24 @@ The tests that open these pages go through `helpers.show_view`, and
 `test_header.py`, `test_login.py`, `test_settings.py`,
 `test_preferences.py`, `test_connect.py`, `test_system_layout.py`,
 `test_tls.py` and `screenshots.py` name the parts that change.
+
+**v1.1: the header's touches** (`style.css` `.brand-name svg`,
+`#refresh-btn`, `.top-left`). The tight logo's viewBox ends at the M's
+baseline; a round letter's overshoot falls outside it and an `svg`
+clips its overflow by default. The refresh icon is centred on the
+button's box, which the text's line box sets, not its x-height.
+`.top-left` wraps its children one by one: `.brand` (the logo and
+`#version-short`) and `#refresh-btn` are separate items, so a narrow
+header can break between them.
+
+**v1.1: the scroll position** (`log.js` `showView`). The pages are
+sections shown and hidden in one document; `window.scrollY` is one for
+all of them, so a page opens wherever the last one was left.
+`components.js` scrolls for a card (`showCard`) and to the top for the
+section menu. Keeping a position per view in `showView` (saved before
+the switch, restored after it, a card's scroll winning) gives each page
+its own; the browser's history (`popstate`) goes through `showView`
+too.
 
 ## Implementation Plan
 
@@ -208,6 +252,33 @@ at, 1100 and 390 px, light and dark.
 **Verification:** `make ui-test` whole, 1100 and 390 px;
 `go test ./...`, `make cross`, `gofmt -l .`, the three `go vet`.
 
+### Block 5: HeaderTouches
+
+- `style.css`: `.brand-name svg { overflow: visible; }`; the refresh
+  icon placed on the text's x-height (about 3 px lower); the version
+  and `#refresh-btn` held together where the header wraps (one item, or
+  `flex-wrap` per group).
+- `test_header.py`: the icon's centre within 1 px of the text's
+  x-height centre; the logo's painted box beyond its viewBox not
+  clipped; at 390 px the version and "updated" on one line.
+- A fragment.
+
+**Verification:** `make ui-test` (`test_header.py`, the brand and
+login tests), 1100 and 390 px, light and dark.
+
+### Block 6: PageScroll
+
+- `log.js` `showView`: the leaving view's `scrollY` kept, the shown
+  view's restored after it is drawn; a card's scroll (`showCard`) and
+  a log's own box unchanged.
+- A UI test: scroll the house, open System settings, scroll it, go
+  back: the house at its place, System settings at its own; the
+  browser's back button the same.
+- `docs/ui.md`; a fragment.
+
+**Verification:** `make ui-test` whole, `go test ./...`, `make cross`,
+`gofmt -l .`, the three `go vet`.
+
 ## Proposed commit messages
 
 The plan's registration, a commit of its own on main before the work
@@ -231,7 +302,15 @@ Block 2, `feat(ui): The header on one baseline, the Cube's clock in its facts`;
 Block 3, `feat(ui): System settings without its row of section buttons`;
 Block 4, `feat(ui): The personal settings one page, opened by 👤`.
 
+v1.1's revision is committed with the other plans of the same
+evaluation, a commit of its own on main. Its blocks:
+Block 5, `fix(ui): The header's refresh icon and logo letters in place`;
+Block 6, `feat(ui): Each page keeps its own scroll position`.
+
 ## Change History
 
 - v1.0 (2026-11-13): the first revision, from the owner's evaluation
   and `PLAN++` with the recommended picks.
+- v1.1 (2026-11-14): Blocks 5 (HeaderTouches) and 6 (PageScroll),
+  from the owner's look at the merged header (D64-A, D77-A) and
+  `PLAN++ as recommended`; Blocks 1 to 4 marked done.

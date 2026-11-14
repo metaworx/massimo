@@ -16,6 +16,8 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
+
+	"go.metaworx.ch/massimo/internal/sharedport"
 )
 
 // interval is how often the responder announces itself unasked.
@@ -408,6 +410,6 @@ func hasFamily(ifi net.Interface, v6 bool) bool {
 // listenShared opens the mDNS port of the family with the address and
 // port shared, since the system's responder holds the port too.
 func listenShared(network string, port int) (net.PacketConn, error) {
-	lc := net.ListenConfig{Control: shareAddress}
+	lc := net.ListenConfig{Control: sharedport.Control}
 	return lc.ListenPacket(context.Background(), network, fmt.Sprintf(":%d", port))
 }
