@@ -772,7 +772,7 @@ An integration is registered by the owner, without a key typed anywhere:
    the integration shows the code.
    A request waits ten minutes; at most five wait at once,
    an address asks at most ten times in ten minutes (`429`),
-   and the setting `integrations.requests` `"off"` refuses requests (`403`).
+   and the setting `integrations.requests` off refuses requests (`403`).
 2. The owner compares the codes and approves (capability `integrations`):
    `POST /api/v1/integrations/{uuid}/approve` with `{"max_caps": [...]}`,
    the integration's maximum, within the role `integration` and all of it
@@ -803,6 +803,23 @@ its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is
 refused and the id recorded as `pending_instance`, which
 `POST …/accept-instance` accepts.
+
+**On the LAN.**
+A server that announces itself (README.md, "Server") also looks for
+Home Assistant's zeroconf records, `_home-assistant._tcp`,
+at the start and every 30 minutes.
+`GET /api/v1/integrations/found` answers what the last look saw,
+`?refresh=1` looking now:
+`{"found": [...], "at": "…", "looks": true}`,
+each installation with `kind`, `name`, `instance_id`, `location`, `url`,
+`version`, `address`, and `integration`, the uuid of the integration or
+the request of that installation id, where there is one.
+An integration or request whose installation id the last look saw is
+marked `"seen": true`: a request's id confirmed by the LAN.
+Home Assistant finds the server the same way:
+the TXT record of `_massimo._tcp` carries `url`, where the API is
+reached, `loc`, the installation's name, `reg=1` while requests are
+taken, and `api=1`, `GET /healthz` listing the features.
 
 ### Acting for an integration's users
 
@@ -1524,6 +1541,9 @@ and the users sign in by OPAQUE alone, so that no password crosses;
 the API keys are not touched.
 A user still of `auth_version` 1 cannot sign in then,
 until someone with `users` sets a password for it.
+`integrations.requests`, true by default, says whether integrations may
+ask to be registered (`POST /api/v1/integrations/requests`), and applies
+at once; the announcement's `reg` says it on the LAN.
 `update.channel` is the update channel (see `GET /api/v1/update`),
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
@@ -1532,7 +1552,8 @@ the build's flavour by default, and applies at once;
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
-`auth.password_login` `true` or `false`, and `update.channel` a name.
+`auth.password_login` and `integrations.requests` `true` or `false`,
+and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.

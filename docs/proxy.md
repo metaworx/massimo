@@ -258,7 +258,8 @@ A client already connected keeps its connection,
 and one given the address still connects and reads the last state.
 The server itself is found whatever its Cube does:
 it announces itself by mDNS as `_massimo._tcp`,
-which the apps and `massimo discover` browse (README.md, "Server");
+which the apps, `massimo discover` and Home Assistant browse
+(README.md, "Server");
 the Cube's discovery has no answer for a server,
 since the original software would take one for another Cube.
 

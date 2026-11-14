@@ -228,7 +228,7 @@ func runServe(args []string) error {
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot, Install: installKind(pkg, packaged, currentProcess()),
 		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: root,
-		Announce: serve.Announce{On: announceOn.on, Version: buildVersion()}, CubeHold: *cubeHold}
+		Announce: serve.Announce{On: announceOn.on, Version: buildVersion(), PublicURL: os.Getenv(env.PublicURL)}, CubeHold: *cubeHold}
 	if *cubeHold <= 0 {
 		cfg.CubeHold = -1 // none
 	}

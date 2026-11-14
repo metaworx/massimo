@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -95,13 +96,13 @@ func TestIntegrationRegistrationRoutes(t *testing.T) {
 	}
 
 	// The setting off refuses requests; an address asking too often waits.
-	if err := s.opts.Store.SetSetting(t.Context(), IntegrationRequestsKey, "off"); err != nil {
+	if err := s.opts.Store.SetSetting(t.Context(), store.IntegrationRequestsKey, false); err != nil {
 		t.Fatal(err)
 	}
 	if code, _ := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body); code != 403 {
 		t.Fatalf("with the setting off: %d", code)
 	}
-	s.opts.Store.SetSetting(t.Context(), IntegrationRequestsKey, "on")
+	s.opts.Store.SetSetting(t.Context(), store.IntegrationRequestsKey, true)
 	limited := 0
 	for n := 0; n < requestBurst+1; n++ {
 		if code, _ := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body); code == 429 {
@@ -206,4 +207,45 @@ func TestIntegrationLinking(t *testing.T) {
 		t.Fatalf("a setpoint after the unlink: %d %s", resp.StatusCode, text)
 	}
 	_ = anna
+}
+
+// The installations seen on the LAN are listed with the integration of
+// their id, and an integration whose id was seen is marked; the switch
+// for the requests is a setting.
+func TestFoundIntegrations(t *testing.T) {
+	_, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	owner := userToken(t, st, "boss", store.RoleOwner)
+	var got struct {
+		Found []FoundIntegration `json:"found"`
+		Looks bool               `json:"looks"`
+	}
+	code, text := callAPI(t, ts, "GET", "/api/v1/integrations/found?refresh=1", owner, "")
+	decodeInto(t, text, &got)
+	if code != 200 || got.Looks || len(got.Found) != 0 {
+		t.Fatalf("without a look at the LAN: %d %s", code, text)
+	}
+	i, _ := registerHA(t, st, nil)
+	s.opts.FindIntegrations = func(context.Context) ([]FoundIntegration, error) {
+		return []FoundIntegration{
+			{Kind: store.KindHomeAssistant, Name: "Casa Leone", InstanceID: haInstance, Address: "192.0.2.20"},
+			{Kind: store.KindHomeAssistant, Name: "Next door", InstanceID: "fedcba9876543210fedcba9876543210", Address: "192.0.2.30"},
+		}, nil
+	}
+	code, text = callAPI(t, ts, "GET", "/api/v1/integrations/found?refresh=1", owner, "")
+	decodeInto(t, text, &got)
+	if code != 200 || !got.Looks || len(got.Found) != 2 || got.Found[0].Integration != i.UUID || got.Found[1].Integration != "" {
+		t.Fatalf("found %d %s", code, text)
+	}
+	var list []integrationView
+	_, text = callAPI(t, ts, "GET", "/api/v1/integrations", owner, "")
+	decodeInto(t, text, &list)
+	if len(list) != 1 || !list[0].Seen {
+		t.Fatalf("not marked seen: %s", text)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/settings", owner, ""); code != 200 || !strings.Contains(text, `"`+store.IntegrationRequestsKey+`"`) {
+		t.Fatalf("the setting %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "PUT", "/api/v1/settings", owner, `{"`+store.IntegrationRequestsKey+`": false}`); code != 200 || st.IntegrationRequests(t.Context()) {
+		t.Fatalf("switched off: %d %s", code, text)
+	}
 }

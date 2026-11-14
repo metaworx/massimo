@@ -135,6 +135,31 @@ type Announce struct {
 	// Version is the TXT record's v, the build's version alone, such as
 	// v0.12.0.
 	Version string
+	// PublicURL is the TXT record's url where the clients reach the API
+	// at another address than the server's own (MASSIMO_PUBLIC_URL).
+	PublicURL string
+}
+
+// browseHomeAssistant asks the LAN for Home Assistant; a test replaces
+// it, so that no test reaches the network.
+var browseHomeAssistant = announce.BrowseHomeAssistant
+
+// findIntegrations is the server's look at the LAN for integrations:
+// Home Assistant's zeroconf records, two seconds of answers.
+func findIntegrations(ctx context.Context) ([]server.FoundIntegration, error) {
+	found, err := browseHomeAssistant(ctx, 2*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	out := []server.FoundIntegration{}
+	for _, f := range found {
+		if !store.ValidInstanceID(f.UUID) {
+			continue
+		}
+		out = append(out, server.FoundIntegration{Kind: store.KindHomeAssistant, Name: f.Name, InstanceID: f.UUID, Location: f.Location,
+			URL: f.InternalURL, Version: f.Version, Address: f.From.String()})
+	}
+	return out, nil
 }
 
 // startAnnounce starts the responder; a test replaces it, so that no
@@ -217,9 +242,14 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	if err != nil {
 		return nil, err
 	}
+	var find func(context.Context) ([]server.FoundIntegration, error)
+	if cfg.Announce.On && st != nil {
+		// The server present on the LAN looks for the integrations there.
+		find = findIntegrations
+	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
-		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers})
+		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return nil, err
@@ -325,7 +355,13 @@ func (i *Instance) announce(ctx context.Context) (wait func()) {
 	if name == "" {
 		name, _ = os.Hostname()
 	}
-	svc := announce.Service{Instance: name, Port: uint16(port), Node: i.st.NodeID(), Version: i.cfg.Announce.Version}
+	location, _ := os.Hostname()
+	if i.cfg.Announce.Name != "" {
+		location = i.cfg.Announce.Name
+	}
+	st := i.st
+	svc := announce.Service{Instance: name, Port: uint16(port), Node: st.NodeID(), Version: i.cfg.Announce.Version, URL: i.cfg.Announce.PublicURL, Location: location,
+		Registration: func() bool { return st.IntegrationRequests(context.Background()) }}
 	if src := i.src; src != nil {
 		svc.Fingerprint = func() string { return src.Status().Fingerprint }
 	}

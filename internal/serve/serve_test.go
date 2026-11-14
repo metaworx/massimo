@@ -215,10 +215,19 @@ func TestOpenIntervals(t *testing.T) {
 }
 
 // fakeAnnounce replaces the responder for the test: it records the
-// service, and fails with err where that is set.
+// service, and fails with err where that is set. The look at the LAN for
+// Home Assistant finds one installation, and one without a valid id.
 func fakeAnnounce(t *testing.T, err error) (got chan announce.Service, stopped chan struct{}) {
 	t.Helper()
 	got, stopped = make(chan announce.Service, 1), make(chan struct{})
+	oldBrowse := browseHomeAssistant
+	browseHomeAssistant = func(context.Context, time.Duration, ...net.IP) ([]announce.HomeAssistant, error) {
+		return []announce.HomeAssistant{
+			{Name: "Casa Leone", From: net.IPv4(192, 0, 2, 20), Port: 8123, UUID: "0123456789abcdef0123456789abcdef", Location: "Casa Leone", Version: "2026.11.1", InternalURL: "http://192.0.2.20:8123"},
+			{Name: "old", From: net.IPv4(192, 0, 2, 21), UUID: "not-an-id"},
+		}, nil
+	}
+	t.Cleanup(func() { browseHomeAssistant = oldBrowse })
 	old := startAnnounce
 	startAnnounce = func(ctx context.Context, svc announce.Service, log *slog.Logger) (func(), error) {
 		got <- svc
@@ -246,8 +255,22 @@ func TestRunAnnounces(t *testing.T) {
 	stop := runInstance(t, inst)
 	svc := <-got
 	_, port, _ := net.SplitHostPort(inst.Addr())
-	if svc.Instance != "box.example.lan" || fmt.Sprint(svc.Port) != port || svc.Node != inst.Store().NodeID() || svc.Version != "v0.12.0" || svc.Fingerprint != nil {
+	if svc.Instance != "box.example.lan" || fmt.Sprint(svc.Port) != port || svc.Node != inst.Store().NodeID() || svc.Version != "v0.12.0" || svc.Fingerprint != nil ||
+		svc.Location != "box.example.lan" || svc.URL != "" || svc.Registration == nil || !svc.Registration() {
 		t.Fatalf("service %+v", svc)
+	}
+	// reg follows the setting at each answer.
+	if err := inst.Store().SetSetting(context.Background(), store.IntegrationRequestsKey, false); err != nil {
+		t.Fatal(err)
+	}
+	if svc.Registration() {
+		t.Fatal("reg=1 with the requests off")
+	}
+	// The Home Assistant installations seen, the one without an id left
+	// out.
+	if found, err := findIntegrations(context.Background()); err != nil || len(found) != 1 || found[0].InstanceID != "0123456789abcdef0123456789abcdef" ||
+		found[0].Kind != store.KindHomeAssistant || found[0].Address != "192.0.2.20" || found[0].URL != "http://192.0.2.20:8123" {
+		t.Fatalf("found %+v %v", found, err)
 	}
 	if err := stop(); err != nil {
 		t.Fatal(err)

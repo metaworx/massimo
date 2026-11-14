@@ -1105,7 +1105,7 @@ paths:
         which the integration shows and the owner compares before approving.
         A request waits ten minutes; at most five wait at once, an address
         asks at most ten times in ten minutes, and the setting
-        integrations.requests "off" refuses requests (403).
+        integrations.requests off refuses requests (403).
       security: [{}]
       requestBody:
         required: true
@@ -1276,6 +1276,43 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/integrations/found:
+    get:
+      summary: The installations of integrations seen on the LAN
+      x-capability: integrations
+      description: |
+        What the last look at the LAN saw: Home Assistant's zeroconf
+        records, looked for at the start and every 30 minutes by a server
+        that announces itself. ?refresh=1 looks now (about two seconds).
+        looks is false where the server does not look.
+      parameters:
+        - {name: refresh, in: query, schema: {type: string, enum: ["1"]}}
+      responses:
+        "200":
+          description: The installations seen
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  found:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind: {type: string}
+                        name: {type: string}
+                        instance_id: {type: string}
+                        location: {type: string}
+                        url: {type: string}
+                        version: {type: string}
+                        address: {type: string}
+                        integration: {type: string, description: "The uuid of the integration or request of this installation id, if any"}
+                  at: {type: string, format: date-time}
+                  looks: {type: boolean}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "502": {description: The LAN could not be asked}
   /api/v1/integrations/{uuid}/users/{id}:
     put:
       summary: Link an integration's user to a Massimo user
@@ -2815,6 +2852,7 @@ paths:
                 backups.keep_days_manual: {value: "365", default: "365", set: false, in_effect: "365", applies: now}
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
+                integrations.requests: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
@@ -2836,7 +2874,8 @@ paths:
         only on request), the intervals at the next start; the whole
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
-        alone); update.channel, devel, nightly, alpha, beta, rc or stable,
+        alone); integrations.requests, true or false, whether
+        integrations may ask to be registered; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
         stable one's; the default is the build's flavour); null goes back
         to the default. Every value is checked before any is written. The
@@ -4418,6 +4457,7 @@ components:
         request_remote: {type: string, description: The address the request came from}
         key_issued_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
+        seen: {type: boolean, description: The last look at the LAN saw its installation id}
         users:
           type: array
           description: Its users, in GET /api/v1/integrations/{uuid} alone

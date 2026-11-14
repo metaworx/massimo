@@ -17,8 +17,10 @@
 package announce
 
 import (
+	"cmp"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -70,6 +72,16 @@ type Service struct {
 	// serves TLS, read at every answer, since a renewal changes it; nil
 	// without TLS.
 	Fingerprint func() string
+	// URL is the TXT record's url, where a client reaches the API: the
+	// public address where the server has one (MASSIMO_PUBLIC_URL); ""
+	// gives its own, http(s)://massimo-<digits>.local:<port>.
+	URL string
+	// Location is the TXT record's loc, the installation's name for a
+	// person: the host name in full where Instance is its first label.
+	Location string
+	// Registration says, read at every answer, whether integrations may
+	// ask to be registered: the TXT record's reg, 1 or 0; nil gives 0.
+	Registration func() bool
 }
 
 // InstanceName is the instance name for a host name: its first label,
@@ -125,16 +137,29 @@ func namesOf(svc Service) (names, error) {
 	return n, nil
 }
 
-// txt is the service's TXT record.
+// txt is the service's TXT record: node, v, tls, name and fp, as since
+// the first announcement; url, loc, reg and api=1 (GET /healthz lists the
+// features) for the integrations. An entry longer than a TXT string's
+// 255 bytes is left out.
 func txt(svc Service) []string {
 	out := []string{"node=" + svc.Node, "v=" + svc.Version, "tls=0", "name=" + InstanceName(svc.Instance)}
+	scheme := "http"
 	if svc.Fingerprint != nil {
-		out[2] = "tls=1"
+		out[2], scheme = "tls=1", "https"
 		if fp := svc.Fingerprint(); fp != "" {
 			out = append(out, "fp="+fp)
 		}
 	}
-	return out
+	url := svc.URL
+	if url == "" {
+		url = fmt.Sprintf("%s://%s.local:%d", scheme, hostLabel(svc.Node), svc.Port)
+	}
+	reg := "reg=0"
+	if svc.Registration != nil && svc.Registration() {
+		reg = "reg=1"
+	}
+	out = append(out, "url="+url, "loc="+cmp.Or(strings.TrimSpace(svc.Location), InstanceName(svc.Instance)), reg, "api=1")
+	return slices.DeleteFunc(out, func(e string) bool { return len(e) > 255 })
 }
 
 // records holds what a response carries: the records it answers and

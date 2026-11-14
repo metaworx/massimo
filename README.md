@@ -807,7 +807,14 @@ the instance is the box's host name,
 the SRV record its API's port on the host `massimo-<node>.local`,
 and the TXT record its node (`node`), version (`v`),
 whether it serves TLS (`tls`) and the certificate's SHA-256 (`fp`),
-which an app compares before it trusts a self-signed certificate.
+which an app compares before it trusts a self-signed certificate;
+for the integrations, where the API is reached (`url`:
+`MASSIMO_PUBLIC_URL`, else the server's own address),
+the installation's name (`loc`),
+whether integrations may ask to be registered (`reg`),
+and `api=1`, `GET /healthz` listing the features.
+A server that announces itself also looks for Home Assistant on the LAN
+(`docs/api-v1.md`, "Integrations").
 It is on by default where `-listen` is reachable from the LAN,
 and off on a loopback address;
 `-announce` (or `MASSIMO_ANNOUNCE`) switches it,

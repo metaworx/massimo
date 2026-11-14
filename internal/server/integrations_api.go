@@ -24,10 +24,6 @@ import (
 // collect take no key; they are bounded per address and by the number of
 // requests waiting.
 
-// IntegrationRequestsKey is the setting that lets integrations ask to be
-// registered: "off" refuses them; anything else, the default, takes them.
-const IntegrationRequestsKey = "integrations.requests"
-
 // requestLimit bounds the registration requests of one address: at most
 // requestBurst within requestWindow.
 type requestLimit struct {
@@ -94,6 +90,9 @@ type integrationView struct {
 	RequestRemote   string    `json:"request_remote,omitempty"`
 	KeyIssuedAt     time.Time `json:"key_issued_at,omitzero"`
 	CreatedAt       time.Time `json:"created_at"`
+	// Seen says the last look at the LAN saw its installation id: the
+	// confirmation of a request's.
+	Seen bool `json:"seen,omitempty"`
 	// Users are its users, in GET /api/v1/integrations/{uuid} alone.
 	Users []integrationUserView `json:"users,omitempty"`
 }
@@ -102,7 +101,7 @@ type integrationView struct {
 // where it came from.
 func (s *Server) viewIntegration(r *http.Request, i store.Integration) integrationView {
 	v := integrationView{UUID: i.UUID, Kind: i.Kind, Name: i.Name, State: i.State, InstanceID: i.InstanceID, PendingInstance: i.PendingInstance,
-		URL: i.URL, Version: i.AppVersion, MaxCaps: i.MaxCaps, KeyIssuedAt: i.KeyIssuedAt, CreatedAt: i.CreatedAt}
+		URL: i.URL, Version: i.AppVersion, MaxCaps: i.MaxCaps, KeyIssuedAt: i.KeyIssuedAt, CreatedAt: i.CreatedAt, Seen: s.instanceSeen(i.InstanceID)}
 	if i.State == store.IntegrationPending {
 		v.RequestCode, v.RequestExpires, v.RequestRemote = i.RequestCode, i.RequestExpires, i.RequestRemote
 	} else {
@@ -136,8 +135,8 @@ func (s *Server) postIntegrationRequest(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
-	if v, _ := st.SettingString(r.Context(), IntegrationRequestsKey); v == "off" {
-		return fail(http.StatusForbidden, "this server takes no registration requests (setting %s)", IntegrationRequestsKey)
+	if !st.IntegrationRequests(r.Context()) {
+		return fail(http.StatusForbidden, "this server takes no registration requests (setting %s)", store.IntegrationRequestsKey)
 	}
 	if !s.integrationRequests.allow(s.clientIP(r), time.Now()) {
 		return &httpError{status: http.StatusTooManyRequests, msg: "too many registration requests from this address", retryAfter: 60}

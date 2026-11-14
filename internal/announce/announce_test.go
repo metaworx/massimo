@@ -142,7 +142,8 @@ func TestAnnounceAnswersQuery(t *testing.T) {
 		t.Fatalf("srv %+v", srv)
 	}
 	txt := byType(m, dnsmessage.TypeTXT)
-	if len(txt) != 1 || !slices.Equal(txt[0].Body.(*dnsmessage.TXTResource).TXT, []string{"node=" + testNode, "v=v0.12.0", "tls=0", "name=box"}) {
+	if len(txt) != 1 || !slices.Equal(txt[0].Body.(*dnsmessage.TXTResource).TXT, []string{"node=" + testNode, "v=v0.12.0", "tls=0", "name=box",
+		"url=http://massimo-00000001.local:8099", "loc=box", "reg=0", "api=1"}) {
 		t.Fatalf("txt %+v", txt)
 	}
 	a, aaaa := byType(m, dnsmessage.TypeA), byType(m, dnsmessage.TypeAAAA)
@@ -234,7 +235,7 @@ func TestBrowseFindsResponder(t *testing.T) {
 	svc := testService()
 	svc.Fingerprint = func() string { return "AA:BB" }
 	_, port, _ := startTest(t, svc, quietLog())
-	found, err := browse(context.Background(), time.Second, []*net.UDPAddr{{IP: net.IPv4(127, 0, 0, 1), Port: port}}, false)
+	found, err := browse(context.Background(), time.Second, ServiceType, []*net.UDPAddr{{IP: net.IPv4(127, 0, 0, 1), Port: port}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,5 +286,94 @@ func TestNames(t *testing.T) {
 	}
 	if got := hostLabel(testNode); got != "massimo-00000001" {
 		t.Errorf("hostLabel %q", got)
+	}
+}
+
+// The TXT record's entries for the integrations: the public address and
+// the location where given, reg as the switch says at each answer, and an
+// entry too long for a TXT string left out.
+func TestTXTForIntegrations(t *testing.T) {
+	reg := false
+	svc := testService()
+	svc.Fingerprint = func() string { return "AA:BB" }
+	svc.Location, svc.Registration = "Casa Leone", func() bool { return reg }
+	want := []string{"node=" + testNode, "v=v0.12.0", "tls=1", "name=box", "fp=AA:BB", "url=https://massimo-00000001.local:8099", "loc=Casa Leone", "reg=0", "api=1"}
+	if got := txt(svc); !slices.Equal(got, want) {
+		t.Fatalf("txt %q", got)
+	}
+	reg, svc.URL = true, "https://massimo.example.net"
+	want[5], want[7] = "url=https://massimo.example.net", "reg=1"
+	if got := txt(svc); !slices.Equal(got, want) {
+		t.Fatalf("txt %q", got)
+	}
+	svc.URL = "https://massimo.example.net/" + strings.Repeat("x", 250)
+	if got := txt(svc); slices.ContainsFunc(got, func(e string) bool { return strings.HasPrefix(e, "url=") }) {
+		t.Fatalf("a long url kept: %q", got)
+	}
+}
+
+// haResponder answers every query on the loopback with a Home Assistant
+// installation's records, as its zeroconf announces them.
+func haResponder(t *testing.T) int {
+	t.Helper()
+	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pc.Close() })
+	service := dnsmessage.MustNewName(HomeAssistantType + ".local.")
+	instance := dnsmessage.MustNewName("Casa Leone." + HomeAssistantType + ".local.")
+	host := dnsmessage.MustNewName("homeassistant.local.")
+	h := func(name dnsmessage.Name, typ dnsmessage.Type) dnsmessage.ResourceHeader {
+		return dnsmessage.ResourceHeader{Name: name, Type: typ, Class: dnsmessage.ClassINET, TTL: 10}
+	}
+	go func() {
+		buf := make([]byte, 9000)
+		for {
+			n, from, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			var q dnsmessage.Message
+			if q.Unpack(buf[:n]) != nil {
+				continue
+			}
+			m := dnsmessage.Message{Header: dnsmessage.Header{ID: q.ID, Response: true, Authoritative: true}, Questions: q.Questions,
+				Answers: []dnsmessage.Resource{{Header: h(service, dnsmessage.TypePTR), Body: &dnsmessage.PTRResource{PTR: instance}}},
+				Additionals: []dnsmessage.Resource{
+					{Header: h(instance, dnsmessage.TypeSRV), Body: &dnsmessage.SRVResource{Target: host, Port: 8123}},
+					{Header: h(instance, dnsmessage.TypeTXT), Body: &dnsmessage.TXTResource{TXT: []string{
+						"location_name=Casa Leone", "uuid=0123456789ABCDEF0123456789abcdef", "version=2026.11.1",
+						"external_url=", "internal_url=http://192.0.2.20:8123", "base_url=http://192.0.2.20:8123", "requires_api_password=True"}}},
+					{Header: h(host, dnsmessage.TypeA), Body: &dnsmessage.AResource{A: [4]byte{192, 0, 2, 20}}},
+				}}
+			if b, err := m.Pack(); err == nil {
+				pc.WriteTo(b, from)
+			}
+		}
+	}()
+	return pc.LocalAddr().(*net.UDPAddr).Port
+}
+
+// A Home Assistant installation is found with its installation id, its
+// location and its address, once although it answers twice.
+func TestBrowseHomeAssistant(t *testing.T) {
+	port := haResponder(t)
+	target := []*net.UDPAddr{{IP: net.IPv4(127, 0, 0, 1), Port: port}}
+	found, err := browse(context.Background(), 500*time.Millisecond, HomeAssistantType, append(target, target[0]), false)
+	if err != nil || len(found) != 1 {
+		t.Fatalf("found %+v %v", found, err)
+	}
+	if f := found[0]; f.Name != "Casa Leone" || f.Port != 8123 || f.TXT["uuid"] != "0123456789ABCDEF0123456789abcdef" {
+		t.Fatalf("found %+v", f)
+	}
+	ha := homeAssistants(found)
+	if len(ha) != 1 || ha[0].UUID != "0123456789abcdef0123456789abcdef" || ha[0].Location != "Casa Leone" || ha[0].Version != "2026.11.1" ||
+		ha[0].InternalURL != "http://192.0.2.20:8123" || ha[0].ExternalURL != "" {
+		t.Fatalf("read %+v", ha)
+	}
+	// A server's browse does not take Home Assistant's answers.
+	if found, _ := browse(context.Background(), 300*time.Millisecond, ServiceType, target, false); len(found) != 0 {
+		t.Fatalf("a Home Assistant taken for a server %+v", found)
 	}
 }

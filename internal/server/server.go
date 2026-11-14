@@ -217,7 +217,11 @@ type Options struct {
 	// discovery socket (default ":23272"), and DiscoveryTargets, where
 	// requests go as host:port (default the broadcast addresses), exist
 	// for tests.
-	DiscoveryWait    time.Duration
+	DiscoveryWait time.Duration
+	// FindIntegrations asks the LAN for the installations of integrations
+	// (integrations_found.go), at the start and every 30 minutes; nil
+	// looks for none.
+	FindIntegrations func(ctx context.Context) ([]FoundIntegration, error)
 	DiscoveryAddr    string
 	DiscoveryTargets []string
 	// LookupMAC gives the MAC of an address that answered discovery
@@ -312,8 +316,9 @@ type Server struct {
 	// integrationRequests bounds the registration requests per address
 	// (integrations_api.go).
 	integrationRequests requestLimit
-	logins              opaqueLogins // the sign-ins by OPAQUE started, and the proofs given
-	oidc                oidcFlows    // the sign-ins through a provider started, and their codes (oidc.go)
+	integFound          foundIntegrations // integrations_found.go
+	logins              opaqueLogins      // the sign-ins by OPAQUE started, and the proofs given
+	oidc                oidcFlows         // the sign-ins through a provider started, and their codes (oidc.go)
 	tickets             *ticketStore
 	refusals            *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).
@@ -740,6 +745,10 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); s.discoveryLoop(ctx) }()
+	if s.opts.FindIntegrations != nil {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.integrationsLoop(ctx) }()
+	}
 	if s.notify != nil {
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
@@ -1208,6 +1217,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/integrations/{uuid}/accept-instance", "integrations", s.acceptInstance)
 	api("PUT /api/v1/integrations/{uuid}", "integrations", s.putIntegration)
 	api("GET /api/v1/integrations/{uuid}", "integrations", s.getIntegration)
+	api("GET /api/v1/integrations/found", "integrations", s.getFoundIntegrations)
 	api("PUT /api/v1/integrations/{uuid}/users/{id}", "integrations", s.putIntegrationUser)
 	api("DELETE /api/v1/integrations/{uuid}", "integrations", s.deleteIntegration)
 	api("GET /api/v1/providers", "auth", s.listProviders)
