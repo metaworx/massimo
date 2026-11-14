@@ -19,9 +19,12 @@ import (
 // keeps one source, and every event says its own.
 func TestLogSourceFilter(t *testing.T) {
 	_, ts, s, st := startStored(t, Options{})
-	eventually(t, "the Cube's states", func() bool {
-		_, evs := logOf(t, ts, "?kind=state")
-		return len(evs) > 0
+	// The Cube's own events too: its connect is logged as the greeting's
+	// last, after the devices' states.
+	eventually(t, "the Cube's states and its connect", func() bool {
+		_, states := logOf(t, ts, "?kind=state")
+		_, cube := logOf(t, ts, "?source=cube")
+		return len(states) > 0 && len(cube) > 0
 	})
 	s.logServer(event{Kind: "settings_read", Source: "system", Time: time.Now()}) // beside the start's server_started
 	_, all := logOf(t, ts, "?limit=1000")
