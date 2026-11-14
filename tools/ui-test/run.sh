@@ -53,7 +53,8 @@
 # suite gets its address in UI_TEST_DOWN_URL.
 #
 # Environment: UI_TEST_PYTHON (default tools/ui-test/.venv/bin/python
-# when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4), and
+# when present, else python3), UI_TEST_REQUIRED, UI_TEST_WORKERS (4),
+# UI_TEST_CASES (the cases to run, such as 390-en,390-de; all four), and
 # set 0's ports: UI_TEST_CUBE_PORT (62919), UI_TEST_API_PORT (8119),
 # UI_TEST_DISCOVERY_PORT (23919), UI_TEST_DOWN_PORT (the second server's,
 # UI_TEST_API_PORT + 1); set n takes the fake Cube's two ports + n and

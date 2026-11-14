@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.50.0)
+# Massimo — CI Conventions (v1.51.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
@@ -62,8 +62,8 @@ the build holds no secret, and nothing is signed until All tests passed,
 which Release waits for with the build;
 a build whose tests fail is thrown away with the run.
 That saves the build's four and a half minutes,
-which used to follow the six of Screenshots,
-the longest test job (owner, 2026-11-10, AP ParallelBuild).
+which used to follow the six of the UI suite's job,
+the longest test job then (owner, 2026-11-10, AP ParallelBuild).
 build.yml's What to release therefore decides at the start of the run;
 `rolling` checks the release's commit again just before publishing.
 A job after one that can be skipped names a status function in its `if:`:
@@ -111,7 +111,7 @@ on the commit the run tested:
 a pull request's head, or the commit pushed to `main`.
 It holds `fingerprint.sh fingerprint` of the tree that ran,
 a pull request's merge commit in its run,
-and whether Screenshots, LAN and Fuzz passed for that code
+and whether the UI tests, LAN and Fuzz passed for that code
 (`fp1:<hex> ui=… lan=… fuzz=…`).
 What to test reads the status on the commit the run before tested:
 for a pull request its head's first parent,
@@ -120,7 +120,7 @@ Where it is green, written by `github-actions[bot]` and its fingerprint the comm
 it answers `tested=true`:
 the jobs that passed for that code are skipped,
 Fuzz, which a pull request never runs,
-and Screenshots and LAN run where they had not passed,
+and the UI tests and LAN run where they had not passed,
 and Guidelines, All tests passed, Build and Release run as always;
 the run's own Tested status then carries the record on.
 So a branch's retirement after its green run tests nothing again,
@@ -238,7 +238,7 @@ as it did the store's prune racing a test's fill;
 such a test is fixed, not skipped under QEMU.
 
 The web UI smoke test (`make ui-test`) and the screenshot set
-(`make ui-screenshots`) run in the Screenshots job,
+(`make ui-screenshots`) run in the UI test jobs,
 on the Chromium of Microsoft's Playwright image (section 3).
 The slideshow (`tools/ui-test/slideshow.sh`) is built where the set is taken
 and committed with it, not in CI,
@@ -250,20 +250,25 @@ the runner's fonts give other pixels,
 so the artifact is for looking at,
 and nothing compares it with the committed set.
 
-The Screenshots job is the run's longest.
-The suite's 484 runs (121 tests,
+The UI suite's 744 runs (186 tests,
 each at 1100 and 390 px, in English and German)
-run in four pytest-xdist workers, one per CPU of the runner,
-each against a server set of its own (`tools/ui-test/README.md`):
-under 6 minutes on four CPUs here, against 9 for half the cases in one process,
-which a pull request ran before;
-the screenshot set takes half a minute.
+run in two jobs, one per width with both languages
+(`UI_TEST_CASES`, `tools/ui-test/README.md`;
+owner, 2026-11-14, AP UiMatrix),
+each in four pytest-xdist workers, one per CPU of the runner,
+each worker against a server set of its own.
+In one job the four cases took 11 minutes of a 13-minute run,
+its longest job by far, the next being Vet and test at 5;
+the screenshot set takes under a minute,
+in the 1100 px job, after its suite.
+The jobs keep the id `screenshots`,
+which All tests passed needs as one: passed where both passed.
 The first pass records no Playwright trace,
 whose DOM snapshots made every step slower;
 the failed tests run once more with it.
-A pull request runs the job only when it changes `internal/server/ui/`,
+A pull request runs the jobs only when it changes `internal/server/ui/`,
 `tools/ui-test/` or `.github/workflows/ci.yml`,
-the paths the contract asks `make ui-test` for and the job's own definition,
+the paths the contract asks `make ui-test` for and the jobs' own definition,
 and then on all four cases,
 so that a case it would have left out does not fail first on `main`.
 The job What to test answers that from the pull request's merge commit,
@@ -272,8 +277,8 @@ The condition sits on the job, not on the workflow's trigger:
 All tests passed, the check `main` requires,
 counts a job skipped by its `if:` as passed,
 while a workflow that a path filter never starts would leave it waiting.
-Only an answer of `false` skips the job,
-so a What to test job that fails runs it rather than letting the pull request
+Only an answer of `false` skips the jobs,
+so a What to test job that fails runs them rather than letting the pull request
 through untested.
 A push to `main` runs the job whatever it changes,
 so a change elsewhere that breaks the page shows on the merge commit's run.
@@ -306,7 +311,7 @@ A pull request runs the job only when it changes `internal/announce/`,
 `cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `tools/lan-test/`
 or `.github/workflows/ci.yml`,
 as the job What to test answers, and a push to `main` always,
-as the Screenshots job does.
+as the UI test jobs do.
 
 The actionlint job runs `make actionlint`,
 the tool pinned by the `tool` line of `tools/actionlint/go.mod`,
@@ -361,7 +366,7 @@ Where CI differs, and why:
 - `govulncheck ./...` runs in CI only, per platform with code of its own,
   because a known vulnerability is a reason to fail a build but not a tool
   every developer installs.
-- The Screenshots job runs what `make ui-test` and `make ui-screenshots` run,
+- The UI test jobs run what `make ui-test` and `make ui-screenshots` run,
   `tools/ui-test/run.sh` and `run.sh screenshots`,
   in the container `mcr.microsoft.com/playwright/python:v<version>-noble`,
   whose Python takes the place of the venv (`UI_TEST_PYTHON`)
