@@ -33,6 +33,10 @@ func TestABusyCubeIsListedAsBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer other.Close()
+	// The dial returns once the kernel has queued the connection; the
+	// fake refuses others only once it has taken this one, and a dial of
+	// the server's before that would get in and wait for a greeting.
+	eventually(t, "the other client taken", func() bool { return fc.Connections() == 1 })
 	at, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Skip(err)
