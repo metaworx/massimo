@@ -753,6 +753,14 @@ to the top of the page.
   sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
   and a room that holds only hidden devices goes with it.
+  **Reboot the Cube**, at the bottom of the panel for a role with `cubes.reboot`,
+  restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
+  which frees one that still holds the server's old connection at once:
+  in place of the button it asks first, naming the Cube's serial,
+  that it is gone for about a minute and its rooms refuse commands for a while,
+  the radiograms pending as the Cube last said and when, which the restart drops,
+  and for a Cube busy with another client that the client may take it back;
+  the head's badge then says rebooting until the Cube greets the server.
   When a line of the server's settings file says something else than the panel,
   a notice names the line and **Take the file's value** takes it.
   **Remove** stops serving the Cube;

@@ -35,6 +35,7 @@
 //	POST /api/v1/cubes/{sn}/pairing                  start pairing (inclusion mode), {"seconds":60}
 //	GET  /api/v1/cubes/{sn}/pairing                  pairing state and the devices that joined
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
+//	POST /api/v1/cubes/{sn}/reboot                   restart the Cube with a UDP R (cube_reboot.go)
 //	GET  /api/v1/system                              how the server is installed, the computer, the caller's address (system_api.go)
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
@@ -1228,6 +1229,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes", "cubes", s.postCube)
 	api("PUT /api/v1/cubes/{sn}", "cubes", s.putCube)
 	api("DELETE /api/v1/cubes/{sn}", "cubes", s.deleteCube)
+	api("POST /api/v1/cubes/{sn}/reboot", "cubes.reboot", s.rebootCube)
 	api("GET /api/v1/settings", "settings", s.getSettings)
 	api("PUT /api/v1/settings", "settings", s.putSettings)
 	api("POST /api/v1/cubes/discover", "discover", s.postDiscover)

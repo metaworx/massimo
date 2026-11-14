@@ -984,6 +984,7 @@ The capabilities, what each allows, and the routes it guards:
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
+| `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
 | `update` | start a software update | `POST /api/v1/update` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
@@ -1009,13 +1010,16 @@ The default roles, as seeded.
 | `guests` | ✓ | | | | |
 | `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | |
-| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `settings`, `update`, `reboot`, `audit`, `auth` | | | | | |
+| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `cubes.reboot`, `settings`, `update`, `reboot`, `audit`, `auth` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07)
 and the passwords of other users (migration 0008, 2026-11-08);
 `reboot` is seeded for no role (2026-11-08): restarting the server is not
 rebooting a computer that may run other services too;
+nor is `cubes.reboot` (2026-11-14):
+a Cube's restart drops the radiograms it has not delivered,
+and the owner gives it to a role where that is wanted;
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;

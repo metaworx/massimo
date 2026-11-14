@@ -25,12 +25,15 @@ const (
 	// LinkBusy: the Cube answers discovery but refuses a new connection,
 	// serve having left none behind: another client holds it.
 	LinkBusy LinkState = "busy"
+	// LinkRebooting: a reboot was sent (Rebooting) and the Cube has not
+	// greeted since.
+	LinkRebooting LinkState = "rebooting"
 	// LinkOffline: anything else not connected.
 	LinkOffline LinkState = "offline"
 )
 
 // Link is the client's link state with its times: since when, and for
-// a hold until when at the latest.
+// a hold and a reboot until when at the latest.
 type Link struct {
 	State LinkState `json:"state"`
 	Since time.Time `json:"since,omitzero"`
@@ -56,6 +59,10 @@ func (c *Client) Link() Link {
 // linkLocked is Link with heardMu held.
 func (c *Client) linkLocked(now time.Time) Link {
 	switch {
+	case now.Before(c.rebootUntil):
+		// First: the connection a reboot ends may not be closed yet, and
+		// the greeting after it ends the wait before it is online.
+		return Link{State: LinkRebooting, Since: c.rebootAt, Until: c.rebootUntil}
 	case c.online.Load():
 		return Link{State: LinkConnected}
 	case c.held.Load():

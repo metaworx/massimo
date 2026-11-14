@@ -650,6 +650,8 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 /* A Cube proxy that does not listen (noticeEl): under the proxy address,
    and in System Info's line of the listener. */
 .cube-proxy-state .notice { margin: -6px 0 12px; overflow-wrap: anywhere; }
+/* A Cube's Reboot, alone at the bottom of its panel (cubes.js rebootRow). */
+.cube-reboot { margin-top: 12px; }
 /* Why a Cube is not connected, where the server knows (cubes.js
    fillLinkState): above its facts. */
 .cube-link-state .notice { margin: 4px 0 12px; overflow-wrap: anywhere; }
@@ -1415,7 +1417,7 @@ massimo-week-program { display: contents; }
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
-.no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes,
+.no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
 .no-settings .needs-settings, .no-auth .needs-auth, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system,
 .no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }

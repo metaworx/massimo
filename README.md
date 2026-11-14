@@ -943,6 +943,7 @@ massimo netconfig -addr <cube-ip>
 massimo netconfig -addr <cube-ip> -static <ip> -gateway <gw> -netmask <mask> [-dns <a>[,<b>]]
 massimo netconfig -addr <cube-ip> -dhcp
 massimo netconfig -sn <serial> -broadcast -dhcp
+massimo netconfig -addr <cube-ip> [-sn <serial>] -reboot
 ```
 
 `netconfig` reads a Cube's network configuration over UDP 23272 (`-json` too):
@@ -963,6 +964,18 @@ it reads the stored configuration first and changes only the DHCP flag, or,
 when the read gets no answer, sends zeros for the addresses,
 which loses the stored fallback (192.168.0.222/16 from the factory) without restoring it;
 a Cube that moved networks may need a power cycle.
+`-reboot` restarts the Cube with `R`,
+as **Reboot the Cube** in System settings → Cubes does
+(`POST /api/v1/cubes/{sn}/reboot`, docs/api-v1.md):
+a Cube that still holds the old connection of a server whose network went down
+refuses every other client until it lets go, after up to about 40 minutes,
+and the restart frees it at once.
+A restart drops the radiograms the Cube has not delivered,
+and its rooms refuse commands for a while after it;
+the command cannot see how many are pending (the web UI and the API show
+the server's count), so it warns and asks first (`-yes` skips that).
+On the box of a running `serve` the Cube answers `serve`'s port:
+give the serial with `-sn` there, and the answer to `R` goes to `serve`.
 
 ### Cube variables
 

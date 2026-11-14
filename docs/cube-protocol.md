@@ -642,6 +642,12 @@ and then DHCP again):
   after the DHCP write the `R`s went unanswered because the Cube was already restarting.
   `massimo netconfig` sends `R` after a status `01` only,
   waits a second for its answer and goes on without one.
+- `R` alone restarts the Cube, which frees one that still holds a dead session
+  ("Lessons from the hardware days", 2026-11-13).
+  Massimo sends it only on a person's word, since a restart drops the radiograms
+  the Cube has not delivered: **Reboot the Cube** in System settings → Cubes,
+  `POST /api/v1/cubes/{sn}/reboot` from the server's discovery socket,
+  and `massimo netconfig -reboot`.
 - After the move, the original software's own network dialogue failed to look
   the Cube up again although the `I` replies arrived,
   so it could not set DHCP back in the same run; a restart of the software did.

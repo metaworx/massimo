@@ -102,6 +102,9 @@ type Client struct {
 	timeouts     int
 	timeoutSince time.Time
 	linkLogged   LinkState
+	// rebootAt and rebootUntil: a reboot was sent then, and is waited
+	// for until then (reboot.go).
+	rebootAt, rebootUntil time.Time
 
 	addrMu sync.Mutex
 	addr   string        // host:port; "" until known, see SetAddress
@@ -297,6 +300,9 @@ func (c *Client) Run(ctx context.Context) error {
 			continue
 		}
 		switch now := time.Now(); {
+		case c.rebooting(now):
+			// The Cube restarts on purpose (Rebooting): no loss.
+			c.log.Debug("cube connection attempt failed", "addr", c.Address(), "error", err, "retry_in", backoff, "rebooting", true)
 		case st.lost.IsZero():
 			// The warning first, then Lost, then the event: whoever sees
 			// Lost sees the warning, and whoever reads the event sees Lost.
@@ -380,6 +386,7 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 			}
 			if m.Type == 'L' && !greeted.Load() {
 				greeted.Store(true)
+				c.endReboot() // before online: Link says rebooting first
 				c.online.Store(true)
 				c.lost.Store(false)
 				// Swap the greeted channel before anyone can see the

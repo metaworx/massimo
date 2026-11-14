@@ -769,6 +769,28 @@ func (r *Responder) Discover(ctx context.Context, o cubelan.SearchOptions) ([]cu
 	return cubelan.Search(ctx, pc, o)
 }
 
+// Reboot sends a Cube's restart request (cubelan.Reboot) from the
+// responder's socket, so that the answer, which a Cube sends to port
+// 23272 only, comes back here.
+func (r *Responder) Reboot(ctx context.Context, addr, serial string) (cubelan.RebootResult, error) {
+	select {
+	case <-r.serving:
+	case <-ctx.Done():
+		return cubelan.RebootResult{}, ctx.Err()
+	}
+	ch := make(chan cubelan.Packet, 16)
+	r.mu.Lock()
+	pc := r.pc
+	r.collectors[ch] = struct{}{}
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.collectors, ch)
+		r.mu.Unlock()
+	}()
+	return cubelan.Reboot(ctx, pc, ch, addr, serial)
+}
+
 // Add registers a proxy. With ip set, replies for it are sent from a
 // socket bound to that IP.
 func (r *Responder) Add(p *Proxy, ip net.IP) error {

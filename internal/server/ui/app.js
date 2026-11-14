@@ -705,21 +705,21 @@ function timeOf(iso) {
 }
 
 // linkState is how the server stands with a Cube (GET /api/v1/cubes,
-// link): connected, held, stale, busy or offline.
+// link): connected, held, stale, busy, rebooting or offline.
 function linkState(c) {
   return (c && c.link && c.link.state) || (c && c.connected ? "connected" : "offline");
 }
 
 // linkText says in a sentence why a Cube is not connected where the
-// server knows more than that: its connection held open, or a Cube that
-// refuses the server; "" otherwise.
+// server knows more than that: its connection held open, a Cube that
+// refuses the server, or one that reboots; "" otherwise.
 function linkText(c) {
   const s = linkState(c);
   if (s === "held") {
     const until = Date.parse((c.link && c.link.until) || "");
     return t("link.held", { time: isNaN(until) ? "–" : fmtShortTime(until) });
   }
-  if (s === "stale" || s === "busy") return t("link." + s);
+  if (s === "stale" || s === "busy" || s === "rebooting") return t("link." + s);
   return "";
 }
 

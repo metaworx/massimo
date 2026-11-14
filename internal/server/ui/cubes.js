@@ -166,6 +166,34 @@ function addCube(serial, btn) {
   return cubeAction(() => api("POST", "api/v1/cubes", { serial }), t("cubes.added", { serial }), serial, btn);
 }
 
+// rebootRow is the Cube's Reboot at the bottom of its panel, for a role
+// with cubes.reboot: a restart frees a Cube that still holds an old
+// connection at once (docs/api-v1.md, POST /api/v1/cubes/{sn}/reboot).
+function rebootRow(c) {
+  const row = elem("div", "actions cube-reboot needs-cubes-reboot");
+  row.appendChild(button(t("cubes.reboot"), "cube-reboot-btn", () => rebootCube(c, row)));
+  return row;
+}
+
+// rebootCube asks in place of the Reboot whether to restart the Cube,
+// naming what a restart costs: the Cube gone for a minute and its rooms
+// refusing commands for a while, the radiograms pending as the Cube last
+// said and when, and for a Cube busy with another client that the client
+// may take it back. Yes sends the reboot with the count it was shown.
+function rebootCube(c, row) {
+  const n = c.pending_radiograms || 0;
+  const parts = [t("cubes.rebootConfirm", { serial: c.serial })];
+  if (n > 0) {
+    const at = Date.parse((c.budget && c.budget.updated_at) || "");
+    parts.push(tn("cubes.rebootPending", n, { time: isNaN(at) ? "–" : fmtShortTime(at) }));
+  }
+  if (linkState(c) === "busy") parts.push(t("cubes.rebootBusy"));
+  confirmInPlace(row, parts.join(" "), { yes: t("cubes.reboot"), no: t("action.cancel") },
+    () => cubeAction(() => api("POST", "api/v1/cubes/" + encodeURIComponent(c.serial) + "/reboot", { pending: n }),
+      t("cubes.rebooted", { serial: c.serial }), c.serial),
+    ".cube-reboot-btn");
+}
+
 // removeCube asks in the panel, in place of its actions, whether to stop
 // serving the Cube; Keep puts the actions back.
 function removeCube(serial, actions) {
@@ -631,7 +659,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
 function cubePanel(c) {
   const link = linkState(c); // app.js
   const linkLabel = link === "connected" || link === "offline" ? t(c.connected ? "cubes.connected" : "cubes.disconnected") : t("link.badge." + link);
-  const badges = [badgeEl(linkLabel, link === "connected" ? "ok" : "warn")];
+  const badges = [badgeEl(linkLabel, link === "connected" ? "ok" : link === "rebooting" ? "mode" : "warn")];
   if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
   if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
   const failing = proxyFailing([c]);
@@ -656,7 +684,9 @@ function cubePanel(c) {
   // fields at the left, the pairing and the hidden devices at the right
   const form = d.querySelector("form.cube-form");
   sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), sum.querySelector(".panel-badges"));
-  sum.after(elem("div", "cube-link-state"), elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form));
+  const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form);
+  sum.after(elem("div", "cube-link-state"), cols);
+  cols.after(rebootRow(c));
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
