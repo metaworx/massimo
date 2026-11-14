@@ -699,15 +699,48 @@ type Responder struct {
 	members []responderMember
 
 	pc         net.PacketConn
-	serving    chan struct{} // closed once Serve has its socket
-	collectors map[chan cubelan.Packet]struct{}
-	searches   int // Discover calls running
+	serving    chan struct{}                    // closed once Serve has its socket
+	collectors map[chan cubelan.Packet]struct{} // of Discover and Reboot
+
+	ownSend     time.Time // the last request Discover or Reboot sent
+	otherSearch time.Time // the last search of another program on this host
+	others      int       // such searches seen, for Discover's cut short
 
 	// hostNets returns the host's IPv4 networks, each with the host's
 	// address in it; nil is hostNetworks.
 	hostNets func() []*net.IPNet
 	// sent, when set, is told of every reply sent, for the tests.
 	sent func(to net.Addr)
+	// The timings, zero for their defaults (the constants below).
+	searchWindow, searchWaitMax, ownEcho time.Duration
+}
+
+// Defaults of the Responder's timings.
+const (
+	// defaultSearchWindow is how long after another program's search on
+	// this host Discover and Reboot wait: the original software listens
+	// 2 s after each of its searches.
+	defaultSearchWindow = 3 * time.Second
+	// defaultSearchWaitMax caps that wait.
+	defaultSearchWaitMax = 30 * time.Second
+	// defaultOwnEcho is how soon after the responder's own request a
+	// request from this host is that request, come back through the
+	// loopback (within microseconds).
+	defaultOwnEcho = 200 * time.Millisecond
+)
+
+// ErrSearchShared is Discover's error when another program on this
+// host searched while it ran: the Cubes' answers went to that program's
+// socket from then on (discoveryNetwork in internal/server), so a Cube
+// that did not answer may still be there.
+var ErrSearchShared = errors.New("proxy: another program on this host searched for Cubes meanwhile")
+
+// orDefault is d, or def where d is zero.
+func orDefault(d, def time.Duration) time.Duration {
+	if d == 0 {
+		return def
+	}
+	return d
 }
 
 type responderMember struct {
@@ -726,48 +759,109 @@ func NewResponder(log *slog.Logger) *Responder {
 // Discover runs a search (cubelan.Search) from the responder's socket,
 // handed what Serve reads that is no request, and returns its answers.
 // Answers of this host's own proxies are among them; the caller tells
-// them apart. It waits for Serve to have its socket.
+// them apart. It waits for Serve to have its socket, and while another
+// program on this host searches (waitOtherSearch). Where one searched
+// while it ran, it returns its answers with ErrSearchShared.
 func (r *Responder) Discover(ctx context.Context, o cubelan.SearchOptions) ([]cubelan.Discovered, error) {
 	select {
 	case <-r.serving:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	if err := r.waitOtherSearch(ctx); err != nil {
+		return nil, err
+	}
+	ch, pc := r.startOp()
+	r.mu.Lock()
+	others := r.others
+	r.mu.Unlock()
+	defer r.endOp(ch)
+	o.Packets = ch
+	answers, err := cubelan.Search(ctx, pc, o)
+	r.mu.Lock()
+	cut := r.others != others
+	r.mu.Unlock()
+	if err == nil && cut {
+		err = ErrSearchShared
+	}
+	return answers, err
+}
+
+// startOp registers a Discover or Reboot: a channel for what Serve reads
+// that is no request, and the socket, which notes the requests sent.
+func (r *Responder) startOp() (chan cubelan.Packet, net.PacketConn) {
 	ch := make(chan cubelan.Packet, 64)
 	r.mu.Lock()
-	pc := r.pc
+	defer r.mu.Unlock()
 	r.collectors[ch] = struct{}{}
-	r.searches++
-	r.mu.Unlock()
-	defer func() {
+	return ch, ownSends{r.pc, r}
+}
+
+// endOp unregisters a Discover or Reboot.
+func (r *Responder) endOp(ch chan cubelan.Packet) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.collectors, ch)
+}
+
+// waitOtherSearch waits until another program on this host has not
+// searched for the search window, at most searchWaitMax: while its
+// socket is open, the Cubes' answers go to it.
+func (r *Responder) waitOtherSearch(ctx context.Context) error {
+	limit := time.Now().Add(orDefault(r.searchWaitMax, defaultSearchWaitMax))
+	for {
 		r.mu.Lock()
-		delete(r.collectors, ch)
-		r.searches--
+		until := r.otherSearch.Add(orDefault(r.searchWindow, defaultSearchWindow))
 		r.mu.Unlock()
-	}()
-	o.Packets = ch
-	return cubelan.Search(ctx, pc, o)
+		if until.After(limit) {
+			until = limit
+		}
+		wait := time.Until(until)
+		if wait <= 0 {
+			return nil
+		}
+		r.log.Debug("proxy: waiting for another program's search on this host", "for", wait)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+}
+
+// ownSends is the responder's socket as Discover and Reboot write to
+// it: it notes when they send a request, so that Serve tells the
+// request, back through the loopback, from another program's.
+type ownSends struct {
+	net.PacketConn
+	r *Responder
+}
+
+// WriteTo notes a request and sends it.
+func (c ownSends) WriteTo(b []byte, to net.Addr) (int, error) {
+	if _, _, ok := cubelan.ParseUDPRequest(b); ok {
+		c.r.mu.Lock()
+		c.r.ownSend = time.Now()
+		c.r.mu.Unlock()
+	}
+	return c.PacketConn.WriteTo(b, to)
 }
 
 // Reboot sends a Cube's restart request (cubelan.Reboot) from the
 // responder's socket, so that the answer, which a Cube sends to port
-// 23272 only, comes back here.
+// 23272 only, comes back here; first it waits while another program on
+// this host searches (waitOtherSearch).
 func (r *Responder) Reboot(ctx context.Context, addr, serial string) (cubelan.RebootResult, error) {
 	select {
 	case <-r.serving:
 	case <-ctx.Done():
 		return cubelan.RebootResult{}, ctx.Err()
 	}
-	ch := make(chan cubelan.Packet, 16)
-	r.mu.Lock()
-	pc := r.pc
-	r.collectors[ch] = struct{}{}
-	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.collectors, ch)
-		r.mu.Unlock()
-	}()
+	if err := r.waitOtherSearch(ctx); err != nil {
+		return cubelan.RebootResult{}, err
+	}
+	ch, pc := r.startOp()
+	defer r.endOp(ch)
 	return cubelan.Reboot(ctx, pc, ch, addr, serial)
 }
 
@@ -778,15 +872,15 @@ func (r *Responder) Reboot(ctx context.Context, addr, serial string) (cubelan.Re
 // the port the responder holds: unicast to a shared port reaches one
 // socket only, and the requester's may not be the one. The subnet is that
 // of from, the address the reply is sent from, or src's where it is sent
-// from the wildcard. Not while the responder's own search runs, whose
-// requests come from the host too.
-func replyTargets(src *net.UDPAddr, from net.IP, port int, nets []*net.IPNet, searching bool) []*net.UDPAddr {
+// from the wildcard. Not for own, the responder's own request come back
+// through the loopback.
+func replyTargets(src *net.UDPAddr, from net.IP, port int, nets []*net.IPNet, own bool) []*net.UDPAddr {
 	out := []*net.UDPAddr{src}
 	if src.Port != cubelan.DiscoveryPort {
 		out = append(out, &net.UDPAddr{IP: src.IP, Port: cubelan.DiscoveryPort})
 	}
 	n := hostNet(nets, src.IP)
-	if searching || port == 0 || n == nil {
+	if own || port == 0 || n == nil {
 		return out
 	}
 	if from != nil && !from.IsUnspecified() {
@@ -939,10 +1033,25 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 		}
 		r.mu.Lock()
 		members := append([]responderMember(nil), r.members...)
-		searching := r.searches > 0
 		hostNets, sent := r.hostNets, r.sent
+		own := time.Since(r.ownSend) <= orDefault(r.ownEcho, defaultOwnEcho)
 		r.mu.Unlock()
+		if hostNets == nil {
+			hostNets = hostNetworks
+		}
 		var nets []*net.IPNet
+		if u != nil && u.Port == localPort(pc) && !own {
+			// A search from this host and this port that is not the
+			// responder's own: another program's socket shares the port
+			// and gets the Cubes' answers while it is open.
+			if nets = hostNets(); hostNet(nets, u.IP) != nil {
+				r.mu.Lock()
+				r.otherSearch = time.Now()
+				r.others++
+				r.mu.Unlock()
+				r.log.Debug("proxy: another program on this host searches for Cubes", "from", u.String())
+			}
+		}
 		for _, m := range members {
 			reply, ok := m.p.discoveryReply(serial, op)
 			if !ok {
@@ -963,13 +1072,10 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 				write(src)
 				continue
 			}
-			if nets == nil && !searching {
-				if hostNets == nil {
-					hostNets = hostNetworks
-				}
+			if nets == nil && !own {
 				nets = hostNets()
 			}
-			for _, to := range replyTargets(u, from, localPort(pc), nets, searching) {
+			for _, to := range replyTargets(u, from, localPort(pc), nets, own) {
 				write(to)
 			}
 			r.log.Debug("proxy: answered discovery", "from", src.String())

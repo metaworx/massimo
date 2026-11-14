@@ -314,6 +314,14 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		go r.Serve(rctx, pc)
 	}
 	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
+	// Another program on this host searched meanwhile and got the Cubes'
+	// answers from then on: the run lists what it heard, and settles
+	// nothing, as one cut short does.
+	shared := errors.Is(err, proxy.ErrSearchShared)
+	if shared {
+		s.log.Info("discovery run cut short: another program on this host searched for Cubes meanwhile")
+		err = nil
+	}
 	if err != nil && len(answers) == 0 {
 		return nil, err
 	}
@@ -341,7 +349,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		answered[f.Serial] = true
 		out = append(out, f)
 	}
-	if err == nil {
+	if err == nil && !shared {
 		// A complete run: who did not answer it is gone. One cut short
 		// cannot tell a Cube gone from one not heard yet.
 		s.settle(answered)

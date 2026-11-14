@@ -42,12 +42,12 @@ func TestReplyTargets(t *testing.T) {
 		return a
 	}
 	for _, tc := range []struct {
-		name      string
-		src       string
-		from      string
-		port      int
-		searching bool
-		want      []string
+		name string
+		src  string
+		from string
+		port int
+		own  bool
+		want []string
 	}{
 		{"another host", "192.0.2.50:23272", "", 23272, false, []string{"192.0.2.50:23272"}},
 		{"another host, another port", "192.0.2.50:5000", "", 23272, false, []string{"192.0.2.50:5000", "192.0.2.50:23272"}},
@@ -58,7 +58,7 @@ func TestReplyTargets(t *testing.T) {
 		{"this host, a proxy on an address without a network", "192.0.2.10:23272", "127.0.0.1", 23272, false, []string{"192.0.2.10:23272"}},
 		{"this host, a /31", "203.0.113.4:23272", "", 23272, false, []string{"203.0.113.4:23272"}},
 		{"this host, a /32", "203.0.113.9:23272", "", 23272, false, []string{"203.0.113.9:23272"}},
-		{"this host, its own search running", "192.0.2.10:23272", "", 23272, true, []string{"192.0.2.10:23272"}},
+		{"this host, the responder's own request", "192.0.2.10:23272", "", 23272, true, []string{"192.0.2.10:23272"}},
 		{"this host, no port known", "192.0.2.10:23272", "", 0, false, []string{"192.0.2.10:23272"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestReplyTargets(t *testing.T) {
 				from = net.ParseIP(tc.from)
 			}
 			var got []string
-			for _, a := range replyTargets(addr(tc.src), from, tc.port, nets, tc.searching) {
+			for _, a := range replyTargets(addr(tc.src), from, tc.port, nets, tc.own) {
 				got = append(got, a.String())
 			}
 			if !slices.Equal(got, tc.want) {
@@ -79,7 +79,7 @@ func TestReplyTargets(t *testing.T) {
 
 // A request from the host itself is also answered by the broadcast of
 // its subnet, at the responder's port, where the original software on
-// the same host listens beside serve; not while serve's own search runs.
+// the same host listens beside serve; not the responder's own request.
 func TestResponderAnswersItsOwnHostByBroadcast(t *testing.T) {
 	_, p, _, ctx := setup(t)
 	p.opts.DiscoverySerial = "XEQ0000100"
@@ -139,10 +139,11 @@ func TestResponderAnswersItsOwnHostByBroadcast(t *testing.T) {
 		}
 	}
 	ask(1)
-	// A request during a search: its unicast reply comes, sent after the
-	// responder looked at the search; the search ends after it.
+	// A request just after the responder sent one of its own, as its own
+	// comes back through the loopback: its unicast reply comes, sent
+	// after the responder looked at its last send.
 	resp.mu.Lock()
-	resp.searches++
+	resp.ownSend, resp.ownEcho = time.Now(), time.Hour
 	resp.mu.Unlock()
 	client.WriteTo(append([]byte("eQ3Max*\x00**********"), 'I'), pc.LocalAddr())
 	buf := make([]byte, 256)
@@ -151,13 +152,13 @@ func TestResponderAnswersItsOwnHostByBroadcast(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.mu.Lock()
-	resp.searches--
+	resp.ownSend = time.Time{}
 	resp.mu.Unlock()
 	// The responder reads requests in turn: once the next one's broadcast
-	// is out, the one during the search was answered without one.
+	// is out, the one taken for its own was answered without one.
 	ask(2)
 	if n := broadcasts(); n != 2 {
-		t.Fatalf("%d broadcasts, want 2: one sent during a search", n)
+		t.Fatalf("%d broadcasts, want 2: one taken for the responder's own", n)
 	}
 	mu.Lock()
 	defer mu.Unlock()
