@@ -130,6 +130,9 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   The log's range, kind and device follow its page,
   as in `#log?range=today&kind=state&device=MEQ0000101` (see Log).
   A page the role may not open shows Rooms instead.
+- Each page comes back at the place it was left,
+  by its button and by back and forward alike;
+  a page opened for the first time starts at its top.
 - When the server was updated, a button offers to reload the page.
   The page reloads by itself only when nothing is open: no setting being edited,
   no panel and none of the settings pages.

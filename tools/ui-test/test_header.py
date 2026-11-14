@@ -2,11 +2,11 @@
 # Copyright (C) 2026 The Massimo Authors
 """The header: its order at full width and ☰ on a narrow screen, the log
 button's symbol, its baseline, the personal page 👤 opens, the page
-shown in the address, and expert mode's line of the chosen Cube's radio
-budget."""
+shown in the address, each page's own scroll position, and expert mode's
+line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_width, show_view, wait_held, wait_until
+from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -375,3 +375,49 @@ def test_no_buttons_before_the_session_is_known(page, case, watch):
     page.unroute("**/api/v1/me")
     page.reload()
     page.wait_for_selector(".room", timeout=10000)
+
+
+# Room to scroll on every page, whatever the window's height: a spacer at
+# the end of each page's section.
+SPACERS = """() => { for (const id of ['rooms', 'system']) {
+  const d = document.createElement('div');
+  d.className = 'test-spacer';
+  d.style.height = '2000px';
+  document.getElementById(id).appendChild(d);
+} }"""
+
+
+def scrolled_to(page, y):
+    """Scrolls the window to y at once and waits until it rests there."""
+    page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
+    scroll_settled(page)
+    return page.evaluate("window.scrollY")
+
+
+def test_each_page_keeps_its_scroll(page, case):
+    """Each page comes back where it was left: Rooms scrolled, System
+    settings opened at its top the first time, scrolled on its own, and
+    each of them back at its own place when it is shown again, by its
+    button and by the browser's back button."""
+    page.evaluate(SPACERS)
+    try:
+        show_view(page, "tiles")
+        house = scrolled_to(page, 400)
+        assert house == 400, "Rooms scrolled"
+        show_view(page, "system")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == 0, "System settings at its top the first time"
+        system = scrolled_to(page, 250)
+        show_view(page, "tiles")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == house, "Rooms back where it was left"
+        show_view(page, "system")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == system, "System settings back at its own place"
+        page.go_back()
+        page.locator("#rooms").wait_for(state="visible")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == house, "the back button too"
+    finally:
+        page.evaluate("document.querySelectorAll('.test-spacer').forEach((e) => e.remove()); window.scrollTo({top: 0, behavior: 'instant'})")
+        show_view(page, "tiles")
