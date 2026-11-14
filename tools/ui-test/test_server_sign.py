@@ -35,8 +35,13 @@ def test_server_connected_and_update(page, case):
     "i", its label naming the version; a click opens Software update."""
     state, icon, label = sign(page)
     assert (state, icon) == ("up", "#icon-plug-on") and label == page.evaluate("t('server.up')"), "connected"
-    b = page.locator("#server-sign").bounding_box()
-    assert b["x"] + b["width"] <= page.locator("#updated").bounding_box()["x"], "before the time"
+    real = page.locator("#version-short").inner_text()
+    for version in ("v0.16.0", "v0.0.0-dev+0123456789ab-dirty", real):  # a release's, a build's: the header wraps differently
+        page.evaluate("(v) => { document.getElementById('version-short').textContent = v; }", version)
+        b = page.locator("#server-sign").bounding_box()
+        u = page.locator("#updated").bounding_box()
+        assert b["x"] + b["width"] <= u["x"], f"before the time with {version}, however the header wraps ({b}, {u})"
+        assert abs((b["y"] + b["height"] / 2) - (u["y"] + u["height"] / 2)) <= 6, f"beside it with {version} ({b}, {u})"
     if case.width >= 600:
         middle = page.evaluate(DIGITS_MIDDLE, "#updated")
         assert abs(b["y"] + b["height"] / 2 - middle) <= 2, f"on the digits' middle ({b}, {middle})"
