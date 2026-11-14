@@ -303,6 +303,10 @@ A 0x11 command to a device in error state that was **not** preceded by `r:` came
 back as discarded (`S:14,1,31`); the software then reports "Command discarded".
 While the UI is open the software polls `l:` every 10 s and disconnects after 30
 s without user activity.
+It reads the next line after a command as its reply (seen 2026-11-14 through
+Massimo's proxy, software 1.4.6): a line it did not ask for comes back as
+"S: expected", "ACK expected" or "device list expected", each reply one line late,
+while the commands themselves still reach the Cube.
 
 ### Verified on hardware with Massimo (2026-11-04, Cube JEQ…, live devices)
 

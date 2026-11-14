@@ -413,7 +413,6 @@ type runtime struct {
 	epoch  string
 	seq    uint64
 	replay []published
-	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
 	logMu  sync.Mutex
 	events []event // the last logSize events, for GET …/log
 
@@ -450,20 +449,6 @@ func (rt *runtime) lockStructure(ctx context.Context) (func(), error) {
 		return func() { <-rt.structure }, nil
 	case <-ctx.Done():
 		return nil, fail(http.StatusServiceUnavailable, "another change of the cube's rooms and devices is still running")
-	}
-}
-
-// subscribePush returns a channel that gets a signal whenever the Cube
-// reported device state, for the LAN proxy.
-func (rt *runtime) subscribePush() (<-chan struct{}, func()) {
-	ch := make(chan struct{}, 1)
-	rt.subsMu.Lock()
-	rt.push[ch] = struct{}{}
-	rt.subsMu.Unlock()
-	return ch, func() {
-		rt.subsMu.Lock()
-		delete(rt.push, ch)
-		rt.subsMu.Unlock()
 	}
 }
 
@@ -933,14 +918,6 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()
 			rt.publishLocked(ev, 0)
-			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventForgotten {
-				for ch := range rt.push {
-					select {
-					case ch <- struct{}{}:
-					default: // a signal is already pending
-					}
-				}
-			}
 			rt.subsMu.Unlock()
 			for _, a := range after {
 				rt.emit(a)

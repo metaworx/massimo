@@ -46,11 +46,6 @@ type Options struct {
 	// MaxDutyPct is the duty cycle at which radio commands from clients
 	// are answered as discarded without being sent (default 95).
 	MaxDutyPct int
-	// Subscribe, when set, returns a channel that receives a signal
-	// whenever the Cube reported new device state, so connected clients
-	// get an L line pushed as the real Cube does, and a function to end
-	// the subscription.
-	Subscribe func() (<-chan struct{}, func())
 	// ReplyTimeout bounds how long a client waits for the Cube's answer
 	// to a passed-through command (default one minute).
 	ReplyTimeout time.Duration
@@ -188,11 +183,6 @@ func (p *Proxy) Run(ctx context.Context, tcpAddr string) error {
 
 // ServeTCP accepts clients on ln until ctx ends.
 func (p *Proxy) ServeTCP(ctx context.Context, ln net.Listener) error {
-	if p.opts.Subscribe != nil {
-		ch, cancel := p.opts.Subscribe()
-		defer cancel()
-		go p.pushLoop(ctx, ch)
-	}
 	go func() {
 		<-ctx.Done()
 		ln.Close()
@@ -211,31 +201,6 @@ func (p *Proxy) ServeTCP(ctx context.Context, ln net.Listener) error {
 			return err
 		}
 		go p.serve(ctx, conn)
-	}
-}
-
-// pushLoop writes the current L line to every client whenever the Cube
-// reported a state change.
-func (p *Proxy) pushLoop(ctx context.Context, ch <-chan struct{}) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case _, ok := <-ch:
-			if !ok {
-				return
-			}
-			snap := p.opts.Client.Snapshot()
-			l, ok := snap.DeviceListLineExcluding(p.hidden(snap.Metadata()))
-			if !ok {
-				continue
-			}
-			p.mu.Lock()
-			for s := range p.conns {
-				s.write(l)
-			}
-			p.mu.Unlock()
-		}
 	}
 }
 
