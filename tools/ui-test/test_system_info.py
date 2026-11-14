@@ -131,7 +131,7 @@ def test_system_details_behind_a_proxy(page, case):
     parts = cert.removesuffix(" " + PROXIED[case.lang]).split(" · ")
     assert parts[0] == "massimo.example.net" and parts[2].endswith("Example CA") and parts[3] == UNTRUSTED[case.lang] \
         and cert.endswith(" " + PROXIED[case.lang]), f"the proxy's certificate: names, expiry, issuer, not trusted, proxied ({cert!r})"
-    assert served == "https://massimo.example.net:443", "the address the proxy serves"
+    assert served == "https://massimo.example.net", "the address the proxy serves"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the details"
     show_view(page, "tiles")
     box["interfaces"] = [{"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.0.2.8", "api": True}, {"ip": "192.0.2.31", "api": True}]}]
@@ -141,7 +141,7 @@ def test_system_details_behind_a_proxy(page, case):
         "the web interface everywhere: no asterisk"
     assert page.locator("#info-addrs .sys-note").inner_text() == ALL[case.lang], "the note says so instead"
     cert, served = tls_lines(page)[:2]
-    assert cert.endswith(" " + PROXIED[case.lang]) and served == "https://massimo.example.net:443", \
+    assert cert.endswith(" " + PROXIED[case.lang]) and served == "https://massimo.example.net", \
         "a certificate not read yet, proxied all the same"
     page.unroute("**/api/v1/system")
     show_view(page, "tiles")

@@ -4,6 +4,8 @@
 package cubelan
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +44,15 @@ type Snapshot struct {
 	// the device again: a removal writes the list without the device
 	// before the device is forgotten, and its event still names it.
 	delisted map[cube.RFAddress]cube.DeviceMeta
+	// asReceived are the C lines that could not be read, kept as the
+	// Cube sent them, one per address, so that the proxy and a backup
+	// give what the Cube gave; a new greeting starts them afresh.
+	asReceived []cube.Message
 }
+
+// ErrKeptAsReceived marks a line the snapshot could not read and keeps
+// as the Cube sent it (Lines repeats it); the error it wraps says why.
+var ErrKeptAsReceived = errors.New("kept as received")
 
 func newSnapshot() *Snapshot {
 	return &Snapshot{
@@ -61,7 +71,7 @@ func SnapshotOf(msgs []cube.Message, now time.Time) (*Snapshot, error) {
 	s := newSnapshot()
 	s.beginGreeting()
 	for _, m := range msgs {
-		if _, err := s.apply(m, now); err != nil {
+		if _, err := s.apply(m, now); err != nil && !errors.Is(err, ErrKeptAsReceived) {
 			return nil, err
 		}
 	}
@@ -160,6 +170,7 @@ func (s *Snapshot) beginGreeting() {
 	defer s.mu.Unlock()
 	s.greeting, s.fresh = true, map[cube.RFAddress]bool{}
 	s.forgotten = nil // the greeting says what the Cube holds
+	s.asReceived = nil
 	s.mparts = s.mparts[:0]
 }
 
@@ -230,7 +241,8 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 	case 'C':
 		c, err := cube.ParseConfig(m.Data)
 		if err != nil {
-			return nil, err
+			s.keepAsReceivedLocked(m)
+			return nil, fmt.Errorf("%w: %w", ErrKeptAsReceived, err)
 		}
 		s.configs[c.RFAddress] = c
 		delete(s.forgotten, c.RFAddress)
@@ -279,6 +291,35 @@ func (s *Snapshot) apply(m cube.Message, now time.Time) ([]Event, error) {
 }
 
 func sameState(a, b cube.DeviceState) bool { return string(a.Raw) == string(b.Raw) }
+
+// keepAsReceivedLocked keeps a C line that could not be read, in place
+// of one kept before for the same address.
+func (s *Snapshot) keepAsReceivedLocked(m cube.Message) {
+	addr, _, _ := strings.Cut(m.Data, ",")
+	for i, k := range s.asReceived {
+		if a, _, _ := strings.Cut(k.Data, ","); a == addr {
+			s.asReceived[i] = m
+			return
+		}
+	}
+	s.asReceived = append(s.asReceived, m)
+}
+
+// inGreeting tells whether a new connection's greeting is being read.
+func (s *Snapshot) inGreeting() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.greeting
+}
+
+// listsZero tells whether the Cube's last device list holds an entry at
+// radio address 000000 (cube.ZeroAddress).
+func (s *Snapshot) listsZero() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.states[cube.ZeroAddress]
+	return ok
+}
 
 // noteDelistedLocked keeps the entries of the devices the new room and
 // device list md leaves out (delisted), and drops those it names again.
@@ -406,14 +447,24 @@ func (s *Snapshot) State(rf cube.RFAddress) (cube.DeviceState, bool) {
 }
 
 // Devices returns all known device addresses in the order the Cube
-// reported them; devices known only from the metadata come last.
+// reported them; devices known only from the metadata come last. An
+// entry at radio address 000000 is no device's (cube.ZeroAddress): Lines
+// repeats it, Devices leaves it out.
 func (s *Snapshot) Devices() []cube.RFAddress {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := append([]cube.RFAddress(nil), s.order...)
+	out := make([]cube.RFAddress, 0, len(s.order))
+	for _, rf := range s.order {
+		if rf != cube.ZeroAddress {
+			out = append(out, rf)
+		}
+	}
 	if s.metadata != nil {
 	next:
 		for _, d := range s.metadata.Devices {
+			if d.RFAddress == cube.ZeroAddress {
+				continue
+			}
 			for _, o := range out {
 				if o == d.RFAddress {
 					continue next
@@ -537,8 +588,8 @@ func (s *Snapshot) ConfigLine(rf cube.RFAddress) (cube.Message, bool) {
 }
 
 // Lines reproduces the snapshot as protocol lines (H, M, C…, L), i.e. the
-// same text a fresh connection would receive. Used for backups and for the
-// simulator.
+// same text a fresh connection would receive, the C lines it could not
+// read as the Cube sent them. Used for backups and for the simulator.
 func (s *Snapshot) Lines() []cube.Message { return s.LinesExcluding(nil, nil) }
 
 // LinesExcluding is Lines without the devices in skip, left out of the
@@ -586,6 +637,7 @@ func (s *Snapshot) LinesExcluding(skip map[cube.RFAddress]bool, skipRooms map[ui
 			out = append(out, cube.Message{Type: 'C', Data: rf.String() + "," + b64(c.Raw)})
 		}
 	}
+	out = append(out, s.asReceived...)
 	var raw []byte
 	for _, rf := range s.order {
 		if st, ok := s.states[rf]; ok && !skip[rf] {

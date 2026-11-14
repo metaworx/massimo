@@ -65,7 +65,17 @@ const (
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
-	"auth",
+	"auth", "integrations",
+}
+
+// integrationCeiling is the fixed role integration's set (migration 0021):
+// every capability but those that manage people, sign-in and the
+// integrations themselves, so that an integration can never widen its
+// own users. It bounds every call through an integration
+// (docs/api-v1.md, "Integrations"); guests are an integration's to manage.
+var integrationCeiling = []string{
+	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+	"guests", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
 }
 
 // Two more values a route may be registered with, which no role holds:
@@ -104,6 +114,10 @@ type principal struct {
 	// legacyToken is the one token a server without a store had when it
 	// let the principal in, "" for none (stillAdmitted).
 	legacyToken string
+	// integration is the registered integration whose key it is, and
+	// actsFor the integration's user the call acts for (onbehalf.go).
+	integration *store.Integration
+	actsFor     *store.IntegrationIdentity
 }
 
 // has reports whether the principal holds a capability; outside users
@@ -848,7 +862,21 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		return nil, false
 	}
 	s.limiter.succeed(ctx, key)
+	q, no := s.integrationPrincipal(ctx, r, p)
+	if no != nil {
+		body := map[string]any{"error": no.msg}
+		if no.code != "" {
+			body["code"] = no.code
+		}
+		writeJSON(w, no.status, body)
+		return p, false // the audit names who was refused
+	}
+	p = q
 	if !s.allowed(p, capability, r) {
+		if p.integration != nil {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": fmt.Sprintf("capability %q required", capability), "code": "forbidden"})
+			return p, false
+		}
 		writeError(w, http.StatusForbidden, fmt.Sprintf("capability %q required", capability))
 		return p, false // the audit names who was refused
 	}

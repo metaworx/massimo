@@ -242,7 +242,9 @@ The default roles and their sets are those of docs/store.md section 6:
 restore and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
-`viewer` reads, `integration` reads, sets, locks and configures.
+`viewer` reads, and `integration`, fixed like `owner`, is the role of the
+registered integrations and their users and the ceiling of their calls
+(docs/store.md section 6); a regular user is never given it.
 A role's set can be changed, a role renamed, created and disabled,
 and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.
@@ -295,6 +297,10 @@ and it will be removed in a later release.
   the two cannot be confused.
   A serial reaches a device while the Cube has it, and a serial the Cube
   does not have is `404`.
+  Radio address 000000 is no device's and is `400`
+  ("radio address 000000 is no device"):
+  a Cube can list an entry there, which no list of the API shows,
+  and nothing is sent to it (docs/cube-protocol.md).
   The answers carry both, `serial` and `rf_address`,
   and the audit names a device by its serial (`device:MEQ0000101`).
 - `{id}` is a room number as the Cube assigns it (1..255).
@@ -356,6 +362,7 @@ without a store (`serve -addr`) the features that need one are left out.
 | `program_etag` | the programme's tag, `If-Match`, `412`, `pending`, the config event's `changed` and `etag`, `GET …/devices/{rf}/program` | no | the release after 0.15.0-alpha.1 |
 | `boost` | `{"mode": "boost"}` on the setpoint routes | no | the release after 0.15.0-alpha.1 |
 | `proxy_virtual` | the Cube option `proxy_virtual` | yes | the release after 0.15.0-alpha.1 |
+| `integration` | registered integrations (`/api/v1/integrations`) acting for their users (`X-MassimoHA-On-Behalf-Of`), `integration` and `acts_for` in `/api/v1/me` | yes | the release after 0.15.0-alpha.1 |
 
 What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
@@ -747,6 +754,152 @@ one for every role but `owner`, whatever the roles' sets say
 (for example `pair` while nobody should pair,
 or `update` on a box the owner updates by hand), and `false` enables it again.
 Both need `capabilities`, which only `owner` has by default.
+
+### Integrations: /api/v1/integrations
+
+An integration, Home Assistant first, is a program that acts for users of
+its own: each of its calls can name the user it acts for and the level
+the user has for that call, and Massimo allows only what every link of
+that chain allows ("Acting for an integration's users", below).
+An integration is registered by the owner, without a key typed anywhere:
+
+1. The integration asks: `POST /api/v1/integrations/requests`, without a key,
+
+   ```json
+   {"kind": "homeassistant", "name": "Casa Leone", "instance_id": "<32 hex>",
+    "url": "http://homeassistant.local:8123", "version": "2026.11.1"}
+   ```
+
+   `instance_id` is the installation's id (Home Assistant's `core.uuid`).
+   The answer is `201` with `{"id": "<uuid>", "code": "K7Q2PX", "expires_at": "…"}`;
+   the integration shows the code.
+   A request waits ten minutes; at most five wait at once,
+   an address asks at most ten times in ten minutes (`429`),
+   and the setting `integrations.requests` off refuses requests (`403`).
+2. The owner compares the codes and approves (capability `integrations`):
+   `POST /api/v1/integrations/{uuid}/approve` with `{"max_caps": [...]}`,
+   the integration's maximum, within the role `integration` and all of it
+   by default; `"attach": "<uuid>"` makes the request an integration of the
+   same kind that was registered before, with its users, links and maximum,
+   as after a key lost or revoked.
+   `POST …/refuse` refuses it.
+3. The integration collects its key:
+   `GET /api/v1/integrations/requests/{id}?code=K7Q2PX`,
+   `202` while the request waits,
+   `200` with `{"key": "…", "integration": {…}}` once approved,
+   `410` once refused, expired, or its key collected and used.
+   An answer lost on the way is not lost:
+   the same call answers a new key, the one before revoked,
+   as long as that key was never used and ten minutes since the approval
+   have not passed.
+
+The key belongs to the integration's own user, named by the integration's
+`key` (lower case, from its name: `casa-leone`), with the role
+`integration`; the user `<key>.system` stands for its calls that no user
+started.
+`GET /api/v1/integrations` lists the integrations and the requests
+waiting, a request with its code and the address it came from;
+`PUT /api/v1/integrations/{uuid}` changes `name`, `max_caps` and `state`
+(`active`, `disabled`);
+`DELETE` revokes it: its key revoked and the integration disabled,
+its users, links and maximum kept for a request from the same installation.
+A call that came with another installation id than the accepted one is
+refused and the id recorded as `pending_instance`, which
+`POST …/accept-instance` accepts.
+
+**On the LAN.**
+A server that announces itself (README.md, "Server") also looks for
+Home Assistant's zeroconf records, `_home-assistant._tcp`,
+at the start and every 30 minutes.
+`GET /api/v1/integrations/found` answers what the last look saw,
+`?refresh=1` looking now:
+`{"found": [...], "at": "…", "looks": true}`,
+each installation with `kind`, `name`, `instance_id`, `location`, `url`,
+`version`, `address`, and `integration`, the uuid of the integration or
+the request of that installation id, where there is one.
+An integration or request whose installation id the last look saw is
+marked `"seen": true`: a request's id confirmed by the LAN.
+Home Assistant finds the server the same way:
+the TXT record of `_massimo._tcp` carries `url`, where the API is
+reached (README.md, "Server"), `loc`, the installation's name, `reg=1` while requests are
+taken, and `api=1`, `GET /healthz` listing the features.
+
+### Acting for an integration's users
+
+A registered integration's key with the header
+
+```
+X-MassimoHA-On-Behalf-Of: id=<the user's id, 32 hex>; level=control; name*=UTF-8''J%C3%BCrg; instance=<installation id, 32 hex>
+```
+
+acts for one of the integration's users.
+
+- **The header's parameters:**
+  - `id` is the user's id at the integration (Home Assistant's `user.id`),
+    or `system` for a call no user started (an automation);
+  - `level` is the user's level for this call: `view`, `control` or `admin`;
+  - `instance` is the installation id;
+  - `name` (quoted or not) or `name*` (RFC 8187, for any character)
+    is the user's name there,
+    shown in the users list and updated when it changes;
+  - `system_generated`, alone,
+    marks one of the integration's own system users
+    (Home Assistant's Supervisor, Cloud, …).
+- **The user** is made at its first call,
+  with the role `integration` and no password,
+  named `<integration key>.<the id's first 8 characters>`
+  (longer where two ids begin alike).
+  Several of the integration's users may be linked to one Massimo user.
+- **What the call may do** is what every link of the chain allows:
+  1. the integration user's role, `integration` at first,
+     narrowed by the owner where wanted;
+  2. the role `integration`, the ceiling of every call through an integration;
+  3. the Massimo user it is linked to, where it is;
+  4. the integration's maximum, `max_caps`;
+  5. the level: `view` reads, `control` also sets, locks and configures,
+     and `admin` adds nothing of its own.
+- **Without the header** the key acts as the integration itself:
+  its role and its maximum (an integration's own polls and stream).
+- **The audit and the log** name the user the call acted as,
+  with `"via"`, the integration's key,
+  and `"for"`, the integration's user (id, name, level).
+
+A refusal says which link refused, in `code`:
+
+| Status | `code` | Why |
+|--------|--------|-----|
+| 400 | `bad_header` | the header says something it may not |
+| 403 | `not_integration` | the header with a key that is no registered integration's |
+| 403 | `integration_disabled` | the integration is disabled or revoked |
+| 403 | `instance_pending` | another installation id than the accepted one; recorded as `pending_instance` for the owner to accept |
+| 403 | `user_disabled` | the integration's user, its linked user or one of their roles is disabled |
+| 403 | `forbidden` | a capability the chain did not leave |
+
+`GET /api/v1/me` answers, for an integration's key, `integration`
+(`uuid`, `key`, `name`, `state`, `instance_id`, null for any other key),
+with the header `acts_for` (`id`, `name`, `level`, `linked`,
+`system_generated`), and `capabilities`, what the chain leaves.
+So an integration knows before naming a user whether its key is a
+registered integration's, and a key typed by hand keeps working without
+the header.
+
+**Links.**
+`GET /api/v1/integrations/{uuid}` answers the integration with `users`,
+its users, the system user first:
+`id`, `name`, the `user` its calls act as, its `own_user`, `linked`,
+`system_generated`, `last_level`, `last_used_at`,
+and for one not linked a `proposal`, a Massimo user whose name or display
+name is its name at the integration.
+The owner confirms a link (capability `integrations`):
+`PUT /api/v1/integrations/{uuid}/users/{id}` with `{"user": "anna"}`;
+its calls then act as `anna`, within `anna`'s role (the chain's third
+link), and `{"user": null}` unlinks it.
+Several of an integration's users may be linked to one user.
+The system user stays its own, a user of an integration is no user to
+link to (`400`), and the caller must outrank the user linked to (`403`).
+`GET /api/v1/users` marks an integration's user with `integration`
+(`key`, `uuid`, and for one of its users `id`, `name`, `linked_to`)
+and lists under `links` the integrations' users linked to a user.
 
 ### Providers: /api/v1/providers
 
@@ -1397,6 +1550,9 @@ and the users sign in by OPAQUE alone, so that no password crosses;
 the API keys are not touched.
 A user still of `auth_version` 1 cannot sign in then,
 until someone with `users` sets a password for it.
+`integrations.requests`, true by default, says whether integrations may
+ask to be registered (`POST /api/v1/integrations/requests`), and applies
+at once; the announcement's `reg` says it on the LAN.
 `update.channel` is the update channel (see `GET /api/v1/update`),
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
@@ -1405,7 +1561,8 @@ the build's flavour by default, and applies at once;
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
-`auth.password_login` `true` or `false`, and `update.channel` a name.
+`auth.password_login` and `integrations.requests` `true` or `false`,
+and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h,
 `window_warn_after` and `window_alert_after` 1m to 24h.

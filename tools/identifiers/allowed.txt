@@ -11,6 +11,8 @@ LEQ0015340  Bouni/max-cube-protocol, N-Message.md
 0fdaed      Bouni/max-cube-protocol, L-Message.md and S-Message.md
 0fc373      Bouni/max-cube-protocol, S-Message.md
 0fc380      Bouni/max-cube-protocol, S-Message.md
+# No device's: a Cube may list an entry there (cube.ZeroAddress).
+000000      radio address 000000, refused as a device
 # Made up by a test, plainly not a device's.
 000001      made up, a test's first address
 000002      made up, a test's second address
