@@ -60,8 +60,11 @@ func (s *Server) refuseLocked() {
 	// One connection of our own in the accept queue fills it: with a
 	// backlog of 0 the kernel then drops every further SYN. A client
 	// that got in first fills it as well, and the dial fails then.
-	if c, err := net.DialTimeout("tcp", dialable(s.ln.Addr()), 500*time.Millisecond); err == nil {
-		s.park, s.parkAddr = c, c.LocalAddr().String()
+	for _, a := range dialable(s.ln.Addr()) {
+		if c, err := net.DialTimeout("tcp", a, 500*time.Millisecond); err == nil {
+			s.park, s.parkAddr = c, c.LocalAddr().String()
+			return
+		}
 	}
 }
 
@@ -149,19 +152,17 @@ func (s *Server) isParkLocked(conn net.Conn) bool {
 	return s.parkAddr != "" && conn.RemoteAddr().String() == s.parkAddr
 }
 
-// dialable is an address to dial a listener at: its own, with an
-// unspecified IP replaced by the loopback.
-func dialable(a net.Addr) string {
+// dialable are the addresses to dial a listener at: its own, or for an
+// unspecified IP the IPv4 loopback, which a dual-stack listener on [::]
+// takes too, then the IPv6 one, which a container may lack.
+func dialable(a net.Addr) []string {
 	t, ok := a.(*net.TCPAddr)
 	if !ok {
-		return a.String()
+		return []string{a.String()}
 	}
-	ip := t.IP
-	if ip == nil || ip.IsUnspecified() {
-		ip = net.IPv4(127, 0, 0, 1)
-		if t.IP != nil && t.IP.To4() == nil {
-			ip = net.IPv6loopback
-		}
+	port := strconv.Itoa(t.Port)
+	if t.IP == nil || t.IP.IsUnspecified() {
+		return []string{net.JoinHostPort("127.0.0.1", port), net.JoinHostPort("::1", port)}
 	}
-	return net.JoinHostPort(ip.String(), strconv.Itoa(t.Port))
+	return []string{net.JoinHostPort(t.IP.String(), port)}
 }
