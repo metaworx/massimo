@@ -290,3 +290,92 @@ def test_proxy_not_listening(page, case):
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s .cube-proxy-state .notice\")" % PANEL, 5), \
         "the notice gone once the listener listens, the panel open"
+
+
+STALE = {"en": "it still holds the server's old connection", "de": "Er hält noch dessen alte Verbindung"}
+STALE_BADGE = {"en": "old connection", "de": "alte Verbindung"}
+
+
+def test_cube_link_stale(page, case):
+    """A Cube that refuses the server while it holds the server's old
+    connection (link stale, stubbed): the panel's badge says so, the open
+    panel a notice above its facts with since when, and Rooms' notice
+    the same first; the notice goes once the Cube is connected again."""
+    def stale(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["connected"] = False
+                c["link"] = {"state": "stale", "since": "2026-11-13T21:41:24+01:00"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    page.route("**/api/v1/cubes", stale)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s .panel-badges\") && "
+                          "document.querySelector(\"%s .panel-badges\").textContent.includes(%s)"
+                          % (PANEL, PANEL, json.dumps(STALE_BADGE[case.lang])), 5), "the panel's badge"
+        panel, _ = open_panel(page)
+        notice = panel.locator(".cube-link-state .notice")
+        assert notice.count() == 1 and STALE[case.lang] in notice.inner_text(), "the notice above the facts"
+        assert notice.locator(".notice-since").count() == 1, "since when"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
+        panel.locator("summary").click()
+        show_view(page, "tiles")
+        assert wait_until(page, "document.querySelector('#home-notice .home-notice-detail').textContent.includes(%s)"
+                          % json.dumps(STALE[case.lang]), 5), "Rooms' notice says it"
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    show_view(page, "system")
+    assert wait_until(page, "!document.querySelector(\"%s .cube-link-state .notice\")" % PANEL, 5), \
+        "the notice gone once the Cube is connected"
+    show_view(page, "tiles")
+
+
+REBOOT_PENDING = {"en": "that 2 radiograms are not delivered yet", "de": "dass 2 Funktelegramme noch nicht zugestellt sind"}
+REBOOTED = {"en": "Cube KEQ0000100 is rebooting", "de": "Cube KEQ0000100 startet neu"}
+
+
+def test_cube_reboot(page, case):
+    """Reboot the Cube (the request stubbed, so that the fake Cube is left
+    alone): it asks in place of the button, naming the serial and the
+    radiograms pending as the Cube last said; No puts the button back and
+    sends nothing, Yes sends the reboot with the count it showed."""
+    def pending(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["pending_radiograms"] = 2
+                c["budget"] = dict(c.get("budget") or {}, updated_at="2026-11-13T21:40:00+01:00")
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    sent = []
+
+    def reboot(route):
+        sent.append(route.request.post_data_json)
+        route.fulfill(status=202, content_type="application/json", body='{"sent": true, "answered": true, "status": 2}')
+    page.route("**/api/v1/cubes", pending)
+    page.route("**/api/v1/cubes/KEQ0000100/reboot", reboot)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        panel, _ = open_panel(page)
+        btn = panel.locator(".cube-reboot-btn")
+        assert btn.is_visible(), "the Reboot at the bottom of the panel"
+        btn.click()
+        box = panel.locator(".confirm-box")
+        text = box.locator(".confirm-text").inner_text()
+        assert "KEQ0000100" in text and REBOOT_PENDING[case.lang] in text, f"the question names the serial and the pending radiograms ({text!r})"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the question"
+        box.locator(".confirm-no").click()
+        assert panel.locator(".cube-reboot-btn").is_visible() and not sent, "No puts the button back and sends nothing"
+        panel.locator(".cube-reboot-btn").click()
+        panel.locator(".confirm-box .confirm-yes").click()
+        assert wait_until(page, "document.getElementById('cubes-msg').textContent.includes(%s)" % json.dumps(REBOOTED[case.lang]), 5), \
+            "the message says it reboots"
+        assert sent == [{"pending": 2}], f"the reboot with the count shown ({sent!r})"
+    finally:
+        page.unroute("**/api/v1/cubes")
+        page.unroute("**/api/v1/cubes/KEQ0000100/reboot")
+    page.evaluate("loadCubes()")
+    show_view(page, "tiles")

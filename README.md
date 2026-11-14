@@ -761,12 +761,26 @@ with its duty cycle and free slots.
 `serve` asks each Cube for its device list every minute (`-poll`),
 and between these polls the connection's TCP keepalive probes the Cube.
 A Cube that stops answering, as one whose network cable is out, is lost
-about 30 seconds after the last traffic,
-or once it leaves two polls in a row unanswered,
-within two polls and ten seconds:
+once it leaves two polls in a row unanswered,
+within two polls and ten seconds,
+and on Linux already when three keepalive probes go unanswered,
+about 30 seconds after the last traffic:
 `serve` logs `cube connection lost`,
-its proxy stops answering discovery for it ([docs/proxy.md](docs/proxy.md)),
-and it tries again, at most a minute apart, until the Cube answers.
+and its proxy stops answering discovery for it ([docs/proxy.md](docs/proxy.md)).
+`serve` holds the lost connection open for 45 minutes (`-cube-hold`,
+0 not at all), since a Cube keeps a session whose end it never saw
+and refuses every other client meanwhile, for 41½ minutes on one occasion
+([docs/cube-protocol.md](docs/cube-protocol.md),
+"Lessons from the hardware days"):
+after an outage of the network of the box running `serve`,
+such as a router's restart,
+the Cube answers on the held connection once the network is back,
+and `serve` logs `cube connection re-established` with `held=true`.
+The hold ends earlier when the Cube closes the connection,
+when discovery finds the Cube at another address,
+or when the Cube has answered discovery for three minutes without the connection resuming;
+`serve` logs `cube held connection ended` and connects anew,
+at most a minute apart, until the Cube answers.
 
 The Cube serves only one LAN client at a time,
 so `serve` is itself a Cube for everyone else:
@@ -891,7 +905,18 @@ for tests that drive the fake from outside:
 `panel_locked`, and `reported: false` for a device the Cube holds no state for),
 `POST /devices/<rf>/remove` and `/restore` to take a device out of its room's
 lists and bring it back, `POST /drop` to make the clients connect again and
-read the greeting, and `GET /devices` for the device list.
+read the greeting, and `GET /devices` for the device list;
+`POST /silent` and `DELETE /silent` pull the Cube's cable and put it back
+(the fake keeps its connections and holds every line meanwhile),
+`POST /release` forgets a dead session (below),
+and `GET /connections` counts the connections so far and open now.
+`-single-client` serves one client at a time, as the Cube does:
+while a client is connected, another client's dial times out (on Linux;
+elsewhere its connection is closed at once).
+A client that leaves while the fake is silent is a session whose end the outage lost,
+and the fake holds it for `-hold-dead` (41 minutes by default,
+as a Cube did on 2026-11-13), refusing every client meanwhile,
+until `POST /release` or an `R` to `-discovery`, which restarts the fake.
 
 ```bash
 massimo discover
@@ -918,6 +943,7 @@ massimo netconfig -addr <cube-ip>
 massimo netconfig -addr <cube-ip> -static <ip> -gateway <gw> -netmask <mask> [-dns <a>[,<b>]]
 massimo netconfig -addr <cube-ip> -dhcp
 massimo netconfig -sn <serial> -broadcast -dhcp
+massimo netconfig -addr <cube-ip> [-sn <serial>] -reboot
 ```
 
 `netconfig` reads a Cube's network configuration over UDP 23272 (`-json` too):
@@ -938,6 +964,18 @@ it reads the stored configuration first and changes only the DHCP flag, or,
 when the read gets no answer, sends zeros for the addresses,
 which loses the stored fallback (192.168.0.222/16 from the factory) without restoring it;
 a Cube that moved networks may need a power cycle.
+`-reboot` restarts the Cube with `R`,
+as **Reboot the Cube** in System settings → Cubes does
+(`POST /api/v1/cubes/{sn}/reboot`, docs/api-v1.md):
+a Cube that still holds the old connection of a server whose network went down
+refuses every other client until it lets go, after up to about 40 minutes,
+and the restart frees it at once.
+A restart drops the radiograms the Cube has not delivered,
+and its rooms refuse commands for a while after it;
+the command cannot see how many are pending (the web UI and the API show
+the server's count), so it warns and asks first (`-yes` skips that).
+On the box of a running `serve` the Cube answers `serve`'s port:
+give the serial with `-sn` there, and the answer to `R` goes to `serve`.
 
 ### Cube variables
 

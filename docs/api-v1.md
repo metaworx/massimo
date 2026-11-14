@@ -221,6 +221,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `roles.disable` | disable and enable a role | `PUT /api/v1/roles/{key}/disabled` |
 | `capabilities` | disable and enable a capability for every role but `owner` | `GET /api/v1/capabilities`, `PUT /api/v1/capabilities/{key}` |
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
+| `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
 
 A user changes only users whose role has no capability its own lacks,
@@ -776,7 +777,7 @@ A disabled provider is saved unchecked.
 `auto_role`, the role of the users a sign-in creates where `auto_create` is true,
 may not be `owner` nor hold an administrative capability (`guests`,
 `users`, `passwords`, `roles`, `roles.disable`, `capabilities`, `cubes`,
-`settings`, `update`, `restart`, `reboot`, `audit`, `auth`);
+`cubes.reboot`, `settings`, `update`, `restart`, `reboot`, `audit`, `auth`);
 `viewer` where absent.
 `auto_domains` limits it to e-mails of those domains, any where empty.
 `allowed_groups` are the groups the provider admits, read from the claim `groups_claim`
@@ -1139,6 +1140,7 @@ then every Cube discovery found on the LAN that is not configured:
     "mac": "00:1a:22:0a:0b:0c",
     "last_seen": "2026-11-04T15:00:02+01:00",
     "connected": true,
+    "link": {"state": "connected"},
     "firmware": "1.1.3",
     "rf_address": "0a0104",
     "budget": {"duty_cycle_pct": 4, "free_memory_slots": 50, "updated_at": "2026-11-04T15:28:11+01:00"},
@@ -1197,6 +1199,33 @@ Its row stays in the server's store with its first and latest sighting
 (the latest is written once per server run, or when an answer changes the row),
 so that a restart does not announce it again;
 after a restart it is listed once a run has heard it.
+
+`link` says how the server stands with a configured Cube,
+beyond `connected`,
+with `since` and for a hold `until` where they apply:
+
+- `connected`:
+  a connection is up and its greeting read;
+- `held`:
+  the Cube is lost, its connection held open since the loss,
+  until `until` at the latest,
+  so that it resumes once the network is back (`serve -cube-hold`, README.md);
+- `stale`:
+  the Cube answers discovery from its address,
+  but the server's connections time out, since `since`,
+  after the server's side ended the last one;
+  the Cube still holds that one, as after an outage of the server's network,
+  and lets go after up to about 40 minutes;
+  `POST /api/v1/cubes/{sn}/reboot` frees it at once (below);
+- `busy`:
+  the same signs, the server having left no connection behind;
+  another client holds the Cube, such as the MAX! software,
+  another server or an integration;
+- `rebooting`:
+  a reboot was sent (`POST /api/v1/cubes/{sn}/reboot`) since `since`,
+  and the Cube has not greeted the server since, until `until` at the latest;
+- `offline`:
+  none of these, such as a Cube that answers nothing.
 
 `source` says where a configured Cube's configuration comes from:
 `env` (taken over from the settings file into the store),
@@ -1375,6 +1404,43 @@ The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
 Every value is checked before any is written.
 The answer is that of `GET`.
+
+### POST /api/v1/cubes/{sn}/reboot
+
+Reboots the Cube: the server sends it `R` on UDP port 23272
+(`docs/cube-protocol.md`, "Cube UDP protocol"),
+from its discovery socket, where the Cube's answer arrives.
+The Cube is gone for about a minute and then takes a connection again;
+one that still holds an old connection (`link` `stale`, above)
+does so otherwise only after up to about 40 minutes.
+A restart drops the radiograms the Cube has not delivered,
+and its rooms refuse commands for a while after it,
+until their devices have reported:
+the server never reboots a Cube by itself,
+and while radiograms are pending as the Cube last said (`pending_radiograms`),
+the request names the count it accepts to drop:
+
+```json
+{"pending": 3}
+```
+
+A request without it, or with fewer, is `409`, naming the count and when
+the Cube said it.
+A Cube that another client holds (`link` `busy`) restarts too,
+and that client may take it again before the server does.
+The answer is `202`:
+
+```json
+{"sent": true, "answered": true, "status": 2}
+```
+
+`answered` says whether the Cube answered within a second,
+`status` its answer's status, 2 for restarting (firmware 1.1.3), null without one.
+The client's `link` is `rebooting` until the Cube's greeting, three minutes at most,
+and the server's log has no loss for it.
+`409` also comes while the Cube's serial or address is not known yet,
+`502` when `R` could not be sent.
+`massimo netconfig -reboot` sends the same request without the server (README.md).
 
 ### POST /api/v1/cubes/discover
 

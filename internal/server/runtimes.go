@@ -110,7 +110,11 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	rt := &runtime{evlog: s.opts.Logger, cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(), push: map[chan struct{}]struct{}{},
 		structure: make(chan struct{}, 1),
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
-	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: s.partLog("cube", rt.serial), EventLines: true})
+	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
+	if opts.cubeOptions != nil {
+		opts.cubeOptions(&copts)
+	}
+	rt.client = cubelan.New(copts)
 	qopts := opts.Queue
 	qopts.Observer = s.newObserver(rt)
 	qopts.OnHold = rt.held

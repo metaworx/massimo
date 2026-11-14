@@ -16,7 +16,8 @@ const providersUI = {
 
 // ADMIN_CAPS are the capabilities a role may not hold to be given to the
 // users a provider creates (adminCapabilities in internal/server/oidc.go).
-const ADMIN_CAPS = ["guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "reboot", "audit", "auth"];
+const ADMIN_CAPS = ["guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart",
+  "reboot", "audit", "auth"];
 
 function providersMsg(text, ok) {
   showResult($("providers-msg"), text, ok);

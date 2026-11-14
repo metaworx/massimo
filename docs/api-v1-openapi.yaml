@@ -2247,6 +2247,58 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/reboot:
+    post:
+      summary: Reboot the Cube (UDP R), which drops the radiograms it has not delivered
+      x-capability: cubes.reboot
+      description: |
+        Sends R to the Cube's port 23272: the Cube restarts, is gone for
+        about a minute and takes a connection again, as one that still holds
+        an old connection (link stale) does only after up to about 40
+        minutes. A restart drops the radiograms the Cube has not delivered,
+        and its rooms refuse commands for a while; so, while radiograms are
+        pending as the Cube last said, the request names the count it
+        accepts, and the server never reboots a Cube by itself. The link is
+        rebooting until the Cube's greeting, three minutes at most.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pending: {type: integer, minimum: 0, description: The pending radiograms the caller accepts to drop; needed while any are pending}
+      responses:
+        "202":
+          description: R sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sent: {type: boolean}
+                  answered: {type: boolean, description: "The Cube answered within a second; on the box of a serve without its discovery port the answer goes elsewhere"}
+                  status: {type: integer, nullable: true, description: "The answer's status: 2, restarting; null without an answer"}
+        "400":
+          description: The body is not JSON
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: More radiograms are pending than the request accepts, or the Cube's serial or address is not known yet
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: R could not be sent
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/cubes/{sn}/pairing:
     post:
       summary: Start pairing (inclusion mode)
@@ -3822,6 +3874,17 @@ components:
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
+        link:
+          type: object
+          description: "How the server stands with a configured Cube beyond connected (docs/api-v1.md, GET /api/v1/cubes)"
+          required: [state]
+          properties:
+            state:
+              type: string
+              enum: [connected, held, stale, busy, rebooting, offline]
+              description: "held: a lost connection held open; stale: the Cube answers discovery but refuses a new connection while it holds the server's old one; busy: the same, another client holding it"
+            since: {type: string, format: date-time, description: "Since when: the loss of a held connection, the first refused dial"}
+            until: {type: string, format: date-time, description: The hold ends then at the latest}
         firmware: {type: string, example: "1.1.3"}
         rf_address: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}

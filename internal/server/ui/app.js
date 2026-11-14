@@ -704,6 +704,25 @@ function timeOf(iso) {
   return d && d.getFullYear() > 2000 ? d : null;
 }
 
+// linkState is how the server stands with a Cube (GET /api/v1/cubes,
+// link): connected, held, stale, busy, rebooting or offline.
+function linkState(c) {
+  return (c && c.link && c.link.state) || (c && c.connected ? "connected" : "offline");
+}
+
+// linkText says in a sentence why a Cube is not connected where the
+// server knows more than that: its connection held open, a Cube that
+// refuses the server, or one that reboots; "" otherwise.
+function linkText(c) {
+  const s = linkState(c);
+  if (s === "held") {
+    const until = Date.parse((c.link && c.link.until) || "");
+    return t("link.held", { time: isNaN(until) ? "–" : fmtShortTime(until) });
+  }
+  if (s === "stale" || s === "busy" || s === "rebooting") return t("link." + s);
+  return "";
+}
+
 // renderHomeNotice says on Rooms why it shows nothing, or only what the
 // server last had: no Cube configured, or the Cube chosen not connected,
 // with the address the server tries, when the Cube last sent data or
@@ -728,6 +747,8 @@ function renderHomeNotice() {
     // its name where it has one, its serial in the detail (as on its label)
     title.textContent = t("home.notConnected", { name: cube.name || cube.serial });
     const parts = [cube.address ? t("home.address", { address: cube.address }) : t("home.noAddress")];
+    const why = linkText(cube); // a held connection, a refusal: first
+    if (why) parts.unshift(why);
     if (cube.name) parts.push(t("home.serial", { serial: cube.serial }));
     const data = timeOf(cube.updated);
     const seen = timeOf(cube.last_seen);

@@ -396,6 +396,14 @@ func (s *Server) noteSerial(ctx context.Context, answers []cubelan.Discovered, n
 		return cp
 	}
 	host, _, _ := net.SplitHostPort(rt.client.Address())
+	for _, a := range answers {
+		if a.Kind != cubelan.KindProxy && a.IP.String() == host {
+			// The Cube itself answers at its client's address: a
+			// connection that does not come is refused (Client.Link).
+			rt.client.Heard()
+			break
+		}
+	}
 	if cfg := rt.config(); cfg.Addr != "" && !cfg.FollowDiscovery {
 		if ip := net.ParseIP(host); ip != nil && !answeredFrom(answers, host) {
 			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", cfg.Addr, "found", cp.Address)

@@ -23,6 +23,7 @@ const netconfigHelp = `usage: massimo netconfig -addr <cube-ip> [-json]
        massimo netconfig -addr <cube-ip> -static <ip> -gateway <gw> -netmask <mask> [-dns <a>[,<b>]] [-dry-run] [-yes]
        massimo netconfig -addr <cube-ip> -dhcp [-dry-run] [-yes]
        massimo netconfig -sn <serial> -broadcast (-dhcp [-encryption] | -static ...) [-dry-run] [-yes]
+       massimo netconfig (-addr <cube-ip> [-sn <serial>] | -sn <serial> -broadcast) -reboot [-dry-run] [-yes]
 
 Read or write a Cube's network configuration over UDP 23272, as the
 original software's network setup does: c reads the stored static
@@ -53,6 +54,18 @@ a power cycle. -broadcast goes to
 255.255.255.255 unless -addr names another target, such as a directed
 broadcast.
 
+-reboot restarts the Cube with R, as the web UI's Reboot the Cube does
+(System settings → Cubes): a Cube that still holds the old connection of a
+server whose network went down refuses every other client until it lets go,
+after up to about 40 minutes, and the restart frees it at once. A restart
+drops the radiograms the Cube has not delivered, and its rooms refuse
+commands for a while after it; this command cannot see how many are
+pending, the server's count is in System settings → Cubes and in GET
+/api/v1/cubes (pending_radiograms). It asks first (-yes skips that). The
+serial is read from -addr unless -sn gives it; on the box of a running
+serve the Cube answers serve's port, so give -sn there, and the answer to
+the R goes to serve as well.
+
 `
 
 // runNetconfig reads or writes a Cube's network configuration.
@@ -77,6 +90,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 	encryption := fs.Bool("encryption", false, "with -broadcast and no answer to the read, send the encryption flag on (otherwise off); a flag that was read is always copied")
 	dryRun := fs.Bool("dry-run", false, "print the C frame as hex and send nothing")
 	yes := fs.Bool("yes", false, "write without asking")
+	reboot := fs.Bool("reboot", false, "restart the Cube (R), which drops the radiograms it has not delivered; with -addr, or -sn and -broadcast")
 	snFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(stderr, netconfigHelp)
@@ -89,6 +103,12 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		return fmt.Errorf("netconfig: unexpected argument %q", fs.Arg(0))
 	}
 	write := *static != "" || *dhcp
+	if *reboot {
+		if write || *encryption || *gateway != "" || *netmask != "" || *dns != "" {
+			return errors.New("netconfig: -reboot writes nothing; leave out -static, -dhcp and their flags")
+		}
+		return netconfigReboot(ctx, *addr, *broadcast, *dryRun, *yes, *asJSON, stdout, stderr, stdin)
+	}
 	switch {
 	case *static != "" && *dhcp:
 		return errors.New("netconfig: -static and -dhcp exclude each other")
@@ -354,5 +374,63 @@ func printNetState(w io.Writer, st cubelan.NetState, asJSON bool) error {
 	fmt.Fprintf(w, "serial      %s\nmode        %s\nencryption  %s\n", st.Serial, mode, onOff(c.Encryption))
 	fmt.Fprintf(w, "in use      %s\n", addrSummary(st.Current))
 	fmt.Fprintf(w, "stored      ip %s gw %s mask %s dns %s (static configuration, %s)\n", c.IP, c.Gateway, c.Netmask, dnsList(c.DNS), what)
+	return nil
+}
+
+// netconfigReboot is netconfig -reboot: R to the Cube at addr, or as a
+// broadcast carrying the serial, after a warning and a question.
+func netconfigReboot(ctx context.Context, addr string, broadcast, dryRun, yes, asJSON bool, stdout, stderr io.Writer, stdin io.Reader) error {
+	info := stdout
+	if asJSON {
+		info = stderr
+	}
+	serial, dest := strings.ToUpper(selectedSN), addr
+	switch {
+	case broadcast && serial == "":
+		return errors.New("netconfig: -broadcast needs the Cube's serial (-sn)")
+	case broadcast && dest == "":
+		dest = net.IPv4bcast.String()
+	case !broadcast && dest == "":
+		return errors.New("netconfig: -addr is required (massimo discover lists the Cubes)")
+	case !broadcast && !snExplicit:
+		st, err := cubelan.QueryNetConfig(ctx, dest)
+		if err != nil {
+			return fmt.Errorf("netconfig: %w (on the box of a running serve the Cube answers serve: give its serial with -sn)", err)
+		}
+		serial = st.Serial
+	}
+	frame := cubelan.RebootFrame(serial)
+	fmt.Fprintf(info, "cube     %s at %s\n", serial, dest)
+	if dryRun {
+		fmt.Fprintf(stdout, "frame    % x\n", frame)
+		fmt.Fprintln(stdout, "dry run: nothing sent")
+		return nil
+	}
+	fmt.Fprintln(stderr, "warning: a reboot drops the radiograms the Cube has not delivered, and its rooms refuse commands for a while after it; "+
+		"this command cannot see how many are pending: the server's count is in System settings → Cubes and in GET /api/v1/cubes (pending_radiograms). "+
+		"The Cube is gone for about a minute.")
+	if !yes {
+		fmt.Fprintf(stderr, "reboot cube %s? [y/N] ", serial)
+		line, _ := bufio.NewReader(stdin).ReadString('\n')
+		if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+			return errors.New("netconfig: cancelled, nothing sent")
+		}
+	}
+	res, err := cubelan.SendReboot(ctx, dest, serial)
+	if err != nil {
+		return fmt.Errorf("netconfig: reboot: %w", err)
+	}
+	if asJSON {
+		out := map[string]any{"serial": serial, "sent": true, "answered": res.Answered, "status": nil}
+		if res.Answered {
+			out["status"] = res.Status
+		}
+		return json.NewEncoder(stdout).Encode(out)
+	}
+	if res.Answered {
+		fmt.Fprintf(stdout, "reboot   sent, answered with status %d%s\n", res.Status, map[bool]string{true: " (restarting)"}[res.Status == cubelan.SetStatusRestarting])
+	} else {
+		fmt.Fprintln(stdout, "reboot   sent, no answer (on the box of a running serve the answer goes to serve)")
+	}
 	return nil
 }

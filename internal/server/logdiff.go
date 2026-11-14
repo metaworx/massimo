@@ -249,6 +249,9 @@ func connectedSummary(snap *cubelan.Snapshot, hidden view.Hidden, e cubelan.Even
 	if e.Cause == cubelan.CauseLoss && e.DownFor > 0 {
 		m["down_for_s"] = int(e.DownFor.Round(time.Second) / time.Second)
 	}
+	if e.Held {
+		m["held"] = true // it resumed on the held connection
+	}
 	return m
 }
 

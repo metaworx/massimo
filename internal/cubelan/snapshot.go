@@ -83,6 +83,11 @@ type Event struct {
 	// was lost before it, for CauseLoss.
 	Cause   string
 	DownFor time.Duration
+	// HeldUntil is, for the EventDisconnected of a loss whose connection
+	// is held open (hold.go), when the hold ends at the latest; Held
+	// marks the EventConnected of a held connection that resumed.
+	HeldUntil time.Time
+	Held      bool
 }
 
 // The causes of a connection, for EventConnected.
