@@ -915,6 +915,13 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 			continue
 		}
 		u, _ := src.(*net.UDPAddr)
+		if u != nil {
+			// A dual-stack socket gives IPv4 sources IPv4-mapped.
+			if ip4 := u.IP.To4(); ip4 != nil && len(u.IP) != net.IPv4len {
+				u = &net.UDPAddr{IP: ip4, Port: u.Port}
+				src = u
+			}
+		}
 		serial, op, ok := cubelan.ParseUDPRequest(buf[:n])
 		if !ok {
 			if u != nil {

@@ -230,14 +230,16 @@ func (s *Server) stopRuntime(rt *runtime) {
 // ensureResponder returns the proxies' discovery socket, opening it on
 // first use; nil when the discovery port is taken. The port is shared,
 // so that a program on this host that searches for Cubes, such as the
-// original software, can bind it too.
+// original software, can bind it too, and the socket is dual-stack
+// (discoveryNetwork), so that such a program's IPv4 socket gets the
+// Cubes' answers while it is open.
 func (s *Server) ensureResponder() *proxy.Responder {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.responder != nil || s.ctx == nil || s.ctx.Err() != nil {
 		return s.responder
 	}
-	pc, err := sharedport.ListenPacket("udp4", s.discoveryAddr())
+	pc, err := sharedport.ListenPacket(discoveryNetwork, s.discoveryAddr())
 	if err != nil {
 		s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
 		return nil

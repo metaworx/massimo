@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/sharedport"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -90,8 +92,9 @@ func (s *Server) rebootTarget(rt *runtime) string {
 
 // sendReboot sends R from the server's discovery socket, where the
 // Cube's answer arrives, or from a socket of its own on the discovery
-// port; where that port is another program's, from any port, the R
-// going out all the same and its answer elsewhere.
+// port, shared and dual-stack as the responder's (ensureResponder);
+// where that port is another program's, from any port, the R going out
+// all the same and its answer elsewhere.
 func (s *Server) sendReboot(ctx context.Context, to, serial string) (cubelan.RebootResult, error) {
 	s.mu.RLock()
 	resp := s.responder
@@ -99,12 +102,17 @@ func (s *Server) sendReboot(ctx context.Context, to, serial string) (cubelan.Reb
 	if resp != nil {
 		return resp.Reboot(ctx, to, serial)
 	}
-	pc, err := net.ListenPacket("udp4", s.discoveryAddr())
+	pc, err := sharedport.ListenPacket(discoveryNetwork, s.discoveryAddr())
 	if err != nil {
 		if pc, err = net.ListenPacket("udp4", ":0"); err != nil {
 			return cubelan.RebootResult{}, err
 		}
+		defer pc.Close()
+		return cubelan.Reboot(ctx, pc, nil, to, serial)
 	}
-	defer pc.Close()
-	return cubelan.Reboot(ctx, pc, nil, to, serial)
+	rctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	resp = proxy.NewResponder(s.partLog("proxy", ""))
+	go resp.Serve(rctx, pc)
+	return resp.Reboot(ctx, to, serial)
 }

@@ -4,6 +4,7 @@
 package proxy
 
 import (
+	"context"
 	"net"
 	"slices"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/sharedport"
 )
 
 // ipNet parses a CIDR keeping the host's address in it, as
@@ -161,5 +163,43 @@ func TestResponderAnswersItsOwnHostByBroadcast(t *testing.T) {
 	defer mu.Unlock()
 	if want := (&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: cubelan.DiscoveryPort}).String(); !slices.Contains(sent, want) {
 		t.Errorf("no reply to the discovery port: %v", sent)
+	}
+}
+
+// A dual-stack responder hands an IPv4 source on as four bytes, as an
+// IPv4 one does, to the searches and the replies alike.
+func TestResponderUnmapsIPv4Sources(t *testing.T) {
+	pc, err := sharedport.ListenPacket("udp", "[::]:0")
+	if err != nil {
+		t.Skipf("no dual-stack socket: %v", err)
+	}
+	if a := pc.LocalAddr().(*net.UDPAddr); a.IP.To4() != nil {
+		pc.Close()
+		t.Skipf("no IPv6: %v", a)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp := NewResponder(nil)
+	ch := make(chan cubelan.Packet, 1)
+	resp.mu.Lock()
+	resp.collectors[ch] = struct{}{}
+	resp.mu.Unlock()
+	go resp.Serve(ctx, pc)
+	client, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	to := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: localPort(pc)}
+	if _, err := client.WriteTo([]byte("eQ3MaxApKEQ0000000>I"), to); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case p := <-ch:
+		if len(p.From.IP) != net.IPv4len || !p.From.IP.Equal(net.IPv4(127, 0, 0, 1)) {
+			t.Fatalf("source %v, %d bytes", p.From, len(p.From.IP))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing reached the search")
 	}
 }
