@@ -7,7 +7,10 @@
 # discovery for the Cube, a client with avahi of its own, and a searcher,
 # a second serve with no Cube that searches through its API, and a
 # follower, a third serve with the Cube by its serial alone, which
-# follows it to another address after the box is gone. run.sh
+# follows it to another address after the box is gone, and a second
+# fake Cube that serves one client at a time with a holder, a serve
+# that holds its lost connection for 20 s and may take its own link
+# down, the outage of its network. run.sh
 # builds massimo into LAN_TEST_WORK, which every container mounts at /m,
 # names the project, builds the image first, and brings the box up only
 # after the searcher's checks of the Cube alone. The box polls every 5 s,
@@ -75,3 +78,28 @@ services:
       MASSIMO_CUBE_KEQ0000100_NAME: follower
     command: [/m/massimo, -data, /tmp, serve, -listen, "0.0.0.0:8099", -announce=off,
               -proxy, "off", -discover-interval, "0", -poll, 5s]
+
+  cube2:
+    image: massimo-lan-test:avahi
+    pull_policy: never
+    networks:
+      lan:
+        mac_address: "00:1a:22:00:00:02"
+    volumes:
+      - "${LAN_TEST_WORK:?run tools/lan-test/run.sh}:/m:ro"
+    command: [/m/massimo, fakecube, -greeting, /m/greeting2.txt, -listen, "0.0.0.0:62910",
+              -discovery, "0.0.0.0:23272", -discovery-serial, KEQ0000101, -single-client,
+              -control, "127.0.0.1:62911"]
+
+  holder:
+    image: massimo-lan-test:avahi
+    pull_policy: never
+    cap_add: [NET_ADMIN]
+    networks: [lan]
+    volumes:
+      - "${LAN_TEST_WORK:?run tools/lan-test/run.sh}:/m:ro"
+    environment:
+      MASSIMO_ENV_FILE: /dev/null
+      MASSIMO_CUBE_KEQ0000101_NAME: holder
+    command: [/m/massimo, -data, /tmp, serve, -listen, "0.0.0.0:8099", -announce=off,
+              -proxy, "off", -discover-interval, "0", -poll, 2s, -cube-hold, 20s]

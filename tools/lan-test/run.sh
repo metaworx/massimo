@@ -30,19 +30,30 @@
 # then, the cable back, brings up the follower, a serve with the Cube by
 # its serial alone, which polls it every 5 s, and checks
 #  10. that, the Cube moved to another address, the follower loses it,
-#      searches, and connects to it at the new address.
+#      searches, and connects to it at the new address;
+# then brings up a second Cube that serves one client at a time, as a
+# Cube does, and the holder, a serve that holds a lost connection for
+# 20 s and polls every 2 s, and checks, its own link taken down as an
+# outage of its network,
+#  11. that a short outage resumes on the held connection: one
+#      connection, the loss and its return held=true in the log;
+#  12. that after a loss longer than the hold, the Cube keeping the
+#      session the holder closed, the Cube refuses the holder, whose link
+#      is stale;
+#  13. that a reboot through the holder's API frees the Cube, which
+#      answers it, and the holder connects again.
 # The hosts are taken down whatever happened, their logs printed first
 # when a check failed. Needs Docker with Compose v2; exit 1 on a failed
 # check, 2 without Docker.
 set -euo pipefail
-readonly VERSION=1.5.0
+readonly VERSION=1.6.0
 readonly SERIAL=KEQ0000100
 readonly CUBE_MAC=00:1a:22:00:00:01
 readonly BUILD=v0.0.0-lan-test
 
 case "${1:-}" in
 	-h | --help)
-		sed -n '4,36p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '4,47p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	--version)
@@ -71,7 +82,7 @@ compose() { docker compose -f "$here/compose.yaml" "$@"; }
 finish() {
 	local rc=$?
 	if [ "$rc" != 0 ]; then
-		for s in cube searcher box client follower; do
+		for s in cube searcher box client follower cube2 holder; do
 			echo "--- $s" >&2
 			compose logs --no-color "$s" >&2 2>&1 || true
 		done
@@ -99,6 +110,8 @@ within() {
 
 (cd "$root" && CGO_ENABLED=0 go build -ldflags "-X main.version=$BUILD" -o "$work/massimo" ./cmd/massimo)
 cp "$root/tools/ui-test/greeting.txt" "$work/"
+# The second Cube's greeting: the same house, the serial KEQ0000101.
+sed 's/^H:KEQ0000100,/H:KEQ0000101,/' "$root/tools/ui-test/greeting.txt" >"$work/greeting2.txt"
 compose build --quiet box >/dev/null 2>&1 || compose build box
 # The box comes up at check 4: until then no proxy answers for the Cube.
 compose up --detach --quiet-pull cube searcher client >/dev/null 2>&1 || compose up --detach cube searcher client
@@ -242,3 +255,75 @@ follower_log() { compose logs --no-color --no-log-prefix follower 2>&1; }
 follower_log | has 'msg="cube connection lost"' || fail "the follower does not log the Cube lost"
 follower_log | has "msg=\"cube address from discovery\".* from=$cube_ip to=$moved_ip" || fail "the follower does not log the Cube's new address"
 ok "the Cube moved to $moved_ip, the follower loses it, searches, and connects at the new address"
+
+# 11. The holder, a serve with the second Cube by its serial alone,
+# which serves one client at a time: its own link down for 30 s, an
+# outage of its network, longer than two missed polls (2 s apart, 10 s
+# for each answer) and shorter than its hold of 20 s after them; the
+# session resumes on the held connection once the link is back.
+SERIAL2=KEQ0000101
+compose up --detach cube2 >/dev/null 2>&1 || compose up --detach cube2
+# The holder's search at its start must hear the Cube: it comes up once
+# the searcher's does.
+finds_cube2() { search && grep -q "^$SERIAL2 " <<<"$answers"; }
+within 30 finds_cube2 || fail "the searcher's search does not find the second Cube $SERIAL2: ${answers:-nothing}"
+compose up --detach holder >/dev/null 2>&1 || compose up --detach holder
+# holder_link prints the holder's Cube: its link state and whether it is
+# connected.
+holder_link() {
+	compose exec -T holder curl -sf http://127.0.0.1:8099/api/v1/cubes 2>/dev/null | python3 -I -c '
+import json, sys
+for c in json.load(sys.stdin) or []:
+    if c.get("configured"):
+        print((c.get("link") or {}).get("state"), str(c.get("connected")).lower())
+' 2>/dev/null
+}
+link_is() { [ "$(holder_link)" = "$1" ]; }
+# cube2_connections prints the second Cube's connections so far.
+cube2_connections() {
+	compose exec -T cube2 curl -sf http://127.0.0.1:62911/connections 2>/dev/null | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["total"])' 2>/dev/null
+}
+holder_log() { compose logs --no-color --no-log-prefix holder 2>&1; }
+within 30 link_is "connected true" || fail "the holder is not connected to $SERIAL2: $(holder_link)"
+[ "$(cube2_connections)" = 1 ] || fail "the second Cube counts $(cube2_connections) connections before the outage, want 1"
+compose exec -T holder ip link set eth0 down
+within 40 link_is "held false" || { compose exec -T holder ip link set eth0 up; fail "the holder does not hold its lost connection: $(holder_link)"; }
+sleep 5
+compose exec -T holder ip link set eth0 up
+within 90 link_is "connected true" || fail "the holder's session does not resume after the outage: $(holder_link)"
+[ "$(cube2_connections)" = 1 ] || fail "the second Cube counts $(cube2_connections) connections after a short outage, want the held one alone"
+holder_log | has 'msg="cube connection lost".*held_until=' || fail "the holder does not log the loss with the hold's end"
+holder_log | has 'msg="cube connected".* cause=loss.* held=true' || fail "the holder does not log the held connection's return"
+ok "a short outage of the holder's network resumes on the held connection: one connection, the loss and its return logged"
+
+# 12. The Cube keeps a session whose end it never saw: the second Cube
+# goes silent, as one whose network is cut, so the holder loses it,
+# holds the connection for 20 s, and closes it; the fake takes that
+# close as lost in the outage and keeps the session (fakecube's
+# -single-client). Back on the network, it refuses the holder's dials,
+# while discovery hears it: the link is stale, not offline. (A real
+# outage of the holder's network leaves the same refusal once it
+# outlasts the kernel's limit, 55 s after the first unanswered poll
+# here; back within it, the kernel's FIN frees the Cube, so which one a
+# check would see depends on the kernel's timers.)
+control() { compose exec -T cube2 curl -sf -X "$1" "http://127.0.0.1:62911/$2" >/dev/null; }
+control POST silent || fail "the second Cube's control does not answer"
+within 40 link_is "held false" || { control DELETE silent; fail "the holder does not hold its lost connection: $(holder_link)"; }
+gave_up() { holder_log | has 'msg="cube held connection ended"'; }
+within 40 gave_up || { control DELETE silent; fail "the holder does not give up the held connection after its hold"; }
+dead() { compose exec -T cube2 curl -sf http://127.0.0.1:62911/connections 2>/dev/null | grep -q '"dead":true'; }
+within 10 dead || { control DELETE silent; fail "the second Cube does not keep the session the holder closed while it was silent"; }
+control DELETE silent
+within 180 link_is "stale false" || fail "the second Cube refusing the holder after the outage is not stale: $(holder_link)"
+holder_log | has "msg=\"cube holds serve's old connection\"" || fail "the holder does not log the Cube holding its old connection"
+ok "after a loss longer than the hold, the Cube keeps the session the holder closed and refuses the holder, whose link is stale"
+
+# 13. A reboot through the holder's API: R to the Cube, which answers it
+# and restarts, ending the old connection; the holder connects again.
+answer="$(compose exec -T holder curl -sf -X POST -H 'Content-Type: application/json' -d '{}' \
+	http://127.0.0.1:8099/api/v1/cubes/$SERIAL2/reboot 2>/dev/null)" || fail "the holder's reboot of $SERIAL2 failed"
+python3 -I -c 'import json, sys; a = json.loads(sys.argv[1]); sys.exit(0 if a == {"sent": True, "answered": True, "status": 2} else 1)' "$answer" ||
+	fail "the reboot's answer: $answer"
+within 120 link_is "connected true" || fail "the holder does not connect again after the reboot: $(holder_link)"
+holder_log | has 'msg="cube rebooting"' || fail "the holder does not log the reboot"
+ok "a reboot through the holder's API frees the Cube, which answered it, and the holder connects again"

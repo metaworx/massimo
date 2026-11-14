@@ -9,7 +9,7 @@ and check the announcement against our own browser only;
 here each host has an address of its own and the real ports,
 and the announcement meets another implementation.
 
-It needs Docker with Compose v2 and takes under a minute,
+It needs Docker with Compose v2 and takes about four minutes,
 more the first time the image is built, which installs avahi.
 It runs in WSL 2 as well,
 where the LAN has neither multicast nor broadcast in NAT mode but a Docker
@@ -17,7 +17,7 @@ bridge has both.
 
 ## What it checks
 
-`compose.yaml` puts five hosts on one bridge network of their own:
+`compose.yaml` puts seven hosts on one bridge network of their own:
 
 - **cube**:
   `massimo fakecube` with the UI suite's greeting (`tools/ui-test/greeting.txt`,
@@ -37,7 +37,16 @@ bridge has both.
   avahi-daemon of its own;
 - **follower**:
   `massimo serve` with the Cube by its serial alone (`MASSIMO_CUBE_KEQ0000100_NAME`),
-  no proxy and no announcement, `-discover-interval 0` and `-poll 5s`.
+  no proxy and no announcement, `-discover-interval 0` and `-poll 5s`;
+- **cube2**:
+  a second `massimo fakecube`, the serial `KEQ0000101`,
+  that serves one client at a time as a Cube does (`-single-client`),
+  with its control on its loopback;
+- **holder**:
+  `massimo serve` with the second Cube by its serial alone,
+  `-poll 2s` and `-cube-hold 20s`;
+  it may take its own link down (`NET_ADMIN`),
+  which is how an outage of its network is staged.
 
 `run.sh` builds a static `massimo` into a temporary directory,
 which every host mounts at `/m`,
@@ -84,6 +93,30 @@ Then, the cable back, it brings up the follower and checks:
     Without the search at the loss, nothing would search before the periodic run,
     which `-discover-interval 0` turns off.
 
+Then it brings up the second Cube and, once a search finds it, the holder,
+and checks:
+
+11. the holder's link down for about 30 s, an outage of its network:
+    the holder takes the Cube for lost (`link` `held` in `GET /api/v1/cubes`),
+    holds the connection, and resumes on it once the link is back,
+    the Cube counting one connection,
+    the log's loss carrying `held_until` and its return `held=true`;
+12. the second Cube silent (its control's `POST /silent`),
+    the holder holds the connection for its 20 s and closes it,
+    which the fake takes as lost in the outage, keeping the session:
+    back on the network, it refuses the holder's dials,
+    and while discovery hears it the holder's `link` is `stale`,
+    the log saying "cube holds serve's old connection";
+13. `POST /api/v1/cubes/KEQ0000101/reboot` on the holder sends `R`,
+    which the Cube answers (status 2) and restarts on, ending the old session,
+    and the holder connects again.
+
+Check 12 stages the Cube's side with the fake's silence:
+after a real outage the abandoned connection's FIN still reaches the Cube
+when the link comes back within the kernel's limit
+(the hold, the marking of the loss and a probe's interval, 55 s here),
+and frees it, so which a real outage shows depends on the kernel's timers.
+
 The box polls every 5 s so that check 8 tests the loss by polls,
 two left unanswered and 10 s each, about 25 s;
 at the default minute, the connection's keepalive would find it first.
@@ -95,7 +128,7 @@ a container connected again gets a new MAC, not of eQ-3's prefix,
 and `discover` would mark the Cube a proxy.
 
 Each check passed prints a line;
-a failed one prints why and the five hosts' logs,
+a failed one prints why and the seven hosts' logs,
 and `run.sh` exits 1 (2 without Docker).
 The hosts are taken down whatever happened,
 under a Compose project of their own (`massimo-lan-<pid>`),
