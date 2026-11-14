@@ -1,4 +1,4 @@
-# AP SiteOnly v1.1: Site changes deploy alone
+# AP SiteOnly v1.2: Site changes deploy alone
 
 ## TL;DR
 
@@ -15,6 +15,9 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 - push to `main`: Release → devel build → Site → a new **Deploy site** job,
   after All tests passed, calling `site.yml`
 - any code among the changes → everything, as now
+- v1.2: `code=false` → a **Code result** job, the verdict of the last run
+  that tested this code; red → All tests passed red on `main`, a warning on a
+  pull request; nothing re-run (D68-C, D73-A, D74-A, D75-A)
 
 | Change | Guidelines | Site | Tests | Devel build | Pages deploy |
 |---|---|---|---|---|---|
@@ -28,6 +31,7 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 2. The Deploy site job for a site-only push to `main`
 3. CI.md section 2, the CHANGELOG fragment, checked against real commits
 4. `packaging/site/`'s pages in `[ci] site` and out of `project.shipped`
+5. The Code result job: a docs-only change carries the code's last verdict
 
 ## Discussion
 
@@ -67,6 +71,31 @@ answered `code=true`: is `packaging/site` not site-only?
   `privacy.html`, listed by name: a new file is code until it is listed.
   `build.sh` and `index.html` stay code: the Debian package job's apt test
   builds the site from them. Not B, all of `packaging/site/**`.
+
+**v1.2** (`PLAN++ as recommended`, 2026-11-14): the owner asked why run
+43641366251, the merge of `ci(pipeline): The UI suite runs each width in a
+job of its own` (#264), published a devel build when the merges with code
+before it had failed. It was sound: its tree was the one a pull request run
+had tested whole and green. But between the failed merge of #254 and #264,
+docs-only commits on `main` had All tests passed green with every code job
+skipped, and the nightly takes the newest such commit: it would have
+released code that failed. CI.md said their code was "tested"; tested, not
+passed. The owner: never re-run a suite whose result is known; a job that
+runs where the code jobs are skipped, and carries their last result.
+
+- **D68-C:** the owner's Code result job. Not A, a record per section as
+  JSON in a check run: a store and fingerprints of its own. Not B, a green
+  base record required: copies that keep a flaky red.
+- **D70-B** (settled in the evaluation): a known red is forwarded, not
+  re-run.
+- **D73-A:** on a pull request the red is a warning and passes, since the
+  pull request adds no code; on `main` it fails All tests passed. Not B, red
+  on pull requests too: a docs fix could not be merged while `main` is red.
+- **D74-A:** where the run to read is still going, Code result waits for
+  it. Not B, fail as not known yet.
+- **D75-A:** Code result is among All tests passed's needs, nothing more:
+  What to release already takes only a commit whose All tests passed
+  succeeded. Not B, a second source for Build's What to release.
 
 ## Analysis
 
@@ -126,6 +155,35 @@ answers code for any shipped path; the five leave it by name, as
 `:!packaging/site/site.py` and so on, plain exclusions, `*` not needed.
 `changelog.sh update-contract` renders the list into the contract, and
 `AGENTS.md` and `GUIDELINES/README.md` are generated from it.
+
+**The Code result job (v1.2).** It runs where What to test answers
+`code=false`, `site=true` among them, and nowhere else; All tests passed
+needs it. Its script, `packaging/code-result.sh` beside
+`packaging/wait-for-job.sh`, walks `main`'s first parents from `HEAD^1`
+(a push's commits before it, a pull request's base) while a commit holds the
+same code as `HEAD`: `git diff --quiet <commit> HEAD -- .` with every
+`[ci] untested` and `[ci] site` path excluded, as What to test's site check
+does. For each such commit, newest first, it reads ci.yml's runs on it
+(`actions/workflows/ci.yml/runs?head_sha=`), this run left out, and of each
+the latest attempt's jobs, the code jobs being all but What to test,
+Guidelines, Site, Code result, All tests passed, Deploy site and the called
+Build and Release:
+
+- a run not completed yet: it waits, polling as `wait-for-job.sh` does,
+  which itself only waits for a job of its own run (D74-A);
+- a run in which Code result ran: a verdict carried, not made; the walk
+  goes on, so that the run that made it is read, its latest attempt: a
+  failed job re-run green clears every docs-only commit after it;
+- a cancelled run, or one whose code jobs were all skipped and whose commit
+  carries no green Tested status: no verdict; the walk goes on (a release
+  commit's push runs nothing; its tag's run, on the same commit, is read);
+- a code job failed, timed out or was cancelled: **red**, that run named;
+- else **green**: the jobs passed, or were skipped on a green record.
+
+The walk ends at the first commit with other code, after 100 commits, or
+where history ends: no run tested this code, which is red. Red fails the job
+on a push and passes it with a warning on a pull request (D73-A); either way
+the summary names the run. It needs `actions: read` and `statuses: read`.
 
 **Not changed.** The nightly build may take a site-only commit; its code is
 that of the commit before, which was tested (CI.md section 2). Pages keeps
@@ -187,6 +245,24 @@ on pull request #212's head merged onto its base (`site=true`), and on a
 change to `packaging/site/build.sh` and to `index.html` (`code=true`);
 `fingerprint.sh check`; `changelog.sh check`; the guidelines' `check`.
 
+### Block 5: Code result (v1.2)
+
+1. `packaging/code-result.sh`: the walk, the wait, the verdict, the summary.
+2. `ci.yml`: the job `code-result`, "Code result", for `code == 'false'`
+   with `suite != 'false'`, a full checkout; in All tests passed's needs;
+   its comment and What to test's name it.
+3. `GUIDELINES/project/CI.md` section 2 (v1.49.0): the job, replacing
+   "its code is that of the commit before it, which was tested".
+4. `CHANGELOG.d/Fixed/claude-code-result.md`.
+
+**Verification:** the script against `main`'s real runs: on
+`chore(aps): -DiscoveryShare, -ANALYSIS DiscoveryShare` (after the failed
+merge of #254: red, that run named), on
+`chore(aps): +NOTE CopyFacts v1.0, +NOTE CubeBadges v1.1` (red through the
+docs-only commits before it), on a docs-only commit after the merge of #264
+(green), as a pull request (red as a warning, exit 0); shellcheck;
+`make actionlint`.
+
 ## Proposed commit message
 
 ```
@@ -227,8 +303,26 @@ File-revision-v1: GUIDELINES/project/CI.md::v1.48.0::2026-11-13::2::the site's o
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+Block 5:
+
+```
+fix(pipeline): A docs-only change carries the last verdict on its code
+
+For AP SiteOnly v1.2, Block 5, with the owner's D68-C, D70-B, D73-A, D74-A and D75-A: a docs-only commit on a main whose code had failed had All tests passed green with every code job skipped, and the nightly takes the newest such commit; a Code result job now carries the verdict of the last run that tested the code, without running it again.
+
+Key changes:
+- packaging/code-result.sh walks main's first parents while the code is the same and reads the latest attempt of the run that tested it, waiting for one still going
+- ci.yml: Code result for code=false, among All tests passed's needs; red fails it on a push, and is a warning on a pull request
+- CI.md section 2 states it
+
+File-revision-v1: GUIDELINES/project/CI.md::v1.49.0::2026-11-14::2::a docs-only change carries the last verdict on its code
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-13): first revision, D62-A, D63-A, D64-C.
 - v1.1 (2026-11-13): Block 4, `packaging/site/`'s pages, D66-A, D67-A;
   Blocks 1 to 3 merged as pull request #199.
+- v1.2 (2026-11-14): Block 5, the Code result job, D68-C, D70-B, D73-A,
+  D74-A, D75-A; Block 4 merged as pull request #214.
