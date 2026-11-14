@@ -2621,6 +2621,49 @@ A Cube without a row in the store yet adds nothing.
 Without a store, each Cube's last 500 events, merged by time, without `id`.
 A Cube's own log does not carry `cube_serial`.
 
+### GET /api/v1/log/alerts?after=
+
+The log's warnings and errors that nothing has settled yet,
+of every Cube and the server's own (`read`), newest first,
+and the worst of them, for the web UI's log button:
+
+```json
+{
+  "level": "error",
+  "alerts": [
+    {"id": 4720, "kind": "state", "level": "warn", "cube_serial": "KEQ0000100", "device": "0a0101", "serial": "MEQ0000101", "flag": "error", "time": "…"},
+    {"id": 4715, "kind": "restart", "level": "error", "time": "…"}
+  ]
+}
+```
+
+A warning or an error is settled by a later event that says it is over,
+of the same Cube, or of the server for the server's own:
+
+| Kind | Settled by |
+|------|------------|
+| `disconnected`, also one the link held | the next `connected` |
+| `command` retried, failed or dropped | the same command key acknowledged for the same device |
+| `hold` | its end: the duty cycle's reset, or the wait for free slots |
+| `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
+| `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
+| `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
+| `login_failed` | a `login` of the same name |
+| `locked_out` | its end |
+| `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
+
+Any other, such as `proxy_discarded` and `proxy_delete_refused`,
+is settled only by a person's mark (`log.seen`).
+A device's transmit error, link error and low battery are in the log at info,
+in its state's changes:
+each is an alert at warn while the device has it,
+at the state line that set it (`flag`).
+`after` leaves out the alerts up to that id.
+The audit's lines (`login_failed`, `locked_out`)
+are there for a holder of `audit` only.
+A Cube without a row in the store yet adds nothing;
+without a store, there are none.
+
 ### GET /api/v1/cubes/{sn}/events
 
 A `text/event-stream`.
