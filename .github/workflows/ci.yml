@@ -106,6 +106,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           suite=true code=true site=false tested=false fp="" ui=true lan=true
+          # Each reason the answers have, for the log and the summary.
+          why=()
+          say() { echo "$1"; why+=("$1"); }
           ui_done=false lan_done=false fuzz_done=false
           fpsh=GUIDELINES/shared/tools/fingerprint.sh
           base="" prev=""
@@ -119,7 +122,7 @@ jobs:
             # for any summary config.ini allows, chore(release:x) included.
             role="$(python3 GUIDELINES/shared/tools/commit_title.py --root GUIDELINES parse "${MESSAGE%%$'\n'*}" 2>/dev/null | cut -d'|' -f1 || true)"
             if [ "$role" = release ]; then
-              echo "a release commit: its tag's run tests it."
+              say "a release commit: its tag's run tests it."
               suite=false
             else
               base="$BEFORE"
@@ -130,7 +133,7 @@ jobs:
           # Documents alone (GUIDELINES/config.ini, [ci] untested): the
           # same code as the base; exit 2, an unknown base included, tests.
           if [ -n "$base" ] && same="$("$fpsh" -q same "$base" HEAD)" && [ "$same" = true ]; then
-            echo "documents alone since ${base}: no test reads them."
+            say "documents alone since ${base}: no test reads them."
             code=false
           fi
           # The site's documents (config.ini, [ci] site) and untested ones
@@ -148,7 +151,7 @@ jobs:
             if [ "${#sites[@]}" -gt 0 ] && [ "$plain" = true ] &&
               git diff --quiet "$base" HEAD -- . "${skip[@]}" &&
               shipped="$("$fpsh" -q shipped "${base}..HEAD")" && [ "$shipped" = false ]; then
-              echo "the site's documents alone since ${base}: Site checks them."
+              say "the site's documents alone since ${base}: Site checks them."
               code=false site=true
             fi
           fi
@@ -161,7 +164,7 @@ jobs:
               --jq '[.[] | select(.context == "Tested")][0] | select(.state == "success" and .creator.login == "github-actions[bot]") | .description' 2>/dev/null || true)"
             read -r -a words <<<"$desc"
             if [ "${words[0]:-}" = "$fp" ]; then
-              echo "${fp} passed at ${prev}: ${desc}"
+              say "${fp} passed at ${prev}: ${desc}"
               tested=true
               for w in "${words[@]:1}"; do
                 case "$w" in
@@ -178,6 +181,31 @@ jobs:
             grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
           echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
+          # The answers as a table in the run's summary, with the reasons.
+          {
+            echo "### What to test"
+            echo
+            if [ "${#why[@]}" -gt 0 ]; then
+              printf -- '- %s\n' "${why[@]}"
+              echo
+            fi
+            echo "| Answer | Value | So |"
+            echo "|--------|-------|----|"
+            row() { # <answer> <value> <so where true> <so where false>
+              if [ "$2" = true ]; then so="$3"; else so="$4"; fi
+              echo "| $1 | \`$2\` | ${so} |"
+            }
+            row suite "$suite" "the suite runs" "a release commit: every job is skipped, its tag's run tests it"
+            row code "$code" "code changed: the test jobs run" "documents alone: no test job runs, Code result carries the code's verdict"
+            row site "$site" "the site's documents alone: Site runs, and a push to main deploys them" "-"
+            row tested "$tested" "this code passed before: what passed is skipped" "no green record for this code"
+            echo "| fp | \`${fp:-none}\` | $([ -n "$fp" ] && echo "the code's fingerprint" || echo "not taken") |"
+            row ui "$ui" "the UI tests are wanted" "the UI tests are not wanted"
+            row lan "$lan" "LAN against avahi is wanted" "LAN against avahi is not wanted"
+            row ui_done "$ui_done" "the UI tests passed for this code before" "-"
+            row lan_done "$lan_done" "LAN passed for this code before" "-"
+            row fuzz_done "$fuzz_done" "Fuzz passed for this code before" "-"
+          } >>"$GITHUB_STEP_SUMMARY"
           {
             echo "suite=${suite}"
             echo "code=${code}"

@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.52.0)
+# Massimo — CI Conventions (v1.53.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -209,6 +209,10 @@ which keeps the nightly build and Deploy site away,
 until a change to the code passes or the failed run is re-run green;
 on a pull request it is a warning and fails nothing,
 since the pull request adds no code of its own (D73-A).
+What to test writes its answers into the run's summary as a table
+(owner, 2026-11-15),
+each with what it means for the run, below the reasons it gave,
+such as the documents alone since a commit or the record it found.
 Only an answer of `false` skips a job:
 a gate that fails leaves its answers empty, so every job runs,
 and All tests passed fails on the gate's result.
