@@ -772,6 +772,17 @@ kept here because they cost time to learn.
   which is unrelated to Cubes but was learned the same night.
 - After a Cube restart, the eco switch stays "not reported" until someone presses it;
   harmless.
+- A device's transmit error (the L entry's error flag) stays while the device
+  reports, and `r:` clears it at no radio cost
+  (2026-11-14, Cube firmware 1.1.3, one wall thermostat of one of the owner's
+  Cubes, through `serve`'s proxy):
+  the device had carried the flag for a day while reporting every few minutes;
+  one `r:01,<radio address>` was answered `S:03,0,32`, the duty cycle and the
+  50 free memory slots as before, so no radiogram was queued,
+  and the next device list, 13 s later, had the flag cleared.
+  So the device's own reports never clear it.
+  The same evening a second Cube held ten devices in error with one slot of 50
+  free, retrying them on its own.
 - A wall thermostat with new batteries reports a measured temperature of 0
   in its L entry until it has measured (2026-11-13, Cube firmware 1.1.3,
   seen as 0.0 °C in a room on the owner's Cube):
