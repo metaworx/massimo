@@ -167,6 +167,10 @@ type Device struct {
 	// last transmission; a device that reports unchanged values does not
 	// move it.
 	LastSeen *time.Time `json:"last_seen,omitempty"`
+	// Window is an open window's times, for a device whose state says a
+	// window is open (SetWindow): when the server saw it open, and when
+	// it counts as open too long, first as a warning, then as an alert.
+	Window *WindowTimes `json:"window,omitempty"`
 	// Stale marks a thermostat whose entry has not changed for
 	// StaleAfter: it may be out of range or out of battery, and its
 	// values may be old. Shutter contacts and eco buttons transmit only
@@ -227,6 +231,38 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, staleAfter time.Duratio
 		d.Stale = thermostat && now().Sub(changed) > staleAfter
 	}
 	return d
+}
+
+// WindowWarnAfter and WindowAlertAfter are how long a window may stay
+// open, by default, before it counts as open too long: a warning, then
+// an alert (the settings window_warn_after and window_alert_after).
+const (
+	WindowWarnAfter  = 5 * time.Minute
+	WindowAlertAfter = 10 * time.Minute
+)
+
+// WindowTimes are an open window's times: when the server saw it open,
+// and when it counts as open too long, as a warning and as an alert. A
+// client tells the state from its clock, between two answers too.
+type WindowTimes struct {
+	OpenSince time.Time `json:"open_since"`
+	WarnAt    time.Time `json:"warn_at"`
+	AlertAt   time.Time `json:"alert_at"`
+}
+
+// SetWindow gives a device whose state says a window is open its
+// window's times, from when the server saw it open and the two limits;
+// none to any other.
+func (d *Device) SetWindow(warn, alert time.Duration) {
+	d.Window = nil
+	if d.State == nil || d.State.WindowOpen == nil || !*d.State.WindowOpen {
+		return
+	}
+	since := d.Received["window_open"]
+	if since.IsZero() {
+		return
+	}
+	d.Window = &WindowTimes{OpenSince: since, WarnAt: since.Add(warn), AlertAt: since.Add(alert)}
 }
 
 // Devices lists every visible device, in the order the Cube reported

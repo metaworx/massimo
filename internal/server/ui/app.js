@@ -21,13 +21,15 @@ const state = {
   me: null, // GET /api/v1/me: the mode, the user, the role, the capabilities, setup (login.js)
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
   pollTimer: null,
   version: null, // the server version the page was loaded with
   newVersion: false,
+  serverDown: false, // the last poll got no answer (renderServerSign)
+  updateAt: 0, // when the page last asked whether an update is out (updateDue)
   lastPoll: null, // time of the last successful poll (browser time)
 };
 
@@ -82,11 +84,11 @@ async function readToken() {
 // the capability preferences also keeps on the server, so that it follows
 // the user to every browser (login.js, loadPreferences); a setting can be
 // kept for this device only instead, in massimo.device, which then wins.
-const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme"];
+const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme", "blink"];
 
 // SETTING_LABELS name each setting's row, for its "only on this device"
 // switch.
-const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme" };
+const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme", blink: "appearance.blink" };
 
 // SETTING_STORE writes a value as massimo.<key> has always held it; the
 // default is kept as no entry, but for the poll and the expert switch.
@@ -97,6 +99,7 @@ const SETTING_STORE = {
   lang: (v) => (v === "auto" ? null : v),
   theme: (v) => (v === "system" ? null : v),
   scheme: (v) => (v === "massimo" ? null : v),
+  blink: (v) => (v === "system" ? null : v),
 };
 
 // validSetting is a value of a setting when it is one, else undefined.
@@ -116,6 +119,8 @@ function validSetting(key, v) {
       return v === "system" || v === "light" || v === "dark" ? v : undefined;
     case "scheme":
       return typeof v === "string" && v !== "" ? v : undefined;
+    case "blink":
+      return BLINK_MODES.includes(v) ? v : undefined; // theme.js
   }
   return undefined;
 }
@@ -123,11 +128,11 @@ function validSetting(key, v) {
 // storedSettings are the user's values as the browser keeps them, the
 // defaults where it keeps none.
 function storedSettings() {
-  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" };
+  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" };
   const poll = validSetting("poll", readStored("massimo.poll"));
   if (poll !== undefined) s.poll = poll;
   s.expert = readStored("massimo.expert") === "1";
-  for (const k of ["clock", "lang", "theme", "scheme"]) {
+  for (const k of ["clock", "lang", "theme", "scheme", "blink"]) {
     const v = validSetting(k, readStored("massimo." + k));
     if (v !== undefined) s[k] = v;
   }
@@ -977,8 +982,11 @@ async function checkVersion() {
   try {
     h = await api("GET", "healthz");
   } catch (e) {
+    serverReached(false);
     return;
   }
+  serverReached(true);
+  updateDue();
   const v = h && h.version ? h.version : "";
   renderTLS(h && h.tls);
   if (state.version === null) {
@@ -986,12 +994,73 @@ async function checkVersion() {
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
     renderVersionTitle();
+    renderServerSign();
     return;
   }
   if (v === state.version) return;
   state.newVersion = true;
-  $("reload-btn").classList.remove("hidden");
+  renderServerSign();
   if (!somethingOpen()) location.reload();
+}
+
+// SERVER_SIGN is the icon of each state of the server's sign.
+const SERVER_SIGN = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };
+
+// serverState is the state the server's sign shows: "down" while the
+// last poll failed, "new" once the server runs another version than the
+// page, "info" while an update is out for one who may install it
+// (update.js updateOut), "up" otherwise.
+function serverState() {
+  if (state.serverDown) return "down";
+  if (state.newVersion) return "new";
+  return updateOut() ? "info" : "up"; // update.js
+}
+
+// renderServerSign draws the server's sign before the time of the last
+// update: its icon in a frame, green, blue, amber (its triangle blinks)
+// or filled red (it blinks), its label saying what a click does; while
+// the server is gone, the page's other signs are greyed, their state
+// unknown, and the time stays that of the last update.
+function renderServerSign() {
+  const st = serverState();
+  const b = $("server-sign");
+  if (!b) return;
+  b.dataset.state = st;
+  const icon = iconEl(SERVER_SIGN[st], "ni"); // components.js
+  if (st === "new") icon.firstChild.setAttribute("class", "mark");
+  b.replaceChildren(icon);
+  const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll }); // update.js
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  document.body.classList.toggle("server-down", st === "down");
+}
+
+// serverSignClick acts by the sign's state: a new version reloads the
+// page, an update out opens Software update, otherwise it polls now.
+function serverSignClick(ev) {
+  const st = serverState();
+  if (st === "new") location.reload();
+  else if (st === "info") {
+    showView("system"); // log.js
+    showCard($("sys-software")); // components.js
+  } else whileBusy($("refresh-btn"), () => poll(true));
+}
+
+// serverReached notes whether the last request to the server got an
+// answer, and redraws the sign where that changed.
+function serverReached(ok) {
+  if (state.serverDown === !ok) return;
+  state.serverDown = !ok;
+  renderServerSign();
+}
+
+// updateDue loads, for one who may install updates, whether one is out:
+// at the first poll and every half hour after (update.js loadUpdate).
+function updateDue() {
+  if (!hasCap("settings")) return; // login.js
+  if (state.updateAt && Date.now() - state.updateAt < 30 * 60000) return;
+  state.updateAt = Date.now();
+  loadUpdate(false).then(renderServerSign);
 }
 
 // --- polling ----------------------------------------------------------
@@ -1187,7 +1256,7 @@ function initSettings() {
     applySettings();
   };
   $("expert-toggle").addEventListener("change", onExpert);
-  $("reload-btn").addEventListener("click", () => location.reload());
+  $("server-sign").addEventListener("click", serverSignClick);
   $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("home-notice-cubes").addEventListener("click", () => showView("system"));
   $("cube-found-link").addEventListener("click", showFound);
@@ -1254,6 +1323,7 @@ function applyLanguage() {
   renderFound();
   renderMe();
   renderVersionTitle();
+  renderServerSign();
   renderDeviceSwitches();
   renderUsers();
   renderProviders(); // providers.js

@@ -129,9 +129,27 @@ function sendWhenChanged(form, changed, { btn, lazy } = {}) {
 }
 
 // badgeEl is a small outlined or filled label (.flag) of a kind: ok,
-// warn, bad, mode, fill-ok, fill-warn, fill-bad.
-function badgeEl(text, kind) {
-  return textEl("span", text, "flag " + kind);
+// warn, bad, mode, fill-ok, fill-warn (the Manual mode), fill-bad,
+// fill-info. A warning or a failure (warn, bad, fill-bad) is set in bold
+// and led by its mark, a triangle or a cross, so that it reads without
+// its colour (markEl); the others are states, in the regular weight.
+// key names the badge across redraws (keepBlink): by default its kind
+// and text.
+function badgeEl(text, kind, key) {
+  const b = textEl("span", text, "flag " + kind);
+  const state = badgeState(kind);
+  if (state) b.prepend(markEl(state, key || (text && kind + ":" + text)));
+  return b;
+}
+
+// BADGE_STATE is the state a badge's kind stands for, where it is one a
+// mark shows: amber a warning, red a failure.
+const BADGE_STATE = { warn: "warn", bad: "bad", "fill-bad": "bad" };
+
+// badgeState is the state a badge's kind stands for (BADGE_STATE), by
+// its first class: "warn stale-badge" is a warning.
+function badgeState(kind) {
+  return BADGE_STATE[(kind || "").split(" ")[0]];
 }
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
@@ -158,6 +176,72 @@ function iconEl(symbol, cls) {
   use.setAttribute("href", "#" + symbol);
   svg.appendChild(use);
   return svg;
+}
+
+// SIGNS draw a kind of thing in a state: its icon alone where all is
+// well; else its drawing, smaller where the mark takes a corner, and the
+// mark, a triangle (warn) or a cross (bad). The radio (a Wi-Fi fan) and
+// the window carry the mark at the bottom right, as the original MAX!
+// software does; the network (a Cube's link) on top, in place of its
+// upper node; the cog (the settings) at the bottom right too. A battery
+// has no mark: it is amber or nothing.
+const SIGNS = {
+  radio: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  window: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
+  cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  battery: { icon: "icon-battery" },
+};
+
+// signEl is the icon of a kind of SIGNS in a state: "" or "ok" plain,
+// "warn" with a triangle, "bad" with a cross, coloured by the state
+// (tone-…) where it is one; "open" (a window open, not yet for long)
+// plain in the accent. The mark is a part of its own (use.mark), which
+// is what blinks (html.blink-on, blink-first). cls adds classes; key
+// names the sign across redraws (keepBlink).
+function signEl(kind, state, cls, key) {
+  const s = SIGNS[kind];
+  const mark = s[state];
+  const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
+  if (mark) {
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#" + mark);
+    use.setAttribute("class", state === "bad" ? "mark x" : "mark");
+    svg.appendChild(use);
+    keepBlink(use, key);
+  }
+  return svg;
+}
+
+// markEl is a mark alone, the triangle of a warning or the cross of a
+// failure, for a badge or a list; key as for keepBlink.
+function markEl(state, key) {
+  const svg = iconEl(state === "bad" ? "mark-x" : "mark-warn", "ni mark-sign tone-" + state);
+  svg.firstChild.setAttribute("class", state === "bad" ? "mark x" : "mark");
+  keepBlink(svg.firstChild, key);
+  return svg;
+}
+
+// marksSeen are when each mark was first drawn and last drawn, by key.
+const marksSeen = new Map();
+
+// keepBlink keeps a mark's blinking where it was across the redraws that
+// make a new element of it: its animation starts back at when the mark
+// with this key was first drawn, so that "at first" blinks five seconds
+// from the sign's coming and not from each redraw, and "on" does not
+// jump. A mark not drawn for a minute counts as new again. Without a
+// key, a mark is new each time.
+function keepBlink(use, key) {
+  if (!key) return;
+  const now = performance.now();
+  let seen = marksSeen.get(key);
+  if (!seen || now - seen.last > 60000) {
+    seen = { first: now, last: now };
+    if (marksSeen.size > 500) marksSeen.clear();
+    marksSeen.set(key, seen);
+  }
+  seen.last = now;
+  use.style.animationDelay = -((now - seen.first) / 1000).toFixed(2) + "s";
 }
 
 // iconButton is a button that shows an icon of the page only, so its
@@ -819,28 +903,32 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 }
 
 // problemsEl shows what is wrong in a place, wherever it is put (a
-// tile's head, a device's, a section card's): one icon per kind of
-// problem among its entries, in the order they come, each in the colour
-// of the worst tone of its kind, as the summary of a menu (dropdown)
-// that lists the entries, each with its icon, its name and a mono line
-// (a serial), then its badges, each led by its icon, with its age.
-// An entry is { icon, title, sub, items }, an item { kind, icon, tone,
-// mark, text, at, stale }: kind groups the summary's icons, an item without
-// one is listed but adds no icon (a device's mode beside its problems);
-// tone is a badgeEl kind ("bad", "warn", "fill-ok", …), which colours
-// the badge and, without "fill-", the icon, or mark where an item says
-// how its icon is coloured ("warn"); at is when the value came (ageEl). label names the problems to a screen reader and in the
-// tooltip. Null where no item has a kind: nothing is wrong there.
+// tile's head, a device's, a section card's, the header's): one icon per
+// kind of problem among its entries, in the order they come, each in the
+// colour of the worst tone of its kind, as the summary of a menu
+// (dropdown) that lists the entries in one format at every level
+// (problemEntry).
+// An entry is { icon, sign, title, sub, items, subs }: its icon, or sign
+// ({ kind, state }, a sign of SIGNS) where its own state shows, its name,
+// a grey detail (a serial), its items, and subs, entries under it (a
+// Cube's devices). An item is { kind, icon, sign, tone, mark, text, at,
+// stale }: kind groups the summary's icons (sign, a kind of SIGNS, draws
+// it with its state's mark), an item without one is listed but adds no
+// icon (a device's mode beside its problems); tone is a badgeEl kind
+// ("bad", "warn", "fill-ok", …), which colours the badge and, without
+// "fill-", the icon, or mark where an item says how its icon is coloured
+// ("warn"); at is when the value came (ageEl). label names the problems
+// to a screen reader and in the tooltip. Null where no item has a kind:
+// nothing is wrong there.
 function problemsEl(entries, label) {
-  const kinds = new Map(); // kind: { icon, tone }
-  for (const e of entries) {
-    for (const it of e.items) {
-      if (!it.kind) continue;
-      const k = kinds.get(it.kind) || { icon: it.icon, tone: "" };
-      const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
-      if (tone === "bad" || !k.tone) k.tone = tone;
-      kinds.set(it.kind, k);
-    }
+  const kinds = new Map(); // kind: { icon, sign, tone }
+  for (const it of entries.flatMap(entryItems)) {
+    if (!it.kind) continue;
+    const k = kinds.get(it.kind) || { icon: it.icon, sign: it.sign, tone: "" };
+    const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
+    const rank = (x) => ({ bad: 3, warn: 2 })[x] || (x ? 1 : 0); // the worst of a kind shows
+    if (rank(tone) > rank(k.tone)) k.tone = tone;
+    kinds.set(it.kind, k);
   }
   if (!kinds.size) return null;
   const details = elem("details", "menu problems");
@@ -848,27 +936,56 @@ function problemsEl(entries, label) {
   summary.className = "problems-sum";
   summary.title = label;
   summary.setAttribute("aria-label", label);
-  for (const k of kinds.values()) summary.appendChild(iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
+  const who = entries.filter((e) => entryItems(e).length).map((e) => e.title + " " + (e.sub || "")).join("|");
+  for (const k of kinds.values()) {
+    summary.appendChild(k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
+  }
   const list = elem("div", "menu-items problems-list");
   for (const e of entries) {
-    if (!e.items.length) continue;
-    const who = elem("div", "problem-who");
-    if (e.icon) who.appendChild(iconEl(e.icon, "ni"));
-    who.appendChild(textEl("span", e.title, "problem-name"));
-    if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
+    const el = problemEntry(e);
+    if (el) list.appendChild(el);
+  }
+  details.append(summary, list);
+  return dropdown(details);
+}
+
+// entryItems are an entry's items and those of the entries under it.
+function entryItems(e) {
+  return (e.items || []).concat(...(e.subs || []).map(entryItems));
+}
+
+// problemEntry is one entry of a problem list, the same at every level:
+// its icon in a column of its own, beside it its name and grey detail,
+// under the name its badges, each led by its icon (a warning's or a
+// failure's by its mark instead), with its age; then the entries under
+// it, indented to the name, a line down from its icon. Null for an entry
+// without an item, its own or under it.
+function problemEntry(e) {
+  if (!entryItems(e).length) return null;
+  const entry = elem("div", "problem-entry");
+  if (e.sign) entry.appendChild(signEl(e.sign.kind, e.sign.state, "problem-icon", e.title + ":" + e.sign.state));
+  else entry.appendChild(e.icon ? iconEl(e.icon, "ni problem-icon") : elem("span", "problem-icon"));
+  const who = elem("div", "problem-who");
+  who.appendChild(textEl("span", e.title, "problem-name"));
+  if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
+  entry.appendChild(who);
+  if ((e.items || []).length) {
     const flags = elem("div", "problem-flags");
     for (const it of e.items) {
-      const b = badgeEl("", it.tone || "mode");
-      if (it.icon) b.appendChild(iconEl(it.icon, "ni"));
+      // A warning's or a failure's badge is led by its mark, which takes
+      // the place of its kind's icon; another state keeps the icon.
+      const b = badgeEl("", it.tone || "mode", [e.title, e.sub, it.kind, it.text].join(":"));
+      if (it.icon && !badgeState(it.tone)) b.appendChild(iconEl(it.icon, "ni"));
       b.appendChild(document.createTextNode(it.text));
       const age = it.at ? ageEl(it.at, it.stale) : null; // app.js
       if (age) b.appendChild(age);
       flags.appendChild(b);
     }
-    list.appendChild(elem("div", "problem-entry", who, flags));
+    entry.appendChild(flags);
   }
-  details.append(summary, list);
-  return dropdown(details);
+  const subs = (e.subs || []).map(problemEntry).filter(Boolean);
+  if (subs.length) entry.appendChild(elem("div", "problem-subs", ...subs));
+  return entry;
 }
 
 // dropdown makes a <details class="menu"> a menu that drops down: one

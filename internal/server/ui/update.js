@@ -80,11 +80,24 @@ function renderUpdate(u) {
   }
 }
 
+// updateOut tells whether an update is out, for one who may install it
+// (the server's sign, app.js renderServerSign).
+function updateOut() {
+  const u = updState.info;
+  return !!u && !!u.available && hasCap("settings"); // login.js
+}
+
+// updateLatest is the version an update would install, "" for none.
+function updateLatest() {
+  return (updState.info && updState.info.latest) || "";
+}
+
 async function loadUpdate(refresh) {
   try {
     const u = await api("GET", "api/v1/update" + (refresh ? "?refresh=1" : ""));
     updState.info = u;
     renderUpdate(u);
+    renderServerSign(); // app.js
     return u;
   } catch (e) {
     $("update-text").textContent = t("update.cannotAsk", { error: e.message });
