@@ -12,6 +12,7 @@ package server
 // with a backoff until it listens or is stopped (docs/proxy.md).
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -458,13 +459,17 @@ type proxyFailure struct {
 // Cube, its address, whether it listens, and, where it does not, the
 // fields of proxyFailure.
 type proxyStatus struct {
-	Serial    string     `json:"serial,omitempty"`
-	Addr      string     `json:"addr"`
-	Listening bool       `json:"listening"`
-	Error     string     `json:"error,omitempty"`
-	Since     *time.Time `json:"since,omitempty"`
-	NextTry   *time.Time `json:"next_try,omitempty"`
-	Tries     int        `json:"tries,omitempty"`
+	Serial string `json:"serial,omitempty"`
+	// DiscoverySerial is the serial the listener answers discovery with:
+	// the Cube's proxy serial where one is set, else the Cube's own; ""
+	// where it answers no discovery (only one on the Cube port does).
+	DiscoverySerial string     `json:"discovery_serial,omitempty"`
+	Addr            string     `json:"addr"`
+	Listening       bool       `json:"listening"`
+	Error           string     `json:"error,omitempty"`
+	Since           *time.Time `json:"since,omitempty"`
+	NextTry         *time.Time `json:"next_try,omitempty"`
+	Tries           int        `json:"tries,omitempty"`
 }
 
 // failure returns a slot's failure, with s.proxyMu held; false while it
@@ -496,6 +501,9 @@ func (s *Server) proxyStatuses() []proxyStatus {
 	out := []proxyStatus{}
 	for _, pr := range s.proxies {
 		st := proxyStatus{Serial: pr.rt.cubeSerial(), Addr: pr.pl.Addr, Listening: pr.listening}
+		if pr.pl.Discovery {
+			st.DiscoverySerial = cmp.Or(pr.pl.DiscoverySerial, st.Serial)
+		}
 		if f, ok := pr.failure(); ok {
 			st.Error, st.Since, st.NextTry, st.Tries = f.Error, &f.Since, &f.NextTry, f.Tries
 		}
