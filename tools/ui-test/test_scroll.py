@@ -10,15 +10,17 @@ flickered until a scroll went past what compacting hides.
 The header is let settle first (quiet_header): one that shrinks while the
 page is a few pixels down, a notice of a radiogram pending that goes,
 has the browser's scroll anchoring keep the content where it was by
-scrolling up, which a step would read as going back."""
+scrolling up, which a step would read as going back. A notice that stays
+moves nothing: with the fake Cube one radiogram counts as pending for good
+once any test has sent a command, the fake answering every command with
+49 of its 50 slots free and a Cube saying its slots only then."""
 from helpers import wait_until
 
 
 def quiet_header(page):
-    """Waits until nothing changes the header's height any more: no
-    radiogram pending, whose notice goes once the Cube acknowledges it,
-    and the header as high for 0.8 s."""
-    assert wait_until(page, "document.getElementById('pending').classList.contains('hidden')", 10), "no radiogram pending"
+    """Waits until nothing changes the header's height any more: the
+    header as high for 0.8 s, a notice of a radiogram pending gone or
+    there to stay."""
     assert wait_until(page, """(() => {
         const h = document.querySelector('.top').getBoundingClientRect().height;
         const now = performance.now();
