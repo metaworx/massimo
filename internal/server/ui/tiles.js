@@ -88,6 +88,18 @@ function apiUntil(value) {
   return (value || "").replace("T", " ").slice(0, 16);
 }
 
+// fmtUntil is a holiday's end, the Cube's wall-clock "YYYY-MM-DD HH:MM",
+// as day, month and time in the page's language ("24.12., 18:00"), with
+// the year where it is not this one; another text as it is.
+function fmtUntil(text) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(text || "");
+  if (!m) return text || "?";
+  const [y, mo, d, hh, mm] = m.slice(1).map(Number);
+  const opts = { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+  if (y !== new Date().getFullYear()) opts.year = "numeric";
+  return new Intl.DateTimeFormat(i18n.lang, opts).format(new Date(y, mo - 1, d, hh, mm));
+}
+
 // --- rendering --------------------------------------------------------
 
 function renderRooms() {
@@ -273,12 +285,14 @@ function renderNotReady(el, room) {
 
 // PROBLEM_KINDS are the problems a tile's head shows as icons, in their
 // order there, each with its icon (index.html's sprite): a sign where
-// its state has a mark (components.js SIGNS), the radio and the window.
+// its state has a mark (components.js SIGNS), the radio and the window;
+// and a holiday, which is no problem but is listed with its end.
 const PROBLEM_KINDS = {
   radio: "icon-radio",
   battery: "icon-battery",
   window: "icon-window-open",
   mixed: "icon-shuffle",
+  holiday: "icon-suitcase",
 };
 
 // PROBLEM_SIGNS are the kinds of PROBLEM_KINDS drawn as signs.
@@ -367,25 +381,33 @@ function deviceProblems(d, withWindow) {
   return out;
 }
 
-// problemsLabel names the kinds of problems among items, for a screen
-// reader and the tooltip.
+// problemsLabel names the kinds of problems among items, and a holiday
+// with its end, for a screen reader and the tooltip.
 function problemsLabel(items) {
-  const kinds = Object.keys(PROBLEM_KINDS).filter((k) => items.some((it) => it.kind === k));
-  return t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") });
+  const kinds = Object.keys(PROBLEM_KINDS).filter((k) => k !== "holiday" && items.some((it) => it.kind === k));
+  const parts = kinds.length ? [t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") })] : [];
+  const holiday = items.find((it) => it.kind === "holiday");
+  if (holiday) parts.push(holiday.text);
+  return parts.join("; ");
 }
 
 // renderProblems shows in the tile's head what is wrong in the room, as
 // icons that open the list of its devices with their problems: a radio
 // fault, a low battery, an open window, and the thermostats' modes where
-// they differ. The room's virtual wall thermostat is not listed: its
-// flags are the wall thermostat's.
+// they differ; a thermostat on holiday with the holiday's end, in its
+// mode's colour, in place of its mode among those that differ. The
+// room's virtual wall thermostat is not listed: its flags are the wall
+// thermostat's.
 function renderProblems(el, room) {
   const modes = roomModes(room);
   const mixed = modes.length > 1;
   const entries = room.devices.map((d) => {
     const items = deviceProblems(d, true);
-    if (mixed && isThermostat(d) && d.state && d.state.mode) {
-      items.push({ kind: "mixed", icon: PROBLEM_KINDS.mixed, tone: modeTone(d.state.mode), mark: "warn", text: modeName(d.state.mode) });
+    const s = d.state || {};
+    if (isThermostat(d) && s.mode === "vacation") {
+      items.push({ kind: "holiday", icon: PROBLEM_KINDS.holiday, tone: modeTone(s.mode), text: t("room.holidayUntil", { until: fmtUntil(s.until) }) });
+    } else if (mixed && isThermostat(d) && s.mode) {
+      items.push({ kind: "mixed", icon: PROBLEM_KINDS.mixed, tone: modeTone(s.mode), mark: "warn", text: modeName(s.mode) });
     }
     return { icon: deviceIcon(d), title: deviceName(d), sub: d.serial || d.rf_address, items };
   });
@@ -448,6 +470,12 @@ function renderSetpoint(el, room) {
   }
   moreSum.classList.toggle("active", !mixed && mode === "vacation");
   moreSum.classList.toggle("partial", mixed && modes.includes("vacation"));
+  if (mode === "vacation") {
+    // On holiday, More says until when (D99), as the room's pill does.
+    const label = t("mode.holidayUntil", { until: fmtUntil(s.until) });
+    moreSum.querySelector(".more-label").textContent = label;
+    moreSum.title = label;
+  }
   renderMore(el, room, mode);
   autoBtn.addEventListener("click", () => {
     leaveEditing(room);
@@ -464,15 +492,6 @@ function renderSetpoint(el, room) {
     }
     sendRoomSetpoint(room, { mode: "manual", temp: current }, t("label.manual", { temp: fmtNum(current, 1) }), "manual");
   });
-  const vac = el.querySelector(".mode-vacation");
-  if (mode === "vacation") {
-    const until = s.until || "?";
-    moreSum.title = t("room.holidayUntil", { until });
-    vac.appendChild(textEl("span", "\u{1F9F3}", "suitcase"));
-    vac.appendChild(document.createTextNode(" " + t("room.until", { until })));
-    vac.title = t("room.holidayUntil", { until });
-    vac.classList.remove("hidden");
-  }
 }
 
 // renderMore wires the tile's More menu (D99): Eco and Comfort, the
@@ -529,7 +548,7 @@ function presetLabel(which, body) {
   const temp = fmtNum(body.temp, 1);
   const label = which === "eco" ? t("label.eco", { temp }) : t("label.comfort", { temp });
   if (body.mode === "auto") return t("label.presetAuto", { label });
-  if (body.mode === "vacation") return t("label.presetUntil", { label, until: body.until });
+  if (body.mode === "vacation") return t("label.presetUntil", { label, until: fmtUntil(body.until) });
   return t("label.presetManual", { label });
 }
 
@@ -849,7 +868,7 @@ function deviceValues(grid, d, offset) {
     // The vacation end spans the grid, under the temperatures.
     const cell = textEl("span", "", "cell wide");
     cell.appendChild(textEl("span", t("val.until"), "k"));
-    cell.appendChild(textEl("span", s.until, ""));
+    cell.appendChild(textEl("span", fmtUntil(s.until), ""));
     grid.appendChild(cell);
   }
   grid.classList.toggle("hidden", rows === 0);

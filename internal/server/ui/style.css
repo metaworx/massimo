@@ -1143,7 +1143,10 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
   padding: 6px 14px;
 }
 .mode-row .mode-group > button { padding: 6px 10px; font-size: 0.85rem; }
-.mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+/* The modes take the row beside the tools, and wrap there: More saying
+   until when a holiday lasts goes under AUTO and MANU, the tools beside
+   both rather than on a line of their own. */
+.mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; flex: 1 1 0; }
 .mode-row .mode-group > button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 /* More (tiles.js renderMore): a mode button whose menu drops down, Eco,
    Comfort, the Hold switch and Holiday…, its items those of a menu */
@@ -1185,9 +1188,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .tool-btn:hover { color: var(--fg); }
 .mode-row .tool-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tool-btn .ni { width: 18px; height: 18px; flex: none; }
-.mode-vacation { color: var(--warn); font-size: 0.9rem; white-space: nowrap; }
 .mode-row .mode-group > button.partial { border-color: var(--accent); border-style: dashed; }
-.suitcase { font-size: 1rem; }
 .house-modes {
   display: flex;
   align-items: center;

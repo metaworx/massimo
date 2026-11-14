@@ -4,18 +4,28 @@
 thermostat's eco or comfort temperature and keep the room's mode, the
 Hold (Manual) switch, shown while the room is in Auto, makes them hold
 it in Manual, and Holiday… opens the holiday form; the arrow keys move
-between its items and Escape closes it.
+between its items and Escape closes it. A room on holiday shows the
+holiday's end on More, in the room's problem pill and in the device
+list.
 
 Every write is held at its route and answered with a stub, so nothing
 reaches the fake Cube; the modes come from state events applied in the
 page (updateDevice), since the fake Cube does not change its states."""
+import datetime
+
 from helpers import hold, wait_held, wait_until
 
-# Sets the thermostats of the first room with two (else the first room
-# with one) to a mode, with until for a holiday, the first of them alone
-# with one; returns the room's id.
-SET_MODE = """([mode, until, one]) => {
-  const r = state.rooms.find((r) => r.devices.filter(isThermostat).length >= 2) || state.rooms.find(roomThermostat);
+UNTIL = {"en": "12/24, 18:00", "de": "24.12., 18:00"}
+ON_MORE = {"en": "Holiday until {}", "de": "Urlaub bis {}"}
+IN_PILL = {"en": "holiday until {}", "de": "Urlaub bis {}"}
+
+# Sets the thermostats of a room to a mode, with until for a holiday,
+# the first of them alone with one: the room of the id given, else the
+# first room with two thermostats, else the first with one; returns the
+# room's id.
+SET_MODE = """([mode, until, one, rid]) => {
+  const r = rid ? state.rooms.find((r) => r.id === rid)
+    : state.rooms.find((r) => r.devices.filter(isThermostat).length >= 2) || state.rooms.find(roomThermostat);
   const ths = r.devices.filter(isThermostat);
   for (const d0 of one ? ths.slice(0, 1) : ths) {
     const d = JSON.parse(JSON.stringify(d0));
@@ -25,6 +35,19 @@ SET_MODE = """([mode, until, one]) => {
     updateDevice(d);
   }
   return r.id;
+}"""
+
+
+# Gives a room of one thermostat a second, a copy of the first, in the
+# page, so that its thermostats can differ; its list is not opened, the
+# server not knowing it.
+TWIN = """(rid) => {
+  const r = state.rooms.find((r) => r.id === rid);
+  if (r.devices.filter(isThermostat).length >= 2) return;
+  const twin = JSON.parse(JSON.stringify(r.devices.find(isThermostat)));
+  Object.assign(twin, { rf_address: "0a0fff", serial: "MEQ0000999", name: "Twin" });
+  r.devices.push(twin);
+  rerenderRoom(r);
 }"""
 
 
@@ -142,3 +165,55 @@ def test_the_menu_by_keyboard(page, case):
     assert page.evaluate(focused).startswith("vacation-until"), "its end date has the focus"
     tile.locator(".vacation-cancel").click()
     assert not tile.locator(".vacation-panel").is_visible(), "Cancel closes it"
+
+
+def head_icons(tile):
+    """The symbols of the icons in a tile head's problem pill."""
+    return [u.get_attribute("href") for u in tile.locator(".tile-head .problems-sum svg > use:first-child").all()]
+
+
+def test_a_holiday_shows_its_end(page, case):
+    """A room on holiday: More pressed, saying until when; the room's
+    pill with the suitcase, naming the holiday and its end to a screen
+    reader, and listing each thermostat with it in the holiday's colour;
+    the device list with the end in the same form; a holiday into
+    another year with its year. One thermostat back in Auto: More partly
+    pressed, its plain label, the pill with the mixed modes and the
+    holiday. All in Auto: no suitcase."""
+    year = datetime.date.today().year
+    rid = page.evaluate(SET_MODE, ["vacation", "%d-12-24 18:00" % year, False])
+    tile, sel = tile_of(page, rid)
+    more = tile.locator(".more-sum")
+    want = ON_MORE[case.lang].format(UNTIL[case.lang])
+    assert more.inner_text().strip() == want, f"More says until when: {more.inner_text()!r}"
+    assert "active" in more.get_attribute("class"), "More is pressed"
+    assert "#icon-suitcase" in head_icons(tile), f"the pill has the suitcase: {head_icons(tile)}"
+    item = IN_PILL[case.lang].format(UNTIL[case.lang])
+    summary = tile.locator(".tile-head .problems-sum")
+    assert item in summary.get_attribute("aria-label"), f"named to a screen reader: {summary.get_attribute('aria-label')!r}"
+    summary.click()
+    flags = tile.locator(".tile-head .problem-entry .flag.fill-info")
+    thermostats = page.evaluate("(rid) => state.rooms.find((r) => r.id === rid).devices.filter(isThermostat).length", rid)
+    assert flags.count() == thermostats, f"each thermostat listed with the holiday: {flags.all_inner_texts()}"
+    assert all(t.strip() == item for t in flags.all_inner_texts()), f"with its end: {flags.all_inner_texts()}"
+    page.keyboard.press("Escape")
+    tile.locator(".room-name-btn").click()
+    page.wait_for_selector(sel + " .device", timeout=5000)
+    ends = tile.locator(".device-vals .cell.wide").all_inner_texts()
+    assert ends and all(UNTIL[case.lang] in e for e in ends), f"the device list's end in the same form: {ends}"
+    tile.locator(".room-name-btn").click()
+
+    page.evaluate(SET_MODE, ["vacation", "%d-01-06 09:30" % (year + 1), False, rid])
+    assert str(year + 1) in more.inner_text(), f"another year's end with its year: {more.inner_text()!r}"
+
+    page.evaluate(TWIN, rid)
+    page.evaluate(SET_MODE, ["vacation", "%d-12-24 18:00" % year, False, rid])
+    page.evaluate(SET_MODE, ["auto", None, True, rid])
+    cls = more.get_attribute("class")
+    assert "partial" in cls and "active" not in cls, f"More partly pressed: {cls}"
+    assert more.inner_text().strip() == page.evaluate("t('mode.more')"), "with its plain label"
+    icons = head_icons(tile)
+    assert "#icon-shuffle" in icons and "#icon-suitcase" in icons, f"the mixed modes and the holiday: {icons}"
+    page.evaluate(SET_MODE, ["auto", None, False, rid])
+    assert "#icon-suitcase" not in head_icons(tile), "no suitcase once the holiday is over"
+    assert more.inner_text().strip() == page.evaluate("t('mode.more')"), "More's plain label"
