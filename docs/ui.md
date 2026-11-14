@@ -681,7 +681,7 @@ to the top of the page.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its last two parts):
+  or `settings` for its announcement and its last two parts):
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -693,6 +693,14 @@ to the top of the page.
   such as a server in a terminal or an open server asked from elsewhere than the box.
   The settings of the settings file that changed since the start and apply only
   at the next one are listed under it, by name, and counted in the card's head.
+  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
+  or **Off** for the setting `announce`: the announcement by mDNS for
+  `massimo discover`, the apps and Home Assistant, Automatic on unless the
+  server listens on the loopback, as behind a reverse proxy.
+  The line under it says whether the server announces itself now, or that
+  a change waits for the next restart; where `-announce` or
+  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
