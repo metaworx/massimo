@@ -218,6 +218,9 @@ type Options struct {
 	// requests go as host:port (default the broadcast addresses), exist
 	// for tests.
 	DiscoveryWait time.Duration
+	// Announce is this run's announcement on the LAN, for the setting
+	// announce in GET /api/v1/settings.
+	Announce AnnounceState
 	// FindIntegrations asks the LAN for the installations of integrations
 	// (integrations_found.go), at the start and every 30 minutes; nil
 	// looks for none.
@@ -369,6 +372,9 @@ type Server struct {
 	proxies  []*proxyRun
 	// staleAfter is the stale threshold in effect, in nanoseconds.
 	staleAfter atomic.Int64
+	// windowWarn and windowAlert are how long a window may stay open
+	// before it counts as open too long, in nanoseconds (SetWindowLimits).
+	windowWarn, windowAlert atomic.Int64
 
 	// fileCubes is Options.FileCubes, by serial in upper case; "" is the
 	// plain MASSIMO_CUBE_ADDRESS Cube until it reports its serial.
@@ -688,6 +694,10 @@ func New(opts Options) *Server {
 	s.pushSlots = make(chan struct{}, maxDeliveries)
 	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
+	s.SetWindowLimits(0, 0)
+	if opts.Store != nil {
+		s.loadWindowLimits(context.Background())
+	}
 	s.loadFound()
 	if opts.Store != nil {
 		s.notify = s.newNotify()
@@ -898,6 +908,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				}
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
 					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
+					dv.SetWindow(s.windowLimits())
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -1094,6 +1105,49 @@ func (s *Server) SetStaleAfter(d time.Duration) {
 
 // StaleAfter returns the stale threshold in effect.
 func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
+
+// SetWindowLimits sets how long a window may stay open before it counts
+// as open too long, a warning, then an alert; 0 or less goes back to
+// view.WindowWarnAfter and view.WindowAlertAfter.
+func (s *Server) SetWindowLimits(warn, alert time.Duration) {
+	if warn <= 0 {
+		warn = view.WindowWarnAfter
+	}
+	if alert <= 0 {
+		alert = view.WindowAlertAfter
+	}
+	s.windowWarn.Store(int64(warn))
+	s.windowAlert.Store(int64(alert))
+}
+
+// windowLimits are the two limits in effect.
+func (s *Server) windowLimits() (warn, alert time.Duration) {
+	return time.Duration(s.windowWarn.Load()), time.Duration(s.windowAlert.Load())
+}
+
+// loadWindowLimits takes the two limits from the store's settings.
+func (s *Server) loadWindowLimits(ctx context.Context) {
+	var lim [2]time.Duration
+	for i, key := range []string{store.WindowWarnKey, store.WindowAlertKey} {
+		v, ok, err := s.opts.Store.SettingDuration(ctx, key)
+		if err != nil {
+			s.log.Warn("setting ignored", "key", key, "error", err)
+		} else if ok {
+			lim[i] = v
+		}
+	}
+	s.SetWindowLimits(lim[0], lim[1])
+}
+
+// withWindow gives each device of a list its window's times (view.Device
+// SetWindow), by the limits in effect.
+func (s *Server) withWindow(devs []view.Device) []view.Device {
+	warn, alert := s.windowLimits()
+	for i := range devs {
+		devs[i].SetWindow(warn, alert)
+	}
+	return devs
+}
 
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.handler }
@@ -1442,9 +1496,17 @@ type cubeView struct {
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
-	MAC       string     `json:"mac,omitempty"`
-	LastSeen  *time.Time `json:"last_seen,omitempty"`
-	Connected bool       `json:"connected"`
+	MAC      string     `json:"mac,omitempty"`
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	// Problems are the Cube's devices with a problem, for a client that
+	// shows every Cube's (the web UI's header): a radio fault, a low
+	// battery, a window open, with its times (problems.go).
+	Problems []cubeProblem `json:"problems,omitempty"`
+	// FoundAddress is the host discovery last found the Cube at, which
+	// may differ from Address: the server connects through a proxy, or
+	// to a fixed address the Cube has left.
+	FoundAddress string `json:"found_address,omitempty"`
+	Connected    bool   `json:"connected"`
 	// Link says how the server stands with the Cube beyond connected:
 	// a lost connection held open, a Cube that refuses a new one while it
 	// holds the server's old one (stale) or another client's (busy).
@@ -1491,7 +1553,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v.ProxyListening = s.proxyListening(rt)
 	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
-		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
+		v.MAC, v.LastSeen, v.FoundAddress = f.MAC, &f.LastSeen, f.Address
 	}
 	if h := snap.Hello(); h != nil {
 		v.Connected = rt.client.Connected()
@@ -1505,6 +1567,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 		}
 	}
 	v.Rooms, v.Devices = view.Counts(snap, rt.hidden())
+	v.Problems = s.problemsOf(rt)
 	return v
 }
 
@@ -1587,6 +1650,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.StaleAfter())}
+	d.SetWindow(s.windowLimits())
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {

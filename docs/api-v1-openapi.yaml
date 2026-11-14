@@ -2853,6 +2853,7 @@ paths:
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 integrations.requests: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
+                announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
@@ -2871,11 +2872,14 @@ paths:
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h), refresh_interval (10m to
         168h, or 0 for off) and discover_interval (1m to 24h, or 0 for
-        only on request), the intervals at the next start; the whole
+        only on request), the intervals at the next start;
+        window_warn_after and window_alert_after (1m to 24h, the alert not
+        under the warning, at once), how long a window may stay open; the whole
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); integrations.requests, true or false, whether
-        integrations may ask to be registered; update.channel, devel, nightly, alpha, beta, rc or stable,
+        integrations may ask to be registered; announce, auto, on or off,
+        the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
         stable one's; the default is the build's flavour); null goes back
         to the default. Every value is checked before any is written. The
@@ -4171,6 +4175,16 @@ components:
           items: {type: string}
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
+        found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
+        problems:
+          type: array
+          description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"
+          items:
+            allOf:
+              - {$ref: '#/components/schemas/Device'}
+              - type: object
+                properties:
+                  room: {type: string, description: The device's room's name}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
         link:
           type: object
@@ -4216,6 +4230,7 @@ components:
         in_effect: {type: string, description: What this run uses; a serve flag wins for one run}
         applies: {type: string, enum: [now, restart]}
         read_only: {type: boolean}
+        fixed_by: {type: string, description: "What decides this run's value instead of the setting: -announce or MASSIMO_ANNOUNCE (announce)"}
     FileDifference:
       type: object
       properties:
@@ -4302,6 +4317,17 @@ components:
             with state.
           additionalProperties: {type: string, format: date-time}
         last_seen: {type: string, format: date-time, description: When the device's entry in the Cube's device list last changed; present with state}
+        window:
+          type: object
+          description: >-
+            An open window's times, present while state.window_open is true:
+            when the server saw it open, and when it counts as open too
+            long, as a warning and as an alert (the settings
+            window_warn_after and window_alert_after).
+          properties:
+            open_since: {type: string, format: date-time}
+            warn_at: {type: string, format: date-time}
+            alert_at: {type: string, format: date-time}
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for 24 hours: out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}
         virtual: {type: boolean, description: "A room's virtual wall thermostat, which the server computes from the room's devices; present when true"}
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}

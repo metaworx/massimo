@@ -21,13 +21,15 @@ const state = {
   me: null, // GET /api/v1/me: the mode, the user, the role, the capabilities, setup (login.js)
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
   pollTimer: null,
   version: null, // the server version the page was loaded with
   newVersion: false,
+  serverDown: false, // the last poll got no answer (renderServerSign)
+  updateAt: 0, // when the page last asked whether an update is out (updateDue)
   lastPoll: null, // time of the last successful poll (browser time)
 };
 
@@ -82,11 +84,11 @@ async function readToken() {
 // the capability preferences also keeps on the server, so that it follows
 // the user to every browser (login.js, loadPreferences); a setting can be
 // kept for this device only instead, in massimo.device, which then wins.
-const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme"];
+const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme", "blink"];
 
 // SETTING_LABELS name each setting's row, for its "only on this device"
 // switch.
-const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme" };
+const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme", blink: "appearance.blink" };
 
 // SETTING_STORE writes a value as massimo.<key> has always held it; the
 // default is kept as no entry, but for the poll and the expert switch.
@@ -97,6 +99,7 @@ const SETTING_STORE = {
   lang: (v) => (v === "auto" ? null : v),
   theme: (v) => (v === "system" ? null : v),
   scheme: (v) => (v === "massimo" ? null : v),
+  blink: (v) => (v === "system" ? null : v),
 };
 
 // validSetting is a value of a setting when it is one, else undefined.
@@ -116,6 +119,8 @@ function validSetting(key, v) {
       return v === "system" || v === "light" || v === "dark" ? v : undefined;
     case "scheme":
       return typeof v === "string" && v !== "" ? v : undefined;
+    case "blink":
+      return BLINK_MODES.includes(v) ? v : undefined; // theme.js
   }
   return undefined;
 }
@@ -123,11 +128,11 @@ function validSetting(key, v) {
 // storedSettings are the user's values as the browser keeps them, the
 // defaults where it keeps none.
 function storedSettings() {
-  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" };
+  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" };
   const poll = validSetting("poll", readStored("massimo.poll"));
   if (poll !== undefined) s.poll = poll;
   s.expert = readStored("massimo.expert") === "1";
-  for (const k of ["clock", "lang", "theme", "scheme"]) {
+  for (const k of ["clock", "lang", "theme", "scheme", "blink"]) {
     const v = validSetting(k, readStored("massimo." + k));
     if (v !== undefined) s[k] = v;
   }
@@ -615,22 +620,50 @@ function renderUpdated() {
   btn.setAttribute("aria-label", t("header.refreshUpdated", { time }));
 }
 
+// LINK_SIGN is the state of a Cube's network sign by its link (linkState):
+// connected fine, a connection held or a Cube rebooting a warning, an old
+// connection, another client or none a failure.
+const LINK_SIGN = { connected: "ok", held: "warn", rebooting: "warn", stale: "bad", busy: "bad", offline: "bad" };
+
+// linkSign is the state of a Cube's network sign.
+function linkSign(c) {
+  return LINK_SIGN[linkState(c)] || "bad";
+}
+
+// linkWord names a Cube's link in a few words, as its badge does.
+function linkWord(c) {
+  const link = linkState(c);
+  return link === "connected" || link === "offline" ? t(c.connected ? "cubes.connected" : "cubes.disconnected") : t("link.badge." + link);
+}
+
+// cubeSignEl is a Cube's network sign, named for a screen reader by its
+// link (components.js signEl).
+function cubeSignEl(c) {
+  const svg = signEl("net", linkSign(c), "conn-sign", "cube:" + c.serial);
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", linkWord(c));
+  return svg;
+}
+
 // renderCubeSelect fills the Cube choice (components.js pickerMenu): the
-// configured Cubes, each with its connection as a plug, its name (its
-// serial without one) and under it its serial and address; then those
-// found on the LAN but not configured, shown, not selectable; then the
-// entry that searches the LAN for new ones. Closed it shows the chosen
-// Cube's plug and name, its tooltip the serial, the address and the
-// connection. An open choice is left as it is, so that a poll does not
-// take the focus from it; a pick closes it first.
+// configured Cubes, each with its network sign (cubeSignEl), its name
+// (its serial without one) and under it its serial and address; then
+// those found on the LAN but not configured, shown, not selectable; then
+// the entry that searches the LAN for new ones. Closed it shows the
+// chosen Cube's sign and name, its tooltip the serial, the address and
+// the link. An open choice is left as it is, so that a poll does not
+// take the focus from it; a pick closes it first. Beside it, every
+// Cube's problems (renderCubeProblems).
 function renderCubeSelect() {
+  renderCubeProblems();
   const menu = $("cube-menu");
   if (menu.open) return;
   const items = state.cubes.map((c) => ({
     value: c.serial,
     label: c.name || c.serial,
     sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
-    icon: connIcon(c.connected),
+    icon: cubeSignEl(c),
   }));
   // a found Cube opens System settings → Cubes, where it can be added,
   // for a role with cubes; for others it is information
@@ -644,7 +677,7 @@ function renderCubeSelect() {
   }
   const cube = state.cubes.find((c) => c.serial === state.serial);
   const name = cube ? cube.name || cube.serial : t("header.cube");
-  const conn = cube ? t(cube.connected ? "header.connected" : "header.disconnected") : "";
+  const conn = cube ? linkWord(cube) : "";
   pickerMenu(menu, {
     items,
     value: state.serial || "",
@@ -655,12 +688,80 @@ function renderCubeSelect() {
       else selectCube(v);
     },
     shown: {
-      icon: cube ? connIcon(cube.connected) : null,
+      icon: cube ? cubeSignEl(cube) : null,
       label: name,
       title: cube ? [name, cube.name ? cube.serial : "", cube.address || "", conn].filter(Boolean).join(" · ") : name,
       aria: cube ? t("header.cubeChoice", { name, state: conn }) : name,
     },
   });
+}
+
+// cubeProblemEntries are every Cube's problems as problemsEl's entries:
+// a Cube with a problem as the heading, its network sign its own state
+// (green where only its devices fail), its link's badge where it is not
+// connected, and its devices with a problem under it, "Room › Device",
+// with their badges (tiles.js deviceProblems); a window open briefly is a
+// state, not a problem. Last, for one who may change the settings, the
+// settings: a Cube proxy that does not listen, a settings file that
+// differs from the store, Cubes found and not served.
+function cubeProblemEntries() {
+  const entries = state.cubes.map((c) => cubeEntry(c));
+  if (hasCap("settings")) {
+    const items = [];
+    for (const c of state.cubes) items.push(...cubeSettingItems(c, c.name || c.serial));
+    if (state.found.length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: tn("cubes.badge.found", state.found.length) });
+    entries.push({ sign: { kind: "cog", state: items.length ? "warn" : "" }, title: t("problem.settings"), items });
+  }
+  return entries;
+}
+
+// cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
+// the heading with its network sign, its link's badge where it is not
+// connected, own its settings' warnings too (cubes.js, a Cube's panel),
+// and its devices with a problem under it, "Room › Device", with their
+// badges (tiles.js deviceProblems); a window open briefly is a state.
+function cubeEntry(c, own) {
+  const st = linkSign(c);
+  const items = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
+  if (own) items.push(...cubeSettingItems(c, ""));
+  const subs = (c.problems || []).map((d) => ({
+    icon: deviceIcon(d), // tiles.js
+    title: [d.room, deviceName(d)].filter(Boolean).join(" › "),
+    sub: d.serial || d.rf_address,
+    items: deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), // tiles.js
+  }));
+  return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
+}
+
+// cubeSettingItems are a Cube's settings that need a look, as items: a
+// proxy listener that does not listen, a settings file that differs;
+// who names the Cube in the text, "" for its own panel.
+function cubeSettingItems(c, who) {
+  const items = [];
+  const text = (key, args) => (who ? t("problem." + key, { cube: who, ...args }) : t("problem." + key + "Own", args));
+  for (const f of c.proxy_failing || []) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("proxy", { addr: f.addr }) });
+  if ((c.file_differs || []).length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("file", {}) });
+  return items;
+}
+
+// problemsLabelOf names the kinds of problems among entries, for a
+// screen reader and the tooltip.
+function problemsLabelOf(entries) {
+  const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
+  return t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") });
+}
+
+// renderCubeProblems draws every Cube's problems beside the Cube choice
+// (problemsEl), nothing where none has one; its list kept open across a
+// poll where it was open.
+function renderCubeProblems() {
+  const box = $("cube-problems");
+  if (!box) return;
+  const was = box.querySelector("details.problems");
+  if (was && was.open) return;
+  const entries = cubeProblemEntries();
+  const p = problemsEl(entries, problemsLabelOf(entries));
+  box.replaceChildren(...(p ? [p] : []));
 }
 
 function applySettings() {
@@ -977,8 +1078,11 @@ async function checkVersion() {
   try {
     h = await api("GET", "healthz");
   } catch (e) {
+    serverReached(false);
     return;
   }
+  serverReached(true);
+  updateDue();
   const v = h && h.version ? h.version : "";
   renderTLS(h && h.tls);
   if (state.version === null) {
@@ -986,12 +1090,73 @@ async function checkVersion() {
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
     renderVersionTitle();
+    renderServerSign();
     return;
   }
   if (v === state.version) return;
   state.newVersion = true;
-  $("reload-btn").classList.remove("hidden");
+  renderServerSign();
   if (!somethingOpen()) location.reload();
+}
+
+// SERVER_SIGN is the icon of each state of the server's sign.
+const SERVER_SIGN = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };
+
+// serverState is the state the server's sign shows: "down" while the
+// last poll failed, "new" once the server runs another version than the
+// page, "info" while an update is out for one who may install it
+// (update.js updateOut), "up" otherwise.
+function serverState() {
+  if (state.serverDown) return "down";
+  if (state.newVersion) return "new";
+  return updateOut() ? "info" : "up"; // update.js
+}
+
+// renderServerSign draws the server's sign before the time of the last
+// update: its icon in a frame, green, blue, amber (its triangle blinks)
+// or filled red (it blinks), its label saying what a click does; while
+// the server is gone, the page's other signs are greyed, their state
+// unknown, and the time stays that of the last update.
+function renderServerSign() {
+  const st = serverState();
+  const b = $("server-sign");
+  if (!b) return;
+  b.dataset.state = st;
+  const icon = iconEl(SERVER_SIGN[st], "ni"); // components.js
+  if (st === "new") icon.firstChild.setAttribute("class", "mark");
+  b.replaceChildren(icon);
+  const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll }); // update.js
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  document.body.classList.toggle("server-down", st === "down");
+}
+
+// serverSignClick acts by the sign's state: a new version reloads the
+// page, an update out opens Software update, otherwise it polls now.
+function serverSignClick(ev) {
+  const st = serverState();
+  if (st === "new") location.reload();
+  else if (st === "info") {
+    showView("system"); // log.js
+    showCard($("sys-software")); // components.js
+  } else whileBusy($("refresh-btn"), () => poll(true));
+}
+
+// serverReached notes whether the last request to the server got an
+// answer, and redraws the sign where that changed.
+function serverReached(ok) {
+  if (state.serverDown === !ok) return;
+  state.serverDown = !ok;
+  renderServerSign();
+}
+
+// updateDue loads, for one who may install updates, whether one is out:
+// at the first poll and every half hour after (update.js loadUpdate).
+function updateDue() {
+  if (!hasCap("settings")) return; // login.js
+  if (state.updateAt && Date.now() - state.updateAt < 30 * 60000) return;
+  state.updateAt = Date.now();
+  loadUpdate(false).then(renderServerSign);
 }
 
 // --- polling ----------------------------------------------------------
@@ -1187,7 +1352,7 @@ function initSettings() {
     applySettings();
   };
   $("expert-toggle").addEventListener("change", onExpert);
-  $("reload-btn").addEventListener("click", () => location.reload());
+  $("server-sign").addEventListener("click", serverSignClick);
   $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("home-notice-cubes").addEventListener("click", () => showView("system"));
   $("cube-found-link").addEventListener("click", showFound);
@@ -1254,6 +1419,7 @@ function applyLanguage() {
   renderFound();
   renderMe();
   renderVersionTitle();
+  renderServerSign();
   renderDeviceSwitches();
   renderUsers();
   renderProviders(); // providers.js

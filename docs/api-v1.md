@@ -1325,7 +1325,16 @@ then every Cube discovery found on the LAN that is not configured:
 
 `configured` tells the two apart.
 A configured Cube has the fields below;
-`mac` and `last_seen` (when it last answered discovery) only once discovery has seen it.
+`mac`, `last_seen` (when it last answered discovery) and `found_address` only once
+discovery has seen it:
+`found_address` is the host it answered from, which differs from `address`
+where the server connects through a proxy or to a fixed address the Cube has left.
+`problems` lists, where there are any, the Cube's visible devices with a problem,
+as `GET …/devices` shows them, each with its room's name (`room`):
+a transmit or link error, a low battery, a window open (with its `window` times);
+a client that shows every Cube's problems, such as the web UI's header,
+needs no other request.
+It is the server's last state, also while the Cube is not connected.
 A found Cube has only the fields shown: `address` is the IP it answered from,
 its own where a massimo proxy answers for it too (docs/proxy.md),
 and `proxies` the other addresses that answered for its serial in the latest run;
@@ -1506,6 +1515,8 @@ The server's settings in the store:
   "poll_interval":     {"value": "1m",  "default": "1m",  "set": false, "in_effect": "1m",  "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
+  "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
+  "window_alert_after": {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "now"},
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
   "node.id":           {"value": "01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55", "set": true, "read_only": true},
   "tenant.id":         {"value": "01a1ae5a-6bee-7edb-b3d5-390730e9e1c5", "set": true, "read_only": true}
@@ -1517,6 +1528,10 @@ The server's settings in the store:
 `-discover-interval`) overrides for one run.
 `stale_after` is when a thermostat that has not changed counts as stale,
 and applies at once; the intervals apply at the next start.
+`window_warn_after` and `window_alert_after` are how long a window may stay open
+before it counts as open too long, a warning and then an alert
+(5 and 10 minutes, 1m to 24h, the alert not under the warning, at once;
+a device's `window`, above).
 `commands.keep_days` is how many days finished commands are kept (see Commands),
 a number, 0 for ever, and applies at once;
 `log.keep_days` how many days the Cubes' events are kept (see `GET …/log`),
@@ -1547,6 +1562,12 @@ until someone with `users` sets a password for it.
 `integrations.requests`, true by default, says whether integrations may
 ask to be registered (`POST /api/v1/integrations/requests`), and applies
 at once; the announcement's `reg` says it on the LAN.
+`announce`, `auto` by default, says whether the server announces itself
+on the LAN by mDNS (README.md, "Server"): `on`, `off`,
+or `auto`, on unless it listens on a loopback address;
+it applies at the next start, `in_effect` saying `on` or `off` for this
+run, and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
+`fixed_by` names it.
 `update.channel` is the update channel (see `GET /api/v1/update`),
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
@@ -1556,9 +1577,10 @@ the build's flavour by default, and applies at once;
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login` and `integrations.requests` `true` or `false`,
-and `update.channel` a name.
+`announce` `auto`, `on` or `off`, and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
-`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h.
+`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h,
+`window_warn_after` and `window_alert_after` 1m to 24h.
 Every value is checked before any is written.
 The answer is that of `GET`.
 
@@ -1749,6 +1771,21 @@ and `received.actual_temp` says how old it is.
 `stale` is a hint: a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.
+
+A device whose state says a window is open (`window_open: true`,
+a shutter contact, or a virtual wall thermostat of a room with one)
+also has `window`, when the server saw it open and when it counts as open
+too long, first as a warning, then as an alert,
+by the settings `window_warn_after` and `window_alert_after`
+(5 and 10 minutes by default, see `GET /api/v1/settings`):
+
+```json
+"window": {"open_since": "2026-11-05T09:40:02+01:00", "warn_at": "2026-11-05T09:45:02+01:00",
+           "alert_at": "2026-11-05T09:50:02+01:00"}
+```
+
+A client tells the window's state from its clock, between two answers too;
+the web UI shows it blue, then amber, then red.
 
 ### The virtual wall thermostat
 

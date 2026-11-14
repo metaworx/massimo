@@ -246,7 +246,7 @@ Stays in `.env`, because it is needed before the store is open, or is a secret:
 | `MASSIMO_ENV_FILE`, `-env` | names the file |
 | `MASSIMO_UPDATE_REQUEST`, `MASSIMO_UPDATE_CHANNEL`, `MASSIMO_GITHUB_TOKEN` | the update helper's contract with root and a secret |
 | `MASSIMO_REBOOT`, `-allow-reboot` | the owner's switch for the reboot of the computer, which the API must not be able to turn on (`docs/api-v1.md`, "GET /api/v1/reboot, …") |
-| `MASSIMO_ANNOUNCE`, `-announce` | the announcement on the LAN by mDNS, which goes with the listener and starts with it (README.md, "Server") |
+| `MASSIMO_ANNOUNCE`, `-announce` | the announcement on the LAN by mDNS, which goes with the listener and starts with it, over the setting `announce` where given (README.md, "Server") |
 | `MASSIMO_PUBLIC_URL` | the announcement's `url`, where the clients reach the API, before the address the trusted reverse proxy serves it at (README.md, "Server") |
 | `MASSIMO_CUBE_SN` | selects a Cube for the commands, which do not open the store |
 

@@ -19,6 +19,10 @@ const (
 	PollIntervalKey     = "poll_interval"
 	RefreshIntervalKey  = "refresh_interval"
 	DiscoverIntervalKey = "discover_interval"
+	// WindowWarnKey and WindowAlertKey are how long a window may stay
+	// open before the web UI shows it amber, then red.
+	WindowWarnKey  = "window_warn_after"
+	WindowAlertKey = "window_alert_after"
 )
 
 // UpdateChannelKey is the update channel the box follows, one of
@@ -234,6 +238,19 @@ func (s *Store) PasswordLogin(ctx context.Context) bool {
 	}
 	return !ok || on
 }
+
+// AnnounceKey says whether serve announces itself on the LAN by mDNS:
+// AnnounceAuto (the default), on unless it listens on a loopback address;
+// AnnounceOn or AnnounceOff. It applies at the next start, and -announce
+// or MASSIMO_ANNOUNCE wins where given (AP AnnounceSetting).
+const AnnounceKey = "announce"
+
+// The values of AnnounceKey.
+const (
+	AnnounceAuto = "auto"
+	AnnounceOn   = "on"
+	AnnounceOff  = "off"
+)
 
 // ProxiedURLKey keeps the address a trusted proxy serves the server at,
 // as the last authorized request through it said: the announcement's url

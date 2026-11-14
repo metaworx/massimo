@@ -38,7 +38,7 @@ def test_language_redraw(page):
     show_view(page, "system")
     panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
     if panel.get_attribute("open") is None:
-        panel.locator("summary").click()
+        panel.locator(":scope > summary").click()
     for lang in ("en", "de"):
         show_view(page, "prefs")
         page.locator("#lang-select").select_option(lang)

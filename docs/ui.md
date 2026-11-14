@@ -83,17 +83,18 @@ show the logo too, the first two larger, above their titles.
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its first line without the time of the last update,
 and the lines under it go until the page is back
-at its top, the button that reloads a new version and expert mode's line
-of the Cube's radio budget apart;
+at its top, expert mode's line of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
   Closed it shows the chosen Cube's name (its serial where it has none)
-  and whether the server is connected to it, as a plug:
-  joined and green while connected, apart and red while not;
-  its tooltip adds the serial and the address.
-  Open, each Cube has its plug, its name and under it its serial and
+  and how the server stands with it, as the network's sign:
+  green while connected, a triangle while its lost connection is held open
+  or it reboots, a cross while it holds the server's old connection,
+  another client has it, or it is gone (see Signs, under How the page is built);
+  its tooltip adds the serial, the address and the link in words.
+  Open, each Cube has its sign, its name and under it its serial and
   address, the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
@@ -109,6 +110,15 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for others the line is the count alone, and the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
+- **Problems**, beside the Cube choice where something is wrong on any Cube:
+  a pill with an icon per kind (a Cube's link, the radio, a battery, a window
+  open too long, the settings), which lists every Cube with a problem as a heading,
+  its own sign and its link's badge, and under it its devices with a problem
+  as "Room › Device" with their badges;
+  for one who may change the settings, **Settings** last:
+  a Cube proxy that does not listen, a settings file that differs,
+  Cubes found and not served.
+  A window open briefly is not listed: it is a state, not a problem.
 - **The time of the last update** and **↻**, one button without a frame,
   which asks the server for the current state now;
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.
@@ -133,9 +143,18 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 - Each page comes back at the place it was left,
   by its button and by back and forward alike;
   a page opened for the first time starts at its top.
-- When the server was updated, a button offers to reload the page.
-  The page reloads by itself only when nothing is open: no setting being edited,
-  no panel and none of the settings pages.
+- **The server's sign**, before the time of the last update,
+  an icon in a frame whose label says what a click does:
+  the plug in green while the server answers (a click updates now);
+  a blue "i" while an update is out,
+  for one who may install it (a click opens Software update);
+  an amber triangle, blinking, once the server runs a new version
+  (a click reloads the page);
+  the open plug on a filled red square, blinking, after a poll without an answer:
+  the page's other signs are greyed, their state not known,
+  the time is that of the last update, and the page tries again at every poll.
+  After an update the page reloads by itself only when nothing is open:
+  no setting being edited, no panel and none of the settings pages.
 - In expert mode a line under the first shows the chosen Cube's name,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
@@ -179,13 +198,19 @@ Every room has a tile:
   so it may be older.
   Radiator thermostats send the measured temperature only now and then,
   mostly after the valve moved.
-- **Icons in the tile's head** say what is wrong in the room, each in its colour:
-  radio waves, a device the Cube could not reach or that lost its link
-  (red for a transmit error); a battery, one running low;
-  an open window, a window contact reporting it;
+- **Icons in the tile's head** say what is wrong in the room, each in its colour
+  and with its mark (see Signs, below):
+  the radio as a Wi-Fi fan, a device that lost its link (amber, a triangle)
+  or the Cube could not reach (red, a cross);
+  a battery, one running low (amber);
+  an open window, a window contact reporting it:
+  blue for its first 5 minutes, then amber with a triangle,
+  red with a cross after 10
+  (the server's settings `window_warn_after` and `window_alert_after`);
   crossed arrows, the room's thermostats in different modes.
   A tap on them lists the devices concerned, each once with its serial,
-  its badges led by the same icons and how long ago each came,
+  its badges under its name, led by the same icons, a warning's and a failure's
+  by its mark, and how long ago each came,
   and for different modes each thermostat's mode;
   Escape or a click outside closes the list.
   An icon goes as soon as its problem does.
@@ -482,9 +507,9 @@ the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
 Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
-**Language**, **Mode** and **Colour scheme**, in a column of its own at the
-right headed **only on this device**, a switch keeps that setting's value in
-this browser instead (its tooltip names the setting),
+**Language**, **Mode**, **Colour scheme** and **Blinking signs**,
+in a column of its own at the right headed **only on this device**,
+a switch keeps that setting's value in this browser instead (its tooltip names the setting),
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
 My settings and My profile are at most 640 px wide.
@@ -519,7 +544,13 @@ without the switches.
   **Customise…** opens an editor with a colour input per token for both sets,
   applied to the page as you change them,
   and a number in front of each background's colour that is the contrast of the text on it
-  (from 4.5 it reads well, under 3 badly).
+  (from 4.5 it reads well, under 3 badly),
+  and in front of the warning icons' colour its contrast on a tile
+  (from 3 they stand out).
+  A scheme saved before a colour was added takes the default's for it.
+  **Blinking signs**: whether a warning's triangle and a failure's cross blink,
+  so that they are not missed; as the system (blinking unless the device asks
+  for reduced motion), on, at first (five times when a sign comes) or off.
   Next to each colour input is its hex value, `#f6f6f4`, in a text field:
   a value typed or pasted there, with or without the `#`,
   also as `#abc` and in any case, applies at once
@@ -681,7 +712,7 @@ to the top of the page.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its last two parts):
+  or `settings` for its announcement and its last two parts):
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -693,6 +724,14 @@ to the top of the page.
   such as a server in a terminal or an open server asked from elsewhere than the box.
   The settings of the settings file that changed since the start and apply only
   at the next one are listed under it, by name, and counted in the card's head.
+  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
+  or **Off** for the setting `announce`: the announcement by mDNS for
+  `massimo discover`, the apps and Home Assistant, Automatic on unless the
+  server listens on the loopback, as behind a reverse proxy.
+  The line under it says whether the server announces itself now, or that
+  a change waits for the next restart; where `-announce` or
+  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
@@ -721,13 +760,17 @@ to the top of the page.
   From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
-  each in a panel whose head shows the name, the serial and the address
+  each in a panel whose head shows the Cube's sign, the name, the serial and the address
   without the port, the duty cycle, the free slots and the radiograms pending,
-  and opens with a click:
+  a pill with every problem of the Cube (its link, its proxy, its settings file
+  and its devices with theirs, as the header's), whose click opens its list
+  and not the panel, and where its settings come from,
+  all of it drawn again at every poll, and opens with a click:
+  its own badges as its top line (its link where it is not connected,
+  a proxy that does not listen, a settings file that differs, the source),
   a table of its facts for everyone who sees the panel
   (address, port, firmware, radio address, the Cube's clock,
   duty cycle, free slots, pending and queued, refreshed while it is open),
-  its connection, in the head's badge,
   and above the facts a notice with since when where the server knows why it
   is not connected (`link` of `docs/api-v1.md`, "GET /api/v1/cubes"):
   its lost connection held open until a time, so that it carries on when the
@@ -752,6 +795,10 @@ to the top of the page.
   each with its name, serial number and radio address and **Show again**;
   **Hide** takes a radio address,
   with the Cube's devices to choose from.
+  While the panel is open, a field not touched follows a value stored meanwhile
+  (by another browser or the settings file);
+  a field being edited keeps what is typed and says under it that the stored value
+  changed, with the new value and **Take theirs**.
   **Save**, off while nothing differs from the Cube's settings,
   sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
@@ -962,11 +1009,30 @@ its heading's `button.section-fold` folding it):
 `pageBar` fills the sections menu of its title's row kept at the top,
 and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
-its items `menuItem`s, a Cube's connection a `connIcon`;
+its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
 a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`;
 an action with what it does and its button is an `.action-row`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
+A state is a sign, a colour and a mark, so that it reads without its colour:
+nothing for a state that is fine, a triangle for a warning (amber),
+a cross for a failure (red).
+`signEl` draws a kind of thing in a state (`SIGNS`: the radio, a Wi-Fi fan,
+and the window with the mark at the bottom right, as the original MAX! software has
+them; the network of a Cube's link with it on top; the cog for the settings),
+the drawing and the mark two parts, so that the mark alone blinks;
+`badgeEl` leads a warning's or a failure's badge with its mark (`markEl`)
+and sets it in bold, while a badge that names a state, such as a mode, stays regular;
+`keepBlink` keeps a mark's blinking where it was across the redraws that make a new
+element of it.
+The icons draw in the token `warn-mark`, a brighter amber than the text's `warn`,
+at a contrast of 3 on a tile, the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`);
+the filled amber, `fill-warn`, is the Manual mode's alone.
+`problemsEl` is the list of what is wrong in a place, wherever it is put,
+its entries one format at every level (`problemEntry`):
+the icon in a column of its own, the name and a grey detail beside it,
+the badges under the name, and the entries under it (`subs`) indented to the name,
+a line down from its icon.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),
