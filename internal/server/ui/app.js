@@ -703,7 +703,8 @@ function renderCubeSelect() {
 // with their badges (tiles.js deviceProblems); a window open briefly is a
 // state, not a problem. Last, for one who may change the settings, the
 // settings: a Cube proxy that does not listen, a settings file that
-// differs from the store, Cubes found and not served.
+// differs from the store, a Cube found elsewhere than its fixed address,
+// Cubes found and not served.
 function cubeProblemEntries() {
   const entries = state.cubes.map((c) => cubeEntry(c));
   if (hasCap("settings")) {
@@ -734,13 +735,15 @@ function cubeEntry(c, own) {
 }
 
 // cubeSettingItems are a Cube's settings that need a look, as items: a
-// proxy listener that does not listen, a settings file that differs;
-// who names the Cube in the text, "" for its own panel.
+// proxy listener that does not listen, a settings file that differs, a
+// fixed address the Cube is found elsewhere than (found_elsewhere); who
+// names the Cube in the text, "" for its own panel.
 function cubeSettingItems(c, who) {
   const items = [];
   const text = (key, args) => (who ? t("problem." + key, { cube: who, ...args }) : t("problem." + key + "Own", args));
   for (const f of c.proxy_failing || []) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("proxy", { addr: f.addr }) });
   if ((c.file_differs || []).length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("file", {}) });
+  if (c.found_elsewhere) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("address", { addr: c.found_elsewhere.address }) });
   return items;
 }
 

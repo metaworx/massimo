@@ -1506,7 +1506,11 @@ type cubeView struct {
 	// may differ from Address: the server connects through a proxy, or
 	// to a fixed address the Cube has left.
 	FoundAddress string `json:"found_address,omitempty"`
-	Connected    bool   `json:"connected"`
+	// FoundElsewhere is a Cube with a fixed address that answered the
+	// latest discovery at another one, neither it nor a proxy answering
+	// at its own; absent otherwise (discovery.go noteElsewhere).
+	FoundElsewhere *addressElsewhere `json:"found_elsewhere,omitempty"`
+	Connected      bool              `json:"connected"`
 	// Link says how the server stands with the Cube beyond connected:
 	// a lost connection held open, a Cube that refuses a new one while it
 	// holds the server's old one (stale) or another client's (busy).
@@ -1554,6 +1558,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
 		v.MAC, v.LastSeen, v.FoundAddress = f.MAC, &f.LastSeen, f.Address
+		v.FoundElsewhere = foundElsewhere(f, cfg, v.Address)
 	}
 	if h := snap.Hello(); h != nil {
 		v.Connected = rt.client.Connected()

@@ -737,16 +737,21 @@ func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
 }
 
 // With periodic discovery, a lost Cube with a fixed address is searched
-// for, and one that answers from another address is warned of.
+// for, and one that answers from another address is warned of, once
+// however many searches find it there (noteElsewhere).
 func TestALostFixedCubeWithAnIntervalIsSearchedFor(t *testing.T) {
 	s, fc, connected, warnings, requests := fixedCube(t, time.Hour)
 	// The run at the start may have warned already, where its wait heard
 	// the answer; the searches after the loss repeat until one does.
 	eventually(t, "the run at the start", func() bool { return requests() >= 1 && noRunGoing(s) })
-	before := warnings()
+	before := requests()
 	fc.Close()
 	eventually(t, "the cube lost", func() bool { return !connected() })
-	eventually(t, "a warning after the loss", func() bool { return warnings() > before })
+	eventually(t, "a warning after the loss", func() bool { return warnings() == 1 })
+	eventually(t, "searches after the warning", func() bool { return requests() >= before+3 })
+	if n := warnings(); n != 1 {
+		t.Errorf("%d warnings over the searches, want 1", n)
+	}
 }
 
 // homes starts a fake Cube's TCP side on 127.0.0.2 and 127.0.0.3, one
