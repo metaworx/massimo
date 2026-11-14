@@ -2733,6 +2733,48 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/log/alerts:
+    get:
+      summary: The log's warnings and errors that nothing has settled yet
+      x-capability: read
+      description: |
+        Every Cube's and the server's warnings and errors that no later
+        event has settled: a disconnect by the next connect, a command by
+        the same command acknowledged, a failed backup by the next one;
+        a hold and a lockout once they end; a kind without a counterpart
+        only by a mark. A device's transmit error, link error and low
+        battery are alerts at warn while the device has them, at the state
+        line that set them. The audit's lines for a holder of audit only.
+        A Cube without a row in the store adds nothing; without a store,
+        none.
+      parameters:
+        - {name: after, in: query, description: "An event's id: only the alerts after it", schema: {type: integer, minimum: 0, example: 4711}}
+      responses:
+        "200":
+          description: The alerts, newest first, and the worst level
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  level: {type: string, enum: ["", warn, error], description: "The worst of the alerts; empty for none"}
+                  alerts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: integer, description: The line's id in the log}
+                        kind: {type: string}
+                        level: {type: string, enum: [warn, error]}
+                        cube_serial: {type: string, description: "The Cube whose line it is; absent for the server's own"}
+                        device: {type: string, description: The device's radio address on its Cube}
+                        serial: {type: string}
+                        flag: {type: string, enum: [error, link_error, battery_low], description: "The device's flag, for a state line"}
+                        time: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes/{sn}/events:
     get:
       summary: Server-sent events for connection and state changes

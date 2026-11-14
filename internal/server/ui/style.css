@@ -1530,6 +1530,21 @@ massimo-week-program { display: contents; }
 .log-device { font-weight: 600; }
 .log-text { color: var(--muted); }
 .log-cmd { padding: 0 8px; font-size: 0.85rem; }
+/* an unsettled problem not marked seen (log.js renderLogLine): a bar in
+   its tone, its mark first, Mark seen last; the log's entry in ☰ in its
+   tone over the menu's muted icons (renderLogSign) */
+.log-line.log-alert { margin-left: -9px; padding-left: 6px; border-left: 3px solid var(--warn-mark); }
+.log-line.log-alert-bad { border-left-color: var(--bad); }
+.log-kind > .mark-sign { width: 1em; height: 1em; margin-right: 0.3em; vertical-align: -0.15em; stroke-width: 2.3; }
+.log-kind > .mark-sign use.mark.x { stroke-width: 2.6; }
+.log-mark { padding: 0 8px; font-size: 0.85rem; }
+.menu-items button > .ni.sign.tone-warn { color: var(--warn-mark); }
+.menu-items button > .ni.sign.tone-bad { color: var(--bad); }
+/* the log's mark on ☰ too, where the phone keeps the log's button in it;
+   on the page's own button, the mark's shape alone over the accent */
+#nav-menu > summary { position: relative; }
+#nav-menu > summary > .mark-sign { position: absolute; right: 1px; bottom: 1px; width: 13px; height: 13px; stroke-width: 2.6; }
+.nav-btn.active > .ni.sign { color: inherit; }
 .log-cmd-detail {
   flex-basis: 100%;
   margin: 2px 0 4px;

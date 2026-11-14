@@ -1328,6 +1328,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes/{sn}/events/ticket", "read", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", "read", s.getLog)
 	api("GET /api/v1/log", "read", s.getAllLog)
+	api("GET /api/v1/log/alerts", "read", s.getLogAlerts)
 	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
 	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
