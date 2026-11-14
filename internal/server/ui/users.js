@@ -198,6 +198,12 @@ function userBadges(u) {
   else if (u.expires_at && Date.parse(u.expires_at) <= Date.now()) out.push(badgeEl(t("users.state.expired"), "bad"));
   else if (u.expires_at) out.push(badgeEl(t("users.state.until", { date: fmtShortTime(Date.parse(u.expires_at)) }), "warn"));
   if (!u.has_password) out.push(badgeEl(t("users.keysOnly"), "mode"));
+  // an integration's user, and the integrations' users that act as this
+  // one (integrations.js)
+  const ig = u.integration;
+  if (ig) out.push(badgeEl(t(ig.id ? "users.integrationUser" : "users.integrationOwn", { key: ig.key }), "mode"));
+  if (ig && ig.linked_to) out.push(badgeEl(t("users.linkedTo", { name: ig.linked_to }), "ok"));
+  if (u.links && u.links.length) out.push(badgeEl(tn("users.links", u.links.length), "mode"));
   return out;
 }
 
@@ -284,6 +290,10 @@ function userPanel(u) {
   const d = detailsPanel({ name: u.display_name || u.name, mono: u.name, badges: userBadges(u), open: usersUI.open.has(u.name), cls: "user-panel" },
     fromTemplate("tpl-user-panel"));
   d.dataset.name = u.name;
+  if (u.links && u.links.length) {
+    const who = u.links.map((l) => (l.name || l.id.slice(0, 8)) + " (" + l.integration + ")").join(", ");
+    d.querySelector("summary").after(textEl("p", t("users.linksList", { users: who }), "muted small user-integration-links"));
+  }
   const tokensBox = fromTemplate("tpl-user-tokens");
   d.appendChild(tokensBox);
   wireNewKey(u, tokensBox);

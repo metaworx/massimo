@@ -1418,7 +1418,7 @@ massimo-week-program { display: contents; }
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
-.no-settings .needs-settings, .no-auth .needs-auth, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
+.no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system,
 .no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
@@ -1454,6 +1454,20 @@ massimo-week-program { display: contents; }
 /* System settings → Sign-in providers; the sign-in card's provider buttons */
 .provider-form { display: flex; flex-direction: column; gap: 6px; }
 .providers-callback .mono { overflow-wrap: anywhere; }
+/* System settings → Integrations (integrations.js) */
+.integrations-settings h4 { font-size: 0.95rem; margin: 12px 0 6px; }
+.integration-caps { border: none; padding: 0; margin: 8px 0 0; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }
+.integration-caps legend { font-weight: 600; padding: 0; margin-bottom: 4px; }
+.integration-users, .integrations-found-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.integration-user { padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.integration-user-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.integration-user-name { font-weight: 600; }
+.integration-user p { margin: 2px 0; }
+.integration-user .inline { display: flex; gap: 6px; flex-wrap: wrap; }
+.integration-user select { flex: 1 1 12em; min-width: 0; }
+.integrations-found-list li { overflow-wrap: anywhere; }
+.integration-request .kv dd:first-of-type { font-size: 1.3rem; letter-spacing: 0.15em; }
+.user-integration-links { margin: 0 0 8px; }
 .login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }

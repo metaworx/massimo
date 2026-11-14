@@ -851,6 +851,34 @@ to the top of the page.
   **Save**, which for an enabled provider first reads its discovery document
   and says what is wrong where the issuer is not reached or named otherwise,
   **Remove**; **Add a provider** opens the form for one, with its key.
+- **Integrations** (with `integrations`, the owner's and the manager's by
+  default; docs/api-v1.md, "Integrations"):
+  with `settings`, **Integrations may ask to be registered**;
+  each request waiting in a panel whose head shows its code, to compare
+  with the one the integration shows,
+  and **seen on the LAN** or **not seen on the LAN**;
+  in it where it came from, its installation id, address, version and
+  until when it waits, a switch per capability of the role `integration`,
+  all on, for its maximum,
+  **Registered before as**, where an integration of its kind is
+  registered, the same installation chosen,
+  **Refuse**, which asks first, and **Approve**.
+  Every integration in a panel, its name and key, **disabled** and
+  **new installation** as badges:
+  its key, installation id, address, version, when its key was issued and
+  whether the LAN saw it;
+  for a call from another installation, **Accept the new installation**;
+  **Enabled**, its maximum with **Save the maximum**,
+  its users (read when the panel opens), the system user first,
+  each with its id's first eight characters, its level and when it acted
+  last, and **Acts as**: its own user or a Massimo user, the one of the
+  same name proposed, with **Link**; and **Revoke**, which asks first.
+  Under them the Home Assistant installations the server saw on the LAN,
+  each **registered** or **not registered**, with **Look again**.
+  In **Users**, an integration's users carry **user of** its key (the
+  integration's own **integration** and its key), and a linked one
+  **acts as** the user; a user that integration users act as counts them
+  as a badge and names them at the top of its panel.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Save**, off while nothing differs from the role,

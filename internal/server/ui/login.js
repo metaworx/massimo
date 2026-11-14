@@ -15,7 +15,7 @@
 // markup, what it alone allows.
 const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
   "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
-  "auth"];
+  "auth", "integrations"];
 
 // DEFAULT_ROLES are the keys of the six default roles, for a role choice
 // that cannot read the roles.
@@ -44,7 +44,7 @@ function canManageUsers() {
 // of the capabilities of its panels, Cubes, backups, users, roles, and
 // the software's update, the server's restart and the computer's reboot.
 function hasSystem() {
-  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
 }
 
 // hasProfile reports whether the page is signed in as a user, who has My

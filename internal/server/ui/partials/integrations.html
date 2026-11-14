@@ -1,0 +1,23 @@
+<!-- System settings → Integrations, a section card: the programs that act for users of their own, such as Home Assistant, with the capability integrations; integrations.js draws into its lists. -->
+<section id="sys-integrations" class="tile section-card integrations-settings needs-integrations" aria-labelledby="sys-integrations-h">
+  <header class="tile-head section-head">
+    <h3 id="sys-integrations-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-integrations-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="integrations.title">Integrations</span></button></h3>
+    <span class="section-badges"></span>
+  </header>
+  <div id="sys-integrations-body" class="section-body" aria-live="polite">
+    <p class="muted small" data-i18n="integrations.text">Programs such as Home Assistant act here for their users. An integration asks to be registered without a key: compare the code it shows with the one here, and approve it with what it may do at most.</p>
+    <div class="field needs-settings">
+      <label class="switch">
+        <input type="checkbox" id="integration-requests">
+        <span class="slider" aria-hidden="true"></span>
+        <span class="switch-label" data-i18n="integrations.requests">Integrations may ask to be registered</span>
+      </label>
+    </div>
+    <div id="integration-requests-list"></div>
+    <div id="integrations-list"></div>
+    <h4 class="integrations-found-h" data-i18n="integrations.found">Seen on the LAN</h4>
+    <div id="integrations-found"></div>
+    <div class="actions"><span class="actions-left"><button type="button" id="integrations-look" data-i18n="integrations.lookAgain">Look again</button></span></div>
+    <p id="integrations-msg" class="small cubes-msg hidden" role="status"></p>
+  </div>
+</section>
