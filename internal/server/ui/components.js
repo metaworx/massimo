@@ -825,19 +825,8 @@ function countList(counts) {
 
 // --- a choice of one in a menu (the Cube choice) -----------------------
 
-// connIcon is a connection as a plug: joined and green while connected,
-// apart and red while not (icon-plug-on, icon-plug-off), named for a
-// screen reader, since shape and colour alone say nothing to one.
-function connIcon(connected) {
-  const svg = iconEl(connected ? "icon-plug-on" : "icon-plug-off", "ni conn " + (connected ? "ok" : "bad"));
-  svg.removeAttribute("aria-hidden");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", t(connected ? "header.connected" : "header.disconnected"));
-  return svg;
-}
-
 // menuItem is an item of a dropdown's list: a button with its icon (a
-// symbol's name, or an element such as connIcon; with blank and no icon
+// symbol's name, or an element such as a Cube's sign; with blank and no icon
 // an empty place of an icon's width, so that the labels line up), its
 // label and, under it in grey, a second line (sub).
 function menuItem({ icon, label, sub, blank }, onClick) {

@@ -185,13 +185,13 @@ def test_save_is_off_until_a_change_and_turns(page, case):
 
 def test_cube_choice_menu(page, case):
     """The Cube choice is a menu of the page: closed the chosen Cube's
-    plug and name, its tooltip the serial, address and connection; open a
-    plug, the name and under it the serial and address per Cube, the chosen
+    network sign and name, its tooltip the serial, address and link; open
+    a sign, the name and under it the serial and address per Cube, the chosen
     one marked and focused, the arrow keys moving between the entries;
     choosing the Cube shown closes it and keeps it."""
     summary = page.locator("#cube-choice")
-    assert summary.locator(".conn.ok").count() == 1, "the chosen Cube connected, a green plug"
-    assert summary.locator(".conn").get_attribute("aria-label"), "the plug named for a screen reader"
+    assert summary.locator(".conn-sign.tone-ok").count() == 1, "the chosen Cube connected, a green network sign"
+    assert summary.locator(".conn-sign").get_attribute("aria-label"), "the sign named for a screen reader"
     title = summary.get_attribute("title") or ""
     assert "KEQ0000100" in title and "127.0.0.1" in title, f"the tooltip has the serial and the address ({title!r})"
     summary.click()

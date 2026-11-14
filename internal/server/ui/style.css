@@ -175,7 +175,7 @@ body:not(.expert) .expert-only { display: none !important; }
 .server-sign[data-state="down"] { background: var(--fill-bad); border-color: var(--fill-bad); color: var(--fill-fg); }
 /* the page's other signs greyed while the server is gone: their state is
    not known */
-body.server-down main .ni.sign, body.server-down main .problems-sum, body.server-down .conn { filter: grayscale(1); opacity: 0.55; }
+body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down .conn-sign { filter: grayscale(1); opacity: 0.55; }
 .refresh-btn .ni { width: 16px; height: 16px; flex: none; }
 .refresh-btn:hover, .refresh-btn:focus-visible { color: var(--accent); }
 .refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -294,11 +294,13 @@ body.signed-out #notify-toast { display: none !important; }
   .cube-menu { flex: 1 1 160px; }
   .menu.cube-menu > summary { width: 100%; max-width: 100%; }
 }
-/* a connection (components.js connIcon): green joined, red apart */
-.ni.conn { width: 18px; height: 18px; }
-.ni.conn.ok, .menu-items button > .ni.conn.ok { color: var(--ok); }
-.ni.conn.bad, .menu-items button > .ni.conn.bad { color: var(--bad); }
-.menu-items button > .ni.conn { width: 20px; height: 20px; }
+/* a Cube's network sign (app.js cubeSignEl): its link's state, the colour
+   of its tone over the list's muted icons */
+.ni.conn-sign { width: 18px; height: 18px; }
+.ni.conn-sign.tone-ok, .menu-items button > .ni.conn-sign.tone-ok { color: var(--ok); }
+.ni.conn-sign.tone-warn, .menu-items button > .ni.conn-sign.tone-warn { color: var(--warn-mark); }
+.ni.conn-sign.tone-bad, .menu-items button > .ni.conn-sign.tone-bad { color: var(--bad); }
+.menu-items button > .ni.conn-sign { width: 20px; height: 20px; }
 /* a menu item of two lines (components.js menuItem), a group's heading,
    a separator, the item chosen */
 .menu-item-text { display: flex; flex-direction: column; min-width: 0; }
@@ -978,6 +980,9 @@ button.subtle { color: var(--muted); }
    the devices with their badges; a device's type as an icon before its
    name. */
 .menu.problems { flex: none; }
+.cube-problems { display: inline-flex; }
+.cube-problems:empty { display: none; }
+.cube-problems .problems-list { right: 0; left: auto; } /* the header's right side: the list opens to the left */
 .menu.problems > summary.problems-sum {
   display: inline-flex;
   align-items: center;
@@ -1037,7 +1042,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .problem-name { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
 .problem-sub { color: var(--muted); font-size: 0.8rem; }
 .problem-flags { display: flex; flex-wrap: wrap; gap: 6px; }
-.problem-flags .flag { display: inline-flex; align-items: center; gap: 4px; }
+.problem-flags .flag { display: inline-flex; align-items: center; gap: 4px; border-radius: 10px; } /* a long one wraps */
 .problem-flags .flag .ni { width: 14px; height: 14px; }
 .device-type-icon { display: inline-flex; flex: none; color: var(--muted); }
 .device-type-icon .ni { width: 18px; height: 18px; }
