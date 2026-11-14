@@ -705,28 +705,50 @@ function renderCubeSelect() {
 // settings: a Cube proxy that does not listen, a settings file that
 // differs from the store, Cubes found and not served.
 function cubeProblemEntries() {
-  const entries = state.cubes.map((c) => {
-    const st = linkSign(c);
-    const items = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
-    const subs = (c.problems || []).map((d) => ({
-      icon: deviceIcon(d), // tiles.js
-      title: [d.room, deviceName(d)].filter(Boolean).join(" › "),
-      sub: d.serial || d.rf_address,
-      items: deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), // tiles.js
-    }));
-    return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
-  });
+  const entries = state.cubes.map((c) => cubeEntry(c));
   if (hasCap("settings")) {
     const items = [];
-    for (const c of state.cubes) {
-      const who = c.name || c.serial;
-      for (const f of c.proxy_failing || []) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: t("problem.proxy", { cube: who, addr: f.addr }) });
-      if ((c.file_differs || []).length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: t("problem.file", { cube: who }) });
-    }
+    for (const c of state.cubes) items.push(...cubeSettingItems(c, c.name || c.serial));
     if (state.found.length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: tn("cubes.badge.found", state.found.length) });
     entries.push({ sign: { kind: "cog", state: items.length ? "warn" : "" }, title: t("problem.settings"), items });
   }
   return entries;
+}
+
+// cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
+// the heading with its network sign, its link's badge where it is not
+// connected, own its settings' warnings too (cubes.js, a Cube's panel),
+// and its devices with a problem under it, "Room › Device", with their
+// badges (tiles.js deviceProblems); a window open briefly is a state.
+function cubeEntry(c, own) {
+  const st = linkSign(c);
+  const items = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
+  if (own) items.push(...cubeSettingItems(c, ""));
+  const subs = (c.problems || []).map((d) => ({
+    icon: deviceIcon(d), // tiles.js
+    title: [d.room, deviceName(d)].filter(Boolean).join(" › "),
+    sub: d.serial || d.rf_address,
+    items: deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), // tiles.js
+  }));
+  return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
+}
+
+// cubeSettingItems are a Cube's settings that need a look, as items: a
+// proxy listener that does not listen, a settings file that differs;
+// who names the Cube in the text, "" for its own panel.
+function cubeSettingItems(c, who) {
+  const items = [];
+  const text = (key, args) => (who ? t("problem." + key, { cube: who, ...args }) : t("problem." + key + "Own", args));
+  for (const f of c.proxy_failing || []) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("proxy", { addr: f.addr }) });
+  if ((c.file_differs || []).length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("file", {}) });
+  return items;
+}
+
+// problemsLabelOf names the kinds of problems among entries, for a
+// screen reader and the tooltip.
+function problemsLabelOf(entries) {
+  const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
+  return t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") });
 }
 
 // renderCubeProblems draws every Cube's problems beside the Cube choice
@@ -738,8 +760,7 @@ function renderCubeProblems() {
   const was = box.querySelector("details.problems");
   if (was && was.open) return;
   const entries = cubeProblemEntries();
-  const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
-  const p = problemsEl(entries, t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") }));
+  const p = problemsEl(entries, problemsLabelOf(entries));
   box.replaceChildren(...(p ? [p] : []));
 }
 

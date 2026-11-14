@@ -458,6 +458,8 @@
   "problem.settings": "Instellingen",
   "problem.proxy": "{cube}: de proxy luistert niet op {addr}",
   "problem.file": "{cube}: het instellingenbestand wijkt af",
+  "problem.proxyOwn": "de proxy luistert niet op {addr}",
+  "problem.fileOwn": "het instellingenbestand wijkt af",
   "room.devices": "apparaten van de ruimte",
   "room.devicesTitle": "Apparaten",
   "room.configure": "de ruimte configureren",

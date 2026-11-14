@@ -459,6 +459,8 @@
   "problem.settings": "Impostazioni",
   "problem.proxy": "{cube}: il proxy non è in ascolto su {addr}",
   "problem.file": "{cube}: il file delle impostazioni è diverso",
+  "problem.proxyOwn": "il proxy non è in ascolto su {addr}",
+  "problem.fileOwn": "il file delle impostazioni è diverso",
   "room.devices": "dispositivi del locale",
   "room.devicesTitle": "Dispositivi",
   "room.configure": "configura il locale",

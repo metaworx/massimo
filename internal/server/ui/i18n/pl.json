@@ -464,6 +464,8 @@
   "problem.settings": "Ustawienia",
   "problem.proxy": "{cube}: proxy nie nasłuchuje na {addr}",
   "problem.file": "{cube}: plik ustawień się różni",
+  "problem.proxyOwn": "proxy nie nasłuchuje na {addr}",
+  "problem.fileOwn": "plik ustawień się różni",
   "room.devices": "urządzenia pomieszczenia",
   "room.devicesTitle": "Urządzenia",
   "room.configure": "konfiguruj pomieszczenie",

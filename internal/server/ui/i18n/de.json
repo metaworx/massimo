@@ -457,6 +457,8 @@
   "problem.settings": "Einstellungen",
   "problem.proxy": "{cube}: der Proxy hört nicht auf {addr}",
   "problem.file": "{cube}: die Einstellungsdatei weicht ab",
+  "problem.proxyOwn": "der Proxy hört nicht auf {addr}",
+  "problem.fileOwn": "die Einstellungsdatei weicht ab",
   "room.devices": "Geräte des Raums",
   "room.devicesTitle": "Geräte",
   "room.configure": "Raum konfigurieren",

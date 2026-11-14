@@ -76,6 +76,7 @@ function fillCubeFacts(d, c) {
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
   fillLinkState(d, c);
   fillProxyState(d, c);
+  fillCubeHead(d, c);
 }
 
 // fillLinkState says above the Cube's facts why it is not connected,
@@ -656,18 +657,53 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
 // built open queues finds the serial in cubesUI.open and asks for
 // nothing, so that a redraw does not redraw the pairing again when the
 // answers come, under what the user is typing there.
-function cubePanel(c) {
-  const link = linkState(c); // app.js
-  const linkLabel = link === "connected" || link === "offline" ? t(c.connected ? "cubes.connected" : "cubes.disconnected") : t("link.badge." + link);
-  const badges = [badgeEl(linkLabel, link === "connected" ? "ok" : link === "rebooting" ? "mode" : "warn")];
-  if (c.source) badges.push(badgeEl(t("cubes.source." + c.source), "mode"));
-  if ((c.file_differs || []).length) badges.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
+// cubeBadges are a Cube's own badges, the top line of its open panel:
+// its link where it is not connected, a proxy that does not listen, a
+// settings file that differs, where its configuration comes from.
+function cubeBadges(c) {
+  const st = linkSign(c); // app.js
+  const out = st === "ok" ? [] : [badgeEl(linkWord(c), st === "bad" ? "bad" : "warn")]; // app.js
   const failing = proxyFailing([c]);
-  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
+  if (failing) out.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
+  if ((c.file_differs || []).length) out.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
+  if (c.source) out.push(badgeEl(t("cubes.source." + c.source), "mode"));
+  return out;
+}
+
+// fillCubeHead draws a Cube's panel's head and top line from its entry
+// of the list, again at every poll (fillCubeFacts): its network sign
+// before the name; one pill with every problem, its link, its proxy, its
+// settings file and its devices (problemsEl), whose click opens its list
+// and not the panel; the source a neutral badge; and in the open panel
+// its own badges as its top line.
+function fillCubeHead(d, c) {
+  const sum = d.querySelector("summary");
+  sum.querySelector(".conn-sign").replaceWith(cubeSignEl(c)); // app.js
+  const entries = [cubeEntry(c, true)]; // app.js
+  const was = sum.querySelector(".cube-pill details");
+  if (!was || !was.open) {
+    const pill = problemsEl(entries, problemsLabelOf(entries)); // components.js, app.js
+    if (pill) {
+      // a click in its list is not one on the panel's head
+      pill.addEventListener("click", (ev) => {
+        if (!ev.target.closest("summary.problems-sum")) ev.preventDefault();
+      });
+    }
+    sum.querySelector(".cube-pill").replaceChildren(...(pill ? [pill] : []));
+  }
+  d.querySelector(".cube-top-line").replaceChildren(...cubeBadges(c));
+}
+
+function cubePanel(c) {
+  const badges = c.source ? [badgeEl(t("cubes.source." + c.source), "mode")] : [];
   const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
     fromTemplate("tpl-cube-panel"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");
+  sum.prepend(elem("span", "conn-sign"));
+  const pills = elem("span", "cube-pill");
+  if (sum.querySelector(".panel-badges")) sum.insertBefore(pills, sum.querySelector(".panel-badges"));
+  else sum.appendChild(pills);
   d.addEventListener("toggle", () => {
     if (d.open) {
       if (cubesUI.open.has(c.serial)) return; // built open by a redraw
@@ -683,9 +719,9 @@ function cubePanel(c) {
   // two columns where there is room (style.css .cube-cols): the Cube's
   // fields at the left, the pairing and the hidden devices at the right
   const form = d.querySelector("form.cube-form");
-  sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), sum.querySelector(".panel-badges"));
+  sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), pills);
   const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form);
-  sum.after(elem("div", "cube-link-state"), cols);
+  sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), cols);
   cols.after(rebootRow(c));
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {

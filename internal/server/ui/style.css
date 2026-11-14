@@ -644,6 +644,18 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
+/* a Cube's panel's head (cubes.js fillCubeHead): its sign before the
+   name, its problems in one pill at the right, then the neutral source
+   badge; its own badges the top line of the open panel */
+.cube-panel > summary > .conn-sign { flex: none; }
+.cube-pill { display: inline-flex; margin-left: auto; }
+.cube-pill:empty { display: none; }
+.cube-pill .problems-list { right: 0; left: auto; }
+.cube-pill ~ .panel-badges { margin-left: 0; }
+.cube-top-line { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+.cube-top-line:empty { display: none; }
+.cube-panel:not([open]) > .cube-top-line { display: none; }
+.cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
 .cube-cols > .cube-form { display: contents; }
 .cube-cols > .cube-pairing { grid-area: pair; }
 .cube-cols .cube-fields { grid-area: fields; }
@@ -1208,7 +1220,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .flag.ok { color: var(--ok); border-color: var(--ok); }
 /* a warning or a failure: bold, led by its mark in the badge's colour */
 .flag.warn, .flag.bad, .flag.fill-bad { font-weight: 650; }
-.flag .mark-sign { width: 1em; height: 1em; margin-right: 0.25em; vertical-align: -0.12em; stroke-width: 2.3; color: inherit; }
+.flag .mark-sign { flex: none; width: 1em; height: 1em; margin-right: 0.25em; vertical-align: -0.12em; stroke-width: 2.3; color: inherit; }
 .flag .mark-sign use.mark.x { stroke-width: 2.6; }
 /* filled badges for the mode and the window state, text always on them */
 .flag.fill-ok { background: var(--fill-ok); color: var(--fill-fg); border-color: var(--fill-ok); }

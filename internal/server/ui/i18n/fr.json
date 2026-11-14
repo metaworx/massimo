@@ -459,6 +459,8 @@
   "problem.settings": "Réglages",
   "problem.proxy": "{cube} : le proxy n’écoute pas sur {addr}",
   "problem.file": "{cube} : le fichier de réglages diffère",
+  "problem.proxyOwn": "le proxy n’écoute pas sur {addr}",
+  "problem.fileOwn": "le fichier de réglages diffère",
   "room.devices": "appareils de la pièce",
   "room.devicesTitle": "Appareils",
   "room.configure": "configurer la pièce",

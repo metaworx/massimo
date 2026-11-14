@@ -457,6 +457,8 @@
   "problem.settings": "Settings",
   "problem.proxy": "{cube}: the proxy does not listen on {addr}",
   "problem.file": "{cube}: the settings file differs",
+  "problem.proxyOwn": "the proxy does not listen on {addr}",
+  "problem.fileOwn": "the settings file differs",
   "room.devices": "devices of the room",
   "room.devicesTitle": "Devices",
   "room.configure": "configure the room",

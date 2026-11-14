@@ -88,7 +88,7 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     before = serve_log()
     show_view(page, "system")
     panel = page.locator(PANEL)
-    panel.locator("summary").click()
+    panel.locator(":scope > summary").click()
     pairing = panel.locator(".cube-pairing")
     pairing.locator(".pair-open").click()
     pairing.locator("input[name=seconds]").fill("5")
@@ -179,7 +179,7 @@ def test_pairing_without_the_capability_cubes(page, case):
     show_view(page, "system")
     panel = page.locator(PANEL)
     assert panel.is_visible(), "the Cube's panel with pair alone"
-    panel.locator("summary").click()
+    panel.locator(":scope > summary").click()
     assert panel.locator(".pair-open").is_visible(), "Pair a device"
     assert panel.locator("form.cube-form").is_hidden(), "not the Cube's settings"
     assert page.locator(".cube-found-list").count() == 0 or page.locator(".cube-found-list").is_hidden(), "not the found Cubes"

@@ -17,7 +17,7 @@ def open_panel(page):
     """System settings → Cubes with the fake Cube's panel open; its form."""
     show_view(page, "system")
     panel = page.locator(PANEL)
-    panel.locator("summary").click()
+    panel.locator(":scope > summary").click()
     return panel, panel.locator("form.cube-form")
 
 
@@ -25,7 +25,7 @@ def test_name_saved_and_taken_back(page, case):
     show_view(page, "system")
     panel = page.locator(PANEL)
     assert panel.count() == 1, "the Cube in System settings → Cubes"
-    panel.locator("summary").click()
+    panel.locator(":scope > summary").click()
     form = panel.locator("form.cube-form")
     assert form.is_visible(), "the Cube's panel opens"
     named_buttons(page, "a Cube's panel")
@@ -85,7 +85,7 @@ def test_found_cube_added_and_removed(page):
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add serves the found Cube"
     assert page.evaluate("state.serial") == "KEQ0000100", "the selected Cube stays"
     other = page.locator(".cube-panel[data-serial='KEQ0000000']")
-    other.locator("summary").click()
+    other.locator(":scope > summary").click()
     other.locator(".remove-cube").click()
     confirm = other.locator(".confirm-box")
     assert confirm.is_visible() and other.locator(".remove-cube").count() == 0, "Remove asks in the panel"
@@ -222,7 +222,7 @@ def test_cube_facts(page, case):
     cube = page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100')")
     host, port = cube["address"].rsplit(":", 1)
     panel = page.locator(PANEL)
-    head = panel.locator("summary")
+    head = panel.locator(":scope > summary")
     assert head.locator(".mono").inner_text() == "KEQ0000100 · " + host, "the serial and the host, without the port"
     stats = head.locator(".cube-head-stats").inner_text()
     assert stats.startswith(DUTY[case.lang] + " ") and stats.count(" · ") == 2, f"duty cycle, free slots and pending in the head ({stats!r})"
@@ -261,7 +261,8 @@ PROXY_BADGE = {"en": "1 proxy not listening", "de": "1 Proxy horcht nicht"}
 
 def test_proxy_not_listening(page, case):
     """A proxy listener that does not listen (proxy_failing, stubbed):
-    the Cubes card and the Cube's panel say so in a badge, the panel
+    the Cubes card and the Cube's panel say so in a badge (the panel's
+    top line), the panel
     under the proxy address with the error and since when; an open
     panel drops the notice once the listener listens."""
     def failing(route):
@@ -274,8 +275,8 @@ def test_proxy_not_listening(page, case):
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
-        assert wait_until(page, "!!document.querySelector(\"%s .panel-badges\") && "
-                          "document.querySelector(\"%s .panel-badges\").textContent.includes(%s)"
+        assert wait_until(page, "!!document.querySelector(\"%s .cube-top-line\") && "
+                          "document.querySelector(\"%s .cube-top-line\").textContent.includes(%s)"
                           % (PANEL, PANEL, json.dumps(PROXY_BADGE[case.lang])), 5), "the panel's badge"
         assert PROXY_BADGE[case.lang] in page.locator("#sys-cubes .section-badges").inner_text(), "the card's badge"
         panel, form = open_panel(page)
@@ -312,15 +313,15 @@ def test_cube_link_stale(page, case):
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
-        assert wait_until(page, "!!document.querySelector(\"%s .panel-badges\") && "
-                          "document.querySelector(\"%s .panel-badges\").textContent.includes(%s)"
+        assert wait_until(page, "!!document.querySelector(\"%s .cube-top-line\") && "
+                          "document.querySelector(\"%s .cube-top-line\").textContent.includes(%s)"
                           % (PANEL, PANEL, json.dumps(STALE_BADGE[case.lang])), 5), "the panel's badge"
         panel, _ = open_panel(page)
         notice = panel.locator(".cube-link-state .notice")
         assert notice.count() == 1 and STALE[case.lang] in notice.inner_text(), "the notice above the facts"
         assert notice.locator(".notice-since").count() == 1, "since when"
         assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
-        panel.locator("summary").click()
+        panel.locator(":scope > summary").click()
         show_view(page, "tiles")
         assert wait_until(page, "document.querySelector('#home-notice .home-notice-detail').textContent.includes(%s)"
                           % json.dumps(STALE[case.lang]), 5), "Rooms' notice says it"
@@ -379,3 +380,47 @@ def test_cube_reboot(page, case):
         page.unroute("**/api/v1/cubes/KEQ0000100/reboot")
     page.evaluate("loadCubes()")
     show_view(page, "tiles")
+
+
+def test_cube_panel_pill(page, case):
+    """A closed Cube's head: its network sign before the name, one pill
+    with every problem, the neutral source badge, no "connected" badge; a
+    click on the pill opens its list and leaves the panel closed; the open
+    panel shows the Cube's own badges as its top line."""
+    def stale(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["connected"] = False
+                c["link"] = {"state": "stale", "since": "2026-11-13T21:41:24+01:00"}
+                c["problems"] = [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen",
+                                  "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    show_view(page, "system")
+    head = page.locator(PANEL).locator(":scope > summary")
+    assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
+    assert head.locator(".cube-pill .problems").count() == 0, "nothing wrong: no pill"
+    page.route("**/api/v1/cubes", stale)
+    try:
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "the pill"
+        uses = head.locator(".conn-sign use").evaluate_all("(us) => us.map((u) => u.getAttribute('href'))")
+        assert uses == ["#icon-net-base", "#mark-net-x"], f"the network sign with its cross ({uses})"
+        box = (head.locator(".conn-sign").bounding_box(), head.locator(".panel-name, .mono").first.bounding_box())
+        assert box[0]["x"] < box[1]["x"], "the sign before the name"
+        head.locator(".cube-pill .problems-sum").click()
+        assert head.locator(".cube-pill details").get_attribute("open") is not None, "the pill's list open"
+        assert page.locator(PANEL).get_attribute("open") is None, "the panel still closed"
+        listed = head.locator(".cube-pill .problems-list").inner_text()
+        assert "Kitchen › Radiator" in listed, f"the devices in the pill's list ({listed!r})"
+        head.locator(".cube-pill .problems-list .problem-name").first.click()
+        assert page.locator(PANEL).get_attribute("open") is None, "a click in the list leaves the panel closed"
+        page.keyboard.press("Escape")
+        head.locator(".cube-head-stats").click()
+        top = page.locator(PANEL).locator(".cube-top-line")
+        assert top.is_visible() and top.locator(".flag.bad").count() == 1, "the open panel's top line: the link, failed"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+        head.locator(".cube-head-stats").click()
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
