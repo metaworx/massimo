@@ -528,3 +528,47 @@ def test_cube_drafts_across_polls(page, case):
         page.evaluate(put, {"name": before, "proxy_serial": ""})
         page.evaluate("loadCubes()")
         panel.locator(":scope > summary").click()
+
+
+HELD_BADGE = {"en": "1 connection held", "de": "1 Verbindung gehalten"}
+LOST_BADGE = {"en": "1 not connected", "de": "1 nicht verbunden"}
+
+
+def test_card_badges_follow_the_poll(page, case):
+    """The Cubes card's badges follow every poll, a Cube's panel open or
+    not, one per link state: a held connection amber, an old connection
+    (stale) red, nothing once the Cube is back (D92-A, D93-A)."""
+    link = {"state": None}
+
+    def stub(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100" and link["state"]:
+                c["connected"] = False
+                c["link"] = {"state": link["state"], "since": "2026-11-14T20:00:00+01:00", "until": "2026-11-14T20:45:00+01:00"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    badges = page.locator("#sys-cubes .section-badges")
+    panel, _ = open_panel(page)
+    page.route("**/api/v1/cubes", stub)
+    try:
+        link["state"] = "held"
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "document.querySelector('#sys-cubes .section-badges').textContent.includes(%s)" % json.dumps(HELD_BADGE[case.lang]), 5), \
+            "held: the card says so, the panel open"
+        held = badges.locator(".flag.warn", has_text=HELD_BADGE[case.lang])
+        assert held.count() == 1 and held.locator("svg.mark-sign use").get_attribute("href") == "#mark-warn", "amber, a triangle"
+        assert badges.locator(".flag.bad").count() == 0, "not red"
+        link["state"] = "stale"
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "document.querySelector('#sys-cubes .section-badges .flag.bad') !== null", 5), "stale: red"
+        assert LOST_BADGE[case.lang] in badges.locator(".flag.bad").inner_text(), "not connected"
+        link["state"] = None
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!document.querySelector('#sys-cubes .section-badges .flag.bad') && "
+                          "!document.querySelector('#sys-cubes .section-badges').textContent.includes(%s)" % json.dumps(HELD_BADGE[case.lang]), 5), \
+            "back: no badge of the link, the panel still open"
+        assert panel.get_attribute("open") is not None, "the panel stayed open"
+    finally:
+        page.unroute("**/api/v1/cubes")
+        page.evaluate("loadCubes()")
+        panel.locator(":scope > summary").click()

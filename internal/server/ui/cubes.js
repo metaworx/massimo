@@ -37,10 +37,12 @@ function cubesVisible() {
 }
 
 // cubesPolled is called by loadCubes after every load of the list: the
-// list drawn again while no panel is open, otherwise each panel's head and
-// facts refreshed in place (fillCubeFacts), so that what is typed stays.
+// card's badges drawn again always; the list drawn again while no panel
+// is open, otherwise each panel's head and facts refreshed in place
+// (fillCubeFacts), so that what is typed stays.
 function cubesPolled() {
   if (!cubesVisible()) return;
+  renderCubesBadges();
   if (cubesUI.open.size === 0 && !cubesUI.busy) {
     renderCubes();
     return;
@@ -895,6 +897,27 @@ function foundRow(c) {
   return li;
 }
 
+// renderCubesBadges draws the Cubes card's badges from the list as the
+// last poll gave it, at every poll, a panel open or not: how many are
+// served; those not connected by their link's state, as their signs
+// show it, a cross red ("not connected"), a held connection or a reboot
+// amber; the proxies that do not listen, the Cubes found at another
+// address, those found and not served.
+function renderCubesBadges() {
+  const count = (link) => state.cubes.filter((c) => linkState(c) === link).length; // app.js
+  const lost = state.cubes.filter((c) => linkSign(c) === "bad").length; // app.js
+  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
+  if (lost) badges.push(badgeEl(tn("cubes.badge.disconnected", lost), "bad"));
+  if (count("held")) badges.push(badgeEl(tn("cubes.badge.held", count("held")), "warn"));
+  if (count("rebooting")) badges.push(badgeEl(tn("cubes.badge.rebooting", count("rebooting")), "warn"));
+  const failing = proxyFailing(state.cubes);
+  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
+  const elsewhere = state.cubes.filter((c) => c.found_elsewhere).length;
+  if (elsewhere) badges.push(badgeEl(tn("cubes.badge.elsewhere", elsewhere), "warn"));
+  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
+  sectionBadges($("sys-cubes"), badges);
+}
+
 // renderCubes draws System settings → Cubes from state.cubes and state.found.
 function renderCubes() {
   const box = $("cubes-list");
@@ -902,15 +925,7 @@ function renderCubes() {
   clear(box);
   if (!state.cubes.length) box.appendChild(textEl("p", t("cubes.none"), "muted small"));
   for (const c of state.cubes) box.appendChild(cubePanel(c));
-  const off = state.cubes.filter((c) => !c.connected).length;
-  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
-  if (off) badges.push(badgeEl(tn("cubes.badge.disconnected", off), "bad"));
-  const failing = proxyFailing(state.cubes);
-  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
-  const elsewhere = state.cubes.filter((c) => c.found_elsewhere).length;
-  if (elsewhere) badges.push(badgeEl(tn("cubes.badge.elsewhere", elsewhere), "warn"));
-  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
-  sectionBadges($("sys-cubes"), badges);
+  renderCubesBadges();
   if (state.found.length) {
     box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title needs-cubes"));
     const ul = elem("ul", "cube-found-list needs-cubes");
