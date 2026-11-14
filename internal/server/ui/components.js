@@ -133,10 +133,12 @@ function sendWhenChanged(form, changed, { btn, lazy } = {}) {
 // fill-info. A warning or a failure (warn, bad, fill-bad) is set in bold
 // and led by its mark, a triangle or a cross, so that it reads without
 // its colour (markEl); the others are states, in the regular weight.
-function badgeEl(text, kind) {
+// key names the badge across redraws (keepBlink): by default its kind
+// and text.
+function badgeEl(text, kind, key) {
   const b = textEl("span", text, "flag " + kind);
   const state = BADGE_STATE[kind];
-  if (state) b.prepend(markEl(state));
+  if (state) b.prepend(markEl(state, key || (text && kind + ":" + text)));
   return b;
 }
 
@@ -189,8 +191,9 @@ const SIGNS = {
 // "warn" with a triangle, "bad" with a cross, coloured by the state
 // (tone-…) where it is one; "open" (a window open, not yet for long)
 // plain in the accent. The mark is a part of its own (use.mark), which
-// is what blinks (html.blink-on, blink-first). cls adds classes.
-function signEl(kind, state, cls) {
+// is what blinks (html.blink-on, blink-first). cls adds classes; key
+// names the sign across redraws (keepBlink).
+function signEl(kind, state, cls, key) {
   const s = SIGNS[kind];
   const mark = s[state];
   const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
@@ -199,16 +202,40 @@ function signEl(kind, state, cls) {
     use.setAttribute("href", "#" + mark);
     use.setAttribute("class", state === "bad" ? "mark x" : "mark");
     svg.appendChild(use);
+    keepBlink(use, key);
   }
   return svg;
 }
 
 // markEl is a mark alone, the triangle of a warning or the cross of a
-// failure, for a badge or a list.
-function markEl(state) {
+// failure, for a badge or a list; key as for keepBlink.
+function markEl(state, key) {
   const svg = iconEl(state === "bad" ? "mark-x" : "mark-warn", "ni mark-sign tone-" + state);
   svg.firstChild.setAttribute("class", state === "bad" ? "mark x" : "mark");
+  keepBlink(svg.firstChild, key);
   return svg;
+}
+
+// marksSeen are when each mark was first drawn and last drawn, by key.
+const marksSeen = new Map();
+
+// keepBlink keeps a mark's blinking where it was across the redraws that
+// make a new element of it: its animation starts back at when the mark
+// with this key was first drawn, so that "at first" blinks five seconds
+// from the sign's coming and not from each redraw, and "on" does not
+// jump. A mark not drawn for a minute counts as new again. Without a
+// key, a mark is new each time.
+function keepBlink(use, key) {
+  if (!key) return;
+  const now = performance.now();
+  let seen = marksSeen.get(key);
+  if (!seen || now - seen.last > 60000) {
+    seen = { first: now, last: now };
+    if (marksSeen.size > 500) marksSeen.clear();
+    marksSeen.set(key, seen);
+  }
+  seen.last = now;
+  use.style.animationDelay = -((now - seen.first) / 1000).toFixed(2) + "s";
 }
 
 // iconButton is a button that shows an icon of the page only, so its
@@ -900,8 +927,9 @@ function problemsEl(entries, label) {
   summary.className = "problems-sum";
   summary.title = label;
   summary.setAttribute("aria-label", label);
+  const who = entries.filter((e) => e.items.length).map((e) => e.title + " " + (e.sub || "")).join("|");
   for (const k of kinds.values()) {
-    summary.appendChild(k.sign ? signEl(k.sign, k.tone) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
+    summary.appendChild(k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
   }
   const list = elem("div", "menu-items problems-list");
   for (const e of entries) {
@@ -914,7 +942,7 @@ function problemsEl(entries, label) {
     for (const it of e.items) {
       // A warning's or a failure's badge is led by its mark, which takes
       // the place of its kind's icon; another state keeps the icon.
-      const b = badgeEl("", it.tone || "mode");
+      const b = badgeEl("", it.tone || "mode", [e.title, e.sub, it.kind, it.text].join(":"));
       if (it.icon && !BADGE_STATE[it.tone]) b.appendChild(iconEl(it.icon, "ni"));
       b.appendChild(document.createTextNode(it.text));
       const age = it.at ? ageEl(it.at, it.stale) : null; // app.js

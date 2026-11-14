@@ -300,6 +300,33 @@ function reapplyTheme() {
   applyTheme(state.settings.theme, state.settings.scheme);
 }
 
+// BLINK_MODES are the choices of the setting "Blinking signs": as the
+// system (blinking unless it asks for reduced motion), always, for the
+// first five seconds a sign is shown, never.
+const BLINK_MODES = ["system", "on", "first", "off"];
+
+// REDUCED_MOTION is the system's wish for less motion, which "system"
+// follows as it changes.
+const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)");
+
+// applyBlink sets the page's class for the marks' blinking (style.css):
+// blink-on, blink-first or none.
+function applyBlink() {
+  let m = state.settings.blink;
+  if (m === "system") m = REDUCED_MOTION.matches ? "off" : "on";
+  const root = document.documentElement;
+  root.classList.toggle("blink-on", m === "on");
+  root.classList.toggle("blink-first", m === "first");
+  const sel = $("blink-select");
+  if (sel) sel.value = state.settings.blink;
+}
+
+// chooseBlink is the setting's choice, kept as the other settings are.
+function chooseBlink(mode) {
+  setSetting("blink", BLINK_MODES.includes(mode) ? mode : "system"); // app.js
+  applyBlink();
+}
+
 // chooseMode and chooseScheme are the settings' choices, kept as the
 // other settings are (app.js setSetting): for this device, or as the
 // user's, in the browser and for a signed-in user on the server.
@@ -334,6 +361,7 @@ function applyAppearance() {
   renderSchemeSelect();
   if (themeState.draft) renderSchemeEditor();
   reapplyTheme();
+  applyBlink();
 }
 
 // schemeMessage shows the result of a save, delete or import under the
@@ -344,6 +372,8 @@ function schemeMessage(text, ok) {
 
 function initAppearance() {
   $("theme-select").addEventListener("change", (ev) => chooseMode(ev.target.value));
+  $("blink-select").addEventListener("change", (ev) => chooseBlink(ev.target.value));
+  REDUCED_MOTION.addEventListener("change", applyBlink);
   $("scheme-select").addEventListener("change", (ev) => {
     closeSchemeEditor();
     schemeMessage("");

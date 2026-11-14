@@ -968,6 +968,13 @@ button.subtle { color: var(--muted); }
 /* A sign's mark (components.js signEl, markEl), a part of its own: a
    cross drawn heavier than the icon, so that it reads at a glance. */
 .ni use.mark.x { stroke-width: 2.4; }
+/* What needs attention blinks, as each person chooses ("Blinking signs",
+   theme.js applyBlink): an amber triangle and a red cross, the mark
+   alone; always, or five times when it comes (its start kept across
+   redraws, components.js keepBlink). */
+@keyframes markblink { 0%, 100% { opacity: 1; } 50% { opacity: 0.12; } }
+html.blink-on .tone-warn use.mark, html.blink-on .tone-bad use.mark { animation: markblink 1.1s ease-in-out infinite; }
+html.blink-first .tone-warn use.mark, html.blink-first .tone-bad use.mark { animation: markblink 1s ease-in-out 5; }
 .tone-info { color: var(--fill-info); }
 .menu-items.problems-list { min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 2px 0; gap: 0; }
 .problem-entry { display: grid; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }

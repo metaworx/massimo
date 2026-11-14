@@ -21,7 +21,7 @@ const state = {
   me: null, // GET /api/v1/me: the mode, the user, the role, the capabilities, setup (login.js)
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
@@ -82,11 +82,11 @@ async function readToken() {
 // the capability preferences also keeps on the server, so that it follows
 // the user to every browser (login.js, loadPreferences); a setting can be
 // kept for this device only instead, in massimo.device, which then wins.
-const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme"];
+const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme", "blink"];
 
 // SETTING_LABELS name each setting's row, for its "only on this device"
 // switch.
-const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme" };
+const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme", blink: "appearance.blink" };
 
 // SETTING_STORE writes a value as massimo.<key> has always held it; the
 // default is kept as no entry, but for the poll and the expert switch.
@@ -97,6 +97,7 @@ const SETTING_STORE = {
   lang: (v) => (v === "auto" ? null : v),
   theme: (v) => (v === "system" ? null : v),
   scheme: (v) => (v === "massimo" ? null : v),
+  blink: (v) => (v === "system" ? null : v),
 };
 
 // validSetting is a value of a setting when it is one, else undefined.
@@ -116,6 +117,8 @@ function validSetting(key, v) {
       return v === "system" || v === "light" || v === "dark" ? v : undefined;
     case "scheme":
       return typeof v === "string" && v !== "" ? v : undefined;
+    case "blink":
+      return BLINK_MODES.includes(v) ? v : undefined; // theme.js
   }
   return undefined;
 }
@@ -123,11 +126,11 @@ function validSetting(key, v) {
 // storedSettings are the user's values as the browser keeps them, the
 // defaults where it keeps none.
 function storedSettings() {
-  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo" };
+  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" };
   const poll = validSetting("poll", readStored("massimo.poll"));
   if (poll !== undefined) s.poll = poll;
   s.expert = readStored("massimo.expert") === "1";
-  for (const k of ["clock", "lang", "theme", "scheme"]) {
+  for (const k of ["clock", "lang", "theme", "scheme", "blink"]) {
     const v = validSetting(k, readStored("massimo." + k));
     if (v !== undefined) s[k] = v;
   }
