@@ -829,6 +829,10 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 	if len(cubes) != 1 || cubes[0]["address"] != proxyAddr || cubes[0]["connected"] != true {
 		t.Fatalf("cubes %v", cubes)
 	}
+	// Where discovery found it, beside where the server connects.
+	if cubes[0]["found_address"] != "127.0.0.2" {
+		t.Fatalf("found_address %v, want the Cube's own 127.0.0.2", cubes[0]["found_address"])
+	}
 	if n := strings.Count(log.String(), `msg="cube address from discovery"`); n != 1 {
 		t.Errorf("%d address changes in three runs, want 1:\n%s", n, log.String())
 	}

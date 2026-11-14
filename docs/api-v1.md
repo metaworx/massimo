@@ -1172,7 +1172,10 @@ then every Cube discovery found on the LAN that is not configured:
 
 `configured` tells the two apart.
 A configured Cube has the fields below;
-`mac` and `last_seen` (when it last answered discovery) only once discovery has seen it.
+`mac`, `last_seen` (when it last answered discovery) and `found_address` only once
+discovery has seen it:
+`found_address` is the host it answered from, which differs from `address`
+where the server connects through a proxy or to a fixed address the Cube has left.
 A found Cube has only the fields shown: `address` is the IP it answered from,
 its own where a massimo proxy answers for it too (docs/proxy.md),
 and `proxies` the other addresses that answered for its serial in the latest run;
