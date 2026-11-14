@@ -156,3 +156,42 @@ def test_channel_fixed_by_the_variable(page):
     assert sel.input_value() == "nightly", "the variable's channel is shown"
     assert "MASSIMO_UPDATE_CHANNEL" in page.locator("#update-channel-note").inner_text(), "the note names the variable"
     unroute_channel(page)
+
+
+def test_last_updates(page):
+    """Software update lists the last three updates under the version
+    lines: the newest still under way with who started it, one from
+    outside Massimo through apt, one the helper rolled back; a fourth is
+    left out, and the list is gone without a history."""
+    show_view(page, "system")
+    history = [
+        {"at": "2026-11-14T18:00:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.0.2", "to": "v0.0.3"},
+        {"at": "2026-11-10T07:00:00Z", "outside": True, "manager": "apt", "from": "v0.0.1", "reached": "v0.0.2",
+         "reached_at": "2026-11-10T07:00:00Z"},
+        {"at": "2026-11-05T12:00:00Z", "by": {"name": "ben"}, "from": "v0.0.1", "to": "v0.0.2", "reached": "v0.0.2",
+         "reached_at": "2026-11-05T12:01:00Z", "result": "rolled-back"},
+        {"at": "2026-11-01T12:00:00Z", "from": "v0.0.0", "to": "v0.0.1", "reached": "v0.0.1", "reached_at": "2026-11-01T12:01:00Z"},
+    ]
+    body = json.loads(update_json("up-to-date", "v0.0.1-test", False))
+    body["history"] = history
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    lines = page.locator("#update-history-list li")
+    assert wait_until(page, "document.querySelectorAll('#update-history-list li').length === 3", 5), "three lines"
+    texts = lines.all_inner_texts()
+    expect = [
+        page.evaluate("[t('update.history.running', {version: 'v0.0.3'}), t('update.history.by', {name: 'Anna'})]"),
+        page.evaluate("['v0.0.2', t('update.history.outsideWith', {manager: 'apt'})]"),
+        page.evaluate("['v0.0.2', t('update.history.by', {name: 'ben'})]"),
+    ]
+    for text, (what, who) in zip(texts, expect):
+        assert text.startswith(what) and text.endswith(who), "a line: %r" % text
+    assert page.locator("#update-history h4").is_visible(), "the heading"
+
+    page.unroute("**/api/v1/update*")
+    page.route("**/api/v1/update*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", False)))
+    page.locator("#update-check").click()
+    assert wait_until(page, "document.getElementById('update-history').classList.contains('hidden')", 5), \
+        "no list without a history"
+    page.unroute("**/api/v1/update*")

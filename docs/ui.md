@@ -726,6 +726,13 @@ to the top of the page.
   (packaging/README.md, "Homebrew").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
+  **Last updates** lists the last three under the version lines:
+  the version reached,
+  or the one asked for with "under way" until the next start,
+  when, and who started it,
+  or "outside Massimo" with apt or brew where Massimo did not start it;
+  one the helper ended without its version says how it ended (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
 - **Maintenance** (with `restart`, `reboot` for its reboot,
   or `settings` for its announcement and its last two parts):
   **Restart the server**
