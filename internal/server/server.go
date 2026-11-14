@@ -218,6 +218,9 @@ type Options struct {
 	// requests go as host:port (default the broadcast addresses), exist
 	// for tests.
 	DiscoveryWait time.Duration
+	// Announce is this run's announcement on the LAN, for the setting
+	// announce in GET /api/v1/settings.
+	Announce AnnounceState
 	// FindIntegrations asks the LAN for the installations of integrations
 	// (integrations_found.go), at the start and every 30 minutes; nil
 	// looks for none.

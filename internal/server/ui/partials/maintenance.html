@@ -1,4 +1,4 @@
-<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again (with restart), the computer's reboot (with reboot), the store and the settings in effect (with settings), update.js. -->
+<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again (with restart), the announcement on the LAN at the next start (with settings), the computer's reboot (with reboot), the store and the settings in effect (with settings), update.js. -->
 <section id="sys-maint" class="tile section-card half maint-settings needs-maintenance" aria-labelledby="sys-maint-h">
   <header class="tile-head section-head">
     <h3 id="sys-maint-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-maint-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="maint.title">Maintenance</span></button></h3>
@@ -13,6 +13,18 @@
       <div class="actions"><button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button></div>
     </div>
     <p id="restart-pending" class="notice small hidden needs-restart"></p>
+    <div class="announce-row needs-settings">
+      <div class="field">
+        <label for="announce-mode" data-i18n="maint.announce">Announce on the LAN</label>
+        <select id="announce-mode" class="field-control">
+          <option value="auto" data-i18n="maint.announceAuto">Automatic</option>
+          <option value="on" data-i18n="maint.announceOn">On</option>
+          <option value="off" data-i18n="maint.announceOff">Off</option>
+        </select>
+      </div>
+      <p id="announce-text" class="muted small field-hint"></p>
+      <p id="announce-msg" class="small cubes-msg hidden" role="status"></p>
+    </div>
     <div class="action-row reboot needs-reboot">
       <div>
         <p class="action-title" data-i18n="maint.reboot">Reboot the computer</p>

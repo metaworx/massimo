@@ -102,6 +102,17 @@ var durationSettings = []durationSetting{
 		inEffect: func(s *Server) time.Duration { _, a := s.windowLimits(); return a }},
 }
 
+// AnnounceState is a run's announcement on the LAN: whether the server
+// announces itself, and what decided it where the setting announce did
+// not (-announce or MASSIMO_ANNOUNCE).
+type AnnounceState struct {
+	On      bool
+	FixedBy string
+}
+
+// announceValues are the setting announce's values.
+var announceValues = []string{store.AnnounceAuto, store.AnnounceOn, store.AnnounceOff}
+
 // settingView is one setting as GET /api/v1/settings shows it.
 type settingView struct {
 	Value    string `json:"value"`               // the store's value, or the default
@@ -111,6 +122,9 @@ type settingView struct {
 	// Applies is "now" or "restart"; "" for the read-only ones.
 	Applies  string `json:"applies,omitempty"`
 	ReadOnly bool   `json:"read_only,omitempty"`
+	// FixedBy names what decides this run's value instead of the setting:
+	// a flag or a variable of the env file (announce).
+	FixedBy string `json:"fixed_by,omitempty"`
 }
 
 // fmtDuration writes a duration as Go does, without the zero units at
@@ -180,6 +194,16 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 	}
 	flavour := s.opts.Update.Flavour
 	out[store.UpdateChannelKey] = settingView{Value: cmp.Or(ch, flavour), Default: flavour, Set: ch != "", InEffect: s.updateChannel(r.Context()), Applies: "now"}
+	ann, err := st.SettingString(r.Context(), store.AnnounceKey)
+	if err != nil {
+		return nil, fail(http.StatusInternalServerError, "%v", err)
+	}
+	inEffect := store.AnnounceOff
+	if s.opts.Announce.On {
+		inEffect = store.AnnounceOn
+	}
+	out[store.AnnounceKey] = settingView{Value: cmp.Or(ann, store.AnnounceAuto), Default: store.AnnounceAuto, Set: ann != "", InEffect: inEffect, Applies: "restart",
+		FixedBy: s.opts.Announce.FixedBy}
 	out[store.NodeIDKey] = settingView{Value: st.NodeID(), Set: true, ReadOnly: true}
 	out[store.TenantIDKey] = settingView{Value: tenant, Set: true, ReadOnly: true}
 	return out, nil
@@ -232,6 +256,18 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		}
 		raw := req[k]
 		isNull := len(raw) == 0 || string(raw) == "null"
+		if k == store.AnnounceKey {
+			if isNull {
+				writes = append(writes, write{key: k, clear: true})
+				continue
+			}
+			var v string
+			if json.Unmarshal(raw, &v) != nil || !slices.Contains(announceValues, v) {
+				return fail(http.StatusBadRequest, "%s: want one of %s, or null for auto", k, strings.Join(announceValues, ", "))
+			}
+			writes = append(writes, write{key: k, name: &v})
+			continue
+		}
 		if k == store.UpdateChannelKey {
 			if isNull {
 				writes = append(writes, write{key: k, clear: true})

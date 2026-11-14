@@ -130,7 +130,15 @@ type Config struct {
 // (internal/announce). A server without a store has no node, and
 // announces nothing.
 type Announce struct {
+	// On is the announcement given by -announce or MASSIMO_ANNOUNCE;
+	// with Auto, the store's setting announce decides instead (open).
 	On bool
+	// Auto leaves it to the setting, auto where it is none: on unless the
+	// server listens on a loopback address.
+	Auto bool
+	// FixedBy names what gave On where Auto is off: -announce or
+	// MASSIMO_ANNOUNCE, for the settings' fixed_by.
+	FixedBy string
 	// Name is the instance name; "" takes the box's host name.
 	Name string
 	// Version is the TXT record's v, the build's version alone, such as
@@ -139,6 +147,43 @@ type Announce struct {
 	// PublicURL is the TXT record's url where the clients reach the API
 	// at another address than the server's own (MASSIMO_PUBLIC_URL).
 	PublicURL string
+}
+
+// announceSetting is the announcement the store's setting asks for:
+// on, off, or auto, on unless the server listens on a loopback address.
+// A value that is none of them is logged and taken as auto; without a
+// store the server announces nothing anyway.
+func announceSetting(ctx context.Context, st *store.Store, listen string, log *slog.Logger) bool {
+	v := store.AnnounceAuto
+	if st != nil {
+		s, err := st.SettingString(ctx, store.AnnounceKey)
+		switch {
+		case err != nil:
+			log.Warn("setting ignored", "key", store.AnnounceKey, "error", err)
+		case s == store.AnnounceOn, s == store.AnnounceOff:
+			v = s
+		case s != "" && s != store.AnnounceAuto:
+			log.Warn("setting ignored", "key", store.AnnounceKey, "value", s, "want", "auto, on or off")
+		}
+	}
+	switch v {
+	case store.AnnounceOn:
+		return true
+	case store.AnnounceOff:
+		return false
+	}
+	return !LoopbackListen(listen)
+}
+
+// LoopbackListen says whether the listen address is reachable from this
+// machine alone: localhost or a loopback address.
+func LoopbackListen(listen string) bool {
+	host := ListenHost(listen)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // browseHomeAssistant asks the LAN for Home Assistant; a test replaces
@@ -239,6 +284,10 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		}
 	}
 
+	if cfg.Announce.Auto {
+		cfg.Announce.On = announceSetting(ctx, st, cfg.Listen, log)
+	}
+
 	su, err := setupCubes(ctx, st, cfg, log)
 	if err != nil {
 		return nil, err
@@ -250,7 +299,8 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
-		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find})
+		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find,
+		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy}})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return nil, err

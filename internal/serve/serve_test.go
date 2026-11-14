@@ -387,3 +387,62 @@ func TestOpenDiscoveryListen(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The setting announce decides where neither -announce nor
+// MASSIMO_ANNOUNCE did: on, off, or auto by the listener's address; a
+// value that is none of them is auto, with a line in the log.
+func TestAnnounceSetting(t *testing.T) {
+	st := testStore(t, t.TempDir())
+	ctx := context.Background()
+	var log syncLog
+	logger := slog.New(slog.NewTextHandler(&log, nil))
+	for _, c := range []struct {
+		value, listen string
+		want          bool
+	}{
+		{"", "127.0.0.1:8099", false}, {"", "0.0.0.0:8099", true}, {"", "localhost:8099", false},
+		{"auto", ":8099", true}, {"on", "127.0.0.1:8099", true}, {"off", "0.0.0.0:8099", false}, {"sometimes", "[::1]:8099", false},
+	} {
+		if c.value == "" {
+			st.DeleteSetting(ctx, store.AnnounceKey)
+		} else if err := st.SetSetting(ctx, store.AnnounceKey, c.value); err != nil {
+			t.Fatal(err)
+		}
+		if got := announceSetting(ctx, st, c.listen, logger); got != c.want {
+			t.Errorf("%q on %s: %v, want %v", c.value, c.listen, got, c.want)
+		}
+	}
+	if !strings.Contains(log.String(), `msg="setting ignored" key=announce value=sometimes`) {
+		t.Fatalf("log:\n%s", log.String())
+	}
+	if announceSetting(ctx, nil, "0.0.0.0:8099", logger) != true {
+		t.Fatal("without a store: auto")
+	}
+}
+
+// With Announce.Auto, a server on the loopback announces itself where the
+// setting says on, and the settings show it in effect.
+func TestRunAnnouncesBySetting(t *testing.T) {
+	clearCubeEnv(t)
+	got, _ := fakeAnnounce(t, nil)
+	dir := t.TempDir()
+	st := testStore(t, dir)
+	if err := st.SetSetting(context.Background(), store.AnnounceKey, "on"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: dir, Proxies: []string{"off"}, DiscoverInterval: &never,
+		Announce: Announce{Auto: true}, Logger: quietLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runInstance(t, inst)
+	select {
+	case <-got:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not announced with the setting on")
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+}

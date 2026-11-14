@@ -1572,6 +1572,10 @@ massimo-week-program { display: contents; }
 .integrations-found-list li { overflow-wrap: anywhere; }
 .integration-request .kv dd:first-of-type { font-size: 1.3rem; letter-spacing: 0.15em; }
 .user-integration-links { margin: 0 0 8px; }
+/* System settings → Maintenance: the announcement on the LAN (update.js) */
+.announce-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.announce-row p { margin: 0; overflow-wrap: anywhere; }
+.announce-row .field-hint { margin-top: 2px; }
 .login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }

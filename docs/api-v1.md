@@ -1562,6 +1562,12 @@ until someone with `users` sets a password for it.
 `integrations.requests`, true by default, says whether integrations may
 ask to be registered (`POST /api/v1/integrations/requests`), and applies
 at once; the announcement's `reg` says it on the LAN.
+`announce`, `auto` by default, says whether the server announces itself
+on the LAN by mDNS (README.md, "Server"): `on`, `off`,
+or `auto`, on unless it listens on a loopback address;
+it applies at the next start, `in_effect` saying `on` or `off` for this
+run, and where `-announce` or `MASSIMO_ANNOUNCE` decides instead,
+`fixed_by` names it.
 `update.channel` is the update channel (see `GET /api/v1/update`),
 one of `devel`, `nightly`, `alpha`, `beta` and `stable`,
 the build's flavour by default, and applies at once;
@@ -1571,7 +1577,7 @@ the build's flavour by default, and applies at once;
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login` and `integrations.requests` `true` or `false`,
-and `update.channel` a name.
+`announce` `auto`, `on` or `off`, and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h,
 `window_warn_after` and `window_alert_after` 1m to 24h.

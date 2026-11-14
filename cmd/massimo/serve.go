@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
@@ -87,7 +86,7 @@ func runServe(args []string) error {
 	allowReboot, rebootErr := newSwitchFlag("allow-reboot", rebootVar, os.Getenv(rebootVar))
 	fs.Var(allowReboot, "allow-reboot", "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", "+switchHelp("allow-reboot")+"; else off)")
 	announceOn, announceErr := newSwitchFlag("announce", env.Announce, os.Getenv(env.Announce))
-	fs.Var(announceOn, "announce", "announce the server on the LAN by mDNS as "+announce.ServiceType+", with its node, version and certificate, for massimo discover and the apps (default "+env.Announce+", "+switchHelp("announce")+"; else on when -listen is reachable from the LAN, off on a loopback address)")
+	fs.Var(announceOn, "announce", "announce the server on the LAN by mDNS as "+announce.ServiceType+", with its node, version and certificate, for massimo discover and the apps (default "+env.Announce+", "+switchHelp("announce")+"; else the setting announce of the store, System settings → Maintenance, whose auto is on when -listen is reachable from the LAN, off on a loopback address)")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
 	fs.Usage = func() {
@@ -176,8 +175,14 @@ func runServe(args []string) error {
 	if announceErr != nil && !given["announce"] {
 		return fmt.Errorf("serve: %w", announceErr)
 	}
-	if !announceOn.set {
-		announceOn.on = !loopbackListen(*listen)
+	// Given, the flag or the variable decides; otherwise the store's
+	// setting, once serve has opened it (serve.Announce.Auto).
+	announceBy := ""
+	if announceOn.set {
+		announceBy = env.Announce
+		if given["announce"] {
+			announceBy = "-announce"
+		}
 	}
 	tlsCfg := serve.TLS{Mode: *tlsFlag, Cert: *tlsCert, Key: *tlsKey, Names: *tlsNames, ACMEEmail: *acmeEmail, ACMEDirectory: *acmeDirectory, HTTP: *tlsHTTP, DNSHook: *acmeDNSHook}
 	tlsInEffect := serve.TLSMode(*tlsFlag, *tlsCert, *tlsKey)
@@ -228,7 +233,7 @@ func runServe(args []string) error {
 		Proxies: proxies, ProxySerial: *proxySerial, ShowHidden: showAll || showHidden, Token: *token, DiscoveryTargets: discoverTargets, DiscoveryListen: *discoverListen,
 		TLS: tlsCfg, HSTSDays: hsts, TrustedProxies: trusted, Update: upd, Reboot: reboot, Install: installKind(pkg, packaged, currentProcess()),
 		Restart: server.RestartOptions{By: restartFor, Blocked: restartBlocked, Restart: rs.restart}, LogAttrs: []any{"sighup", hup}, Logger: root,
-		Announce: serve.Announce{On: announceOn.on, Version: buildVersion(), PublicURL: os.Getenv(env.PublicURL)}, CubeHold: *cubeHold}
+		Announce: serve.Announce{On: announceOn.on, Auto: !announceOn.set, FixedBy: announceBy, Version: buildVersion(), PublicURL: os.Getenv(env.PublicURL)}, CubeHold: *cubeHold}
 	if *cubeHold <= 0 {
 		cfg.CubeHold = -1 // none
 	}
@@ -299,14 +304,7 @@ func runServe(args []string) error {
 
 // loopbackListen says whether the listen address is reachable from this
 // box alone: a loopback address or localhost, not every interface.
-func loopbackListen(listen string) bool {
-	host := serve.ListenHost(listen)
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
+func loopbackListen(listen string) bool { return serve.LoopbackListen(listen) }
 
 // serveReboot finds who reboots this server's computer (reboot.go) and
 // what asks for it; a request a helper never took is removed first.

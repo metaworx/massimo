@@ -460,3 +460,35 @@ func TestSettingsAPI(t *testing.T) {
 		t.Fatalf("log.keep_days back to the default: %d %v", code, keep(out))
 	}
 }
+
+// The setting announce: its value, this run's announcement as in_effect,
+// what fixes it, at the next start; auto, on and off taken, null back to
+// auto, anything else refused.
+func TestAnnounceSettingAPI(t *testing.T) {
+	_, ts, _, st := startStored(t, Options{Announce: AnnounceState{On: true, FixedBy: "MASSIMO_ANNOUNCE"}})
+	code, out := do(t, ts, "GET", "/api/v1/settings", "")
+	ann, _ := out[store.AnnounceKey].(map[string]any)
+	if code != 200 || ann["value"] != "auto" || ann["default"] != "auto" || ann["set"] != false || ann["in_effect"] != "on" || ann["applies"] != "restart" ||
+		ann["fixed_by"] != "MASSIMO_ANNOUNCE" {
+		t.Fatalf("get %d %v", code, ann)
+	}
+	code, out = do(t, ts, "PUT", "/api/v1/settings", `{"announce":"off"}`)
+	ann, _ = out[store.AnnounceKey].(map[string]any)
+	if code != 200 || ann["value"] != "off" || ann["set"] != true || ann["in_effect"] != "on" {
+		t.Fatalf("put off %d %v", code, ann)
+	}
+	if v, _ := st.SettingString(context.Background(), store.AnnounceKey); v != "off" {
+		t.Fatalf("stored %q", v)
+	}
+	for _, bad := range []string{`{"announce":"yes"}`, `{"announce":true}`, `{"announce":""}`} {
+		if code, out := do(t, ts, "PUT", "/api/v1/settings", bad); code != 400 {
+			t.Errorf("%s: %d %v", bad, code, out)
+		}
+	}
+	if code, _ := do(t, ts, "PUT", "/api/v1/settings", `{"announce":null}`); code != 200 {
+		t.Fatalf("null: %d", code)
+	}
+	if v, _ := st.SettingString(context.Background(), store.AnnounceKey); v != "" {
+		t.Fatalf("not cleared: %q", v)
+	}
+}

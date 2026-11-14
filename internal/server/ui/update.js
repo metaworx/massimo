@@ -846,6 +846,60 @@ async function loadSystemInfo() {
   $("info-client").textContent = v.client_ip || "–";
 }
 
+// --- the announcement on the LAN (the setting announce) ----------------
+
+// announceUI keeps the setting as GET /api/v1/settings answered it.
+const announceUI = { v: null };
+
+// renderAnnounce shows the choice and what it does: whether the server
+// announces itself now, that a change waits for the next start, or, where
+// -announce or MASSIMO_ANNOUNCE decides, the choice read-only with what
+// sets it (AP AnnounceSetting, D15-A).
+function renderAnnounce() {
+  const v = announceUI.v;
+  const sel = $("announce-mode");
+  const text = $("announce-text");
+  if (!v) return;
+  sel.value = v.value || "auto";
+  sel.disabled = !!v.fixed_by;
+  const now = t(v.in_effect === "on" ? "maint.announceNowOn" : "maint.announceNowOff");
+  if (v.fixed_by) {
+    text.textContent = t("maint.announceFixed", { by: v.fixed_by }) + " " + now;
+    return;
+  }
+  const wants = v.value === "on" ? "on" : v.value === "off" ? "off" : "";
+  const waits = wants && wants !== v.in_effect;
+  text.textContent = t("maint.announceHint") + " " + (waits ? t("maint.announceWaits") : now);
+}
+
+// loadAnnounce reads the setting, for a holder of settings.
+async function loadAnnounce() {
+  if (!hasCap("settings")) return;
+  try {
+    const all = (await api("GET", "api/v1/settings")) || {};
+    announceUI.v = all.announce || null;
+    renderAnnounce();
+  } catch (e) {
+    showResult($("announce-msg"), t("maint.cannotAsk", { error: e.message }), false);
+  }
+}
+
+// setAnnounce stores the choice; auto is the default, sent as null.
+async function setAnnounce() {
+  const sel = $("announce-mode");
+  const value = sel.value;
+  sel.disabled = true;
+  try {
+    const all = (await api("PUT", "api/v1/settings", { announce: value === "auto" ? null : value })) || {};
+    announceUI.v = all.announce || announceUI.v;
+    showResult($("announce-msg"), t("maint.announceSaved"), true);
+  } catch (e) {
+    showResult($("announce-msg"), t("maint.announceFailed", { error: e.message }), false);
+  }
+  sel.disabled = false;
+  renderAnnounce();
+}
+
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
@@ -854,7 +908,10 @@ function initUpdate() {
   $("settings-reload").addEventListener("click", reloadSettings);
   $("reboot-btn").addEventListener("click", startReboot);
   $("reboot-cancel").addEventListener("click", cancelReboot);
+  $("announce-mode").addEventListener("change", setAnnounce);
   onView("system", () => {
+    showResult($("announce-msg"), "");
+    loadAnnounce();
     loadUpdate(false).then(loadChannel);
     loadRestart();
     loadReboot();
