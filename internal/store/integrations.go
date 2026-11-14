@@ -631,3 +631,75 @@ func (s *Store) integrationUserTx(ctx context.Context, tx *sql.Tx, i Integration
 		}
 	}
 }
+
+// ErrBadLink is a link the store refuses: to a user of an integration,
+// or of the system user.
+var ErrBadLink = errors.New("store: an integration's user links to a Massimo user of its own")
+
+// IntegrationIdentities lists an integration's users, the system user
+// first, then by name.
+func (s *Store) IntegrationIdentities(ctx context.Context, integrationID int64) ([]IntegrationIdentity, error) {
+	return s.integrationIdentities(ctx, `integration_id = ?`, integrationID)
+}
+
+// AllIntegrationIdentities lists every integration's users.
+func (s *Store) AllIntegrationIdentities(ctx context.Context) ([]IntegrationIdentity, error) {
+	return s.integrationIdentities(ctx, `integration_id IS NOT NULL`)
+}
+
+func (s *Store) integrationIdentities(ctx context.Context, where string, args ...any) ([]IntegrationIdentity, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE `+where+`
+		ORDER BY subject <> 'system', lower(name), id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: integration users: %w", err)
+	}
+	defer rows.Close()
+	out := []IntegrationIdentity{}
+	for rows.Next() {
+		i, err := scanIntegrationIdentity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store: integration users: %w", err)
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+// LinkIntegrationUser links an integration's user to a Massimo user, its
+// calls then acting as that user; userID 0 unlinks it, its calls acting
+// as the user made at its first call again. The system user stays its
+// own, and a user of an integration is no Massimo user to link to
+// (ErrBadLink).
+func (s *Store) LinkIntegrationUser(ctx context.Context, integrationID int64, subject string, userID, by int64) (IntegrationIdentity, error) {
+	if err := s.writable(); err != nil {
+		return IntegrationIdentity{}, err
+	}
+	id, err := scanIntegrationIdentity(s.db.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE integration_id = ? AND subject = ?`,
+		integrationID, subject))
+	if errors.Is(err, sql.ErrNoRows) {
+		return IntegrationIdentity{}, fmt.Errorf("%w: user %s", ErrNoIntegration, subject)
+	}
+	if err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	target := id.OwnUserID
+	if userID != 0 {
+		if subject == "system" {
+			return IntegrationIdentity{}, fmt.Errorf("%w: the system user", ErrBadLink)
+		}
+		var ofIntegration int
+		if err := s.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM user_identities WHERE own_user_id = ?) + (SELECT count(*) FROM integrations WHERE user_id = ?)`,
+			userID, userID).Scan(&ofIntegration); err != nil {
+			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+		}
+		if ofIntegration > 0 {
+			return IntegrationIdentity{}, ErrBadLink
+		}
+		target = userID
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET user_id = ?, created_by = coalesce(created_by, ?) WHERE id = ?`, target, nullID(by), id.ID); err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	id.UserID = target
+	return id, nil
+}

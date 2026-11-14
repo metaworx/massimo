@@ -1224,6 +1224,23 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/integrations/{uuid}:
+    get:
+      summary: An integration with its users
+      x-capability: integrations
+      description: |
+        The integration and its users, the system user first. An
+        unlinked user carries a proposal for a link: a Massimo user whose
+        name or display name is the user's name at the integration.
+      parameters: [{$ref: "#/components/parameters/integrationUUID"}]
+      responses:
+        "200":
+          description: The integration
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Integration"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
     put:
       summary: Change an integration
       x-capability: integrations
@@ -1256,6 +1273,42 @@ paths:
       parameters: [{$ref: "#/components/parameters/integrationUUID"}]
       responses:
         "200": {description: Revoked}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/integrations/{uuid}/users/{id}:
+    put:
+      summary: Link an integration's user to a Massimo user
+      x-capability: integrations
+      description: |
+        {"user": "<name>"} links the integration's user to a Massimo user:
+        its calls then act as that user, within its role. {"user": null}
+        unlinks it. Several of an integration's users may link to one
+        user. The system user and a user of an integration are refused
+        (400); the caller must outrank the user linked to (403).
+      parameters:
+        - {$ref: "#/components/parameters/integrationUUID"}
+        - {name: id, in: path, required: true, schema: {type: string}, description: "The user's id at the integration, 32 hex digits"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user: {type: string, nullable: true}
+      responses:
+        "200":
+          description: Linked or unlinked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  linked: {type: boolean}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
@@ -3774,6 +3827,24 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time}
+        integration:
+          type: object
+          description: "In GET /api/v1/users: an integration's user. id, name and linked_to for one of its users, absent for the integration's own"
+          properties:
+            key: {type: string}
+            uuid: {type: string}
+            id: {type: string}
+            name: {type: string}
+            linked_to: {type: string}
+        links:
+          type: array
+          description: "In GET /api/v1/users: the integrations' users linked to this user"
+          items:
+            type: object
+            properties:
+              integration: {type: string, description: The integration's key}
+              id: {type: string}
+              name: {type: string}
     RoleRef:
       type: object
       properties:
@@ -4347,6 +4418,22 @@ components:
         request_remote: {type: string, description: The address the request came from}
         key_issued_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
+        users:
+          type: array
+          description: Its users, in GET /api/v1/integrations/{uuid} alone
+          items: {$ref: "#/components/schemas/IntegrationUser"}
+    IntegrationUser:
+      type: object
+      properties:
+        id: {type: string, description: "Its id at the integration, or system"}
+        name: {type: string, description: Its name there, from its last call}
+        user: {type: string, description: The user its calls act as}
+        own_user: {type: string, description: The user made at its first call}
+        linked: {type: boolean}
+        system_generated: {type: boolean}
+        last_level: {type: string, enum: [view, control, admin]}
+        last_used_at: {type: string, format: date-time}
+        proposal: {type: string, description: "A Massimo user of the same name to link it to; absent where linked or none matches"}
     ProgramWithTag:
       allOf:
         - {$ref: "#/components/schemas/WeekProgram"}

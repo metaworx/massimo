@@ -42,6 +42,28 @@ type userView struct {
 	// May is what the caller may do with the user, in the users routes'
 	// answers (users_api.go); absent elsewhere.
 	May *userMay `json:"may,omitempty"`
+	// Integration marks an integration's user, and Links lists the
+	// integrations' users linked to this one: in GET /api/v1/users.
+	Integration *userIntegration `json:"integration,omitempty"`
+	Links       []userLink       `json:"links,omitempty"`
+}
+
+// userIntegration is what makes a user an integration's: the integration,
+// and for one of its users the id and name there and the Massimo user it
+// is linked to. The integration's own user has no id.
+type userIntegration struct {
+	Key      string `json:"key"`
+	UUID     string `json:"uuid"`
+	ID       string `json:"id,omitempty"`
+	Name     string `json:"name,omitempty"`
+	LinkedTo string `json:"linked_to,omitempty"`
+}
+
+// userLink is an integration's user linked to a Massimo user.
+type userLink struct {
+	Integration string `json:"integration"` // its key
+	ID          string `json:"id"`
+	Name        string `json:"name,omitempty"`
 }
 
 // roleRef is the role of a user as GET /api/v1/me shows it.

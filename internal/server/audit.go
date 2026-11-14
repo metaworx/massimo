@@ -100,6 +100,7 @@ var actions = map[string]string{
 	"POST /api/v1/integrations/{uuid}/refuse":                    "integration.refuse",
 	"POST /api/v1/integrations/{uuid}/accept-instance":           "integration.accept_instance",
 	"PUT /api/v1/integrations/{uuid}":                            "integration.update",
+	"PUT /api/v1/integrations/{uuid}/users/{id}":                 "integration.link",
 	"DELETE /api/v1/integrations/{uuid}":                         "integration.revoke",
 	"POST /api/v1/providers":                                     "provider.add",
 	"PUT /api/v1/providers/{key}":                                "provider.update",
@@ -133,7 +134,7 @@ var changeLines = map[string]string{
 	"user.add": "change", "user.update": "change", "user.remove": "change", "token.add": "change", "token.revoke": "change",
 	"identity.add": "change", "identity.update": "change", "identity.link": "change", "identity.remove": "change", "provider.add": "change", "provider.update": "change", "provider.remove": "change",
 	"integration.request": "change", "integration.approve": "change", "integration.refuse": "change", "integration.accept_instance": "change",
-	"integration.update": "change", "integration.revoke": "change",
+	"integration.update": "change", "integration.revoke": "change", "integration.link": "change",
 	"role.add": "change", "role.update": "change", "role.remove": "change", "role.disable": "change", "capability.disable": "change",
 }
 

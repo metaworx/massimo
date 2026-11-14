@@ -161,3 +161,56 @@ func TestIntegrationUsers(t *testing.T) {
 		t.Fatalf("system %+v %v", sys, err)
 	}
 }
+
+// An integration's users link to Massimo users, two to the same one, and
+// unlink; the system user and a link to an integration's user are refused.
+func TestLinkIntegrationUser(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+	i, _ := s.ApproveIntegration(ctx, req.UUID, nil, "", 0)
+	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleGuest}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "aaaaaaaa000000000000000000000000", Name: "Anna", Level: "view"})
+	b, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "bbbbbbbb000000000000000000000000", Name: "Anna's phone", Level: "view"})
+	if _, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "system", Level: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []IntegrationIdentity{a, b} {
+		got, err := s.LinkIntegrationUser(ctx, i.ID, id.Subject, anna.ID, 0)
+		if err != nil || !got.Linked() || got.UserID != anna.ID {
+			t.Fatalf("link %s: %+v %v", id.Subject, got, err)
+		}
+	}
+	list, err := s.IntegrationIdentities(ctx, i.ID)
+	if err != nil || len(list) != 3 || list[0].Subject != "system" || list[1].UserID != anna.ID || list[2].UserID != anna.ID {
+		t.Fatalf("listed %+v %v", list, err)
+	}
+	if _, err := s.LinkIntegrationUser(ctx, i.ID, "system", anna.ID, 0); !errors.Is(err, ErrBadLink) {
+		t.Fatalf("linking the system user: %v", err)
+	}
+	if _, err := s.LinkIntegrationUser(ctx, i.ID, b.Subject, a.OwnUserID, 0); !errors.Is(err, ErrBadLink) {
+		t.Fatalf("linking to an integration's user: %v", err)
+	}
+	if _, err := s.LinkIntegrationUser(ctx, i.ID, b.Subject, i.UserID, 0); !errors.Is(err, ErrBadLink) {
+		t.Fatalf("linking to the integration's own user: %v", err)
+	}
+	if _, err := s.LinkIntegrationUser(ctx, i.ID, "cccccccc000000000000000000000000", anna.ID, 0); !errors.Is(err, ErrNoIntegration) {
+		t.Fatalf("an unknown user: %v", err)
+	}
+	got, err := s.LinkIntegrationUser(ctx, i.ID, a.Subject, 0, 0)
+	if err != nil || got.Linked() || got.UserID != a.OwnUserID {
+		t.Fatalf("unlinked %+v %v", got, err)
+	}
+	// A later call keeps the link.
+	again, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: b.Subject, Name: "Anna's phone", Level: "control"})
+	if again.UserID != anna.ID {
+		t.Fatalf("the link lost at a call: %+v", again)
+	}
+	all, _ := s.AllIntegrationIdentities(ctx)
+	if len(all) != 3 {
+		t.Fatalf("all %d", len(all))
+	}
+}

@@ -288,12 +288,17 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
+	marks, links, err := integrationMarks(r.Context(), st, users)
+	if err != nil {
+		return userFail(err)
+	}
 	out := []userView{}
 	for _, u := range users {
 		self := p.named() && u.ID == p.user.ID
 		if a.mayView(u) || self {
 			v := s.viewUserOf(r, st, u)
 			v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self}
+			v.Integration, v.Links = marks[u.ID], links[u.ID]
 			out = append(out, v)
 		}
 	}

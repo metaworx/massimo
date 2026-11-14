@@ -863,6 +863,24 @@ So an integration knows before naming a user whether its key is a
 registered integration's, and a key typed by hand keeps working without
 the header.
 
+**Links.**
+`GET /api/v1/integrations/{uuid}` answers the integration with `users`,
+its users, the system user first:
+`id`, `name`, the `user` its calls act as, its `own_user`, `linked`,
+`system_generated`, `last_level`, `last_used_at`,
+and for one not linked a `proposal`, a Massimo user whose name or display
+name is its name at the integration.
+The owner confirms a link (capability `integrations`):
+`PUT /api/v1/integrations/{uuid}/users/{id}` with `{"user": "anna"}`;
+its calls then act as `anna`, within `anna`'s role (the chain's third
+link), and `{"user": null}` unlinks it.
+Several of an integration's users may be linked to one user.
+The system user stays its own, a user of an integration is no user to
+link to (`400`), and the caller must outrank the user linked to (`403`).
+`GET /api/v1/users` marks an integration's user with `integration`
+(`key`, `uuid`, and for one of its users `id`, `name`, `linked_to`)
+and lists under `links` the integrations' users linked to a user.
+
 ### Providers: /api/v1/providers
 
 `GET` and `POST /api/v1/providers`; `PUT` and `DELETE /api/v1/providers/{key}`.

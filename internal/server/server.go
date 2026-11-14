@@ -1207,6 +1207,8 @@ func (s *Server) routes() {
 	api("POST /api/v1/integrations/{uuid}/refuse", "integrations", s.refuseIntegration)
 	api("POST /api/v1/integrations/{uuid}/accept-instance", "integrations", s.acceptInstance)
 	api("PUT /api/v1/integrations/{uuid}", "integrations", s.putIntegration)
+	api("GET /api/v1/integrations/{uuid}", "integrations", s.getIntegration)
+	api("PUT /api/v1/integrations/{uuid}/users/{id}", "integrations", s.putIntegrationUser)
 	api("DELETE /api/v1/integrations/{uuid}", "integrations", s.deleteIntegration)
 	api("GET /api/v1/providers", "auth", s.listProviders)
 	api("POST /api/v1/providers", "auth", s.postProvider)

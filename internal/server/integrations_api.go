@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -93,6 +94,8 @@ type integrationView struct {
 	RequestRemote   string    `json:"request_remote,omitempty"`
 	KeyIssuedAt     time.Time `json:"key_issued_at,omitzero"`
 	CreatedAt       time.Time `json:"created_at"`
+	// Users are its users, in GET /api/v1/integrations/{uuid} alone.
+	Users []integrationUserView `json:"users,omitempty"`
 }
 
 // viewIntegration is i as the API shows it; a request shows its code and
@@ -340,4 +343,161 @@ func (s *Server) deleteIntegration(w http.ResponseWriter, r *http.Request) error
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	return nil
+}
+
+// integrationUserView is one of an integration's users as the API shows
+// it: who it acts as, and a proposal by name for a link.
+type integrationUserView struct {
+	ID              string    `json:"id"` // its id at the integration, or system
+	Name            string    `json:"name"`
+	User            string    `json:"user"`     // the user its calls act as
+	OwnUser         string    `json:"own_user"` // the user made at its first call
+	Linked          bool      `json:"linked"`
+	SystemGenerated bool      `json:"system_generated,omitempty"`
+	LastLevel       string    `json:"last_level,omitempty"`
+	LastUsedAt      time.Time `json:"last_used_at,omitzero"`
+	// Proposal is a Massimo user of the same name, for the owner to link
+	// it to (D1-C); absent where linked or none matches.
+	Proposal string `json:"proposal,omitempty"`
+}
+
+// integrationOf is the integration of a request's path, a 404 for none
+// or a request.
+func (s *Server) integrationOf(r *http.Request, st *store.Store) (store.Integration, error) {
+	i, ok, err := st.IntegrationByUUID(r.Context(), r.PathValue("uuid"))
+	if err != nil {
+		return store.Integration{}, integrationFail(err)
+	}
+	if !ok || i.State == store.IntegrationPending || i.State == store.IntegrationRefused {
+		return store.Integration{}, fail(http.StatusNotFound, "no integration %s", r.PathValue("uuid"))
+	}
+	return i, nil
+}
+
+// getIntegration handles GET /api/v1/integrations/{uuid}: the
+// integration with its users, each with a proposal for a link by name.
+func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	i, err := s.integrationOf(r, st)
+	if err != nil {
+		return err
+	}
+	ids, err := st.IntegrationIdentities(r.Context(), i.ID)
+	if err != nil {
+		return integrationFail(err)
+	}
+	users, err := st.Users(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	// Proposals leave out every integration's users.
+	marks, _, err := integrationMarks(r.Context(), st, users)
+	if err != nil {
+		return integrationFail(err)
+	}
+	byID := map[int64]store.User{}
+	for _, u := range users {
+		byID[u.ID] = u
+	}
+	out := []integrationUserView{}
+	for _, id := range ids {
+		v := integrationUserView{ID: id.Subject, Name: id.Name, User: byID[id.UserID].Name, OwnUser: byID[id.OwnUserID].Name, Linked: id.Linked(),
+			SystemGenerated: id.SystemGenerated, LastLevel: id.LastLevel, LastUsedAt: id.LastUsedAt}
+		if !id.Linked() && id.Subject != "system" && id.Name != "" {
+			for _, u := range users {
+				if marks[u.ID] == nil && (strings.EqualFold(u.DisplayName, id.Name) || strings.EqualFold(u.Name, id.Name)) {
+					v.Proposal = u.Name
+					break
+				}
+			}
+		}
+		out = append(out, v)
+	}
+	v := s.viewIntegration(r, i)
+	v.Users = out
+	writeJSON(w, http.StatusOK, v)
+	return nil
+}
+
+// putIntegrationUser handles PUT /api/v1/integrations/{uuid}/users/{id}:
+// {"user": "<name>"} links the integration's user to a Massimo user,
+// {"user": null} unlinks it. The caller must outrank the user linked to,
+// as for changing that user.
+func (s *Server) putIntegrationUser(w http.ResponseWriter, r *http.Request) error {
+	st, err := s.userStore()
+	if err != nil {
+		return err
+	}
+	i, err := s.integrationOf(r, st)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		User *string `json:"user"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return fail(http.StatusBadRequest, "bad body: %v", err)
+	}
+	var to int64
+	if req.User != nil {
+		u, ok, err := st.User(r.Context(), *req.User)
+		if err != nil {
+			return userFail(err)
+		}
+		if !ok {
+			return fail(http.StatusNotFound, "no user %s", *req.User)
+		}
+		if a := s.accessOf(r.Context(), principalOf(r), ""); !a.ranks(u.Role) {
+			return a.rankFail(u.Role, "integrations")
+		}
+		to = u.ID
+	}
+	id, err := st.LinkIntegrationUser(r.Context(), i.ID, strings.ToLower(r.PathValue("id")), to, principalOf(r).userID())
+	switch {
+	case errors.Is(err, store.ErrBadLink):
+		return fail(http.StatusBadRequest, "%v", err)
+	case err != nil:
+		return integrationFail(err)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "linked": id.Linked()})
+	return nil
+}
+
+// integrationMarks are the users list's marks: which users are an
+// integration's, and which integration users are linked to a user.
+func integrationMarks(ctx context.Context, st *store.Store, users []store.User) (map[int64]*userIntegration, map[int64][]userLink, error) {
+	integs, err := st.Integrations(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	ids, err := st.AllIntegrationIdentities(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := map[int64]string{}
+	for _, u := range users {
+		names[u.ID] = u.Name
+	}
+	byID := map[int64]store.Integration{}
+	marks := map[int64]*userIntegration{}
+	for _, i := range integs {
+		byID[i.ID] = i
+		if i.UserID != 0 {
+			marks[i.UserID] = &userIntegration{Key: i.Key, UUID: i.UUID}
+		}
+	}
+	links := map[int64][]userLink{}
+	for _, id := range ids {
+		i := byID[id.IntegrationID]
+		m := &userIntegration{Key: i.Key, UUID: i.UUID, ID: id.Subject, Name: id.Name}
+		if id.Linked() {
+			m.LinkedTo = names[id.UserID]
+			links[id.UserID] = append(links[id.UserID], userLink{Integration: i.Key, ID: id.Subject, Name: id.Name})
+		}
+		marks[id.OwnUserID] = m
+	}
+	return marks, links, nil
 }
