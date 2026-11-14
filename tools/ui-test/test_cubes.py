@@ -8,7 +8,7 @@ as found. Each test puts the server's store back as it was, since every
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
-from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_found, scroll_width, show_view, wait_held, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -78,6 +78,7 @@ def test_found_cube_added_and_removed(page):
         choose_cube(page, "__discover")
         wait_until(page, "!discovery.running", 10)
     show_view(page, "system")
+    open_found(page)
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
     assert found.count() == 1, "the found Cube in System settings → Cubes"
     assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in System settings → Cubes"
@@ -464,23 +465,20 @@ def test_cube_panel_pill(page, case):
                 c["problems"] = [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen",
                                   "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}]
         route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-    def fine(route):
-        # The fixture's window contact is open, which warns once the server
-        # has run five minutes (view.WindowWarnAfter): no device problems.
+    def clean(route):
+        # nothing wrong: the fake's window, open since the server started,
+        # counts as a problem once it has been open five minutes
         cubes = route.fetch().json()
         for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["problems"] = []
+            c["problems"] = []
         route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
     show_view(page, "system")
     head = page.locator(PANEL).locator(":scope > summary")
-    page.route("**/api/v1/cubes", fine)
-    try:
-        page.evaluate("loadCubes()")
-        assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
-        assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no pill"
-    finally:
-        page.unroute("**/api/v1/cubes")
+    page.route("**/api/v1/cubes", clean)
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no pill"
+    assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
+    page.unroute("**/api/v1/cubes")
     page.route("**/api/v1/cubes", stale)
     try:
         page.evaluate("loadCubes()")
@@ -541,3 +539,60 @@ def test_cube_drafts_across_polls(page, case):
         page.evaluate(put, {"name": before, "proxy_serial": ""})
         page.evaluate("loadCubes()")
         panel.locator(":scope > summary").click()
+
+
+HELD_BADGE = {"en": "1 connection held", "de": "1 Verbindung gehalten"}
+LOST_BADGE = {"en": "1 not connected", "de": "1 nicht verbunden"}
+
+
+def test_card_badges_follow_the_poll(page, case):
+    """The Cubes card's badges follow every poll, a Cube's panel open or
+    not, one per link state: a held connection amber, an old connection
+    (stale) red, nothing once the Cube is back (D92-A, D93-A)."""
+    link = {"state": None}
+
+    def stub(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100" and link["state"]:
+                c["connected"] = False
+                c["link"] = {"state": link["state"], "since": "2026-11-14T20:00:00+01:00", "until": "2026-11-14T20:45:00+01:00"}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    badges = page.locator("#sys-cubes .section-badges")
+    panel, _ = open_panel(page)
+    page.route("**/api/v1/cubes", stub)
+    try:
+        link["state"] = "held"
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "document.querySelector('#sys-cubes .section-badges').textContent.includes(%s)" % json.dumps(HELD_BADGE[case.lang]), 5), \
+            "held: the card says so, the panel open"
+        held = badges.locator(".flag.warn", has_text=HELD_BADGE[case.lang])
+        assert held.count() == 1 and held.locator("svg.mark-sign use").get_attribute("href") == "#mark-warn", "amber, a triangle"
+        assert badges.locator(".flag.bad").count() == 0, "not red"
+        link["state"] = "stale"
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "document.querySelector('#sys-cubes .section-badges .flag.bad') !== null", 5), "stale: red"
+        assert LOST_BADGE[case.lang] in badges.locator(".flag.bad").inner_text(), "not connected"
+        link["state"] = None
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!document.querySelector('#sys-cubes .section-badges .flag.bad') && "
+                          "!document.querySelector('#sys-cubes .section-badges').textContent.includes(%s)" % json.dumps(HELD_BADGE[case.lang]), 5), \
+            "back: no badge of the link, the panel still open"
+        assert panel.get_attribute("open") is not None, "the panel stayed open"
+    finally:
+        page.unroute("**/api/v1/cubes")
+        page.evaluate("loadCubes()")
+        panel.locator(":scope > summary").click()
+
+
+def test_cube_facts_copy(page, case):
+    """A Cube's facts: its serial, address and radio address each with a
+    copy icon; the serial copies (D97-A, AP CopyFacts' component)."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    panel, _ = open_panel(page)
+    for fact in ("serial", "host", "radio"):
+        assert panel.locator(f".cube-info [data-fact={fact}] .copy-icon").count() == 1, f"{fact} with its copy icon"
+    page.evaluate("navigator.clipboard.writeText('')")
+    panel.locator(".cube-info [data-fact=serial] .copy-icon").click()
+    assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "the serial copies"
+    panel.locator(":scope > summary").click()

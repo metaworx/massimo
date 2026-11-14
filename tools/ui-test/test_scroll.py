@@ -2,10 +2,12 @@
 # Copyright (C) 2026 The Massimo Authors
 """A slow scroll down from the top (components.js stickyHeader): the
 header compacts once the page is 96 px down and stays so, and the page
-goes down at every step. With expert mode on and the found Cubes open,
-the browser's scroll anchoring once took the page back to the top each
-time the header compacted, the header grew back, and the screen
-flickered until a scroll went past what compacting hides.
+goes down at every step. With expert mode on and the found Cubes counted
+under the header, the browser's scroll anchoring once took the page back
+to the top each time the header compacted, the header grew back, and the
+screen flickered until a scroll went past what compacting hides; that
+line has gone, and a line of the test's own under the header, which
+compacting hides as it did that one, stands in for it.
 
 The header is let settle first (quiet_header): one that shrinks while the
 page is a few pixels down, a notice of a radiogram pending that goes,
@@ -33,17 +35,24 @@ def quiet_header(page):
 
 
 def test_slow_scroll_goes_down(page, case):
-    """Expert mode on, a found Cube counted under the header, the page
-    scrolled down 8 px at a time: every step goes down, and the header
-    compacts once and does not grow back on the way; then up again to the
-    top, where the header grows back once. The found Cube is one the
-    server found, by a search: one only the page was told of goes at the
-    next poll, and the header with it."""
+    """Expert mode on, a line under the header that compacting hides, as
+    the found Cubes' count was, the page scrolled down 8 px at a time:
+    every step goes down, and the header compacts once and does not grow
+    back on the way; then up again to the top, where the header grows back
+    once."""
     page.evaluate("""async () => {
       state.settings.expert = true;
       applySettings();
-      await api('POST', 'api/v1/cubes/discover');
-      await loadCubes();
+      const line = document.createElement('p');
+      line.id = 'scroll-line';
+      line.className = 'notice';
+      line.textContent = 'a line under the header';
+      document.getElementById('tls-notice').after(line);
+      // hidden with the header compacted, in the same layout, as the
+      // count was: a rule of the page's style sheet, the policy taking no
+      // style element of the test's
+      const sheet = [...document.styleSheets].find((s) => (s.href || '').endsWith('style.css'));
+      window.scrollRule = sheet.insertRule('body.scrolled #scroll-line { display: none !important; }', sheet.cssRules.length);
       // room to scroll at every width
       const spacer = document.createElement('div');
       spacer.id = 'scroll-spacer';
@@ -51,8 +60,6 @@ def test_slow_scroll_goes_down(page, case):
       document.querySelector('main').appendChild(spacer);
       window.scrollTo(0, 0);
     }""")
-    assert wait_until(page, "state.found.length > 0 && !document.getElementById('cube-found').classList.contains('hidden')", 10), \
-        "a found Cube counted under the header"
     quiet_header(page)
     assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
         "at the top, the header whole"
@@ -90,6 +97,8 @@ def test_slow_scroll_goes_down(page, case):
     assert toggles == [True, False], f"at the top the header grew back once ({toggles})"
     page.evaluate("""() => {
       document.getElementById('scroll-spacer').remove();
+      document.getElementById('scroll-line').remove();
+      [...document.styleSheets].find((s) => (s.href || '').endsWith('style.css')).deleteRule(window.scrollRule);
       state.settings.expert = false;
       applySettings();
       window.scrollTo(0, 0);

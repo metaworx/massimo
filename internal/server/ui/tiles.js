@@ -104,8 +104,27 @@ function fmtUntil(text) {
 
 function renderRooms() {
   const section = $("rooms");
-  clear(section);
-  for (const r of state.rooms) section.appendChild(renderRoom(r));
+  // A tile whose configuration has the focus stays as it is, as for a
+  // state event (updateDevice), and the others are drawn around it: a
+  // redraw between the press and the release of a click (a reload after
+  // a metadata event) swallowed the click, and one under the user's
+  // typing took the focus away. It is drawn once the focus leaves the
+  // configuration (renderRoom).
+  const kept = state.rooms.find(configFocused);
+  const keep = kept && section.querySelector('.room[data-id="' + kept.id + '"]');
+  if (keep) {
+    roomUI(kept).deferred = true;
+    for (const el of [...section.children]) if (el !== keep) el.remove();
+    let before = true;
+    for (const r of state.rooms) {
+      if (r === kept) before = false;
+      else if (before) section.insertBefore(renderRoom(r), keep);
+      else section.appendChild(renderRoom(r));
+    }
+  } else {
+    clear(section);
+    for (const r of state.rooms) section.appendChild(renderRoom(r));
+  }
   $("house").classList.toggle("hidden", !state.rooms.some(roomThermostat));
   renderHouseRooms();
   const unl = $("unlisted");

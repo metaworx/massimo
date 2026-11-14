@@ -152,6 +152,31 @@ def test_week_programme_send_is_off_until_a_point_changes(page, case):
     tile.locator(".config-tabs .close").click()
 
 
+def test_a_redraw_of_the_rooms_keeps_a_click_in_the_configuration(page, case):
+    """A redraw of every tile, as a metadata event's reload makes, between
+    the press and the release of a click on Reset all leaves the tile with
+    the focus as it is, so that the click counts; the tile is drawn again
+    once the focus has left its configuration."""
+    tile, sel = first_tile(page)
+    open_tab(tile, "program")
+    send = tile.locator(".config-body form button[type=submit]")
+    temp = tile.locator(".prog-point input[type=number]").first
+    was = float(temp.input_value())
+    temp.fill("%g" % (was + 0.5 if was < 30 else was - 0.5))
+    temp.press("Tab")
+    assert wait_until(page, "!!document.querySelector('.prog-days .day.dirty')", 5), "the day is marked as changed"
+    reset = tile.locator(".prog-reset-all")
+    reset.scroll_into_view_if_needed()
+    box = reset.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.evaluate("document.querySelector(%r).dataset.before = '1'; renderRooms()" % sel)
+    page.mouse.up()
+    assert send.is_disabled(), "Reset all counts with a redraw in the click"
+    tile.locator(".config-tabs .close").click()
+    assert wait_until(page, "!document.querySelector(%r).dataset.before" % sel, 5), "it is drawn again once the focus left"
+
+
 def test_copy_send_is_off_until_a_room_is_ticked(page, case):
     """Copy's Send is off until a room to copy to is ticked, and again
     once it is unticked."""

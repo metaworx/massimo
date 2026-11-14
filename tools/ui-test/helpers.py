@@ -88,6 +88,15 @@ def found_text(lang, n):
     return FOUND_N[lang].format(n=n, s="" if n == 1 else "s")
 
 
+def open_found(page):
+    """Opens System settings → Cubes' fold of what was found on the
+    network, where it is closed."""
+    fold = page.locator("#cubes-list .found-panel")
+    fold.wait_for(state="attached")
+    if not fold.evaluate("(d) => d.open"):
+        fold.locator(":scope > summary").click()
+
+
 def update_json(state, to, available, manager=None, channel="alpha", suite=None):
     """GET /api/v1/update's answer with the update helper in the given
     state, the package manager that owns the binary, if any, the channel

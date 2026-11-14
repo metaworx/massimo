@@ -7,17 +7,38 @@ its own (serve -discover-listen, run.sh), so the search needs no UDP
 23272."""
 import time
 
-from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, scroll_width, show_view, wait_until
+from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, open_found, scroll_width, show_view, wait_until
 
 GATEWAY = {"en": "gateway", "de": "Gateway"}
 VIA_PROXY = {"en": "via proxy at {address}", "de": "über Proxy {address}"}
+GROUP = {"en": "Found on the network", "de": "Im Netzwerk gefunden"}
+SERVES = {"en": "Massimo proxy, serves {serial}", "de": "Massimo-Proxy, bedient {serial}"}
+SERVED_BY = {"en": "served by Massimo on {host}", "de": "von Massimo auf {host} bedient"}
+
+# The pill's found group: the last entry of its list.
+FOUND_GROUP = "#cube-problems .problems-list > .problem-entry:last-child"
+
+
+def found_sign(page):
+    """The found Cubes' sign in the header's pill, and the number on it."""
+    sign = page.locator("#cube-problems .problems-sum .found-count")
+    return sign, (sign.locator("b").inner_text() if sign.count() else "")
+
+
+def open_pill(page):
+    """Opens the header's problem pill, where it is closed."""
+    pill = page.locator("#cube-problems details.problems")
+    if not pill.evaluate("(d) => d.open"):
+        pill.locator(":scope > summary").click()
 
 
 def test_search_held_then_answered(page, case):
     """The search shows "searching" while the request is held, then the
-    found Cube in the choice and counted under the header, a link to
-    System settings → Cubes, which lists it with its DHCP flag and the env
-    lines to add it, and the log has its cube_found."""
+    found Cube in the choice, and in the header's pill the found Cubes'
+    sign with their number and their group last in its list, its link
+    opening System settings → Cubes with the found Cubes' fold open, which
+    lists it with its DHCP flag and, folded, the lines for the settings
+    file, copied by one icon; and the log has its cube_found."""
     assert cube_item(page, "__discover").count() == 1, "search entry in the Cube choice"
     serial = page.evaluate("state.serial")
     held = []
@@ -39,11 +60,16 @@ def test_search_held_then_answered(page, case):
     assert opt.count() == 1 and not opt.is_disabled(), "found Cube in the choice, which opens System settings with cubes"
     assert page.evaluate("state.serial") == serial, "the selected Cube stays"
     n = page.evaluate("state.found.length")
-    link = page.locator("#cube-found-link")
-    assert link.is_visible() and link.inner_text() == found_text(case.lang, n), "the found Cubes counted under the header, a link"
-    assert page.locator("#cube-found-text").is_hidden(), "the plain count only without cubes"
+    sign, number = found_sign(page)
+    assert sign.is_visible() and number == str(n), "the found Cubes' sign in the header's pill, their number on it"
+    assert page.locator("#cube-found").count() == 0, "no line under the header"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes"
-    link.click()
+    open_pill(page)
+    group = page.locator(FOUND_GROUP)
+    assert group.locator(":scope > .problem-who .problem-name").inner_text() == GROUP[case.lang], "the found Cubes' group last"
+    cube = group.locator(".problem-subs .problem-entry", has_text="KEQ0000000")
+    assert cube.count() == 1 and "127.0.0.1" in cube.inner_text(), "the found Cube in it with its address"
+    group.locator(".found-to-cubes").click()
     assert wait_until(page, "currentView === 'system'", 3), "the link opens System settings"
     # under the page's row, once the cards above it have their data
     assert wait_until(page, """(() => {
@@ -58,14 +84,23 @@ def test_search_held_then_answered(page, case):
         return r.top >= bar - 1 && r.top < bar + 40;
     })()"""), "and still there once everything has come"
     row = page.locator(".cube-found-row[data-serial='KEQ0000000']")
-    assert row.is_visible(), "the found Cube in System settings → Cubes"
+    assert row.is_visible(), "the found Cube in System settings → Cubes, the fold open"
     assert " · DHCP · " in row.locator(".found-facts").inner_text(), "the found Cube's DHCP flag"
     # The gateway it uses, from its answer to N, the fake's lease: its
     # own address's /24 with the gateway at .1. In the expert line,
     # hidden here: its text is there all the same.
     assert GATEWAY[case.lang] + " 127.0.0.1" in row.locator(".found-extra").text_content(), "the found Cube's gateway"
-    assert "MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1" in page.locator("#cubes-list .env-lines").inner_text(), \
-        "env lines for the found Cube under the list"
+    lines = page.locator("#cubes-list .found-lines")
+    assert not lines.evaluate("(d) => d.open"), "the lines for the settings file folded"
+    lines.locator(":scope > summary .panel-name").click()
+    assert "MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1" in lines.locator(".env-lines").inner_text(), \
+        "the lines for the found Cube, unfolded"
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    page.evaluate("navigator.clipboard.writeText('')")
+    lines.locator(":scope > summary .copy-icon").click()
+    assert wait_until(page, "navigator.clipboard.readText().then((t) => t.includes('MASSIMO_CUBE_KEQ0000000_ADDRESS=127.0.0.1\\nMASSIMO_CUBE_KEQ0000000_NAME='))", 3), \
+        "one icon copies the lines"
+    assert lines.evaluate("(d) => d.open"), "and leaves the fold as it is"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes in System settings"
     show_view(page, "tiles")
     choose_cube(page, "found:KEQ0000000")
@@ -80,27 +115,70 @@ def test_search_held_then_answered(page, case):
     show_view(page, "tiles")
 
 
-def test_cube_found_live(page, case):
-    """A cube_found event adds another found Cube live, counted under the
-    header, and System settings → Cubes lists it with the massimo proxy
-    that answers for it; without cubes the count is text, and the choice's
-    entry cannot be chosen."""
-    before = page.evaluate("state.found.length")
-    cube = dict(FOUND2, proxies=["192.0.2.7"])
+def found_event(page, cube):
+    """Tells the page of a found Cube, as the server's cube_found does."""
     page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
                   "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", cube)
+
+
+def test_cube_found_live(page, case):
+    """A cube_found event adds another found Cube live, counted on the
+    pill's sign, and System settings → Cubes lists it with the massimo
+    proxy that answers for it; without cubes the pill's group has no link,
+    and the choice's entry cannot be chosen."""
+    before = page.evaluate("state.found.length")
+    found_event(page, dict(FOUND2, proxies=["192.0.2.7"]))
     assert cube_item(page, "found:LEQ0000506").count() == 1, "cube_found adds a Cube live"
-    assert page.locator("#cube-found-link").inner_text() == found_text(case.lang, before + 1), "found Cubes counted"
+    assert found_sign(page)[1] == str(before + 1), "found Cubes counted on the pill's sign"
     show_view(page, "system")
+    open_found(page)
     facts = page.locator(".cube-found-row[data-serial='LEQ0000506'] .found-facts")
     assert facts.count() == 1 and VIA_PROXY[case.lang].format(address="192.0.2.7") in facts.inner_text(), "the proxy that answers for it"
     show_view(page, "tiles")
-    # a role without cubes: the count alone, the choice's entry information
+    # a role without cubes: the group without its link, the choice's entry information
     page.evaluate("() => { document.body.classList.add('no-cubes'); const k = hasCap; window.hasCap = (c) => c !== 'cubes' && k(c); renderCubeSelect(); }")
-    text = page.locator("#cube-found-text")
-    assert text.is_visible() and text.inner_text() == found_text(case.lang, before + 1), "without cubes the count is text"
-    assert page.locator("#cube-found-link").is_hidden(), "and no link"
+    assert found_sign(page)[1] == str(before + 1), "without cubes the sign all the same"
+    open_pill(page)
+    assert page.locator(FOUND_GROUP + " .found-to-cubes").count() == 0, "and no link"
+    page.keyboard.press("Escape")
     assert cube_item(page, "found:LEQ0000506").is_disabled(), "the choice's found entry cannot be chosen without cubes"
+
+
+def test_found_proxy(page, case):
+    """A Massimo proxy found on the network, with the Cube it serves and
+    the server it runs on, as the server describes it: in the pill's group
+    and in System settings → Cubes, the proxy's sign, what it serves and
+    the server's name a link to the address its announcement gives,
+    without Add and without lines for the settings file; a url that is not
+    http(s) is no link."""
+    proxy = dict(FOUND2, serial="LEQ0000601", address="192.0.2.31", kind="proxy", serves="KEQ0000201",
+                 host={"name": "box-a", "url": "https://box-a.example:8443"})
+    odd = dict(FOUND2, serial="LEQ0000602", address="192.0.2.32", kind="proxy",
+               host={"name": "box-b", "url": "javascript:alert(1)"})
+    found_event(page, proxy)
+    found_event(page, odd)
+    open_pill(page)
+    entry = page.locator(FOUND_GROUP + " .problem-subs .problem-entry", has_text="LEQ0000601")
+    assert SERVES[case.lang].format(serial="KEQ0000201") in entry.inner_text(), "what the proxy serves, in the pill"
+    link = entry.locator("a.found-host")
+    assert link.inner_text() == "box-a" and link.get_attribute("href") == "https://box-a.example:8443", "its server a link"
+    assert link.get_attribute("rel") == "noopener noreferrer" and link.get_attribute("target") == "_blank", "to a tab of its own"
+    page.keyboard.press("Escape")
+    show_view(page, "system")
+    open_found(page)
+    row = page.locator(".cube-found-row[data-serial='LEQ0000601']")
+    assert row.get_attribute("data-kind") == "proxy" and row.locator(".add-cube").count() == 0, "a proxy has no Add"
+    assert row.locator("use").first.get_attribute("href") == "#icon-proxy", "and the proxy's sign"
+    facts = row.locator(".found-facts").inner_text()
+    assert SERVES[case.lang].format(serial="KEQ0000201") in facts and SERVED_BY[case.lang].format(host="box-a") in facts, \
+        "what it serves and the server serving it"
+    assert row.locator("a.found-host").get_attribute("href") == "https://box-a.example:8443", "its server a link"
+    other = page.locator(".cube-found-row[data-serial='LEQ0000602']")
+    assert other.locator("a").count() == 0 and SERVED_BY[case.lang].format(host="box-b") in other.inner_text(), \
+        "a url that is not http(s) is the name alone"
+    assert "LEQ0000601" not in " ".join(page.locator("#cubes-list .env-lines").all_text_contents()), "no lines for a proxy"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the proxies"
+    show_view(page, "tiles")
 
 
 def test_refused_search(page):

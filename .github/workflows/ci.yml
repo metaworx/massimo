@@ -48,16 +48,19 @@ jobs:
   # devel build. code is false where fingerprint.sh finds the same code as
   # the base (a pull request's) or as the commit main was at (a push's):
   # documents alone, as config.ini's [ci] untested names them; every job
-  # but Guidelines is skipped, and main makes no devel build. site is true
+  # but Guidelines and Code result is skipped, and main makes no devel
+  # build. site is true
   # where the changes are the site's documents (config.ini, [ci] site) and
   # untested ones alone, and none is shipped; code is then false too, Site
-  # runs, and a push to main deploys the site (Deploy site). A tag is
+  # runs, and a push to main deploys the site (Deploy site). Where code is
+  # false, Code result carries the verdict of the last run that tested the
+  # code, so that All tests passed is red on code that failed. A tag is
   # always tested whole, and fingerprint.sh's exit 2, an unknown commit
   # included, counts as code. tested is true where the Tested status on
   # the commit tested before holds this code's fingerprint: what passed
-  # for it is skipped, and Fuzz, Screenshots and LAN run where they did
+  # for it is skipped, and Fuzz, the UI tests and LAN run where they did
   # not pass yet (All tests passed writes the status). ui and lan, for the
-  # Screenshots and LAN jobs, are true for
+  # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
   # the proxy, the LAN test or this file. The run checks out the pull
@@ -323,14 +326,17 @@ jobs:
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
 
-  # The web UI in Chromium against the fake Cube: the pytest suite, then
-  # the screenshot set, uploaded as the artifact ui-screenshots
-  # (tools/ui-test/README.md). Nothing is compared with the committed
-  # set: the job fails when a test fails or a shot cannot be taken, not
-  # when a picture changed; a failed test's screenshot and video, and the
-  # trace of its run once more, kept in tools/ui-test/results/, are
-  # uploaded as ui-test-results. It
-  # runs in Microsoft's Playwright image, which holds the browsers and
+  # The web UI in Chromium against the fake Cube: the pytest suite, a
+  # job per width with both languages (UI_TEST_CASES), and in the
+  # 1100 px one after its suite the screenshot set, uploaded as the
+  # artifact ui-screenshots (tools/ui-test/README.md). Nothing is
+  # compared with the committed set: a job fails when a test fails or a
+  # shot cannot be taken, not when a picture changed; a failed test's
+  # screenshot and video, and the trace of its run once more, kept in
+  # tools/ui-test/results/, are uploaded as ui-test-results-<width>.
+  # The jobs keep the id screenshots, which All tests passed needs and
+  # reads as one, passed where both passed. They
+  # run in Microsoft's Playwright image, which holds the browsers and
   # their system libraries, so that nothing goes
   # through apt (which took up to 11 minutes on the runner). The image's
   # version and the pip pin below move together (GUIDELINES/project/CI.md,
@@ -340,9 +346,21 @@ jobs:
   # What to test answered ui=true; skipped by this condition, the
   # required check counts as passed.
   screenshots:
-    name: Screenshots
+    name: UI test (${{ matrix.label }})
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' && needs.changes.outputs.ui_done != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - width: 1100
+            cases: 1100-en,1100-de
+            label: 1100 px, screenshots
+            shots: true
+          - width: 390
+            cases: 390-en,390-de
+            label: 390 px
+            shots: false
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
@@ -365,19 +383,21 @@ jobs:
 
       # UI_TEST_REQUIRED: a missing Playwright, pytest,
       # pytest-playwright or pytest-xdist fails the job instead of
-      # skipping the suite or running it in one process. run.sh runs all
-      # four cases in four workers, one per CPU of the runner, each
+      # skipping the suite or running it in one process. run.sh runs the
+      # job's two cases in four workers, one per CPU of the runner, each
       # against a server set of its own, on a push and a pull request.
       - name: Smoke test
         run: tools/ui-test/run.sh
         env:
           UI_TEST_REQUIRED: 1
+          UI_TEST_CASES: ${{ matrix.cases }}
 
       - name: Screenshots
+        if: ${{ matrix.shots }}
         run: tools/ui-test/run.sh screenshots
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.shots }}
         with:
           name: ui-screenshots
           path: |
@@ -387,7 +407,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
-          name: ui-test-results
+          name: ui-test-results-${{ matrix.width }}
           path: tools/ui-test/results/
           if-no-files-found: ignore
 
@@ -399,8 +419,8 @@ jobs:
   # client, discover listing it and marking the proxy, and its goodbye.
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
-  # a pull request whose What to test answered lan=true, as Screenshots
-  # does; skipped by this condition, the check counts as passed.
+  # a pull request whose What to test answered lan=true, as the UI tests
+  # do; skipped by this condition, the check counts as passed.
   lan:
     name: LAN against avahi
     needs: changes
@@ -1157,6 +1177,34 @@ jobs:
       - name: Build the pages and the docs of the commit
         run: packaging/site/build.sh --out site --no-apt --ref main=HEAD
 
+  # The code's verdict where What to test answers code=false and no code
+  # job runs (packaging/code-result.sh; GUIDELINES/project/CI.md, section
+  # 2): that of the last run that tested this code, on main's first parents,
+  # read and never run again. Red fails it on a push, so that All tests
+  # passed fails and the nightly build takes nothing, and is a warning on a
+  # pull request, which adds no code. The whole history, for the walk;
+  # actions to read the runs and wait for one still going, statuses for the
+  # Tested status of a run that skipped its jobs on it.
+  code-result:
+    name: Code result
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      actions: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: The verdict of the last run that tested this code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: packaging/code-result.sh
+
   # One job that stands for all of the above: it fails unless none of
   # them failed or was cancelled (a pull request skips some). The release
   # waits for it, and the nightly build looks for it among a commit's runs
@@ -1185,13 +1233,13 @@ jobs:
   # Once it has passed, it writes the Tested status (GUIDELINES/project/CI.md,
   # section 2) on the commit the run tested, a pull request's head or the
   # commit pushed to main: the fingerprint of the code that ran and whether
-  # Screenshots, LAN and Fuzz passed for it, in this run or the one it
+  # the UI tests, LAN and Fuzz passed for it, in this run or the one it
   # carries on. What to test reads it to skip what passed. Not for a run
   # that tested documents alone, nor for a tag; a fork's pull request has
   # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
-    needs: [ changes, test, actionlint, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
+    needs: [ changes, test, actionlint, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site, code-result ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     permissions:

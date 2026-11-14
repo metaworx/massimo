@@ -55,6 +55,7 @@ as it does without pytest-xdist and more than one worker.
 make ui-test                                          # the whole suite
 PYTEST_ADDOPTS='-k cubes' make ui-test                # the tests whose names match
 PYTEST_ADDOPTS='-k "hidden and 390-de"' make ui-test  # one test in one case
+UI_TEST_CASES=390-en,390-de make ui-test              # some cases, as a CI job runs them
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process

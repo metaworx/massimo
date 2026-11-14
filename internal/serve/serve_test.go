@@ -23,6 +23,13 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
+// TestMain keeps the look for servers beside each discovery run off the
+// network: it finds none.
+func TestMain(m *testing.M) {
+	browseServers = func(context.Context, time.Duration, ...net.IP) ([]announce.Found, error) { return nil, nil }
+	os.Exit(m.Run())
+}
+
 // getJSON decodes the answer of a GET into v.
 func getJSON(t *testing.T, url string, v any) {
 	t.Helper()
