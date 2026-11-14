@@ -198,12 +198,6 @@ func pageIDs(t *testing.T, name, page string) map[string]bool {
 	return ids
 }
 
-// The page is assembled from index.html and the partials: every file of
-// ui/partials/ is listed in uiPartials exactly once and every listed one
-// exists, no marker is left, the page is served at / as assembled, and
-// every id the scripts look up ($("…")) and every template they clone
-// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
-// script of another page (uiPageScripts), in that page.
 // Massimo's mark (make ui-brand): every file the page's head, the connect
 // page's, the manifest and the service worker name is served with its
 // type; /favicon.ico at the root, where browsers look; an SVG with a
@@ -258,6 +252,12 @@ func TestUIBrand(t *testing.T) {
 	}
 }
 
+// The page is assembled from index.html and the partials: every file of
+// ui/partials/ is listed in uiPartials exactly once and every listed one
+// exists, no marker is left, the page is served at / as assembled, and
+// every id the scripts look up ($("…")) and every template they clone
+// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
+// script of another page (uiPageScripts), in that page.
 func TestUIPage(t *testing.T) {
 	files, err := fs.Glob(uiFiles, "ui/partials/*.html")
 	if err != nil {
