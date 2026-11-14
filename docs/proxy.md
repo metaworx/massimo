@@ -243,7 +243,19 @@ massimo serve -proxy-serial XEQ0000200
 or, in `.env`, `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL=XEQ0000200`.
 The TCP greeting always carries the real serial.
 Alternatively block the Cube's UDP answers on the PC's firewall.
-If port 23272 is in use on the server's host, for example by `massimo discover`,
+The server shares port 23272 with the other programs on its host (SO_REUSEADDR,
+with SO_REUSEPORT on Linux and macOS),
+so that the original software there binds it too, as its search must.
+A datagram to a shared port's own address reaches one socket only:
+on Windows the one bound first, on Linux the server's.
+So the server answers a request from its own host by the subnet's broadcast too,
+which every socket on the port receives:
+the original software on the server's PC lists the server's proxies,
+but not a Cube the server holds,
+since the server's socket takes the Cube's answer.
+A program that binds the port without sharing it keeps it to itself:
+`massimo discover` and `massimo netconfig` take another port beside a running server,
+and where such a program holds the port first,
 the server runs without discovery and logs a warning;
 clients are then given the address by hand.
 

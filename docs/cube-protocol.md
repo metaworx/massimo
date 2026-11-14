@@ -759,6 +759,15 @@ kept here because they cost time to learn.
   whatever the request's source port, so on the box running `serve`,
   `massimo discover` sees only `serve`'s own proxy answer;
   use `POST /api/v1/cubes/discover` there.
+  `serve` shares the port (2026-11-14, measured on Windows 11 and Linux
+  with Java 8's `MulticastSocket`, as the original software 1.4.6 binds it,
+  no Cube involved): a unicast datagram to a shared port reaches one socket,
+  on Windows the one bound first, on Linux the one bound last,
+  `serve`'s udp4 socket ahead of Java's dual-stack one; a broadcast reaches all.
+  So a Cube's answer to the original software on `serve`'s box goes to `serve`,
+  which answers a search from its own host by broadcast as well.
+  Across Windows accounts, as between the service and a user,
+  the port is shared only where the first socket set SO_REUSEADDR.
   GitHub creates no push event for more than three tags pushed at once,
   which is unrelated to Cubes but was learned the same night.
 - After a Cube restart, the eco switch stays "not reported" until someone presses it;
