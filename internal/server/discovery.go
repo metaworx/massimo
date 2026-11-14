@@ -94,6 +94,14 @@ type foundCube struct {
 	// state is the entry's: kept on the map's entry, and in a copy only
 	// as it was when copied.
 	state foundState
+	// elsewhere is the host of a Cube with a fixed address that the
+	// latest run's answers for it did not come from, the Cube's own or a
+	// proxy's there, "" where they did or the Cube follows discovery;
+	// elsewhereFound is the address the Cube answered from instead, and
+	// elsewhereSince when the run that first found it so was
+	// (noteElsewhere). In memory only, as state.
+	elsewhere, elsewhereFound string
+	elsewhereSince            time.Time
 }
 
 // discoveryRun is one run of discovery; callers that come while it
@@ -426,11 +434,10 @@ func (s *Server) noteSerial(ctx context.Context, answers []cubelan.Discovered, n
 		}
 	}
 	if cfg := rt.config(); cfg.Addr != "" && !cfg.FollowDiscovery {
-		if ip := net.ParseIP(host); ip != nil && !answeredFrom(answers, host) {
-			s.log.Warn("cube answers discovery from another address than configured", "serial", serial, "configured", cfg.Addr, "found", cp.Address)
-		}
+		s.noteElsewhere(serial, cfg.Addr, host, cp.Address, answers, now)
 		return cp
 	}
+	s.noteElsewhere(serial, "", "", "", nil, now)
 	to := followAddress(host, answers)
 	if to == "" || to == host {
 		return cp
@@ -480,6 +487,61 @@ func answeredFrom(answers []cubelan.Discovered, host string) bool {
 		}
 	}
 	return false
+}
+
+// noteElsewhere records whether a Cube with a fixed address, configured
+// and connecting at host, answered a run from elsewhere: from neither
+// host nor a proxy there (answeredFrom), at found instead. It warns once,
+// where that is new or the Cube answers at another address than before,
+// and logs the runs that repeat it at Debug; host "" (a Cube that follows
+// discovery) or a host that answered clears it.
+func (s *Server) noteElsewhere(serial, configured, host, found string, answers []cubelan.Discovered, now time.Time) {
+	away := host != "" && net.ParseIP(host) != nil && !answeredFrom(answers, host)
+	s.foundMu.Lock()
+	f := s.found[serial]
+	if f == nil {
+		s.foundMu.Unlock()
+		return
+	}
+	repeat := away && f.elsewhere == host && f.elsewhereFound == found
+	switch {
+	case !away:
+		f.elsewhere, f.elsewhereFound, f.elsewhereSince = "", "", time.Time{}
+	case !repeat:
+		f.elsewhere, f.elsewhereFound, f.elsewhereSince = host, found, now
+	}
+	s.foundMu.Unlock()
+	const msg = "cube answers discovery from another address than configured"
+	switch {
+	case repeat:
+		s.log.Debug(msg, "serial", serial, "configured", configured, "found", found)
+	case away:
+		s.log.Warn(msg, "serial", serial, "configured", configured, "found", found)
+	}
+}
+
+// addressElsewhere is a Cube with a fixed address that answers
+// discovery at another one (cubeView.FoundElsewhere).
+type addressElsewhere struct {
+	// Address is where the Cube answers, with the configured address's
+	// port: the address a PUT takes to connect there.
+	Address    string    `json:"address"`
+	Configured string    `json:"configured"`
+	Since      time.Time `json:"since"`
+}
+
+// foundElsewhere is f's addressElsewhere for a Cube configured as cfg
+// and connecting at addr, nil where the Cube is not present, follows
+// discovery, or answered the latest run at addr's host.
+func foundElsewhere(f foundCube, cfg CubeConfig, addr string) *addressElsewhere {
+	if f.state != foundPresent || f.elsewhere == "" || cfg.Addr == "" || cfg.FollowDiscovery {
+		return nil
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || host != f.elsewhere {
+		return nil
+	}
+	return &addressElsewhere{Address: net.JoinHostPort(f.elsewhereFound, port), Configured: cfg.Addr, Since: f.elsewhereSince}
 }
 
 // followAddress is where a Cube followed by discovery goes, given the

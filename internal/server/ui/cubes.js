@@ -75,6 +75,7 @@ function fillCubeFacts(d, c) {
   for (const td of d.querySelectorAll(".cube-info [data-fact]")) td.textContent = facts[td.dataset.fact] || "–";
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
   fillLinkState(d, c);
+  fillAddressState(d, c);
   fillProxyState(d, c);
   fillCubeHead(d, c);
   if (d.syncForm) d.syncForm(c);
@@ -88,6 +89,33 @@ function fillLinkState(d, c) {
   clear(box);
   const text = linkText(c);
   if (text) box.appendChild(noticeEl(text, { since: c.link && c.link.since }));
+}
+
+// fillAddressState says above the Cube's facts that discovery finds a
+// Cube with a fixed address at another one (found_elsewhere), since
+// when, and, where the Cube has the form (not one of -addr or -sn),
+// offers to take the found address or to follow discovery. It is
+// redrawn only where the finding changed, so that a poll leaves a
+// focused button where it is.
+function fillAddressState(d, c) {
+  const box = d.querySelector(".cube-address-state");
+  if (!box) return;
+  const f = c.found_elsewhere;
+  const editable = !!f && !!c.source && c.source !== "flag";
+  const key = f ? [f.address, f.configured, f.since, editable].join(" ") : "";
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  clear(box);
+  if (!f) return;
+  box.appendChild(noticeEl(t("cubes.elsewhere", { found: f.address, configured: f.configured }), { since: f.since })); // components.js
+  if (!editable) return;
+  const use = textEl("button", t("cubes.useFound"), "use-found");
+  use.type = "button";
+  use.addEventListener("click", () => saveCube(c.serial, { address: f.address }, use));
+  const follow = textEl("button", t("cubes.followFound"), "follow-found");
+  follow.type = "button";
+  follow.addEventListener("click", () => saveCube(c.serial, { follow_discovery: true }, follow));
+  box.appendChild(elem("div", "cube-elsewhere-fix needs-cubes", use, follow));
 }
 
 // fillProxyState says under the proxy address where the Cube's proxy
@@ -660,13 +688,15 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
 // answers come, under what the user is typing there.
 // cubeBadges are a Cube's own badges, the top line of its open panel:
 // its link where it is not connected, a proxy that does not listen, a
-// settings file that differs, where its configuration comes from.
+// settings file that differs, a fixed address it is found elsewhere
+// than, where its configuration comes from.
 function cubeBadges(c) {
   const st = linkSign(c); // app.js
   const out = st === "ok" ? [] : [badgeEl(linkWord(c), st === "bad" ? "bad" : "warn")]; // app.js
   const failing = proxyFailing([c]);
   if (failing) out.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
   if ((c.file_differs || []).length) out.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
+  if (c.found_elsewhere) out.push(badgeEl(t("cubes.elsewhereBadge"), "warn"));
   if (c.source) out.push(badgeEl(t("cubes.source." + c.source), "mode"));
   return out;
 }
@@ -722,7 +752,7 @@ function cubePanel(c) {
   const form = d.querySelector("form.cube-form");
   sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), pills);
   const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form);
-  sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), cols);
+  sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), cols);
   cols.after(rebootRow(c));
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
@@ -877,6 +907,8 @@ function renderCubes() {
   if (off) badges.push(badgeEl(tn("cubes.badge.disconnected", off), "bad"));
   const failing = proxyFailing(state.cubes);
   if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
+  const elsewhere = state.cubes.filter((c) => c.found_elsewhere).length;
+  if (elsewhere) badges.push(badgeEl(tn("cubes.badge.elsewhere", elsewhere), "warn"));
   if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
   sectionBadges($("sys-cubes"), badges);
   if (state.found.length) {
