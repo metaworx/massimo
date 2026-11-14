@@ -783,7 +783,9 @@ function fillCertificate(v) {
         c.issuer ? t("sysinfo.issuer", { issuer: c.issuer }) : "", c.trusted ? "" : t("sysinfo.untrusted")].filter(Boolean).join(" · ");
     }
     line(text + " " + t("sysinfo.proxied"));
-    line((p.proto ? p.proto + "://" : "") + p.host + ":" + p.port, "mono muted small");
+    // the scheme's own port left out, as the announcement's url has it
+    const own = (p.proto === "https" && p.port === 443) || (p.proto === "http" && p.port === 80) || !p.port;
+    line(p.proto + "://" + (p.host.includes(":") ? "[" + p.host + "]" : p.host) + (own ? "" : ":" + p.port), "mono muted small");
     if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
     return;
   }

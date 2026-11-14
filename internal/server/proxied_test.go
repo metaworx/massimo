@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 // Where a proxy serves a request, in each of the common headers' forms.
@@ -142,5 +144,60 @@ func TestSystemBehindAProxy(t *testing.T) {
 	_, untrusting, _ := startWith(t, Options{Token: "secret"})
 	if v := get(untrusting); v.Proxy != nil {
 		t.Fatalf("headers of an untrusted peer taken: %+v", v.Proxy)
+	}
+}
+
+// The address a trusted proxy serves the server at, from an authorized
+// request, is kept for the announcement, the scheme's own port left out;
+// an anonymous request, an untrusted peer or a request without a scheme
+// changes nothing.
+func TestProxiedURL(t *testing.T) {
+	trusted, _ := ParseTrustedProxies("127.0.0.1,::1")
+	_, ts, s, st := startStored(t, Options{TrustedProxies: trusted})
+	owner := userToken(t, st, "boss", store.RoleOwner)
+	call := func(path, token string, h map[string]string) {
+		t.Helper()
+		req, _ := http.NewRequest("GET", ts.URL+path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	https := map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "massimo.example.net", "X-Forwarded-Port": "443"}
+	call("/api/v1/integrations/requests/x", "", https) // anonymous
+	if got := s.ProxiedURL(); got != "" {
+		t.Fatalf("taken from an anonymous request: %q", got)
+	}
+	call("/api/v1/me", owner, map[string]string{"X-Forwarded-For": "192.0.2.20"}) // no scheme
+	call("/api/v1/me", owner, https)
+	if got := s.ProxiedURL(); got != "https://massimo.example.net" {
+		t.Fatalf("proxied %q", got)
+	}
+	if v, _ := st.SettingString(t.Context(), store.ProxiedURLKey); v != "https://massimo.example.net" {
+		t.Fatalf("stored %q", v)
+	}
+	call("/api/v1/me", owner, map[string]string{"X-Forwarded-Proto": "http", "X-Forwarded-Host": "massimo.example.net:8080"})
+	if got := s.ProxiedURL(); got != "http://massimo.example.net:8080" {
+		t.Fatalf("another port %q", got)
+	}
+	// A new server reads it from the store.
+	fresh := New(Options{Store: st})
+	if got := fresh.ProxiedURL(); got != "http://massimo.example.net:8080" {
+		t.Fatalf("after a restart %q", got)
+	}
+	for in, want := range map[[3]string]string{
+		{"https", "h", "443"}: "https://h", {"http", "h", "80"}: "http://h", {"https", "h", "80"}: "https://h:80", {"https", "::1", "8443"}: "https://[::1]:8443",
+	} {
+		p, _ := strconv.Atoi(in[2])
+		if got := publicURL(in[0], in[1], p); got != want {
+			t.Errorf("publicURL%v = %q, want %q", in, got, want)
+		}
 	}
 }

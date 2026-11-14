@@ -1205,6 +1205,8 @@ function showView(view, address = "push", card) {
     view = "tiles";
     address = "replace";
   }
+  const left = view !== currentView ? currentView : null;
+  if (left) viewScroll[left] = window.scrollY;
   if (view !== "me" || (card === "profile" && !hasProfile())) card = undefined;
   if (view === "log") fillLogSelects(); // a device the Cube does not have goes before the address takes it
   setAddress(view === "log" ? logHash() : card ? "#" + card : VIEW_HASH[view], address);
@@ -1229,6 +1231,29 @@ function showView(view, address = "push", card) {
   }
   document.dispatchEvent(new CustomEvent("viewshown", { detail: view }));
   if (card) showCard($(card), true); // components.js
+  else if (left) restoreScroll(viewScroll[view] || 0);
+}
+
+// viewScroll is where each page was left, by view: the pages share the
+// window's one scroll position, and each comes back at its own.
+const viewScroll = {};
+
+// restoreScroll brings a page shown back to y, and again while its
+// content grows for a second after (a page that loads as it is shown),
+// until the user scrolls by hand.
+function restoreScroll(y) {
+  const go = () => window.scrollTo({ top: y, behavior: "instant" });
+  go();
+  if (!y) return;
+  const by = ["wheel", "touchstart", "keydown", "pointerdown"];
+  const ro = new ResizeObserver(go);
+  const stop = () => {
+    ro.disconnect();
+    for (const ev of by) removeEventListener(ev, stop);
+  };
+  ro.observe(document.querySelector("main"));
+  for (const ev of by) addEventListener(ev, stop, { passive: true });
+  setTimeout(stop, 1000);
 }
 
 // onView runs fn each time a page is shown, for a script that loads

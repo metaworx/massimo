@@ -100,8 +100,9 @@ func TestAuditOfEveryWrite(t *testing.T) {
 		if row.Action != want || row.Result != result || row.Remote != "127.0.0.1" {
 			t.Errorf("%s %s (%d): row %+v, want action %s result %s", r.method, r.path, code, row, want, result)
 		}
-		// The sign-ins have no caller yet, whatever token they carry.
-		anonymous := r.path == "/api/v1/login" || strings.HasPrefix(r.path, "/api/v1/login/")
+		// The sign-ins and an integration's registration request have no
+		// caller yet, whatever token they carry.
+		anonymous := r.path == "/api/v1/login" || strings.HasPrefix(r.path, "/api/v1/login/") || strings.HasPrefix(r.path, "/api/v1/integrations/requests")
 		if !anonymous && row.User != store.BootstrapUser || anonymous && row.User != "" {
 			t.Errorf("%s %s: user %q", r.method, r.path, row.User)
 		}

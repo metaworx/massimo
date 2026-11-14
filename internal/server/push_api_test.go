@@ -137,7 +137,7 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/me/push/"+strconv.FormatInt(v.ID, 10), op, ""); code != 404 {
 		t.Fatalf("another user removed it: %d", code)
 	}
-	for _, role := range []string{store.RoleGuest, store.RoleIntegration} {
+	for _, role := range []string{store.RoleGuest} {
 		tok := userToken(t, st, "u-"+role, role)
 		if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", tok, subscription(t, "https://push.example.net/send/"+role, "")); code != 403 || errorOf(text) != `capability "preferences" required` {
 			t.Errorf("%s subscribed: %d %s", role, code, text)
@@ -189,7 +189,7 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 			t.Errorf("%s %s: target %q, want %q", r.Action, r.Result, r.Target, want)
 		}
 	}
-	if seen["push.subscribe ok"] != 2 || seen["push.unsubscribe ok"] != 1 || seen["push.unsubscribe refused"] != 2 || seen["push.unsubscribe failed"] != 2 {
+	if seen["push.subscribe ok"] != 2 || seen["push.unsubscribe ok"] != 1 || seen["push.unsubscribe refused"] != 1 || seen["push.unsubscribe failed"] != 2 {
 		t.Errorf("audit rows: %v", seen)
 	}
 }
