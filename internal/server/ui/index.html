@@ -94,6 +94,10 @@
         <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
         <span id="version-short" class="muted mono small"></span>
       </div>
+      <!-- the server's sign (app.js renderServerSign): connected, an update
+           out (a click opens Software update), a new version running (a
+           click reloads), unreachable (a click tries again) -->
+      <button type="button" id="server-sign" class="server-sign" data-state="up" aria-label="connected to the server" title="Connected to the server"><svg class="ni" aria-hidden="true"><use href="#icon-plug-on"/></svg></button>
       <!-- the time of the last successful poll and the refresh icon, one
            button without a frame, its tap area larger than it (app.js
            renderUpdated) -->
@@ -123,7 +127,6 @@
       </details>
     </nav>
   </div>
-  <button type="button" id="reload-btn" class="primary hidden" data-i18n="header.reload">New version on the server, reload</button>
   <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span></p>
   <!-- the Cubes found on the LAN and not served, counted: a link to System
        settings → Cubes, which lists them, for a role with cubes (app.js
