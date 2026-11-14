@@ -466,6 +466,7 @@
   "room.holidayUntil": "vakantie tot {until}",
   "room.until": "tot {until}",
   "problem.label": "Problemen: {list}",
+  "problem.none": "Niets aan de hand",
   "problem.radio": "radiostoring",
   "problem.battery": "batterij bijna leeg",
   "problem.window": "raam open",

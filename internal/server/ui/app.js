@@ -775,13 +775,13 @@ function cubeSettingItems(c, who) {
 function problemsLabelOf(entries) {
   const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
   const found = entries.some((e) => e.info) && state.found.length ? tn("found.pill", state.found.length) : "";
-  if (!kinds.length) return found;
+  if (!kinds.length) return [t("problem.none"), found].filter(Boolean).join(" · ");
   return [t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") }), found].filter(Boolean).join(" · ");
 }
 
 // renderCubeProblems draws every Cube's problems beside the Cube choice
-// (problemsEl), nothing where none has one; its list kept open across a
-// poll where it was open.
+// (problemsEl), a green check where none has one (okPill), nothing before
+// there is a Cube; its list kept open across a poll where it was open.
 function renderCubeProblems() {
   const box = $("cube-problems");
   if (!box) return;
@@ -789,7 +789,8 @@ function renderCubeProblems() {
   if (was && was.open) return;
   const entries = cubeProblemEntries();
   const p = problemsEl(entries, problemsLabelOf(entries));
-  box.replaceChildren(...(p ? [p] : []));
+  if (p) box.replaceChildren(p);
+  else box.replaceChildren(...(state.cubes.length ? [okPill(t("problem.none"))] : [])); // components.js
 }
 
 function applySettings() {

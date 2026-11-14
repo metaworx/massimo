@@ -384,6 +384,19 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   text-align: center;
 }
 .problems-sum .found-count { margin-right: 4px; }
+/* nothing wrong (components.js okPill): a green check in the pill's frame;
+   in the header's pill before the found Cubes' sign too */
+.ok-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  line-height: 1;
+}
+.ok-pill .ni, .problems-sum .ok-check { width: 18px; height: 18px; }
+.ni.ok-check { color: var(--ok); stroke-width: 2.4; }
 .problem-entry > .found-count.problem-icon, .problem-entry > .found-count.problem-icon .ni { width: var(--ic); height: var(--ic); color: var(--accent); }
 /* in the pill's list, the way to System settings → Cubes: a link's look */
 .found-to-cubes {
@@ -728,14 +741,19 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; align-self: start; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
-/* a Cube's panel's head (cubes.js fillCubeHead): its sign before the
-   name, its problems in one pill at the right, then the neutral source
-   badge; its own badges the top line of the open panel */
-.cube-panel > summary > .conn-sign { flex: none; }
-.cube-pill { display: inline-flex; margin-left: auto; }
+/* a Cube's panel's head (cubes.js cubePanel, fillCubeHead): its sign,
+   name, serial and radio budget at the left, wrapping; its problems in
+   one pill top-right, whatever wraps, a green check where nothing is
+   wrong; the neutral source badge a line of its own under them; its own
+   badges the top line of the open panel */
+.panel.cube-panel > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.panel.cube-panel > summary::before { grid-column: 1; grid-row: 1; }
+.cube-head-who { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.cube-head-who > .conn-sign { flex: none; }
+.cube-pill { grid-column: 3; grid-row: 1; align-self: start; display: inline-flex; }
 .cube-pill:empty { display: none; }
 .cube-pill .problems-list { right: 0; left: auto; }
-.cube-pill ~ .panel-badges { margin-left: 0; }
+.panel.cube-panel > summary > .panel-badges { grid-column: 2 / -1; grid-row: 2; justify-content: flex-start; margin-left: 0; }
 .cube-top-line { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 /* a field's value changed on the server while a draft of it is open
    (cubes.js syncForm): the notice and Take theirs under the field */
@@ -891,7 +909,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .panel[open] > summary::before, .sys-sub[open] > summary::before { transform: rotate(45deg); }
 .panel[open] > summary { margin-bottom: 10px; }
-.panel > summary > .mono { color: var(--muted); }
+.panel > summary > .mono, .cube-head-who > .mono { color: var(--muted); }
 .panel-name { font-weight: 600; }
 .panel-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
 .user-panel, .role-panel { margin-bottom: 8px; padding: 8px 12px; }

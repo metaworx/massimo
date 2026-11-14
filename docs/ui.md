@@ -115,7 +115,8 @@ the sign and the time a short line under it.
   for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **Problems**, beside the Cube choice where something is wrong on any Cube:
+- **Problems**, beside the Cube choice, a green check in a pill's frame
+  where nothing is wrong on any Cube; where something is,
   a pill with an icon per kind (a Cube's link, the radio, a battery, a window
   open too long, the settings), which lists every Cube with a problem as a heading,
   its own sign and its link's badge, and under it its devices with a problem
@@ -694,7 +695,8 @@ to the top of the page.
   or, where a trusted proxy serves the page, the proxy's, "(proxied)":
   its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
   with the address the proxy serves, a link to it in a new window and its copy icon;
-  "being read…" while the server reads it, which it does within seconds of the first request:
+  "being read…" while the server reads it,
+  which it does within seconds of the first request:
   the page asks again every 2 s while System settings is shown,
   and says "could not be read" when 30 s have not brought it;
   where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
@@ -793,8 +795,9 @@ to the top of the page.
   the serial and the address without the port,
   the duty cycle, the free slots and the radiograms pending,
   a pill with every problem of the Cube (its link, its proxy, its settings file
-  and its devices with theirs, as the header's), whose click opens its list
-  and not the panel, and where its settings come from,
+  and its devices with theirs, as the header's), top-right whatever wraps,
+  a green check where nothing is wrong, whose click opens its list
+  and not the panel, and under them where its settings come from,
   all of it drawn again at every poll, and opens with a click:
   its own badges as its top line (its link where it is not connected,
   a proxy that does not listen, a settings file that differs,

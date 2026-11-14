@@ -347,6 +347,18 @@ function copyEl(text, { label, icon, cls } = {}) {
   return elem("span", "copy-pair", span, copyIcon(() => text, name));
 }
 
+// okPill stands in a problem pill's place where nothing is wrong (a
+// Cube's head, the header): a green check in the pill's frame, label
+// its name and tooltip, with no list behind it, so that a problem's pill
+// takes its place without moving what is beside it.
+function okPill(label) {
+  const pill = elem("span", "ok-pill", iconEl("icon-check", "ni ok-check"));
+  pill.setAttribute("role", "img");
+  pill.setAttribute("aria-label", label);
+  pill.title = label;
+  return pill;
+}
+
 // foundCountEl is the sign of the Cubes found on the network and not
 // served: a cube with their number in a corner badge, in the accent's
 // blue, as information rather than a problem; hidden from a screen
@@ -1051,6 +1063,8 @@ function problemsEl(entries, label) {
   }
   const extra = entries.map((e) => e.summary).filter(Boolean);
   if (!kinds.size && !extra.length) return null;
+  // information alone: nothing wrong, said first (okPill's check)
+  if (!kinds.size) extra.unshift(iconEl("icon-check", "ni ok-check"));
   const details = elem("details", "menu problems");
   const summary = document.createElement("summary");
   summary.className = "problems-sum";

@@ -465,6 +465,7 @@
   "room.holidayUntil": "Urlaub bis {until}",
   "room.until": "bis {until}",
   "problem.label": "Probleme: {list}",
+  "problem.none": "Alles in Ordnung",
   "problem.radio": "Funkfehler",
   "problem.battery": "Batterie schwach",
   "problem.window": "Fenster offen",
