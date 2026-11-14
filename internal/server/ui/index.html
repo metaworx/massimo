@@ -76,12 +76,15 @@
       <div class="brand">
         <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
         <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
-        <span id="version-short" class="muted mono small"></span>
       </div>
-      <!-- the time of the last successful poll and the refresh icon, one
-           button without a frame, its tap area larger than it (app.js
-           renderUpdated) -->
-      <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
+      <!-- the version and the time of the last update, which wrap as one -->
+      <div class="top-facts">
+        <span id="version-short" class="muted mono small"></span>
+        <!-- the time of the last successful poll and the refresh icon, one
+             button without a frame, its tap area larger than it (app.js
+             renderUpdated) -->
+        <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
+      </div>
     </div>
     <div class="cube">
       <!-- the Cube choice, a menu of the page (components.js pickerMenu):
