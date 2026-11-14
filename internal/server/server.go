@@ -1493,9 +1493,17 @@ type cubeView struct {
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
-	MAC       string     `json:"mac,omitempty"`
-	LastSeen  *time.Time `json:"last_seen,omitempty"`
-	Connected bool       `json:"connected"`
+	MAC      string     `json:"mac,omitempty"`
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	// Problems are the Cube's devices with a problem, for a client that
+	// shows every Cube's (the web UI's header): a radio fault, a low
+	// battery, a window open, with its times (problems.go).
+	Problems []cubeProblem `json:"problems,omitempty"`
+	// FoundAddress is the host discovery last found the Cube at, which
+	// may differ from Address: the server connects through a proxy, or
+	// to a fixed address the Cube has left.
+	FoundAddress string `json:"found_address,omitempty"`
+	Connected    bool   `json:"connected"`
 	// Link says how the server stands with the Cube beyond connected:
 	// a lost connection held open, a Cube that refuses a new one while it
 	// holds the server's old one (stale) or another client's (busy).
@@ -1542,7 +1550,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v.ProxyListening = s.proxyListening(rt)
 	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
-		v.MAC, v.LastSeen = f.MAC, &f.LastSeen
+		v.MAC, v.LastSeen, v.FoundAddress = f.MAC, &f.LastSeen, f.Address
 	}
 	if h := snap.Hello(); h != nil {
 		v.Connected = rt.client.Connected()
@@ -1556,6 +1564,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 		}
 	}
 	v.Rooms, v.Devices = view.Counts(snap, rt.hidden())
+	v.Problems = s.problemsOf(rt)
 	return v
 }
 

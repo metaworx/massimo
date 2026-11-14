@@ -111,12 +111,14 @@
     </div>
     <div class="cube">
       <!-- the Cube choice, a menu of the page (components.js pickerMenu):
-           the chosen Cube's connection as a plug and its name; the list
-           each Cube with its serial and address -->
+           the chosen Cube's network sign and its name; the list each Cube
+           with its sign, serial and address -->
       <details id="cube-menu" class="menu cube-menu">
         <summary id="cube-choice" class="cube-choice" aria-label="Cube" data-i18n-attr="aria-label:header.cube"><span class="picker-icon"></span><span class="picker-label"></span><svg class="ni caret" aria-hidden="true"><use href="#icon-chevron-down"/></svg></summary>
         <div class="menu-items"></div>
       </details>
+      <!-- every Cube's problems (app.js renderCubeProblems) -->
+      <span id="cube-problems" class="cube-problems"></span>
       <span id="cube-search" class="muted small hidden" role="status"></span>
     </div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">

@@ -620,22 +620,50 @@ function renderUpdated() {
   btn.setAttribute("aria-label", t("header.refreshUpdated", { time }));
 }
 
+// LINK_SIGN is the state of a Cube's network sign by its link (linkState):
+// connected fine, a connection held or a Cube rebooting a warning, an old
+// connection, another client or none a failure.
+const LINK_SIGN = { connected: "ok", held: "warn", rebooting: "warn", stale: "bad", busy: "bad", offline: "bad" };
+
+// linkSign is the state of a Cube's network sign.
+function linkSign(c) {
+  return LINK_SIGN[linkState(c)] || "bad";
+}
+
+// linkWord names a Cube's link in a few words, as its badge does.
+function linkWord(c) {
+  const link = linkState(c);
+  return link === "connected" || link === "offline" ? t(c.connected ? "cubes.connected" : "cubes.disconnected") : t("link.badge." + link);
+}
+
+// cubeSignEl is a Cube's network sign, named for a screen reader by its
+// link (components.js signEl).
+function cubeSignEl(c) {
+  const svg = signEl("net", linkSign(c), "conn-sign", "cube:" + c.serial);
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", linkWord(c));
+  return svg;
+}
+
 // renderCubeSelect fills the Cube choice (components.js pickerMenu): the
-// configured Cubes, each with its connection as a plug, its name (its
-// serial without one) and under it its serial and address; then those
-// found on the LAN but not configured, shown, not selectable; then the
-// entry that searches the LAN for new ones. Closed it shows the chosen
-// Cube's plug and name, its tooltip the serial, the address and the
-// connection. An open choice is left as it is, so that a poll does not
-// take the focus from it; a pick closes it first.
+// configured Cubes, each with its network sign (cubeSignEl), its name
+// (its serial without one) and under it its serial and address; then
+// those found on the LAN but not configured, shown, not selectable; then
+// the entry that searches the LAN for new ones. Closed it shows the
+// chosen Cube's sign and name, its tooltip the serial, the address and
+// the link. An open choice is left as it is, so that a poll does not
+// take the focus from it; a pick closes it first. Beside it, every
+// Cube's problems (renderCubeProblems).
 function renderCubeSelect() {
+  renderCubeProblems();
   const menu = $("cube-menu");
   if (menu.open) return;
   const items = state.cubes.map((c) => ({
     value: c.serial,
     label: c.name || c.serial,
     sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
-    icon: connIcon(c.connected),
+    icon: cubeSignEl(c),
   }));
   // a found Cube opens System settings → Cubes, where it can be added,
   // for a role with cubes; for others it is information
@@ -649,7 +677,7 @@ function renderCubeSelect() {
   }
   const cube = state.cubes.find((c) => c.serial === state.serial);
   const name = cube ? cube.name || cube.serial : t("header.cube");
-  const conn = cube ? t(cube.connected ? "header.connected" : "header.disconnected") : "";
+  const conn = cube ? linkWord(cube) : "";
   pickerMenu(menu, {
     items,
     value: state.serial || "",
@@ -660,12 +688,80 @@ function renderCubeSelect() {
       else selectCube(v);
     },
     shown: {
-      icon: cube ? connIcon(cube.connected) : null,
+      icon: cube ? cubeSignEl(cube) : null,
       label: name,
       title: cube ? [name, cube.name ? cube.serial : "", cube.address || "", conn].filter(Boolean).join(" · ") : name,
       aria: cube ? t("header.cubeChoice", { name, state: conn }) : name,
     },
   });
+}
+
+// cubeProblemEntries are every Cube's problems as problemsEl's entries:
+// a Cube with a problem as the heading, its network sign its own state
+// (green where only its devices fail), its link's badge where it is not
+// connected, and its devices with a problem under it, "Room › Device",
+// with their badges (tiles.js deviceProblems); a window open briefly is a
+// state, not a problem. Last, for one who may change the settings, the
+// settings: a Cube proxy that does not listen, a settings file that
+// differs from the store, Cubes found and not served.
+function cubeProblemEntries() {
+  const entries = state.cubes.map((c) => cubeEntry(c));
+  if (hasCap("settings")) {
+    const items = [];
+    for (const c of state.cubes) items.push(...cubeSettingItems(c, c.name || c.serial));
+    if (state.found.length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: tn("cubes.badge.found", state.found.length) });
+    entries.push({ sign: { kind: "cog", state: items.length ? "warn" : "" }, title: t("problem.settings"), items });
+  }
+  return entries;
+}
+
+// cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
+// the heading with its network sign, its link's badge where it is not
+// connected, own its settings' warnings too (cubes.js, a Cube's panel),
+// and its devices with a problem under it, "Room › Device", with their
+// badges (tiles.js deviceProblems); a window open briefly is a state.
+function cubeEntry(c, own) {
+  const st = linkSign(c);
+  const items = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
+  if (own) items.push(...cubeSettingItems(c, ""));
+  const subs = (c.problems || []).map((d) => ({
+    icon: deviceIcon(d), // tiles.js
+    title: [d.room, deviceName(d)].filter(Boolean).join(" › "),
+    sub: d.serial || d.rf_address,
+    items: deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), // tiles.js
+  }));
+  return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
+}
+
+// cubeSettingItems are a Cube's settings that need a look, as items: a
+// proxy listener that does not listen, a settings file that differs;
+// who names the Cube in the text, "" for its own panel.
+function cubeSettingItems(c, who) {
+  const items = [];
+  const text = (key, args) => (who ? t("problem." + key, { cube: who, ...args }) : t("problem." + key + "Own", args));
+  for (const f of c.proxy_failing || []) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("proxy", { addr: f.addr }) });
+  if ((c.file_differs || []).length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("file", {}) });
+  return items;
+}
+
+// problemsLabelOf names the kinds of problems among entries, for a
+// screen reader and the tooltip.
+function problemsLabelOf(entries) {
+  const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
+  return t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") });
+}
+
+// renderCubeProblems draws every Cube's problems beside the Cube choice
+// (problemsEl), nothing where none has one; its list kept open across a
+// poll where it was open.
+function renderCubeProblems() {
+  const box = $("cube-problems");
+  if (!box) return;
+  const was = box.querySelector("details.problems");
+  if (was && was.open) return;
+  const entries = cubeProblemEntries();
+  const p = problemsEl(entries, problemsLabelOf(entries));
+  box.replaceChildren(...(p ? [p] : []));
 }
 
 function applySettings() {

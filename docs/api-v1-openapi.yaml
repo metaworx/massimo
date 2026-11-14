@@ -4173,6 +4173,16 @@ components:
           items: {type: string}
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
+        found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
+        problems:
+          type: array
+          description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"
+          items:
+            allOf:
+              - {$ref: '#/components/schemas/Device'}
+              - type: object
+                properties:
+                  room: {type: string, description: The device's room's name}
         connected: {type: boolean, description: The server is connected to the Cube and has its complete greeting}
         link:
           type: object

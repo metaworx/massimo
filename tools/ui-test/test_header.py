@@ -177,14 +177,14 @@ def active(page, selector):
 def test_header_order_and_the_narrow_header(page, case):
     """At full width the brand and the time of the last update with ↻
     beside it at the left (the version and the time under the brand, both,
-    where they leave no room), then on the first line the Cube choice with the plug
-    of its connection, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
+    where they leave no room), then on the first line the Cube choice with the network
+    sign of its link, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
     beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and System settings, opens each, and is
     highlighted while one of them is shown."""
     order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#view-me"]
     b = {sel: box(page, sel) for sel in order}
     assert b["#updated"]["x"] < b["#refresh-btn svg"]["x"], "↻ after the time it renews, in the same button"
-    assert page.locator("#cube-choice .picker-icon .conn").count() == 1, "the connection, a plug in the Cube choice"
+    assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
     assert b["#view-tiles"]["x"] < b["#view-me"]["x"], "🏠 left of 👤"
     if case.width >= 600:
         right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-settings"]

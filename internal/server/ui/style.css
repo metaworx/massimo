@@ -181,7 +181,7 @@ body:not(.expert) .expert-only { display: none !important; }
 .sign-updated { display: inline-flex; align-items: baseline; gap: 10px; flex: none; white-space: nowrap; }
 /* the page's other signs greyed while the server is gone: their state is
    not known */
-body.server-down main .ni.sign, body.server-down main .problems-sum, body.server-down .conn { filter: grayscale(1); opacity: 0.55; }
+body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down .conn-sign { filter: grayscale(1); opacity: 0.55; }
 /* ↻ on the digits' middle, not on their baseline (an SVG's own baseline
    is its bottom edge): moved down without moving the line */
 .refresh-btn .ni { position: relative; top: 3px; width: 16px; height: 16px; flex: none; }
@@ -305,11 +305,13 @@ body.signed-out #notify-toast { display: none !important; }
   .cube-menu { flex: 1 1 160px; }
   .menu.cube-menu > summary { width: 100%; max-width: 100%; }
 }
-/* a connection (components.js connIcon): green joined, red apart */
-.ni.conn { width: 18px; height: 18px; }
-.ni.conn.ok, .menu-items button > .ni.conn.ok { color: var(--ok); }
-.ni.conn.bad, .menu-items button > .ni.conn.bad { color: var(--bad); }
-.menu-items button > .ni.conn { width: 20px; height: 20px; }
+/* a Cube's network sign (app.js cubeSignEl): its link's state, the colour
+   of its tone over the list's muted icons */
+.ni.conn-sign { width: 18px; height: 18px; }
+.ni.conn-sign.tone-ok, .menu-items button > .ni.conn-sign.tone-ok { color: var(--ok); }
+.ni.conn-sign.tone-warn, .menu-items button > .ni.conn-sign.tone-warn { color: var(--warn-mark); }
+.ni.conn-sign.tone-bad, .menu-items button > .ni.conn-sign.tone-bad { color: var(--bad); }
+.menu-items button > .ni.conn-sign { width: 20px; height: 20px; }
 /* a menu item of two lines (components.js menuItem), a group's heading,
    a separator, the item chosen */
 .menu-item-text { display: flex; flex-direction: column; min-width: 0; }
@@ -653,6 +655,22 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
+/* a Cube's panel's head (cubes.js fillCubeHead): its sign before the
+   name, its problems in one pill at the right, then the neutral source
+   badge; its own badges the top line of the open panel */
+.cube-panel > summary > .conn-sign { flex: none; }
+.cube-pill { display: inline-flex; margin-left: auto; }
+.cube-pill:empty { display: none; }
+.cube-pill .problems-list { right: 0; left: auto; }
+.cube-pill ~ .panel-badges { margin-left: 0; }
+.cube-top-line { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
+/* a field's value changed on the server while a draft of it is open
+   (cubes.js syncForm): the notice and Take theirs under the field */
+.cube-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -4px 0 8px; }
+.cube-conflict .notice { margin: 0; flex: 1 1 220px; }
+.cube-top-line:empty { display: none; }
+.cube-panel:not([open]) > .cube-top-line { display: none; }
+.cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
 .cube-cols > .cube-form { display: contents; }
 .cube-cols > .cube-pairing { grid-area: pair; }
 .cube-cols .cube-fields { grid-area: fields; }
@@ -989,6 +1007,9 @@ button.subtle { color: var(--muted); }
    the devices with their badges; a device's type as an icon before its
    name. */
 .menu.problems { flex: none; }
+.cube-problems { display: inline-flex; }
+.cube-problems:empty { display: none; }
+.cube-problems .problems-list { right: 0; left: auto; } /* the header's right side: the list opens to the left */
 .menu.problems > summary.problems-sum {
   display: inline-flex;
   align-items: center;
@@ -1048,7 +1069,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .problem-name { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
 .problem-sub { color: var(--muted); font-size: 0.8rem; }
 .problem-flags { display: flex; flex-wrap: wrap; gap: 6px; }
-.problem-flags .flag { display: inline-flex; align-items: center; gap: 4px; }
+.problem-flags .flag { display: inline-flex; align-items: center; gap: 4px; border-radius: 10px; } /* a long one wraps */
 .problem-flags .flag .ni { width: 14px; height: 14px; }
 .device-type-icon { display: inline-flex; flex: none; color: var(--muted); }
 .device-type-icon .ni { width: 18px; height: 18px; }
@@ -1214,7 +1235,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .flag.ok { color: var(--ok); border-color: var(--ok); }
 /* a warning or a failure: bold, led by its mark in the badge's colour */
 .flag.warn, .flag.bad, .flag.fill-bad { font-weight: 650; }
-.flag .mark-sign { width: 1em; height: 1em; margin-right: 0.25em; vertical-align: -0.12em; stroke-width: 2.3; color: inherit; }
+.flag .mark-sign { flex: none; width: 1em; height: 1em; margin-right: 0.25em; vertical-align: -0.12em; stroke-width: 2.3; color: inherit; }
 .flag .mark-sign use.mark.x { stroke-width: 2.6; }
 /* filled badges for the mode and the window state, text always on them */
 .flag.fill-ok { background: var(--fill-ok); color: var(--fill-fg); border-color: var(--fill-ok); }

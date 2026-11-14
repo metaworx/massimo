@@ -352,7 +352,7 @@ def step(page, which):
     elif which == "cubes":
         show_view(page, "system")
         panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
-        panel.locator("summary").click()
+        panel.locator(":scope > summary").click()
         panel.locator("form.cube-form").wait_for(state="visible")
         page.locator(".cube-found-row[data-serial='KEQ0000000']").wait_for(state="visible")
         to_top(page, page.locator("#system .cubes-settings"))
