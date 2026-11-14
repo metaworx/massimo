@@ -754,8 +754,12 @@ function fillProxies(v) {
   const list = v.cube_proxies || [];
   if (!list.length) cell.textContent = "–";
   for (const p of list) {
-    // the address the original software connects to, copyable (components.js)
-    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", copyEl(p.addr, { label: p.addr, icon: true }));
+    // the Cube's serial, the serial the proxy answers discovery with, and
+    // the address the original software connects to, each copyable
+    // (components.js)
+    const line = elem("div", "sys-proxy", copyEl(p.serial || "", { label: p.serial, icon: true }));
+    if (p.discovery_serial) line.append(" ", ...tNodes("proxy.appearsAs", { serial: copyEl(p.discovery_serial, { label: p.discovery_serial, icon: true }) })); // i18n.js
+    line.append(" ", copyEl(p.addr, { label: p.addr, icon: true }));
     if (p.listening) line.append(" ", textEl("span", t("proxy.listening"), "muted"));
     else line.appendChild(noticeEl(t("proxy.notListening", { addr: p.addr, error: p.error || "" }), { since: p.since, next: p.next_try }));
     cell.appendChild(line);

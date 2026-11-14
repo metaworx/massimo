@@ -1677,6 +1677,7 @@ massimo-week-program { display: contents; }
 .user-integration-links { margin: 0 0 8px; }
 /* System settings → Maintenance: the announcement on the LAN (update.js) */
 .announce-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.announce-row:first-child { border-top: none; padding-top: 0; } /* Maintenance's first row */
 .announce-row p { margin: 0; overflow-wrap: anywhere; }
 .announce-row .field-hint { margin-top: 2px; }
 .login-providers { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }

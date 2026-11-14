@@ -705,7 +705,8 @@ to the top of the page.
   and that `-trusted-proxies` would show more.
   The server's version copies on a click, or by its copy icon, whole, with
   what it was built with (the header's does too, without the icon);
-  so does each Cube proxy's address, which the original software connects to.
+  so do each Cube proxy's serial, the serial it answers discovery with ("as …",
+  where it answers discovery) and its address, which the original software connects to.
   A copy says "Copied"; on a page served over plain HTTP the browser gives no
   clipboard to the page, and the copy goes through its copy command instead.
   At its end, for a holder of `settings`,
@@ -746,7 +747,9 @@ to the top of the page.
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its announcement and its last two parts):
+  or `settings` for its announcement and its last two parts),
+  in this order: **Announce on the LAN**, **Settings file**, **Restart**
+  and **Reboot the computer**, each under a bold title:
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -939,9 +942,10 @@ to the top of the page.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
-- **Sign-in providers** (with `auth`, the owner's alone by default):
+- **Sign-in providers** (with `auth`, the owner's alone by default),
+  explained by the ⓘ in its head:
   the redirect URI to register at a provider,
-  the page's address and `api/v1/login/oidc/callback`;
+  the page's address and `api/v1/login/oidc/callback`, with its copy icon;
   every OpenID Connect provider in a panel, its name and key,
   **disabled** and **creates users** as badges,
   with its name on the button, issuer, client ID, client secret (written only:
@@ -955,7 +959,7 @@ to the top of the page.
   and says what is wrong where the issuer is not reached or named otherwise,
   **Remove**; **Add a provider** opens the form for one, with its key.
 - **Integrations** (with `integrations`, the owner's and the manager's by
-  default; docs/api-v1.md, "Integrations"):
+  default; docs/api-v1.md, "Integrations"), explained by the ⓘ in its head:
   with `settings`, **Integrations may ask to be registered**;
   each request waiting in a panel whose head shows its code, to compare
   with the one the integration shows,

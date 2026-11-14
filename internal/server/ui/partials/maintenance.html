@@ -1,21 +1,13 @@
-<!-- System settings → Maintenance, a section card: the server's restart and its settings file read again (with restart), the announcement on the LAN at the next start (with settings), the computer's reboot (with reboot), update.js. -->
+<!-- System settings → Maintenance, a section card, in the owner's order: the announcement on the LAN at the next start (with settings), the settings file read again and the server's restart (with restart), the computer's reboot (with reboot), update.js. -->
 <section id="sys-maint" class="tile section-card half maint-settings needs-maintenance" aria-labelledby="sys-maint-h">
   <header class="tile-head section-head">
     <h3 id="sys-maint-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-maint-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="maint.title">Maintenance</span></button></h3>
     <span class="section-badges"></span>
   </header>
   <div id="sys-maint-body" class="section-body" aria-live="polite">
-    <div class="action-row restart needs-restart">
-      <div>
-        <p class="action-title" data-i18n="maint.restart">Restart</p>
-        <p id="restart-text" class="muted small hidden"></p>
-      </div>
-      <div class="actions"><button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button></div>
-    </div>
-    <p id="restart-pending" class="notice small hidden needs-restart"></p>
     <div class="announce-row needs-settings">
       <div class="field">
-        <label for="announce-mode" data-i18n="maint.announce">Announce on the LAN</label>
+        <label for="announce-mode" class="action-title" data-i18n="maint.announce">Announce on the LAN</label>
         <select id="announce-mode" class="field-control">
           <option value="auto" data-i18n="maint.announceAuto">Automatic</option>
           <option value="on" data-i18n="maint.announceOn">On</option>
@@ -25,6 +17,22 @@
       <p id="announce-text" class="muted small field-hint"></p>
       <p id="announce-msg" class="small cubes-msg hidden" role="status"></p>
     </div>
+    <div class="action-row needs-restart">
+      <div>
+        <p class="action-title" data-i18n="maint.file">Settings file</p>
+        <p id="settings-file-text" class="muted small"></p>
+        <p id="settings-reload-msg" class="small cubes-msg hidden" role="status"></p>
+      </div>
+      <div class="actions"><button type="button" id="settings-reload" data-i18n="maint.reload">Reload now</button></div>
+    </div>
+    <div class="action-row restart needs-restart">
+      <div>
+        <p class="action-title" data-i18n="maint.restart">Restart</p>
+        <p id="restart-text" class="muted small hidden"></p>
+      </div>
+      <div class="actions"><button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button></div>
+    </div>
+    <p id="restart-pending" class="notice small hidden needs-restart"></p>
     <div class="action-row reboot needs-reboot">
       <div>
         <p class="action-title" data-i18n="maint.reboot">Reboot the computer</p>
@@ -39,14 +47,6 @@
         <button type="button" id="reboot-btn" class="hidden" data-i18n="reboot.button">Reboot</button>
         <button type="button" id="reboot-cancel" class="hidden" data-i18n="reboot.cancel">Take the reboot back</button>
       </div>
-    </div>
-    <div class="action-row needs-restart">
-      <div>
-        <p class="action-title" data-i18n="maint.file">Settings file</p>
-        <p id="settings-file-text" class="muted small"></p>
-        <p id="settings-reload-msg" class="small cubes-msg hidden" role="status"></p>
-      </div>
-      <div class="actions"><button type="button" id="settings-reload" data-i18n="maint.reload">Reload now</button></div>
     </div>
   </div>
 </section>
