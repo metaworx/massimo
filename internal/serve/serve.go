@@ -16,6 +16,7 @@
 package serve
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -360,7 +361,8 @@ func (i *Instance) announce(ctx context.Context) (wait func()) {
 		location = i.cfg.Announce.Name
 	}
 	st := i.st
-	svc := announce.Service{Instance: name, Port: uint16(port), Node: st.NodeID(), Version: i.cfg.Announce.Version, URL: i.cfg.Announce.PublicURL, Location: location,
+	svc := announce.Service{Instance: name, Port: uint16(port), Node: st.NodeID(), Version: i.cfg.Announce.Version, Location: location,
+		URL:          func() string { return cmp.Or(i.cfg.Announce.PublicURL, i.srv.ProxiedURL()) },
 		Registration: func() bool { return st.IntegrationRequests(context.Background()) }}
 	if src := i.src; src != nil {
 		svc.Fingerprint = func() string { return src.Status().Fingerprint }

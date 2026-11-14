@@ -301,12 +301,12 @@ func TestTXTForIntegrations(t *testing.T) {
 	if got := txt(svc); !slices.Equal(got, want) {
 		t.Fatalf("txt %q", got)
 	}
-	reg, svc.URL = true, "https://massimo.example.net"
+	reg, svc.URL = true, func() string { return "https://massimo.example.net" }
 	want[5], want[7] = "url=https://massimo.example.net", "reg=1"
 	if got := txt(svc); !slices.Equal(got, want) {
 		t.Fatalf("txt %q", got)
 	}
-	svc.URL = "https://massimo.example.net/" + strings.Repeat("x", 250)
+	svc.URL = func() string { return "https://massimo.example.net/" + strings.Repeat("x", 250) }
 	if got := txt(svc); slices.ContainsFunc(got, func(e string) bool { return strings.HasPrefix(e, "url=") }) {
 		t.Fatalf("a long url kept: %q", got)
 	}

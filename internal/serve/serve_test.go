@@ -256,7 +256,7 @@ func TestRunAnnounces(t *testing.T) {
 	svc := <-got
 	_, port, _ := net.SplitHostPort(inst.Addr())
 	if svc.Instance != "box.example.lan" || fmt.Sprint(svc.Port) != port || svc.Node != inst.Store().NodeID() || svc.Version != "v0.12.0" || svc.Fingerprint != nil ||
-		svc.Location != "box.example.lan" || svc.URL != "" || svc.Registration == nil || !svc.Registration() {
+		svc.Location != "box.example.lan" || svc.URL == nil || svc.URL() != "" || svc.Registration == nil || !svc.Registration() {
 		t.Fatalf("service %+v", svc)
 	}
 	// reg follows the setting at each answer.

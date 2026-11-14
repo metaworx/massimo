@@ -350,6 +350,7 @@ type Server struct {
 	// /api/v1/system; proxyCheck the proxy's certificate (proxied.go).
 	apiAddr    net.Addr
 	proxyCheck proxyCheck
+	proxiedURL proxiedURL // the announcement's url (proxied.go)
 
 	// Discovery, see discovery.go.
 	responder *proxy.Responder // the proxies' discovery socket, when serving
@@ -1142,6 +1143,9 @@ func (s *Server) routes() {
 			}
 			if !ok {
 				return
+			}
+			if capability != capNone {
+				s.noteProxied(r)
 			}
 			if au != nil && !noCommand[action] && s.beginCommand(w, r, au) {
 				return

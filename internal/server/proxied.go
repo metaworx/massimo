@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 // proxyCheckTimeout bounds a handshake with the proxy, proxyCheckEvery
@@ -296,4 +297,67 @@ func readProxyCert(ctx context.Context, addr, host string, roots *x509.CertPool)
 		out.Issuer = chain[0].Issuer.Organization[0]
 	}
 	return out
+}
+
+// proxiedURL is the address a trusted proxy serves the server at, as the
+// last authorized request through it said, kept in the store
+// (store.ProxiedURLKey) so that a restart keeps it: the announcement's url
+// where MASSIMO_PUBLIC_URL is not set (AP IntegrationUsers, D12-A).
+type proxiedURL struct {
+	mu     sync.Mutex
+	v      string
+	loaded bool
+}
+
+// publicURL is scheme://host[:port], the port left out where it is the
+// scheme's own.
+func publicURL(proto, host string, port int) string {
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port == 0 || proto == "https" && port == 443 || proto == "http" && port == 80 {
+		return proto + "://" + host
+	}
+	return proto + "://" + host + ":" + strconv.Itoa(port)
+}
+
+// noteProxied takes the address of an authorized request that a trusted
+// proxy forwarded with its scheme, and stores it where it changed.
+func (s *Server) noteProxied(r *http.Request) {
+	st := s.opts.Store
+	if st == nil || !proxyHeaders(r.Header) || !s.trustedProxy(peerIP(r.RemoteAddr)) {
+		return
+	}
+	proto, host, port := forwardedTarget(r.Header, r.Host)
+	if proto == "" || host == "" || strings.ContainsAny(host, " /\\@?#%") {
+		return
+	}
+	u := publicURL(proto, host, port)
+	s.ProxiedURL() // loads the stored one first
+	s.proxiedURL.mu.Lock()
+	same := s.proxiedURL.v == u
+	s.proxiedURL.v = u
+	s.proxiedURL.mu.Unlock()
+	if same {
+		return
+	}
+	if err := st.SetSetting(context.WithoutCancel(r.Context()), store.ProxiedURLKey, u); err != nil {
+		s.log.Warn("the proxy's address not stored", "url", u, "error", err)
+		return
+	}
+	s.log.Info("the proxy's address noted", "url", u)
+}
+
+// ProxiedURL is the address a trusted proxy serves the server at, as the
+// last authorized request through it said; "" before any.
+func (s *Server) ProxiedURL() string {
+	s.proxiedURL.mu.Lock()
+	defer s.proxiedURL.mu.Unlock()
+	if !s.proxiedURL.loaded && s.opts.Store != nil {
+		s.proxiedURL.loaded = true
+		if v, err := s.opts.Store.SettingString(context.Background(), store.ProxiedURLKey); err == nil {
+			s.proxiedURL.v = v
+		}
+	}
+	return s.proxiedURL.v
 }

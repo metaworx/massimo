@@ -818,7 +818,7 @@ An integration or request whose installation id the last look saw is
 marked `"seen": true`: a request's id confirmed by the LAN.
 Home Assistant finds the server the same way:
 the TXT record of `_massimo._tcp` carries `url`, where the API is
-reached, `loc`, the installation's name, `reg=1` while requests are
+reached (README.md, "Server"), `loc`, the installation's name, `reg=1` while requests are
 taken, and `api=1`, `GET /healthz` listing the features.
 
 ### Acting for an integration's users

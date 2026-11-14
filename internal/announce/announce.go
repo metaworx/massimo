@@ -72,10 +72,11 @@ type Service struct {
 	// serves TLS, read at every answer, since a renewal changes it; nil
 	// without TLS.
 	Fingerprint func() string
-	// URL is the TXT record's url, where a client reaches the API: the
-	// public address where the server has one (MASSIMO_PUBLIC_URL); ""
-	// gives its own, http(s)://massimo-<digits>.local:<port>.
-	URL string
+	// URL gives the TXT record's url, read at every answer, where a
+	// client reaches the API: the public address where the server has one
+	// (MASSIMO_PUBLIC_URL, else the address its reverse proxy serves it
+	// at); nil or "" gives its own, http(s)://massimo-<digits>.local:<port>.
+	URL func() string
 	// Location is the TXT record's loc, the installation's name for a
 	// person: the host name in full where Instance is its first label.
 	Location string
@@ -150,7 +151,10 @@ func txt(svc Service) []string {
 			out = append(out, "fp="+fp)
 		}
 	}
-	url := svc.URL
+	url := ""
+	if svc.URL != nil {
+		url = svc.URL()
+	}
 	if url == "" {
 		url = fmt.Sprintf("%s://%s.local:%d", scheme, hostLabel(svc.Node), svc.Port)
 	}

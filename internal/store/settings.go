@@ -235,6 +235,11 @@ func (s *Store) PasswordLogin(ctx context.Context) bool {
 	return !ok || on
 }
 
+// ProxiedURLKey keeps the address a trusted proxy serves the server at,
+// as the last authorized request through it said: the announcement's url
+// where MASSIMO_PUBLIC_URL is not set. The server writes it; no API does.
+const ProxiedURLKey = "server.proxied_url"
+
 // IntegrationRequestsKey says whether integrations may ask to be
 // registered, POST /api/v1/integrations/requests (true by default); the
 // announcement's reg says it on the LAN.

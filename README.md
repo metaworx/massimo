@@ -809,7 +809,9 @@ and the TXT record its node (`node`), version (`v`),
 whether it serves TLS (`tls`) and the certificate's SHA-256 (`fp`),
 which an app compares before it trusts a self-signed certificate;
 for the integrations, where the API is reached (`url`:
-`MASSIMO_PUBLIC_URL`, else the server's own address),
+`MASSIMO_PUBLIC_URL`, else the address a trusted reverse proxy serves
+the server at, as the last signed-in request through it said,
+else the server's own),
 the installation's name (`loc`),
 whether integrations may ask to be registered (`reg`),
 and `api=1`, `GET /healthz` listing the features.
