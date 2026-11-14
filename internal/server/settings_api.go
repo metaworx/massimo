@@ -80,6 +80,9 @@ var boolSettings = []boolSetting{
 	// The password sign-in, POST /api/v1/login (login_api.go): off, the
 	// users sign in by OPAQUE alone.
 	{key: store.PasswordLoginKey, def: true},
+	// Integrations may ask to be registered (integrations_api.go); the
+	// announcement's reg says it on the LAN.
+	{key: store.IntegrationRequestsKey, def: true},
 }
 
 var durationSettings = []durationSetting{

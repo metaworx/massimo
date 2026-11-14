@@ -5,6 +5,7 @@ package announce
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -36,6 +37,8 @@ type Found struct {
 	Version     string `json:"version,omitempty"`
 	TLS         bool   `json:"tls"`
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// TXT is every entry of the TXT record, the keys lower case.
+	TXT map[string]string `json:"-"`
 }
 
 // Address is where the server's API is reached, host:port: the address
@@ -57,16 +60,58 @@ func Browse(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]Found
 	for _, ip := range unicast {
 		targets = append(targets, &net.UDPAddr{IP: ip, Port: Port})
 	}
-	return browse(ctx, wait, targets, len(targets) == 0)
+	return browse(ctx, wait, ServiceType, targets, len(targets) == 0)
 }
 
-// browse sends the query to targets, and to the groups with multicast.
-func browse(ctx context.Context, wait time.Duration, targets []*net.UDPAddr, multicast bool) ([]Found, error) {
-	query, err := browseQuery()
+// HomeAssistantType is the DNS-SD service type of Home Assistant.
+const HomeAssistantType = "_home-assistant._tcp"
+
+// HomeAssistant is a Home Assistant installation that announced itself
+// (its zeroconf record): the hint of an integration that may ask to be
+// registered, and the confirmation of a request's installation id.
+type HomeAssistant struct {
+	Name        string `json:"name"`         // the instance name
+	From        net.IP `json:"from"`         // the address the answer came from
+	Port        int    `json:"port"`         // its port
+	UUID        string `json:"uuid"`         // the installation id, core.uuid
+	Location    string `json:"location"`     // location_name, the home's name
+	Version     string `json:"version"`      // its version
+	InternalURL string `json:"internal_url"` // internal_url, or base_url
+	ExternalURL string `json:"external_url,omitempty"`
+}
+
+// BrowseHomeAssistant asks for the Home Assistant installations on the
+// LAN, as Browse asks for the servers.
+func BrowseHomeAssistant(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]HomeAssistant, error) {
+	var targets []*net.UDPAddr
+	for _, ip := range unicast {
+		targets = append(targets, &net.UDPAddr{IP: ip, Port: Port})
+	}
+	found, err := browse(ctx, wait, HomeAssistantType, targets, len(targets) == 0)
 	if err != nil {
 		return nil, err
 	}
-	var col collector
+	return homeAssistants(found), nil
+}
+
+// homeAssistants reads Home Assistant's TXT entries.
+func homeAssistants(found []Found) []HomeAssistant {
+	out := []HomeAssistant{}
+	for _, f := range found {
+		out = append(out, HomeAssistant{Name: f.Name, From: f.From, Port: f.Port, UUID: strings.ToLower(f.TXT["uuid"]), Location: f.TXT["location_name"],
+			Version: f.TXT["version"], InternalURL: cmp.Or(f.TXT["internal_url"], f.TXT["base_url"]), ExternalURL: f.TXT["external_url"]})
+	}
+	return out
+}
+
+// browse sends the query for a service type to targets, and to the
+// groups with multicast.
+func browse(ctx context.Context, wait time.Duration, svcType string, targets []*net.UDPAddr, multicast bool) ([]Found, error) {
+	query, err := browseQuery(svcType)
+	if err != nil {
+		return nil, err
+	}
+	col := collector{svcType: svcType}
 	var wg sync.WaitGroup
 	deadline := time.Now().Add(wait)
 	opened := 0
@@ -128,9 +173,9 @@ func isTimeout(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
-// browseQuery is the PTR question for the service type.
-func browseQuery() ([]byte, error) {
-	name, err := dnsmessage.NewName(ServiceType + ".local.")
+// browseQuery is the PTR question for a service type.
+func browseQuery(svcType string) ([]byte, error) {
+	name, err := dnsmessage.NewName(svcType + ".local.")
 	if err != nil {
 		return nil, err
 	}
@@ -177,14 +222,12 @@ func sendToGroup(pc net.PacketConn, v6 bool, query []byte) {
 // collector gathers the records of the answers, per address they came
 // from.
 type collector struct {
+	svcType   string // asked for, such as ServiceType
 	mu        sync.Mutex
 	instances map[string]*Found   // from + name of the instance, lower case
 	hosts     map[string][]net.IP // from + host name, lower case
 	order     []string            // the instances' keys as they came
 }
-
-// serviceSuffix ends an instance's name.
-const serviceSuffix = "." + ServiceType + ".local."
 
 // add takes one answer's records.
 func (c *collector) add(msg []byte, from net.IP) {
@@ -212,6 +255,7 @@ func (c *collector) add(msg []byte, from net.IP) {
 	if c.instances == nil {
 		c.instances, c.hosts = map[string]*Found{}, map[string][]net.IP{}
 	}
+	serviceSuffix := "." + c.svcType + ".local."
 	key := func(name string) string { return from.String() + "|" + strings.ToLower(name) }
 	instance := func(name string) *Found {
 		k := key(name)
@@ -230,7 +274,7 @@ func (c *collector) add(msg []byte, from net.IP) {
 		name := r.Header.Name.String()
 		switch body := r.Body.(type) {
 		case *dnsmessage.PTRResource:
-			if strings.EqualFold(name, ServiceType+".local.") && isInstance(body.PTR.String()) && r.Header.TTL > 0 {
+			if strings.EqualFold(name, c.svcType+".local.") && isInstance(body.PTR.String()) && r.Header.TTL > 0 {
 				instance(body.PTR.String())
 			}
 		case *dnsmessage.SRVResource:
@@ -241,8 +285,10 @@ func (c *collector) add(msg []byte, from net.IP) {
 		case *dnsmessage.TXTResource:
 			if isInstance(name) && r.Header.TTL > 0 {
 				f := instance(name)
+				f.TXT = map[string]string{}
 				for _, kv := range body.TXT {
 					k, v, _ := strings.Cut(kv, "=")
+					f.TXT[strings.ToLower(k)] = v
 					switch strings.ToLower(k) {
 					case "node":
 						f.Node = v
@@ -270,9 +316,10 @@ func appendIP(list []net.IP, ip net.IP) []net.IP {
 	return append(list, append(net.IP(nil), ip...))
 }
 
-// found are the instances with an SRV record, one per node: a server
-// that answered from two addresses (IPv4 and IPv6) is listed once, by
-// the first answer, an IPv4 one where there is one.
+// found are the instances with an SRV record, one per node (a Home
+// Assistant's uuid): a server that answered from two addresses (IPv4 and
+// IPv6) is listed once, by the first answer, an IPv4 one where there is
+// one.
 func (c *collector) found() []Found {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -284,14 +331,14 @@ func (c *collector) found() []Found {
 			continue
 		}
 		f.Addrs = c.hosts[f.From.String()+"|"+strings.ToLower(f.Host)]
-		if f.Node != "" {
-			if i, ok := byNode[f.Node]; ok {
+		if id := cmp.Or(f.Node, f.TXT["uuid"]); id != "" {
+			if i, ok := byNode[id]; ok {
 				if out[i].From.To4() == nil && f.From.To4() != nil {
 					out[i] = f
 				}
 				continue
 			}
-			byNode[f.Node] = len(out)
+			byNode[id] = len(out)
 		}
 		out = append(out, f)
 	}

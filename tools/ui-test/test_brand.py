@@ -44,7 +44,7 @@ def test_logo_over_the_word(page, case):
     in orange; the full logo at full width, the small mark alone under
     600 px with the rest of the word for screen readers only; the word the
     heading's text; the M's colour that of the mode chosen; every element
-    marked for it drawn."""
+    marked for it drawn, the letters' overshoot below the box not cut."""
     h1 = page.locator(".top h1.brand-name")
     assert h1.inner_text().replace("\n", "") == "Massimo", "the heading's text is the word"
     drawing = page.locator(visible_drawing(case))
@@ -63,6 +63,8 @@ def test_logo_over_the_word(page, case):
     page.evaluate("document.documentElement.dataset.theme = 'light'")
     marked = page.evaluate("[...document.querySelectorAll('[data-brand]')].map((e) => e.querySelectorAll('svg').length)")
     assert len(marked) >= 3 and all(n == 2 for n in marked), f"every marked element drawn, logo and mark ({marked})"
+    clipped = page.evaluate("[...document.querySelectorAll('[data-brand] svg')].filter((e) => getComputedStyle(e).overflow !== 'visible').length")
+    assert clipped == 0, "the round letters' overshoot below the baseline painted, not cut at the tight box"
     # each cover in the background of its place, so that it hides the word
     covers = page.evaluate("""[['.top', '.top'], ['#login-dialog', '#login-dialog'], ['#setup', '#setup']].map(([place, bg]) => [
       getComputedStyle(document.querySelector(place + ' [data-brand] .brand-logo use.brand-cover')).fill,

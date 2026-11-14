@@ -20,6 +20,12 @@ import (
 // RFAddress is the 24-bit radio address of a MAX! device or of the Cube.
 type RFAddress uint32
 
+// ZeroAddress is radio address 000000. It is no device's: a Cube can
+// list an entry there all the same, with a configuration too short to be
+// one (seen on firmware 1.1.3, docs/cube-protocol.md), and nothing is
+// ever sent to it.
+const ZeroAddress RFAddress = 0
+
 // ParseRFAddress parses a 6-digit hexadecimal radio address such as "0fdaed".
 func ParseRFAddress(s string) (RFAddress, error) {
 	s = strings.TrimSpace(s)

@@ -87,6 +87,9 @@ const (
 	TrustedProxies = "MASSIMO_TRUSTED_PROXIES"
 	// Announce switches serve's announcement on the LAN by mDNS.
 	Announce = "MASSIMO_ANNOUNCE"
+	// PublicURL is the address the clients reach the API at, where it is
+	// not the server's own: the announcement's url.
+	PublicURL = "MASSIMO_PUBLIC_URL"
 )
 
 // Moved lists the per-Cube variables whose values serve keeps in its
@@ -203,7 +206,7 @@ func Known(k string) bool {
 	case Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
 		LogFormat, LogFileFormat, LogProcessFormat, LogRotateSize, LogKeep, LogKeepMin,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", "MASSIMO_REBOOT",
-		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies, Announce,
+		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies, Announce, PublicURL,
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.
 		"MASSIMO_UPDATE_CHANNEL", "MASSIMO_UPDATE_API", "MASSIMO_GITHUB_TOKEN":

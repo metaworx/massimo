@@ -47,7 +47,7 @@ func TestUIServed(t *testing.T) {
 		!strings.Contains(body, `<base href="../">`) || !strings.Contains(body, `http-equiv="Content-Security-Policy"`) {
 		t.Fatalf("GET /ui/connect.html: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/week-program.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/providers.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js", "/ui/notify.js", "/ui/notifytext.js"} {
+	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/week-program.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/providers.js", "/ui/integrations.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js", "/ui/notify.js", "/ui/notifytext.js"} {
 		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
 			t.Fatalf("GET %s: %d %s", p, code, ct)
 		}
@@ -198,12 +198,6 @@ func pageIDs(t *testing.T, name, page string) map[string]bool {
 	return ids
 }
 
-// The page is assembled from index.html and the partials: every file of
-// ui/partials/ is listed in uiPartials exactly once and every listed one
-// exists, no marker is left, the page is served at / as assembled, and
-// every id the scripts look up ($("…")) and every template they clone
-// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
-// script of another page (uiPageScripts), in that page.
 // Massimo's mark (make ui-brand): every file the page's head, the connect
 // page's, the manifest and the service worker name is served with its
 // type; /favicon.ico at the root, where browsers look; an SVG with a
@@ -258,6 +252,12 @@ func TestUIBrand(t *testing.T) {
 	}
 }
 
+// The page is assembled from index.html and the partials: every file of
+// ui/partials/ is listed in uiPartials exactly once and every listed one
+// exists, no marker is left, the page is served at / as assembled, and
+// every id the scripts look up ($("…")) and every template they clone
+// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
+// script of another page (uiPageScripts), in that page.
 func TestUIPage(t *testing.T) {
 	files, err := fs.Glob(uiFiles, "ui/partials/*.html")
 	if err != nil {
@@ -433,6 +433,52 @@ func TestUIETagVersion(t *testing.T) {
 // uiLanguages are the languages of LANGUAGE_NAMES in i18n.js, each with
 // its file ui/i18n/<code>.json.
 var uiLanguages = []string{"en", "de", "fr", "it", "nl", "pl"}
+
+// The scripts a page loads share one global scope, so a name declared at
+// the top of two of them clashes: a second function declaration silently
+// replaces the first (integrations.js's renderFound hid app.js's found
+// Cubes), and a second const, let or class stops the later script with a
+// SyntaxError. Each page, the one at / and those of uiPageScripts, is
+// checked on its own, its scripts read from its <script src> tags; a name
+// two pages' scripts share is fine. A top-level declaration is one at the
+// start of a line, the scripts' indentation putting everything nested
+// further in.
+func TestUIScriptGlobals(t *testing.T) {
+	pages := map[string][]byte{"the page": assembledPage(t)}
+	for name := range uiPageScripts {
+		b, err := uiFiles.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages[name] = b
+	}
+	src := regexp.MustCompile(`<script src="(ui/[^"]+\.js)"`)
+	decl := regexp.MustCompile(`(?m)^(?:(?:async\s+)?function\s*\*?\s*([\w$]+)\s*\(|(?:const|let)\s+([\w$]+)\s*=|class\s+([\w$]+)\b)`)
+	for _, page := range slices.Sorted(maps.Keys(pages)) {
+		scripts := src.FindAllSubmatch(pages[page], -1)
+		if len(scripts) == 0 {
+			t.Errorf("%s loads no script", page)
+		}
+		where := map[string][]string{} // identifier: the scripts declaring it
+		for _, s := range scripts {
+			name := string(s[1])
+			b, err := uiFiles.ReadFile(name)
+			if err != nil {
+				t.Errorf("%s loads %s: %v", page, name, err)
+				continue
+			}
+			for _, m := range decl.FindAllSubmatch(b, -1) {
+				id := string(slices.Concat(m[1], m[2], m[3]))
+				where[id] = append(where[id], name)
+			}
+		}
+		for _, id := range slices.Sorted(maps.Keys(where)) {
+			if files := where[id]; len(slices.Compact(slices.Clone(files))) > 1 {
+				t.Errorf("%s: %s is declared in %s", page, id, strings.Join(files, ", "))
+			}
+		}
+	}
+}
 
 // The translation files hold the texts of the page: each parses, the
 // other languages have no key English lacks (but their own plural forms
