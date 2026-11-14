@@ -48,10 +48,13 @@ jobs:
   # devel build. code is false where fingerprint.sh finds the same code as
   # the base (a pull request's) or as the commit main was at (a push's):
   # documents alone, as config.ini's [ci] untested names them; every job
-  # but Guidelines is skipped, and main makes no devel build. site is true
+  # but Guidelines and Code result is skipped, and main makes no devel
+  # build. site is true
   # where the changes are the site's documents (config.ini, [ci] site) and
   # untested ones alone, and none is shipped; code is then false too, Site
-  # runs, and a push to main deploys the site (Deploy site). A tag is
+  # runs, and a push to main deploys the site (Deploy site). Where code is
+  # false, Code result carries the verdict of the last run that tested the
+  # code, so that All tests passed is red on code that failed. A tag is
   # always tested whole, and fingerprint.sh's exit 2, an unknown commit
   # included, counts as code. tested is true where the Tested status on
   # the commit tested before holds this code's fingerprint: what passed
@@ -1174,6 +1177,34 @@ jobs:
       - name: Build the pages and the docs of the commit
         run: packaging/site/build.sh --out site --no-apt --ref main=HEAD
 
+  # The code's verdict where What to test answers code=false and no code
+  # job runs (packaging/code-result.sh; GUIDELINES/project/CI.md, section
+  # 2): that of the last run that tested this code, on main's first parents,
+  # read and never run again. Red fails it on a push, so that All tests
+  # passed fails and the nightly build takes nothing, and is a warning on a
+  # pull request, which adds no code. The whole history, for the walk;
+  # actions to read the runs and wait for one still going, statuses for the
+  # Tested status of a run that skipped its jobs on it.
+  code-result:
+    name: Code result
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      actions: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: The verdict of the last run that tested this code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: packaging/code-result.sh
+
   # One job that stands for all of the above: it fails unless none of
   # them failed or was cancelled (a pull request skips some). The release
   # waits for it, and the nightly build looks for it among a commit's runs
@@ -1208,7 +1239,7 @@ jobs:
   # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
-    needs: [ changes, test, actionlint, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site ]
+    needs: [ changes, test, actionlint, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site, code-result ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     permissions:
