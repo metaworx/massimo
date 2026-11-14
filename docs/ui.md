@@ -117,6 +117,7 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   as "Room › Device" with their badges;
   for one who may change the settings, **Settings** last:
   a Cube proxy that does not listen, a settings file that differs,
+  a Cube that discovery finds at another address than its fixed one,
   Cubes found and not served.
   A window open briefly is not listed: it is a state, not a problem.
 - **The time of the last update** and **↻**, one button without a frame,
@@ -767,7 +768,8 @@ to the top of the page.
   and not the panel, and where its settings come from,
   all of it drawn again at every poll, and opens with a click:
   its own badges as its top line (its link where it is not connected,
-  a proxy that does not listen, a settings file that differs, the source),
+  a proxy that does not listen, a settings file that differs,
+  a Cube found elsewhere than its fixed address, the source),
   a table of its facts for everyone who sees the panel
   (address, port, firmware, radio address, the Cube's clock,
   duty cycle, free slots, pending and queued, refreshed while it is open),
@@ -777,6 +779,11 @@ to the top of the page.
   network is back, the Cube still holding the server's old connection
   (it lets go after up to about 40 minutes, or a reboot frees it),
   or the Cube busy with another client;
+  and where discovery finds a Cube with a fixed address at another one
+  (`found_elsewhere`), a notice with both addresses and since when,
+  and **Use the found address** and **Follow discovery**, which save either
+  at once (a Cube of `-addr` or `-sn` has the notice alone);
+  the card's badge counts such Cubes;
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),

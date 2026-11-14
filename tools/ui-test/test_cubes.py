@@ -293,6 +293,74 @@ def test_proxy_not_listening(page, case):
         "the notice gone once the listener listens, the panel open"
 
 
+ELSEWHERE = {"address": "192.0.2.24:62910", "configured": "192.0.2.23:62910", "since": "2026-11-14T08:00:00+01:00"}
+ELSEWHERE_BADGE = {"en": "found elsewhere", "de": "anderswo gefunden"}
+ELSEWHERE_COUNT = {"en": "1 found elsewhere", "de": "1 anderswo gefunden"}
+ELSEWHERE_ITEM = {"en": "found at 192.0.2.24:62910", "de": "gefunden auf 192.0.2.24:62910"}
+
+
+def test_cube_found_elsewhere(page, case):
+    """A Cube with a fixed address that discovery finds at another one
+    (found_elsewhere, stubbed): a badge on the panel's top line and in
+    the Cubes card, an item in the Cube's pill, a notice above its facts
+    with since when, and two buttons that PUT the found address and
+    follow_discovery (the PUT stubbed, nothing changes); the notice goes
+    once the Cube answers at its address, the panel open."""
+    # a request still under way when its route is removed (the PUTs'
+    # reload of the Cubes) is let go, as in test_announce_setting.py
+    def elsewhere(route):
+        try:
+            cubes = route.fetch().json()
+            for c in cubes:
+                if c.get("serial") == "KEQ0000100":
+                    c["found_elsewhere"] = ELSEWHERE
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        except Exception:  # Route is already handled, or the page closed
+            pass
+    puts = []
+    def put(route):
+        if route.request.method != "PUT":
+            route.fallback()
+            return
+        puts.append(route.request.post_data_json)
+        try:
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(route.fetch(method="GET").json()))
+        except Exception:  # as above
+            pass
+    page.route("**/api/v1/cubes", elsewhere)
+    page.route("**/api/v1/cubes/KEQ0000100", put)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s .cube-top-line\") && "
+                          "document.querySelector(\"%s .cube-top-line\").textContent.includes(%s)"
+                          % (PANEL, PANEL, json.dumps(ELSEWHERE_BADGE[case.lang])), 5), "the panel's badge"
+        assert ELSEWHERE_COUNT[case.lang] in page.locator("#sys-cubes .section-badges").inner_text(), "the card's badge"
+        assert ELSEWHERE_ITEM[case.lang] in page.locator(PANEL + " .cube-pill").text_content(), "the item in the Cube's pill"
+        panel, _ = open_panel(page)
+        notice = panel.locator(".cube-address-state .notice")
+        assert notice.count() == 1, "the notice above the facts"
+        text = notice.inner_text()
+        assert "192.0.2.24:62910" in text and "192.0.2.23:62910" in text, "the found and the configured address"
+        assert notice.locator(".notice-since").count() == 1, "since when"
+        named_buttons(page, "the found address's buttons")
+        for name, n in ((".use-found", 1), (".follow-found", 2)):
+            panel.locator(".cube-address-state " + name).click()
+            for _ in range(50):
+                if len(puts) >= n:
+                    break
+                page.wait_for_timeout(100)
+            assert len(puts) >= n, "%s sends a PUT" % name
+        assert {"address": "192.0.2.24:62910"} in puts and {"follow_discovery": True} in puts, "the two PUTs' bodies: %r" % puts
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
+    finally:
+        page.unroute("**/api/v1/cubes/KEQ0000100")
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "!document.querySelector(\"%s .cube-address-state .notice\")" % PANEL, 5), \
+        "the notice gone once the Cube answers at its address, the panel open"
+
+
 STALE = {"en": "it still holds the server's old connection", "de": "Er hält noch dessen alte Verbindung"}
 STALE_BADGE = {"en": "old connection", "de": "alte Verbindung"}
 
