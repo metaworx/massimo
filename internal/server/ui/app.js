@@ -916,6 +916,7 @@ async function refresh() {
   try {
     await loadCubes();
     await loadRooms();
+    loadLogAlerts(); // log.js
     if (langError) showLanguageError();
     else $("message").classList.add("hidden");
   } catch (e) {
@@ -1164,11 +1165,12 @@ function updateDue() {
 
 // --- polling ----------------------------------------------------------
 
-// poll refreshes the header and runs the version check; the rooms are
-// refreshed as well while the event stream is not connected, or always
-// when the user asked (the refresh button).
+// poll refreshes the header, the log button's sign, and runs the version
+// check; the rooms are refreshed as well while the event stream is not
+// connected, or always when the user asked (the refresh button).
 function poll(rooms) {
   checkVersion();
+  loadLogAlerts(); // log.js: the log button's sign
   return loadCubes().then(() => {
     if (rooms || !state.eventsOpen) return loadRooms();
   }).catch(() => {});
@@ -1436,6 +1438,7 @@ function applyLanguage() {
   renderRooms();
   fillLogSelects();
   renderLog();
+  renderLogSign(); // log.js
   if (updState.info) renderUpdate(updState.info);
   if (infoState.store || infoState.config) renderServerInfo();
   if (isShown("me")) renderNotify(); // notify.js

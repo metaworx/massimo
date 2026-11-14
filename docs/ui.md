@@ -133,6 +133,10 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   The items of **☰** have the icons of their pages.
 - The page buttons, a house, a person, a sheet and a cog,
   switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
+  The sheet turns amber with a triangle, or red with a cross,
+  while the log holds a warning or an error not yet settled or marked seen (see Log),
+  its name with the count;
+  on a phone ☰ carries the mark, and the log's entry in it the sign.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
   `#notify`) and `#system` (System settings),
@@ -398,6 +402,21 @@ the oldest line, where an event of that same millisecond can be missed.
 A page that cannot load says so in the log, whatever is chosen;
 an answer that comes after **Clear**, another choice or another Cube is dropped,
 and another Cube in the header starts the log over with every device.
+
+A warning or an error of any Cube's log, or of the server's,
+stays a problem until a later line settles it
+or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
+a lost connection until the next one,
+a failed command until the same one is acknowledged,
+a failed backup until the next, a hold until it ends;
+a device's transmit error, link error and low battery while the device has them,
+at the line that set them.
+Its line is highlighted, a bar and its mark in amber or red,
+with **Mark seen**; **Mark all as seen** beside **Clear** marks every one.
+Opening the log marks nothing.
+The marks follow a signed-in user with `preferences` (the preference `log.seen`);
+anyone else's stay in the browser.
+The page asks at every poll.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").

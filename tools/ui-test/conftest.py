@@ -154,11 +154,12 @@ def failed_checks_forgotten(request):
 def clear_preferences():
     """The token's user keeps the page's settings on the server, and the
     four cases share the server: its preferences are removed before
-    every page, its notification rules among them, so that a test starts
-    from the defaults as a fresh browser does."""
+    every page, its notification rules and its marks of the log among
+    them, so that a test starts from the defaults as a fresh browser
+    does."""
     if not TOKEN:
         return
-    for key in ("ui", "schemes", "notify"):
+    for key in ("ui", "schemes", "notify", "log.seen"):
         api_call("DELETE", "api/v1/me/preferences/" + key)
 
 

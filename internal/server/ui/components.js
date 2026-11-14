@@ -183,13 +183,15 @@ function iconEl(symbol, cls) {
 // mark, a triangle (warn) or a cross (bad). The radio (a Wi-Fi fan) and
 // the window carry the mark at the bottom right, as the original MAX!
 // software does; the network (a Cube's link) on top, in place of its
-// upper node; the cog (the settings) at the bottom right too. A battery
-// has no mark: it is amber or nothing.
+// upper node; the cog (the settings) and the log (its unseen problems,
+// log.js renderLogSign) at the bottom right too. A battery has no mark:
+// it is amber or nothing.
 const SIGNS = {
   radio: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   window: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
   cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  log: { icon: "icon-log", base: "icon-log-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   battery: { icon: "icon-battery" },
 };
 
