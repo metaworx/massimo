@@ -27,7 +27,7 @@ const DEFAULT_SCHEME = "massimo";
 // The tokens, in the order of style.css and of the editor.
 const THEME_TOKENS = [
   "bg", "fg", "muted", "card", "card-head", "line", "accent", "accent-fg", "heat",
-  "ok", "warn", "bad", "notice-bg", "notice-fg", "fill-ok", "fill-warn", "fill-bad", "fill-info", "fill-fg",
+  "ok", "warn", "warn-mark", "bad", "notice-bg", "notice-fg", "fill-ok", "fill-warn", "fill-bad", "fill-info", "fill-fg",
 ];
 
 // The pairs that must stay readable: a background token and the text
@@ -43,6 +43,13 @@ const CONTRAST_PAIRS = {
   "notice-bg": "notice-fg",
 };
 
+// The colours that draw icons and marks, with the background they stand
+// on, graded at 3:1 (WCAG's contrast for a graphic, not text): the
+// editor shows their contrast next to the icon colour. warn-mark is the
+// amber of the icons and their triangles; warn, the deeper amber of the
+// text, reads at 4.5.
+const MARK_PAIRS = { "warn-mark": "card" };
+
 // The built-in schemes, by id; their names are appearance.scheme.<id>
 // in the translation table. "massimo" is the default and repeats the
 // token blocks of style.css, which stay the source for a page without
@@ -51,48 +58,49 @@ const CONTRAST_PAIRS = {
 // colours, "graphite" keeps the default's tones with a grey accent in
 // place of the blue. Every pair of CONTRAST_PAIRS, the muted text on
 // the page and the tile, and the ok, warn and bad texts on a tile are
-// at 4.5 or better in both sets of all three.
+// at 4.5 or better in both sets of all three, and the icons' colours of
+// MARK_PAIRS, ok and bad at 3 on a tile.
 const BUILTIN_SCHEMES = {
   massimo: {
     light: {
       "bg": "#f6f6f4", "fg": "#1c1c1a", "muted": "#6b6b66", "card": "#ffffff", "card-head": "#eeeeea", "line": "#dcdcd6",
-      "accent": "#1f63c6", "accent-fg": "#ffffff", "heat": "#b5452c", "ok": "#2d7a3a", "warn": "#9a6b00", "bad": "#b3261e",
+      "accent": "#1f63c6", "accent-fg": "#ffffff", "heat": "#b5452c", "ok": "#2d7a3a", "warn": "#b34d0f", "warn-mark": "#d05911", "bad": "#991b1b",
       "notice-bg": "#fff4d6", "notice-fg": "#5a3f00",
-      "fill-ok": "#2d7a3a", "fill-warn": "#8a5f00", "fill-bad": "#b3261e", "fill-info": "#6b3fb3", "fill-fg": "#ffffff",
+      "fill-ok": "#2d7a3a", "fill-warn": "#8a5f00", "fill-bad": "#991b1b", "fill-info": "#6b3fb3", "fill-fg": "#ffffff",
     },
     dark: {
       "bg": "#151514", "fg": "#ececea", "muted": "#9b9b95", "card": "#202020", "card-head": "#2a2a29", "line": "#353533",
-      "accent": "#6ea8fe", "accent-fg": "#151514", "heat": "#e0674a", "ok": "#6fc37c", "warn": "#e3b341", "bad": "#f28b82",
+      "accent": "#6ea8fe", "accent-fg": "#151514", "heat": "#e0674a", "ok": "#6fc37c", "warn": "#ffa94d", "warn-mark": "#ffa94d", "bad": "#ff453a",
       "notice-bg": "#3a3012", "notice-fg": "#f1dfae",
-      "fill-ok": "#6fc37c", "fill-warn": "#e3b341", "fill-bad": "#f28b82", "fill-info": "#c4a7f5", "fill-fg": "#151514",
+      "fill-ok": "#6fc37c", "fill-warn": "#e3b341", "fill-bad": "#ff453a", "fill-info": "#c4a7f5", "fill-fg": "#151514",
     },
   },
   contrast: {
     light: {
       "bg": "#ffffff", "fg": "#000000", "muted": "#3d3d3d", "card": "#ffffff", "card-head": "#efefef", "line": "#6b6b6b",
-      "accent": "#0b3d91", "accent-fg": "#ffffff", "heat": "#9b2f12", "ok": "#0b5e1e", "warn": "#6b4a00", "bad": "#9c1010",
+      "accent": "#0b3d91", "accent-fg": "#ffffff", "heat": "#9b2f12", "ok": "#0b5e1e", "warn": "#8f3d0b", "warn-mark": "#b34d0f", "bad": "#9c1010",
       "notice-bg": "#fff1b8", "notice-fg": "#3a2a00",
       "fill-ok": "#0b5e1e", "fill-warn": "#6b4a00", "fill-bad": "#9c1010", "fill-info": "#4b1f9a", "fill-fg": "#ffffff",
     },
     dark: {
       "bg": "#000000", "fg": "#ffffff", "muted": "#c8c8c8", "card": "#0d0d0d", "card-head": "#1c1c1c", "line": "#8a8a8a",
-      "accent": "#8ec5ff", "accent-fg": "#000000", "heat": "#ff8a6a", "ok": "#7ee08a", "warn": "#ffd25e", "bad": "#ff9b94",
+      "accent": "#8ec5ff", "accent-fg": "#000000", "heat": "#ff8a6a", "ok": "#7ee08a", "warn": "#ffb870", "warn-mark": "#ffb870", "bad": "#ff5a50",
       "notice-bg": "#4a3c10", "notice-fg": "#fff0c2",
-      "fill-ok": "#7ee08a", "fill-warn": "#ffd25e", "fill-bad": "#ff9b94", "fill-info": "#d3bcff", "fill-fg": "#000000",
+      "fill-ok": "#7ee08a", "fill-warn": "#ffd25e", "fill-bad": "#ff5a50", "fill-info": "#d3bcff", "fill-fg": "#000000",
     },
   },
   graphite: {
     light: {
       "bg": "#f5f5f3", "fg": "#1e1e1c", "muted": "#6a6a66", "card": "#ffffff", "card-head": "#ececea", "line": "#d9d9d4",
-      "accent": "#4a4a46", "accent-fg": "#ffffff", "heat": "#b5452c", "ok": "#2d7a3a", "warn": "#9a6b00", "bad": "#b3261e",
+      "accent": "#4a4a46", "accent-fg": "#ffffff", "heat": "#b5452c", "ok": "#2d7a3a", "warn": "#b34d0f", "warn-mark": "#d05911", "bad": "#991b1b",
       "notice-bg": "#efeadb", "notice-fg": "#4a3f1e",
-      "fill-ok": "#2d7a3a", "fill-warn": "#8a5f00", "fill-bad": "#b3261e", "fill-info": "#5a5f8f", "fill-fg": "#ffffff",
+      "fill-ok": "#2d7a3a", "fill-warn": "#8a5f00", "fill-bad": "#991b1b", "fill-info": "#5a5f8f", "fill-fg": "#ffffff",
     },
     dark: {
       "bg": "#161616", "fg": "#eaeae8", "muted": "#9a9a96", "card": "#212121", "card-head": "#2b2b2a", "line": "#373735",
-      "accent": "#c9c9c4", "accent-fg": "#161616", "heat": "#e0674a", "ok": "#6fc37c", "warn": "#e3b341", "bad": "#f28b82",
+      "accent": "#c9c9c4", "accent-fg": "#161616", "heat": "#e0674a", "ok": "#6fc37c", "warn": "#ffa94d", "warn-mark": "#ffa94d", "bad": "#ff453a",
       "notice-bg": "#333028", "notice-fg": "#e8e0c8",
-      "fill-ok": "#6fc37c", "fill-warn": "#e3b341", "fill-bad": "#f28b82", "fill-info": "#b8b4e0", "fill-fg": "#161616",
+      "fill-ok": "#6fc37c", "fill-warn": "#e3b341", "fill-bad": "#ff453a", "fill-info": "#b8b4e0", "fill-fg": "#161616",
     },
   },
 };
@@ -422,14 +430,17 @@ function tokenLabel(k) {
   return t("appearance.token." + k);
 }
 
-// fillContrast writes the ratio of the pair into a badge: the number,
-// its grade as class, the pair as title and label.
-function fillContrast(badge, set, bgToken) {
-  const textToken = CONTRAST_PAIRS[bgToken];
-  const ratio = contrastRatio(set[textToken], set[bgToken]);
+// fillContrast writes the ratio of a token's pair into a badge: the
+// number, its grade as class, the pair as title and label. The token is
+// a background of CONTRAST_PAIRS, graded for text on it, or an icon
+// colour of MARK_PAIRS, graded at 3:1 on its background.
+function fillContrast(badge, set, token) {
+  const mark = MARK_PAIRS[token];
+  const [fg, bg] = mark ? [token, mark] : [CONTRAST_PAIRS[token], token];
+  const ratio = contrastRatio(set[fg], set[bg]);
   badge.textContent = fmtNum(ratio, 1);
-  badge.className = "contrast " + contrastClass(ratio);
-  const label = t("appearance.contrast", { text: tokenLabel(textToken), bg: tokenLabel(bgToken), ratio: fmtNum(ratio, 1) });
+  badge.className = "contrast " + (mark ? (ratio >= 3 ? "ok" : "bad") : contrastClass(ratio));
+  const label = t("appearance.contrast", { text: tokenLabel(fg), bg: tokenLabel(bg), ratio: fmtNum(ratio, 1) });
   badge.title = label;
   badge.setAttribute("aria-label", label);
 }
@@ -459,7 +470,7 @@ function markHex(field, refused) {
 
 // renderSchemeSet fills the fieldset of one set (light or dark) of the
 // draft: a row per token (tpl-scheme-row) with its name, the contrast badge for a
-// background of CONTRAST_PAIRS (an empty placeholder of the same width
+// background of CONTRAST_PAIRS or an icon colour of MARK_PAIRS (an empty placeholder of the same width
 // on the other rows, so the colours and the hex fields line up), the
 // colour input and the hex field. The hex field takes a typed or pasted
 // value: a colour applies as it is typed and is written as #rrggbb once
@@ -521,7 +532,7 @@ function renderSchemeSet(fs, mode) {
       }
     });
     const badge = label.nextElementSibling;
-    if (CONTRAST_PAIRS[k]) {
+    if (CONTRAST_PAIRS[k] || MARK_PAIRS[k]) {
       badge.setAttribute("role", "img"); // so the label is read out
       badges[k] = badge;
     } else {

@@ -622,7 +622,9 @@ func contrastRatio(a, b string) float64 {
 // which stay the truth for a page without a stored scheme; the two must
 // not drift apart. Every built-in scheme has every token in both sets,
 // and the pairs the editor grades, the muted text on the page and the
-// tile, and the ok, warn and bad texts on a tile read at WCAG AA (4.5).
+// tile, and the ok, warn and bad texts on a tile read at WCAG AA (4.5);
+// the icons' amber (warn-mark), green and red stand out from a tile at
+// 3, WCAG's contrast for a graphic.
 func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
 	css, err := uiFiles.ReadFile("ui/style.css")
 	if err != nil {
@@ -635,8 +637,8 @@ func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
 	light := cssTokens(t, string(css), ":root")
 	dark := cssTokens(t, string(css), `:root[data-theme="dark"]`)
 	system := cssTokens(t, string(css), `:root:not([data-theme="light"])`)
-	if len(light) != 19 || len(dark) != 19 || len(system) != 19 {
-		t.Fatalf("style.css: %d light, %d dark, %d system tokens, want 19 each", len(light), len(dark), len(system))
+	if len(light) != 20 || len(dark) != 20 || len(system) != 20 {
+		t.Fatalf("style.css: %d light, %d dark, %d system tokens, want 20 each", len(light), len(dark), len(system))
 	}
 	schemes := builtinSchemes(string(js))
 	if len(schemes) < 3 {
@@ -670,6 +672,11 @@ func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
 			for _, p := range pairs {
 				if r := contrastRatio(set[p[0]], set[p[1]]); r < 4.5 {
 					t.Errorf("theme.js %s.%s: %s on %s has contrast %.1f, want 4.5", id, mode, p[0], p[1], r)
+				}
+			}
+			for _, icon := range []string{"warn-mark", "ok", "bad"} {
+				if r := contrastRatio(set[icon], set["card"]); r < 3 {
+					t.Errorf("theme.js %s.%s: the icons' %s on card has contrast %.1f, want 3", id, mode, icon, r)
 				}
 			}
 		}

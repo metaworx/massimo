@@ -37,8 +37,8 @@ def test_schemes_editor_export_import(page, case, tmp_path):
     assert not page.evaluate("document.documentElement.hasAttribute('data-theme')"), "mode system removes data-theme"
     page.locator("#scheme-customise").click()
     editor = page.locator("#scheme-editor")
-    assert editor.is_visible() and editor.locator("input[type=color]").count() == 38, "editor with a colour input per token and set"
-    assert editor.locator(".contrast.ok").count() == 14, "contrast badges, all ok for a built-in scheme"
+    assert editor.is_visible() and editor.locator("input[type=color]").count() == 40, "editor with a colour input per token and set"
+    assert editor.locator(".contrast.ok").count() == 16, "contrast badges, all ok for a built-in scheme: seven backgrounds and the icons' amber, twice"
     assert editor.locator("#scheme-delete").is_disabled(), "no Delete for a built-in scheme"
     named_buttons(page, "the scheme editor")
     scheme_hex(page, lang)
@@ -52,14 +52,14 @@ def test_schemes_editor_export_import(page, case, tmp_path):
     assert page.locator("#scheme-msg").inner_text() == SAVED[lang], f"saved message in {lang}"
     kept = stored()
     assert len(kept) == 1 and kept[0]["name"] == "Test scheme" and kept[0]["light"]["bg"] == "#112233" \
-        and len(kept[0]["light"]) == 19 and len(kept[0]["dark"]) == 19, "the scheme is in the browser"
+        and len(kept[0]["light"]) == 20 and len(kept[0]["dark"]) == 20, "the scheme is in the browser"
     assert not editor.locator("#scheme-delete").is_disabled(), "Delete for the user's scheme"
     with page.expect_download() as dl:
         page.locator("#scheme-export").click()
     doc = json.loads(Path(dl.value.path()).read_text())
     assert dl.value.suggested_filename == "massimo-scheme-test-scheme.json", "export file name"
     assert doc.get("format") == "massimo-scheme/1" and doc.get("name") == "Test scheme" and doc["light"]["bg"] == "#112233" \
-        and len(doc["light"]) == 19 and len(doc["dark"]) == 19 and doc["dark"]["bg"] == "#000000", "export is the scheme document"
+        and len(doc["light"]) == 20 and len(doc["dark"]) == 20 and doc["dark"]["bg"] == "#000000", "export is the scheme document"
     editor.locator("#scheme-delete").click()
     assert sel.input_value() == "massimo" and bg() == default_bg and editor.is_hidden(), "Delete goes back to the default"
     assert page.evaluate("localStorage.getItem('massimo.schemes')") is None, "nothing stored after Delete"
@@ -127,7 +127,10 @@ def scheme_hex(page, lang):
               return {badge: x('.contrast'), colour: x('input[type=color]'), hex: x('.scheme-hex'),
                       real: !r.querySelector('.contrast').classList.contains('none')};
             })""", i)
-        assert len(cols) == 19 and any(c["real"] for c in cols) and any(not c["real"] for c in cols) \
+        assert len(cols) == 20 and any(c["real"] for c in cols) and any(not c["real"] for c in cols) \
             and len({c["colour"] for c in cols}) == 1 and len({c["hex"] for c in cols}) == 1 \
             and len({c["badge"] for c in cols}) == 1 and all(c["badge"] < c["colour"] < c["hex"] for c in cols), \
             f"badge column first, colours and hex fields aligned in the {mode} set"
+    mark = page.locator("#scheme-light-warn-mark").locator("xpath=ancestor::*[contains(@class, 'scheme-row')]").locator(".contrast")
+    assert mark.get_attribute("class") == "contrast ok" and "3" < mark.inner_text(), \
+        "the icons' amber graded by its contrast on a tile, at 3 for a graphic"

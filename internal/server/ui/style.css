@@ -12,13 +12,14 @@
   --accent-fg: #ffffff;
   --heat: #b5452c; /* warm end of the week programme's temperature bars */
   --ok: #2d7a3a;
-  --warn: #9a6b00;
-  --bad: #b3261e;
+  --warn: #b34d0f; /* warning text */
+  --warn-mark: #d05911; /* warning icons and their triangles */
+  --bad: #991b1b;
   --notice-bg: #fff4d6;
   --notice-fg: #5a3f00;
   --fill-ok: #2d7a3a;
-  --fill-warn: #8a5f00;
-  --fill-bad: #b3261e;
+  --fill-warn: #8a5f00; /* the Manual mode */
+  --fill-bad: #991b1b;
   --fill-info: #6b3fb3; /* holiday, apart from the blue accent */
   --fill-fg: #ffffff;
   --mono: ui-monospace, Menlo, Consolas, monospace;
@@ -35,13 +36,14 @@
     --accent-fg: #151514;
     --heat: #e0674a;
     --ok: #6fc37c;
-    --warn: #e3b341;
-    --bad: #f28b82;
+    --warn: #ffa94d;
+    --warn-mark: #ffa94d;
+    --bad: #ff453a;
     --notice-bg: #3a3012;
     --notice-fg: #f1dfae;
     --fill-ok: #6fc37c;
     --fill-warn: #e3b341;
-    --fill-bad: #f28b82;
+    --fill-bad: #ff453a;
     --fill-info: #c4a7f5;
     --fill-fg: #151514;
   }
@@ -57,13 +59,14 @@
   --accent-fg: #151514;
   --heat: #e0674a;
   --ok: #6fc37c;
-  --warn: #e3b341;
-  --bad: #f28b82;
+  --warn: #ffa94d;
+  --warn-mark: #ffa94d;
+  --bad: #ff453a;
   --notice-bg: #3a3012;
   --notice-fg: #f1dfae;
   --fill-ok: #6fc37c;
   --fill-warn: #e3b341;
-  --fill-bad: #f28b82;
+  --fill-bad: #ff453a;
   --fill-info: #c4a7f5;
   --fill-fg: #151514;
 }
@@ -959,7 +962,7 @@ button.subtle { color: var(--muted); }
 }
 .problems-sum .ni { width: 18px; height: 18px; }
 .tone-bad { color: var(--bad); }
-.tone-warn { color: var(--warn); }
+.tone-warn { color: var(--warn-mark); }
 .tone-ok { color: var(--ok); }
 .tone-info { color: var(--fill-info); }
 .menu-items.problems-list { min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 2px 0; gap: 0; }
@@ -1282,7 +1285,7 @@ massimo-week-program { display: contents; }
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--warn);
+  background: var(--warn-mark);
 }
 .day-bar .day.all, .day-bar .day.copy { font-weight: 400; }
 .day-bar .day.all { color: var(--muted); }
