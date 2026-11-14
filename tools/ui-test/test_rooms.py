@@ -46,13 +46,56 @@ def head_icons(room):
     return sign_icons(room.locator(".tile-head .problems-sum"))
 
 
+# Gives the open window contact the times of a window open for `ago`
+# minutes, by the server's limits of 5 and 10 minutes.
+WINDOW_TIMES = """(ago) => {
+  const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
+  const d = JSON.parse(JSON.stringify(r.devices.find((d) => d.type === "shutter_contact")));
+  const since = Date.now() - ago * 60000;
+  const iso = (m) => new Date(since + m * 60000).toISOString();
+  d.state.window_open = true;
+  d.window = { open_since: iso(0), warn_at: iso(5), alert_at: iso(10) };
+  updateDevice(d);
+}"""
+
+
+def window_badge(room):
+    """The class and the leading mark of the open window's badge in the
+    room's list."""
+    room.locator(".tile-head .problems-sum").click()
+    flag = room.locator(".tile-head .problem-entry .flag").first
+    out = flag.get_attribute("class"), [u.get_attribute("href") for u in flag.locator("svg.mark-sign use").all()]
+    room.page.keyboard.press("Escape")
+    return out
+
+
 def test_open_window(page, case):
-    """The room with the open window contact shows the open window's icon
-    in its tile's head, which lists the contact, open, with its age; the
-    icon goes when a state event closes the contact; the measured
-    temperature shows its age."""
+    """The room with the open window contact shows the open window in its
+    tile's head, which lists the contact, open, with its age: blue and
+    plain for its first five minutes, amber with a triangle up to ten,
+    red with a cross after; the icon goes when a state event closes the
+    contact; the measured temperature shows its age."""
     room = page.locator(".room", has=page.locator(".room-name", has_text="Kind 1"))
-    assert head_icons(room) == ["#icon-window-open-small+#mark-corner-x"], "the open window in the head of the room with the open window"
+    page.evaluate(WINDOW_TIMES, 1)
+    assert head_icons(room) == ["#icon-window-open"], "open briefly: the open window, plain"
+    assert "tone-open" in room.locator(".tile-head .problems-sum svg").first.get_attribute("class"), "in blue"
+    assert window_badge(room) == ("flag fill-open", []), "its badge filled blue, no mark"
+    page.evaluate(WINDOW_TIMES, 6)
+    assert head_icons(room) == ["#icon-window-open-small+#mark-corner-warn"], "open long: amber, a triangle"
+    assert window_badge(room) == ("flag warn", ["#mark-warn"]), "its badge an amber outline led by a triangle"
+    page.evaluate(WINDOW_TIMES, 11)
+    assert head_icons(room) == ["#icon-window-open-small+#mark-corner-x"], "open too long: red, a cross"
+    assert window_badge(room) == ("flag fill-bad", ["#mark-x"]), "its badge filled red, led by a cross"
+    page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
+      const d = JSON.parse(JSON.stringify(r.devices.find((d) => d.type === "shutter_contact")));
+      d.window = { open_since: new Date(Date.now() - 299500).toISOString(), warn_at: new Date(Date.now() + 500).toISOString(),
+        alert_at: new Date(Date.now() + 300500).toISOString() };
+      updateDevice(d);
+    }""")
+    assert head_icons(room) == ["#icon-window-open"], "half a second before the warning"
+    assert wait_until(page, "document.querySelector('.room .tile-head .problems-sum use[href=\"#mark-corner-warn\"]') !== null", 3), \
+        "the tile turns amber by the clock alone"
     summary = room.locator(".tile-head .problems-sum")
     assert OPEN[case.lang] in (summary.get_attribute("aria-label") or "").lower(), "named to a screen reader"
     assert page.locator(".room").first.locator(".problems").count() == 0, "nothing in the head of a room with closed windows"

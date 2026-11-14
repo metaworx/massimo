@@ -107,6 +107,7 @@ function renderRooms() {
   } else {
     unl.classList.add("hidden");
   }
+  planWindowRedraw();
 }
 
 // unlistedUI is per device without a room what its row has open: form
@@ -282,6 +283,54 @@ const PROBLEM_KINDS = {
 // PROBLEM_SIGNS are the kinds of PROBLEM_KINDS drawn as signs.
 const PROBLEM_SIGNS = { radio: "radio", window: "window" };
 
+// windowState is an open window's state by the page's clock and the
+// window's times (the server's limits): "open" until its warning time,
+// "warn" until its alert time, "bad" after; "" for a window not open.
+function windowState(d) {
+  const s = d.state || {};
+  if (s.window_open !== true) return "";
+  const w = d.window;
+  if (!w) return "open";
+  const now = Date.now();
+  if (now >= Date.parse(w.alert_at)) return "bad";
+  if (now >= Date.parse(w.warn_at)) return "warn";
+  return "open";
+}
+
+// WINDOW_TONE is the badge of an open window's state: filled blue while
+// it is open briefly, an amber outline (a warning) once it is open long,
+// filled red (a failure) once it is open too long; a closed window's is
+// filled green.
+const WINDOW_TONE = { open: "fill-open", warn: "warn", bad: "fill-bad" };
+
+// planWindowRedraw draws again, when an open window's state changes by
+// the clock alone, the tiles of the rooms whose window changes then.
+let windowTimer = null;
+function planWindowRedraw() {
+  if (windowTimer) clearTimeout(windowTimer);
+  windowTimer = null;
+  const now = Date.now();
+  let next = Infinity;
+  for (const r of state.rooms) {
+    for (const d of r.devices) {
+      if (!d.window || windowState(d) === "") continue;
+      for (const at of [Date.parse(d.window.warn_at), Date.parse(d.window.alert_at)]) {
+        if (at > now && at < next) next = at;
+      }
+    }
+  }
+  if (next === Infinity) return;
+  windowTimer = setTimeout(() => {
+    windowTimer = null;
+    for (const r of state.rooms) {
+      if (!r.devices.some((d) => d.window)) continue;
+      if (configFocused(r)) roomUI(r).deferred = true;
+      else rerenderRoom(r);
+    }
+    planWindowRedraw();
+  }, Math.min(next - now + 250, 2 ** 31 - 1));
+}
+
 // MODE_TONE colours a mode's badge: auto green, manual (and boost) amber,
 // holiday violet.
 const MODE_TONE = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" };
@@ -312,7 +361,7 @@ function deviceProblems(d, withWindow) {
   if (s.link_error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
   if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
   if (withWindow && s.window_open === true) {
-    out.push({ kind: "window", icon: PROBLEM_KINDS.window, sign: PROBLEM_SIGNS.window, tone: "fill-bad", text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
+    out.push({ kind: "window", icon: PROBLEM_KINDS.window, sign: PROBLEM_SIGNS.window, tone: WINDOW_TONE[windowState(d)], text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
   }
   return out;
 }
@@ -660,7 +709,7 @@ function deviceBadges(d) {
   if (s.panel_locked) out.push([t("badge.locked"), "warn"]);
   if (s.window_open !== undefined) {
     const at = received(d, "window_open");
-    out.push(s.window_open ? [t("badge.open"), "fill-bad", at] : [t("badge.closed"), "fill-ok", at]);
+    out.push(s.window_open ? [t("badge.open"), WINDOW_TONE[windowState(d)] || "fill-bad", at] : [t("badge.closed"), "fill-ok", at]);
   } else if (s.mode && isThermostat(d)) {
     out.push([modeName(s.mode), modeTone(s.mode)]); // a boost says so, coloured as manual
   }
@@ -862,6 +911,7 @@ function rerenderRoom(room) {
   } finally {
     rendering = false;
   }
+  planWindowRedraw();
 }
 
 // configFocused reports whether the focus is in a room tile's

@@ -19,6 +19,10 @@ const (
 	PollIntervalKey     = "poll_interval"
 	RefreshIntervalKey  = "refresh_interval"
 	DiscoverIntervalKey = "discover_interval"
+	// WindowWarnKey and WindowAlertKey are how long a window may stay
+	// open before the web UI shows it amber, then red.
+	WindowWarnKey  = "window_warn_after"
+	WindowAlertKey = "window_alert_after"
 )
 
 // UpdateChannelKey is the update channel the box follows, one of

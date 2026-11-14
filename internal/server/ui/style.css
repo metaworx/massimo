@@ -1180,6 +1180,7 @@ html.blink-first .tone-warn use.mark, html.blink-first .tone-bad use.mark { anim
 .flag.fill-warn { background: var(--fill-warn); color: var(--fill-fg); border-color: var(--fill-warn); }
 .flag.fill-bad { background: var(--fill-bad); color: var(--fill-fg); border-color: var(--fill-bad); }
 .flag.fill-info { background: var(--fill-info); color: var(--fill-fg); border-color: var(--fill-info); }
+.flag.fill-open { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); } /* a window open briefly */
 
 button, select, input {
   font: inherit;

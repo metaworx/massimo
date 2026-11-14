@@ -137,7 +137,7 @@ function sendWhenChanged(form, changed, { btn, lazy } = {}) {
 // and text.
 function badgeEl(text, kind, key) {
   const b = textEl("span", text, "flag " + kind);
-  const state = BADGE_STATE[kind];
+  const state = badgeState(kind);
   if (state) b.prepend(markEl(state, key || (text && kind + ":" + text)));
   return b;
 }
@@ -145,6 +145,12 @@ function badgeEl(text, kind, key) {
 // BADGE_STATE is the state a badge's kind stands for, where it is one a
 // mark shows: amber a warning, red a failure.
 const BADGE_STATE = { warn: "warn", bad: "bad", "fill-bad": "bad" };
+
+// badgeState is the state a badge's kind stands for (BADGE_STATE), by
+// its first class: "warn stale-badge" is a warning.
+function badgeState(kind) {
+  return BADGE_STATE[(kind || "").split(" ")[0]];
+}
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
 // server keeps trying to leave, such as a Cube proxy that does not listen
@@ -920,7 +926,8 @@ function problemsEl(entries, label) {
     if (!it.kind) continue;
     const k = kinds.get(it.kind) || { icon: it.icon, sign: it.sign, tone: "" };
     const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
-    if (tone === "bad" || !k.tone) k.tone = tone;
+    const rank = (x) => ({ bad: 3, warn: 2 })[x] || (x ? 1 : 0); // the worst of a kind shows
+    if (rank(tone) > rank(k.tone)) k.tone = tone;
     kinds.set(it.kind, k);
   }
   if (!kinds.size) return null;
@@ -968,7 +975,7 @@ function problemEntry(e) {
       // A warning's or a failure's badge is led by its mark, which takes
       // the place of its kind's icon; another state keeps the icon.
       const b = badgeEl("", it.tone || "mode", [e.title, e.sub, it.kind, it.text].join(":"));
-      if (it.icon && !BADGE_STATE[it.tone]) b.appendChild(iconEl(it.icon, "ni"));
+      if (it.icon && !badgeState(it.tone)) b.appendChild(iconEl(it.icon, "ni"));
       b.appendChild(document.createTextNode(it.text));
       const age = it.at ? ageEl(it.at, it.stale) : null; // app.js
       if (age) b.appendChild(age);

@@ -360,6 +360,9 @@ type Server struct {
 	proxies  []*proxyRun
 	// staleAfter is the stale threshold in effect, in nanoseconds.
 	staleAfter atomic.Int64
+	// windowWarn and windowAlert are how long a window may stay open
+	// before it counts as open too long, in nanoseconds (SetWindowLimits).
+	windowWarn, windowAlert atomic.Int64
 
 	// fileCubes is Options.FileCubes, by serial in upper case; "" is the
 	// plain MASSIMO_CUBE_ADDRESS Cube until it reports its serial.
@@ -679,6 +682,10 @@ func New(opts Options) *Server {
 	s.pushSlots = make(chan struct{}, maxDeliveries)
 	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
+	s.SetWindowLimits(0, 0)
+	if opts.Store != nil {
+		s.loadWindowLimits(context.Background())
+	}
 	s.loadFound()
 	if opts.Store != nil {
 		s.notify = s.newNotify()
@@ -885,6 +892,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				}
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
 					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
+					dv.SetWindow(s.windowLimits())
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -1081,6 +1089,49 @@ func (s *Server) SetStaleAfter(d time.Duration) {
 
 // StaleAfter returns the stale threshold in effect.
 func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
+
+// SetWindowLimits sets how long a window may stay open before it counts
+// as open too long, a warning, then an alert; 0 or less goes back to
+// view.WindowWarnAfter and view.WindowAlertAfter.
+func (s *Server) SetWindowLimits(warn, alert time.Duration) {
+	if warn <= 0 {
+		warn = view.WindowWarnAfter
+	}
+	if alert <= 0 {
+		alert = view.WindowAlertAfter
+	}
+	s.windowWarn.Store(int64(warn))
+	s.windowAlert.Store(int64(alert))
+}
+
+// windowLimits are the two limits in effect.
+func (s *Server) windowLimits() (warn, alert time.Duration) {
+	return time.Duration(s.windowWarn.Load()), time.Duration(s.windowAlert.Load())
+}
+
+// loadWindowLimits takes the two limits from the store's settings.
+func (s *Server) loadWindowLimits(ctx context.Context) {
+	var lim [2]time.Duration
+	for i, key := range []string{store.WindowWarnKey, store.WindowAlertKey} {
+		v, ok, err := s.opts.Store.SettingDuration(ctx, key)
+		if err != nil {
+			s.log.Warn("setting ignored", "key", key, "error", err)
+		} else if ok {
+			lim[i] = v
+		}
+	}
+	s.SetWindowLimits(lim[0], lim[1])
+}
+
+// withWindow gives each device of a list its window's times (view.Device
+// SetWindow), by the limits in effect.
+func (s *Server) withWindow(devs []view.Device) []view.Device {
+	warn, alert := s.windowLimits()
+	for i := range devs {
+		devs[i].SetWindow(warn, alert)
+	}
+	return devs
+}
 
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.handler }
@@ -1556,6 +1607,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.StaleAfter())}
+	d.SetWindow(s.windowLimits())
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {
