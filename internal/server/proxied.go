@@ -341,11 +341,13 @@ func (s *Server) noteProxied(r *http.Request) {
 	if same {
 		return
 	}
+	// The address comes from the proxy's headers, so the log names the
+	// setting, not the value (GET /api/v1/system shows it).
 	if err := st.SetSetting(context.WithoutCancel(r.Context()), store.ProxiedURLKey, u); err != nil {
-		s.log.Warn("the proxy's address not stored", "url", u, "error", err)
+		s.log.Warn("the proxy's address not stored", "setting", store.ProxiedURLKey, "error", err)
 		return
 	}
-	s.log.Info("the proxy's address noted", "url", u)
+	s.log.Info("the proxy's address noted for the announcement", "setting", store.ProxiedURLKey)
 }
 
 // ProxiedURL is the address a trusted proxy serves the server at, as the
