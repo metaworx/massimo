@@ -464,10 +464,20 @@ def test_cube_panel_pill(page, case):
                 c["problems"] = [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen",
                                   "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}]
         route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    def clean(route):
+        # nothing wrong: the fake's window, open since the server started,
+        # counts as a problem once it has been open five minutes
+        cubes = route.fetch().json()
+        for c in cubes:
+            c["problems"] = []
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
     show_view(page, "system")
     head = page.locator(PANEL).locator(":scope > summary")
+    page.route("**/api/v1/cubes", clean)
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no pill"
     assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
-    assert head.locator(".cube-pill .problems").count() == 0, "nothing wrong: no pill"
+    page.unroute("**/api/v1/cubes")
     page.route("**/api/v1/cubes", stale)
     try:
         page.evaluate("loadCubes()")
