@@ -120,6 +120,8 @@
   "copy.done": "Kopiert",
   "copy.failed": "Nicht kopiert: der Browser hat es abgelehnt",
   "copy.what": "{what} kopieren",
+  "copy.hint": "Klick kopiert",
+  "copy.version": "Server-Version kopieren",
   "appearance.scheme": "Farbschema",
   "appearance.scheme.massimo": "Massimo",
   "appearance.scheme.contrast": "Hoher Kontrast",

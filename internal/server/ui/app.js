@@ -1070,7 +1070,7 @@ function certText(tls) {
 // renderVersionTitle names the server's whole version in the tooltip of
 // the short one in the header.
 function renderVersionTitle() {
-  $("version-short").title = state.version ? t("header.versionTitle", { version: state.version }) : "";
+  copyLabel($("version-short"), state.version ? t("header.versionTitle", { version: state.version }) + " · " + t("copy.hint") : ""); // components.js
 }
 
 async function checkVersion() {
@@ -1353,6 +1353,8 @@ function initSettings() {
   };
   $("expert-toggle").addEventListener("change", onExpert);
   $("server-sign").addEventListener("click", serverSignClick);
+  // the version copies whole, as its tooltip names it (D94-A)
+  copyable($("version-short"), () => state.version, ""); // components.js
   $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("home-notice-cubes").addEventListener("click", () => showView("system"));
   $("cube-found-link").addEventListener("click", showFound);

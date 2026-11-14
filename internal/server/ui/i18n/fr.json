@@ -122,6 +122,8 @@
   "copy.done": "Copié",
   "copy.failed": "Pas copié : le navigateur a refusé",
   "copy.what": "Copier {what}",
+  "copy.hint": "un clic copie",
+  "copy.version": "Copier la version du serveur",
   "appearance.scheme": "Jeu de couleurs",
   "appearance.scheme.massimo": "Massimo",
   "appearance.scheme.contrast": "Contraste élevé",

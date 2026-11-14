@@ -828,7 +828,10 @@ async function loadSystemInfo() {
   }
   if (!v) return;
   const parts = splitVersion(v.version || "");
-  $("info-version").textContent = parts.short || "–";
+  // the short version shown, the whole one copied, by a click or the icon
+  const name = t("copy.version");
+  const version = copyable(textEl("span", parts.short || "–", "mono"), () => v.version || "", name); // components.js
+  $("info-version").replaceChildren(v.version ? elem("span", "copy-pair", version, copyIcon(() => v.version, name)) : version);
   $("info-built").textContent = parts.rest || "–";
   sysClock.zone = v.time_zone || "";
   fillStarted(v);

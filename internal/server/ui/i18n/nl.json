@@ -121,6 +121,8 @@
   "copy.done": "Gekopieerd",
   "copy.failed": "Niet gekopieerd: de browser weigerde",
   "copy.what": "{what} kopiëren",
+  "copy.hint": "klik kopieert",
+  "copy.version": "Serverversie kopiëren",
   "appearance.scheme": "Kleurenschema",
   "appearance.scheme.massimo": "Massimo",
   "appearance.scheme.contrast": "Hoog contrast",

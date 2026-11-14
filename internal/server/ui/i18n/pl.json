@@ -123,6 +123,8 @@
   "copy.done": "Skopiowano",
   "copy.failed": "Nie skopiowano: przeglądarka odmówiła",
   "copy.what": "Kopiuj {what}",
+  "copy.hint": "kliknięcie kopiuje",
+  "copy.version": "Kopiuj wersję serwera",
   "appearance.scheme": "Schemat kolorów",
   "appearance.scheme.massimo": "Massimo",
   "appearance.scheme.contrast": "Wysoki kontrast",
