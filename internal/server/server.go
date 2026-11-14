@@ -1364,12 +1364,16 @@ var deviceSerial = regexp.MustCompile(`^[A-Za-z]{3}[0-9]{7}$`)
 // its radio address, six hex digits, or by its serial number, which the
 // Cube's snapshot holds while the Cube has the device. The two cannot be
 // confused. A serial the snapshot does not know is a 404, anything else
-// that is neither a 400.
+// that is neither a 400, and so is radio address 000000, which a Cube may
+// list but is no device (cube.ZeroAddress).
 func deviceOf(rt *runtime, name string) (cube.RFAddress, error) {
 	if !deviceSerial.MatchString(name) {
 		rf, err := cube.ParseRFAddress(name)
 		if err != nil {
 			return 0, fail(http.StatusBadRequest, "bad device %q: a radio address of six hex digits, or a serial number", name)
+		}
+		if rf == cube.ZeroAddress {
+			return 0, fail(http.StatusBadRequest, "%v", cube.ErrZeroAddress)
 		}
 		return rf, nil
 	}
