@@ -687,7 +687,10 @@ to the top of the page.
   The certificate is the server's own (its source, names and expiry; none on plain HTTP),
   or, where a trusted proxy serves the page, the proxy's, "(proxied)":
   its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
-  with the address the proxy serves;
+  with the address the proxy serves, a link to it in a new window and its copy icon;
+  "being read…" while the server reads it, which it does within seconds of the first request:
+  the page asks again every 2 s while System settings is shown,
+  and says "could not be read" when 30 s have not brought it;
   where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
   and address, and that with that header the server reads the proxy's certificate;
   a page on HTTPS from a server without TLS says "(proxied)" too,
