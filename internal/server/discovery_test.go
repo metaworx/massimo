@@ -282,6 +282,27 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	}
 }
 
+// A served Cube on this host, as the fake Cube of the UI tests is, is
+// heard: its answer is a Cube's, which no proxy of the server gives. The
+// same serial from this host answering the identify request alone is the
+// server's own proxy's, and left out.
+func TestDiscoveryHearsAServedCubeOnThisHost(t *testing.T) {
+	atHost, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atHost.Close()
+	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000000", Addr: "127.0.0.1:9"}},
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atHost.Addr()}})
+	if got := foundSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000000" {
+		t.Fatalf("found %v, want the served Cube KEQ0000000", got)
+	}
+	atHost.SetIdentifyOnly(true)
+	if got := foundSerials(t, ts); len(got) != 0 {
+		t.Fatalf("found %v, want none: a proxy's answer from this host", got)
+	}
+}
+
 // foundSerials are the serials a discovery run found, configured or not.
 func foundSerials(t *testing.T, ts *httptest.Server) []string {
 	t.Helper()

@@ -177,14 +177,20 @@ func (s *Server) configured(serial string) *runtime {
 // ownAnswer reports whether an answer is one of this server's proxies':
 // from one of this host's addresses with a configured Cube's serial, or,
 // from any address, with a serial of its own that one of its proxies
-// answers with (proxySerial), unless a Cube gave it (cubelan.KindCube).
-// A configured Cube's serial from elsewhere is left in: the Cube itself,
-// or another server's proxy of it, which the Cube may follow.
+// answers with (proxySerial). An answer a Cube gave (cubelan.KindCube: N
+// or c answered, eQ-3's MAC, the bootloader) is none, from wherever it
+// came: a proxy answers the identify request alone, and a fake Cube on
+// this host, served, is still heard. A configured Cube's serial from
+// elsewhere is left in: the Cube itself, or another server's proxy of
+// it, which the Cube may follow.
 func (s *Server) ownAnswer(d cubelan.Discovered, local map[string]bool) bool {
+	if d.Kind == cubelan.KindCube {
+		return false
+	}
 	if s.configured(d.Serial) != nil {
 		return local[d.IP.String()]
 	}
-	return d.Kind != cubelan.KindCube && s.proxySerial(d.Serial)
+	return s.proxySerial(d.Serial)
 }
 
 // proxySerial reports whether one of this server's proxies answers
