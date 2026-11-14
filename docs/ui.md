@@ -126,6 +126,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for a proxy the Cube it serves, and the Massimo server serving it,
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
+  Its list, as every menu of the page, opens inside the window,
+  no higher than the room below it, and scrolls in itself, not the page.
 - **The time of the last update** and **↻**, one button without a frame,
   which asks the server for the current state now;
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.

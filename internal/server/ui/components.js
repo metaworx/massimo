@@ -1114,21 +1114,52 @@ function problemEntry(e) {
 }
 
 // dropdown makes a <details class="menu"> a menu that drops down: one
-// open at a time, closed by a choice of one of its items, by Escape
-// (the focus back on its summary) and by a click outside it. The room
-// tiles' ⋯ and the header's 👤 and ☰ are such menus.
+// open at a time, kept in the window (placeMenu), closed by a choice of
+// one of its items, by Escape (the focus back on its summary) and by a
+// click outside it. The room tiles' ⋯ and the header's 👤 and ☰ are such
+// menus.
 function dropdown(details) {
   details.addEventListener("toggle", () => {
     if (!details.open) return;
     for (const other of document.querySelectorAll("details.menu[open]")) {
       if (other !== details) other.open = false;
     }
+    // after the other toggle listeners, which may fill the list
+    requestAnimationFrame(() => placeMenu(details));
   });
   details.addEventListener("click", (ev) => {
     if (ev.target.closest(".menu-items button")) details.open = false;
   });
   return details;
 }
+
+// placeMenu keeps an open menu's list in the window: where it runs out
+// of the window as the style sheet places it, aligned to its summary's
+// other edge where it fits there, else moved just inside the window,
+// 16 px from its edges; its height capped to the room below it, with a
+// scroll of its own that the page does not take over (style.css
+// .menu-items).
+function placeMenu(details) {
+  const list = details.querySelector(":scope > .menu-items");
+  if (!list || !details.open) return;
+  const gap = 16;
+  const vw = document.documentElement.clientWidth;
+  Object.assign(list.style, { left: "", right: "", maxHeight: "" });
+  const box = details.getBoundingClientRect();
+  const r = list.getBoundingClientRect();
+  const fits = (x) => x >= gap - 0.5 && x + r.width <= vw - gap + 0.5;
+  if (!fits(r.left)) {
+    const other = Math.abs(r.right - box.right) < 1 ? box.left : box.right - r.width;
+    const x = fits(other) ? other : Math.max(gap, Math.min(r.left, vw - gap - r.width));
+    Object.assign(list.style, { left: x - box.left + "px", right: "auto" });
+  }
+  const top = list.getBoundingClientRect().top;
+  list.style.maxHeight = Math.max(160, window.innerHeight - top - gap) + "px";
+}
+
+addEventListener("resize", () => {
+  for (const m of document.querySelectorAll("details.menu[open]")) placeMenu(m);
+});
 
 document.addEventListener("click", (ev) => {
   for (const m of document.querySelectorAll("details.menu[open]")) {
