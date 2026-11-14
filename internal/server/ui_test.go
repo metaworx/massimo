@@ -434,6 +434,52 @@ func TestUIETagVersion(t *testing.T) {
 // its file ui/i18n/<code>.json.
 var uiLanguages = []string{"en", "de", "fr", "it", "nl", "pl"}
 
+// The scripts a page loads share one global scope, so a name declared at
+// the top of two of them clashes: a second function declaration silently
+// replaces the first (integrations.js's renderFound hid app.js's found
+// Cubes), and a second const, let or class stops the later script with a
+// SyntaxError. Each page, the one at / and those of uiPageScripts, is
+// checked on its own, its scripts read from its <script src> tags; a name
+// two pages' scripts share is fine. A top-level declaration is one at the
+// start of a line, the scripts' indentation putting everything nested
+// further in.
+func TestUIScriptGlobals(t *testing.T) {
+	pages := map[string][]byte{"the page": assembledPage(t)}
+	for name := range uiPageScripts {
+		b, err := uiFiles.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages[name] = b
+	}
+	src := regexp.MustCompile(`<script src="(ui/[^"]+\.js)"`)
+	decl := regexp.MustCompile(`(?m)^(?:(?:async\s+)?function\s*\*?\s*([\w$]+)\s*\(|(?:const|let)\s+([\w$]+)\s*=|class\s+([\w$]+)\b)`)
+	for _, page := range slices.Sorted(maps.Keys(pages)) {
+		scripts := src.FindAllSubmatch(pages[page], -1)
+		if len(scripts) == 0 {
+			t.Errorf("%s loads no script", page)
+		}
+		where := map[string][]string{} // identifier: the scripts declaring it
+		for _, s := range scripts {
+			name := string(s[1])
+			b, err := uiFiles.ReadFile(name)
+			if err != nil {
+				t.Errorf("%s loads %s: %v", page, name, err)
+				continue
+			}
+			for _, m := range decl.FindAllSubmatch(b, -1) {
+				id := string(slices.Concat(m[1], m[2], m[3]))
+				where[id] = append(where[id], name)
+			}
+		}
+		for _, id := range slices.Sorted(maps.Keys(where)) {
+			if files := where[id]; len(slices.Compact(slices.Clone(files))) > 1 {
+				t.Errorf("%s: %s is declared in %s", page, id, strings.Join(files, ", "))
+			}
+		}
+	}
+}
+
 // The translation files hold the texts of the page: each parses, the
 // other languages have no key English lacks (but their own plural forms
 // and the machine-translation note), and English has every key the
