@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -157,5 +158,36 @@ func TestUpdateHistoryAtStart(t *testing.T) {
 	list := s.updateHistory(t.Context())
 	if len(list) != 1 || !list[0].Outside || list[0].Manager != "brew" || list[0].From != "v1.0.0" || list[0].Reached != "v1.1.0" {
 		t.Fatalf("the history after two starts: %+v", list)
+	}
+}
+
+// GET /api/v1/update answers the history, newest first, and an empty
+// list before the first update.
+func TestUpdateHistoryInTheAnswer(t *testing.T) {
+	st := testStore(t, "")
+	s, ts, _ := historyServer(t, st, "apt")
+	token := userToken(t, st, "anna", store.RoleOwner)
+	var out struct {
+		History []map[string]any `json:"history"`
+	}
+	var empty map[string]json.RawMessage
+	if getJSON(t, ts, token, "/api/v1/update", &empty); string(empty["history"]) != "[]" {
+		t.Fatalf("before the first update: %s", empty["history"])
+	}
+	s.noteVersionStart(t.Context(), "v0.1.0-alpha.8", "v0.1.0-alpha.9", nil)
+	if code, body := callAPI(t, ts, "POST", "/api/v1/update", token, "{}"); code != 202 {
+		t.Fatalf("POST: %d %s", code, body)
+	}
+	getJSON(t, ts, token, "/api/v1/update", &out)
+	if len(out.History) != 2 {
+		t.Fatalf("the history: %+v", out.History)
+	}
+	newest, oldest := out.History[0], out.History[1]
+	by, _ := newest["by"].(map[string]any)
+	if by["name"] != "anna" || newest["to"] != "v0.1.0-alpha.10" || newest["reached"] != nil || newest["outside"] != nil {
+		t.Errorf("the update started: %v", newest)
+	}
+	if oldest["outside"] != true || oldest["manager"] != "apt" || oldest["reached"] != "v0.1.0-alpha.9" || oldest["by"] != nil {
+		t.Errorf("the update from outside: %v", oldest)
 	}
 }

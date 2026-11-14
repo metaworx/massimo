@@ -198,6 +198,8 @@ type updateView struct {
 	CanUpdate  bool           `json:"can_update"`
 	Blocked    string         `json:"blocked,omitempty"`
 	Helper     *update.Status `json:"helper,omitempty"`
+	// History is the last updates, newest first (update_history.go).
+	History []updateEntry `json:"history"`
 }
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
@@ -232,6 +234,9 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 		}
 	}
 	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
+	if v.History = s.updateHistory(ctx); v.History == nil {
+		v.History = []updateEntry{}
+	}
 	return v, found
 }
 

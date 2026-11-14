@@ -4103,6 +4103,28 @@ components:
         can_update: {type: boolean, description: POST would start an update}
         blocked: {type: string, description: Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
+        history:
+          type: array
+          description: The last ten updates, newest first; empty without a store
+          items: {$ref: "#/components/schemas/UpdateEntry"}
+    UpdateEntry:
+      type: object
+      description: "An update: started in Massimo (by, to), or found at a start (outside); completed by the next start with another version"
+      properties:
+        at: {type: string, format: date-time, description: When it was started, or found at a start}
+        by:
+          type: object
+          description: The user who started it; absent for the owner's key and an update from outside Massimo
+          properties:
+            name: {type: string}
+            display_name: {type: string}
+        outside: {type: boolean, description: "Massimo did not start it: apt, brew or a person on the box"}
+        manager: {type: string, description: "The box's package manager (apt, brew), for an update from outside"}
+        from: {type: string, description: The version that ran before}
+        to: {type: string, description: The version asked for, where Massimo started it}
+        reached: {type: string, description: The version the next start ran; absent while the update runs}
+        reached_at: {type: string, format: date-time}
+        result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where it ended without reaching to"}
     UpdateStatus:
       type: object
       description: The update helper's last run
