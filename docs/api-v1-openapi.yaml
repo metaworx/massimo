@@ -2617,7 +2617,9 @@ paths:
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h), refresh_interval (10m to
         168h, or 0 for off) and discover_interval (1m to 24h, or 0 for
-        only on request), the intervals at the next start; the whole
+        only on request), the intervals at the next start;
+        window_warn_after and window_alert_after (1m to 24h, the alert not
+        under the warning, at once), how long a window may stay open; the whole
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); update.channel, devel, nightly, alpha, beta, rc or stable,
@@ -4004,6 +4006,17 @@ components:
             with state.
           additionalProperties: {type: string, format: date-time}
         last_seen: {type: string, format: date-time, description: When the device's entry in the Cube's device list last changed; present with state}
+        window:
+          type: object
+          description: >-
+            An open window's times, present while state.window_open is true:
+            when the server saw it open, and when it counts as open too
+            long, as a warning and as an alert (the settings
+            window_warn_after and window_alert_after).
+          properties:
+            open_since: {type: string, format: date-time}
+            warn_at: {type: string, format: date-time}
+            alert_at: {type: string, format: date-time}
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for 24 hours: out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}
         virtual: {type: boolean, description: "A room's virtual wall thermostat, which the server computes from the room's devices; present when true"}
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}

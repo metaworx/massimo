@@ -91,6 +91,12 @@ var durationSettings = []durationSetting{
 		inEffect: func(s *Server) time.Duration { return s.opts.RefreshInterval }},
 	{key: store.DiscoverIntervalKey, def: DefaultDiscoverInterval, min: time.Minute, max: 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.DiscoverInterval }},
+	// How long a window may stay open before the web UI shows it amber,
+	// then red; the second not under the first.
+	{key: store.WindowWarnKey, def: view.WindowWarnAfter, min: time.Minute, max: 24 * time.Hour, now: true,
+		inEffect: func(s *Server) time.Duration { w, _ := s.windowLimits(); return w }},
+	{key: store.WindowAlertKey, def: view.WindowAlertAfter, min: time.Minute, max: 24 * time.Hour, now: true,
+		inEffect: func(s *Server) time.Duration { _, a := s.windowLimits(); return a }},
 }
 
 // settingView is one setting as GET /api/v1/settings shows it.
@@ -301,6 +307,23 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 	}); err != nil {
 		return err
 	}
+	// The window's alert comes after its warning, not before.
+	warn, alert := s.windowLimits()
+	for _, wr := range writes {
+		lim := map[string]*time.Duration{store.WindowWarnKey: &warn, store.WindowAlertKey: &alert}[wr.key]
+		switch {
+		case lim == nil:
+		case wr.clear && wr.key == store.WindowWarnKey:
+			*lim = view.WindowWarnAfter
+		case wr.clear:
+			*lim = view.WindowAlertAfter
+		default:
+			*lim = *wr.duration
+		}
+	}
+	if alert < warn {
+		return fail(http.StatusBadRequest, "%s (%s) must not be under %s (%s)", store.WindowAlertKey, fmtDuration(alert), store.WindowWarnKey, fmtDuration(warn))
+	}
 	pruneBackups := false
 	for _, wr := range writes {
 		var from any
@@ -335,6 +358,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				s.SetStaleAfter(*wr.duration)
 			}
+		}
+		if wr.key == store.WindowWarnKey || wr.key == store.WindowAlertKey {
+			s.loadWindowLimits(r.Context())
 		}
 		value := "default"
 		switch {

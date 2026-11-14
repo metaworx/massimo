@@ -83,8 +83,7 @@ show the logo too, the first two larger, above their titles.
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its first line without the time of the last update,
 and the lines under it go until the page is back
-at its top, the button that reloads a new version and expert mode's line
-of the Cube's radio budget apart;
+at its top, expert mode's line of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**.
 
 - **Cube**:
@@ -130,9 +129,18 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   The log's range, kind and device follow its page,
   as in `#log?range=today&kind=state&device=MEQ0000101` (see Log).
   A page the role may not open shows Rooms instead.
-- When the server was updated, a button offers to reload the page.
-  The page reloads by itself only when nothing is open: no setting being edited,
-  no panel and none of the settings pages.
+- **The server's sign**, before the time of the last update,
+  an icon in a frame whose label says what a click does:
+  the plug in green while the server answers (a click updates now);
+  a blue "i" while an update is out,
+  for one who may install it (a click opens Software update);
+  an amber triangle, blinking, once the server runs a new version
+  (a click reloads the page);
+  the open plug on a filled red square, blinking, after a poll without an answer:
+  the page's other signs are greyed, their state not known,
+  the time is that of the last update, and the page tries again at every poll.
+  After an update the page reloads by itself only when nothing is open:
+  no setting being edited, no panel and none of the settings pages.
 - In expert mode a line under the first shows the chosen Cube's name,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
@@ -176,13 +184,19 @@ Every room has a tile:
   so it may be older.
   Radiator thermostats send the measured temperature only now and then,
   mostly after the valve moved.
-- **Icons in the tile's head** say what is wrong in the room, each in its colour:
-  radio waves, a device the Cube could not reach or that lost its link
-  (red for a transmit error); a battery, one running low;
-  an open window, a window contact reporting it;
+- **Icons in the tile's head** say what is wrong in the room, each in its colour
+  and with its mark (see Signs, below):
+  the radio as a Wi-Fi fan, a device that lost its link (amber, a triangle)
+  or the Cube could not reach (red, a cross);
+  a battery, one running low (amber);
+  an open window, a window contact reporting it:
+  blue for its first 5 minutes, then amber with a triangle,
+  red with a cross after 10
+  (the server's settings `window_warn_after` and `window_alert_after`);
   crossed arrows, the room's thermostats in different modes.
   A tap on them lists the devices concerned, each once with its serial,
-  its badges led by the same icons and how long ago each came,
+  its badges under its name, led by the same icons, a warning's and a failure's
+  by its mark, and how long ago each came,
   and for different modes each thermostat's mode;
   Escape or a click outside closes the list.
   An icon goes as soon as its problem does.
@@ -479,9 +493,9 @@ the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
 Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
-**Language**, **Mode** and **Colour scheme**, in a column of its own at the
-right headed **only on this device**, a switch keeps that setting's value in
-this browser instead (its tooltip names the setting),
+**Language**, **Mode**, **Colour scheme** and **Blinking signs**,
+in a column of its own at the right headed **only on this device**,
+a switch keeps that setting's value in this browser instead (its tooltip names the setting),
 for a phone that polls less often or a wall tablet that stays dark;
 switched off, your value applies again.
 My settings and My profile are at most 640 px wide.
@@ -516,7 +530,13 @@ without the switches.
   **Customise…** opens an editor with a colour input per token for both sets,
   applied to the page as you change them,
   and a number in front of each background's colour that is the contrast of the text on it
-  (from 4.5 it reads well, under 3 badly).
+  (from 4.5 it reads well, under 3 badly),
+  and in front of the warning icons' colour its contrast on a tile
+  (from 3 they stand out).
+  A scheme saved before a colour was added takes the default's for it.
+  **Blinking signs**: whether a warning's triangle and a failure's cross blink,
+  so that they are not missed; as the system (blinking unless the device asks
+  for reduced motion), on, at first (five times when a sign comes) or off.
   Next to each colour input is its hex value, `#f6f6f4`, in a text field:
   a value typed or pasted there, with or without the `#`,
   also as `#abc` and in any case, applies at once
@@ -936,6 +956,25 @@ a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`;
 an action with what it does and its button is an `.action-row`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
+A state is a sign, a colour and a mark, so that it reads without its colour:
+nothing for a state that is fine, a triangle for a warning (amber),
+a cross for a failure (red).
+`signEl` draws a kind of thing in a state (`SIGNS`: the radio, a Wi-Fi fan,
+and the window with the mark at the bottom right, as the original MAX! software has
+them; the network of a Cube's link with it on top; the cog for the settings),
+the drawing and the mark two parts, so that the mark alone blinks;
+`badgeEl` leads a warning's or a failure's badge with its mark (`markEl`)
+and sets it in bold, while a badge that names a state, such as a mode, stays regular;
+`keepBlink` keeps a mark's blinking where it was across the redraws that make a new
+element of it.
+The icons draw in the token `warn-mark`, a brighter amber than the text's `warn`,
+at a contrast of 3 on a tile, the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`);
+the filled amber, `fill-warn`, is the Manual mode's alone.
+`problemsEl` is the list of what is wrong in a place, wherever it is put,
+its entries one format at every level (`problemEntry`):
+the icon in a column of its own, the name and a grey detail beside it,
+the badges under the name, and the entries under it (`subs`) indented to the name,
+a line down from its icon.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),

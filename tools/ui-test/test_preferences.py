@@ -51,7 +51,7 @@ def test_settings_follow_the_user(page, new_context, case):
     assert ui is not None and ui["poll"] == 10, "the first page hands its settings to the server"
     show_view(page, "prefs")
     switches = page.locator("input[data-device-only]")
-    assert switches.count() == 6, "a switch under each of the six settings"
+    assert switches.count() == 7, "a switch under each of the seven settings"
     assert switches.first.get_attribute("aria-label"), "the switch is named for its row"
     page.locator("#poll-input").fill("30")
     page.locator("#poll-input").dispatch_event("change")
@@ -211,7 +211,7 @@ def test_device_column(page, case):
     show_view(page, "prefs")
     cells = page.evaluate("""[...document.querySelectorAll('#prefs .dev-row > .dev-cell')]
         .map((c) => [Math.round(c.getBoundingClientRect().left), Math.round(c.getBoundingClientRect().right)])""")
-    assert len(cells) == 7 and len({c[0] for c in cells}) == 1, f"one column, a cell per row ({cells})"
+    assert len(cells) == 8 and len({c[0] for c in cells}) == 1, f"one column, a cell per row ({cells})"
     head = page.evaluate("document.querySelector('#prefs .dev-colhead').getBoundingClientRect().left")
     assert round(head) == cells[0][0], "the column headed at the top"
     body = page.evaluate("document.querySelector('#prefs .settings-body').getBoundingClientRect().right "

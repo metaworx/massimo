@@ -1,4 +1,4 @@
-<!-- My settings → Appearance: the mode and the colour scheme in the rows of My settings, theme.js; the editor is drawn into #scheme-editor from scheme.html. -->
+<!-- My settings → Appearance: the mode, the colour scheme and the blinking signs in the rows of My settings, theme.js; the editor is drawn into #scheme-editor from scheme.html. -->
 <div class="appearance">
   <div class="dev-group">
     <span data-i18n="appearance.title">Appearance</span>
@@ -23,6 +23,19 @@
       <select id="scheme-select" class="field-control"></select>
     </div>
     <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="scheme"><span class="slider" aria-hidden="true"></span></label></span>
+  </div>
+  <div class="dev-row">
+    <div class="field">
+      <label for="blink-select" data-i18n="appearance.blink">Blinking signs</label>
+      <span data-help="blink" data-help-label="appearance.blink"></span>
+      <select id="blink-select" class="field-control">
+        <option value="system" data-i18n="appearance.blinkSystem">as the system</option>
+        <option value="on" data-i18n="appearance.blinkOn">on</option>
+        <option value="first" data-i18n="appearance.blinkFirst">at first (5 s)</option>
+        <option value="off" data-i18n="appearance.blinkOff">off</option>
+      </select>
+    </div>
+    <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="blink"><span class="slider" aria-hidden="true"></span></label></span>
   </div>
   <div class="dev-row dev-last">
     <div class="scheme-actions">
