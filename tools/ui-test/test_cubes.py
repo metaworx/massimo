@@ -8,7 +8,7 @@ as found. Each test puts the server's store back as it was, since every
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
-from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_found, scroll_width, show_view, wait_held, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -78,6 +78,7 @@ def test_found_cube_added_and_removed(page):
         choose_cube(page, "__discover")
         wait_until(page, "!discovery.running", 10)
     show_view(page, "system")
+    open_found(page)
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
     assert found.count() == 1, "the found Cube in System settings → Cubes"
     assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in System settings → Cubes"

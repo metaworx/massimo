@@ -349,15 +349,36 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
 .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
-/* Cubes found on the LAN but not configured, counted under the header: a
-   link to System settings → Cubes, or the count alone without cubes; in
-   the text's colour, as the warning's has too little contrast on the page */
-.cube-found { margin: 8px 0 0; font-size: 0.9rem; max-width: 100%; }
-.cube-found-link {
+/* The found Cubes' sign (components.js foundCountEl): a cube with their
+   number in a corner badge, in the accent's blue, as information; in the
+   header's problem pill last, its list's last group, and System settings'
+   fold of them. */
+.found-count { position: relative; display: inline-flex; flex: none; color: var(--accent); }
+.found-count .ni { width: 18px; height: 18px; }
+.found-count b {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--card);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+.problems-sum .found-count { margin-right: 4px; }
+.problem-entry > .found-count.problem-icon, .problem-entry > .found-count.problem-icon .ni { width: var(--ic); height: var(--ic); color: var(--accent); }
+/* in the pill's list, the way to System settings → Cubes: a link's look */
+.found-to-cubes {
   padding: 0;
   border: none;
   background: none;
-  color: inherit;
+  color: var(--accent);
   font: inherit;
   height: auto;
   min-height: 0;
@@ -365,9 +386,14 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   text-underline-offset: 2px;
   cursor: pointer;
 }
-body:not(.no-cubes) .without-cubes { display: none; }
-/* under System settings → Cubes' found list: the env lines to serve them */
+.menu-items .found-to-cubes { display: inline; width: auto; padding: 0; }
+/* System settings → Cubes: the found Cubes and proxies, one fold */
+.found-panel > summary .found-count { margin-right: 6px; }
+.cube-found-list .found-icon { width: 16px; height: 16px; flex: none; color: var(--muted); }
+/* under System settings → Cubes' found list: how to serve them, the lines
+   for the settings file in a fold with one copy icon */
 .cubes-found-hints p { margin: 6px 0; }
+.found-lines > summary { align-items: center; }
 .cubes-found-hints .env-lines {
   margin: 6px 0;
   padding: 8px 10px;
@@ -390,7 +416,7 @@ body:not(.no-cubes) .without-cubes { display: none; }
 #version-short { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 body.scrolled .top { padding: 8px 0; }
 body.scrolled .top #refresh-btn, body.scrolled #tls-notice,
-body.scrolled #cube-found, body.scrolled #pending { display: none !important; }
+body.scrolled #pending { display: none !important; }
 @media (max-width: 599px) {
   body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
   body.scrolled .top-left { display: none; }
