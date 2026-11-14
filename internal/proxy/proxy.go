@@ -702,9 +702,11 @@ type Responder struct {
 	serving    chan struct{}                    // closed once Serve has its socket
 	collectors map[chan cubelan.Packet]struct{} // of Discover and Reboot
 
-	ownSend     time.Time // the last request Discover or Reboot sent
-	otherSearch time.Time // the last search of another program on this host
-	others      int       // such searches seen, for Discover's cut short
+	ownSend     time.Time            // the last request Discover or Reboot sent
+	opEnd       time.Time            // when the last Discover or Reboot ended
+	otherSearch time.Time            // the last search of another program on this host
+	others      int                  // such searches seen, for Discover's cut short
+	warned      map[string]time.Time // unasked's last line per source and opcode
 
 	// hostNets returns the host's IPv4 networks, each with the host's
 	// address in it; nil is hostNetworks.
@@ -712,7 +714,7 @@ type Responder struct {
 	// sent, when set, is told of every reply sent, for the tests.
 	sent func(to net.Addr)
 	// The timings, zero for their defaults (the constants below).
-	searchWindow, searchWaitMax, ownEcho time.Duration
+	searchWindow, searchWaitMax, ownEcho, opGrace, warnEvery time.Duration
 }
 
 // Defaults of the Responder's timings.
@@ -727,6 +729,12 @@ const (
 	// request from this host is that request, come back through the
 	// loopback (within microseconds).
 	defaultOwnEcho = 200 * time.Millisecond
+	// defaultOpGrace is how long after a Discover or Reboot an answer is
+	// a late one to it.
+	defaultOpGrace = 5 * time.Second
+	// defaultWarnEvery is how often an answer no operation asked for is
+	// logged, per source and opcode.
+	defaultWarnEvery = time.Minute
 )
 
 // ErrSearchShared is Discover's error when another program on this
@@ -802,6 +810,7 @@ func (r *Responder) endOp(ch chan cubelan.Packet) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.collectors, ch)
+	r.opEnd = time.Now()
 }
 
 // waitOtherSearch waits until another program on this host has not
@@ -890,6 +899,50 @@ func replyTargets(src *net.UDPAddr, from net.IP, port int, nets []*net.IPNet, ow
 		out = append(out, &net.UDPAddr{IP: b, Port: port})
 	}
 	return out
+}
+
+// unasked logs a Cube's answer that no Discover or Reboot asked for, at
+// Warn, once per source and opcode every warnEvery: another program on
+// this host works with a Cube (its network settings, its firmware), and
+// the answer came here, so that program misses it. An identify answer
+// is logged at Debug only, since another server's proxies answer a
+// search on their own host by the subnet's broadcast too, which comes
+// here as well. Answers from this host, its own proxies', are not
+// logged.
+func (r *Responder) unasked(from *net.UDPAddr, b []byte) {
+	serial, op, ok := cubelan.ParseUDPReply(b)
+	if !ok {
+		return
+	}
+	if op == cubelan.UDPIdentify {
+		r.log.Debug("proxy: an identify answer no search of serve's asked for", "from", from.String(), "serial", strings.Trim(serial, "*"))
+		return
+	}
+	r.mu.Lock()
+	hostNets := r.hostNets
+	r.mu.Unlock()
+	if hostNets == nil {
+		hostNets = hostNetworks
+	}
+	if from.IP.IsLoopback() || hostNet(hostNets(), from.IP) != nil {
+		return
+	}
+	key := from.IP.String() + "/" + string(op)
+	now := time.Now()
+	r.mu.Lock()
+	if r.warned == nil {
+		r.warned = map[string]time.Time{}
+	}
+	last, seen := r.warned[key]
+	if seen && now.Sub(last) < orDefault(r.warnEvery, defaultWarnEvery) {
+		r.mu.Unlock()
+		return
+	}
+	r.warned[key] = now
+	r.mu.Unlock()
+	r.log.Warn("proxy: a Cube answered another program on this host, and the answer came to serve",
+		"from", from.String(), "serial", strings.Trim(serial, "*"), "op", string(op),
+		"hint", "stop serve while that program works with the Cube on UDP 23272")
 }
 
 // hostNet returns the network of nets whose address is ip, or nil.
@@ -1027,7 +1080,11 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 					default:
 					}
 				}
+				unasked := len(r.collectors) == 0 && time.Since(r.opEnd) > orDefault(r.opGrace, defaultOpGrace)
 				r.mu.Unlock()
+				if unasked {
+					r.unasked(u, pkt.Data)
+				}
 			}
 			continue
 		}

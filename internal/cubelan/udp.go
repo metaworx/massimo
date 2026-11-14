@@ -25,6 +25,14 @@ func ParseUDPRequest(b []byte) (serial string, op byte, ok bool) {
 	return strings.TrimRight(string(s), "*"), b[len(udpSignature)+10], true
 }
 
+// ParseUDPReply decodes a Cube's answer on UDP 23272, of either its
+// application or its bootloader: the serial (with its padding) and the
+// opcode it answers.
+func ParseUDPReply(b []byte) (serial string, op byte, ok bool) {
+	serial, _, op, _, ok = parseUDPReply(b)
+	return serial, op, ok
+}
+
 // UDPReply builds the answer a Cube gives to a discovery request:
 // signature, serial, '>', opcode, data. For opcode 'I' data is the radio
 // address (4 bytes) and the firmware (2 bytes), big endian.
